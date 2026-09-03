@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -18,6 +21,12 @@ function reader(files: Record<string, unknown>): ScenarioReader {
   };
 }
 
+const repoRoot = new URL('../../../', import.meta.url);
+
+/** Lector real sobre el repo: los escenarios del ejemplo existen desde LILA-008. */
+const readFromRepo: ScenarioReader = (path) =>
+  JSON.parse(readFileSync(fileURLToPath(new URL(path, repoRoot)), 'utf8'));
+
 const PEDIDO = {
   'examples/pedido/as-is.scenario.json': AS_IS,
   'examples/pedido/to-be-3-cajeros.scenario.json': { ...TO_BE, extends: 'as-is.scenario.json' },
@@ -25,7 +34,7 @@ const PEDIDO = {
 
 describe('resolveExtends', () => {
   test('to-be-3-cajeros resuelve a un objeto igual al AS-IS salvo capacity = 3', () => {
-    const read = reader(PEDIDO);
+    const read = readFromRepo;
     // Los dos pasan por la misma resolución, así que `model` queda normalizado igual en ambos.
     const asIs = resolveExtends('examples/pedido/as-is.scenario.json', read);
     const toBe = resolveExtends('examples/pedido/to-be-3-cajeros.scenario.json', read);
@@ -42,11 +51,18 @@ describe('resolveExtends', () => {
 
   test('el resuelto valida como escenario completo', () => {
     const resolved = ScenarioSchema.parse(
-      resolveExtends('examples/pedido/to-be-3-cajeros.scenario.json', reader(PEDIDO)),
+      resolveExtends('examples/pedido/to-be-3-cajeros.scenario.json', readFromRepo),
     );
     expect(resolved.resources?.['cajero']?.capacity).toBe(3);
     expect(resolved.model).toBe('examples/pedido/model.bpmn');
     expect(scenarioErrors(validateScenario(resolved, pedidoIr()))).toEqual([]);
+  });
+
+  test('los fixtures inline de docs/SCENARIO_FORMAT.md no han derivado de examples/', () => {
+    expect(readFromRepo('examples/pedido/as-is.scenario.json')).toEqual(AS_IS);
+    expect(readFromRepo('examples/pedido/to-be-3-cajeros.scenario.json')).toEqual(
+      PEDIDO['examples/pedido/to-be-3-cajeros.scenario.json'],
+    );
   });
 
   test('un ciclo A -> B -> A produce error que cita los archivos', () => {
