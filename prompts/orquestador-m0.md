@@ -25,7 +25,7 @@ Cerrar el **milestone M0 completo** (26 tickets: repo, CI, docs antes del códig
 - El `id` BPMN es la única clave de elemento; nunca el nombre. Ids nuevos son NCName con prefijo por tipo. Ids ajenos no válidos se sanitizan con mapa reversible.
 - Todos los tiempos en segundos; dinero en `run.currency`; `baseTimeUnit` solo afecta a la presentación.
 - Nombres de columna de resultados = los de Bizagi (`docs/BIZAGI_PARITY.md`), más los extras del documento de estructura.
-- Nada de base de datos, REST, Docker, servidor ni cuentas antes de M3. Nada de UI antes de cerrar M1; desde ahí la épica E9 (UI) puede correr como workstream paralelo a M2/M3, empezando por #132 (importar el diseño de Claude Design) y #57 (shell con bpmn-js), siempre que Brito ya haya pasado la URL del artefacto de diseño.
+- Nada de base de datos, REST, Docker, servidor ni cuentas antes de M3. Nada de UI antes de cerrar M1; desde ahí la épica E9 (UI) puede correr como workstream paralelo a M2/M3, empezando por #142 (importar el diseño de Claude Design) y #57 (shell con bpmn-js), siempre que Brito ya haya pasado la URL del artefacto de diseño.
 - Determinismo: nunca `Math.random` ni `Date` dentro del motor.
 - Docs y mensajes en español; código, identificadores, claves JSON y nombres de archivo en inglés (vocabulario BPSim).
 - Estilo: el mínimo que funciona. Sin abstracciones con una sola implementación, sin interfaces "para después", sin scaffolding. Si tomas un atajo deliberado con techo conocido, márcalo con un comentario `// ponytail: <techo y camino de mejora>`.
@@ -53,7 +53,7 @@ Lanza sub-agentes por workstream; dentro de cada uno respeta las dependencias de
 - W5 · Parser BPMN (Opus): #18 `parseBpmn` → #19 aplanado → #20 tolerancia a Bizagi (necesita #9 y #17) → #21 `validate` (necesita #3) → #22 `annotate` (necesita #16).
 - Cierre de M0: #45 `lila validate` (Sonnet), que depende de #21.
 
-W6 · UI (arranca al cerrar M1, Opus): #132 importar diseño → #57 shell bpmn-js → #133 sistema de temas → #58, #66, #60. Espera a M2 para #62–#64 y a M3 para #61; #134 (Apariencia) y Electron (#70–#74) al final.
+W6 · UI (arranca al cerrar M1, Opus): #142 importar diseño → #57 shell bpmn-js → #143 sistema de temas → #58, #66, #60. Espera a M2 para #62–#64 y a M3 para #61; #144 (Apariencia) y Electron (#70–#74) al final.
 
 Si M0 termina, continúa con M1 en este orden: #23 heap, #24 rng, #25 distribuciones (paralelos), luego #26 bucle DES (**Opus**, ticket L), después #27, #28, #29 y por último #30, #31, #32, #46.
 
