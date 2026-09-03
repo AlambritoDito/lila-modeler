@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Pedido"
+                  targetNamespace="https://lila-modeler.org/bpmn/pedido"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:collaboration id="Collaboration_Pedido">
+    <bpmn:participant id="Participant_Restaurante" name="Restaurante" processRef="Process_Restaurante" />
+    <bpmn:participant id="Participant_Cliente" name="Cliente" processRef="Process_Cliente" />
+    <bpmn:messageFlow id="MessageFlow_Entregado" name="Notifica entrega" sourceRef="EndEvent_Entregado" targetRef="Task_ClienteRecibe" />
+    <bpmn:messageFlow id="MessageFlow_Rechazado" name="Notifica rechazo" sourceRef="EndEvent_Rechazado" targetRef="Task_ClienteRecibe" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_Restaurante" name="Restaurante" isExecutable="false">
+    <bpmn:documentation>Proceso benchmark "pedido": ids literales de examples/pedido/as-is.scenario.json (LILA-008). Task_Empacar no tiene entrada en el escenario: toma los defaults de SCENARIO_FORMAT.md §2.5 (sin tiempo, capacidad infinita) y solo existe para dar cuerpo al AND fork/join.</bpmn:documentation>
+
+    <bpmn:startEvent id="StartEvent_Pedido" name="Pedido recibido">
+      <bpmn:outgoing>Flow_Start_TomarPedido</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_TomarPedido" sourceRef="StartEvent_Pedido" targetRef="Task_TomarPedido" />
+
+    <bpmn:task id="Task_TomarPedido" name="Tomar pedido">
+      <bpmn:incoming>Flow_Start_TomarPedido</bpmn:incoming>
+      <bpmn:outgoing>Flow_TomarPedido_ANDFork</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_TomarPedido_ANDFork" sourceRef="Task_TomarPedido" targetRef="Gateway_ANDFork" />
+
+    <bpmn:parallelGateway id="Gateway_ANDFork" name="Preparar y empacar">
+      <bpmn:incoming>Flow_TomarPedido_ANDFork</bpmn:incoming>
+      <bpmn:outgoing>Flow_ANDFork_Preparar</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ANDFork_Empacar</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:sequenceFlow id="Flow_ANDFork_Preparar" sourceRef="Gateway_ANDFork" targetRef="Task_Preparar" />
+    <bpmn:sequenceFlow id="Flow_ANDFork_Empacar" sourceRef="Gateway_ANDFork" targetRef="Task_Empacar" />
+
+    <bpmn:task id="Task_Preparar" name="Preparar alimento">
+      <bpmn:incoming>Flow_ANDFork_Preparar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Preparar_ANDJoin</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:task id="Task_Empacar" name="Empacar pedido">
+      <bpmn:incoming>Flow_ANDFork_Empacar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Empacar_ANDJoin</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_Preparar_ANDJoin" sourceRef="Task_Preparar" targetRef="Gateway_ANDJoin" />
+    <bpmn:sequenceFlow id="Flow_Empacar_ANDJoin" sourceRef="Task_Empacar" targetRef="Gateway_ANDJoin" />
+
+    <bpmn:parallelGateway id="Gateway_ANDJoin" name="Pedido listo">
+      <bpmn:incoming>Flow_Preparar_ANDJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_Empacar_ANDJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ANDJoin_Revisar</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:sequenceFlow id="Flow_ANDJoin_Revisar" sourceRef="Gateway_ANDJoin" targetRef="Task_Revisar" />
+
+    <bpmn:task id="Task_Revisar" name="Revisar pedido">
+      <bpmn:incoming>Flow_ANDJoin_Revisar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Revisar_Aprobacion</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_Revisar_Aprobacion" sourceRef="Task_Revisar" targetRef="Gateway_Aprobacion" />
+
+    <bpmn:exclusiveGateway id="Gateway_Aprobacion" name="¿Aprobado?">
+      <bpmn:incoming>Flow_Revisar_Aprobacion</bpmn:incoming>
+      <bpmn:outgoing>Flow_Aprobado</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Rechazado</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_Aprobado" name="Aprobado" sourceRef="Gateway_Aprobacion" targetRef="Timer_Reposo" />
+    <bpmn:sequenceFlow id="Flow_Rechazado" name="Rechazado" sourceRef="Gateway_Aprobacion" targetRef="EndEvent_Rechazado" />
+
+    <bpmn:intermediateCatchEvent id="Timer_Reposo" name="Reposo">
+      <bpmn:incoming>Flow_Aprobado</bpmn:incoming>
+      <bpmn:outgoing>Flow_Timer_EndEntregado</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_Reposo" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:sequenceFlow id="Flow_Timer_EndEntregado" sourceRef="Timer_Reposo" targetRef="EndEvent_Entregado" />
+
+    <bpmn:endEvent id="EndEvent_Entregado" name="Pedido entregado">
+      <bpmn:incoming>Flow_Timer_EndEntregado</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="EndEvent_Rechazado" name="Pedido rechazado">
+      <bpmn:incoming>Flow_Rechazado</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmn:process id="Process_Cliente" name="Cliente" isExecutable="false">
+    <bpmn:documentation>Participante de contexto (LILA-008): no aparece en as-is.scenario.json / to-be-3-cajeros.scenario.json y no lo simula el motor v1 (una sola pool de proceso por IR, sección 6). Representa al cliente que recibe la notificación de entrega o rechazo vía message flow.</bpmn:documentation>
+
+    <bpmn:startEvent id="StartEvent_ClienteInicio" name="Inicio">
+      <bpmn:outgoing>Flow_ClienteStart_Recibe</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_ClienteStart_Recibe" sourceRef="StartEvent_ClienteInicio" targetRef="Task_ClienteRecibe" />
+
+    <bpmn:task id="Task_ClienteRecibe" name="Recibe notificacion">
+      <bpmn:incoming>Flow_ClienteStart_Recibe</bpmn:incoming>
+      <bpmn:outgoing>Flow_ClienteRecibe_Fin</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_ClienteRecibe_Fin" sourceRef="Task_ClienteRecibe" targetRef="EndEvent_ClienteFin" />
+
+    <bpmn:endEvent id="EndEvent_ClienteFin" name="Fin">
+      <bpmn:incoming>Flow_ClienteRecibe_Fin</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Pedido">
+    <bpmndi:BPMNPlane id="BPMNPlane_Pedido" bpmnElement="Collaboration_Pedido">
+
+      <bpmndi:BPMNShape id="Participant_Restaurante_di" bpmnElement="Participant_Restaurante" isHorizontal="true">
+        <dc:Bounds x="140" y="40" width="1080" height="440" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="StartEvent_Pedido_di" bpmnElement="StartEvent_Pedido">
+        <dc:Bounds x="200" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_TomarPedido_di" bpmnElement="Task_TomarPedido">
+        <dc:Bounds x="280" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_ANDFork_di" bpmnElement="Gateway_ANDFork">
+        <dc:Bounds x="430" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_Preparar_di" bpmnElement="Task_Preparar">
+        <dc:Bounds x="530" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_Empacar_di" bpmnElement="Task_Empacar">
+        <dc:Bounds x="530" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_ANDJoin_di" bpmnElement="Gateway_ANDJoin">
+        <dc:Bounds x="680" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_Revisar_di" bpmnElement="Task_Revisar">
+        <dc:Bounds x="780" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_Aprobacion_di" bpmnElement="Gateway_Aprobacion">
+        <dc:Bounds x="930" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Timer_Reposo_di" bpmnElement="Timer_Reposo">
+        <dc:Bounds x="1030" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="EndEvent_Entregado_di" bpmnElement="EndEvent_Entregado">
+        <dc:Bounds x="1120" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="EndEvent_Rechazado_di" bpmnElement="EndEvent_Rechazado">
+        <dc:Bounds x="1030" y="320" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Participant_Cliente_di" bpmnElement="Participant_Cliente" isHorizontal="true">
+        <dc:Bounds x="140" y="540" width="560" height="140" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="StartEvent_ClienteInicio_di" bpmnElement="StartEvent_ClienteInicio">
+        <dc:Bounds x="200" y="584" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_ClienteRecibe_di" bpmnElement="Task_ClienteRecibe">
+        <dc:Bounds x="300" y="562" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="EndEvent_ClienteFin_di" bpmnElement="EndEvent_ClienteFin">
+        <dc:Bounds x="460" y="584" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_TomarPedido_di" bpmnElement="Flow_Start_TomarPedido">
+        <di:waypoint x="236" y="220" />
+        <di:waypoint x="280" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_TomarPedido_ANDFork_di" bpmnElement="Flow_TomarPedido_ANDFork">
+        <di:waypoint x="380" y="220" />
+        <di:waypoint x="430" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ANDFork_Preparar_di" bpmnElement="Flow_ANDFork_Preparar">
+        <di:waypoint x="455" y="195" />
+        <di:waypoint x="455" y="140" />
+        <di:waypoint x="530" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ANDFork_Empacar_di" bpmnElement="Flow_ANDFork_Empacar">
+        <di:waypoint x="455" y="245" />
+        <di:waypoint x="455" y="340" />
+        <di:waypoint x="530" y="340" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Preparar_ANDJoin_di" bpmnElement="Flow_Preparar_ANDJoin">
+        <di:waypoint x="630" y="140" />
+        <di:waypoint x="705" y="140" />
+        <di:waypoint x="705" y="195" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Empacar_ANDJoin_di" bpmnElement="Flow_Empacar_ANDJoin">
+        <di:waypoint x="630" y="340" />
+        <di:waypoint x="705" y="340" />
+        <di:waypoint x="705" y="245" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ANDJoin_Revisar_di" bpmnElement="Flow_ANDJoin_Revisar">
+        <di:waypoint x="730" y="220" />
+        <di:waypoint x="780" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Revisar_Aprobacion_di" bpmnElement="Flow_Revisar_Aprobacion">
+        <di:waypoint x="880" y="220" />
+        <di:waypoint x="930" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Aprobado_di" bpmnElement="Flow_Aprobado">
+        <di:waypoint x="980" y="220" />
+        <di:waypoint x="1030" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Rechazado_di" bpmnElement="Flow_Rechazado">
+        <di:waypoint x="955" y="245" />
+        <di:waypoint x="955" y="338" />
+        <di:waypoint x="1030" y="338" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Timer_EndEntregado_di" bpmnElement="Flow_Timer_EndEntregado">
+        <di:waypoint x="1066" y="220" />
+        <di:waypoint x="1120" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ClienteStart_Recibe_di" bpmnElement="Flow_ClienteStart_Recibe">
+        <di:waypoint x="236" y="602" />
+        <di:waypoint x="300" y="602" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ClienteRecibe_Fin_di" bpmnElement="Flow_ClienteRecibe_Fin">
+        <di:waypoint x="400" y="602" />
+        <di:waypoint x="460" y="602" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="MessageFlow_Entregado_di" bpmnElement="MessageFlow_Entregado">
+        <di:waypoint x="1138" y="238" />
+        <di:waypoint x="1138" y="480" />
+        <di:waypoint x="350" y="480" />
+        <di:waypoint x="350" y="562" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="MessageFlow_Rechazado_di" bpmnElement="MessageFlow_Rechazado">
+        <di:waypoint x="1048" y="356" />
+        <di:waypoint x="1048" y="500" />
+        <di:waypoint x="400" y="500" />
+        <di:waypoint x="400" y="562" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>
