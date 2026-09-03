@@ -1,0 +1,16 @@
+{
+  "name": "@lila/engine",
+  "version": "0.0.0",
+  "description": "Motor de simulación DES para BPMN",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --build"
+  }
+}
