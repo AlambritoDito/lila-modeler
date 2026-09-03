@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture LILA-021: un evento adjunto a actividad (boundary event), que está fuera del perfil
+     soportado (docs/SEMANTICS.md § 2 y § 3). El id y el nombre del boundary son los del ejemplo
+     literal de R-NOSOP-2, para poder comparar el mensaje carácter a carácter.
+     Al descartarse el boundary, su rama de cancelación queda inalcanzable: eso también es error. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_BoundaryEvent"
+                  targetNamespace="https://lila-modeler.org/bpmn/test"
+                  exporter="Lila Modeler tests"
+                  exporterVersion="0.0.0">
+  <bpmn:process id="Process_ConBoundary" name="Con boundary event" isExecutable="true">
+    <bpmn:startEvent id="Start_Proceso" name="Inicio" />
+    <bpmn:sequenceFlow id="Flow_Start_Revisar" sourceRef="Start_Proceso" targetRef="Task_Revisar" />
+
+    <bpmn:userTask id="Task_Revisar" name="Revisar" />
+    <bpmn:sequenceFlow id="Flow_Revisar_Fin" sourceRef="Task_Revisar" targetRef="End_Proceso" />
+
+    <bpmn:boundaryEvent id="Boundary_3a1f" name="Vence el plazo" attachedToRef="Task_Revisar">
+      <bpmn:timerEventDefinition id="Timer_Plazo" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_Boundary_Cancelar" sourceRef="Boundary_3a1f" targetRef="Task_Cancelar" />
+
+    <bpmn:task id="Task_Cancelar" name="Cancelar" />
+    <bpmn:sequenceFlow id="Flow_Cancelar_Fin" sourceRef="Task_Cancelar" targetRef="End_Cancelado" />
+
+    <bpmn:endEvent id="End_Cancelado" name="Cancelado" />
+    <bpmn:endEvent id="End_Proceso" name="Fin" />
+  </bpmn:process>
+</bpmn:definitions>
