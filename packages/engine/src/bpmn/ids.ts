@@ -5,9 +5,12 @@
 /** NCName válido: XML Name sin ":" (empieza por letra/"_", sigue con letras/dígitos/"_"/"-"/"."). */
 const NCNAME_START = /^[A-Za-z_]/;
 const NCNAME_INVALID_CHAR = /[^A-Za-z0-9_.-]/g;
+// Sin la bandera `g`: un regex global guarda `lastIndex` entre llamadas y `test()` se
+// vuelve intermitente. El de arriba solo se usa con `replace`, que sí la necesita.
+const NCNAME_HAS_INVALID_CHAR = /[^A-Za-z0-9_.-]/;
 
 export function isNCName(id: string): boolean {
-  return id.length > 0 && NCNAME_START.test(id) && !NCNAME_INVALID_CHAR.test(id);
+  return id.length > 0 && NCNAME_START.test(id) && !NCNAME_HAS_INVALID_CHAR.test(id);
 }
 
 const SUFFIX_LENGTH = 12;

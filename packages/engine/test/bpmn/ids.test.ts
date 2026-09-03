@@ -64,3 +64,10 @@ test('varios ids no-NCName distintos que sanitizan al mismo candidato no colisio
   // Cada sanitizado recupera exactamente su original.
   expect(map.get('_1abc')).toBe('1abc');
 });
+
+test('isNCName no arrastra estado entre llamadas (regex sin bandera g)', () => {
+  expect(isNCName('a b c')).toBe(false);
+  expect(isNCName('x y')).toBe(false);
+  expect(isNCName('Task_1')).toBe(true);
+  expect(isNCName('Task_1')).toBe(true);
+});
