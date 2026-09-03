@@ -10,6 +10,7 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Cada ticket tiene: qué, aceptación (la prueba que lo cierra), de qué depende, tamaño (S ≤ medio día, M ≤ 2 días, L ≤ 1 semana) y archivos que toca.
 - **Reglas para agentes**: (1) leer `docs/SEMANTICS.md`, `SCENARIO_FORMAT.md` y `RESULTS_FORMAT.md` antes de tocar el motor; (2) `packages/engine/src/core/` no importa nada fuera de `core/` (ni `bpmn-moddle`, ni `node:*`, ni React); (3) ningún ticket cierra sin su prueba de aceptación en verde; (4) nombres de columna de resultados = los de Bizagi (ver `docs/BIZAGI_PARITY.md`); (5) todo tiempo en segundos, dinero en `run.currency`; (6) el `id` BPMN es la única clave; nunca el nombre.
 - **v1 = "como Bizagi"**: épicas E0–E11 (hitos M0–M5). **Después**: E12–E19.
+- **Cuándo arranca la UI**: la épica E9 puede correr como workstream paralelo a M2/M3 en cuanto cierre M1 (`simulate` y `lila run` existen), empezando por LILA-112 (importar el diseño) y LILA-057 (shell con bpmn-js). Resultados, comparar y overlay (LILA-062…064) esperan a M2; el panel de escenario (LILA-061) conviene después de M3; Electron (E10) al final.
 
 ---
 
@@ -372,7 +373,7 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 ### E9 — App web: editor, escenario, resultados (M5)
 
 #### LILA-057 · `apps/web` con bpmn-js
-- Épica E9 · Hito M5 · Tamaño M · Depende de LILA-016
+- Épica E9 · Hito M5 · Tamaño M · Depende de LILA-016, LILA-112
 - Qué: Vite + React; `Modeler.tsx` monta `BpmnModeler({ moddleExtensions: { lila } })`; import/export XML; el canvas reserva la esquina inferior derecha para la marca de agua bpmn.io; foco y atajos de bpmn-js 18 verificados.
 - Aceptación: abre `examples/pedido/model.bpmn` y un fixture de Bizagi; crear una tarea deja el nombre en edición inmediata sin `Task 1`; exportar produce XML válido que `lila validate` acepta.
 - Archivos: `apps/web/src/Modeler.tsx`, `main.tsx`, `app.css`.
@@ -448,6 +449,24 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Qué: importar el BPMN más grande que tenga Brito; medir import y mover 100 elementos.
 - Aceptación: sin bloqueos > 1 s; si los hay, ticket de seguimiento con perfil.
 - Archivos: —
+
+#### LILA-112 · Importar el diseño de Claude Design: tokens, temas y componentes
+- Épica E9 · Hito M5 · Tamaño M · Depende de —
+- Qué: leer el artefacto de Claude Design (URL que pasa Brito), extraer la tabla de tokens a `apps/web/src/theme/tokens.css` (variables CSS con los nombres exactos del brief `prompts/claude-design-ui.md`), `themes/eva-01.json` y `themes/papel.json`; convertir el inventario de componentes en la lista de componentes React a construir; guardar una captura de cada artboard en `docs/design/` como referencia visual. Los artboards son referencia, no código a copiar.
+- Aceptación: todos los tokens del brief existen como variables CSS; cambiar el JSON de tema cambia la UI sin recompilar; hay captura de cada artboard en `docs/design/` y `docs/design/README.md` enlaza el artefacto.
+- Archivos: `apps/web/src/theme/*`, `docs/design/*`
+
+#### LILA-113 · Sistema de temas tipo VS Code
+- Épica E9 · Hito M5 · Tamaño M · Depende de LILA-112, LILA-057
+- Qué: `ThemeProvider` que aplica un tema JSON como variables CSS en `:root`; Eva-01 por defecto; selección persistida (userData en escritorio, localStorage en la demo); tipografía y densidad como tokens; el lienzo de bpmn-js, los marcadores y los overlays de simulación leen los tokens.
+- Aceptación: cambiar de Eva-01 a Papel en caliente sin recargar; el lienzo y los overlays toman los colores del tema; un test verifica contraste AA del texto en ambos temas.
+- Archivos: `apps/web/src/theme/ThemeProvider.tsx`, `themes/*.json`
+
+#### LILA-114 · Ajustes → Apariencia: editor de tokens, tipografía, importar/exportar
+- Épica E9 · Hito M5 · Tamaño L · Depende de LILA-113
+- Qué: pantalla con lista de temas (integrados y del usuario), editor de tokens agrupados con selector de color y hex editable, tipografía (UI, mono, diagrama, tamaño base, densidad), vista previa en vivo, restablecer, exportar e importar JSON con el formato documentado en `docs/THEMES.md`.
+- Aceptación: editar `accent.primary` se refleja al instante en la vista previa y en la app; exportar e importar el JSON reproduce el tema exacto; un JSON inválido se rechaza con mensaje claro.
+- Archivos: `apps/web/src/settings/Appearance.tsx`, `docs/THEMES.md`
 
 ### E10 — App de escritorio con Electron (M5)
 
