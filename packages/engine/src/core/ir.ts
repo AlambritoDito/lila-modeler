@@ -57,8 +57,16 @@ export interface ProcessIR {
   source: IrSource;
 }
 
-/** Códigos de error estructural (R-NOSOP-5 de `docs/SEMANTICS.md`). */
-export type IrProblemCode = 'E-FLUJO-COLGANTE' | 'E-ID-DUPLICADO' | 'E-REF-INEXISTENTE';
+/** Códigos de error de validación (secciones 3 y 17 de `docs/SEMANTICS.md`). */
+export type IrProblemCode =
+  | 'E-NOSOP'
+  | 'E-FLUJO-COLGANTE'
+  | 'E-ID-DUPLICADO'
+  | 'E-REF-INEXISTENTE'
+  | 'E-GATEWAY-SIN-ARISTAS'
+  | 'E-INALCANZABLE'
+  | 'E-SIN-START'
+  | 'E-SIN-END';
 
 /** Un problema estructural del IR, siempre atribuido a un id. */
 export interface IrProblem {
@@ -75,9 +83,9 @@ export interface IrProblem {
  * Devuelve la lista completa en una pasada, en orden de aparición (R-NOSOP-3). Un IR sin
  * problemas devuelve `[]`.
  *
- * ponytail: aquí solo va lo estructural. El catálogo de construcciones no soportadas
- * (`E-NOSOP`, `E-INALCANZABLE`, `E-SIN-START`, `E-SIN-END`) es LILA-021 y entra en
- * `core/validate.ts` reutilizando `IrProblem`.
+ * El resto del catálogo (`E-NOSOP`, `E-GATEWAY-SIN-ARISTAS`, `E-INALCANZABLE`, `E-SIN-START`,
+ * `E-SIN-END`) lo añade `bpmn/validate.ts`, que reutiliza esta función: vive fuera de `core/`
+ * porque necesita los elementos no soportados que descartó el parser y que el IR ya no tiene.
  */
 export function validateIr(ir: ProcessIR): IrProblem[] {
   const problems: IrProblem[] = [];
