@@ -1,0 +1,36 @@
+{
+  "$schema": "https://lila-modeler.org/schema/scenario/1.json",
+  "version": 1,
+  "name": "AS-IS",
+  "description": "Operación actual, 2 cajeros y 3 cocineros",
+  "model": "model.bpmn",
+  "run": {
+    "start": "2026-09-07T08:00:00-06:00",
+    "duration": 2592000,
+    "warmup": 3600,
+    "replications": 30,
+    "seed": 42,
+    "baseTimeUnit": "min",
+    "currency": "MXN"
+  },
+  "calendars": {
+    "oficina": { "intervals": [ { "days": ["MON","TUE","WED","THU","FRI"], "from": "09:00", "to": "18:00" } ] }
+  },
+  "resources": {
+    "cajero":   { "name": "Cajero",   "type": "role",      "capacity": 2, "costPerHour": 220, "fixedCost": 0, "calendar": "oficina" },
+    "cocinero": { "name": "Cocinero", "type": "role",      "capacity": 3, "costPerHour": 180, "calendar": "oficina" },
+    "horno":    { "name": "Horno",    "type": "equipment", "capacity": 1 }
+  },
+  "elements": {
+    "StartEvent_Pedido": { "interTriggerTimer": { "type": "exponential", "mean": 240 }, "triggerCount": 10000, "calendar": "oficina" },
+    "Task_TomarPedido":  { "processingTime": { "type": "triangular", "min": 60, "mode": 120, "max": 300 },
+                           "resources": [ { "ref": "cajero", "quantity": 1 } ], "fixedCost": 2.5 },
+    "Task_Preparar":     { "processingTime": { "type": "normal", "mean": 480, "sd": 90 },
+                           "resources": [ { "ref": "cocinero" }, { "ref": "horno" } ], "selection": "and" },
+    "Task_Revisar":      { "processingTime": { "type": "constant", "value": 90 },
+                           "resources": [ { "ref": "cajero" }, { "ref": "cocinero" } ], "selection": "or" },
+    "Timer_Reposo":      { "processingTime": { "type": "constant", "value": 600 } },
+    "Flow_Aprobado":     { "probability": 0.78 },
+    "Flow_Rechazado":    { "probability": 0.22 }
+  }
+}
