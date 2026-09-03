@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { isNCName, newId, sanitizeIds } from '../../src/bpmn/ids.js';
+import { isNCName, newId, sanitizeIds, sanitizeXmlIds } from '../../src/bpmn/ids.js';
 
 test('10 000 ids generados son NCName únicos', () => {
   const ids = new Set<string>();
@@ -70,4 +70,45 @@ test('isNCName no arrastra estado entre llamadas (regex sin bandera g)', () => {
   expect(isNCName('x y')).toBe(false);
   expect(isNCName('Task_1')).toBe(true);
   expect(isNCName('Task_1')).toBe(true);
+});
+
+test('sanitizeXmlIds reescribe un id no-NCName en su definición y en su referencia', () => {
+  const xml =
+    '<bpmn:startEvent id="1-inicio" /><bpmn:sequenceFlow id="Flow_1" sourceRef="1-inicio" targetRef="Task_1" />';
+
+  const { xml: out, sanitizedToOriginal } = sanitizeXmlIds(xml);
+
+  expect(sanitizedToOriginal.size).toBe(1);
+  const [sanitized] = [...sanitizedToOriginal.keys()];
+  expect(sanitized).toBeDefined();
+  expect(sanitizedToOriginal.get(sanitized as string)).toBe('1-inicio');
+
+  // El id sanitizado reemplaza tanto la definición (`id="..."`) como la referencia
+  // (`sourceRef="..."`), y ninguna otra cosa del XML cambia.
+  expect(out).toContain(`id="${sanitized}"`);
+  expect(out).toContain(`sourceRef="${sanitized}"`);
+  expect(out).toContain('targetRef="Task_1"');
+  expect(out).not.toContain('id="1-inicio"');
+  expect(out).not.toContain('sourceRef="1-inicio"');
+});
+
+test('sanitizeXmlIds reescribe un id no-NCName en el contenido de texto de un elemento (flowNodeRef)', () => {
+  const xml =
+    '<bpmn:startEvent id="1-inicio" />' +
+    '<bpmn:lane id="Lane_1"><bpmn:flowNodeRef>1-inicio</bpmn:flowNodeRef></bpmn:lane>';
+
+  const { xml: out, sanitizedToOriginal } = sanitizeXmlIds(xml);
+  const [sanitized] = [...sanitizedToOriginal.keys()];
+  expect(sanitized).toBeDefined();
+
+  expect(out).toContain(`<bpmn:flowNodeRef>${sanitized}</bpmn:flowNodeRef>`);
+});
+
+test('sanitizeXmlIds no toca el XML si todos los ids ya son NCName', () => {
+  const xml = '<bpmn:startEvent id="Start_1" /><bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" />';
+
+  const { xml: out, sanitizedToOriginal } = sanitizeXmlIds(xml);
+
+  expect(sanitizedToOriginal.size).toBe(0);
+  expect(out).toBe(xml);
 });

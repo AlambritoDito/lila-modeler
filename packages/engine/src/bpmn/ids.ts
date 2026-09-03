@@ -74,3 +74,50 @@ export function sanitizeIds(ids: readonly string[]): Map<string, string> {
 
   return sanitizedToOriginal;
 }
+
+/** Cualquier valor de atributo XML `algo="..."`, para recolectar candidatos a id. */
+const ID_ATTR = /\bid="([^"]*)"/g;
+
+/**
+ * Sanitiza los ids no-NCName directamente en el texto del XML, antes de dárselo a
+ * bpmn-moddle.
+ *
+ * bpmn-moddle (vía `moddle-xml`) valida el atributo `id` contra la gramática XML Name en el
+ * momento de leer cada elemento y, si no es válido, descarta el elemento entero como
+ * "unparsable content" (queda como warning, no como excepción — pero el elemento y todo su
+ * contenido, incluidas sus `bizagi:*` de `extensionElements`, desaparecen del árbol). Un id
+ * inválido nunca llega a existir como `ModdleElement.id`, así que sanitizar después de
+ * `fromXML` no tiene nada que sanitizar: hay que reescribir el XML primero.
+ *
+ * Devuelve el XML con cada id no-NCName reemplazado por su versión sanitizada (determinista,
+ * vía `sanitizeIds`) en toda posición donde aparece como valor completo de atributo
+ * (`id="..."`, pero también `sourceRef="..."`, `targetRef="..."`, `default="..."`,
+ * `bpmnElement="..."`, etc. — cualquier atributo que referencie el id) o como contenido de
+ * texto de un elemento (`<bpmn:flowNodeRef>...</bpmn:flowNodeRef>`), junto con el mapa
+ * `idSanitizado -> idOriginal` (vacío si no había nada que sanitizar).
+ *
+ * ponytail: reemplazo de texto con regex, no un recorrido XML real. Techo: no reescribe un id
+ * dentro de una lista separada por espacios (p. ej. `dataInputRefs="a b c"` con `b` inválido);
+ * no aparece en los fixtures de Bizagi conocidos. Camino: si aparece un caso real, tokenizar
+ * esos atributos por espacio antes de reemplazar.
+ */
+export function sanitizeXmlIds(xml: string): {
+  xml: string;
+  sanitizedToOriginal: Map<string, string>;
+} {
+  const ids = new Set<string>();
+  for (const match of xml.matchAll(ID_ATTR)) ids.add(match[1] as string);
+
+  const sanitizedToOriginal = sanitizeIds([...ids]);
+  if (sanitizedToOriginal.size === 0) return { xml, sanitizedToOriginal };
+
+  let out = xml;
+  for (const [candidate, original] of sanitizedToOriginal) {
+    const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out
+      .replace(new RegExp(`="${escaped}"`, 'g'), `="${candidate}"`)
+      .replace(new RegExp(`>${escaped}<`, 'g'), `>${candidate}<`);
+  }
+
+  return { xml: out, sanitizedToOriginal };
+}
