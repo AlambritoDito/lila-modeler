@@ -1,0 +1,28 @@
+{
+  "source": "https://help.bizagi.com/platform/en/level_4_example.htm",
+  "level": 4,
+  "title": "Level 4 - Calendar analysis: Performing a calendar analysis for the Emergency attendance process",
+  "values": {
+    "waitTimeSeconds": {
+      "avg": 1526,
+      "quote": "The average time a patient waits for assistance suffered a little increase from 25 minutes and 15 seconds to 25 minutes and 26 seconds. This is not significant.",
+      "baselineAvgSeconds": 1515,
+      "baselineNota": "El 'antes' (25 min 15 s) es el resultado de nivel 3 con 3 enfermeras y sin calendarios, ver examples/bizagi-levels/level-3/expected.json#values.threeNurses."
+    },
+    "arriveAtPatientPlaceBA": {
+      "maxWaitSeconds": 900,
+      "avgWaitSeconds": 44.4,
+      "quote": "The Arrive at patient place BA task has a maximum waiting time of 15 min. It could be critical for a patient, however the average waiting time is 0,74 min."
+    },
+    "shifts": {
+      "source": "tabla 'Resource | Morning shift (6:00 am - 2:00 pm) | Day shift (2:00 pm - 10:00 pm) | Night shift (10:00 pm - 6:00 am)' de la pagina",
+      "callCenterAgent": { "morning": 2, "day": 2, "night": 1 },
+      "nurse": { "morning": 3, "day": 3, "night": 3 },
+      "ambulance": { "morning": 4, "day": 4, "night": 4 },
+      "basicAmbulance": { "morning": 2, "day": 1, "night": 2 },
+      "quickAttentionVehicle": { "morning": 1, "day": 2, "night": 1 },
+      "receptionist": { "morning": 2, "day": 1, "night": 1 }
+    }
+  },
+  "nota": "La tabla completa de resultados (CalendarAnalysis1/2.png) es una imagen, no texto; solo se citan los numeros que la pagina da en prosa (arriba). SCENARIO_FORMAT.md v1 no soporta que un mismo pool de recursos tenga capacidad distinta por calendario (a diferencia de Bizagi); scenario.json modela esto con 3 pools por recurso variable (uno por turno) seleccionados con selection:'or', ver documentation del .bpmn y la nota de scenario.json. El calendario 'night' (22:00-06:00) cruza medianoche y se declara como dos intervalos (22:00-23:59 y 00:00-06:00) por R13 de SCENARIO_FORMAT.md, dejando un hueco de 1 minuto como simplificacion conocida."
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://lila-modeler.org/schema/scenario/1.json",
+  "version": 1,
+  "name": "Bizagi nivel 3 - analisis de recursos (3 enfermeras)",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_3_example.htm, configuracion final con 3 enfermeras (la que la pagina recomienda y de la que parte el nivel 4).",
+  "model": "model.bpmn",
+  "run": {
+    "start": "2026-01-05T00:00:00+00:00",
+    "duration": 604800,
+    "currency": "USD"
+  },
+  "resources": {
+    "callCenterAgent": { "name": "Call center agent", "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0 },
+    "nurse":           { "name": "Nurse",              "type": "role", "capacity": 3, "fixedCost": 5, "costPerHour": 0 },
+    "ambulance":       { "name": "Ambulance",           "type": "equipment", "capacity": 4, "fixedCost": 30, "costPerHour": 0.4 },
+    "basicAmbulance":  { "name": "Basic ambulance",     "type": "equipment", "capacity": 2, "fixedCost": 25, "costPerHour": 0.3 },
+    "quickAttentionVehicle": { "name": "Quick attention vehicle", "type": "equipment", "capacity": 2, "fixedCost": 18, "costPerHour": 0.22 },
+    "receptionist":    { "name": "Receptionist",        "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0 }
+  },
+  "elements": {
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
+    "Task_Recibir":    { "processingTime": { "type": "constant", "value": 240 },
+                         "resources": [ { "ref": "callCenterAgent", "quantity": 1 } ], "fixedCost": 2 },
+    "Task_Clasificar": { "processingTime": { "type": "constant", "value": 300 },
+                         "resources": [ { "ref": "nurse", "quantity": 1 } ], "fixedCost": 1 },
+    "Task_Gestionar":  { "processingTime": { "type": "constant", "value": 660 },
+                         "resources": [ { "ref": "nurse", "quantity": 1 } ], "fixedCost": 1 },
+    "Task_Recoger":    { "processingTime": { "type": "constant", "value": 1200 },
+                         "resources": [ { "ref": "ambulance", "quantity": 1 } ], "fixedCost": 0 },
+    "Task_LlegarQAV":  { "processingTime": { "type": "constant", "value": 420 },
+                         "resources": [ { "ref": "basicAmbulance", "quantity": 1 } ], "fixedCost": 0 },
+    "Task_LlegarBA":   { "processingTime": { "type": "constant", "value": 600 },
+                         "resources": [ { "ref": "quickAttentionVehicle", "quantity": 1 } ], "fixedCost": 0 },
+    "Task_Autorizar":  { "processingTime": { "type": "constant", "value": 240 },
+                         "resources": [ { "ref": "receptionist", "quantity": 1 } ], "fixedCost": 1 }
+  }
+}

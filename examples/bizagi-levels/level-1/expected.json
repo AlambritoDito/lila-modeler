@@ -1,0 +1,19 @@
+{
+  "source": "https://help.bizagi.com/platform/en/level_1_example.htm",
+  "level": 1,
+  "title": "Level 1 - Process validation: Validating the Emergency attendance process",
+  "values": {
+    "maxArrivalCount": 1000,
+    "triageProbabilities": { "green": 0.2, "yellow": 0.3, "red": 0.5 },
+    "correctedRun": {
+      "quote": "The number of tokens created (1000) is equal to the sum of instances completed (483+315+202).",
+      "instancesCompleted": { "green": 483, "yellow": 315, "red": 202, "total": 1000 }
+    },
+    "brokenRun": {
+      "nota": "Corrida histórica ANTES de agregar el Parallel Gateway de convergencia (el error que el tutorial enseña a diagnosticar). No es el resultado esperado del model.bpmn de este repo, que ya incluye la convergencia; se deja aquí solo para trazabilidad pedagógica del ejemplo original.",
+      "quote": "The number of tokens (1000) created at the Start Event of the process differs to the sum of instances completed at the End Events (1006+311+186).",
+      "instancesCompleted": { "green": 1006, "yellow": 311, "red": 186, "total": 1503 }
+    }
+  },
+  "nota": "Bizagi no publica en texto los nombres de las tareas dentro de cada rama de triage (solo en capturas de pantalla no accesibles, p.ej. SimulationExample2.png, ProcessValidation40/41/42.png); model.bpmn reproduce la estructura descrita (XOR 'Triage type' 20/30/50 + Parallel Gateway fork/join por rama) con nombres de tarea representativos, documentados como tales en el propio .bpmn."
+}

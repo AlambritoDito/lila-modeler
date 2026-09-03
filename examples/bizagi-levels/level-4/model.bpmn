@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_BizagiLevel4"
+                  targetNamespace="https://lila-modeler.org/bpmn/bizagi-levels/level-4"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:process id="Process_Urgencias" name="Emergency attendance process" isExecutable="false">
+    <bpmn:documentation>Reconstrucción del "Emergency attendance process" usado en
+https://help.bizagi.com/platform/en/level_4_example.htm (LILA-010, nivel 4: calendarios/turnos
+sobre los recursos del nivel 3, https://help.bizagi.com/platform/en/level_3_example.htm). Mismo
+proceso que los niveles 2 y 3, tal como hace la documentación oficial de Bizagi. La probabilidad
+del gateway "Arrive at patient place QAV/BA" no está publicada en texto (solo en captura); se deja
+sin `probability` en el escenario, que por SCENARIO_FORMAT.md §2.5/R10 reparte equitativamente por
+defecto — no es un valor inventado, es el default documentado del formato.</bpmn:documentation>
+
+    <bpmn:startEvent id="StartEvent_Llegada" name="Llega reporte">
+      <bpmn:outgoing>Flow_Start_Recibir</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Recibir" sourceRef="StartEvent_Llegada" targetRef="Task_Recibir" />
+
+    <bpmn:task id="Task_Recibir" name="Receive emergency report">
+      <bpmn:incoming>Flow_Start_Recibir</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recibir_Clasificar</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Recibir_Clasificar" sourceRef="Task_Recibir" targetRef="Task_Clasificar" />
+
+    <bpmn:task id="Task_Clasificar" name="Classify Triage">
+      <bpmn:incoming>Flow_Recibir_Clasificar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Clasificar_Gestionar</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Clasificar_Gestionar" sourceRef="Task_Clasificar" targetRef="Task_Gestionar" />
+
+    <bpmn:task id="Task_Gestionar" name="Manage patient entry">
+      <bpmn:incoming>Flow_Clasificar_Gestionar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Gestionar_Recoger</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Gestionar_Recoger" sourceRef="Task_Gestionar" targetRef="Task_Recoger" />
+
+    <bpmn:task id="Task_Recoger" name="Pick up patient">
+      <bpmn:incoming>Flow_Gestionar_Recoger</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recoger_Vehiculo</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Recoger_Vehiculo" sourceRef="Task_Recoger" targetRef="Gateway_Vehiculo" />
+
+    <bpmn:exclusiveGateway id="Gateway_Vehiculo" name="Vehiculo asignado">
+      <bpmn:incoming>Flow_Recoger_Vehiculo</bpmn:incoming>
+      <bpmn:outgoing>Flow_Vehiculo_QAV</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Vehiculo_BA</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_Vehiculo_QAV" name="QAV" sourceRef="Gateway_Vehiculo" targetRef="Task_LlegarQAV" />
+    <bpmn:sequenceFlow id="Flow_Vehiculo_BA" name="BA" sourceRef="Gateway_Vehiculo" targetRef="Task_LlegarBA" />
+
+    <bpmn:task id="Task_LlegarQAV" name="Arrive at patient place QAV">
+      <bpmn:incoming>Flow_Vehiculo_QAV</bpmn:incoming>
+      <bpmn:outgoing>Flow_QAV_Autorizar</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_LlegarBA" name="Arrive at patient place BA">
+      <bpmn:incoming>Flow_Vehiculo_BA</bpmn:incoming>
+      <bpmn:outgoing>Flow_BA_Autorizar</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_QAV_Autorizar" sourceRef="Task_LlegarQAV" targetRef="Task_Autorizar" />
+    <bpmn:sequenceFlow id="Flow_BA_Autorizar" sourceRef="Task_LlegarBA" targetRef="Task_Autorizar" />
+
+    <bpmn:task id="Task_Autorizar" name="Authorize entry">
+      <bpmn:incoming>Flow_QAV_Autorizar</bpmn:incoming>
+      <bpmn:incoming>Flow_BA_Autorizar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Autorizar_Fin</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Autorizar_Fin" sourceRef="Task_Autorizar" targetRef="EndEvent_Fin" />
+
+    <bpmn:endEvent id="EndEvent_Fin" name="Paciente atendido">
+      <bpmn:incoming>Flow_Autorizar_Fin</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_BizagiLevel4">
+    <bpmndi:BPMNPlane id="BPMNPlane_BizagiLevel4" bpmnElement="Process_Urgencias">
+
+      <bpmndi:BPMNShape id="StartEvent_Llegada_di" bpmnElement="StartEvent_Llegada">
+        <dc:Bounds x="80" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recibir_di" bpmnElement="Task_Recibir">
+        <dc:Bounds x="160" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Clasificar_di" bpmnElement="Task_Clasificar">
+        <dc:Bounds x="300" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Gestionar_di" bpmnElement="Task_Gestionar">
+        <dc:Bounds x="440" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recoger_di" bpmnElement="Task_Recoger">
+        <dc:Bounds x="580" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Vehiculo_di" bpmnElement="Gateway_Vehiculo">
+        <dc:Bounds x="730" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_LlegarQAV_di" bpmnElement="Task_LlegarQAV">
+        <dc:Bounds x="830" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_LlegarBA_di" bpmnElement="Task_LlegarBA">
+        <dc:Bounds x="830" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Autorizar_di" bpmnElement="Task_Autorizar">
+        <dc:Bounds x="980" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Fin_di" bpmnElement="EndEvent_Fin">
+        <dc:Bounds x="1130" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_Recibir_di" bpmnElement="Flow_Start_Recibir">
+        <di:waypoint x="116" y="220" /><di:waypoint x="160" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recibir_Clasificar_di" bpmnElement="Flow_Recibir_Clasificar">
+        <di:waypoint x="260" y="220" /><di:waypoint x="300" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Clasificar_Gestionar_di" bpmnElement="Flow_Clasificar_Gestionar">
+        <di:waypoint x="400" y="220" /><di:waypoint x="440" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Gestionar_Recoger_di" bpmnElement="Flow_Gestionar_Recoger">
+        <di:waypoint x="540" y="220" /><di:waypoint x="580" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recoger_Vehiculo_di" bpmnElement="Flow_Recoger_Vehiculo">
+        <di:waypoint x="680" y="220" /><di:waypoint x="730" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Vehiculo_QAV_di" bpmnElement="Flow_Vehiculo_QAV">
+        <di:waypoint x="755" y="195" /><di:waypoint x="755" y="120" /><di:waypoint x="830" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Vehiculo_BA_di" bpmnElement="Flow_Vehiculo_BA">
+        <di:waypoint x="755" y="245" /><di:waypoint x="755" y="340" /><di:waypoint x="830" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_QAV_Autorizar_di" bpmnElement="Flow_QAV_Autorizar">
+        <di:waypoint x="930" y="120" /><di:waypoint x="1030" y="120" /><di:waypoint x="1030" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_BA_Autorizar_di" bpmnElement="Flow_BA_Autorizar">
+        <di:waypoint x="930" y="340" /><di:waypoint x="1030" y="340" /><di:waypoint x="1030" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Autorizar_Fin_di" bpmnElement="Flow_Autorizar_Fin">
+        <di:waypoint x="1080" y="220" /><di:waypoint x="1130" y="220" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>

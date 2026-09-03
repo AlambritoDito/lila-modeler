@@ -1,0 +1,26 @@
+{
+  "source": "https://help.bizagi.com/platform/en/level_3_example.htm",
+  "level": 3,
+  "title": "Level 3 - Resource analysis: Performing a resource analysis for the Emergency attendance process",
+  "values": {
+    "threeNurses": {
+      "nota": "Configuracion final publicada (3 enfermeras), la que reproduce scenario.json de esta carpeta y de la que parte el nivel 4.",
+      "waitTimeSeconds": { "min": 960, "max": 2100, "avg": 1515 },
+      "quotes": [
+        "the minimum time remains at 16 minutes, the maximum now becomes 35 minutes and the average 25 minutes and 15 seconds.",
+        "Usages are acceptable. Nurses now have a utilization of 69,75%."
+      ],
+      "resourceUtilization": { "nurse": 0.6975 }
+    },
+    "twoNurses": {
+      "nota": "Corrida ANTERIOR (2 enfermeras), publicada como diagnostico del cuello de botella antes de agregar la tercera. No corresponde al scenario.json de esta carpeta (que ya usa 3); se deja para trazabilidad del ejemplo original.",
+      "waitTimeSeconds": { "min": 960, "max": 39420, "avg": 13178 },
+      "quotes": [
+        "The minimum time remains at 16 minutes but the maximum increased to 10 hours and 57 minutes and now the average is 3 hours, 39 minutes and 38 seconds.",
+        "The nurse who performs the Classify triage and Manage patient reception has a usage of 99,85%."
+      ],
+      "resourceUtilization": { "nurse": 0.9985 }
+    }
+  },
+  "nota": "Las tablas completas de resultados por actividad/recurso (ResourcesAnalysis1-4.png) son imagenes, no texto: no se transcriben para no inventar cifras. Los parametros de entrada (recursos, cantidades, costos, requerimientos por actividad, tiempos de proceso) SI estan publicados en texto integro y se usan tal cual en scenario.json; incluye la asignacion literal 'Arrive at patient place QAV -> Basic ambulance' / 'Arrive at patient place BA -> Quick attention vehicle' tal como aparece en la pagina (aunque los nombres parecen intercambiados, se reproduce verbatim)."
+}
