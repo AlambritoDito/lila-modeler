@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture LILA-019: el mismo proceso que subproceso-and.bpmn, aplanado a mano.
+     R-PLAN-5: el aplanado no cambia los números, así que los dos IR deben coincidir. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_AplanadoAnd"
+                  targetNamespace="https://lila-modeler.org/bpmn/test"
+                  exporter="Lila Modeler tests"
+                  exporterVersion="0.0.0">
+  <bpmn:process id="Process_Aplanado" name="Aplanado a mano" isExecutable="true">
+    <bpmn:startEvent id="Start_Proceso" name="Inicio" />
+    <bpmn:sequenceFlow id="Flow_Entrada" sourceRef="Start_Proceso" targetRef="Gateway_Fork" />
+
+    <bpmn:parallelGateway id="Gateway_Fork" name="Bifurca" />
+    <bpmn:sequenceFlow id="Flow_Fork_A" sourceRef="Gateway_Fork" targetRef="Task_A" />
+    <bpmn:sequenceFlow id="Flow_Fork_B" sourceRef="Gateway_Fork" targetRef="Task_B" />
+
+    <bpmn:task id="Task_A" name="Rama A" />
+    <bpmn:userTask id="Task_B" name="Rama B" />
+
+    <bpmn:sequenceFlow id="Flow_A_Join" sourceRef="Task_A" targetRef="Gateway_Join" />
+    <bpmn:sequenceFlow id="Flow_B_Join" sourceRef="Task_B" targetRef="Gateway_Join" />
+
+    <bpmn:parallelGateway id="Gateway_Join" name="Sincroniza" />
+    <bpmn:sequenceFlow id="Flow_Join_Fin" sourceRef="Gateway_Join" targetRef="End_Proceso" />
+
+    <bpmn:endEvent id="End_Proceso" name="Fin" />
+  </bpmn:process>
+</bpmn:definitions>
