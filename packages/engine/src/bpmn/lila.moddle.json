@@ -1,0 +1,83 @@
+{
+  "name": "Lila",
+  "uri": "https://lila-modeler.org/schema/bpmn/1",
+  "prefix": "lila",
+  "xml": {
+    "tagAlias": "lowerCase"
+  },
+  "types": [
+    {
+      "name": "Responsibility",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "type", "isAttr": true, "type": "String" },
+        { "name": "roleRef", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "SystemRef",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "DocumentRef",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "RiskRef",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "ControlRef",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "KpiRef",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "Input",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "Output",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "VersionTag",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "value", "isAttr": true, "type": "String" }
+      ]
+    }
+  ]
+}
