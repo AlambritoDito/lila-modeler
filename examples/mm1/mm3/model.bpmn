@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_MM3"
+                  targetNamespace="https://lila-modeler.org/bpmn/mm3"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:process id="Process_MM3" name="M/M/3 (rho=0.8)" isExecutable="false">
+    <bpmn:documentation>Oráculo M/M/3 (LILA-011): 1 tarea, 3 servidores (pool capacity=3). Llegadas exponenciales, servicio exponencial. Valores esperados en expected.json (Erlang C, ver tools/oracles/erlang_c.ts).</bpmn:documentation>
+
+    <bpmn:startEvent id="StartEvent_Llegadas" name="Llegada">
+      <bpmn:outgoing>Flow_Start_Servicio</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_Servicio" sourceRef="StartEvent_Llegadas" targetRef="Task_Servicio" />
+
+    <bpmn:task id="Task_Servicio" name="Atender">
+      <bpmn:incoming>Flow_Start_Servicio</bpmn:incoming>
+      <bpmn:outgoing>Flow_Servicio_Fin</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_Servicio_Fin" sourceRef="Task_Servicio" targetRef="EndEvent_Fin" />
+
+    <bpmn:endEvent id="EndEvent_Fin" name="Fin">
+      <bpmn:incoming>Flow_Servicio_Fin</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_MM3">
+    <bpmndi:BPMNPlane id="BPMNPlane_MM3" bpmnElement="Process_MM3">
+
+      <bpmndi:BPMNShape id="StartEvent_Llegadas_di" bpmnElement="StartEvent_Llegadas">
+        <dc:Bounds x="180" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_Servicio_di" bpmnElement="Task_Servicio">
+        <dc:Bounds x="270" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="EndEvent_Fin_di" bpmnElement="EndEvent_Fin">
+        <dc:Bounds x="420" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_Servicio_di" bpmnElement="Flow_Start_Servicio">
+        <di:waypoint x="216" y="120" />
+        <di:waypoint x="270" y="120" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Servicio_Fin_di" bpmnElement="Flow_Servicio_Fin">
+        <di:waypoint x="370" y="120" />
+        <di:waypoint x="420" y="120" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>

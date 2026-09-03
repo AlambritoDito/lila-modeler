@@ -1,0 +1,18 @@
+{
+  "source": "tools/oracles/erlang_c.ts (Erlang C)",
+  "name": "M/M/1 rho=0.8",
+  "params": {
+    "lambda": 0.0026666666666666666,
+    "mu": 0.0033333333333333335,
+    "c": 1
+  },
+  "values": {
+    "utilization": 0.7999999999999999,
+    "probWait": 0.7999999999999999,
+    "wqSeconds": 1199.9999999999993,
+    "lqCustomers": 3.199999999999998,
+    "lCustomers": 3.999999999999998,
+    "wSeconds": 1499.9999999999993
+  },
+  "nota": "Wq/Lq/L/W calculados con la fórmula de Erlang C (M/M/c); reproducible con `npx tsx tools/oracles/generate-mm-expected.ts`. Ver examples/mm1/README.md."
+}
