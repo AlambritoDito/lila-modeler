@@ -3,16 +3,22 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/*", "apps/*"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "test": "vitest run",
     "build": "tsc --build",
     "typecheck": "tsc --build --force"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "tsx": "^4.20.5"
+    "vitest": "^3.2.4"
   }
 }

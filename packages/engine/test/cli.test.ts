@@ -1,0 +1,76 @@
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { main } from '../src/cli.js';
+
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const pedido = `${repo}examples/pedido/model.bpmn`;
+const boundary = fileURLToPath(new URL('./fixtures/boundary-event.bpmn', import.meta.url));
+
+let out: string[];
+
+beforeEach(() => {
+  out = [];
+  const capture = (...args: unknown[]) => void out.push(args.join(' '));
+  vi.spyOn(console, 'log').mockImplementation(capture);
+  vi.spyOn(console, 'error').mockImplementation(capture);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// Aceptación LILA-045: `lila validate examples/pedido/model.bpmn` ⇒ 0 errores.
+test('validate sobre examples/pedido imprime el IR y sale con 0', async () => {
+  const code = await main(['validate', pedido]);
+  const text = out.join('\n');
+
+  expect(code).toBe(0);
+  expect(text).toContain('0 errores, 0 avisos.');
+  expect(text).toContain('Task_TomarPedido');
+  expect(text).toContain('Flow_Aprobado: Gateway_Aprobacion -> Timer_Reposo');
+  expect(text).toContain('Nodos (11)');
+  expect(text).toContain('Flujos (11)');
+});
+
+// Aceptación LILA-045: con un fixture con boundary event ⇒ error y exit 1.
+test('validate sobre un modelo con boundary event sale con 1 y cita el id', async () => {
+  const code = await main(['validate', boundary]);
+  const text = out.join('\n');
+
+  expect(code).toBe(1);
+  expect(text).toContain('E-NOSOP');
+  expect(text).toContain('no soportado por el simulador');
+});
+
+test('--json imprime JSON parseable con ir, errores y avisos', async () => {
+  const code = await main(['validate', pedido, '--json']);
+  const parsed = JSON.parse(out.join('\n')) as {
+    ir: { nodes: Record<string, unknown> };
+    errors: unknown[];
+    warnings: unknown[];
+  };
+
+  expect(code).toBe(0);
+  expect(Object.keys(parsed.ir.nodes)).toContain('Task_TomarPedido');
+  expect(parsed.errors).toEqual([]);
+  expect(parsed.warnings).toEqual([]);
+});
+
+test('sin argumentos imprime el uso y sale con 1', async () => {
+  expect(await main([])).toBe(1);
+  expect(out.join('\n')).toContain('Uso: lila validate');
+});
+
+test('un comando desconocido sale con 1', async () => {
+  expect(await main(['simular', pedido])).toBe(1);
+  expect(out.join('\n')).toContain('comando desconocido');
+});
+
+test('validate sin ruta sale con 1', async () => {
+  expect(await main(['validate'])).toBe(1);
+  expect(out.join('\n')).toContain('falta la ruta');
+});
+
+test('--help sale con 0', async () => {
+  expect(await main(['--help'])).toBe(0);
+});
