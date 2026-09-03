@@ -7,10 +7,21 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./bpmn": "./dist/bpmn/index.js",
+    "./schema": "./dist/scenario.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --build"
+  },
+  "dependencies": {
+    "bpmn-moddle": "^10.2.0",
+    "zod": "^4.5.4"
+  },
+  "bin": {
+    "lila": "./dist/cli.js"
   }
 }
