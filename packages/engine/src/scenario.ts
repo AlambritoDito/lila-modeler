@@ -396,3 +396,112 @@ export function toJsonSchema(): Record<string, unknown> {
     ...z.toJSONSchema(ScenarioSchema, { io: 'input', unrepresentable: 'any' }),
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * § 6 — extends
+ * ------------------------------------------------------------------ */
+
+/**
+ * Lee un escenario ya parseado a JSON desde una ruta. Se inyecta para que `scenario.ts` no toque
+ * disco: la CLI pasa `readFileSync` + `JSON.parse`, la web pasa su sistema de archivos virtual.
+ */
+export type ScenarioReader = (path: string) => unknown;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Normaliza una ruta con `/`, resolviendo `.` y `..`.
+ *
+ * ponytail: solo separador `/`, sin unidades de Windows ni URLs. Es lo que hay en un repo y en el
+ * FS virtual de la web; si algún día entra una ruta `C:\…`, se cambia por `node:path` en el borde
+ * que la produce, no aquí.
+ */
+function normalizePath(path: string): string {
+  const absolute = path.startsWith('/');
+  const parts: string[] = [];
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..' && parts.length > 0 && parts[parts.length - 1] !== '..') parts.pop();
+    else if (part !== '..' || !absolute) parts.push(part);
+  }
+  return (absolute ? '/' : '') + parts.join('/');
+}
+
+/** Resuelve `ref` **relativa al archivo** `base`, no al directorio de trabajo (§ 6). */
+export function resolveScenarioPath(base: string, ref: string): string {
+  if (ref.startsWith('/')) return normalizePath(ref);
+  const slash = base.lastIndexOf('/');
+  const dir = slash === -1 ? '' : base.slice(0, slash);
+  return normalizePath(dir === '' ? ref : `${dir}/${ref}`);
+}
+
+/**
+ * Merge profundo del hijo sobre el padre.
+ *
+ * - Objeto sobre objeto: se fusiona clave a clave.
+ * - `null`: **borra** la clave del resultado.
+ * - Cualquier otra cosa, arrays incluidos, **reemplaza entera** (§ 6: es la única semántica
+ *   predecible para una lista sin claves).
+ */
+function deepMerge(
+  parent: Record<string, unknown>,
+  child: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...parent };
+  for (const [key, value] of Object.entries(child)) {
+    const previous = out[key];
+    if (value === null) delete out[key];
+    else if (isPlainObject(previous) && isPlainObject(value)) out[key] = deepMerge(previous, value);
+    else out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Resuelve la cadena de `extends` de un escenario y devuelve el objeto fusionado, **sin validar**:
+ * las reglas de `docs/SCENARIO_FORMAT.md` § 5 se aplican al escenario resuelto, no a cada archivo.
+ *
+ * - Cadenas permitidas: se resuelve de la raíz hacia abajo.
+ * - Rutas relativas al archivo del hijo; `model` se reescribe relativo al archivo que lo declara,
+ *   para que un `model` heredado de otro directorio siga apuntando al mismo `.bpmn`.
+ * - Ciclos rechazados con error que cita los archivos implicados.
+ * - El `extends` desaparece del resultado: ya está aplicado.
+ */
+export function resolveExtends(path: string, read: ScenarioReader): Record<string, unknown> {
+  const chain: Array<{ path: string; scenario: Record<string, unknown> }> = [];
+  const seen = new Set<string>();
+  let current = normalizePath(path);
+
+  for (;;) {
+    if (seen.has(current)) {
+      const cycle = [...chain.map((link) => link.path), current].join(' -> ');
+      throw new Error(`extends: ciclo en la cadena de herencia: ${cycle}`);
+    }
+    seen.add(current);
+
+    const raw = read(current);
+    if (!isPlainObject(raw)) throw new Error(`${current}: el escenario debe ser un objeto JSON.`);
+
+    chain.push({ path: current, scenario: raw });
+
+    const parent = raw['extends'];
+    if (parent === undefined || parent === null) break;
+    if (typeof parent !== 'string') {
+      throw new Error(`${current}: extends debe ser una ruta a otro escenario.`);
+    }
+    current = resolveScenarioPath(current, parent);
+  }
+
+  let resolved: Record<string, unknown> = {};
+  // De la raíz hacia abajo: el último de la cadena es el ancestro más lejano.
+  for (const link of [...chain].reverse()) {
+    const { extends: _ignored, ...own } = link.scenario;
+    if (typeof own['model'] === 'string') {
+      own['model'] = resolveScenarioPath(link.path, own['model']);
+    }
+    resolved = deepMerge(resolved, own);
+  }
+  return resolved;
+}
