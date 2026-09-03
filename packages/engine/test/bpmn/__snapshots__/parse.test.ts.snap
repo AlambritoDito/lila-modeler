@@ -1,0 +1,213 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshot del IR de examples/pedido 1`] = `
+{
+  "flows": {
+    "Flow_ANDFork_Empacar": {
+      "from": "Gateway_ANDFork",
+      "isDefault": false,
+      "name": "",
+      "to": "Task_Empacar",
+    },
+    "Flow_ANDFork_Preparar": {
+      "from": "Gateway_ANDFork",
+      "isDefault": false,
+      "name": "",
+      "to": "Task_Preparar",
+    },
+    "Flow_ANDJoin_Revisar": {
+      "from": "Gateway_ANDJoin",
+      "isDefault": false,
+      "name": "",
+      "to": "Task_Revisar",
+    },
+    "Flow_Aprobado": {
+      "from": "Gateway_Aprobacion",
+      "isDefault": false,
+      "name": "Aprobado",
+      "to": "Timer_Reposo",
+    },
+    "Flow_Empacar_ANDJoin": {
+      "from": "Task_Empacar",
+      "isDefault": false,
+      "name": "",
+      "to": "Gateway_ANDJoin",
+    },
+    "Flow_Preparar_ANDJoin": {
+      "from": "Task_Preparar",
+      "isDefault": false,
+      "name": "",
+      "to": "Gateway_ANDJoin",
+    },
+    "Flow_Rechazado": {
+      "from": "Gateway_Aprobacion",
+      "isDefault": false,
+      "name": "Rechazado",
+      "to": "EndEvent_Rechazado",
+    },
+    "Flow_Revisar_Aprobacion": {
+      "from": "Task_Revisar",
+      "isDefault": false,
+      "name": "",
+      "to": "Gateway_Aprobacion",
+    },
+    "Flow_Start_TomarPedido": {
+      "from": "StartEvent_Pedido",
+      "isDefault": false,
+      "name": "",
+      "to": "Task_TomarPedido",
+    },
+    "Flow_Timer_EndEntregado": {
+      "from": "Timer_Reposo",
+      "isDefault": false,
+      "name": "",
+      "to": "EndEvent_Entregado",
+    },
+    "Flow_TomarPedido_ANDFork": {
+      "from": "Task_TomarPedido",
+      "isDefault": false,
+      "name": "",
+      "to": "Gateway_ANDFork",
+    },
+  },
+  "id": "Process_Restaurante",
+  "name": "Restaurante",
+  "nodes": {
+    "EndEvent_Entregado": {
+      "incoming": [
+        "Flow_Timer_EndEntregado",
+      ],
+      "name": "Pedido entregado",
+      "outgoing": [],
+      "type": "end",
+    },
+    "EndEvent_Rechazado": {
+      "incoming": [
+        "Flow_Rechazado",
+      ],
+      "name": "Pedido rechazado",
+      "outgoing": [],
+      "type": "end",
+    },
+    "Gateway_ANDFork": {
+      "incoming": [
+        "Flow_TomarPedido_ANDFork",
+      ],
+      "name": "Preparar y empacar",
+      "outgoing": [
+        "Flow_ANDFork_Preparar",
+        "Flow_ANDFork_Empacar",
+      ],
+      "type": "and",
+    },
+    "Gateway_ANDJoin": {
+      "incoming": [
+        "Flow_Preparar_ANDJoin",
+        "Flow_Empacar_ANDJoin",
+      ],
+      "name": "Pedido listo",
+      "outgoing": [
+        "Flow_ANDJoin_Revisar",
+      ],
+      "type": "and",
+    },
+    "Gateway_Aprobacion": {
+      "incoming": [
+        "Flow_Revisar_Aprobacion",
+      ],
+      "name": "¿Aprobado?",
+      "outgoing": [
+        "Flow_Aprobado",
+        "Flow_Rechazado",
+      ],
+      "type": "xor",
+    },
+    "StartEvent_Pedido": {
+      "incoming": [],
+      "name": "Pedido recibido",
+      "outgoing": [
+        "Flow_Start_TomarPedido",
+      ],
+      "type": "start",
+    },
+    "Task_Empacar": {
+      "incoming": [
+        "Flow_ANDFork_Empacar",
+      ],
+      "name": "Empacar pedido",
+      "outgoing": [
+        "Flow_Empacar_ANDJoin",
+      ],
+      "type": "task",
+    },
+    "Task_Preparar": {
+      "incoming": [
+        "Flow_ANDFork_Preparar",
+      ],
+      "name": "Preparar alimento",
+      "outgoing": [
+        "Flow_Preparar_ANDJoin",
+      ],
+      "type": "task",
+    },
+    "Task_Revisar": {
+      "incoming": [
+        "Flow_ANDJoin_Revisar",
+      ],
+      "name": "Revisar pedido",
+      "outgoing": [
+        "Flow_Revisar_Aprobacion",
+      ],
+      "type": "task",
+    },
+    "Task_TomarPedido": {
+      "incoming": [
+        "Flow_Start_TomarPedido",
+      ],
+      "name": "Tomar pedido",
+      "outgoing": [
+        "Flow_TomarPedido_ANDFork",
+      ],
+      "type": "task",
+    },
+    "Timer_Reposo": {
+      "incoming": [
+        "Flow_Aprobado",
+      ],
+      "name": "Reposo",
+      "outgoing": [
+        "Flow_Timer_EndEntregado",
+      ],
+      "type": "timer",
+    },
+  },
+  "source": {
+    "exporter": "Lila Modeler examples (hand-written)",
+    "exporterVersion": "0.0.0",
+    "originalIds": {
+      "EndEvent_Entregado": "EndEvent_Entregado",
+      "EndEvent_Rechazado": "EndEvent_Rechazado",
+      "Flow_ANDFork_Empacar": "Flow_ANDFork_Empacar",
+      "Flow_ANDFork_Preparar": "Flow_ANDFork_Preparar",
+      "Flow_ANDJoin_Revisar": "Flow_ANDJoin_Revisar",
+      "Flow_Aprobado": "Flow_Aprobado",
+      "Flow_Empacar_ANDJoin": "Flow_Empacar_ANDJoin",
+      "Flow_Preparar_ANDJoin": "Flow_Preparar_ANDJoin",
+      "Flow_Rechazado": "Flow_Rechazado",
+      "Flow_Revisar_Aprobacion": "Flow_Revisar_Aprobacion",
+      "Flow_Start_TomarPedido": "Flow_Start_TomarPedido",
+      "Flow_Timer_EndEntregado": "Flow_Timer_EndEntregado",
+      "Flow_TomarPedido_ANDFork": "Flow_TomarPedido_ANDFork",
+      "Gateway_ANDFork": "Gateway_ANDFork",
+      "Gateway_ANDJoin": "Gateway_ANDJoin",
+      "Gateway_Aprobacion": "Gateway_Aprobacion",
+      "StartEvent_Pedido": "StartEvent_Pedido",
+      "Task_Empacar": "Task_Empacar",
+      "Task_Preparar": "Task_Preparar",
+      "Task_Revisar": "Task_Revisar",
+      "Task_TomarPedido": "Task_TomarPedido",
+      "Timer_Reposo": "Timer_Reposo",
+    },
+  },
+}
+`;
