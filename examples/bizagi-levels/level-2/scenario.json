@@ -1,0 +1,21 @@
+{
+  "$schema": "https://lila-modeler.org/schema/scenario/1.json",
+  "version": 1,
+  "name": "Bizagi nivel 2 - analisis de tiempos",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_2_example.htm: tiempos de proceso, recursos infinitos (sin resources).",
+  "model": "model.bpmn",
+  "run": {
+    "start": "2026-01-05T00:00:00+00:00",
+    "duration": 604800
+  },
+  "elements": {
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
+    "Task_Recibir":    { "processingTime": { "type": "constant", "value": 240 } },
+    "Task_Clasificar": { "processingTime": { "type": "constant", "value": 300 } },
+    "Task_Gestionar":  { "processingTime": { "type": "constant", "value": 660 } },
+    "Task_Recoger":    { "processingTime": { "type": "constant", "value": 1200 } },
+    "Task_LlegarQAV":  { "processingTime": { "type": "constant", "value": 420 } },
+    "Task_LlegarBA":   { "processingTime": { "type": "constant", "value": 600 } },
+    "Task_Autorizar":  { "processingTime": { "type": "constant", "value": 240 } }
+  }
+}

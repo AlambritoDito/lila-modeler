@@ -1,0 +1,18 @@
+{
+  "source": "https://help.bizagi.com/platform/en/level_2_example.htm",
+  "level": 2,
+  "title": "Level 2 - Throughput time analysis: Performing a time analysis for the Emergency attendance process",
+  "values": {
+    "waitTimeSeconds": {
+      "min": 960,
+      "max": 1980,
+      "avg": 1503,
+      "quotes": [
+        "A patient waits at least 16 minutes before receiving medical attention.",
+        "A patient waits no more than 33 minutes for medical attention.",
+        "The expected time a patient waits to receive medical attention is 25 minutes and 3 seconds."
+      ]
+    }
+  },
+  "nota": "Bizagi asume aqui capacidad infinita de recursos (sin resources en el escenario). La tabla completa de resultados por actividad (ProcessValidation47/48.png) es una imagen, no texto: no se transcribe para no inventar cifras. El intervalo entre llegadas (media 5 min) y el periodo de simulacion (1 semana) sí estan publicados en texto y se usan en scenario.json; la probabilidad del gateway QAV/BA no se publica en texto (ver documentation del .bpmn)."
+}

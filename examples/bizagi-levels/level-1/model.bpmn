@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_BizagiLevel1"
+                  targetNamespace="https://lila-modeler.org/bpmn/bizagi-levels/level-1"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:process id="Process_BizagiLevel1" name="Validacion de rutas - Urgencias" isExecutable="false">
+    <bpmn:documentation>Reconstrucción del ejemplo "Validating the Emergency attendance process" de
+https://help.bizagi.com/platform/en/level_1_example.htm (LILA-010, nivel 1: solo validación de
+rutas, sin tiempos ni recursos). La página solo publica el nombre de los gateways (XOR "Triage
+type" y un Parallel Gateway de divergencia/convergencia) y los conteos de tokens antes y después
+de corregir el diagrama; los nombres de las tareas dentro de cada rama de triage no están en el
+texto, solo en capturas de pantalla no accesibles como texto. Task_AtenderX/Task_RegistrarX son
+nombres representativos para reproducir la estructura (XOR de 3 salidas + AND fork/join por rama)
+necesaria para que los conteos publicados (1000 tokens; 483+315+202=1000 tras la corrección)
+tengan sentido. Ver examples/bizagi-levels/level-1/expected.json.</bpmn:documentation>
+
+    <bpmn:startEvent id="StartEvent_Llegada" name="Llega paciente">
+      <bpmn:outgoing>Flow_Start_Triage</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_Triage" sourceRef="StartEvent_Llegada" targetRef="Gateway_Triage" />
+
+    <bpmn:exclusiveGateway id="Gateway_Triage" name="Triage type">
+      <bpmn:incoming>Flow_Start_Triage</bpmn:incoming>
+      <bpmn:outgoing>Flow_Green</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Yellow</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Red</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_Green" name="Green" sourceRef="Gateway_Triage" targetRef="Gateway_ForkGreen" />
+    <bpmn:sequenceFlow id="Flow_Yellow" name="Yellow" sourceRef="Gateway_Triage" targetRef="Gateway_ForkYellow" />
+    <bpmn:sequenceFlow id="Flow_Red" name="Red" sourceRef="Gateway_Triage" targetRef="Gateway_ForkRed" />
+
+    <bpmn:parallelGateway id="Gateway_ForkGreen">
+      <bpmn:incoming>Flow_Green</bpmn:incoming>
+      <bpmn:outgoing>Flow_ForkGreen_A</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ForkGreen_B</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Task_AtenderGreen" name="Atender (Green)">
+      <bpmn:incoming>Flow_ForkGreen_A</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinGreen_A</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_RegistrarGreen" name="Registrar (Green)">
+      <bpmn:incoming>Flow_ForkGreen_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinGreen_B</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="Gateway_JoinGreen">
+      <bpmn:incoming>Flow_JoinGreen_A</bpmn:incoming>
+      <bpmn:incoming>Flow_JoinGreen_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_Green_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="Flow_ForkGreen_A" sourceRef="Gateway_ForkGreen" targetRef="Task_AtenderGreen" />
+    <bpmn:sequenceFlow id="Flow_ForkGreen_B" sourceRef="Gateway_ForkGreen" targetRef="Task_RegistrarGreen" />
+    <bpmn:sequenceFlow id="Flow_JoinGreen_A" sourceRef="Task_AtenderGreen" targetRef="Gateway_JoinGreen" />
+    <bpmn:sequenceFlow id="Flow_JoinGreen_B" sourceRef="Task_RegistrarGreen" targetRef="Gateway_JoinGreen" />
+    <bpmn:sequenceFlow id="Flow_Green_End" sourceRef="Gateway_JoinGreen" targetRef="EndEvent_Green" />
+    <bpmn:endEvent id="EndEvent_Green" name="Fin (Green)">
+      <bpmn:incoming>Flow_Green_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:parallelGateway id="Gateway_ForkYellow">
+      <bpmn:incoming>Flow_Yellow</bpmn:incoming>
+      <bpmn:outgoing>Flow_ForkYellow_A</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ForkYellow_B</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Task_AtenderYellow" name="Atender (Yellow)">
+      <bpmn:incoming>Flow_ForkYellow_A</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinYellow_A</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_RegistrarYellow" name="Registrar (Yellow)">
+      <bpmn:incoming>Flow_ForkYellow_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinYellow_B</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="Gateway_JoinYellow">
+      <bpmn:incoming>Flow_JoinYellow_A</bpmn:incoming>
+      <bpmn:incoming>Flow_JoinYellow_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_Yellow_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="Flow_ForkYellow_A" sourceRef="Gateway_ForkYellow" targetRef="Task_AtenderYellow" />
+    <bpmn:sequenceFlow id="Flow_ForkYellow_B" sourceRef="Gateway_ForkYellow" targetRef="Task_RegistrarYellow" />
+    <bpmn:sequenceFlow id="Flow_JoinYellow_A" sourceRef="Task_AtenderYellow" targetRef="Gateway_JoinYellow" />
+    <bpmn:sequenceFlow id="Flow_JoinYellow_B" sourceRef="Task_RegistrarYellow" targetRef="Gateway_JoinYellow" />
+    <bpmn:sequenceFlow id="Flow_Yellow_End" sourceRef="Gateway_JoinYellow" targetRef="EndEvent_Yellow" />
+    <bpmn:endEvent id="EndEvent_Yellow" name="Fin (Yellow)">
+      <bpmn:incoming>Flow_Yellow_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:parallelGateway id="Gateway_ForkRed">
+      <bpmn:incoming>Flow_Red</bpmn:incoming>
+      <bpmn:outgoing>Flow_ForkRed_A</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ForkRed_B</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="Task_AtenderRed" name="Atender (Red)">
+      <bpmn:incoming>Flow_ForkRed_A</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinRed_A</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_RegistrarRed" name="Registrar (Red)">
+      <bpmn:incoming>Flow_ForkRed_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinRed_B</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:parallelGateway id="Gateway_JoinRed">
+      <bpmn:incoming>Flow_JoinRed_A</bpmn:incoming>
+      <bpmn:incoming>Flow_JoinRed_B</bpmn:incoming>
+      <bpmn:outgoing>Flow_Red_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sequenceFlow id="Flow_ForkRed_A" sourceRef="Gateway_ForkRed" targetRef="Task_AtenderRed" />
+    <bpmn:sequenceFlow id="Flow_ForkRed_B" sourceRef="Gateway_ForkRed" targetRef="Task_RegistrarRed" />
+    <bpmn:sequenceFlow id="Flow_JoinRed_A" sourceRef="Task_AtenderRed" targetRef="Gateway_JoinRed" />
+    <bpmn:sequenceFlow id="Flow_JoinRed_B" sourceRef="Task_RegistrarRed" targetRef="Gateway_JoinRed" />
+    <bpmn:sequenceFlow id="Flow_Red_End" sourceRef="Gateway_JoinRed" targetRef="EndEvent_Red" />
+    <bpmn:endEvent id="EndEvent_Red" name="Fin (Red)">
+      <bpmn:incoming>Flow_Red_End</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_BizagiLevel1">
+    <bpmndi:BPMNPlane id="BPMNPlane_BizagiLevel1" bpmnElement="Process_BizagiLevel1">
+
+      <bpmndi:BPMNShape id="StartEvent_Llegada_di" bpmnElement="StartEvent_Llegada">
+        <dc:Bounds x="120" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Triage_di" bpmnElement="Gateway_Triage">
+        <dc:Bounds x="210" y="275" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_ForkGreen_di" bpmnElement="Gateway_ForkGreen">
+        <dc:Bounds x="320" y="55" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AtenderGreen_di" bpmnElement="Task_AtenderGreen">
+        <dc:Bounds x="420" y="0" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegistrarGreen_di" bpmnElement="Task_RegistrarGreen">
+        <dc:Bounds x="420" y="120" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinGreen_di" bpmnElement="Gateway_JoinGreen">
+        <dc:Bounds x="570" y="55" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Green_di" bpmnElement="EndEvent_Green">
+        <dc:Bounds x="670" y="62" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_ForkYellow_di" bpmnElement="Gateway_ForkYellow">
+        <dc:Bounds x="320" y="275" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AtenderYellow_di" bpmnElement="Task_AtenderYellow">
+        <dc:Bounds x="420" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegistrarYellow_di" bpmnElement="Task_RegistrarYellow">
+        <dc:Bounds x="420" y="340" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinYellow_di" bpmnElement="Gateway_JoinYellow">
+        <dc:Bounds x="570" y="275" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Yellow_di" bpmnElement="EndEvent_Yellow">
+        <dc:Bounds x="670" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_ForkRed_di" bpmnElement="Gateway_ForkRed">
+        <dc:Bounds x="320" y="495" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AtenderRed_di" bpmnElement="Task_AtenderRed">
+        <dc:Bounds x="420" y="440" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RegistrarRed_di" bpmnElement="Task_RegistrarRed">
+        <dc:Bounds x="420" y="560" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinRed_di" bpmnElement="Gateway_JoinRed">
+        <dc:Bounds x="570" y="495" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Red_di" bpmnElement="EndEvent_Red">
+        <dc:Bounds x="670" y="502" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_Triage_di" bpmnElement="Flow_Start_Triage">
+        <di:waypoint x="156" y="300" />
+        <di:waypoint x="210" y="300" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Green_di" bpmnElement="Flow_Green">
+        <di:waypoint x="235" y="275" />
+        <di:waypoint x="235" y="80" />
+        <di:waypoint x="320" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkGreen_A_di" bpmnElement="Flow_ForkGreen_A">
+        <di:waypoint x="345" y="55" />
+        <di:waypoint x="345" y="40" />
+        <di:waypoint x="420" y="40" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkGreen_B_di" bpmnElement="Flow_ForkGreen_B">
+        <di:waypoint x="345" y="105" />
+        <di:waypoint x="345" y="160" />
+        <di:waypoint x="420" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinGreen_A_di" bpmnElement="Flow_JoinGreen_A">
+        <di:waypoint x="520" y="40" />
+        <di:waypoint x="595" y="40" />
+        <di:waypoint x="595" y="55" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinGreen_B_di" bpmnElement="Flow_JoinGreen_B">
+        <di:waypoint x="520" y="160" />
+        <di:waypoint x="595" y="160" />
+        <di:waypoint x="595" y="105" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Green_End_di" bpmnElement="Flow_Green_End">
+        <di:waypoint x="620" y="80" />
+        <di:waypoint x="670" y="80" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Yellow_di" bpmnElement="Flow_Yellow">
+        <di:waypoint x="260" y="300" />
+        <di:waypoint x="320" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkYellow_A_di" bpmnElement="Flow_ForkYellow_A">
+        <di:waypoint x="345" y="275" />
+        <di:waypoint x="345" y="260" />
+        <di:waypoint x="420" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkYellow_B_di" bpmnElement="Flow_ForkYellow_B">
+        <di:waypoint x="345" y="325" />
+        <di:waypoint x="345" y="380" />
+        <di:waypoint x="420" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinYellow_A_di" bpmnElement="Flow_JoinYellow_A">
+        <di:waypoint x="520" y="260" />
+        <di:waypoint x="595" y="260" />
+        <di:waypoint x="595" y="275" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinYellow_B_di" bpmnElement="Flow_JoinYellow_B">
+        <di:waypoint x="520" y="380" />
+        <di:waypoint x="595" y="380" />
+        <di:waypoint x="595" y="325" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Yellow_End_di" bpmnElement="Flow_Yellow_End">
+        <di:waypoint x="620" y="300" />
+        <di:waypoint x="670" y="300" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_Red_di" bpmnElement="Flow_Red">
+        <di:waypoint x="235" y="325" />
+        <di:waypoint x="235" y="520" />
+        <di:waypoint x="320" y="520" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkRed_A_di" bpmnElement="Flow_ForkRed_A">
+        <di:waypoint x="345" y="495" />
+        <di:waypoint x="345" y="480" />
+        <di:waypoint x="420" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ForkRed_B_di" bpmnElement="Flow_ForkRed_B">
+        <di:waypoint x="345" y="545" />
+        <di:waypoint x="345" y="600" />
+        <di:waypoint x="420" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinRed_A_di" bpmnElement="Flow_JoinRed_A">
+        <di:waypoint x="520" y="480" />
+        <di:waypoint x="595" y="480" />
+        <di:waypoint x="595" y="495" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinRed_B_di" bpmnElement="Flow_JoinRed_B">
+        <di:waypoint x="520" y="600" />
+        <di:waypoint x="595" y="600" />
+        <di:waypoint x="595" y="545" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Red_End_di" bpmnElement="Flow_Red_End">
+        <di:waypoint x="620" y="520" />
+        <di:waypoint x="670" y="520" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>
