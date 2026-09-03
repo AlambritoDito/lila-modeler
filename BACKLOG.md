@@ -2,6 +2,8 @@
 
 Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño, hitos). Aquí está el trabajo desglosado para que agentes y personas sepan qué hacer, en qué orden y cuándo está terminado.
 
+**Dónde se gestiona**: en GitHub Issues del repo privado `AlambritoDito/lila-modeler`. El número de issue coincide con el id del ticket (`LILA-026` = `#26`); las 20 épicas son los issues `#112`–`#131` con su lista de tareas; los hitos M0–M6 son milestones. Este archivo es la fuente que generó los issues; si cambia el alcance, se edita aquí y se actualiza el issue, no al revés.
+
 **Convenciones**
 
 - `LILA-nnn` es el id del ticket. Las épicas son `E0`…`E19`. Los hitos `M0`…`M6` son los de la sección 7 del documento de estructura.
