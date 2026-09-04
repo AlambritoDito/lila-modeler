@@ -10,7 +10,7 @@
  */
 import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
-import { newId } from './ids.js';
+import { newId, sanitizeXmlIds } from './ids.js';
 import type { Flow, Node, NodeType, ProcessIR } from '../core/ir.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
@@ -79,6 +79,13 @@ interface Collector {
   nodes: Record<string, Node>;
   flows: Record<string, Flow>;
   originalIds: Record<string, string>;
+  /**
+   * `id sanitizado -> id original`, para los ids del documento que no eran NCName válido
+   * (p. ej. los que puede emitir Bizagi) y ya se reescribieron en el texto del XML por
+   * `sanitizeXmlIds` antes de llegar aquí — `el.id` de moddle ya es el id sanitizado. Sirve
+   * solo para poblar `source.originalIds` con el id que traía el archivo.
+   */
+  sanitizedToOriginal: Map<string, string>;
   /** Ids ya ocupados: nodos, flujos y subprocesos comparten el espacio de ids. */
   used: Set<string>;
   /** Id final de cada elemento moddle, que solo difiere del suyo si hubo colisión. */
@@ -97,9 +104,10 @@ interface Collector {
 }
 
 /**
- * Id definitivo del elemento. Los ids de BPMN son únicos por documento, así que la rama de
- * colisión solo se activa con archivos mal formados o al aplanar ids que ya venían repetidos;
- * el id nuevo queda registrado en `source.originalIds`.
+ * Id definitivo del elemento. `el.id` ya viene sanitizado si el XML lo necesitaba
+ * (`sanitizeXmlIds`, aplicado antes de `moddle.fromXML`), así que aquí solo queda la rama de
+ * colisión, que se activa con archivos mal formados o al aplanar ids que ya venían repetidos.
+ * El id nuevo (o el sanitizado) queda registrado en `source.originalIds`.
  */
 function claimId(el: ModdleElement, c: Collector): string {
   const cached = c.idOf.get(el);
@@ -109,7 +117,7 @@ function claimId(el: ModdleElement, c: Collector): string {
   if (c.used.has(id)) id = newId(el.$type.replace('bpmn:', ''));
 
   c.used.add(id);
-  c.originalIds[id] = el.id;
+  c.originalIds[id] = c.sanitizedToOriginal.get(el.id) ?? el.id;
   c.idOf.set(el, id);
   return id;
 }
@@ -256,8 +264,16 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
   return (el.flowElements ?? []).length > 0;
 }
 
-/** Lee el XML con bpmn-moddle (con la extensión `lila` cargada) y produce el IR ya aplanado. */
-export async function parseBpmn(xml: string): Promise<ParseResult> {
+/**
+ * Lee el XML con bpmn-moddle (con la extensión `lila` cargada) y produce el IR ya aplanado.
+ *
+ * Antes de tocar bpmn-moddle, sanitiza en el propio texto del XML los ids que no son NCName
+ * válido (`sanitizeXmlIds`): moddle-xml descarta de raíz cualquier elemento cuyo `id` no pase
+ * su validación, así que un id ajeno inválido (algunos exports de Bizagi) tiene que arreglarse
+ * antes de que bpmn-moddle lo vea, no después.
+ */
+export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
+  const { xml, sanitizedToOriginal } = sanitizeXmlIds(xmlIn);
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions } = await moddle.fromXML(xml);
 
@@ -274,6 +290,7 @@ export async function parseBpmn(xml: string): Promise<ParseResult> {
     nodes: {},
     flows: {},
     originalIds: {},
+    sanitizedToOriginal,
     used: new Set(),
     idOf: new Map(),
     laneOf: new Map(),
@@ -343,4 +360,22 @@ export async function parseBpmn(xml: string): Promise<ParseResult> {
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),
     unsupported: c.unsupported.sort((a, b) => a.at - b.at).map(({ element }) => element),
   };
+}
+
+/**
+ * Lee el XML con bpmn-moddle y lo vuelve a serializar tal cual, sin pasar por el IR. Existe
+ * para probar que el round-trip conserva lo que `parseBpmn` descarta (namespaces ajenos como
+ * `bizagi:*`, que bpmn-moddle preserva de fábrica al no tener registrado su propio descriptor)
+ * y porque la app (LILA-020+) la va a necesitar para exportar de vuelta al formato original.
+ *
+ * Mismo saneo de ids que `parseBpmn` y por la misma razón: un id no-NCName sin sanitizar hace
+ * que moddle-xml descarte el elemento entero al leerlo (con sus `bizagi:*` adentro), antes de
+ * que haya nada que reserializar.
+ */
+export async function roundTripXml(xmlIn: string): Promise<string> {
+  const { xml } = sanitizeXmlIds(xmlIn);
+  const moddle = BpmnModdle({ lila });
+  const { rootElement } = await moddle.fromXML(xml);
+  const { xml: out } = await moddle.toXML(rootElement);
+  return out;
 }
