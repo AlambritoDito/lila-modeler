@@ -27,9 +27,16 @@ import {
   resourcesCsv,
   runStartMs,
 } from './csv.js';
+import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
-import { formatDuration, formatNumber, formatTable, type BaseTimeUnit } from './format.js';
+import {
+  formatDuration,
+  formatNumber,
+  formatSignedPercent,
+  formatTable,
+  type BaseTimeUnit,
+} from './format.js';
 import {
   resolveExtends,
   ScenarioSchema,
@@ -42,10 +49,13 @@ import {
 const USAGE = `Uso: lila validate <archivo.bpmn> [--json]
      lila run <modelo.bpmn> <escenario.json> [--seed n] [--replications n]
               [--json resultado.json] [--csv directorio]
+     lila compare <modelo.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
+                  [--json resultado.json] [--all]
 
 Comandos:
   validate   Parsea el BPMN, imprime su IR y valida el modelo.
   run        Valida modelo y escenario, simula y muestra tablas de resultados.
+  compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
 
 Opciones de validate:
   --json     Imprime el IR y los problemas por stdout.
@@ -56,6 +66,13 @@ Opciones de run:
   --json archivo    Escribe el RunResult determinista como JSON.
   --csv directorio  Escribe elements, flows, resources, process y log como CSV RFC 4180.
                     log.csv se escribe en streaming y lleva timestamps ISO desde run.start.
+
+Opciones de compare:
+  --seed n          Sobrescribe run.seed en todos los escenarios comparados.
+  --replications n  Sobrescribe run.replications en todos los escenarios comparados.
+  --json archivo    Escribe el CompareResult determinista como JSON.
+  --all             Imprime todos los KPI de compare(), no solo el subconjunto curado.
+                    El primer escenario listado es la base: los demás se comparan contra él.
 
 Opciones generales:
   -h, --help Muestra esta ayuda.`;
@@ -180,6 +197,21 @@ function integerOption(name: string, raw: string | undefined, minimum?: number):
   return value;
 }
 
+/** Overrides comunes de `--seed`/`--replications`; `run` y `compare` los aplican igual. */
+function withRunOverrides(
+  scenario: ResolvedScenario,
+  options: { seed?: number | undefined; replications?: number | undefined },
+): ResolvedScenario {
+  return {
+    ...scenario,
+    run: {
+      ...scenario.run,
+      ...(options.seed === undefined ? {} : { seed: options.seed }),
+      ...(options.replications === undefined ? {} : { replications: options.replications }),
+    },
+  };
+}
+
 /** Campos válidos de v1 cuyo comportamiento aún no existe en el motor de M1. */
 function unsupportedM1(scenario: ResolvedScenario): string[] {
   const errors: string[] = [];
@@ -225,6 +257,28 @@ function resultWithBoundaryWarnings(
 }
 
 type ParsedIr = Awaited<ReturnType<typeof parseBpmn>>['ir'];
+
+/** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
+async function loadValidatedModel(
+  modelFile: string,
+): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
+  const path = absolutePath(modelFile);
+  const parsed = await parseBpmn(readFileSync(path, 'utf8'));
+  const validation = validate(parsed.ir, {
+    unsupported: parsed.unsupported,
+    messageFlowCount: parsed.messageFlowCount,
+    conditionFlowIds: parsed.conditionFlowIds,
+  });
+  return { path, ir: parsed.ir, validation };
+}
+
+/** Imprime los problemas del modelo y responde si hay errores que aborten el comando. */
+function modelHasErrors(validation: ValidationResult): boolean {
+  if (validation.errors.length === 0) return false;
+  printValidationProblems(validation);
+  console.log(`${validation.errors.length} errores, ${validation.warnings.length} avisos.`);
+  return true;
+}
 
 function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunResult): void {
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
@@ -377,13 +431,14 @@ function assertReplaceableFile(target: string): void {
   }
 }
 
-function writeJson(file: string, result: RunResult): void {
+/** Publica cualquier valor serializable como JSON determinista; usado por `run` y `compare`. */
+function writeJson(file: string, data: unknown): void {
   const target = absolutePath(file);
   mkdirSync(dirname(target), { recursive: true });
   assertReplaceableFile(target);
   const staged = stageFile(target);
   try {
-    staged.write(`${JSON.stringify(result, null, 2)}\n`);
+    staged.write(`${JSON.stringify(data, null, 2)}\n`);
     staged.commit();
   } catch (error) {
     staged.abort();
@@ -496,18 +551,8 @@ async function runCommand(
   scenarioFile: string,
   options: RunCommandOptions,
 ): Promise<number> {
-  const modelPath = absolutePath(modelFile);
-  const parsedModel = await parseBpmn(readFileSync(modelPath, 'utf8'));
-  const modelValidation = validate(parsedModel.ir, {
-    unsupported: parsedModel.unsupported,
-    messageFlowCount: parsedModel.messageFlowCount,
-    conditionFlowIds: parsedModel.conditionFlowIds,
-  });
-  if (modelValidation.errors.length > 0) {
-    printValidationProblems(modelValidation);
-    console.log(`${modelValidation.errors.length} errores, ${modelValidation.warnings.length} avisos.`);
-    return 1;
-  }
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
+  if (modelHasErrors(modelValidation)) return 1;
 
   const scenarioPath = absolutePath(scenarioFile);
   const resolvedScenario = loadResolvedScenario(scenarioPath);
@@ -518,14 +563,7 @@ async function runCommand(
     return 1;
   }
 
-  const scenario: ResolvedScenario = {
-    ...resolvedScenario,
-    run: {
-      ...resolvedScenario.run,
-      ...(options.seed === undefined ? {} : { seed: options.seed }),
-      ...(options.replications === undefined ? {} : { replications: options.replications }),
-    },
-  };
+  const scenario = withRunOverrides(resolvedScenario, options);
 
   const unsupported = unsupportedM1(scenario);
   if (unsupported.length > 0) {
@@ -533,7 +571,7 @@ async function runCommand(
     return 1;
   }
 
-  const scenarioProblems = validateScenario(scenario, parsedModel.ir);
+  const scenarioProblems = validateScenario(scenario, ir);
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
     printScenarioProblems(scenarioProblems);
@@ -543,17 +581,17 @@ async function runCommand(
   const logSink =
     options.csv === undefined ? undefined : openEventLogSink(options.csv, runStartMs(scenario.run.start));
   try {
-    const simulated = simulate(parsedModel.ir, scenario, {
+    const simulated = simulate(ir, scenario, {
       log: logSink !== undefined,
       ...(logSink === undefined ? {} : { onEvent: (row: EventLogRow) => logSink.onEvent(row) }),
     });
     logSink?.close();
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
 
-    printRunResult(parsedModel.ir, scenario, result);
+    printRunResult(ir, scenario, result);
     if (options.json !== undefined) writeJson(options.json, result);
     if (options.csv !== undefined) {
-      writeCsvDirectory(options.csv, parsedModel.ir, scenario, result);
+      writeCsvDirectory(options.csv, ir, scenario, result);
       logSink?.commit();
       console.log(`CSV: ${absolutePath(options.csv)}`);
     }
@@ -564,7 +602,342 @@ async function runCommand(
   }
 }
 
-function positionalError(command: 'validate' | 'run', expected: string): number {
+/* ------------------------------------------------------------------ *
+ * `lila compare` (LILA-047)
+ * ------------------------------------------------------------------ */
+
+interface CompareCommandOptions {
+  seed?: number | undefined;
+  replications?: number | undefined;
+  json?: string | undefined;
+  all: boolean;
+}
+
+interface LoadedScenarioResult {
+  file: string;
+  scenario: ResolvedScenario;
+  result: RunResult;
+}
+
+/**
+ * ponytail: subconjunto curado de KPIs para la tabla por defecto, no las decenas de percentiles
+ * y variantes min/max/sd que produce `compare()` para cada elemento y recurso — un vistazo a
+ * `lila compare` debe caber en una pantalla. `--all` restaura la lista completa sin filtrar.
+ * Selección (LILA-047): por elemento started/completed/processing.mean/resourceWait.mean/
+ * queueLength.mean; por recurso utilization/totalCost; por proceso cycleTime.mean/waitTime.mean/
+ * throughputPerHour/costPerCase/totalCost.
+ */
+const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
+  'elements:started',
+  'elements:completed',
+  'elements:processing.mean',
+  'elements:resourceWait.mean',
+  'elements:queueLength.mean',
+  'resources:utilization',
+  'resources:totalCost',
+  'process:cycleTime.mean',
+  'process:waitTime.mean',
+  'process:throughputPerHour',
+  'process:costPerCase',
+  'process:totalCost',
+]);
+
+/** Nombres de columna Bizagi (docs/RESULTS_FORMAT.md §10); lo que no tiene equivalente conserva el path interno. */
+const BIZAGI_COMPARE_LABELS: Readonly<Record<string, string>> = {
+  'elements:started': 'Instances started',
+  'elements:completed': 'Instances completed',
+  'elements:processing.min': 'Minimum time',
+  'elements:processing.max': 'Maximum time',
+  'elements:processing.mean': 'Average time',
+  'elements:processing.total': 'Total time',
+  'elements:resourceWait.min': 'Minimum time (waiting for resource)',
+  'elements:resourceWait.max': 'Maximum time (waiting for resource)',
+  'elements:resourceWait.mean': 'Average time (waiting for resource)',
+  'elements:resourceWait.sd': 'Standard deviation (waiting for resource)',
+  'elements:resourceWait.total': 'Total time (waiting for resource)',
+  'elements:fixedCostTotal': 'Total fixed cost',
+  'resources:utilization': 'Utilization (%)',
+  'resources:busyTime': 'Busy time',
+  'resources:fixedCost': 'Fixed cost',
+  'resources:unitCost': 'Unit cost',
+  'resources:totalCost': 'Total cost',
+  'flows:count': 'Instances/Tokens completed',
+};
+
+/**
+ * Métricas cuyo valor son segundos y por tanto se convierten a `baseTimeUnit` al imprimir
+ * (R-DURA-2). `busyTime` son segundos-unidad (RESULTS_FORMAT.md § 4) y también se convierte: dejar
+ * la única duración que solo aparece con `--all` en segundos crudos, junto a costos derivados de
+ * ella ya convertidos, hacía ilegible la tabla de recursos.
+ */
+const DURATION_METRIC_PREFIXES: ReadonlySet<string> = new Set([
+  'processing',
+  'resourceWait',
+  'offHoursWait',
+  'cycleTime',
+  'waitTime',
+  'busyTime',
+]);
+
+function isDurationMetric(metric: string): boolean {
+  return DURATION_METRIC_PREFIXES.has(metric.split('.')[0] ?? '');
+}
+
+function compareMetricLabel(scope: CompareScope, metric: string): string {
+  return BIZAGI_COMPARE_LABELS[`${scope}:${metric}`] ?? metric;
+}
+
+/** Valor de una sola celda, sin delta: usado también para la columna base. */
+function formatCompareValue(metric: string, value: number | null, unit: BaseTimeUnit): string {
+  if (value === null) return '-';
+  if (isDurationMetric(metric)) return formatDuration(value, unit);
+  if (metric === 'utilization') return `${formatNumber(value * 100)}%`;
+  return formatNumber(value);
+}
+
+/** Valor + delta relativo con signo + marca `*` de significancia, para las columnas no base. */
+function formatCompareCell(
+  metric: string,
+  value: number | null,
+  deltaRel: number | null,
+  significant: boolean,
+  unit: BaseTimeUnit,
+): string {
+  const valueText = formatCompareValue(metric, value, unit);
+  if (value === null) return valueText;
+  const deltaText = deltaRel === null ? '-' : formatSignedPercent(deltaRel);
+  return `${valueText} (${deltaText})${significant ? '*' : ''}`;
+}
+
+function compareColumnHeader(name: string, index: number): string {
+  return index === 0 ? `${name} (base)` : name;
+}
+
+function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>, scope: CompareScope, id: string | null): string {
+  if (id === null) return '';
+  if (scope === 'elements') return ir.nodes[id]?.name ?? '';
+  if (scope === 'flows') return ir.flows[id]?.name ?? '';
+  if (scope === 'resources') return resourceNames[id] ?? '';
+  return '';
+}
+
+/** ¿El escenario declara calendarios, en `calendars` o en la referencia de un pool/elemento? */
+function declaresCalendars(scenario: ResolvedScenario): boolean {
+  if (Object.keys(scenario.calendars ?? {}).length > 0) return true;
+  if (Object.values(scenario.resources ?? {}).some((resource) => resource.calendar !== undefined)) return true;
+  return Object.values(scenario.elements ?? {}).some((element) => element.calendar !== undefined);
+}
+
+/**
+ * Avisos de la corrida completa, en un solo bloque al pie de la tabla.
+ *
+ * Incluye los avisos de modelo y escenario que `lila run` ya imprime (`resultWithBoundaryWarnings`)
+ * y tres que solo tienen sentido comparando: unidad de tiempo distinta entre escenarios —la tabla
+ * usa siempre la del base—, semillas distintas —se pierden los números aleatorios comunes de
+ * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)— y
+ * calendarios declarados, que el motor todavía no simula (M3, LILA-041).
+ */
+function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTimeUnit): string[] {
+  const lines: string[] = [];
+  const label = (entry: LoadedScenarioResult): string => `"${entry.scenario.name}"`;
+
+  const otherUnits = loaded.filter((entry) => entry.scenario.run.baseTimeUnit !== unit);
+  if (otherUnits.length > 0) {
+    lines.push(
+      `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
+        `Declaran otra: ${otherUnits.map((entry) => `${label(entry)} (${entry.scenario.run.baseTimeUnit})`).join(', ')}.`,
+    );
+  }
+
+  const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed));
+  if (seeds.size > 1) {
+    lines.push(
+      `los escenarios corren con semillas distintas (${[...seeds].join(', ')}): se pierden los números ` +
+        'aleatorios comunes (R-DET-3) y los deltas mezclan el efecto del cambio con el del muestreo. ' +
+        'Usa --seed para forzar la misma semilla en todos.',
+    );
+  }
+
+  for (const entry of loaded.filter((entry) => declaresCalendars(entry.scenario))) {
+    lines.push(
+      `${label(entry)} declara calendarios; el motor todavía no los simula (M3, LILA-041) y sus ` +
+        'números salen 24×7. `lila run` rechaza ese escenario con E-NIVEL-M3.',
+    );
+  }
+
+  for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
+    lines.push(
+      `${label(entry)} corrió sin al menos dos replicaciones completas; sin IC95 no hay marca de ` +
+        'significancia posible para ese escenario.',
+    );
+  }
+
+  // Los avisos del motor llegan uno por replicación (W-JOIN-BLOQUEADO cita un conteo distinto en
+  // cada una): 30 réplicas × N escenarios enterrarían la tabla. `compare` es una vista de resumen,
+  // así que se queda con el primero de cada código y dice cuántos más hubo; el detalle completo
+  // está en `lila run` y en su `--json`.
+  for (const entry of loaded) {
+    const byCode = new Map<string, { first: string; count: number }>();
+    for (const warning of entry.result.warnings) {
+      const code = warning.split(':')[0] ?? warning;
+      const group = byCode.get(code);
+      if (group === undefined) byCode.set(code, { first: warning, count: 1 });
+      else group.count++;
+    }
+    for (const { first, count } of byCode.values()) {
+      const more = count > 1 ? ` (+${count - 1} aviso${count === 2 ? '' : 's'} más con el mismo código)` : '';
+      lines.push(`${label(entry)} ${first}${more}`);
+    }
+  }
+  return lines;
+}
+
+function printCompareResult(
+  ir: ParsedIr,
+  loaded: readonly LoadedScenarioResult[],
+  comparison: CompareResult,
+  allRows: boolean,
+): void {
+  const base = loaded[0]!;
+  const unit = base.scenario.run.baseTimeUnit as BaseTimeUnit;
+  // El nombre de un pool puede venir de cualquier escenario: el TO-BE puede estrenar un pool que
+  // el base no declara, y esa fila existe igual en la tabla (`compare()` la da con base `null`).
+  const resourceNames: Record<string, string> = {};
+  for (const entry of loaded) {
+    for (const [id, resource] of Object.entries(entry.scenario.resources ?? {})) {
+      resourceNames[id] ??= resource.name ?? id;
+    }
+  }
+
+  console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
+  console.log(`Unidad de tiempo ${unit} (escenario base) · Utilización en %`);
+  console.log('');
+  console.log('Escenarios comparados');
+  console.log(
+    formatTable(
+      ['#', 'Nombre', 'Archivo', 'Semilla', 'Replicaciones'],
+      loaded.map((entry, index) => [
+        String(index),
+        compareColumnHeader(entry.scenario.name, index),
+        entry.file,
+        formatNumber(entry.scenario.run.seed),
+        formatNumber(entry.scenario.run.replications),
+      ]),
+    ),
+  );
+
+  const scopes: CompareScope[] = allRows
+    ? ['elements', 'resources', 'process', 'flows']
+    : ['elements', 'resources', 'process'];
+  const titles: Readonly<Record<CompareScope, string>> = {
+    elements: 'Process elements',
+    resources: 'Resources',
+    process: 'Process',
+    flows: 'Sequence flows',
+  };
+
+  for (const scope of scopes) {
+    const rows = comparison.rows.filter(
+      (row) => row.scope === scope && (allRows || DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`)),
+    );
+    if (rows.length === 0) continue;
+
+    const withId = scope !== 'process';
+    console.log('');
+    console.log(titles[scope]);
+    console.log(
+      formatTable(
+        [
+          ...(withId ? ['Id', 'Name'] : []),
+          'Metric',
+          ...loaded.map((entry, index) => compareColumnHeader(entry.scenario.name, index)),
+        ],
+        rows.map((row) => [
+          ...(withId ? [row.id ?? '', rowLabel(ir, resourceNames, scope, row.id)] : []),
+          compareMetricLabel(scope, row.metric),
+          ...row.values.map((value, index) =>
+            index === 0
+              ? formatCompareValue(row.metric, value, unit)
+              : formatCompareCell(
+                  row.metric,
+                  value,
+                  row.deltaRel[index] ?? null,
+                  row.significant[index] ?? false,
+                  unit,
+                ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  console.log('');
+  console.log('* diferencia significativa (IC95 sin solapamiento)');
+
+  const warnings = compareWarnings(loaded, unit);
+  if (warnings.length > 0) {
+    console.log('');
+    console.log('Avisos:');
+    for (const warning of warnings) console.log(`  ${warning}`);
+  }
+}
+
+async function compareCommand(
+  modelFile: string,
+  scenarioFiles: readonly string[],
+  options: CompareCommandOptions,
+): Promise<number> {
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
+  if (modelHasErrors(modelValidation)) return 1;
+
+  // A diferencia de `lila run`, `compare` no aplica `unsupportedM1`: LILA-038 (compare()) ya agrega
+  // métricas de recursos de nivel 3, que el motor simula desde LILA-033…036, y la aceptación de
+  // este ticket depende de ellas. Los `calendars` de M3 sí siguen sin simularse: no se rechazan
+  // aquí —examples/pedido, el caso de aceptación, los declara— pero salen avisados al pie.
+  const validated: Array<{
+    file: string;
+    scenario: ResolvedScenario;
+    problems: readonly ScenarioProblem[];
+  }> = [];
+  // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
+  // simulación completa de los n − 1 anteriores.
+  for (const scenarioFile of scenarioFiles) {
+    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile));
+    if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
+      console.error(
+        `lila compare: el modelo posicional (${modelPath}) no coincide con scenario.model ` +
+          `(${resolvedScenario.model}) en ${scenarioFile}.`,
+      );
+      return 1;
+    }
+
+    const scenario = withRunOverrides(resolvedScenario, options);
+    const problems = validateScenario(scenario, ir);
+    if (scenarioErrors(problems).length > 0) {
+      console.error(`lila compare: ${scenarioFile}`);
+      printScenarioProblems(problems);
+      return 1;
+    }
+    validated.push({ file: scenarioFile, scenario, problems });
+  }
+
+  const loaded: LoadedScenarioResult[] = validated.map((entry) => ({
+    file: entry.file,
+    scenario: entry.scenario,
+    result: resultWithBoundaryWarnings(
+      simulate(ir, entry.scenario, { log: false }),
+      modelValidation,
+      entry.problems,
+    ),
+  }));
+
+  const comparison = compare(loaded.map((entry) => entry.result));
+  printCompareResult(ir, loaded, comparison, options.all);
+  if (options.json !== undefined) writeJson(options.json, comparison);
+  return 0;
+}
+
+function positionalError(command: 'validate' | 'run' | 'compare', expected: string): number {
   console.error(`lila ${command}: se esperaba ${expected}.`);
   return 1;
 }
@@ -614,6 +987,34 @@ async function dispatchRun(argv: readonly string[]): Promise<number> {
   });
 }
 
+async function dispatchCompare(argv: readonly string[]): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      seed: { type: 'string' },
+      replications: { type: 'string' },
+      json: { type: 'string' },
+      all: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: true,
+  });
+  if (values.help === true) {
+    console.log(USAGE);
+    return 0;
+  }
+  if (positionals.length < 3) {
+    return positionalError('compare', 'un <modelo.bpmn> y al menos dos escenarios <a.json> <b.json>');
+  }
+  const [model, ...scenarios] = positionals;
+  return compareCommand(model!, scenarios, {
+    seed: integerOption('seed', values.seed),
+    replications: integerOption('replications', values.replications, 1),
+    json: values.json,
+    all: values.all === true,
+  });
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   const [command, ...args] = argv;
   if (command === undefined) {
@@ -628,6 +1029,7 @@ export async function main(argv: readonly string[]): Promise<number> {
   try {
     if (command === 'validate') return await dispatchValidate(args);
     if (command === 'run') return await dispatchRun(args);
+    if (command === 'compare') return await dispatchCompare(args);
     console.error(`lila: comando desconocido "${command}".`);
     console.error(USAGE);
     return 1;

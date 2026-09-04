@@ -20,6 +20,17 @@ export function formatNumber(value: number): string {
   return String(Object.is(rounded, -0) ? 0 : rounded);
 }
 
+/**
+ * Fracción como porcentaje con signo explícito, para las columnas de delta de `lila compare`.
+ * El signo sale del texto ya redondeado y no del valor crudo: una diferencia de −1e−11 redondea a
+ * cero y se imprime `0%`, nunca `-0%` (ni `+0%`, que afirmaría un aumento inexistente).
+ */
+export function formatSignedPercent(fraction: number): string {
+  const text = formatNumber(fraction * 100);
+  if (text === '0') return '0%';
+  return `${text.startsWith('-') ? '' : '+'}${text}%`;
+}
+
 /** Tabla monoespaciada estable sin dependencia de terminal ni locale. */
 export function formatTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
   const widths = headers.map((header, column) => {
