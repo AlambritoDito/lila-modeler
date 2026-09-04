@@ -62,10 +62,30 @@ Definiciones operativas (todas se calculan sobre las instancias del elemento que
 - **`processing.{min,max,mean,total}`** — estadísticas del tiempo abierto efectivamente trabajado por el elemento, sin espera de recurso ni de calendario. Por R-CAL-8 se obtiene de cada fila como `endedAt − enabledAt − resourceWait − offHoursWait`; en ausencia de calendarios se reduce a `endedAt − startedAt`. `mean = total / completed`. Fórmula: para el conjunto `P` de duraciones de processing completadas, `min = min(P)`, `max = max(P)`, `total = Σ P`, `mean = total / |P|`. *(prueba: LILA-028)*
 - **`resourceWait.{min,max,mean,sd,total}`** — estadísticas de `startedAt − enabledAt − offHoursWait[enabledAt, startedAt]`: tiempo abierto en que la instancia esperó exclusivamente a que un recurso quedara disponible (R-REC-8). `sd` es la desviación estándar muestral (`n−1` en el denominador) del mismo conjunto. Si el elemento no requiere recursos (`resources` vacío en el escenario), toda instancia tiene `resourceWait = 0` — degradación de capacidad infinita (ADR-016 y sección 6). *(prueba: LILA-028)*
 - **`offHoursWait.{min,max,mean,sd,total}`** — estadísticas del tiempo cerrado dentro de todo el intervalo `[enabledAt, endedAt]`, incluido tanto el cierre antes de arrancar como las pausas durante el procesamiento (R-CAL-7). Se acumula por separado de `resourceWait`; si el elemento usa calendario 24×7 (default sin calendario asignado), siempre vale 0. *(prueba de agregación: LILA-028; semántica de calendario: LILA-041)*
-- **`queueLength.{mean,max}`** — longitud de la cola de instancias esperando el elemento (`enabledAt ≤ t < startedAt`), muestreada en cada evento del elemento. `mean` es el promedio ponderado por tiempo (integral de la longitud de cola sobre el tiempo de la replicación, dividida entre la duración de la corrida); `max` es el máximo instantáneo observado.
-- **`fixedCostTotal`** — `elements[id].fixedCost × completed` (costo fijo por token completado, definido en el escenario; ver `SCENARIO_FORMAT.md`).
+- **`queueLength.{mean,max}`** — longitud de la cola de instancias esperando el elemento. Cada instancia de actividad (no cada fila: una AND con dos pools aporta **una** sola vez) contribuye el intervalo **semiabierto** `[enabledAt, startedAt)`, o `[enabledAt, observedUntil)` si seguía en cola al cortar. `mean` es la integral de la longitud instantánea sobre la ventana estadística dividida entre su duración (`statisticsDuration`, es decir la corrida menos el `warmup`, ver sección 8); `max` es el máximo instantáneo. Consecuencias de que el intervalo sea semiabierto: una espera de duración cero nunca forma cola (sin recursos, `queueLength = {mean: 0, max: 0}` para todo elemento, R-DEG-1), y la instancia que sale de la cola en el mismo instante en que otra entra no se cuentan juntas. *(prueba: LILA-036)*
+- **`fixedCostTotal`** — `elements[id].fixedCost × completed` (costo fijo por token completado, definido en el escenario; ver `SCENARIO_FORMAT.md`). Se obtiene como `Σ row.elementCost`, nunca `Σ row.cost` (R-COST-4).
 
 Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fuera de horario separada de espera por recurso — Bizagi ✗ / Lila ✓"); es una métrica extra de Lila.
+
+### Lifecycle parcial: qué entra en los agregados *(decisión de LILA-036)*
+
+Las filas `terminated` e `inFlight` conservan en el log crudo la espera **observada** hasta
+`observedUntil` (sección 7). En los agregados el criterio es uniforme y no depende del elemento:
+
+- Las estadísticas **por instancia** — `processing`, `resourceWait`, `offHoursWait` de esta
+  sección y `process.waitTime` de la sección 5 — agregan **solo** instancias con
+  `status = "completed"`. Una espera cortada por `terminate` o por el fin de la corrida es una
+  observación **censurada**: incluirla sesgaría la media a la baja y mezclaría dos poblaciones.
+  Se sigue así la regla que LILA-033 ya aplicaba (filas raw completas, agregado solo de
+  completadas).
+- Las **integrales de estado y los costos** — `queueLength` de esta sección, `busyTime`,
+  `utilization` y los costos de la sección 4, y `process.totalCost` de la sección 5 — **sí**
+  incluyen el lifecycle parcial: miden ocupación realmente observada dentro de la ventana, y
+  R-COST-4 exige que el costo ya incurrido por un caso en vuelo no desaparezca del total.
+
+Consecuencia deliberada y probada: un elemento cuya espera es **enteramente** censurada tiene
+`resourceWait.total = 0` y por tanto **no aparece** en `bottlenecks` (sección 6), aunque su
+`queueLength` y la utilización de su pool sí lo delaten. *(prueba: LILA-036)*
 
 ---
 
@@ -93,11 +113,15 @@ interface ResourceMetrics {
 }
 ```
 
-- **`busyTime`** — suma de segundos que el pool tuvo al menos una unidad ocupada atendiendo instancias (tiempo real trabajado, sumado sobre todas las unidades de capacidad: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s).
-- **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). Expresada como fracción `0..1`; la CLI la imprime como porcentaje (columna Bizagi `Utilization %`).
-- **`fixedCost`** — `Σ fixedCost del recurso × instancias atendidas por ese recurso` (costo fijo por token procesado, definido en `resources[id].fixedCost` del escenario).
+- **`busyTime`** — segundos-unidad que el pool estuvo ocupado atendiendo instancias, sumados sobre las unidades ocupadas: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s. Se agrega **por fila** del event log (ADR-025): cada fila con `resourceId` y `startedAt` no nulos aporta `resourceQuantity × (min(endedAt ?? observedUntil, t_stop) − max(startedAt, warmup))`. Una fila sentinel, o una que nunca llegó a arrancar, aporta 0.
+- **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). En nivel 3 (sin calendarios, M2) `availableTime = statisticsDuration`, es decir la ventana `[warmup, t_stop]`; los calendarios de M3 solo cambian ese denominador (R-CAL-9). Expresada como fracción `0..1`; la CLI la imprime como porcentaje (columna Bizagi `Utilization %`). Con `capacity × availableTime = 0` vale 0, no `NaN`.
+- **`fixedCost`** — `resources[id].fixedCost × usos`, donde *usos* es `Σ resourceQuantity` sobre las filas que llegaron a ocupar el pool (una tarea que ocupa 2 unidades son 2 usos, R-COST-2).
 - **`unitCost`** — `costPerHour del recurso × (busyTime / 3600)` (costo por las horas efectivamente ocupadas).
-- **`totalCost`** — `fixedCost + unitCost`.
+- **`totalCost`** — `fixedCost + unitCost`. Identidad verificable contra el log:
+  `Σ resources[*].totalCost = Σ row.resourceCost` sobre todas las filas de la ventana, es decir
+  `Σ fijo × usos + Σ porHora × horas ocupadas` (R-COST-4). *(prueba: LILA-036)*
+
+Todo pool declarado en `scenario.resources` aparece en el mapa, aunque nunca se haya usado (todos sus campos en cero): así las replicaciones comparten el mismo conjunto de claves de KPI (sección 8). Sin `resources` en el escenario el mapa queda `{}` y `bottlenecks` queda `[]`, exactamente como en M1 — la degradación no cambia la forma del JSON (R-DEG-1, prueba LILA-039).
 
 ---
 
@@ -125,7 +149,7 @@ interface Percentiles {
 - **`completed`** — número de casos que llegaron a un end event (o fueron consumidos por un `terminate`).
 - **`inFlight`** — `started − completed` al momento de cortar la corrida (casos que ni completaron ni fueron descartados).
 - **`cycleTime.*`** — estadísticas del tiempo total de vida de un caso (`caseEndedAt − caseEnabledAt`, sumando todos los elementos por los que pasó); `p50`/`p90`/`p95` son los percentiles 50, 90 y 95 empíricos (interpolación lineal sobre la muestra ordenada) del mismo conjunto de duraciones. Solo se calculan sobre casos **completados**.
-- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso. Hasta LILA-033 una fila `terminated`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada; LILA-036 debe fijar y probar el tratamiento agregado de lifecycle parcial junto con las métricas de nivel 3.
+- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso, y solo sobre casos **completados**. Una fila `terminated`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada: es la regla de lifecycle parcial fijada por LILA-036 (sección 2). *(prueba: LILA-036)*
 - **`throughputPerHour`** — `completed / (duración efectiva de la corrida en horas)`, donde la duración efectiva excluye el `warmup` (ver sección 8).
 - **`costPerCase`** — media de `Σ row.cost` sobre los casos completados. Los costos de casos en vuelo sí forman parte de `totalCost`, pero no de esta media (R-COST-4). *(prueba: LILA-028)*
 - **`totalCost`** — suma de `fixedCostTotal` de todos los elementos más `totalCost` de todos los recursos (costo total del escenario en la replicación).
@@ -144,7 +168,12 @@ interface BottleneckEntry {
 }
 ```
 
-Ranking de elementos ordenado descendentemente por `elements[elementId].resourceWait.total` (el elemento donde más tiempo total se perdió esperando recurso). Desempate: mayor `utilization` primero (del recurso — o, si el elemento usa varios pools con `selection: "and"`, el mayor `utilization` entre ellos). Elementos con `resourceWait.total = 0` no aparecen en el ranking. Es una métrica que Bizagi no ofrece (sección 3: "Ranking de cuellos de botella — Bizagi ✗ / Lila ✓").
+Ranking de elementos ordenado descendentemente por `elements[elementId].resourceWait.total` (el elemento donde más tiempo total se perdió esperando recurso). Desempate: mayor `utilization` primero (del recurso — o, si el elemento usa varios pools, el mayor `utilization` entre ellos); si también empata, `elementId` ascendente, para que el orden sea total y determinista. Elementos con `resourceWait.total = 0` no aparecen en el ranking. Es una métrica que Bizagi no ofrece (sección 3: "Ranking de cuellos de botella — Bizagi ✗ / Lila ✓").
+
+Los pools de un elemento se leen del **event log** (`resourceId` de sus filas), no del escenario:
+cada fila ya trae el pool efectivamente asignado, así que el ranking vale igual para un solo pool,
+para `selection: "and"` y para la selección `"or"` de LILA-035 sin ningún caso especial.
+*(prueba: LILA-036)*
 
 ---
 
@@ -202,8 +231,9 @@ efectivamente emitida. `process.totalCost = Σ cost`; sumar `cost` para el fijo 
 elemento duplicaría recursos y está prohibido. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
 LILA-036, LILA-037)*
 
-`started`, `completed`, `processing`, `resourceWait`, `offHoursWait` y `waitTime` se agregan una
-vez por `(replication, activityInstanceId)`; costos y ocupación de pool se agregan por fila.
+`started`, `completed`, `processing`, `resourceWait`, `offHoursWait`, `waitTime` y el intervalo de
+cola que alimenta `queueLength` se agregan una vez por `(replication, activityInstanceId)`; costos
+y ocupación de pool se agregan por fila.
 
 ### `log.csv`
 
