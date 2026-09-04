@@ -30,7 +30,13 @@ import {
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
-import { formatDuration, formatNumber, formatTable, type BaseTimeUnit } from './format.js';
+import {
+  formatDuration,
+  formatNumber,
+  formatSignedPercent,
+  formatTable,
+  type BaseTimeUnit,
+} from './format.js';
 import {
   resolveExtends,
   ScenarioSchema,
@@ -191,6 +197,21 @@ function integerOption(name: string, raw: string | undefined, minimum?: number):
   return value;
 }
 
+/** Overrides comunes de `--seed`/`--replications`; `run` y `compare` los aplican igual. */
+function withRunOverrides(
+  scenario: ResolvedScenario,
+  options: { seed?: number | undefined; replications?: number | undefined },
+): ResolvedScenario {
+  return {
+    ...scenario,
+    run: {
+      ...scenario.run,
+      ...(options.seed === undefined ? {} : { seed: options.seed }),
+      ...(options.replications === undefined ? {} : { replications: options.replications }),
+    },
+  };
+}
+
 /** Campos válidos de v1 cuyo comportamiento aún no existe en el motor de M1. */
 function unsupportedM1(scenario: ResolvedScenario): string[] {
   const errors: string[] = [];
@@ -236,6 +257,28 @@ function resultWithBoundaryWarnings(
 }
 
 type ParsedIr = Awaited<ReturnType<typeof parseBpmn>>['ir'];
+
+/** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
+async function loadValidatedModel(
+  modelFile: string,
+): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
+  const path = absolutePath(modelFile);
+  const parsed = await parseBpmn(readFileSync(path, 'utf8'));
+  const validation = validate(parsed.ir, {
+    unsupported: parsed.unsupported,
+    messageFlowCount: parsed.messageFlowCount,
+    conditionFlowIds: parsed.conditionFlowIds,
+  });
+  return { path, ir: parsed.ir, validation };
+}
+
+/** Imprime los problemas del modelo y responde si hay errores que aborten el comando. */
+function modelHasErrors(validation: ValidationResult): boolean {
+  if (validation.errors.length === 0) return false;
+  printValidationProblems(validation);
+  console.log(`${validation.errors.length} errores, ${validation.warnings.length} avisos.`);
+  return true;
+}
 
 function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunResult): void {
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
@@ -508,18 +551,8 @@ async function runCommand(
   scenarioFile: string,
   options: RunCommandOptions,
 ): Promise<number> {
-  const modelPath = absolutePath(modelFile);
-  const parsedModel = await parseBpmn(readFileSync(modelPath, 'utf8'));
-  const modelValidation = validate(parsedModel.ir, {
-    unsupported: parsedModel.unsupported,
-    messageFlowCount: parsedModel.messageFlowCount,
-    conditionFlowIds: parsedModel.conditionFlowIds,
-  });
-  if (modelValidation.errors.length > 0) {
-    printValidationProblems(modelValidation);
-    console.log(`${modelValidation.errors.length} errores, ${modelValidation.warnings.length} avisos.`);
-    return 1;
-  }
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
+  if (modelHasErrors(modelValidation)) return 1;
 
   const scenarioPath = absolutePath(scenarioFile);
   const resolvedScenario = loadResolvedScenario(scenarioPath);
@@ -530,14 +563,7 @@ async function runCommand(
     return 1;
   }
 
-  const scenario: ResolvedScenario = {
-    ...resolvedScenario,
-    run: {
-      ...resolvedScenario.run,
-      ...(options.seed === undefined ? {} : { seed: options.seed }),
-      ...(options.replications === undefined ? {} : { replications: options.replications }),
-    },
-  };
+  const scenario = withRunOverrides(resolvedScenario, options);
 
   const unsupported = unsupportedM1(scenario);
   if (unsupported.length > 0) {
@@ -545,7 +571,7 @@ async function runCommand(
     return 1;
   }
 
-  const scenarioProblems = validateScenario(scenario, parsedModel.ir);
+  const scenarioProblems = validateScenario(scenario, ir);
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
     printScenarioProblems(scenarioProblems);
@@ -555,17 +581,17 @@ async function runCommand(
   const logSink =
     options.csv === undefined ? undefined : openEventLogSink(options.csv, runStartMs(scenario.run.start));
   try {
-    const simulated = simulate(parsedModel.ir, scenario, {
+    const simulated = simulate(ir, scenario, {
       log: logSink !== undefined,
       ...(logSink === undefined ? {} : { onEvent: (row: EventLogRow) => logSink.onEvent(row) }),
     });
     logSink?.close();
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
 
-    printRunResult(parsedModel.ir, scenario, result);
+    printRunResult(ir, scenario, result);
     if (options.json !== undefined) writeJson(options.json, result);
     if (options.csv !== undefined) {
-      writeCsvDirectory(options.csv, parsedModel.ir, scenario, result);
+      writeCsvDirectory(options.csv, ir, scenario, result);
       logSink?.commit();
       console.log(`CSV: ${absolutePath(options.csv)}`);
     }
@@ -631,18 +657,26 @@ const BIZAGI_COMPARE_LABELS: Readonly<Record<string, string>> = {
   'elements:resourceWait.total': 'Total time (waiting for resource)',
   'elements:fixedCostTotal': 'Total fixed cost',
   'resources:utilization': 'Utilization (%)',
+  'resources:busyTime': 'Busy time',
   'resources:fixedCost': 'Fixed cost',
   'resources:unitCost': 'Unit cost',
   'resources:totalCost': 'Total cost',
   'flows:count': 'Instances/Tokens completed',
 };
 
+/**
+ * Métricas cuyo valor son segundos y por tanto se convierten a `baseTimeUnit` al imprimir
+ * (R-DURA-2). `busyTime` son segundos-unidad (RESULTS_FORMAT.md § 4) y también se convierte: dejar
+ * la única duración que solo aparece con `--all` en segundos crudos, junto a costos derivados de
+ * ella ya convertidos, hacía ilegible la tabla de recursos.
+ */
 const DURATION_METRIC_PREFIXES: ReadonlySet<string> = new Set([
   'processing',
   'resourceWait',
   'offHoursWait',
   'cycleTime',
   'waitTime',
+  'busyTime',
 ]);
 
 function isDurationMetric(metric: string): boolean {
@@ -671,7 +705,7 @@ function formatCompareCell(
 ): string {
   const valueText = formatCompareValue(metric, value, unit);
   if (value === null) return valueText;
-  const deltaText = deltaRel === null ? '-' : `${deltaRel >= 0 ? '+' : ''}${formatNumber(deltaRel * 100)}%`;
+  const deltaText = deltaRel === null ? '-' : formatSignedPercent(deltaRel);
   return `${valueText} (${deltaText})${significant ? '*' : ''}`;
 }
 
@@ -687,6 +721,77 @@ function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>,
   return '';
 }
 
+/** ¿El escenario declara calendarios, en `calendars` o en la referencia de un pool/elemento? */
+function declaresCalendars(scenario: ResolvedScenario): boolean {
+  if (Object.keys(scenario.calendars ?? {}).length > 0) return true;
+  if (Object.values(scenario.resources ?? {}).some((resource) => resource.calendar !== undefined)) return true;
+  return Object.values(scenario.elements ?? {}).some((element) => element.calendar !== undefined);
+}
+
+/**
+ * Avisos de la corrida completa, en un solo bloque al pie de la tabla.
+ *
+ * Incluye los avisos de modelo y escenario que `lila run` ya imprime (`resultWithBoundaryWarnings`)
+ * y tres que solo tienen sentido comparando: unidad de tiempo distinta entre escenarios —la tabla
+ * usa siempre la del base—, semillas distintas —se pierden los números aleatorios comunes de
+ * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)— y
+ * calendarios declarados, que el motor todavía no simula (M3, LILA-041).
+ */
+function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTimeUnit): string[] {
+  const lines: string[] = [];
+  const label = (entry: LoadedScenarioResult): string => `"${entry.scenario.name}"`;
+
+  const otherUnits = loaded.filter((entry) => entry.scenario.run.baseTimeUnit !== unit);
+  if (otherUnits.length > 0) {
+    lines.push(
+      `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
+        `Declaran otra: ${otherUnits.map((entry) => `${label(entry)} (${entry.scenario.run.baseTimeUnit})`).join(', ')}.`,
+    );
+  }
+
+  const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed));
+  if (seeds.size > 1) {
+    lines.push(
+      `los escenarios corren con semillas distintas (${[...seeds].join(', ')}): se pierden los números ` +
+        'aleatorios comunes (R-DET-3) y los deltas mezclan el efecto del cambio con el del muestreo. ' +
+        'Usa --seed para forzar la misma semilla en todos.',
+    );
+  }
+
+  for (const entry of loaded.filter((entry) => declaresCalendars(entry.scenario))) {
+    lines.push(
+      `${label(entry)} declara calendarios; el motor todavía no los simula (M3, LILA-041) y sus ` +
+        'números salen 24×7. `lila run` rechaza ese escenario con E-NIVEL-M3.',
+    );
+  }
+
+  for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
+    lines.push(
+      `${label(entry)} corrió sin al menos dos replicaciones completas; sin IC95 no hay marca de ` +
+        'significancia posible para ese escenario.',
+    );
+  }
+
+  // Los avisos del motor llegan uno por replicación (W-JOIN-BLOQUEADO cita un conteo distinto en
+  // cada una): 30 réplicas × N escenarios enterrarían la tabla. `compare` es una vista de resumen,
+  // así que se queda con el primero de cada código y dice cuántos más hubo; el detalle completo
+  // está en `lila run` y en su `--json`.
+  for (const entry of loaded) {
+    const byCode = new Map<string, { first: string; count: number }>();
+    for (const warning of entry.result.warnings) {
+      const code = warning.split(':')[0] ?? warning;
+      const group = byCode.get(code);
+      if (group === undefined) byCode.set(code, { first: warning, count: 1 });
+      else group.count++;
+    }
+    for (const { first, count } of byCode.values()) {
+      const more = count > 1 ? ` (+${count - 1} aviso${count === 2 ? '' : 's'} más con el mismo código)` : '';
+      lines.push(`${label(entry)} ${first}${more}`);
+    }
+  }
+  return lines;
+}
+
 function printCompareResult(
   ir: ParsedIr,
   loaded: readonly LoadedScenarioResult[],
@@ -695,11 +800,17 @@ function printCompareResult(
 ): void {
   const base = loaded[0]!;
   const unit = base.scenario.run.baseTimeUnit as BaseTimeUnit;
-  const resourceNames = Object.fromEntries(
-    Object.entries(base.scenario.resources ?? {}).map(([id, resource]) => [id, resource.name ?? id]),
-  );
+  // El nombre de un pool puede venir de cualquier escenario: el TO-BE puede estrenar un pool que
+  // el base no declara, y esa fila existe igual en la tabla (`compare()` la da con base `null`).
+  const resourceNames: Record<string, string> = {};
+  for (const entry of loaded) {
+    for (const [id, resource] of Object.entries(entry.scenario.resources ?? {})) {
+      resourceNames[id] ??= resource.name ?? id;
+    }
+  }
 
   console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
+  console.log(`Unidad de tiempo ${unit} (escenario base) · Utilización en %`);
   console.log('');
   console.log('Escenarios comparados');
   console.log(
@@ -763,14 +874,11 @@ function printCompareResult(
   console.log('');
   console.log('* diferencia significativa (IC95 sin solapamiento)');
 
-  const withoutCi95 = loaded.filter((entry) => entry.result.replications === undefined);
-  if (withoutCi95.length > 0) {
+  const warnings = compareWarnings(loaded, unit);
+  if (warnings.length > 0) {
     console.log('');
-    for (const entry of withoutCi95) {
-      console.log(
-        `Aviso: "${entry.scenario.name}" corrió sin al menos dos replicaciones completas; sin IC95 no hay marca de significancia posible para ese escenario.`,
-      );
-    }
+    console.log('Avisos:');
+    for (const warning of warnings) console.log(`  ${warning}`);
   }
 }
 
@@ -779,26 +887,22 @@ async function compareCommand(
   scenarioFiles: readonly string[],
   options: CompareCommandOptions,
 ): Promise<number> {
-  const modelPath = absolutePath(modelFile);
-  const parsedModel = await parseBpmn(readFileSync(modelPath, 'utf8'));
-  const modelValidation = validate(parsedModel.ir, {
-    unsupported: parsedModel.unsupported,
-    messageFlowCount: parsedModel.messageFlowCount,
-    conditionFlowIds: parsedModel.conditionFlowIds,
-  });
-  if (modelValidation.errors.length > 0) {
-    printValidationProblems(modelValidation);
-    console.log(`${modelValidation.errors.length} errores, ${modelValidation.warnings.length} avisos.`);
-    return 1;
-  }
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
+  if (modelHasErrors(modelValidation)) return 1;
 
-  // A diferencia de `lila run`, `compare` no aplica `unsupportedM1`: LILA-038 (compare()) ya
-  // agrega métricas de recursos de nivel 3, y la aceptación de este ticket (AS-IS vs TO-BE de
-  // examples/pedido) depende de resources/calendars, que el motor ya simula.
-  const loaded: LoadedScenarioResult[] = [];
+  // A diferencia de `lila run`, `compare` no aplica `unsupportedM1`: LILA-038 (compare()) ya agrega
+  // métricas de recursos de nivel 3, que el motor simula desde LILA-033…036, y la aceptación de
+  // este ticket depende de ellas. Los `calendars` de M3 sí siguen sin simularse: no se rechazan
+  // aquí —examples/pedido, el caso de aceptación, los declara— pero salen avisados al pie.
+  const validated: Array<{
+    file: string;
+    scenario: ResolvedScenario;
+    problems: readonly ScenarioProblem[];
+  }> = [];
+  // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
+  // simulación completa de los n − 1 anteriores.
   for (const scenarioFile of scenarioFiles) {
-    const scenarioPath = absolutePath(scenarioFile);
-    const resolvedScenario = loadResolvedScenario(scenarioPath);
+    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile));
     if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
       console.error(
         `lila compare: el modelo posicional (${modelPath}) no coincide con scenario.model ` +
@@ -807,30 +911,28 @@ async function compareCommand(
       return 1;
     }
 
-    const scenario: ResolvedScenario = {
-      ...resolvedScenario,
-      run: {
-        ...resolvedScenario.run,
-        ...(options.seed === undefined ? {} : { seed: options.seed }),
-        ...(options.replications === undefined ? {} : { replications: options.replications }),
-      },
-    };
-
-    const scenarioProblems = validateScenario(scenario, parsedModel.ir);
-    const errors = scenarioErrors(scenarioProblems);
-    if (errors.length > 0) {
+    const scenario = withRunOverrides(resolvedScenario, options);
+    const problems = validateScenario(scenario, ir);
+    if (scenarioErrors(problems).length > 0) {
       console.error(`lila compare: ${scenarioFile}`);
-      printScenarioProblems(scenarioProblems);
+      printScenarioProblems(problems);
       return 1;
     }
-
-    const simulated = simulate(parsedModel.ir, scenario, { log: false });
-    const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
-    loaded.push({ file: scenarioFile, scenario, result });
+    validated.push({ file: scenarioFile, scenario, problems });
   }
 
+  const loaded: LoadedScenarioResult[] = validated.map((entry) => ({
+    file: entry.file,
+    scenario: entry.scenario,
+    result: resultWithBoundaryWarnings(
+      simulate(ir, entry.scenario, { log: false }),
+      modelValidation,
+      entry.problems,
+    ),
+  }));
+
   const comparison = compare(loaded.map((entry) => entry.result));
-  printCompareResult(parsedModel.ir, loaded, comparison, options.all);
+  printCompareResult(ir, loaded, comparison, options.all);
   if (options.json !== undefined) writeJson(options.json, comparison);
   return 0;
 }
