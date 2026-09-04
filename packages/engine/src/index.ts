@@ -15,6 +15,6 @@ export type {
   Stat,
   StatSd,
 } from './core/result.js';
-export type { AbortSignalLike, SimElement, SimRun, SimScenario } from './core/sim.js';
+export type { AbortSignalLike, SimElement, SimResource, SimRun, SimScenario } from './core/sim.js';
 
 export const version = '0.0.0';

@@ -122,25 +122,39 @@ export interface RunResult {
 }
 
 /**
- * Una fila del event log (sección 7 de docs/RESULTS_FORMAT.md): una por instancia de
- * elemento por caso por replicación. Timestamps en segundos desde `run.start`.
+ * Una fila plana por asignación de pool (ADR-025). Varias filas pueden pertenecer a la misma
+ * instancia de actividad; sin recurso existe una única fila sentinel.
  */
 export interface EventLogRow {
   /** Índice de la replicación, 0..scenario.run.replications-1. */
   replication: number;
   /** Identificador del caso (instancia de proceso), único dentro de la replicación. */
   caseId: string;
+  /** Identificador estable de la ocurrencia; agrupa asignaciones de una misma tarea/timer. */
+  activityInstanceId: string;
   /** id BPMN del elemento (nunca el nombre). */
   elementId: string;
-  /** id del pool de recursos que atendió la instancia; null si el elemento no requiere recurso. */
+  /** id del pool de esta asignación; null en la fila sentinel. */
   resourceId: string | null;
+  /** Posición de la asignación en `elements[id].resources`; null para el sentinel. */
+  allocationIndex: number | null;
+  /** Unidades del pool; null en la fila sentinel. */
+  resourceQuantity: number | null;
+  /** Estado observable al emitir la fila. */
+  status: 'completed' | 'terminated' | 'inFlight';
   enabledAt: number;
-  startedAt: number;
-  endedAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  /** Fin normal o instante de corte/terminate para lifecycle parcial. */
+  observedUntil: number;
   /** startedAt − enabledAt menos la porción atribuible a calendario cerrado (ver offHoursWait). */
   resourceWait: number;
   /** Porción de startedAt − enabledAt en la que el calendario estaba cerrado. */
   offHoursWait: number;
-  /** En run.currency: fixedCost del elemento (si esta fila lo completa) + porción de unitCost del recurso. */
+  /** Fijo del elemento, cargado una sola vez por actividad completada. */
+  elementCost: number;
+  /** Costo fijo y por tiempo de esta asignación de pool. */
+  resourceCost: number;
+  /** Identidad exacta `elementCost + resourceCost`. */
   cost: number;
 }

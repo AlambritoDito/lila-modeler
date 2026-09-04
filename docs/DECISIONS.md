@@ -289,6 +289,28 @@ un campo separado, sin cambiar el significado del top-level. *(prueba: LILA-029)
 
 ---
 
+## ADR-025 — Event log plano por asignación, agrupado por instancia de actividad
+
+**Status:** Accepted
+
+Cada asignación de pool produce una fila plana y todas las filas de una ocurrencia comparten
+`activityInstanceId` y su posición original en `allocationIndex`. Una actividad sin recurso, o
+una que se cierra todavía en cola, produce una fila sentinel (`resourceId = null`,
+`resourceQuantity = null`, `allocationIndex = null`). El lifecycle parcial distingue `terminated` de `inFlight`, conserva timestamps anulables y
+`observedUntil`. Los costos se descomponen en `elementCost` y `resourceCost`; el fijo del elemento
+aparece una sola vez en la fila emitida de menor `allocationIndex` y `cost` es su suma exacta.
+
+Se descarta una fila por actividad con `resources[]`: duplica estructura dentro del CSV, dificulta
+streaming/XES y contradice el formato plano comprometido. Se descartan acumuladores internos sin
+reconstrucción desde el log: violan R-COST-3 y no permiten auditar utilización/costos sin volver a
+simular. La alternativa elegida conserva CSV plano, representa `quantity` y AND/OR, evita duplicar
+el costo fijo y mantiene observables las tareas en cola o en curso al cortar.
+
+Revisar solo con una nueva versión del formato de resultados; consumidores v1 dependen de estas
+columnas. *(prueba: LILA-033, LILA-036, LILA-037)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).

@@ -200,6 +200,13 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-TOK-5 — Instantes por token y tarea.** `enabled` = instante en que el token llega al nodo;
   `started` = instante en que empieza a consumirse la duración; `ended` = instante en que termina.
   Para nodos sin recurso ni calendario, `enabled = started`. *(prueba: LILA-033, LILA-036)*
+- **R-TOK-6 — Identidad y lifecycle de actividad.** Cada entrada a una tarea o timer crea un
+  `activityInstanceId` opaco y único dentro de la replicación, derivado de un contador. Todas las asignaciones de pools
+  de esa ocurrencia comparten el id y los mismos instantes. Al cierre normal se emite
+  `status = "completed"`; `terminate` emite `status = "terminated"`, y la parada o cancelación
+  emite `status = "inFlight"`. En los dos últimos, `startedAt = null` distingue una instancia que
+  seguía en cola de una ya iniciada y `endedAt = null`; `observedUntil` fija el corte.
+  *(decisión: ADR-025; prueba: LILA-033, LILA-037)*
 
 ---
 
@@ -346,8 +353,9 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 - **R-ARR-7 — Warmup.** `run.warmup` (segundos desde `run.start`) excluye de **todas** las
   estadísticas los casos **iniciados** antes de `warmup`, pero esos casos existen: ocupan recursos,
   hacen cola y afectan a los demás. Un caso iniciado en `warmup − 1` no cuenta aunque termine
-  después. Las integrales ponderadas por tiempo (`queueLength`, utilización) se acumulan solo en
-  `[warmup, t_stop]`. *(prueba: LILA-027)*
+  después. Tampoco aporta directamente a costos ni integrales: `queueLength` y utilización
+  integran solo el estado atribuible a la cohorte medida en `[warmup, t_stop]`; la ocupación
+  pre-warmup sí puede retrasar indirectamente a esa cohorte. *(prueba: LILA-027, LILA-033)*
 - **R-ARR-8 — Replicaciones.** `run.replications = R` corre R veces la misma configuración; la
   replicación `r` (0-indexada) usa streams derivados de `(seed, r, elementId)`. Por KPI se reportan
   `mean`, `sd` (muestral, `n − 1`) y `ci95 = mean ± t(0,975; R−1) · sd / √R`. Con `R = 1` no hay
@@ -371,13 +379,15 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 `scenario.resources[pool] = { name, type: "role"|"equipment", capacity, costPerHour, fixedCost,
 calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" | "or"`.
 
-- **R-REC-1 — Pool con capacidad entera.** `capacity` es un entero `≥ 1`; ausente vale 1. Un pool
+- **R-REC-1 — Pool con capacidad entera.** `capacity` es obligatorio y es un entero `≥ 1`. Un pool
   es un contador de unidades idénticas: no hay identidad individual de recurso en v1 (el event log
   registra el **pool**, no la unidad). *(prueba: LILA-033)*
 - **R-REC-2 — Defaults de la asignación.** `quantity` ausente vale 1. `selection` ausente vale
   `"and"`. Con un solo pool, `and` y `or` son equivalentes. `quantity > capacity` del pool es error
   `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre). Una `ref` a un pool inexistente es
-  error `E-REC-DESCONOCIDO`. *(prueba: LILA-013, LILA-042)*
+  error `E-REC-DESCONOCIDO`. En LILA-033 más de un pool falla antes de simular con
+  `E-REC-MULTIPOOL-PENDIENTE`; LILA-034/035 sustituyen ese guard por AND/OR. *(prueba: LILA-013,
+  LILA-033, LILA-042)*
 - **R-REC-3 — Cola FIFO por instante de habilitación.** Cada pool tiene una cola ordenada por
   `(enabled, seq)` ascendente, donde `seq` es el contador monótono del evento que habilitó al token.
   Como `seq` es único, el orden es total y determinista: **no hay empates reales**.
@@ -408,6 +418,14 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 - **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, gateways y `timer` nunca
   consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
   *(prueba: LILA-021, LILA-026)*
+- **R-REC-11 — Filas por asignación.** Cada asignación efectiva de pool produce una fila plana con
+  `resourceId` y `resourceQuantity`; una actividad sin pool produce exactamente una fila sentinel
+  con `resourceId`, `resourceQuantity` y `allocationIndex` en `null`. Una actividad AND/OR que se cierra mientras aún espera
+  también emite una sola sentinel, porque todavía no existe asignación; una vez iniciada emite sus
+  asignaciones efectivas. Las filas se agrupan por `activityInstanceId`, nunca mediante un array
+  anidado. Métricas de actividad y caso deduplican por `(replication, activityInstanceId)`; costos y
+  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033,
+  LILA-037)*
 
 ---
 
@@ -475,13 +493,16 @@ comportamiento real de L-Sim/Bizagi.
   sobre las unidades ocupadas (una tarea que ocupa `quantity = 2` durante 1 h aporta 2 h).
   *(prueba: LILA-036)*
 - **R-COST-3 — Costo de una fila del log.**
-  `row.cost = elements[elementId].fixedCost + Σ_pools ( pool.fixedCost × quantity +
-  pool.costPerHour × quantity × busyTime_fila / 3600 )`. Es lo que permite reconstruir cualquier
-  agregado desde el log sin volver a simular. *(prueba: LILA-037, LILA-036)*
+  `row.cost = row.elementCost + row.resourceCost`. `elementCost` vale el fijo del elemento solo en
+  la primera fila de la instancia (orden del array `resources`) y 0 en las demás; para el sentinel
+  es el fijo del elemento. `resourceCost = pool.fixedCost × quantity + pool.costPerHour × quantity
+  × busyTime_fila / 3600` si el pool llegó a ocuparse, y 0 mientras siguió en cola. Así el fijo del
+  elemento no se duplica en AND y cada componente es reconstruible. *(decisión: ADR-025; prueba:
+  LILA-037, LILA-036)*
 - **R-COST-4 — Costo por caso y total.** `costo(caso) = Σ row.cost de sus filas`;
   `process.costPerCase` = media sobre los casos **completados** de la ventana;
-  `process.totalCost = Σ row.cost` de todas las filas de la ventana, incluidas las de casos en
-  vuelo. De ahí sale la identidad verificable
+  `process.totalCost = Σ row.cost` de todas las filas de la ventana, incluidas las parciales de
+  casos en vuelo. `element.fixedCostTotal = Σ row.elementCost`, no `Σ row.cost`. De ahí sale la identidad verificable
   `totalCost = Σ fijo × usos + Σ porHora × horas ocupadas`. *(prueba: LILA-036)*
 - **R-COST-5 — Costos ausentes.** `fixedCost` y `costPerHour` ausentes valen 0. Costos negativos los
   rechaza el esquema. *(prueba: LILA-013)*
@@ -641,7 +662,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 | R-TOK-2 | caso = conjunto de tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
 | R-TOK-4 | tránsito instantáneo y `flows.count` | LILA-028 |
-| R-TOK-5 | `enabled`/`started`/`ended` | LILA-033, LILA-036 |
+| R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identidad y lifecycle parcial | LILA-033, LILA-037 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: equitativo, residuo al default, normalización, sorteo | LILA-026 (normalización y avisos: LILA-042) |
 | R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042 |
 | R-OR-1 … R-OR-7 | OR fork/join, emparejamiento y loops | LILA-026 |
@@ -662,6 +683,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 | R-REC-7 | ocupación/liberación, sin apropiación | LILA-033 |
 | R-REC-8 | `resourceWait = started − enabled − offHoursWait` | LILA-036, LILA-041 |
 | R-REC-9, R-REC-10 | pool duplicado; qué elementos admiten recursos | LILA-013, LILA-021 |
+| R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
 | R-CAL-1 … R-CAL-3 | patrón semanal, intervalos, primitivas | LILA-040 |
 | R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
 | R-CAL-9 | utilización sobre horas disponibles | LILA-041, LILA-036 |
