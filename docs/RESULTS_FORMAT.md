@@ -368,6 +368,8 @@ interface CompareRow {
 - **Claves ausentes**: un KPI que no existe en algún resultado vale `null` ahí; no es un error, y su
   `deltaAbs`/`deltaRel` también son `null`.
 - **`deltaRel` con base 0**: `null`, nunca `Infinity` ni `NaN`, para que el JSON siga siendo válido.
+- **Lista vacía**: `compare([])` lanza `RangeError` con `E-COMPARE-VACIO`. Un solo resultado sí es
+  válido: da deltas 0 y ninguna significancia.
 - **Significancia**: `significant[i]` es `true` cuando los intervalos `ci95` de la base y del
   resultado `i` (sección 8) **no se solapan**. Dos intervalos que solo se tocan en un extremo cuentan
   como solapados. Un resultado sin `replications` —una sola replicación, o una corrida cancelada con

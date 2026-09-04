@@ -136,7 +136,10 @@ export function compare(results: readonly RunResult[]): CompareResult {
       // JSON siga siendo válido y la CLI pueda imprimir un guion sin caso especial.
       deltaRel.push(absolute === null || base === null || base === 0 ? null : absolute / base);
       const ci95 = ci95ByResult[index]?.[path]?.ci95;
-      significant.push(baseCi95 !== undefined && ci95 !== undefined && disjoint(baseCi95, ci95));
+      // `index > 0` sostiene el invariante documentado `significant[0] === false` sin depender de
+      // que el IC de la base esté bien formado: un `ci95` invertido ([hi, lo]) sería disjunto de
+      // sí mismo y marcaría a la base como significativa contra sí misma.
+      significant.push(index > 0 && baseCi95 !== undefined && ci95 !== undefined && disjoint(baseCi95, ci95));
     }
 
     return { kpi: path, ...describeKpi(path), base, values, deltaAbs, deltaRel, significant };
