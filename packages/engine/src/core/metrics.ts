@@ -104,7 +104,16 @@ function emptyElementMetrics(started: number, completed: number): ElementMetrics
  * cuellos de botella conservan su valor neutro hasta LILA-036. La agregación entre replicaciones
  * se hace después, en `replications.ts` (LILA-027).
  */
-export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunResult {
+export interface AggregateReplicationOptions {
+  /** Duración efectiva de la ventana estadística, en segundos (R-ARR-7). */
+  statisticsDuration?: number | undefined;
+}
+
+export function aggregateReplication(
+  ir: ProcessIR,
+  run: ReplicationRun,
+  options: AggregateReplicationOptions = {},
+): RunResult {
   // Precondición de frontera con LILA-027: el productor entrega `cases`, `elements` y `flows`
   // pertenecientes a una misma ventana estadística. Puede conservar en `rows` eventos previos al
   // warmup para el event log; filtrar por los caseId recibidos impide que contaminen el agregado.
@@ -161,7 +170,7 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
   const waitTimes = completedCases.map((record) => waitByCase.get(String(record.caseId)) ?? 0);
   const completedCaseCosts = completedCases.map((record) => costByCase.get(String(record.caseId)) ?? 0);
   const totalCost = includedRows.reduce((total, row) => total + row.cost, 0);
-  const effectiveSeconds = Math.max(0, run.stoppedAt);
+  const effectiveSeconds = Math.max(0, options.statisticsDuration ?? run.stoppedAt);
 
   return {
     elements,

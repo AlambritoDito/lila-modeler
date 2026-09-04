@@ -183,12 +183,12 @@ describe('casos adversos de agregación', () => {
       },
       warnings: ['aviso estable'],
     };
-    const result = aggregateReplication(ir, manual);
+    const result = aggregateReplication(ir, manual, { statisticsDuration: 50 });
 
     expect(result.elements.A?.processing).toEqual({ min: 10, max: 10, mean: 10, total: 10 });
     expect(result.elements.A?.fixedCostTotal).toBe(3);
     expect(result.process.totalCost).toBe(3);
-    expect(result.process.throughputPerHour).toBe(36);
+    expect(result.process.throughputPerHour).toBe(72);
     expect(result.warnings).toEqual(['aviso estable']);
   });
 
