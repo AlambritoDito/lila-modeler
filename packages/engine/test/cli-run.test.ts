@@ -2,8 +2,10 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -127,6 +129,7 @@ describe('lila run (LILA-046)', () => {
     expect(runResultSchema.safeParse(parsed).success).toBe(true);
     expect(parsed.replications?.count).toBe(2);
     expect(parsed.process).toMatchObject({ started: 3, completed: 3 });
+    expect(readdirSync(join(fixture.root, 'out')).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
   test('--csv crea cinco archivos deterministas RFC 4180; resources queda solo con header', async () => {
@@ -152,7 +155,7 @@ describe('lila run (LILA-046)', () => {
     expect(readFileSync(join(first, 'flows.csv'), 'utf8')).toContain('"entrada, principal"');
     expect(readFileSync(join(first, 'resources.csv'), 'utf8').split('\r\n')).toHaveLength(2);
     expect(readFileSync(join(first, 'log.csv'), 'utf8').split('\r\n')).toHaveLength(5);
-    expect(existsSync(join(first, '.log.csv.tmp'))).toBe(false);
+    expect(readdirSync(first).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
   test('rechaza explícitamente recursos y calendarios de hitos posteriores', async () => {
@@ -212,6 +215,27 @@ describe('lila run (LILA-046)', () => {
 
     expect(await main(['run', fixture.model, scenario])).toBe(1);
     expect(output.join('\n')).toContain('no coincide con scenario.model');
+  });
+
+  test('acepta que el modelo posicional sea un symlink al scenario.model real', async () => {
+    const alias = join(fixture.root, 'model-alias.bpmn');
+    symlinkSync(fixture.model, alias);
+
+    expect(await main(['run', alias, fixture.scenario])).toBe(0);
+    expect(output.join('\n')).not.toContain('no coincide con scenario.model');
+  });
+
+  test('un conflicto en un CSV no publica un conjunto parcial ni deja temporales', async () => {
+    const directory = join(fixture.root, 'csv-conflict');
+    mkdirSync(join(directory, 'flows.csv'), { recursive: true });
+    writeFileSync(join(directory, 'elements.csv'), 'resultado anterior\r\n', 'utf8');
+
+    expect(await main(['run', fixture.model, fixture.scenario, '--csv', directory])).toBe(1);
+    expect(readFileSync(join(directory, 'elements.csv'), 'utf8')).toBe('resultado anterior\r\n');
+    expect(existsSync(join(directory, 'resources.csv'))).toBe(false);
+    expect(existsSync(join(directory, 'process.csv'))).toBe(false);
+    expect(existsSync(join(directory, 'log.csv'))).toBe(false);
+    expect(readdirSync(directory).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
   test('separa --json booleano de validate y --json con ruta de run', async () => {
