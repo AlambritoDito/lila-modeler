@@ -5,6 +5,7 @@ import { main } from '../src/cli.js';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const pedido = `${repo}examples/pedido/model.bpmn`;
 const boundary = fileURLToPath(new URL('./fixtures/boundary-event.bpmn', import.meta.url));
+const warningsFixture = fileURLToPath(new URL('./fixtures/warnings.bpmn', import.meta.url));
 
 let out: string[];
 
@@ -56,6 +57,22 @@ test('--json imprime JSON parseable con ir, errores y avisos', async () => {
   expect(parsed.errors).toEqual([]);
   expect(parsed.warnings).toMatchObject([
     { code: 'W-MSGFLOW', id: 'Process_Restaurante' },
+  ]);
+});
+
+test('propaga W-MSGFLOW y cada W-COND en salida humana y JSON', async () => {
+  expect(await main(['validate', warningsFixture])).toBe(0);
+  const human = out.join('\n');
+  expect(human).toContain('aviso  W-MSGFLOW  Process_Warnings: se ignoraron 2 flujos de mensaje');
+  expect(human).toContain('aviso  W-COND  Flow_Condition: conditionExpression se ignora');
+  expect(human).toContain('0 errores, 2 avisos.');
+
+  out = [];
+  expect(await main(['validate', warningsFixture, '--json'])).toBe(0);
+  const json = JSON.parse(out.join('\n')) as { warnings: { code: string; id: string }[] };
+  expect(json.warnings).toEqual([
+    expect.objectContaining({ code: 'W-MSGFLOW', id: 'Process_Warnings' }),
+    expect.objectContaining({ code: 'W-COND', id: 'Flow_Condition' }),
   ]);
 });
 

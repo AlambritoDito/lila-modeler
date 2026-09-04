@@ -32,8 +32,13 @@ const GATEWAY_TYPES: Record<string, NodeType> = {
   'bpmn:ParallelGateway': 'and',
 };
 
+/** Definiciones inline y referencias a definiciones globales, ambas vías válidas de BPMN. */
+function eventDefinitionsOf(el: ModdleElement): readonly ModdleElement[] {
+  return [...(el.eventDefinitions ?? []), ...(el.eventDefinitionRef ?? [])];
+}
+
 function hasEventDefinition(el: ModdleElement, type: string): boolean {
-  return (el.eventDefinitions ?? []).some((definition) => definition.$type === type);
+  return eventDefinitionsOf(el).some((definition) => definition.$type === type);
 }
 
 /** Textos normativos de `docs/SEMANTICS.md` R-NOSOP-2. */
@@ -96,7 +101,7 @@ function unsupportedConstruction(el: ModdleElement): UnsupportedConstruction | u
   if (el.$type === 'bpmn:BoundaryEvent') return 'evento adjunto a actividad (boundary event)';
   if (el.$type === 'bpmn:IntermediateThrowEvent') return 'evento intermedio de lanzamiento';
 
-  const definitions = el.eventDefinitions ?? [];
+  const definitions = eventDefinitionsOf(el);
   if (el.parallelMultiple === true || definitions.length > 1) {
     return 'evento con disparadores múltiples';
   }

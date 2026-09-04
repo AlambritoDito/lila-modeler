@@ -28,6 +28,7 @@ declare module 'bpmn-moddle' {
     flowNodeRef?: ModdleElement[];
     /** eventos */
     eventDefinitions?: ModdleElement[];
+    eventDefinitionRef?: ModdleElement[];
     parallelMultiple?: boolean;
     /** `bpmn:Activity` */
     loopCharacteristics?: ModdleElement;
