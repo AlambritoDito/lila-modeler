@@ -119,6 +119,13 @@ export interface RunResult {
   /** Solo con `cancelled`: número de replicaciones completas incluidas en el agregado. */
   completedReplications?: number;
   warnings: string[];
+  /**
+   * Event log completo de la corrida, en orden de simulación y de replicación (sección 7 de
+   * docs/RESULTS_FORMAT.md). Presente **solo** cuando nadie más se hizo cargo de las filas: sin
+   * `opts.onEvent` y sin `opts.log: false`. Con `onEvent` el consumidor ya las recibe una a una
+   * y retenerlas aquí duplicaría hasta 6 M de objetos; con `log: false` no hay log. *(LILA-037)*
+   */
+  log?: EventLogRow[];
 }
 
 /**

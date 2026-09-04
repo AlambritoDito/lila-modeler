@@ -78,7 +78,9 @@ describe('QA adversarial de simulate (LILA-029)', () => {
       signal: controller.signal,
       onEvent: () => events++,
     });
-    const second = simulate(IR, scenario(4), { signal: controller.signal });
+    // Ambas corridas pasan `onEvent`: con él `result.log` no se materializa (LILA-037 § 7) y la
+    // comparación sigue siendo entre dos resultados construidos exactamente igual.
+    const second = simulate(IR, scenario(4), { signal: controller.signal, onEvent: () => events++ });
 
     expect(events).toBe(0);
     expect(first).toEqual(second);
