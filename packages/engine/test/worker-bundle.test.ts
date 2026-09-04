@@ -43,6 +43,18 @@ interface IsolationViolation extends DependencyReference {
   readonly reason: string;
 }
 
+/** Globals que @types/node hace parecer válidos pero no existen dentro de un Web Worker. */
+const FORBIDDEN_NODE_GLOBALS = new Set([
+  'Buffer',
+  'NodeJS',
+  '__dirname',
+  '__filename',
+  'global',
+  'module',
+  'process',
+  'require',
+]);
+
 function normalizePath(path: string): string {
   return path.split(sep).join('/');
 }
@@ -105,6 +117,45 @@ function dependencyReferences(file: string): DependencyReference[] {
     });
   }
 
+  /** El CallExpression padre ya registra estos dos usos de require con su specifier. */
+  function isRequireIdentifierCoveredByCall(node: ts.Identifier): boolean {
+    const parent = node.parent;
+    if (ts.isCallExpression(parent) && parent.expression === node) return true;
+    return (
+      ts.isPropertyAccessExpression(parent) &&
+      parent.expression === node &&
+      parent.name.text === 'resolve' &&
+      ts.isCallExpression(parent.parent) &&
+      parent.parent.expression === parent
+    );
+  }
+
+  function isNonReferenceName(node: ts.Identifier): boolean {
+    const parent = node.parent;
+    return (
+      (ts.isPropertySignature(parent) && parent.name === node) ||
+      (ts.isPropertyDeclaration(parent) && parent.name === node) ||
+      (ts.isPropertyAssignment(parent) && parent.name === node) ||
+      (ts.isMethodSignature(parent) && parent.name === node) ||
+      (ts.isMethodDeclaration(parent) && parent.name === node) ||
+      (ts.isVariableDeclaration(parent) && parent.name === node) ||
+      (ts.isParameter(parent) && parent.name === node) ||
+      (ts.isFunctionDeclaration(parent) && parent.name === node) ||
+      (ts.isClassDeclaration(parent) && parent.name === node) ||
+      (ts.isInterfaceDeclaration(parent) && parent.name === node) ||
+      (ts.isTypeAliasDeclaration(parent) && parent.name === node) ||
+      (ts.isTypeParameterDeclaration(parent) && parent.name === node) ||
+      (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+      (ts.isImportSpecifier(parent) && (parent.name === node || parent.propertyName === node)) ||
+      (ts.isImportClause(parent) && parent.name === node) ||
+      (ts.isNamespaceImport(parent) && parent.name === node)
+    );
+  }
+
+  function isGlobalObject(node: ts.Expression): boolean {
+    return ts.isIdentifier(node) && ['globalThis', 'global', 'self', 'window'].includes(node.text);
+  }
+
   function visit(node: ts.Node): void {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier !== undefined) {
@@ -151,6 +202,29 @@ function dependencyReferences(file: string): DependencyReference[] {
       node.expression.expression.text === 'Date'
     ) {
       add(node, 'Date');
+    } else if (
+      ts.isPropertyAccessExpression(node) &&
+      isGlobalObject(node.expression) &&
+      FORBIDDEN_NODE_GLOBALS.has(node.name.text)
+    ) {
+      add(node, 'Node global', node.name.text);
+    } else if (
+      ts.isElementAccessExpression(node) &&
+      isGlobalObject(node.expression) &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      FORBIDDEN_NODE_GLOBALS.has(node.argumentExpression.text)
+    ) {
+      add(node, 'Node global', node.argumentExpression.text);
+    } else if (
+      ts.isIdentifier(node) &&
+      FORBIDDEN_NODE_GLOBALS.has(node.text) &&
+      !isNonReferenceName(node) &&
+      !(node.text === 'require' && isRequireIdentifierCoveredByCall(node))
+    ) {
+      // Es deliberadamente sintáctico: esos nombres quedan reservados en core/. Así también
+      // se detectan aliases (`const load = require`) y process.getBuiltinModule(), invisibles
+      // para el metafile de esbuild cuando no existe un import literal.
+      add(node, 'Node global', node.text);
     }
 
     ts.forEachChild(node, visit);
@@ -188,7 +262,11 @@ function inspectStaticIsolation(root: string): IsolationViolation[] {
         file: normalizePath(relative(canonicalRoot, file)),
       };
 
-      if (reference.kind === 'Math.random' || reference.kind === 'Date') {
+      if (
+        reference.kind === 'Math.random' ||
+        reference.kind === 'Date' ||
+        reference.kind === 'Node global'
+      ) {
         violations.push({ ...base, reason: `${reference.kind} no está permitido en core/` });
         continue;
       }
@@ -338,6 +416,62 @@ describe('aislamiento del bundle de core (LILA-032)', () => {
     ]);
   });
 
+  test('rechaza export type, subpaths de paquetes y aliases de tsconfig', () => {
+    const root = coreFixture({
+      'nested/types.ts': [
+        "export type { ZodType } from 'zod/v4';",
+        "import type { ReactNode } from '@ui/types';",
+        'export type Output = ReactNode;',
+      ].join('\n'),
+    });
+
+    expect(inspectStaticIsolation(root)).toEqual([
+      expect.objectContaining({ file: 'nested/types.ts', kind: 'export', specifier: 'zod/v4' }),
+      expect.objectContaining({ file: 'nested/types.ts', kind: 'import', specifier: '@ui/types' }),
+    ]);
+  });
+
+  test('rechaza import dinámico literal y no literal', () => {
+    const root = coreFixture({
+      'nested/dynamic.ts': [
+        "export const direct = import('node:fs/promises');",
+        "const packageName = 'zod';",
+        'export const indirect = import(packageName);',
+      ].join('\n'),
+    });
+
+    expect(inspectStaticIsolation(root)).toEqual([
+      expect.objectContaining({ kind: 'dynamic import', specifier: 'node:fs/promises' }),
+      expect.objectContaining({
+        kind: 'dynamic import',
+        reason: 'dynamic import debe usar un literal estático',
+      }),
+    ]);
+  });
+
+  test('rechaza require directo, resolve, aliased y globals Node sin import', () => {
+    const root = coreFixture({
+      'direct.ts': "export const fs = require('node:fs');\n",
+      'resolve.ts': "export const path = require.resolve('zod');\n",
+      'alias.ts': "const load = require; export const fs = load('node:fs');\n",
+      'module.ts': "export const fs = module.require('node:fs');\n",
+      'process.ts': "export const fs = process.getBuiltinModule('node:fs');\n",
+      'computed.ts': "export const fs = globalThis['require']('node:fs');\n",
+    });
+    const violations = inspectStaticIsolation(root);
+
+    expect(violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: 'direct.ts', kind: 'require', specifier: 'node:fs' }),
+        expect.objectContaining({ file: 'resolve.ts', kind: 'require', specifier: 'zod' }),
+        expect.objectContaining({ file: 'alias.ts', kind: 'Node global', specifier: 'require' }),
+        expect.objectContaining({ file: 'module.ts', kind: 'Node global', specifier: 'module' }),
+        expect.objectContaining({ file: 'process.ts', kind: 'Node global', specifier: 'process' }),
+        expect.objectContaining({ file: 'computed.ts', kind: 'Node global', specifier: 'require' }),
+      ]),
+    );
+  });
+
   test('también inspecciona declaraciones que no llegan al bundle', () => {
     const root = coreFixture({
       'public.d.ts': "export type { ZodType } from 'zod';\n",
@@ -346,6 +480,24 @@ describe('aislamiento del bundle de core (LILA-032)', () => {
 
     expect(inspectStaticIsolation(root)).toEqual([
       expect.objectContaining({ file: 'public.d.ts', kind: 'export', specifier: 'zod' }),
+    ]);
+  });
+
+  test('rechaza referencias triple-slash externas aunque estén en un subdirectorio', () => {
+    const root = coreFixture({
+      'nested/public.d.ts': [
+        '/// <reference types="node" />',
+        'export interface PublicShape { readonly value: number; }',
+      ].join('\n'),
+      'nested/index.ts': 'export const value = 42;\n',
+    });
+
+    expect(inspectStaticIsolation(root)).toEqual([
+      expect.objectContaining({
+        file: 'nested/public.d.ts',
+        kind: 'reference types',
+        specifier: 'node',
+      }),
     ]);
   });
 
@@ -362,6 +514,16 @@ describe('aislamiento del bundle de core (LILA-032)', () => {
     });
 
     expect(inspectStaticIsolation(root)).toEqual([]);
+    await expect(assertBrowserBundleIsIsolated(root)).resolves.toBeUndefined();
+  });
+
+  test('empaqueta cada entrypoint de runtime en subdirectorios', async () => {
+    const root = coreFixture({
+      'index.ts': "export { nested } from './nested/entry.js';\n",
+      'nested/entry.ts': 'export const nested = 42;\n',
+      'nested/types.d.ts': 'export interface Shape { readonly value: number; }\n',
+    });
+
     await expect(assertBrowserBundleIsIsolated(root)).resolves.toBeUndefined();
   });
 
