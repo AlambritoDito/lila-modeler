@@ -132,8 +132,8 @@ export interface ReplicationOptions {
  */
 export function assertSupportedResourceScenario(scenario: SimScenario): void {
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
-    if ((element.resources?.length ?? 0) > 1) {
-      throw new Error(`E-REC-MULTIPOOL-PENDIENTE: ${elementId}: múltiples pools requieren LILA-034/035.`);
+    if ((element.resources?.length ?? 0) > 1 && element.selection === 'or') {
+      throw new Error(`E-REC-OR-PENDIENTE: ${elementId}: selección OR multi-pool requiere LILA-035.`);
     }
   }
 }
@@ -225,8 +225,7 @@ export function runReplication(
   const seed = scenario.run.seed ?? 1;
   const warmup = scenario.run.warmup ?? 0;
 
-  // La API core no depende del validador zod. Mantiene el mismo fail-fast para que un escenario
-  // multi-pool no emita callbacks ni avance tiempo antes de fallar (#34/#35).
+  // La API core no depende del validador zod; comparte el fail-fast OR con `simulate`.
   assertSupportedResourceScenario(scenario);
 
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).

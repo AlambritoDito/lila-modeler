@@ -385,9 +385,9 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 - **R-REC-2 — Defaults de la asignación.** `quantity` ausente vale 1. `selection` ausente vale
   `"and"`. Con un solo pool, `and` y `or` son equivalentes. `quantity > capacity` del pool es error
   `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre). Una `ref` a un pool inexistente es
-  error `E-REC-DESCONOCIDO`. En LILA-033 más de un pool falla antes de simular con
-  `E-REC-MULTIPOOL-PENDIENTE`; LILA-034/035 sustituyen ese guard por AND/OR. *(prueba: LILA-013,
-  LILA-033, LILA-042)*
+  error `E-REC-DESCONOCIDO`. Desde LILA-034 múltiples pools con selección ausente o `"and"` son
+  válidos; `"or"` falla antes de simular con `E-REC-OR-PENDIENTE` hasta LILA-035.
+  *(prueba: LILA-013, LILA-033, LILA-034, LILA-042)*
 - **R-REC-3 — Cola FIFO por instante de habilitación.** Cada pool tiene una cola ordenada por
   `(enabled, seq)` ascendente, donde `seq` es el contador monótono del evento que habilitó al token.
   Como `seq` es único, el orden es total y determinista: **no hay empates reales**.
@@ -395,7 +395,8 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 - **R-REC-4 — Selección AND: atómica, sin retención parcial.** La tarea entra en la cola de todos
   sus pools. Arranca cuando **todos** ellos tienen simultáneamente `quantity` unidades libres; en
   ese instante se descuentan todas de golpe. Nunca se retiene un recurso mientras se espera otro,
-  así que **no puede haber deadlock**. *(prueba: LILA-034)*
+  así que **no puede haber deadlock**. Las filas y `assignments` conservan el orden declarado en
+  el escenario aunque el índice interno use todos los pools. *(prueba: LILA-034)*
 - **R-REC-5 — FIFO con salto en la asignación AND.** En cada liberación se recorre la cola en orden
   FIFO global `(enabled, seq)` y arranca el **primer candidato satisfacible**; un candidato que no
   puede arrancar no bloquea a los que van detrás. Es una desviación deliberada del FIFO estricto:
@@ -424,7 +425,7 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   también emite una sola sentinel, porque todavía no existe asignación; una vez iniciada emite sus
   asignaciones efectivas. Las filas se agrupan por `activityInstanceId`, nunca mediante un array
   anidado. Métricas de actividad y caso deduplican por `(replication, activityInstanceId)`; costos y
-  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033,
+  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
   LILA-037)*
 
 ---

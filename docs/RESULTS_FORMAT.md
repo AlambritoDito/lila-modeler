@@ -182,8 +182,8 @@ sigue esperando al corte produce una sentinel, no requisitos ficticios. No exist
 `resources[]`. Esto conserva CSV plano y permite reconstruir ocupación/costos. `fixedCostTotal` se
 obtiene de `Σ elementCost`: el fijo vive solo en la fila canónica de menor `allocationIndex`
 efectivamente emitida. `process.totalCost = Σ cost`; sumar `cost` para el fijo del
-elemento duplicaría recursos y está prohibido. *(decisión: ADR-025; prueba: LILA-033, LILA-036,
-LILA-037)*
+elemento duplicaría recursos y está prohibido. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
+LILA-036, LILA-037)*
 
 `started`, `completed`, `processing`, `resourceWait`, `offHoursWait` y `waitTime` se agregan una
 vez por `(replication, activityInstanceId)`; costos y ocupación de pool se agregan por fila.

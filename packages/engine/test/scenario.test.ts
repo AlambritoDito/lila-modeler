@@ -15,7 +15,7 @@ import { AS_IS, TO_BE, clone, pedidoIr } from './pedido.fixtures.js';
 const repoRoot = new URL('../../../', import.meta.url);
 
 function withoutPendingMultiPool<T extends { code: string }>(problems: T[]): T[] {
-  return problems.filter((problem) => problem.code !== 'E-REC-MULTIPOOL-PENDIENTE');
+  return problems.filter((problem) => problem.code !== 'E-REC-OR-PENDIENTE');
 }
 
 describe('esquema del escenario', () => {
@@ -124,11 +124,10 @@ describe('esquema del escenario', () => {
 });
 
 describe('validateScenario contra el IR', () => {
-  test('el AS-IS solo señala las dos asignaciones multi-pool pendientes de LILA-034/035', () => {
+  test('el AS-IS solo señala la selección OR pendiente de LILA-035', () => {
     const scenario = ScenarioSchema.parse(clone(AS_IS));
     expect(scenarioErrors(validateScenario(scenario, pedidoIr())).map((problem) => problem.code)).toEqual([
-      'E-REC-MULTIPOOL-PENDIENTE',
-      'E-REC-MULTIPOOL-PENDIENTE',
+      'E-REC-OR-PENDIENTE',
     ]);
   });
 

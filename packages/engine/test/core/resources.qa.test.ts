@@ -21,7 +21,7 @@ const IR: ProcessIR = {
 };
 
 describe('QA adversarial de recursos (LILA-033)', () => {
-  test('simulate rechaza multi-pool antes de onProgress y onEvent', () => {
+  test('simulate rechaza OR multi-pool antes de onProgress y onEvent', () => {
     const scenario: SimScenario = {
       run: { seed: 1 },
       resources: { a: { capacity: 1 }, b: { capacity: 1 } },
@@ -30,7 +30,7 @@ describe('QA adversarial de recursos (LILA-033)', () => {
         Task: {
           processingTime: { type: 'constant', value: 1 },
           resources: [{ ref: 'a' }, { ref: 'b' }],
-          selection: 'and',
+          selection: 'or',
         },
       },
     };
@@ -41,7 +41,7 @@ describe('QA adversarial de recursos (LILA-033)', () => {
         onProgress: () => callbacks.push('progress'),
         onEvent: () => callbacks.push('event'),
       }),
-    ).toThrow(/E-REC-MULTIPOOL-PENDIENTE/);
+    ).toThrow(/E-REC-OR-PENDIENTE/);
     expect(callbacks).toEqual([]);
   });
 
