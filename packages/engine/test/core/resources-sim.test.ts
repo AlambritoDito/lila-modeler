@@ -225,15 +225,20 @@ describe('integración de recursos LILA-033/034', () => {
     expect(result.process.totalCost).toBe(58);
   });
 
-  test('OR multi-pool no se degrada silenciosamente a AND antes de LILA-035', () => {
+  test('OR multi-pool no se degrada a AND: ocupa un solo pool y deja el otro libre (LILA-035)', () => {
     const input = scenario();
     input.resources = { a: { capacity: 1 }, b: { capacity: 1 } };
+    input.elements!.Start!.triggerCount = 2;
     input.elements!.Task!.resources = [{ ref: 'a' }, { ref: 'b' }];
     input.elements!.Task!.selection = 'or';
-    const events: unknown[] = [];
-    expect(() => runReplication(linearIr(), input, 0, { onEvent: (row) => events.push(row) })).toThrow(
-      /E-REC-OR-PENDIENTE/,
-    );
-    expect(events).toEqual([]);
+    const events: { resourceId: string | null }[] = [];
+    const run = runReplication(linearIr(), input, 0, { onEvent: (row) => events.push(row) });
+    // Dos casos concurrentes: el primero toma `a` (orden de declaración) y el segundo `b`,
+    // ninguno espera y cada uno emite exactamente una fila.
+    expect(run.rows.map((row) => [row.resourceId, row.startedAt, row.resourceWait])).toEqual([
+      ['a', 0, 0],
+      ['b', 1, 0],
+    ]);
+    expect(events.map((row) => row.resourceId)).toEqual(['a', 'b']);
   });
 });

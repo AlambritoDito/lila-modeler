@@ -130,15 +130,6 @@ describe('ResourceManager (LILA-033)', () => {
     expect(manager.release(['older-and'], 6).map((grant) => grant.requestId)).toEqual(['younger-a']);
   });
 
-  test('OR multi-pool sigue fallando antes de mutar hasta LILA-035', () => {
-    const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 } });
-    expect(() => manager.enqueue({
-      id: 'or', enabledAt: 0, selection: 'or',
-      requirements: [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }],
-    }, 0)).toThrow(/E-REC-OR-PENDIENTE/);
-    expect(manager.liveRequestCount).toBe(0);
-  });
-
   test('100 000 AND comparten clase, mantienen orden y no reescanean toda Q', () => {
     const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 } });
     const requirements = [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }] as const;

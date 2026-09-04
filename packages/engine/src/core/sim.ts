@@ -143,9 +143,6 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
   }
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
     const uses = element.resources ?? [];
-    if (uses.length > 1 && element.selection === 'or') {
-      throw new Error(`E-REC-OR-PENDIENTE: ${elementId}: selección OR multi-pool requiere LILA-035.`);
-    }
     const seen = new Set<string>();
     for (const use of uses) {
       const pool = pools[use.ref];
@@ -258,7 +255,7 @@ export function runReplication(
   const seed = scenario.run.seed ?? 1;
   const warmup = scenario.run.warmup ?? 0;
 
-  // La API core no depende del validador zod; comparte el fail-fast OR con `simulate`.
+  // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
   assertSupportedResourceScenario(scenario);
 
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).
@@ -602,8 +599,9 @@ export function runReplication(
         }
         const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
         const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
-        // R-REC-4: los requisitos conservan el orden declarado en el escenario; la adquisición
-        // AND es atómica en `ResourceManager`, así que aquí no hay retención parcial que deshacer.
+        // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
+        // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
+        // y la selección OR concede una sola alternativa, la primera declarada que esté libre.
         const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
           poolId: use.ref,
           quantity: use.quantity ?? 1,
