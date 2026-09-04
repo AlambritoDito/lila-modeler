@@ -196,6 +196,10 @@ export type ScenarioProblemCode =
   | 'E-RESERVADO'
   | 'E-ELEMENTO-DESCONOCIDO'
   | 'E-REF-DESCONOCIDA'
+  | 'E-REC-DESCONOCIDO'
+  | 'E-REC-DUPLICADO'
+  | 'E-REC-CANTIDAD'
+  | 'E-REC-MULTIPOOL-PENDIENTE'
   | 'E-CAMPO-NO-APLICA'
   | 'E-SIN-PARADA'
   | 'W-ELEMENTO-SIN-PARAMETROS';
@@ -316,14 +320,50 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
 
     if (element.triggerCount !== undefined) triggerCounts += 1;
 
-    // R9 — toda `ref` debe existir en `resources`; todo `calendar`, en `calendars`.
+    // R-REC-2/9/10 — recursos solo en tareas; referencia, cantidad y duplicados se rechazan
+    // antes de entrar al scheduler para que una solicitud imposible nunca quede en cola.
+    if ((element.resources?.length ?? 0) > 0 && node?.type !== 'task') {
+      problems.push({
+        code: 'E-CAMPO-NO-APLICA',
+        path: `elements.${id}.resources`,
+        severity: 'error',
+        message: `elements.${id}.resources: solo una tarea puede consumir recursos.`,
+      });
+    }
+    if ((element.resources?.length ?? 0) > 1) {
+      problems.push({
+        code: 'E-REC-MULTIPOOL-PENDIENTE',
+        path: `elements.${id}.resources`,
+        severity: 'error',
+        message: `elements.${id}.resources: múltiples pools requieren LILA-034/035.`,
+      });
+    }
+    const seenResources = new Set<string>();
     for (const [i, use] of (element.resources ?? []).entries()) {
       if (resources[use.ref] === undefined) {
         problems.push({
-          code: 'E-REF-DESCONOCIDA',
+          code: 'E-REC-DESCONOCIDO',
           path: `elements.${id}.resources[${i}].ref`,
           severity: 'error',
           message: `elements.${id}.resources[${i}].ref: el recurso ${use.ref} no existe en resources.`,
+        });
+      }
+      if (seenResources.has(use.ref)) {
+        problems.push({
+          code: 'E-REC-DUPLICADO',
+          path: `elements.${id}.resources[${i}].ref`,
+          severity: 'error',
+          message: `elements.${id}.resources[${i}].ref: ${use.ref} aparece más de una vez; usa quantity.`,
+        });
+      }
+      seenResources.add(use.ref);
+      const capacity = resources[use.ref]?.capacity;
+      if (capacity !== undefined && use.quantity > capacity) {
+        problems.push({
+          code: 'E-REC-CANTIDAD',
+          path: `elements.${id}.resources[${i}].quantity`,
+          severity: 'error',
+          message: `elements.${id}.resources[${i}].quantity: ${use.quantity} excede capacity ${capacity} de ${use.ref}.`,
         });
       }
     }

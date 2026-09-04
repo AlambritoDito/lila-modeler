@@ -9,9 +9,9 @@
  * `performance.now` (R-DET-5). Todos los tiempos son segundos desde `run.start`, que vale 0
  * (R-DURA-1, R-TOK-1). El `id` BPMN es la única clave (R-DURA-4).
  *
- * Alcance de M1: **capacidad infinita** (R-DEG-1). Una tarea arranca en cuanto se habilita,
- * así que `started = enabled` y `resourceWait = 0` (R-TOK-5). Colas, pools y calendarios son
- * M2/M3 y no viven aquí.
+ * LILA-033 añade pools simples, cantidad y FIFO. Las selecciones multi-pool AND/OR se mantienen
+ * fuera de este módulo hasta LILA-034/035; timers y tareas sin asignación conservan capacidad
+ * infinita (R-REC-10).
  *
  * Salida: un resultado intermedio (contadores por elemento y por flujo, tiempos por caso y
  * filas del event log). Las métricas formales son LILA-028 y la función pública `simulate()`
@@ -22,6 +22,7 @@ import { sample, type Distribution } from './distributions.js';
 import { Heap } from './heap.js';
 import type { ProcessIR, Node } from './ir.js';
 import type { EventLogRow } from './result.js';
+import { ResourceManager, type ResourceAllocation, type ResourceRequirement } from './resources.js';
 import { stream, type Rng } from './rng.js';
 
 /* ------------------------------------------------------------------ *
@@ -39,6 +40,15 @@ export interface SimElement {
   triggerCount?: number | undefined;
   probability?: number | undefined;
   fixedCost?: number | undefined;
+  resources?: readonly { readonly ref: string; readonly quantity?: number | undefined }[] | undefined;
+  selection?: 'and' | 'or' | undefined;
+}
+
+export interface SimResource {
+  capacity: number;
+  type?: 'role' | 'equipment' | undefined;
+  fixedCost?: number | undefined;
+  costPerHour?: number | undefined;
 }
 
 /** Subconjunto de `run` que consume el motor. `warmup` y `replications` son LILA-027. */
@@ -54,6 +64,7 @@ export interface SimRun {
 /** Escenario visto por el motor. */
 export interface SimScenario {
   run: SimRun;
+  resources?: Record<string, SimResource> | undefined;
   elements?: Record<string, SimElement> | undefined;
 }
 
@@ -136,11 +147,24 @@ type SimEvent =
   | {
       readonly t: number;
       readonly kind: 'done';
+      readonly activityInstanceId: string;
       readonly caseId: number;
       readonly nodeId: string;
-      readonly marks: readonly number[];
-      readonly enabledAt: number;
     };
+
+interface ActivityState {
+  readonly id: string;
+  readonly caseId: number;
+  readonly nodeId: string;
+  readonly marks: readonly number[];
+  readonly enabledAt: number;
+  readonly duration: number;
+  readonly requirements: readonly ResourceRequirement[];
+  requestId?: string;
+  allocation?: ResourceAllocation;
+  startedAt: number | null;
+  closed: boolean;
+}
 
 /** Estado vivo de un caso mientras corre. */
 interface CaseState {
@@ -156,6 +180,8 @@ interface CaseState {
   andCounts: Map<string, number>;
   /** Contador del OR join por `"joinId#activationId"` (R-OR-5, R-OR-7). */
   orCounts: Map<string, number>;
+  /** Instancias abiertas para que terminate libere/cierre recursos del caso. */
+  activityIds: Set<string>;
 }
 
 const NO_MARKS: readonly number[] = [];
@@ -186,6 +212,14 @@ export function runReplication(
   const seed = scenario.run.seed ?? 1;
   const warmup = scenario.run.warmup ?? 0;
 
+  // La API core no depende del validador zod. Mantiene el mismo fail-fast para que un escenario
+  // multi-pool no emita callbacks ni avance tiempo antes de fallar (#34/#35).
+  for (const [elementId, element] of Object.entries(spec)) {
+    if ((element.resources?.length ?? 0) > 1) {
+      throw new Error(`E-REC-MULTIPOOL-PENDIENTE: ${elementId}: múltiples pools requieren LILA-034/035.`);
+    }
+  }
+
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).
   const rngs = new Map<string, Rng>();
   const rngFor = (elementId: string): Rng => {
@@ -211,6 +245,10 @@ export function runReplication(
   const rows: EventLogRow[] = [];
   const caseStates: CaseState[] = [];
   const heap = new Heap<SimEvent>();
+  const resources = scenario.resources ?? {};
+  const resourceManager = new ResourceManager(resources);
+  const activities = new Map<string, ActivityState>();
+  let nextActivityInstanceId = 1;
 
   /**
    * R-ARR-7: la inclusión depende únicamente del instante en que nació el caso. El caso
@@ -219,6 +257,76 @@ export function runReplication(
    * un caso que nació antes del warmup pero terminó después.
    */
   const isMeasuredCase = (caseId: number): boolean => (caseStates[caseId - 1]?.startedAt ?? -Infinity) >= warmup;
+
+  /** Inicia concesiones devueltas por el manager y agenda su fin. */
+  const startAllocations = (allocations: readonly ResourceAllocation[]): void => {
+    for (const allocation of allocations) {
+      const activity = activities.get(allocation.requestId);
+      if (activity === undefined || activity.closed) continue;
+      activity.allocation = allocation;
+      activity.startedAt = allocation.startedAt;
+      heap.push({
+        t: allocation.startedAt + activity.duration,
+        kind: 'done',
+        activityInstanceId: activity.id,
+        caseId: activity.caseId,
+        nodeId: activity.nodeId,
+      });
+    }
+  };
+
+  /** Convierte lifecycle normal/parcial en filas planas y cierra una actividad una sola vez. */
+  const closeActivity = (
+    activity: ActivityState,
+    observedUntil: number,
+    status: EventLogRow['status'],
+  ): void => {
+    if (activity.closed) return;
+    activity.closed = true;
+    activities.delete(activity.id);
+    const caseState = caseStates[activity.caseId - 1];
+    caseState?.activityIds.delete(activity.id);
+
+    const assignments = activity.requirements.length === 0 || activity.startedAt === null
+      ? [{ poolId: null, quantity: null, allocationIndex: null }]
+      : (activity.allocation?.assignments ?? activity.requirements).map((assignment) => ({
+          ...assignment,
+          allocationIndex: activity.requirements.findIndex((candidate) => candidate.poolId === assignment.poolId),
+        }));
+    for (let index = 0; index < assignments.length; index++) {
+      const assignment = assignments[index]!;
+      const startedAt = activity.startedAt;
+      const endedAt = status === 'completed' ? observedUntil : null;
+      const occupied = startedAt === null ? 0 : Math.max(0, observedUntil - startedAt);
+      const pool = assignment.poolId === null ? undefined : resources[assignment.poolId];
+      const elementCost = status === 'completed' && index === 0 ? (spec[activity.nodeId]?.fixedCost ?? 0) : 0;
+      const resourceCost = startedAt === null || pool === undefined
+        ? 0
+        : (pool.fixedCost ?? 0) * assignment.quantity!
+          + ((pool.costPerHour ?? 0) * assignment.quantity! * occupied) / 3600;
+      const row: EventLogRow = {
+        replication,
+        caseId: String(activity.caseId),
+        activityInstanceId: activity.id,
+        elementId: activity.nodeId,
+        resourceId: assignment.poolId,
+        allocationIndex: assignment.allocationIndex,
+        resourceQuantity: assignment.quantity,
+        status,
+        enabledAt: activity.enabledAt,
+        startedAt,
+        endedAt,
+        observedUntil,
+        resourceWait: startedAt === null ? Math.max(0, observedUntil - activity.enabledAt) : startedAt - activity.enabledAt,
+        offHoursWait: 0,
+        elementCost,
+        resourceCost,
+        cost: elementCost + resourceCost,
+      };
+      rows.push(row);
+      if (options.log !== false) options.onEvent?.({ ...row });
+    }
+  };
 
   /* --- ramaje: pesos por gateway, calculados una vez --------------- */
 
@@ -384,6 +492,7 @@ export function runReplication(
         alive: true,
         andCounts: new Map(),
         orCounts: new Map(),
+        activityIds: new Set(),
       });
       heap.push({ t: next.t, kind: 'enter', caseId, nodeId: next.startId, marks: NO_MARKS });
 
@@ -411,30 +520,17 @@ export function runReplication(
     const counters = elements[next.nodeId]!;
 
     if (next.kind === 'done') {
-      // Fin de la duración de una task o un timer. Capacidad infinita ⇒ started = enabled y
-      // resourceWait = 0 (R-TOK-5, R-DEG-1). R-EVT-6: si el caso murió antes, la instancia
-      // cuenta como `started` y no como `completed`, y no emite fila.
+      const activity = activities.get(next.activityInstanceId);
+      if (activity === undefined || activity.closed) continue;
       if (isMeasuredCase(next.caseId)) counters.completed++;
-      const row: EventLogRow = {
-        replication,
-        caseId: String(next.caseId),
-        elementId: next.nodeId,
-        resourceId: null,
-        enabledAt: next.enabledAt,
-        startedAt: next.enabledAt,
-        endedAt: next.t,
-        resourceWait: 0,
-        offHoursWait: 0,
-        cost: spec[next.nodeId]?.fixedCost ?? 0, // R-COST-3 sin recursos.
-      };
-      rows.push(row);
-      // El callback es una frontera pública: una mutación accidental de su argumento no debe
-      // alterar las filas internas que luego alimentan las métricas.
-      if (options.log !== false) options.onEvent?.({ ...row });
+      closeActivity(activity, next.t, 'completed');
+      if (activity.requestId !== undefined) {
+        startAllocations(resourceManager.release([activity.requestId], next.t));
+      }
       // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
       // Una cancelación activada por onEvent se observa después de cerrar esa transición
       // atómica, nunca entre el contador/row de la tarea y su forward.
-      forward(node, next.caseId, next.marks, next.t);
+      forward(node, next.caseId, activity.marks, next.t);
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -454,8 +550,7 @@ export function runReplication(
 
       case 'task':
       case 'timer': {
-        // R-EVT-1: el timer es un retardo sin recurso; con capacidad infinita se comporta
-        // igual que una tarea. R-DEG-3 / R-EVT-2: sin `processingTime` la duración es 0.
+        // R-EVT-1: timer sin recurso. R-DEG-3 / R-EVT-2: sin processingTime dura 0.
         const dist = spec[next.nodeId]?.processingTime;
         if (dist === undefined) {
           warn(
@@ -465,14 +560,43 @@ export function runReplication(
           );
         }
         const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
-        heap.push({
-          t: next.t + duration,
-          kind: 'done',
+        const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
+        // LILA-033 implementa exactamente un pool. Rechazar explícitamente multi-pool evita
+        // simular capacidad infinita y cobrar recursos que nunca se reservaron (#34/#35).
+        const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
+          poolId: use.ref,
+          quantity: use.quantity ?? 1,
+        }));
+        const activity: ActivityState = {
+          id: String(nextActivityInstanceId++),
           caseId: next.caseId,
           nodeId: next.nodeId,
           marks: next.marks,
           enabledAt: next.t,
-        });
+          duration,
+          requirements,
+          startedAt: requirements.length === 0 ? next.t : null,
+          closed: false,
+        };
+        activities.set(activity.id, activity);
+        state.activityIds.add(activity.id);
+        if (requirements.length === 0) {
+          heap.push({
+            t: next.t + duration,
+            kind: 'done',
+            activityInstanceId: activity.id,
+            caseId: activity.caseId,
+            nodeId: activity.nodeId,
+          });
+        } else {
+          activity.requestId = activity.id;
+          startAllocations(resourceManager.enqueue({
+            id: activity.id,
+            enabledAt: next.t,
+            requirements,
+            selection: spec[next.nodeId]?.selection,
+          }, next.t));
+        }
         break;
       }
 
@@ -556,11 +680,31 @@ export function runReplication(
         state.andCounts.clear();
         state.orCounts.clear();
         state.endedAt = next.t;
+        {
+          const requestIds: string[] = [];
+          for (const activityId of [...state.activityIds]) {
+            const activity = activities.get(activityId);
+            if (activity === undefined || activity.closed) continue;
+            closeActivity(activity, next.t, 'terminated');
+            if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+          }
+          startAllocations(resourceManager.cancel(requestIds, next.t));
+        }
         break;
     }
   }
 
   /* --- cierre ------------------------------------------------------- */
+
+  // R-TOK-6: el corte conserva lifecycle de todas las tareas abiertas. Se cancelan juntas para
+  // que ninguna concesión artificial ocurra mientras se está desmantelando la réplica.
+  const openRequestIds: string[] = [];
+  for (const activity of activities.values()) {
+    if (activity.closed) continue;
+    closeActivity(activity, stoppedAt, 'inFlight');
+    if (activity.requestId !== undefined) openRequestIds.push(activity.requestId);
+  }
+  resourceManager.cancel(openRequestIds, stoppedAt);
 
   // R-OR-8 / R-AND-4: los tokens que quedan esperando en un join al parar cuentan como caso
   // en vuelo y avisan.

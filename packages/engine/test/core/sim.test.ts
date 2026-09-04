@@ -279,6 +279,10 @@ describe('terminate mata todos los tokens del caso', () => {
     expect(cycles(run)).toEqual([10, 10, 10]);
     expect(run.elements.Slow).toEqual({ started: 3, completed: 0 });
     expect(run.elements.End).toEqual({ started: 0, completed: 0 });
-    expect(run.rows.filter((r) => r.elementId === 'Slow')).toHaveLength(0);
+    expect(run.rows.filter((r) => r.elementId === 'Slow')).toMatchObject([
+      { status: 'terminated', startedAt: 0, endedAt: null, observedUntil: 10 },
+      { status: 'terminated', startedAt: 1000, endedAt: null, observedUntil: 1010 },
+      { status: 'terminated', startedAt: 2000, endedAt: null, observedUntil: 2010 },
+    ]);
   });
 });

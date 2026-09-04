@@ -10,7 +10,7 @@
  */
 
 import type { ProcessIR } from './ir.js';
-import type { ElementMetrics, Percentiles, RunResult, Stat, StatSd } from './result.js';
+import type { ElementMetrics, EventLogRow, Percentiles, RunResult, Stat, StatSd } from './result.js';
 import type { ReplicationRun } from './sim.js';
 
 const EMPTY_STAT: Readonly<Stat> = { min: 0, max: 0, mean: 0, total: 0 };
@@ -118,8 +118,25 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
   const fixedCostByElement = new Map<string, number>();
   const waitByCase = new Map<string, number>();
   const costByCase = new Map<string, number>();
+  const rowsByActivity = new Map<string, EventLogRow[]>();
 
   for (const row of includedRows) {
+    const activityRows = rowsByActivity.get(row.activityInstanceId) ?? [];
+    activityRows.push(row);
+    rowsByActivity.set(row.activityInstanceId, activityRows);
+
+    fixedCostByElement.set(
+      row.elementId,
+      (fixedCostByElement.get(row.elementId) ?? 0) + row.elementCost,
+    );
+    costByCase.set(row.caseId, (costByCase.get(row.caseId) ?? 0) + row.cost);
+  }
+
+  // Una actividad AND tendrá varias filas: processing/esperas pertenecen a la instancia y se
+  // agregan una sola vez; costos por pool sí se sumaron fila por fila arriba (ADR-025).
+  for (const activityRows of rowsByActivity.values()) {
+    const row = activityRows[0]!;
+    if (row.status !== 'completed' || row.startedAt === null || row.endedAt === null) continue;
     // R-CAL-8: esta identidad sigue siendo correcta cuando una tarea se pausa durante el
     // cierre de calendario. En M1 las esperas valen cero y se reduce a endedAt - startedAt.
     const processing = row.endedAt - row.enabledAt - row.resourceWait - row.offHoursWait;
@@ -135,11 +152,7 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
     offHoursWaitValues.push(row.offHoursWait);
     offHoursWaitByElement.set(row.elementId, offHoursWaitValues);
 
-    // En M1 no existen recursos: `row.cost` es exactamente el fixedCost del elemento. LILA-036
-    // extenderá esta separación cuando las filas incorporen costos de pools.
-    fixedCostByElement.set(row.elementId, (fixedCostByElement.get(row.elementId) ?? 0) + row.cost);
     waitByCase.set(row.caseId, (waitByCase.get(row.caseId) ?? 0) + row.resourceWait + row.offHoursWait);
-    costByCase.set(row.caseId, (costByCase.get(row.caseId) ?? 0) + row.cost);
   }
 
   const elements: Record<string, ElementMetrics> = {};

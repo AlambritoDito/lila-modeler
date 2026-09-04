@@ -137,13 +137,20 @@ test('una fila de event log válida pasa la validación', () => {
   const result = eventLogRowSchema.safeParse({
     replication: 0,
     caseId: 'case-1',
+    activityInstanceId: 'activity-1',
     elementId: 'Task_7f3k2q1',
     resourceId: 'cajero',
+    allocationIndex: 0,
+    resourceQuantity: 1,
+    status: 'completed',
     enabledAt: 10,
     startedAt: 15,
     endedAt: 135,
+    observedUntil: 135,
     resourceWait: 5,
     offHoursWait: 0,
+    elementCost: 5,
+    resourceCost: 20,
     cost: 25,
   });
   expect(result.success).toBe(true);
@@ -153,16 +160,47 @@ test('una fila de event log sin recurso usa resourceId: null', () => {
   const result = eventLogRowSchema.safeParse({
     replication: 0,
     caseId: 'case-1',
+    activityInstanceId: 'activity-1',
     elementId: 'Timer_reposo',
     resourceId: null,
+    allocationIndex: null,
+    resourceQuantity: null,
+    status: 'completed',
     enabledAt: 10,
     startedAt: 10,
     endedAt: 610,
+    observedUntil: 610,
     resourceWait: 0,
     offHoursWait: 0,
+    elementCost: 0,
+    resourceCost: 0,
     cost: 0,
   });
   expect(result.success).toBe(true);
+});
+
+test('lifecycle parcial rechaza costos imposibles antes de empezar o completar', () => {
+  const partial = {
+    replication: 0,
+    caseId: 'case-1',
+    activityInstanceId: 'activity-1',
+    elementId: 'Task_7f3k2q1',
+    resourceId: null,
+    allocationIndex: null,
+    resourceQuantity: null,
+    status: 'inFlight' as const,
+    enabledAt: 10,
+    startedAt: null,
+    endedAt: null,
+    observedUntil: 20,
+    resourceWait: 10,
+    offHoursWait: 0,
+    elementCost: 0,
+    resourceCost: 0,
+    cost: 0,
+  };
+  expect(eventLogRowSchema.safeParse({ ...partial, resourceCost: 1, cost: 1 }).success).toBe(false);
+  expect(eventLogRowSchema.safeParse({ ...partial, elementCost: 1, cost: 1 }).success).toBe(false);
 });
 
 test('una fila de event log con un campo faltante falla', () => {

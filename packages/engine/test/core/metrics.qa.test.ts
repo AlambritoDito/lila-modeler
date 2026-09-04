@@ -42,13 +42,20 @@ function row(caseId: number, elementId: string, processing: number, resourceWait
   return {
     replication: 0,
     caseId: String(caseId),
+    activityInstanceId: `${caseId}-${elementId}`,
     elementId,
     resourceId: null,
+    allocationIndex: null,
+    resourceQuantity: null,
+    status: 'completed',
     enabledAt,
     startedAt: enabledAt + resourceWait,
     endedAt: enabledAt + resourceWait + offHoursWait + processing,
+    observedUntil: enabledAt + resourceWait + offHoursWait + processing,
     resourceWait,
     offHoursWait,
+    elementCost: cost,
+    resourceCost: 0,
     cost,
   };
 }
