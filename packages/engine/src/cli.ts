@@ -3,13 +3,15 @@
 
 import {
   closeSync,
+  existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
-  writeSync,
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -135,7 +137,9 @@ function absolutePath(file: string): string {
 }
 
 function comparablePath(file: string): string {
-  const normalized = resolve(file);
+  // Dos rutas distintas pueden nombrar el mismo archivo mediante un symlink. El contrato compara
+  // el modelo real, no la ortografía usada para llegar a él.
+  const normalized = existsSync(file) ? realpathSync(file) : resolve(file);
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
@@ -307,10 +311,82 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   }
 }
 
+interface StagedFile {
+  readonly target: string;
+  write(contents: string): void;
+  close(): void;
+  commit(): void;
+  abort(): void;
+}
+
+let temporarySequence = 0;
+
+/** Crea un temporal exclusivo en el mismo directorio: `rename` publica cada archivo atómicamente. */
+function stageFile(target: string): StagedFile {
+  let temporary = '';
+  let descriptor: number | undefined;
+  for (;;) {
+    temporary = `${target}.tmp-${process.pid}-${temporarySequence++}`;
+    try {
+      descriptor = openSync(temporary, 'wx');
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  }
+
+  const close = (): void => {
+    if (descriptor === undefined) return;
+    const openDescriptor = descriptor;
+    descriptor = undefined;
+    closeSync(openDescriptor);
+  };
+
+  return {
+    target,
+    write(contents) {
+      if (descriptor === undefined) throw new Error(`archivo temporal ya cerrado: ${temporary}`);
+      // `writeFileSync(fd, ...)` completa todo el buffer; un único `writeSync` puede ser parcial.
+      writeFileSync(descriptor, contents, 'utf8');
+    },
+    close,
+    commit() {
+      close();
+      renameSync(temporary, target);
+    },
+    abort() {
+      try {
+        close();
+      } catch {
+        // El error original de escritura/publicación es el que debe llegar al usuario.
+      }
+      try {
+        unlinkSync(temporary);
+      } catch {
+        // Si ya se publicó o nunca llegó a crearse, no queda temporal que limpiar.
+      }
+    },
+  };
+}
+
+function assertReplaceableFile(target: string): void {
+  if (existsSync(target) && lstatSync(target).isDirectory()) {
+    throw new Error(`no se puede escribir ${target}: existe un directorio con ese nombre.`);
+  }
+}
+
 function writeJson(file: string, result: RunResult): void {
   const target = absolutePath(file);
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  assertReplaceableFile(target);
+  const staged = stageFile(target);
+  try {
+    staged.write(`${JSON.stringify(result, null, 2)}\n`);
+    staged.commit();
+  } catch (error) {
+    staged.abort();
+    throw error;
+  }
   console.log(`JSON: ${target}`);
 }
 
@@ -331,8 +407,24 @@ function writeCsvDirectory(
     'resources.csv': resourcesCsv(result, resourceNames),
     'process.csv': processCsv(result),
   };
-  for (const [name, contents] of Object.entries(files)) {
-    writeFileSync(resolve(target, name), contents, 'utf8');
+  const entries = Object.entries(files).map(([name, contents]) => ({
+    contents,
+    path: resolve(target, name),
+  }));
+
+  // Detecta todos los conflictos antes de publicar el primero y evita un conjunto mezclado.
+  for (const entry of entries) assertReplaceableFile(entry.path);
+  const staged: Array<(typeof entries)[number] & { file: StagedFile }> = [];
+  try {
+    for (const entry of entries) staged.push({ ...entry, file: stageFile(entry.path) });
+    for (const entry of staged) {
+      entry.file.write(entry.contents);
+      entry.file.close();
+    }
+    for (const entry of staged) entry.file.commit();
+  } catch (error) {
+    for (const entry of staged) entry.file.abort();
+    throw error;
   }
 }
 
@@ -350,21 +442,21 @@ interface EventLogSink {
 function openEventLogSink(directory: string): EventLogSink {
   const targetDirectory = absolutePath(directory);
   mkdirSync(targetDirectory, { recursive: true });
-  const temporary = resolve(targetDirectory, '.log.csv.tmp');
   const target = resolve(targetDirectory, 'log.csv');
-  const descriptor = openSync(temporary, 'w');
+  assertReplaceableFile(target);
+  const staged = stageFile(target);
   let buffer = eventLogCsvHeader();
   let closed = false;
 
   const flush = (): void => {
     if (buffer === '') return;
-    writeSync(descriptor, buffer, undefined, 'utf8');
+    staged.write(buffer);
     buffer = '';
   };
   const close = (): void => {
     if (closed) return;
     flush();
-    closeSync(descriptor);
+    staged.close();
     closed = true;
   };
 
@@ -376,15 +468,10 @@ function openEventLogSink(directory: string): EventLogSink {
     close,
     commit() {
       close();
-      renameSync(temporary, target);
+      staged.commit();
     },
     abort() {
-      close();
-      try {
-        unlinkSync(temporary);
-      } catch {
-        // Si ya se renombró o no llegó a crearse, no queda temporal que limpiar.
-      }
+      staged.abort();
     },
   };
 }
