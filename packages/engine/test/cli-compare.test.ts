@@ -135,7 +135,7 @@ describe('lila compare (LILA-047)', () => {
       expect(utilization, firstText).toBeDefined();
       expect(utilization).toMatch(/\(-\d[\d.]*%\)\*/);
     },
-    20_000,
+    120_000, // ponytail: cuatro simulaciones de examples/pedido con 30 réplicas (~25 s en CI); techo holgado, no medida de rendimiento
   );
 
   test('error claro con menos de dos escenarios', async () => {
