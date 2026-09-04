@@ -1,0 +1,51 @@
+{
+  "name": "Eva-01",
+  "tokens": {
+    "bg.base": "#12101A",
+    "bg.surface": "#1C1730",
+    "bg.elevated": "#26203F",
+    "bg.hover": "#2F2850",
+    "border": "#3A2F5C",
+    "border.strong": "#4E3F7A",
+    "shadow": "#00000099",
+
+    "fg.primary": "#ECE9F5",
+    "fg.muted": "#A79FC4",
+    "fg.disabled": "#6F6690",
+    "fg.onAccent": "#0E1205",
+
+    "accent.primary": "#9EF01A",
+    "accent.secondary": "#FF8A00",
+    "accent.tertiary": "#7B4DFF",
+
+    "status.success": "#7CE038",
+    "status.warning": "#FFB020",
+    "status.error": "#FF4D4D",
+    "status.info": "#4FC3F7",
+
+    "canvas.bg": "#17132A",
+    "canvas.grid": "#241E3C",
+    "diagram.stroke": "#D9D2F0",
+    "diagram.fill": "#1F1A36",
+    "diagram.label": "#ECE9F5",
+    "diagram.selected": "#9EF01A",
+    "diagram.hover": "#7B4DFF",
+    "diagram.connection": "#B9B0DA",
+    "diagram.marker.error": "#FF4D4D",
+    "diagram.marker.warning": "#FFB020",
+
+    "sim.bottleneck.low": "#FFB020",
+    "sim.bottleneck.mid": "#FF8A00",
+    "sim.bottleneck.high": "#FF4D4D",
+    "sim.utilization.low": "#4FC3F7",
+    "sim.utilization.mid": "#7CE038",
+    "sim.utilization.high": "#FF8A00",
+    "sim.token": "#9EF01A",
+
+    "font.ui": "Archivo, Inter, system-ui, sans-serif",
+    "font.mono": "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+    "font.diagram": "Archivo, Inter, system-ui, sans-serif",
+    "font.size.base": "13px",
+    "density": "normal"
+  }
+}

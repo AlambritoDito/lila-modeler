@@ -1,0 +1,51 @@
+{
+  "name": "Papel",
+  "tokens": {
+    "bg.base": "#F4F1EC",
+    "bg.surface": "#FBF9F5",
+    "bg.elevated": "#FFFFFF",
+    "bg.hover": "#E9E4DA",
+    "border": "#DAD3C7",
+    "border.strong": "#B4AA99",
+    "shadow": "#3B322426",
+
+    "fg.primary": "#1A1613",
+    "fg.muted": "#5C554C",
+    "fg.disabled": "#9A9184",
+    "fg.onAccent": "#0B0603",
+
+    "accent.primary": "#EC3013",
+    "accent.secondary": "#B45309",
+    "accent.tertiary": "#1D4ED8",
+
+    "status.success": "#157F3D",
+    "status.warning": "#A66300",
+    "status.error": "#C42B1C",
+    "status.info": "#1D6FA5",
+
+    "canvas.bg": "#FBF9F5",
+    "canvas.grid": "#E6E0D5",
+    "diagram.stroke": "#2B2620",
+    "diagram.fill": "#FFFFFF",
+    "diagram.label": "#1A1613",
+    "diagram.selected": "#EC3013",
+    "diagram.hover": "#1D4ED8",
+    "diagram.connection": "#4A443B",
+    "diagram.marker.error": "#C42B1C",
+    "diagram.marker.warning": "#A66300",
+
+    "sim.bottleneck.low": "#A66300",
+    "sim.bottleneck.mid": "#C2410C",
+    "sim.bottleneck.high": "#C42B1C",
+    "sim.utilization.low": "#1D6FA5",
+    "sim.utilization.mid": "#157F3D",
+    "sim.utilization.high": "#C2410C",
+    "sim.token": "#EC3013",
+
+    "font.ui": "Archivo, Inter, system-ui, sans-serif",
+    "font.mono": "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+    "font.diagram": "Archivo, Inter, system-ui, sans-serif",
+    "font.size.base": "13px",
+    "density": "normal"
+  }
+}
