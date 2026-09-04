@@ -10,6 +10,9 @@ npm run golden:update
 git diff -- packages/engine/test/golden/pedido.seed-42.json
 ```
 
-El script parsea y valida el BPMN y el escenario reales antes de simular. Un cambio del golden debe
-acompañar el cambio semántico que lo provoca; nunca se actualiza solo para silenciar una prueba.
-La matriz de CI existente ejecuta esta comparación con Node 22 y Node 24 (R-DET-6).
+El script parsea el BPMN y el escenario reales y retira explícitamente `resources`, `calendars`,
+`elements[*].resources`, `selection` y las referencias `elements[*].calendar` antes de validar y
+simular. Esa es la entrada degradada que entendía M1 y permite comprobar que añadir
+`ResourceManager` no cambia sus bytes (LILA-039). Un cambio del golden debe acompañar el cambio
+semántico que lo provoca; nunca se actualiza solo para silenciar una prueba. La matriz de CI
+existente ejecuta esta comparación con Node 22 y Node 24 (R-DET-6).
