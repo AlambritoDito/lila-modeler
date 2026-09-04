@@ -1,4 +1,6 @@
 export * from './core/ir.js';
+export { compare } from './core/compare.js';
+export type { CompareResult, CompareRow, CompareScope } from './core/compare.js';
 export { simulate } from './core/run.js';
 export type { SimulateOptions, SimulationProgress } from './core/run.js';
 export type {
