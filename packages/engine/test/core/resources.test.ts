@@ -83,17 +83,79 @@ describe('ResourceManager (LILA-033)', () => {
     expect(manager.used('worker')).toBe(0);
   });
 
-  test.each(['and', 'or'] as const)('multi-pool %s falla explícitamente hasta LILA-034/035', (selection) => {
+  test('AND adquiere todos los pools atómicamente y conserva el orden del escenario', () => {
+    const manager = new ResourceManager({ a: { capacity: 2 }, b: { capacity: 3 } });
+    const grants = manager.enqueue({
+      id: 'and', enabledAt: 0, selection: 'and',
+      requirements: [{ poolId: 'b', quantity: 2 }, { poolId: 'a', quantity: 1 }],
+    }, 0);
+    expect(grants).toMatchObject([{ requestId: 'and', assignments: [
+      { poolId: 'b', quantity: 2 }, { poolId: 'a', quantity: 1 },
+    ] }]);
+    expect(manager.used('a')).toBe(1);
+    expect(manager.used('b')).toBe(2);
+  });
+
+  test('salta una AND bloqueada sin retener capacidad ni romper FIFO single-pool', () => {
+    const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 }, c: { capacity: 1 } });
+    manager.enqueue(request('holder-b', 0, 'b'), 0);
+    expect(manager.enqueue({
+      id: 'older', enabledAt: 1,
+      requirements: [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }],
+    }, 1)).toEqual([]);
+    expect(manager.used('a')).toBe(0);
+
+    expect(manager.enqueue({
+      id: 'younger', enabledAt: 2,
+      requirements: [{ poolId: 'a', quantity: 1 }, { poolId: 'c', quantity: 1 }],
+    }, 2)).toMatchObject([{ requestId: 'younger', startedAt: 2 }]);
+    manager.release(['younger'], 3);
+    expect(manager.used('a')).toBe(0);
+    expect(manager.release(['holder-b'], 10)).toMatchObject([{ requestId: 'older', startedAt: 10 }]);
+  });
+
+  test('release de lote libera todo antes de elegir y no deja que un single robe capacidad', () => {
+    const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 } });
+    manager.enqueue(request('active-a', 0, 'a'), 0);
+    manager.enqueue(request('active-b', 0, 'b'), 0);
+    manager.enqueue({
+      id: 'older-and', enabledAt: 1,
+      requirements: [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }],
+    }, 1);
+    manager.enqueue(request('younger-a', 2, 'a'), 2);
+
+    expect(manager.release(['active-a', 'active-b'], 5).map((grant) => grant.requestId)).toEqual(['older-and']);
+    expect(manager.used('a')).toBe(1);
+    expect(manager.used('b')).toBe(1);
+    expect(manager.release(['older-and'], 6).map((grant) => grant.requestId)).toEqual(['younger-a']);
+  });
+
+  test('OR multi-pool sigue fallando antes de mutar hasta LILA-035', () => {
     const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 } });
     expect(() => manager.enqueue({
-      id: selection,
-      enabledAt: 0,
-      selection,
+      id: 'or', enabledAt: 0, selection: 'or',
       requirements: [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }],
-    }, 0)).toThrow(/E-REC-MULTIPOOL-PENDIENTE/);
-    expect(manager.used('a')).toBe(0);
-    expect(manager.used('b')).toBe(0);
+    }, 0)).toThrow(/E-REC-OR-PENDIENTE/);
+    expect(manager.liveRequestCount).toBe(0);
   });
+
+  test('100 000 AND comparten clase, mantienen orden y no reescanean toda Q', () => {
+    const manager = new ResourceManager({ a: { capacity: 1 }, b: { capacity: 1 } });
+    const requirements = [{ poolId: 'a', quantity: 1 }, { poolId: 'b', quantity: 1 }] as const;
+    manager.enqueue({ id: 'holder', enabledAt: 0, requirements }, 0);
+    for (let i = 0; i < 100_000; i++) {
+      manager.enqueue({ id: `q-${i}`, enabledAt: i + 1, requirements }, i + 1);
+    }
+    let active = 'holder';
+    for (let i = 0; i < 100_000; i++) {
+      const grants = manager.release([active], 100_001 + i);
+      expect(grants[0]?.requestId).toBe(`q-${i}`);
+      active = `q-${i}`;
+    }
+    manager.release([active], 200_002);
+    expect(manager.liveRequestCount).toBe(0);
+    expect(manager.headInspections).toBeLessThan(700_000);
+  }, 15_000);
 
   test('cada manager empieza con capacidad y secuencia vacías', () => {
     const first = new ResourceManager({ worker: { capacity: 1 } });

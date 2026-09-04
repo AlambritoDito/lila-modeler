@@ -50,7 +50,7 @@ function scenario(overrides: Partial<SimScenario['run']> = {}): SimScenario {
   };
 }
 
-describe('integración de recursos LILA-033', () => {
+describe('integración de recursos LILA-033/034', () => {
   test('aceptación exacta: capacity=2, quantity=2 y FIFO produce 0/9/18 s de espera', () => {
     const run = runReplication(linearIr(), scenario());
     const taskRows = run.rows.filter((row) => row.elementId === 'Task');
@@ -118,6 +118,28 @@ describe('integración de recursos LILA-033', () => {
     expect(aggregateReplication(linearIr(), run).process).toMatchObject({ completed: 0, inFlight: 2, totalCost: 19 });
   });
 
+  test('AND queued emite una sola sentinel; AND activa conserva una fila por pool', () => {
+    const run = runReplication(linearIr(), {
+      run: { seed: 1, duration: 15 },
+      resources: { a: { capacity: 1 }, b: { capacity: 1 } },
+      elements: {
+        Start: { interTriggerTimer: { type: 'constant', value: 5 }, triggerCount: 2 },
+        Task: { processingTime: { type: 'constant', value: 20 }, resources: [{ ref: 'b' }, { ref: 'a' }] },
+      },
+    });
+    const first = run.rows.filter((row) => row.caseId === '1');
+    const second = run.rows.filter((row) => row.caseId === '2');
+    expect(first).toMatchObject([
+      { resourceId: 'b', allocationIndex: 0, status: 'inFlight', startedAt: 0 },
+      { resourceId: 'a', allocationIndex: 1, status: 'inFlight', startedAt: 0 },
+    ]);
+    expect(new Set(first.map((row) => row.activityInstanceId)).size).toBe(1);
+    expect(second).toMatchObject([{
+      resourceId: null, resourceQuantity: null, allocationIndex: null,
+      status: 'inFlight', enabledAt: 5, startedAt: null, observedUntil: 15,
+    }]);
+  });
+
   test('cada replicación recrea manager, secuencia e ids de actividad', () => {
     const first = runReplication(linearIr(), scenario(), 0);
     const second = runReplication(linearIr(), scenario(), 1);
@@ -130,22 +152,27 @@ describe('integración de recursos LILA-033', () => {
   test('terminate cierra el activo, libera una vez y arranca el queued de otro caso en ese instante', () => {
     const run = runReplication(terminateIr(), {
       run: { seed: 1 },
-      resources: { worker: { capacity: 1 } },
+      resources: { a: { capacity: 1 }, b: { capacity: 1 } },
       elements: {
         StartKill: { interTriggerTimer: { type: 'constant', value: 100 }, triggerCount: 1 },
         StartOther: { interTriggerTimer: { type: 'constant', value: 100 }, triggerCount: 1 },
-        Work: { processingTime: { type: 'constant', value: 100 }, resources: [{ ref: 'worker' }] },
+        Work: { processingTime: { type: 'constant', value: 100 }, resources: [{ ref: 'a' }, { ref: 'b' }] },
         Timer: { processingTime: { type: 'constant', value: 5 } },
         Delay: { processingTime: { type: 'constant', value: 1 } },
-        Other: { processingTime: { type: 'constant', value: 10 }, resources: [{ ref: 'worker' }] },
+        Other: { processingTime: { type: 'constant', value: 10 }, resources: [{ ref: 'a' }, { ref: 'b' }] },
       },
     });
-    expect(run.rows.find((row) => row.elementId === 'Work')).toMatchObject({
-      status: 'terminated', startedAt: 0, endedAt: null, observedUntil: 5,
-    });
-    expect(run.rows.find((row) => row.elementId === 'Other')).toMatchObject({
-      status: 'completed', enabledAt: 1, startedAt: 5, endedAt: 15, resourceWait: 4,
-    });
+    const work = run.rows.filter((row) => row.elementId === 'Work');
+    expect(work).toHaveLength(2);
+    expect(new Set(work.map((row) => row.activityInstanceId)).size).toBe(1);
+    expect(work).toMatchObject([
+      { resourceId: 'a', allocationIndex: 0, status: 'terminated', startedAt: 0, observedUntil: 5 },
+      { resourceId: 'b', allocationIndex: 1, status: 'terminated', startedAt: 0, observedUntil: 5 },
+    ]);
+    expect(run.rows.filter((row) => row.elementId === 'Other')).toMatchObject([
+      { resourceId: 'a', status: 'completed', enabledAt: 1, startedAt: 5, endedAt: 15, resourceWait: 4 },
+      { resourceId: 'b', status: 'completed', enabledAt: 1, startedAt: 5, endedAt: 15, resourceWait: 4 },
+    ]);
     expect(run.elements.Other).toEqual({ started: 1, completed: 1 });
     expect(run.cases.map((record) => record.endedAt)).toEqual([5, 15]);
   });
@@ -177,14 +204,35 @@ describe('integración de recursos LILA-033', () => {
     ]);
   });
 
-  test.each(['and', 'or'] as const)('multi-pool %s no se degrada silenciosamente a infinito', (selection) => {
+  test('AND emite una fila por pool en orden, comparte activityInstanceId y cobra el elemento una vez', () => {
+    const input = scenario();
+    input.resources = {
+      b: { capacity: 2, fixedCost: 3, costPerHour: 3600 },
+      a: { capacity: 1, fixedCost: 5, costPerHour: 7200 },
+    };
+    input.elements!.Start!.triggerCount = 1;
+    input.elements!.Task!.resources = [{ ref: 'b', quantity: 2 }, { ref: 'a', quantity: 1 }];
+    input.elements!.Task!.selection = 'and';
+    input.elements!.Task!.fixedCost = 7;
+    const run = runReplication(linearIr(), input);
+    expect(run.rows).toMatchObject([
+      { resourceId: 'b', allocationIndex: 0, resourceQuantity: 2, activityInstanceId: '1', elementCost: 7, resourceCost: 26, cost: 33 },
+      { resourceId: 'a', allocationIndex: 1, resourceQuantity: 1, activityInstanceId: '1', elementCost: 0, resourceCost: 25, cost: 25 },
+    ]);
+    const result = aggregateReplication(linearIr(), run);
+    expect(result.elements.Task?.processing.total).toBe(10);
+    expect(result.elements.Task?.fixedCostTotal).toBe(7);
+    expect(result.process.totalCost).toBe(58);
+  });
+
+  test('OR multi-pool no se degrada silenciosamente a AND antes de LILA-035', () => {
     const input = scenario();
     input.resources = { a: { capacity: 1 }, b: { capacity: 1 } };
     input.elements!.Task!.resources = [{ ref: 'a' }, { ref: 'b' }];
-    input.elements!.Task!.selection = selection;
+    input.elements!.Task!.selection = 'or';
     const events: unknown[] = [];
     expect(() => runReplication(linearIr(), input, 0, { onEvent: (row) => events.push(row) })).toThrow(
-      /E-REC-MULTIPOOL-PENDIENTE/,
+      /E-REC-OR-PENDIENTE/,
     );
     expect(events).toEqual([]);
   });

@@ -311,6 +311,26 @@ columnas. *(prueba: LILA-033, LILA-036, LILA-037)*
 
 ---
 
+## ADR-026 — Scheduler AND por firmas y heap de cabezas elegibles
+
+**Status:** Accepted
+
+Las solicitudes AND con la misma firma ordenada de `(pool, quantity)` comparten una cola FIFO. Cada
+pool indexa solo las firmas que lo usan; al cambiar su capacidad se reevalúan esas cabezas. Un heap
+separado, comparado explícitamente por el `(enabledAt, seq)` original, elige el primer candidato
+satisfacible y reserva todos sus pools en una sola mutación. Las solicitudes single-pool comparten
+una única clase por pool, incluso con cantidades distintas, para conservar FIFO estricto.
+
+Se descarta recorrer y reinsertar toda la cola global en cada llegada: bajo saturación produce
+O(n² log n). También se descarta crear una clase single-pool por cantidad, porque permitiría que una
+solicitud pequeña adelantase a la cabeza del mismo pool. Versiones/tombstones invalidan cabezas sin
+búsquedas lineales y release/cancel reúnen todos los pools afectados antes de planificar.
+
+Esta estructura deja un punto de extensión para las alternativas OR de LILA-035 sin exponer
+`ResourceManager` como API pública. *(prueba: LILA-034)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).

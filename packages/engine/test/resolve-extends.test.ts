@@ -56,8 +56,7 @@ describe('resolveExtends', () => {
     expect(resolved.resources?.['cajero']?.capacity).toBe(3);
     expect(resolved.model).toBe('examples/pedido/model.bpmn');
     expect(scenarioErrors(validateScenario(resolved, pedidoIr())).map((problem) => problem.code)).toEqual([
-      'E-REC-MULTIPOOL-PENDIENTE',
-      'E-REC-MULTIPOOL-PENDIENTE',
+      'E-REC-OR-PENDIENTE',
     ]);
   });
 
