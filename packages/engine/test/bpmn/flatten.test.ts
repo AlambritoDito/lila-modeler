@@ -156,9 +156,19 @@ test('devuelve los elementos fuera del perfil en orden de documento, sin formate
   const { ir, unsupported } = await parseBpmn(xml);
 
   expect(unsupported).toEqual([
-    { id: 'Boundary_1', qname: 'bpmn:BoundaryEvent', name: 'Vence el plazo' },
+    {
+      id: 'Boundary_1',
+      qname: 'bpmn:BoundaryEvent',
+      name: 'Vence el plazo',
+      construction: 'evento adjunto a actividad (boundary event)',
+    },
     { id: 'Flow_Boundary', qname: 'bpmn:SequenceFlow', name: '' },
-    { id: 'Gateway_Eventos', qname: 'bpmn:EventBasedGateway', name: '' },
+    {
+      id: 'Gateway_Eventos',
+      qname: 'bpmn:EventBasedGateway',
+      name: '',
+      construction: 'gateway basado en eventos',
+    },
   ]);
   // El IR queda estructuralmente sano: ni el elemento ni su flujo entran.
   expect(Object.keys(ir.nodes)).toEqual(['Start_1', 'Task_1', 'End_1']);

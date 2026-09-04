@@ -32,8 +32,117 @@ const GATEWAY_TYPES: Record<string, NodeType> = {
   'bpmn:ParallelGateway': 'and',
 };
 
+/** Definiciones inline y referencias a definiciones globales, ambas vías válidas de BPMN. */
+function eventDefinitionsOf(el: ModdleElement): readonly ModdleElement[] {
+  return [...(el.eventDefinitions ?? []), ...(el.eventDefinitionRef ?? [])];
+}
+
 function hasEventDefinition(el: ModdleElement, type: string): boolean {
-  return (el.eventDefinitions ?? []).some((definition) => definition.$type === type);
+  return eventDefinitionsOf(el).some((definition) => definition.$type === type);
+}
+
+/** Textos normativos de `docs/SEMANTICS.md` R-NOSOP-2. */
+export type UnsupportedConstruction =
+  | 'evento adjunto a actividad (boundary event)'
+  | 'evento de mensaje'
+  | 'evento de señal'
+  | 'evento de enlace'
+  | 'evento de error'
+  | 'evento de escalamiento'
+  | 'evento de compensación'
+  | 'evento condicional'
+  | 'evento de cancelación'
+  | 'evento con disparadores múltiples'
+  | 'evento intermedio de lanzamiento'
+  | 'gateway basado en eventos'
+  | 'gateway complejo'
+  | 'marcador de multi-instancia'
+  | 'marcador de bucle en la actividad'
+  | 'subproceso transaccional'
+  | 'subproceso ad-hoc'
+  | 'subproceso de eventos'
+  | 'diagrama de coreografía'
+  | 'diagrama de conversación'
+  | 'atributo startQuantity distinto de 1'
+  | 'atributo completionQuantity distinto de 1'
+  | 'evento de fin con ese disparador'
+  | 'evento de inicio con ese disparador';
+
+const EVENT_DEFINITION_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
+  'bpmn:MessageEventDefinition': 'evento de mensaje',
+  'bpmn:SignalEventDefinition': 'evento de señal',
+  'bpmn:LinkEventDefinition': 'evento de enlace',
+  'bpmn:ErrorEventDefinition': 'evento de error',
+  'bpmn:EscalationEventDefinition': 'evento de escalamiento',
+  'bpmn:CompensateEventDefinition': 'evento de compensación',
+  'bpmn:ConditionalEventDefinition': 'evento condicional',
+  'bpmn:CancelEventDefinition': 'evento de cancelación',
+};
+
+const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
+  'bpmn:EventBasedGateway': 'gateway basado en eventos',
+  'bpmn:ComplexGateway': 'gateway complejo',
+  'bpmn:Transaction': 'subproceso transaccional',
+  'bpmn:AdHocSubProcess': 'subproceso ad-hoc',
+  'bpmn:ChoreographyTask': 'diagrama de coreografía',
+  'bpmn:Choreography': 'diagrama de coreografía',
+  'bpmn:GlobalChoreographyTask': 'diagrama de coreografía',
+  'bpmn:Conversation': 'diagrama de conversación',
+  'bpmn:CallConversation': 'diagrama de conversación',
+  'bpmn:SubConversation': 'diagrama de conversación',
+};
+
+/**
+ * Devuelve la primera construcción no soportada del elemento siguiendo el orden del catálogo.
+ * R-NOSOP-3 exige un solo error por elemento: boundary y throw describen al evento completo;
+ * después, los disparadores concretos ganan a los diagnósticos genéricos de start/end.
+ */
+function unsupportedConstruction(el: ModdleElement): UnsupportedConstruction | undefined {
+  if (el.$type === 'bpmn:BoundaryEvent') return 'evento adjunto a actividad (boundary event)';
+  if (el.$type === 'bpmn:IntermediateThrowEvent') return 'evento intermedio de lanzamiento';
+
+  const definitions = eventDefinitionsOf(el);
+  if (el.parallelMultiple === true || definitions.length > 1) {
+    return 'evento con disparadores múltiples';
+  }
+  for (const definition of definitions) {
+    const construction = EVENT_DEFINITION_CONSTRUCTIONS[definition.$type];
+    if (construction !== undefined) return construction;
+  }
+
+  const byType = TYPE_CONSTRUCTIONS[el.$type];
+  if (byType !== undefined) return byType;
+
+  if (el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics') {
+    return 'marcador de multi-instancia';
+  }
+  if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
+    return 'marcador de bucle en la actividad';
+  }
+  if (el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true) {
+    return 'subproceso de eventos';
+  }
+  if (el.startQuantity !== undefined && el.startQuantity !== 1) {
+    return 'atributo startQuantity distinto de 1';
+  }
+  if (el.completionQuantity !== undefined && el.completionQuantity !== 1) {
+    return 'atributo completionQuantity distinto de 1';
+  }
+  if (
+    el.$type === 'bpmn:EndEvent' &&
+    definitions.length > 0 &&
+    !hasEventDefinition(el, 'bpmn:TerminateEventDefinition')
+  ) {
+    return 'evento de fin con ese disparador';
+  }
+  if (
+    el.$type === 'bpmn:StartEvent' &&
+    definitions.length > 0 &&
+    !hasEventDefinition(el, 'bpmn:TimerEventDefinition')
+  ) {
+    return 'evento de inicio con ese disparador';
+  }
+  return undefined;
 }
 
 /** Tipo del IR para un elemento moddle, o `undefined` si está fuera del perfil soportado. */
@@ -66,6 +175,8 @@ export interface UnsupportedElement {
   qname: string;
   /** Nombre visible, o cadena vacía si el elemento no lo declara. */
   name: string;
+  /** Fila exacta de R-NOSOP-2 que hizo que el elemento quedara fuera del perfil. */
+  construction?: UnsupportedConstruction;
 }
 
 /** Un `bpmn:subProcess` embebido: solo existe hasta que se aplana (R-PLAN-1). */
@@ -101,6 +212,23 @@ interface Collector {
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
   unsupported: { at: number; element: UnsupportedElement }[];
+}
+
+function addUnsupported(
+  el: ModdleElement,
+  construction: UnsupportedConstruction | undefined,
+  c: Collector,
+): void {
+  c.unsupportedEls.add(el);
+  c.unsupported.push({
+    at: c.order.get(el) ?? c.order.size,
+    element: {
+      id: el.id,
+      qname: el.$type,
+      name: el.name ?? '',
+      ...(construction === undefined ? {} : { construction }),
+    },
+  });
 }
 
 /**
@@ -150,9 +278,11 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     }
     if (el.default) c.defaultFlowIds.add(el.default.id);
 
-    // `bpmn:transaction`, `bpmn:adHocSubProcess` y el subproceso de eventos no son perfil
-    // soportado (docs/SEMANTICS.md § 3): no se aplanan, se omiten como cualquier no soportado.
-    if (el.$type === 'bpmn:SubProcess' && el.triggeredByEvent !== true) {
+    const construction = unsupportedConstruction(el);
+
+    // Solo se aplana el subproceso embebido sin ningún detalle fuera de perfil. En particular,
+    // los marcadores y quantities deben sobrevivir hasta `validate` como E-NOSOP (LILA-163).
+    if (el.$type === 'bpmn:SubProcess' && construction === undefined) {
       const id = claimId(el, c);
       c.boxIds.add(id);
       walk(el, id, c);
@@ -171,16 +301,12 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       continue;
     }
 
-    const type = nodeTypeOf(el);
+    const type = construction === undefined ? nodeTypeOf(el) : undefined;
     // Lo que está fuera del perfil (boundary events, gateways complejos, marcadores de bucle…)
-    // no entra al IR, pero se devuelve en `ParseResult.unsupported` para que LILA-021 pueda
-    // emitir `E-NOSOP` sin volver a leer el XML.
+    // no entra al IR, pero se devuelve en `ParseResult.unsupported` para que el validador pueda
+    // emitir `E-NOSOP` con el detalle normativo (LILA-021, LILA-163) sin volver a leer el XML.
     if (type === undefined) {
-      c.unsupportedEls.add(el);
-      c.unsupported.push({
-        at: c.order.get(el) ?? c.order.size,
-        element: { id: el.id, qname: el.$type, name: el.name ?? '' },
-      });
+      addUnsupported(el, construction, c);
       continue;
     }
 
@@ -255,9 +381,42 @@ export interface ParseResult {
   /**
    * Elementos del XML que no entraron al IR por estar fuera del perfil soportado, en orden de
    * aparición en el documento: los nodos no soportados y los `sequenceFlow` descartados por
-   * tocarlos. `parseBpmn` no emite el error ni formatea el texto — eso es LILA-021.
+   * tocarlos. `parseBpmn` no emite el error ni formatea el texto — eso corresponde al validador
+   * (LILA-021); sí conserva la fila exacta del catálogo (LILA-163).
    */
   unsupported: UnsupportedElement[];
+  /** Cantidad de message flows ignorados en todo el archivo (R-PERF-3). */
+  messageFlowCount: number;
+  /** Ids de sequence flows del proceso elegido cuya condición se ignora (R-PERF-4). */
+  conditionFlowIds: string[];
+}
+
+/** Construcciones de coreografía/conversación que no viven dentro de `process.flowElements`. */
+function collectUnsupportedRootElement(root: ModdleElement, c: Collector): void {
+  const visit = (el: ModdleElement): void => {
+    const construction = TYPE_CONSTRUCTIONS[el.$type];
+    if (construction !== undefined) {
+      c.order.set(el, c.order.size);
+      addUnsupported(el, construction, c);
+    }
+    for (const child of el.flowElements ?? []) visit(child);
+    for (const child of el.conversations ?? []) visit(child);
+    for (const child of el.conversationNodes ?? []) visit(child);
+  };
+
+  if (
+    root.$type === 'bpmn:Choreography' ||
+    root.$type === 'bpmn:GlobalChoreographyTask' ||
+    root.$type === 'bpmn:Collaboration'
+  ) {
+    visit(root);
+  }
+}
+
+function countMessageFlows(definitions: ModdleElement): number {
+  let count = 0;
+  for (const root of definitions.rootElements ?? []) count += root.messageFlows?.length ?? 0;
+  return count;
 }
 
 function isNonEmptyProcess(el: ModdleElement): boolean {
@@ -303,7 +462,12 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     unsupported: [],
   };
 
-  walk(main, undefined, c);
+  // Recorremos los root elements en orden de documento para que los E-NOSOP de diagramas de
+  // coreografía/conversación se intercalen correctamente con los del proceso principal.
+  for (const root of definitions.rootElements ?? []) {
+    if (root === main) walk(main, undefined, c);
+    else collectUnsupportedRootElement(root, c);
+  }
 
   for (const el of c.sequenceFlows) {
     const from = el.sourceRef === undefined ? undefined : c.idOf.get(el.sourceRef);
@@ -359,6 +523,10 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),
     unsupported: c.unsupported.sort((a, b) => a.at - b.at).map(({ element }) => element),
+    messageFlowCount: countMessageFlows(definitions),
+    conditionFlowIds: c.sequenceFlows
+      .filter((flow) => flow.conditionExpression !== undefined)
+      .map((flow) => flow.id),
   };
 }
 

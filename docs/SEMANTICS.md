@@ -76,10 +76,11 @@ definida; todo lo demás cae en la sección 3 de este documento.
   y sin consumir tiempo. *(prueba: LILA-026)*
 - **R-PERF-3 — `bpmn:messageFlow` no transporta tokens.** Los flujos de mensaje entre pools se
   ignoran y producen aviso `W-MSGFLOW` una vez por archivo, citando cuántos se ignoraron. Los pools
-  se simulan como un único grafo: un token no “salta” de pool. *(prueba: LILA-021)*
+  se simulan como un único grafo: un token no “salta” de pool. *(prueba: LILA-021, LILA-163)*
 - **R-PERF-4 — `conditionExpression` se ignora.** Las condiciones de los sequence flows no se
   evalúan en v1 (`conditions` es campo reservado, §15): el ramaje es probabilístico. Un flujo con
-  `conditionExpression` produce aviso `W-COND` citando el id del flujo. *(prueba: LILA-021)*
+  `conditionExpression` produce aviso `W-COND` citando el id del flujo. *(prueba: LILA-021,
+  LILA-163)*
 - **R-PERF-5 — Varios start events son válidos.** Cada `start` con `interTriggerTimer` genera su
   propio flujo de llegadas, con su propio `triggerCount` y su propio stream de números aleatorios.
   Un `start` sin `interTriggerTimer` no genera nada y produce aviso `W-START-SIN-LLEGADAS`.
@@ -105,7 +106,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   ```
 
   `{qname}` es el nombre calificado BPMN (`bpmn:boundaryEvent`). `{construcción}` es exactamente el
-  texto de la tabla siguiente. El código del error es `E-NOSOP`. *(prueba: LILA-021)*
+  texto de la tabla siguiente. El código del error es `E-NOSOP`. *(prueba: LILA-021, LILA-163)*
 
 - **R-NOSOP-2 — Catálogo cerrado de `{construcción}`.** Ningún otro texto es válido:
 
@@ -136,6 +137,9 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `evento de fin con ese disparador` |
 | `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `evento de inicio con ese disparador` |
 
+  El detalle que distingue cada fila del catálogo se conserva desde el parser; los fixtures que
+  verifican el texto exacto de las 24 filas son parte de LILA-163.
+
   Ejemplo literal del mensaje que emite `validate(ir)`:
 
   ```
@@ -144,7 +148,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
 - **R-NOSOP-3 — Un solo error por elemento, todos los elementos en una pasada.** `validate(ir)`
   no se detiene en el primero: devuelve la lista completa, ordenada por orden de aparición en el
-  XML, para que el usuario arregle el archivo de una vez. *(prueba: LILA-021)*
+  XML, para que el usuario arregle el archivo de una vez. *(prueba: LILA-021, LILA-163)*
 - **R-NOSOP-4 — Nada de degradación silenciosa.** Un elemento no soportado nunca se convierte en
   `task` de duración 0 ni se “salta”. `simulate()` se niega a correr si `validate()` devolvió al
   menos un error. *(prueba: LILA-021, LILA-045)*
@@ -615,10 +619,11 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 | R-DURA-6 | pureza de `simulate` | LILA-029, LILA-032 |
 | R-PERF-1 | toda variante de tarea → `task` | LILA-018 |
 | R-PERF-2 | XOR convergente = mezcla sin espera | LILA-026 |
-| R-PERF-3 | message flow ignorado | LILA-021 |
-| R-PERF-4 | `conditionExpression` ignorada | LILA-021 |
+| R-PERF-3 | message flow ignorado | LILA-021, LILA-163 |
+| R-PERF-4 | `conditionExpression` ignorada | LILA-021, LILA-163 |
 | R-PERF-5 | varios starts | LILA-026 |
-| R-NOSOP-1 … R-NOSOP-5 | texto exacto y catálogo de no soportados | LILA-021 |
+| R-NOSOP-1 … R-NOSOP-3 | texto exacto y catálogo de no soportados | LILA-021, LILA-163 |
+| R-NOSOP-4, R-NOSOP-5 | no degradar; errores estructurales | LILA-021 |
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
