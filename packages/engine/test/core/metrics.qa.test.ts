@@ -64,6 +64,7 @@ describe('QA adversarial LILA-028', () => {
     const run: ReplicationRun = {
       replication: 0,
       stoppedAt: 20,
+      statisticsDuration: 20,
       cases: [{ caseId: 1, startId: 'Start', startedAt: 0, endedAt: 20 }],
       rows: [row(1, 'Task', 5), row(1, 'Timer', 15)],
       flows: { Flow_SG: 1, Flow_GT: 1, Flow_TT: 1, Flow_TE: 1, Flow_Never: 0 },
@@ -92,6 +93,7 @@ describe('QA adversarial LILA-028', () => {
     const run: ReplicationRun = {
       replication: 0,
       stoppedAt: 30,
+      statisticsDuration: 30,
       cases: [
         { caseId: 1, startId: 'Start', startedAt: 0, endedAt: 11 },
         { caseId: 2, startId: 'Start', startedAt: 0, endedAt: 12 },
@@ -115,6 +117,7 @@ describe('QA adversarial LILA-028', () => {
     const run: ReplicationRun = {
       replication: 0,
       stoppedAt: 30,
+      statisticsDuration: 30,
       cases: [0, 10, 20, 30].map((endedAt, index) => ({
         caseId: index + 1,
         startId: 'Start',
@@ -136,6 +139,7 @@ describe('QA adversarial LILA-028', () => {
     const run: ReplicationRun = {
       replication: 0,
       stoppedAt: 100,
+      statisticsDuration: 50,
       cases: [{ caseId: 6, startId: 'Start', startedAt: 50, endedAt: 60 }],
       rows: [],
       flows: {},
@@ -144,10 +148,11 @@ describe('QA adversarial LILA-028', () => {
     };
 
     expect(
-      aggregateReplication(makeIr({ Start: 'start' }, {}), run, { statisticsDuration: 50 }).process.throughputPerHour,
+      aggregateReplication(makeIr({ Start: 'start' }, {}), run).process.throughputPerHour,
     ).toBe(72);
+    run.statisticsDuration = 0;
     expect(
-      aggregateReplication(makeIr({ Start: 'start' }, {}), run, { statisticsDuration: 0 }).process.throughputPerHour,
+      aggregateReplication(makeIr({ Start: 'start' }, {}), run).process.throughputPerHour,
     ).toBe(0);
   });
 
@@ -155,6 +160,7 @@ describe('QA adversarial LILA-028', () => {
     const run: ReplicationRun = {
       replication: 0,
       stoppedAt: 20,
+      statisticsDuration: 20,
       cases: [
         { caseId: 1, startId: 'Start', startedAt: 0, endedAt: 10 },
         { caseId: 2, startId: 'Start', startedAt: 0, endedAt: null },
