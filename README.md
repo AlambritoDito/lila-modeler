@@ -23,6 +23,7 @@ Los contratos —el IR del proceso, el formato de escenario y el de resultados�
 npm install
 npm test
 npm run build
+npm run bench   # benchmark reproducible: 100 000 casos, 5 tareas lineales
 ```
 
 ## Documentación
