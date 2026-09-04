@@ -18,10 +18,13 @@ describe('golden determinista de examples/pedido (LILA-030)', () => {
 
     expect(seed42).toBe(expected);
     expect(expected.endsWith('\n')).toBe(true);
+    expect(expected).not.toContain('\r');
     expect(runResultSchema.safeParse(JSON.parse(expected)).success).toBe(true);
   });
 
   test('cambiar solo la semilla rompe el golden', () => {
-    expect(seed43).not.toBe(seed42);
+    const expected = readFileSync(PEDIDO_GOLDEN_PATH, 'utf8');
+
+    expect(seed43).not.toBe(expected);
   });
 });

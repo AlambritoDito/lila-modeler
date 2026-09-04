@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parseBpmn } from '../../src/bpmn/parse.js';
-import { validate } from '../../src/bpmn/validate.js';
+import { parseBpmn, validate } from '../../src/bpmn/index.js';
 import { simulate } from '../../src/index.js';
 import {
   ScenarioSchema,
@@ -27,13 +26,16 @@ export function canonicalJson(value: unknown): string {
  * Ejecuta el ejemplo real `examples/pedido` sin conservar sus filas de log en el callback.
  * El escenario se parsea de nuevo en cada llamada para que cambiar la semilla no mute el fixture.
  */
-export async function renderPedidoGolden(seed = 42): Promise<string> {
+export async function renderPedidoGolden(seed: number): Promise<string> {
   const scenarioInput: unknown = JSON.parse(
     readFileSync(resolve(EXAMPLE_DIR, 'as-is.scenario.json'), 'utf8'),
   );
   const parsed = ScenarioSchema.parse(scenarioInput);
   if (parsed.model === undefined || parsed.run === undefined) {
     throw new Error('examples/pedido/as-is.scenario.json no es un escenario resuelto.');
+  }
+  if (parsed.run.seed !== 42) {
+    throw new Error('examples/pedido/as-is.scenario.json debe declarar explícitamente seed 42.');
   }
 
   const scenario: ResolvedScenario = {
