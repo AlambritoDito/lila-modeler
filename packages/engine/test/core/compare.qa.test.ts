@@ -455,7 +455,7 @@ describe('QA LILA-038 · ataque 9: la aceptación no depende de la semilla 42', 
     const paths = new Set(compare([base]).rows.map((row) => row.kpi));
     for (const path of Object.keys(base.replications?.kpis ?? {})) expect(paths.has(path)).toBe(true);
     expect(paths.size).toBe(Object.keys(base.replications?.kpis ?? {}).length);
-  });
+  }, 60_000); // ponytail: simula examples/pedido con 30 réplicas (~5 s en CI); techo holgado, no medida de rendimiento
 });
 
 /* ------------------------------------------------------------------ *
