@@ -14,10 +14,6 @@ import { AS_IS, TO_BE, clone, pedidoIr } from './pedido.fixtures.js';
 
 const repoRoot = new URL('../../../', import.meta.url);
 
-function withoutPendingMultiPool<T extends { code: string }>(problems: T[]): T[] {
-  return problems.filter((problem) => problem.code !== 'E-REC-OR-PENDIENTE');
-}
-
 describe('esquema del escenario', () => {
   test('el AS-IS y el TO-BE de docs/SCENARIO_FORMAT.md validan', () => {
     expect(ScenarioSchema.safeParse(AS_IS).success).toBe(true);
@@ -124,11 +120,9 @@ describe('esquema del escenario', () => {
 });
 
 describe('validateScenario contra el IR', () => {
-  test('el AS-IS solo señala la selección OR pendiente de LILA-035', () => {
+  test('el AS-IS de la documentación no tiene errores (OR multi-pool vale desde LILA-035)', () => {
     const scenario = ScenarioSchema.parse(clone(AS_IS));
-    expect(scenarioErrors(validateScenario(scenario, pedidoIr())).map((problem) => problem.code)).toEqual([
-      'E-REC-OR-PENDIENTE',
-    ]);
+    expect(scenarioErrors(validateScenario(scenario, pedidoIr()))).toEqual([]);
   });
 
   test('una clave de elements que no existe en el IR produce error que cita el id', () => {
@@ -138,7 +132,7 @@ describe('validateScenario contra el IR', () => {
     };
     const scenario = ScenarioSchema.parse(raw);
 
-    const errors = withoutPendingMultiPool(scenarioErrors(validateScenario(scenario, pedidoIr())));
+    const errors = scenarioErrors(validateScenario(scenario, pedidoIr()));
 
     expect(errors).toHaveLength(1);
     expect(errors[0]?.code).toBe('E-ELEMENTO-DESCONOCIDO');
@@ -165,7 +159,7 @@ describe('validateScenario contra el IR', () => {
     const parsed = ScenarioSchema.safeParse(raw);
     expect(parsed.success).toBe(true);
 
-    const errors = withoutPendingMultiPool(scenarioErrors(validateScenario(parsed.data!, pedidoIr())));
+    const errors = scenarioErrors(validateScenario(parsed.data!, pedidoIr()));
     expect(errors.map((e) => e.message)).toEqual([
       'calendars.oficina.holidays: campo reservado, no soportado por el simulador en v1.',
       'resources.cajero.preempt: campo reservado, no soportado por el simulador en v1.',
@@ -178,7 +172,7 @@ describe('validateScenario contra el IR', () => {
     (raw['elements'] as Record<string, Record<string, unknown>>)['Task_TomarPedido']!['priority'] =
       null;
     const scenario = ScenarioSchema.parse(raw);
-    expect(withoutPendingMultiPool(scenarioErrors(validateScenario(scenario, pedidoIr())))).toEqual([]);
+    expect(scenarioErrors(validateScenario(scenario, pedidoIr()))).toEqual([]);
   });
 
   test('probability fuera de un sequence flow y selection sin resources son error', () => {
@@ -190,7 +184,7 @@ describe('validateScenario contra el IR', () => {
     };
     const scenario = ScenarioSchema.parse(raw);
 
-    const codes = withoutPendingMultiPool(scenarioErrors(validateScenario(scenario, pedidoIr()))).map((e) => e.path);
+    const codes = scenarioErrors(validateScenario(scenario, pedidoIr())).map((e) => e.path);
     expect(codes).toEqual(['elements.Timer_Reposo.probability', 'elements.Timer_Reposo.selection']);
   });
 
@@ -201,7 +195,7 @@ describe('validateScenario contra el IR', () => {
     };
     const scenario = ScenarioSchema.parse(raw);
 
-    const errors = withoutPendingMultiPool(scenarioErrors(validateScenario(scenario, pedidoIr())));
+    const errors = scenarioErrors(validateScenario(scenario, pedidoIr()));
     expect(errors[0]?.code).toBe('E-REC-DESCONOCIDO');
     expect(errors[0]?.message).toContain('barista');
   });
@@ -215,7 +209,7 @@ describe('validateScenario contra el IR', () => {
     ];
     elements['Timer_Reposo']!['resources'] = [{ ref: 'horno' }];
     const scenario = ScenarioSchema.parse(raw);
-    const errors = withoutPendingMultiPool(scenarioErrors(validateScenario(scenario, pedidoIr())));
+    const errors = scenarioErrors(validateScenario(scenario, pedidoIr()));
 
     expect(errors.map((problem) => problem.code)).toEqual([
       'E-REC-CANTIDAD',

@@ -1,4 +1,4 @@
-/** Gestor determinista de pools, FIFO y adquisición AND atómica (LILA-033/034). */
+/** Gestor determinista de pools, FIFO, adquisición AND atómica y selección OR (LILA-033/034/035). */
 
 import { Heap } from './heap.js';
 
@@ -32,6 +32,10 @@ interface QueuedRequest {
   readonly seq: number;
   readonly request: ResourceRequest;
   readonly classKey: string;
+  /** Lo que concede esta entrada: todos los requisitos (AND) o una alternativa (OR). */
+  readonly requirements: readonly ResourceRequirement[];
+  /** Índice declarado en el escenario; desempata alternativas OR libres a la vez (R-REC-6). */
+  readonly altIndex: number;
 }
 
 interface RequestClass {
@@ -46,12 +50,13 @@ interface PoolState {
 }
 
 type RequestState =
-  | { status: 'queued'; queued: QueuedRequest }
+  | { status: 'queued'; seq: number; classKeys: readonly string[] }
   | { status: 'active'; allocation: ResourceAllocation };
 
 interface ReadyHead {
   readonly enabledAt: number;
   readonly seq: number;
+  readonly altIndex: number;
   readonly classKey: string;
   readonly requestId: string;
   readonly version: number;
@@ -96,8 +101,14 @@ class ReadyHeap {
     return root;
   }
 
+  /**
+   * `(enabledAt, seq)` ya es un orden total entre solicitudes distintas; `altIndex` solo desempata
+   * las alternativas OR de una misma solicitud, que comparten `seq` a propósito (R-REC-6).
+   */
   static #before(left: ReadyHead, right: ReadyHead): boolean {
-    return left.enabledAt < right.enabledAt || (left.enabledAt === right.enabledAt && left.seq < right.seq);
+    if (left.enabledAt !== right.enabledAt) return left.enabledAt < right.enabledAt;
+    if (left.seq !== right.seq) return left.seq < right.seq;
+    return left.altIndex < right.altIndex;
   }
 }
 
@@ -127,18 +138,21 @@ export class ResourceManager {
 
   enqueue(request: ResourceRequest, at = request.enabledAt): ResourceAllocation[] {
     this.#validate(request);
-    const classKey = this.#classKey(request);
-    let requestClass = this.#classes.get(classKey);
-    if (requestClass === undefined) {
-      requestClass = { waiters: new Heap(), version: 0 };
-      this.#classes.set(classKey, requestClass);
-      for (const requirement of request.requirements) this.#pools.get(requirement.poolId)!.classes.add(classKey);
+    // Un solo `seq` para todas las entradas: una OR ocupa la misma posición FIFO en cada pool.
+    const seq = this.#nextSeq++;
+    const classKeys: string[] = [];
+    for (const entry of this.#entriesOf(request)) {
+      let requestClass = this.#classes.get(entry.classKey);
+      if (requestClass === undefined) {
+        requestClass = { waiters: new Heap(), version: 0 };
+        this.#classes.set(entry.classKey, requestClass);
+        for (const requirement of entry.requirements) this.#pools.get(requirement.poolId)!.classes.add(entry.classKey);
+      }
+      requestClass.waiters.push({ t: request.enabledAt, seq, request, ...entry });
+      classKeys.push(entry.classKey);
     }
-
-    const queued: QueuedRequest = { t: request.enabledAt, seq: this.#nextSeq++, request, classKey };
-    this.#requests.set(request.id, { status: 'queued', queued });
-    requestClass.waiters.push(queued);
-    return this.#drain(new Set([classKey]), at);
+    this.#requests.set(request.id, { status: 'queued', seq, classKeys });
+    return this.#drain(new Set(classKeys), at);
   }
 
   /** Valida todo el lote antes de mutar; luego libera y planifica una sola vez. */
@@ -171,7 +185,7 @@ export class ResourceManager {
         this.#free(state.allocation);
         this.#markPoolsDirty(state.allocation.assignments, dirty);
       } else {
-        dirty.add(state.queued.classKey);
+        for (const classKey of state.classKeys) dirty.add(classKey);
       }
       this.#requests.delete(id);
     }
@@ -192,12 +206,16 @@ export class ResourceManager {
     return this.#requests.size;
   }
 
+  /** Entradas todavía en cola, lápidas incluidas: sirve para probar que OR no deja fugas. */
+  get queuedEntryCount(): number {
+    let total = 0;
+    for (const requestClass of this.#classes.values()) total += requestClass.waiters.size;
+    return total;
+  }
+
   #validate(request: ResourceRequest): void {
     if (this.#requests.has(request.id)) throw new Error(`E-REC-SOLICITUD-DUPLICADA: ya existe la solicitud ${request.id}.`);
     if (request.requirements.length === 0) throw new Error(`E-REC-SIN-ASIGNACION: ${request.id}: falta un pool.`);
-    if (request.requirements.length > 1 && request.selection === 'or') {
-      throw new Error(`E-REC-OR-PENDIENTE: ${request.id}: LILA-035 implementa selección OR multi-pool.`);
-    }
     const seen = new Set<string>();
     for (const requirement of request.requirements) {
       if (seen.has(requirement.poolId)) throw new Error(`E-REC-DUPLICADO: ${request.id}: el pool ${requirement.poolId} aparece más de una vez.`);
@@ -216,12 +234,33 @@ export class ResourceManager {
    * la firma AND se ordena por `(poolId, quantity)` para que dos tareas que declaran los mismos
    * pools en distinto orden compartan una única cola y no dupliquen clases equivalentes.
    */
-  #classKey(request: ResourceRequest): string {
-    if (request.requirements.length === 1) return `single:${JSON.stringify(request.requirements[0]!.poolId)}`;
-    const signature = request.requirements
+  #classKey(requirements: readonly ResourceRequirement[]): string {
+    if (requirements.length === 1) return `single:${JSON.stringify(requirements[0]!.poolId)}`;
+    const signature = requirements
       .map((requirement) => [requirement.poolId, requirement.quantity] as const)
       .sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : left[1] - right[1]));
     return `and:${JSON.stringify(signature)}`;
+  }
+
+  /**
+   * R-REC-6: una OR multi-pool se encola en **todas** sus alternativas. Cada alternativa es una
+   * solicitud single-pool más en la cola de ese pool, así que OR, AND y single conviven en el
+   * mismo FIFO. La primera entrada que se concede deja a las demás como lápidas: `#head` las
+   * descarta al llegar a la cabeza, y conceder marca dirty las clases retiradas para que su nueva
+   * cabeza se reevalúe en el acto.
+   * // ponytail: la retirada es perezosa, como el resto de ADR-026. Techo: una alternativa que
+   * // nunca vuelve a ser cabeza retiene su entrada hasta el final de la replicación (O(1) por
+   * // alternativa). Camino de mejora: borrado posicional en `Heap`, si alguna vez pesa.
+   */
+  #entriesOf(request: ResourceRequest): readonly Omit<QueuedRequest, 't' | 'seq' | 'request'>[] {
+    if (request.selection === 'or' && request.requirements.length > 1) {
+      return request.requirements.map((requirement, altIndex) => ({
+        classKey: this.#classKey([requirement]),
+        requirements: [requirement],
+        altIndex,
+      }));
+    }
+    return [{ classKey: this.#classKey(request.requirements), requirements: request.requirements, altIndex: 0 }];
   }
 
   #free(allocation: ResourceAllocation): void {
@@ -238,18 +277,24 @@ export class ResourceManager {
     }
   }
 
+  /**
+   * Descarta lápidas hasta dar con una cabeza viva. El `seq` desempata además el caso en que un
+   * id se reencola tras liberarse: las entradas OR retiradas de otras colas llevan el `seq`
+   * anterior y no pueden hacerse pasar por la nueva solicitud.
+   */
   #head(requestClass: RequestClass): QueuedRequest | undefined {
     for (;;) {
       const head = requestClass.waiters.peek();
       if (head === undefined) return undefined;
       this.#headInspections++;
-      if (this.#requests.get(head.request.id)?.status === 'queued') return head;
+      const state = this.#requests.get(head.request.id);
+      if (state?.status === 'queued' && state.seq === head.seq) return head;
       requestClass.waiters.pop();
     }
   }
 
-  #satisfiable(request: ResourceRequest): boolean {
-    for (const requirement of request.requirements) {
+  #satisfiable(requirements: readonly ResourceRequirement[]): boolean {
+    for (const requirement of requirements) {
       const pool = this.#pools.get(requirement.poolId)!;
       if (pool.capacity - pool.used < requirement.quantity) return false;
     }
@@ -261,8 +306,8 @@ export class ResourceManager {
     if (requestClass === undefined) return;
     const version = ++requestClass.version;
     const head = this.#head(requestClass);
-    if (head === undefined || head.t > at || !this.#satisfiable(head.request)) return;
-    this.#ready.push({ enabledAt: head.t, seq: head.seq, classKey, requestId: head.request.id, version });
+    if (head === undefined || head.t > at || !this.#satisfiable(head.requirements)) return;
+    this.#ready.push({ enabledAt: head.t, seq: head.seq, altIndex: head.altIndex, classKey, requestId: head.request.id, version });
   }
 
   #drain(initialDirty: Set<string>, at: number): ResourceAllocation[] {
@@ -273,21 +318,24 @@ export class ResourceManager {
       const requestClass = this.#classes.get(ready.classKey);
       if (requestClass === undefined || requestClass.version !== ready.version) continue;
       const head = this.#head(requestClass);
-      if (head === undefined || head.request.id !== ready.requestId || head.t > at || !this.#satisfiable(head.request)) continue;
+      if (head === undefined || head.request.id !== ready.requestId || head.t > at || !this.#satisfiable(head.requirements)) continue;
 
       requestClass.waiters.pop();
-      for (const requirement of head.request.requirements) this.#pools.get(requirement.poolId)!.used += requirement.quantity;
+      for (const requirement of head.requirements) this.#pools.get(requirement.poolId)!.used += requirement.quantity;
       const allocation: ResourceAllocation = {
         requestId: head.request.id,
         enabledAt: head.request.enabledAt,
         startedAt: at,
         seq: head.seq,
-        assignments: head.request.requirements,
+        assignments: head.requirements,
       };
+      const withdrawn = this.#requests.get(head.request.id);
       this.#requests.set(head.request.id, { status: 'active', allocation });
       granted.push(allocation);
 
-      const dirty = new Set<string>();
+      // Las alternativas OR que se retiran dejan una lápida en su cola: reevaluarlas aquí es lo
+      // que impide que la cabeza que queda detrás se quede esperando a un evento del pool.
+      const dirty = new Set<string>(withdrawn?.status === 'queued' ? withdrawn.classKeys : []);
       this.#markPoolsDirty(allocation.assignments, dirty);
       for (const classKey of dirty) this.#evaluate(classKey, at);
     }

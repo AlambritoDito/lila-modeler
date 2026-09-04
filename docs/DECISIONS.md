@@ -326,8 +326,16 @@ O(n² log n). También se descarta crear una clase single-pool por cantidad, por
 solicitud pequeña adelantase a la cabeza del mismo pool. Versiones/tombstones invalidan cabezas sin
 búsquedas lineales y release/cancel reúnen todos los pools afectados antes de planificar.
 
-Esta estructura deja un punto de extensión para las alternativas OR de LILA-035 sin exponer
-`ResourceManager` como API pública. *(prueba: LILA-034)*
+LILA-035 usa esa estructura sin añadir nada nuevo: una selección OR se encola como **una entrada
+por alternativa**, cada una en la clase single-pool de su pool y todas con el mismo `seq`, así que
+comparten posición FIFO y compiten en igualdad con las solicitudes de un solo pool. Conceder una
+alternativa deja a las demás como lápidas — el mismo mecanismo que ya invalida cabezas — y marca sus
+clases para reevaluar en el acto, que es lo que impide que la cabeza siguiente de un pool retirado
+espere a un evento que ya no va a llegar. El desempate entre alternativas libres a la vez es el
+índice declarado en el escenario (R-REC-6): `(enabledAt, seq, altIndex)` sigue siendo un orden total
+y no altera el de AND/single, donde `altIndex` siempre vale 0. Se descarta elegir el pool más libre o
+el de menor utilización: obligaría a un criterio global y a reordenar colas, y no hay paridad Bizagi
+que lo pida. `ResourceManager` sigue sin ser API pública. *(prueba: LILA-034, LILA-035)*
 
 ---
 

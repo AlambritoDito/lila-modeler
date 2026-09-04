@@ -8,7 +8,8 @@
   heap de cabezas elegibles ordenado por `(enabledAt, seq)` original; salto de AND bloqueada sin
   romper FIFO single-pool; `release`/`cancel` por lote; assignments/log en orden del escenario;
   sentinel de AND todavía queued; costos por pool y `elementCost` una sola vez.
-- OR multi-pool permanece en fail-fast `E-REC-OR-PENDIENTE` antes de callbacks hasta LILA-035.
+- OR multi-pool permanecía en fail-fast `E-REC-OR-PENDIENTE` antes de callbacks; LILA-035 levantó ese
+  fail-fast y el código ya no existe (R-REC-6, ADR-026).
 - Documentación actualizada: `SEMANTICS`, `RESULTS_FORMAT`, `BACKLOG` y ADR-026.
 
 ## Verificación ejecutada

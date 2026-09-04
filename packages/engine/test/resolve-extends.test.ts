@@ -55,9 +55,7 @@ describe('resolveExtends', () => {
     );
     expect(resolved.resources?.['cajero']?.capacity).toBe(3);
     expect(resolved.model).toBe('examples/pedido/model.bpmn');
-    expect(scenarioErrors(validateScenario(resolved, pedidoIr())).map((problem) => problem.code)).toEqual([
-      'E-REC-OR-PENDIENTE',
-    ]);
+    expect(scenarioErrors(validateScenario(resolved, pedidoIr()))).toEqual([]);
   });
 
   test('los fixtures inline de docs/SCENARIO_FORMAT.md no han derivado de examples/', () => {

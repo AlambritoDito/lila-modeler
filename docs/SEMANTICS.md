@@ -388,9 +388,10 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   error `E-REC-DESCONOCIDO`, un pool repetido en la misma tarea es `E-REC-DUPLICADO` y una
   `capacity` que no sea entero ≥ 1 es `E-REC-CAPACIDAD`. Los cuatro se comprueban en un preflight
   **antes de cualquier callback público**: una corrida no puede emitir filas ni progreso y fallar
-  después. Desde LILA-034 múltiples pools con selección ausente o `"and"` son
-  válidos; `"or"` falla antes de simular con `E-REC-OR-PENDIENTE` hasta LILA-035.
-  *(prueba: LILA-013, LILA-033, LILA-034, LILA-042)*
+  después. Desde LILA-034 múltiples pools con selección ausente o `"and"` son válidos y desde
+  LILA-035 también lo es `"or"`. `quantity > capacity` es error también en una alternativa OR: la
+  alternativa nunca podría arrancar y el escenario está mal declarado aunque otra sí quepa.
+  *(prueba: LILA-013, LILA-033, LILA-034, LILA-035, LILA-042)*
 - **R-REC-3 — Cola FIFO por instante de habilitación.** Cada pool tiene una cola ordenada por
   `(enabled, seq)` ascendente, donde `seq` es el contador monótono del evento que habilitó al token.
   Como `seq` es único, el orden es total y determinista: **no hay empates reales**.
@@ -408,11 +409,15 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   cola FIFO por pool, así que una cabeza single-pool que no cabe sí bloquea a las que van detrás en
   ese mismo pool, aunque pidan menos unidades (ADR-026). *(prueba: LILA-034, LILA-033)*
 - **R-REC-6 — Selección OR.** La tarea se encola en **todos** los pools alternativos y arranca con
-  el primero que tenga `quantity` unidades libres; al arrancar se retira de las demás colas. Si en
-  el instante de habilitación hay varios pools disponibles, gana el que aparece **primero en el
-  array `resources`** de la tarea (orden de documento del escenario). Si la disponibilidad llega por
-  liberaciones simultáneas en el mismo instante, gana el pool cuya liberación tiene el `seq` menor.
-  El pool efectivamente usado se registra en `resourceId` del event log. *(prueba: LILA-035)*
+  el primero que tenga `quantity` unidades libres; al arrancar se retira de las demás colas y solo
+  ocupa unidades del pool elegido. Cada alternativa entra en la cola FIFO de su pool con el **mismo**
+  `(enabled, seq)`, así que OR, AND y single-pool compiten en igualdad en cada pool (R-REC-5).
+  **Desempate**: cuando en el mismo instante hay varias alternativas libres, gana la que aparece
+  **primero en el array `resources`** de la tarea (orden de documento del escenario). Es la única
+  regla: da igual por qué liberación llegó la disponibilidad, porque todas las liberaciones de un
+  mismo instante se aplican antes de planificar. El pool efectivamente usado se registra en
+  `resourceId` del event log y una OR produce **exactamente una** fila de asignación (R-REC-11);
+  sus costos son los del pool usado. *(prueba: LILA-035)*
 - **R-REC-7 — Ocupación y liberación.** Las unidades se ocupan en `started` y se liberan en `ended`
   (o al morir el caso, R-EVT-5). No hay apropiación (`preempt` es campo reservado, §15) ni
   prioridades: una tarea empezada nunca se interrumpe salvo por `terminate`. *(prueba: LILA-033)*
