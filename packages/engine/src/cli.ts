@@ -490,7 +490,11 @@ async function runCommand(
 ): Promise<number> {
   const modelPath = absolutePath(modelFile);
   const parsedModel = await parseBpmn(readFileSync(modelPath, 'utf8'));
-  const modelValidation = validate(parsedModel.ir, { unsupported: parsedModel.unsupported });
+  const modelValidation = validate(parsedModel.ir, {
+    unsupported: parsedModel.unsupported,
+    messageFlowCount: parsedModel.messageFlowCount,
+    conditionFlowIds: parsedModel.conditionFlowIds,
+  });
   if (modelValidation.errors.length > 0) {
     printValidationProblems(modelValidation);
     console.log(`${modelValidation.errors.length} errores, ${modelValidation.warnings.length} avisos.`);
