@@ -56,11 +56,16 @@ function stat(values: readonly number[]): Stat {
   return { min, max, mean: total / values.length, total };
 }
 
-/** Estadísticas con desviación estándar muestral. */
+/**
+ * Estadísticas con desviación estándar muestral. Las claves se escriben en el orden de la
+ * interfaz `StatSd`, el mismo de `EMPTY_STAT_SD`: `JSON.stringify` de un elemento sin
+ * observaciones y de uno con observaciones tiene que producir el mismo orden de claves, o los
+ * goldens byte a byte de LILA-030/LILA-039 dependerían de si el elemento se ejecutó.
+ */
 function statSd(values: readonly number[]): StatSd {
   if (values.length === 0) return { ...EMPTY_STAT_SD };
   const base = stat(values);
-  return { ...base, sd: sampleSd(values, base.mean) };
+  return { min: base.min, max: base.max, mean: base.mean, sd: sampleSd(values, base.mean), total: base.total };
 }
 
 /**

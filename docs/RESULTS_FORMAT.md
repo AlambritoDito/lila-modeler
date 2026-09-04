@@ -113,7 +113,7 @@ interface ResourceMetrics {
 }
 ```
 
-- **`busyTime`** — segundos-unidad que el pool estuvo ocupado atendiendo instancias, sumados sobre las unidades ocupadas: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s. Se agrega **por fila** del event log (ADR-025): cada fila con `resourceId` y `startedAt` no nulos aporta `resourceQuantity × (min(endedAt ?? observedUntil, t_stop) − max(startedAt, warmup))`. Una fila sentinel, o una que nunca llegó a arrancar, aporta 0.
+- **`busyTime`** — segundos-unidad que el pool estuvo ocupado atendiendo instancias, sumados sobre las unidades ocupadas: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s. Se agrega **por fila** del event log (ADR-025): cada fila **de la cohorte medida** con `resourceId` y `startedAt` no nulos aporta `resourceQuantity × (min(endedAt ?? observedUntil, t_stop) − max(startedAt, warmup))`. Una fila sentinel, o una que nunca llegó a arrancar, aporta 0. Las filas de casos iniciados antes del `warmup` no aportan aunque su ocupación caiga dentro de la ventana: por R-ARR-7 esos casos existen y retrasan a los demás, pero no entran en ninguna integral (ver sección 8).
 - **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). En nivel 3 (sin calendarios, M2) `availableTime = statisticsDuration`, es decir la ventana `[warmup, t_stop]`; los calendarios de M3 solo cambian ese denominador (R-CAL-9). Expresada como fracción `0..1`; la CLI la imprime como porcentaje (columna Bizagi `Utilization %`). Con `capacity × availableTime = 0` vale 0, no `NaN`.
 - **`fixedCost`** — `resources[id].fixedCost × usos`, donde *usos* es `Σ resourceQuantity` sobre las filas que llegaron a ocupar el pool (una tarea que ocupa 2 unidades son 2 usos, R-COST-2).
 - **`unitCost`** — `costPerHour del recurso × (busyTime / 3600)` (costo por las horas efectivamente ocupadas).
@@ -121,7 +121,18 @@ interface ResourceMetrics {
   `Σ resources[*].totalCost = Σ row.resourceCost` sobre todas las filas de la ventana, es decir
   `Σ fijo × usos + Σ porHora × horas ocupadas` (R-COST-4). *(prueba: LILA-036)*
 
-Todo pool declarado en `scenario.resources` aparece en el mapa, aunque nunca se haya usado (todos sus campos en cero): así las replicaciones comparten el mismo conjunto de claves de KPI (sección 8). Sin `resources` en el escenario el mapa queda `{}` y `bottlenecks` queda `[]`, exactamente como en M1 — la degradación no cambia la forma del JSON (R-DEG-1, prueba LILA-039).
+Todo pool declarado en `scenario.resources` aparece en el mapa **aunque ningún elemento lo use**,
+con `utilization = 0` y `busyTime`, `fixedCost`, `unitCost` y `totalCost` en cero — es lo mismo que
+hace la tabla *Resources* de Bizagi, que lista todo recurso declarado aunque su utilización sea
+0 % (sección 3), y es lo que permite que todas las replicaciones compartan el mismo conjunto de
+claves de KPI (sección 8): si un pool ocioso desapareciera del mapa en unas replicaciones y no en
+otras, `summarizeKpis` lo rechazaría con `E-KPI-INCONSISTENTE`.
+
+Declarar un pool ocioso **no** es el caso de degradación: R-DEG-1 habla de un escenario **sin**
+sección `resources`, y solo entonces el mapa queda `{}` y `bottlenecks` queda `[]`, exactamente
+como en M1 — la degradación no cambia la forma del JSON (prueba LILA-039). Un escenario que
+declara pools sin usarlos sí cambia `resources`, y nada más del resultado.
+*(prueba: LILA-036, LILA-034)*
 
 ---
 
@@ -329,16 +340,20 @@ La CLI (`lila run`) imprime las tablas de `elements` y `resources` con los **nom
 | `resourceWait.total` | Total time (waiting for resource) |
 | `fixedCostTotal` | Total fixed cost |
 
-`offHoursWait`, `queueLength`, los percentiles de `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase` y `bottlenecks` **no tienen columna equivalente en Bizagi** — son las métricas extra listadas en la sección 3 del documento de estructura ("Extras que Bizagi no da"); la CLI las imprime en tablas adicionales sin intentar nombrarlas "a la Bizagi".
+`offHoursWait`, `queueLength`, `resources[id].busyTime`, los percentiles de `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase`, `process.totalCost` y `bottlenecks` **no tienen columna equivalente en Bizagi** — son las métricas extra listadas en la sección 3 del documento de estructura ("Extras que Bizagi no da"); la CLI las imprime en tablas adicionales sin intentar nombrarlas "a la Bizagi".
 
 ### Tabla "Resources" (niveles 3–4)
 
 | Campo interno (`RunResult.resources[id]`) | Nombre de columna Bizagi |
 |---|---|
 | `utilization` | Utilization (%) |
+| `busyTime` | — (sin columna en Bizagi; extra de Lila, en segundos-unidad) |
 | `fixedCost` | Fixed cost |
 | `unitCost` | Unit cost |
 | `totalCost` | Total cost |
+
+La tabla lista **una fila por pool declarado**, también los que quedaron con 0 % de utilización
+(sección 4), igual que Bizagi.
 
 ### Tabla "Sequence flows" (nivel 1)
 
