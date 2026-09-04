@@ -143,12 +143,48 @@ export const runResultSchema = z
 export const eventLogRowSchema = z.object({
   replication: z.number(),
   caseId: z.string(),
+  activityInstanceId: z.string(),
   elementId: z.string(),
   resourceId: z.string().nullable(),
+  allocationIndex: z.number().int().nonnegative().nullable(),
+  resourceQuantity: z.number().int().positive().nullable(),
+  status: z.enum(['completed', 'terminated', 'inFlight']),
   enabledAt: z.number(),
-  startedAt: z.number(),
-  endedAt: z.number(),
+  startedAt: z.number().nullable(),
+  endedAt: z.number().nullable(),
+  observedUntil: z.number(),
   resourceWait: z.number(),
   offHoursWait: z.number(),
+  elementCost: z.number(),
+  resourceCost: z.number(),
   cost: z.number(),
+}).superRefine((row, context) => {
+  if (new Set([row.resourceId === null, row.resourceQuantity === null, row.allocationIndex === null]).size !== 1) {
+    context.addIssue({
+      code: 'custom',
+      path: ['resourceQuantity'],
+      message: 'resourceId, resourceQuantity y allocationIndex son null juntos solo en sentinel.',
+    });
+  }
+  if (row.status === 'completed' && (row.startedAt === null || row.endedAt === null)) {
+    context.addIssue({ code: 'custom', path: ['status'], message: 'completed exige startedAt y endedAt.' });
+  }
+  if (row.status !== 'completed' && row.endedAt !== null) {
+    context.addIssue({ code: 'custom', path: ['status'], message: 'terminated/inFlight exigen endedAt null.' });
+  }
+  if (row.startedAt === null && row.resourceId !== null) {
+    context.addIssue({ code: 'custom', path: ['resourceId'], message: 'sin startedAt todavía no existe asignación: exige sentinel.' });
+  }
+  if (row.startedAt === null && row.resourceCost !== 0) {
+    context.addIssue({ code: 'custom', path: ['resourceCost'], message: 'una actividad nunca iniciada no puede tener costo de recurso.' });
+  }
+  if (row.status !== 'completed' && row.elementCost !== 0) {
+    context.addIssue({ code: 'custom', path: ['elementCost'], message: 'el fijo del elemento se carga solo al completar.' });
+  }
+  if (row.status === 'completed' && row.endedAt !== row.observedUntil) {
+    context.addIssue({ code: 'custom', path: ['observedUntil'], message: 'al completar, observedUntil = endedAt.' });
+  }
+  if (row.cost !== row.elementCost + row.resourceCost) {
+    context.addIssue({ code: 'custom', path: ['cost'], message: 'cost debe ser elementCost + resourceCost.' });
+  }
 }) satisfies z.ZodType<EventLogRow>;

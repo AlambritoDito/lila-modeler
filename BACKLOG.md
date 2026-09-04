@@ -219,9 +219,9 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 ### E4 — Nivel 3: recursos, colas, costos, log, comparación (M2)
 
 #### LILA-033 · Pools de recursos y colas FIFO
-- Épica E4 · Hito M2 · Tamaño M · Depende de LILA-026
-- Qué: `resources[pool] = {capacity, costPerHour, fixedCost, calendar?}`; cola FIFO por `enabledAt` con desempate por `seq`; `enabled/started/ended` por token.
-- Aceptación: M/M/1 ρ = 0,8, 30 replicaciones ⇒ espera media dentro del 3 % de la fórmula y utilización 0,80 ± 0,02.
+- Épica E4 · Hito M2 · Tamaño M · Depende de LILA-029
+- Qué: `resources[pool] = {capacity, costPerHour, fixedCost, calendar?}`; asignación de un solo pool con `quantity`; cola FIFO global por `(enabledAt, seq)`; lifecycle completo y parcial por `activityInstanceId`. AND/OR multi-pool se rechazan explícitamente hasta LILA-034/035. `calendar` se conserva en el formato pero no se interpreta hasta LILA-041. Las filas raw fijan el desglose de costos; las métricas agregadas de recursos pertenecen a LILA-036 y CSV/streaming a LILA-037.
+- Aceptación: pool con `capacity = 2`, tarea que pide `quantity = 2`, llegadas en 0/1/2 s y duración 10 s ⇒ empieza en 0/10/20, espera 0/9/18 y termina en 10/20/30, con filas de lifecycle reconstruibles y orden FIFO exacto. M/M/1 queda en LILA-050, después de las métricas LILA-036.
 - Archivos: `packages/engine/src/core/sim.ts`, `resources.ts`.
 
 #### LILA-034 · Asignación AND multi-pool atómica
@@ -237,14 +237,14 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Archivos: `packages/engine/src/core/resources.ts`.
 
 #### LILA-036 · Métricas de nivel 3
-- Épica E4 · Hito M2 · Tamaño M · Depende de LILA-033, LILA-028
-- Qué: `resourceWait` min/max/mean/sd/total por elemento; `queueLength` mean/max (ponderada por tiempo); por recurso utilización, busyTime, fixedCost, unitCost, totalCost; por proceso waitTime, costPerCase, totalCost; `bottlenecks` (ranking por `resourceWait.total`, desempate por utilización).
-- Aceptación: M/M/3 dentro del 3 % de Erlang-C; `totalCost = Σ fijo × usos + Σ hora × horas ocupadas` verificado desde el log; el ranking del benchmark señala al pool saturado.
+- Épica E4 · Hito M2 · Tamaño M · Depende de LILA-034, LILA-035, LILA-028
+- Qué: `resourceWait` min/max/mean/sd/total por elemento; `queueLength` mean/max (ponderada por tiempo); por recurso utilización, busyTime, fixedCost, unitCost, totalCost; por proceso waitTime, costPerCase, totalCost; `bottlenecks` (ranking por `resourceWait.total`, desempate por utilización). Fijar y probar explícitamente si la espera observada de filas `terminated`/`inFlight` entra en métricas agregadas; LILA-033 conserva esas filas raw pero agrega solo actividades completadas.
+- Aceptación: caso determinista con dos pools y cantidades conocidas reconstruye desde el log `totalCost = Σ fijo × usos + Σ hora × horas ocupadas`; utilización, longitud de cola y esperas coinciden con el cálculo a mano; el ranking señala al pool saturado. Los oráculos M/M/1 y M/M/c quedan en LILA-050.
 - Archivos: `packages/engine/src/core/metrics.ts`.
 
 #### LILA-037 · Event log completo y CSV en streaming
-- Épica E4 · Hito M2 · Tamaño S · Depende de LILA-033, LILA-029
-- Qué: filas `{replication, caseId, elementId, resourceId, enabledAt, startedAt, endedAt, resourceWait, offHoursWait, cost}` por callback; `toCsv` con timestamps ISO desde `run.start`; desactivable.
+- Épica E4 · Hito M2 · Tamaño S · Depende de LILA-036, LILA-046
+- Qué: filas planas por asignación, agrupadas por `activityInstanceId`, con sentinel para actividades sin recurso, lifecycle parcial y desglose `elementCost`/`resourceCost`; `toCsv` con timestamps ISO desde `run.start`; desactivable.
 - Aceptación: `lila run --csv out/` escribe `log.csv` sin cargar todo en memoria; 30 × 10 000 casos no superan 200 MB de RAM en Node.
 - Archivos: `packages/engine/src/core/run.ts`, `csv.ts`.
 
@@ -255,7 +255,7 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Archivos: `packages/engine/src/core/compare.ts`.
 
 #### LILA-039 · Regresión de degradación (sin recursos)
-- Épica E4 · Hito M2 · Tamaño S · Depende de LILA-033
+- Épica E4 · Hito M2 · Tamaño S · Depende de LILA-033, LILA-030
 - Qué: test que corre el escenario sin `resources` y compara con el golden de M1.
 - Aceptación: resultado idéntico bit a bit.
 - Archivos: `packages/engine/test/semantics.test.ts`.

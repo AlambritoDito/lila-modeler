@@ -124,7 +124,7 @@ interface Percentiles {
 - **`completed`** — número de casos que llegaron a un end event (o fueron consumidos por un `terminate`).
 - **`inFlight`** — `started − completed` al momento de cortar la corrida (casos que ni completaron ni fueron descartados).
 - **`cycleTime.*`** — estadísticas del tiempo total de vida de un caso (`caseEndedAt − caseEnabledAt`, sumando todos los elementos por los que pasó); `p50`/`p90`/`p95` son los percentiles 50, 90 y 95 empíricos (interpolación lineal sobre la muestra ordenada) del mismo conjunto de duraciones. Solo se calculan sobre casos **completados**.
-- **`waitTime.*`** — mismas estadísticas y percentiles, pero sobre la suma de `resourceWait + offHoursWait` de todos los elementos que atravesó el caso (tiempo total de espera del caso, sin importar la causa).
+- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso. Hasta LILA-033 una fila `terminated`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada; LILA-036 debe fijar y probar el tratamiento agregado de lifecycle parcial junto con las métricas de nivel 3.
 - **`throughputPerHour`** — `completed / (duración efectiva de la corrida en horas)`, donde la duración efectiva excluye el `warmup` (ver sección 8).
 - **`costPerCase`** — media de `Σ row.cost` sobre los casos completados. Los costos de casos en vuelo sí forman parte de `totalCost`, pero no de esta media (R-COST-4). *(prueba: LILA-028)*
 - **`totalCost`** — suma de `fixedCostTotal` de todos los elementos más `totalCost` de todos los recursos (costo total del escenario en la replicación).
@@ -149,7 +149,9 @@ Ranking de elementos ordenado descendentemente por `elements[elementId].resource
 
 ## 7. Event log
 
-Filas planas, una por instancia de elemento por caso por replicación. Se emiten por streaming
+Filas planas, una por **asignación de pool** por instancia de actividad. Las filas de una misma
+ocurrencia se agrupan por `activityInstanceId`; una actividad sin recurso conserva una fila
+sentinel. Se emiten por streaming
 (`opts.onEvent`) para que la CLI escriba a CSV y la web pueda agregar/muestrear sin cargar todo en
 memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas grandes).
 `opts.log` vale `true` por defecto; `log: false` suprime el callback incluso si se proporcionó
@@ -159,14 +161,32 @@ memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas
 |---|---|---|---|
 | `replication` | integer | — | Índice de la replicación, `0..scenario.run.replications-1`. |
 | `caseId` | string | — | Identificador del caso (instancia de proceso), único dentro de la replicación. |
+| `activityInstanceId` | string | — | Identificador opaco y único de la ocurrencia de tarea/timer dentro de la replicación, derivado de un contador; agrupa sus asignaciones. |
 | `elementId` | string | — | `id` BPMN del elemento (nunca el nombre). |
-| `resourceId` | string \| null | — | `id` del pool de recursos que atendió la instancia; `null`/ausente si el elemento no requiere recurso. |
+| `resourceId` | string \| null | — | `id` del pool efectivamente asignado; `null` en la sentinel de una actividad sin recurso o que seguía esperando. |
+| `allocationIndex` | integer \| null | — | Posición de la asignación en el array `resources` del elemento; `null` para sentinel. |
+| `resourceQuantity` | integer \| null | unidades | Cantidad ocupada del pool; `null` para el sentinel. |
+| `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
 | `enabledAt` | number | segundos desde `run.start` | Instante en que el token llegó al elemento y quedó habilitado para empezar. |
-| `startedAt` | number | segundos desde `run.start` | Instante en que empezó a procesarse (tras esperar recurso y calendario). |
-| `endedAt` | number | segundos desde `run.start` | Instante en que terminó el processing. |
-| `resourceWait` | number | segundos | Porción de la espera antes de empezar atribuible exclusivamente a falta de recurso; no incluye tiempo de calendario cerrado. |
-| `offHoursWait` | number | segundos | Tiempo cerrado contenido en todo el intervalo `[enabledAt, endedAt]`: incluye tanto el cierre antes de arrancar como las pausas durante el procesamiento. Junto con `resourceWait` cumple `endedAt − enabledAt = resourceWait + offHoursWait + processing` (R-CAL-7/8). *(prueba de la identidad: LILA-028)* |
-| `cost` | number | `run.currency` | Costo atribuido a esta fila: `fixedCost` del elemento (si esta fila lo completa) más, si tiene `resourceId`, el costo del recurso por su tiempo abierto efectivamente ocupado; las pausas de calendario no generan costo (R-CAL-6, R-COST-3). |
+| `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` para `queued`. |
+| `endedAt` | number \| null | segundos desde `run.start` | Instante en que terminó normalmente; solo existe con `status = "completed"`. |
+| `observedUntil` | number | segundos desde `run.start` | `endedAt` al completar; instante de `terminate`, cancelación o parada para lifecycle parcial. |
+| `resourceWait` | number | segundos | Porción de la espera atribuible a falta de recurso; si `startedAt = null`, se observa hasta `observedUntil`. No incluye tiempo de calendario cerrado. |
+| `offHoursWait` | number | segundos | Tiempo cerrado en `[enabledAt, endedAt ?? observedUntil]`. Para completadas cumple `endedAt − enabledAt = resourceWait + offHoursWait + processing` (R-CAL-7/8). *(prueba de la identidad: LILA-028)* |
+| `elementCost` | number | `run.currency` | Fijo del elemento, cargado una sola vez al completar: primera asignación según el escenario o sentinel; 0 en filas adicionales/parciales. |
+| `resourceCost` | number | `run.currency` | Fijo y costo por tiempo ocupado de esta asignación; 0 si nunca arrancó. |
+| `cost` | number | `run.currency` | Identidad exacta `elementCost + resourceCost`. |
+
+Una tarea con dos pools AND ya iniciada produce dos filas con el mismo `activityInstanceId`; si
+sigue esperando al corte produce una sentinel, no requisitos ficticios. No existe una fila con
+`resources[]`. Esto conserva CSV plano y permite reconstruir ocupación/costos. `fixedCostTotal` se
+obtiene de `Σ elementCost`: el fijo vive solo en la fila canónica de menor `allocationIndex`
+efectivamente emitida. `process.totalCost = Σ cost`; sumar `cost` para el fijo del
+elemento duplicaría recursos y está prohibido. *(decisión: ADR-025; prueba: LILA-033, LILA-036,
+LILA-037)*
+
+`started`, `completed`, `processing`, `resourceWait`, `offHoursWait` y `waitTime` se agregan una
+vez por `(replication, activityInstanceId)`; costos y ocupación de pool se agregan por fila.
 
 Al exportar (CSV de la CLI, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` se pueden derivar además a timestamps ISO 8601 absolutos (`run.start + segundos`); el CSV en bruto para procesamiento programático conserva los segundos relativos. El event log, con un mapeo trivial de columnas, es compatible con XES (IEEE 1849) y OCEL 2.0 (ver sección 6 del documento de estructura).
 
@@ -208,7 +228,7 @@ tiene eventos. La fracción es estrictamente monótona y una corrida completa te
 cancelada puede terminar antes. No se instala ningún hook por evento cuando el callback está
 ausente. *(prueba: LILA-029)*
 
-**`warmup`**: `scenario.run.warmup` (segundos desde `run.start`) excluye de **todas** las estadísticas de `process` (y, por consistencia, de `elements`) los casos que se **iniciaron** antes de que terminara el warmup — sus eventos igual se emiten en el event log (no se descartan datos), pero no participan en `started`/`completed`/`cycleTime`/`waitTime`/`throughputPerHour`/costos. `throughputPerHour` usa como denominador la duración efectiva de la corrida excluyendo el propio warmup.
+**`warmup`**: `scenario.run.warmup` (segundos desde `run.start`) excluye de **todas** las estadísticas los casos que se **iniciaron** antes de que terminara el warmup. Esos casos siguen ocupando pools, haciendo cola y alterando cuándo arrancan los casos medidos; sus filas igual se emiten, pero la cohorte queda fuera de `process`, `elements`, `resources`, costos y de las integrales de `queueLength`/utilización. Las integrales de cohortes medidas se recortan además a `[warmup, t_stop]`. `throughputPerHour` usa como denominador la duración efectiva de la corrida excluyendo el propio warmup. *(prueba: LILA-027, LILA-033, LILA-036)*
 
 ---
 
