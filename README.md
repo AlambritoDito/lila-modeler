@@ -3,15 +3,16 @@
 Modelador y simulador de procesos BPMN, open source (Apache-2.0), con paridad de funciones con
 Bizagi Modeler y su simulador de cuatro niveles.
 
-Estado: en construcción. Hoy existe el esqueleto del monorepo; el motor llega en M1.
+Estado: en construcción. El motor de niveles 1–2 y los comandos `validate` y `run` ya son
+ejecutables; recursos y calendarios llegan en M2/M3.
 
 ## Qué es
 
 - Un **motor de simulación de eventos discretos** (`packages/engine`) escrito en TypeScript, sin
   dependencias en su núcleo, que corre igual en la CLI, en un Web Worker del navegador y detrás de
   un servidor MCP.
-- Una **CLI** (`npx lila validate | run | compare`) para validar un `.bpmn`, simular un escenario y
-  comparar AS-IS contra TO-BE.
+- Una **CLI** (`npx lila validate | run`) para validar un `.bpmn` y simular un escenario. La
+  comparación AS-IS contra TO-BE llega en M3.
 - Más adelante, una **app web y de escritorio** para modelar y ver resultados.
 
 Los contratos —el IR del proceso, el formato de escenario y el de resultados— están documentados en
@@ -24,6 +25,26 @@ npm install
 npm test
 npm run build
 ```
+
+Validar un modelo:
+
+```bash
+npx lila validate examples/bizagi-levels/level-2/model.bpmn
+```
+
+Simular un escenario de nivel 1–2, mostrar las tablas Bizagi y escribir JSON + cinco CSV:
+
+```bash
+npx lila run \
+  examples/bizagi-levels/level-2/model.bpmn \
+  examples/bizagi-levels/level-2/scenario.json \
+  --seed 42 --replications 3 \
+  --json out/result.json --csv out/csv
+```
+
+`scenario.model` y `extends` se resuelven respecto al archivo que los declara. El modelo pasado
+como primer argumento debe coincidir con `scenario.model`. En M1, un escenario con `resources` o
+`calendars` se rechaza explícitamente en vez de simularlo como si esos parámetros no existieran.
 
 ## Documentación
 
