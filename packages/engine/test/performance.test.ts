@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import {
   BENCHMARK_CASES,
   BENCHMARK_TASKS,
+  CI_REGRESSION_MS,
   JIT_WARMUP_CASES,
   JIT_WARMUP_RUNS,
   runLinearBenchmark,
@@ -16,13 +17,20 @@ test(
   () => {
     const result = runLinearBenchmark();
 
+    // Literales deliberados: importar solo las constantes permitiría reducir el workload y
+    // mantener la prueba verde por accidente.
+    expect(BENCHMARK_CASES).toBe(100_000);
+    expect(BENCHMARK_TASKS).toBe(5);
+    expect(CI_REGRESSION_MS).toBe(3_000);
     expect(result).toMatchObject({
-      caseCount: BENCHMARK_CASES,
-      taskCount: BENCHMARK_TASKS,
+      caseCount: 100_000,
+      taskCount: 5,
       warmupCases: JIT_WARMUP_CASES,
       warmupRuns: JIT_WARMUP_RUNS,
+      completedCases: 100_000,
+      completedTaskExecutions: 500_000,
     });
-    expect(result.elapsedMs).toBeLessThan(3_000);
+    expect(result.elapsedMs).toBeLessThan(CI_REGRESSION_MS);
   },
   10_000,
 );

@@ -11,6 +11,8 @@ export const BENCHMARK_CASES = 100_000;
 export const BENCHMARK_TASKS = 5;
 export const JIT_WARMUP_CASES = 2_000;
 export const JIT_WARMUP_RUNS = 3;
+export const LOCAL_TARGET_MS = 1_000;
+export const CI_REGRESSION_MS = 3_000;
 
 export const LINEAR_IR: ProcessIR = {
   id: 'Process_Performance',
@@ -77,7 +79,12 @@ function linearScenario(caseCount: number): SimScenario {
   };
 }
 
-function runAndVerify(caseCount: number): void {
+interface VerifiedWorkload {
+  completedCases: number;
+  completedTaskExecutions: number;
+}
+
+function runAndVerify(caseCount: number): VerifiedWorkload {
   const result = simulate(LINEAR_IR, linearScenario(caseCount), { log: false });
   if (result.process.started !== caseCount || result.process.completed !== caseCount) {
     throw new Error(
@@ -85,12 +92,40 @@ function runAndVerify(caseCount: number): void {
         `iniciados=${result.process.started}, completados=${result.process.completed}.`,
     );
   }
+  let completedTaskExecutions = 0;
   for (let task = 1; task <= BENCHMARK_TASKS; task++) {
-    const completed = result.elements[`Task_${task}`]?.completed;
-    if (completed !== caseCount) {
-      throw new Error(`E-BENCH-INCOMPLETO: Task_${task} completó ${String(completed)} de ${caseCount} casos.`);
+    const id = `Task_${task}`;
+    const metrics = result.elements[id];
+    if (metrics?.started !== caseCount || metrics.completed !== caseCount) {
+      throw new Error(
+        `E-BENCH-INCOMPLETO: ${id} inició ${String(metrics?.started)} y completó ` +
+          `${String(metrics?.completed)} de ${caseCount} casos.`,
+      );
+    }
+    if (
+      metrics.processing.min !== 1 ||
+      metrics.processing.max !== 1 ||
+      metrics.processing.mean !== 1 ||
+      metrics.processing.total !== caseCount
+    ) {
+      throw new Error(`E-BENCH-TRABAJO: ${id} no ejecutó ${caseCount} segundos de processing.`);
+    }
+    completedTaskExecutions += metrics.completed;
+  }
+  for (const [flowId, metrics] of Object.entries(result.flows)) {
+    if (metrics.count !== caseCount) {
+      throw new Error(`E-BENCH-TRABAJO: ${flowId} recibió ${metrics.count} de ${caseCount} tokens.`);
     }
   }
+  if (
+    result.process.cycleTime.min !== BENCHMARK_TASKS ||
+    result.process.cycleTime.max !== BENCHMARK_TASKS ||
+    result.process.cycleTime.mean !== BENCHMARK_TASKS
+  ) {
+    throw new Error(`E-BENCH-TRABAJO: el ciclo lineal no duró exactamente ${BENCHMARK_TASKS} segundos.`);
+  }
+
+  return { completedCases: result.process.completed, completedTaskExecutions };
 }
 
 export interface LinearBenchmarkOptions {
@@ -104,6 +139,8 @@ export interface LinearBenchmarkResult {
   taskCount: number;
   warmupCases: number;
   warmupRuns: number;
+  completedCases: number;
+  completedTaskExecutions: number;
   elapsedMs: number;
 }
 
@@ -113,11 +150,35 @@ export function runLinearBenchmark(options: LinearBenchmarkOptions = {}): Linear
   const warmupCases = options.warmupCases ?? JIT_WARMUP_CASES;
   const warmupRuns = options.warmupRuns ?? JIT_WARMUP_RUNS;
 
+  if (!Number.isInteger(caseCount) || caseCount < 1) {
+    throw new RangeError('E-BENCH-CASOS: caseCount debe ser un entero >= 1.');
+  }
+  if (!Number.isInteger(warmupCases) || warmupCases < 1) {
+    throw new RangeError('E-BENCH-CASOS: warmupCases debe ser un entero >= 1.');
+  }
+  if (!Number.isInteger(warmupRuns) || warmupRuns < 0) {
+    throw new RangeError('E-BENCH-WARMUP: warmupRuns debe ser un entero >= 0.');
+  }
+
   for (let run = 0; run < warmupRuns; run++) runAndVerify(warmupCases);
 
   const startedAt = performance.now();
-  runAndVerify(caseCount);
-  const elapsedMs = performance.now() - startedAt;
+  if (!Number.isFinite(startedAt) || startedAt < 0) {
+    throw new Error('E-BENCH-RELOJ: performance.now() devolvió un inicio inválido.');
+  }
+  const verified = runAndVerify(caseCount);
+  const endedAt = performance.now();
+  if (!Number.isFinite(endedAt) || endedAt < startedAt) {
+    throw new Error('E-BENCH-RELOJ: performance.now() no fue finito y monótono.');
+  }
+  const elapsedMs = endedAt - startedAt;
 
-  return { caseCount, taskCount: BENCHMARK_TASKS, warmupCases, warmupRuns, elapsedMs };
+  return {
+    caseCount,
+    taskCount: BENCHMARK_TASKS,
+    warmupCases,
+    warmupRuns,
+    ...verified,
+    elapsedMs,
+  };
 }
