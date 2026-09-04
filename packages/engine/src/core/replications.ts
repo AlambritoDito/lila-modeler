@@ -142,9 +142,17 @@ export function numericKpis(result: RunResult): Record<string, number> {
     for (const [key, child] of Object.entries(value)) visit(child, path === '' ? key : `${path}.${key}`);
   };
 
-  visit(result.elements, 'elements');
-  visit(result.flows, 'flows');
-  visit(result.resources, 'resources');
+  // `.` es válido en un NCName BPMN, por lo que los ids dinámicos deben escapar el
+  // separador de los paths. La barra inversa no es un NameChar XML; aun así se escapa
+  // primero para que la transformación siga siendo inequívoca ante una entrada no validada.
+  const escapeId = (id: string): string => id.replaceAll('\\', '\\\\').replaceAll('.', '\\.');
+  const visitById = (values: Readonly<Record<string, unknown>>, collection: string): void => {
+    for (const [id, value] of Object.entries(values)) visit(value, `${collection}.${escapeId(id)}`);
+  };
+
+  visitById(result.elements, 'elements');
+  visitById(result.flows, 'flows');
+  visitById(result.resources, 'resources');
   visit(result.process, 'process');
   return kpis;
 }

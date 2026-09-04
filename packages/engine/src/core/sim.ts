@@ -82,6 +82,8 @@ export interface ReplicationRun {
   replication: number;
   /** Instante en que paró la corrida: `run.duration` o el vaciado del heap (R-ARR-3). */
   stoppedAt: number;
+  /** Segundos que pueden alimentar estadísticas: `max(0, stoppedAt - warmup)` (R-ARR-7). */
+  statisticsDuration: number;
   /**
    * Casos incluidos en estadísticas (inicio >= warmup), en orden de llegada. `caseId`
    * conserva el id real del log y por eso puede empezar después de 1 (R-ARR-7, R-TOK-2).
@@ -533,6 +535,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   return {
     replication,
     stoppedAt,
+    statisticsDuration: Math.max(0, stoppedAt - warmup),
     cases: caseStates
       .filter((state) => state.startedAt >= warmup)
       .map((state) => ({
