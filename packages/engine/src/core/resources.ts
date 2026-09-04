@@ -35,7 +35,6 @@ interface QueuedRequest {
 }
 
 interface RequestClass {
-  readonly key: string;
   readonly waiters: Heap<QueuedRequest>;
   version: number;
 }
@@ -131,7 +130,7 @@ export class ResourceManager {
     const classKey = this.#classKey(request);
     let requestClass = this.#classes.get(classKey);
     if (requestClass === undefined) {
-      requestClass = { key: classKey, waiters: new Heap(), version: 0 };
+      requestClass = { waiters: new Heap(), version: 0 };
       this.#classes.set(classKey, requestClass);
       for (const requirement of request.requirements) this.#pools.get(requirement.poolId)!.classes.add(classKey);
     }
@@ -212,9 +211,17 @@ export class ResourceManager {
     }
   }
 
+  /**
+   * Firma de clase (ADR-026). Single-pool ignora `quantity` para conservar FIFO estricto por pool;
+   * la firma AND se ordena por `(poolId, quantity)` para que dos tareas que declaran los mismos
+   * pools en distinto orden compartan una única cola y no dupliquen clases equivalentes.
+   */
   #classKey(request: ResourceRequest): string {
     if (request.requirements.length === 1) return `single:${JSON.stringify(request.requirements[0]!.poolId)}`;
-    return `and:${JSON.stringify(request.requirements)}`;
+    const signature = request.requirements
+      .map((requirement) => [requirement.poolId, requirement.quantity] as const)
+      .sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : left[1] - right[1]));
+    return `and:${JSON.stringify(signature)}`;
   }
 
   #free(allocation: ResourceAllocation): void {

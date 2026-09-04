@@ -9,9 +9,9 @@
  * `performance.now` (R-DET-5). Todos los tiempos son segundos desde `run.start`, que vale 0
  * (R-DURA-1, R-TOK-1). El `id` BPMN es la única clave (R-DURA-4).
  *
- * LILA-033 añade pools simples, cantidad y FIFO. Las selecciones multi-pool AND/OR se mantienen
- * fuera de este módulo hasta LILA-034/035; timers y tareas sin asignación conservan capacidad
- * infinita (R-REC-10).
+ * LILA-033 añade pools simples, cantidad y FIFO; LILA-034, la adquisición AND multi-pool
+ * atómica. La selección OR multi-pool sigue en fail-fast hasta LILA-035; timers y tareas sin
+ * asignación conservan capacidad infinita (R-REC-10).
  *
  * Salida: un resultado intermedio (contadores por elemento y por flujo, tiempos por caso y
  * filas del event log). Las métricas formales son LILA-028 y la función pública `simulate()`
@@ -126,14 +126,47 @@ export interface ReplicationOptions {
 }
 
 /**
- * Preflight de capacidades de M2 que debe ocurrir antes de cualquier callback público.
+ * Preflight de recursos que debe ocurrir antes de cualquier callback público: una asignación
+ * imposible (capacity inválida, `ref` colgante, pool repetido o `quantity > capacity`) nunca
+ * puede emitir filas ni progreso antes de fallar, y el mensaje cita el `id` BPMN de la tarea,
+ * no el id interno de la instancia (R-REC-2, R-DURA-4). `validateScenario` reporta los mismos
+ * códigos fuera de `core/`; este guard los repite porque `core/` no importa el validador zod.
  * Se exporta solo desde el módulo interno para que `simulate` y `runReplication` compartan
  * exactamente el mismo guard; no forma parte del barrel de `@lila/engine`.
  */
 export function assertSupportedResourceScenario(scenario: SimScenario): void {
+  const pools = scenario.resources ?? {};
+  for (const [poolId, pool] of Object.entries(pools)) {
+    if (!Number.isInteger(pool.capacity) || pool.capacity < 1) {
+      throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+    }
+  }
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
-    if ((element.resources?.length ?? 0) > 1 && element.selection === 'or') {
+    const uses = element.resources ?? [];
+    if (uses.length > 1 && element.selection === 'or') {
       throw new Error(`E-REC-OR-PENDIENTE: ${elementId}: selección OR multi-pool requiere LILA-035.`);
+    }
+    const seen = new Set<string>();
+    for (const use of uses) {
+      const pool = pools[use.ref];
+      if (pool === undefined) {
+        throw new Error(`E-REC-DESCONOCIDO: ${elementId}: el pool ${use.ref} no existe.`);
+      }
+      if (seen.has(use.ref)) {
+        throw new Error(`E-REC-DUPLICADO: ${elementId}: el pool ${use.ref} aparece más de una vez.`);
+      }
+      seen.add(use.ref);
+      const quantity = use.quantity ?? 1;
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new RangeError(
+          `E-REC-CANTIDAD: ${elementId}: quantity de ${use.ref} debe ser un entero mayor o igual que 1.`,
+        );
+      }
+      if (quantity > pool.capacity) {
+        throw new RangeError(
+          `E-REC-CANTIDAD: ${elementId}: quantity ${quantity} excede capacity ${pool.capacity} de ${use.ref}.`,
+        );
+      }
     }
   }
 }
@@ -569,8 +602,8 @@ export function runReplication(
         }
         const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
         const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
-        // LILA-033 implementa exactamente un pool. Rechazar explícitamente multi-pool evita
-        // simular capacidad infinita y cobrar recursos que nunca se reservaron (#34/#35).
+        // R-REC-4: los requisitos conservan el orden declarado en el escenario; la adquisición
+        // AND es atómica en `ResourceManager`, así que aquí no hay retención parcial que deshacer.
         const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
           poolId: use.ref,
           quantity: use.quantity ?? 1,
