@@ -169,7 +169,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     // Solo el modo retenido conserva las filas más allá de la iteración; en los otros dos el
     // `ReplicationRun` entero queda libre al cerrarla, así que el pico es el de una replicación.
     if (log !== undefined) for (const row of run.rows) log.push(row);
-    const result = aggregateReplication(ir, run);
+    const result = aggregateReplication(ir, run, scenario);
 
     if (run.cancelled === true) {
       partial = result;

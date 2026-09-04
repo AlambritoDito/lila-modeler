@@ -1,5 +1,5 @@
 /**
- * Agregación de métricas de una replicación (LILA-028).
+ * Agregación de métricas de una replicación (LILA-028, nivel 3 en LILA-036).
  *
  * Este módulo transforma la salida intermedia del DES en el contrato `RunResult`. No ejecuta
  * simulaciones ni mantiene estado global: una misma `ReplicationRun` siempre produce el mismo
@@ -10,8 +10,17 @@
  */
 
 import type { ProcessIR } from './ir.js';
-import type { ElementMetrics, EventLogRow, Percentiles, RunResult, Stat, StatSd } from './result.js';
-import type { ReplicationRun } from './sim.js';
+import type {
+  BottleneckEntry,
+  ElementMetrics,
+  EventLogRow,
+  Percentiles,
+  ResourceMetrics,
+  RunResult,
+  Stat,
+  StatSd,
+} from './result.js';
+import type { ReplicationRun, SimScenario } from './sim.js';
 
 const EMPTY_STAT: Readonly<Stat> = { min: 0, max: 0, mean: 0, total: 0 };
 const EMPTY_STAT_SD: Readonly<StatSd> = { min: 0, max: 0, mean: 0, sd: 0, total: 0 };
@@ -47,11 +56,16 @@ function stat(values: readonly number[]): Stat {
   return { min, max, mean: total / values.length, total };
 }
 
-/** Estadísticas con desviación estándar muestral. */
+/**
+ * Estadísticas con desviación estándar muestral. Las claves se escriben en el orden de la
+ * interfaz `StatSd`, el mismo de `EMPTY_STAT_SD`: `JSON.stringify` de un elemento sin
+ * observaciones y de uno con observaciones tiene que producir el mismo orden de claves, o los
+ * goldens byte a byte de LILA-030/LILA-039 dependerían de si el elemento se ejecutó.
+ */
 function statSd(values: readonly number[]): StatSd {
   if (values.length === 0) return { ...EMPTY_STAT_SD };
   const base = stat(values);
-  return { ...base, sd: sampleSd(values, base.mean) };
+  return { min: base.min, max: base.max, mean: base.mean, sd: sampleSd(values, base.mean), total: base.total };
 }
 
 /**
@@ -97,14 +111,73 @@ function emptyElementMetrics(started: number, completed: number): ElementMetrics
   };
 }
 
+/** Un intervalo de espera observada `[from, to)`; `to <= from` no llega hasta aquí. */
+interface Interval {
+  from: number;
+  to: number;
+}
+
+/**
+ * Longitud de cola ponderada por tiempo (LILA-036). `mean` es la integral de la longitud
+ * instantánea sobre la ventana estadística dividida entre su duración; `max` es el máximo
+ * instantáneo. Los intervalos son semiabiertos `[from, to)`, así que una instancia que arranca
+ * en el mismo instante en que otra sale de la cola no las cuenta juntas y una espera de
+ * duración cero nunca llega a formar cola (docs/RESULTS_FORMAT.md § 2).
+ */
+function queueLength(intervals: readonly Interval[], windowDuration: number): { mean: number; max: number } {
+  if (intervals.length === 0) return { mean: 0, max: 0 };
+  // ponytail: barrido offline O(n log n) sobre los intervalos ya materializados, en vez de
+  // acumular la integral durante la simulación. Techo: memoria proporcional al número de
+  // instancias del elemento — el mismo orden que este módulo ya paga por `run.rows`. Camino de
+  // mejora, si LILA-037 llega a corridas que no caben en memoria: acumular en el kernel DES.
+  // `-1` antes que `+1` con el mismo `t`: el que sale de la cola no coexiste con el que entra.
+  const events: { t: number; delta: number }[] = [];
+  for (const interval of intervals) {
+    events.push({ t: interval.from, delta: 1 });
+    events.push({ t: interval.to, delta: -1 });
+  }
+  events.sort((left, right) => left.t - right.t || left.delta - right.delta);
+
+  let integral = 0;
+  let max = 0;
+  let open = 0;
+  let previous = events[0]!.t;
+  for (const event of events) {
+    if (event.t > previous) {
+      integral += open * (event.t - previous);
+      previous = event.t;
+    }
+    open += event.delta;
+    if (open > max) max = open;
+  }
+  return { mean: windowDuration > 0 ? integral / windowDuration : 0, max };
+}
+
 /**
  * Convierte una replicación del kernel DES en un `RunResult` completo.
  *
- * LILA-028 posee las métricas de elemento, flujo y proceso. Los campos de recursos, colas y
- * cuellos de botella conservan su valor neutro hasta LILA-036. La agregación entre replicaciones
- * se hace después, en `replications.ts` (LILA-027).
+ * LILA-028 posee las métricas de elemento, flujo y proceso; LILA-036 añade las de nivel 3
+ * (colas, recursos y cuellos de botella). La agregación entre replicaciones se hace después,
+ * en `replications.ts` (LILA-027).
+ *
+ * Regla de lifecycle parcial, fijada por LILA-036 y documentada en `docs/RESULTS_FORMAT.md`:
+ * las estadísticas **por instancia** (`processing`, `resourceWait`, `offHoursWait` y
+ * `process.waitTime`) agregan solo actividades con `status = "completed"`, porque la espera de
+ * una fila `terminated`/`inFlight` es una observación censurada en `observedUntil` y sesgaría la
+ * media a la baja. Las **integrales de estado y los costos** (`queueLength`, `busyTime`,
+ * `utilization`, costos de recurso y `process.totalCost`) sí incluyen el lifecycle parcial:
+ * miden ocupación realmente observada dentro de la ventana, y R-COST-4 exige que el costo ya
+ * incurrido por un caso en vuelo no desaparezca.
+ *
+ * `scenario` solo aporta las definiciones de pool (capacidad y costos); sin `resources` el
+ * resultado conserva exactamente la forma de M1 (`resources: {}`, `bottlenecks: []`) para no
+ * romper el golden de degradación (R-DEG-1, LILA-039).
  */
-export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunResult {
+export function aggregateReplication(
+  ir: ProcessIR,
+  run: ReplicationRun,
+  scenario: SimScenario = { run: {} },
+): RunResult {
   // Precondición de frontera con LILA-027: el productor entrega `cases`, `elements` y `flows`
   // pertenecientes a una misma ventana estadística. Puede conservar en `rows` eventos previos al
   // warmup para el event log; filtrar por los caseId recibidos impide que contaminen el agregado.
@@ -119,6 +192,17 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
   const waitByCase = new Map<string, number>();
   const costByCase = new Map<string, number>();
   const rowsByActivity = new Map<string, EventLogRow[]>();
+  const queueByElement = new Map<string, Interval[]>();
+  const poolsByElement = new Map<string, Set<string>>();
+  const busyByPool = new Map<string, number>();
+  const usesByPool = new Map<string, number>();
+
+  // R-ARR-7: la ventana estadística es `[warmup, stoppedAt]`. Se deriva del propio
+  // `ReplicationRun` para que la integral no dependa de que el escenario recibido aquí sea el
+  // mismo con el que se corrió la replicación.
+  const windowEnd = run.stoppedAt;
+  const windowDuration = Math.max(0, run.statisticsDuration);
+  const windowStart = windowEnd - windowDuration;
 
   for (const row of includedRows) {
     const activityRows = rowsByActivity.get(row.activityInstanceId) ?? [];
@@ -130,12 +214,42 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
       (fixedCostByElement.get(row.elementId) ?? 0) + row.elementCost,
     );
     costByCase.set(row.caseId, (costByCase.get(row.caseId) ?? 0) + row.cost);
+
+    // Ocupación y usos se agregan **por fila** (ADR-025): una tarea AND con dos pools ocupa
+    // los dos, y una fila con `resourceId = null` (sentinel) o que nunca arrancó no ocupa nada.
+    // Cada fila trae el pool efectivamente usado, así que la selección OR de LILA-035 entra por
+    // aquí sin cambios.
+    if (row.resourceId === null) continue;
+    const pools = poolsByElement.get(row.elementId) ?? new Set<string>();
+    pools.add(row.resourceId);
+    poolsByElement.set(row.elementId, pools);
+    if (row.startedAt === null) continue;
+    const quantity = row.resourceQuantity ?? 1;
+    const occupiedFrom = Math.max(row.startedAt, windowStart);
+    const occupiedTo = Math.min(row.endedAt ?? row.observedUntil, windowEnd);
+    busyByPool.set(
+      row.resourceId,
+      (busyByPool.get(row.resourceId) ?? 0) + quantity * Math.max(0, occupiedTo - occupiedFrom),
+    );
+    usesByPool.set(row.resourceId, (usesByPool.get(row.resourceId) ?? 0) + quantity);
   }
 
   // Una actividad AND tendrá varias filas: processing/esperas pertenecen a la instancia y se
   // agregan una sola vez; costos por pool sí se sumaron fila por fila arriba (ADR-025).
   for (const activityRows of rowsByActivity.values()) {
     const row = activityRows[0]!;
+
+    // La cola pertenece a la instancia, no a la fila: todas las filas de una AND comparten
+    // `enabledAt`/`startedAt`. Una instancia que seguía esperando al corte sí estuvo en la cola
+    // hasta `observedUntil`, así que su intervalo observado entra en la integral.
+    const waitFrom = Math.max(row.enabledAt, windowStart);
+    const waitTo = Math.min(row.startedAt ?? row.observedUntil, windowEnd);
+    if (waitTo > waitFrom) {
+      const intervals = queueByElement.get(row.elementId) ?? [];
+      intervals.push({ from: waitFrom, to: waitTo });
+      queueByElement.set(row.elementId, intervals);
+    }
+
     if (row.status !== 'completed' || row.startedAt === null || row.endedAt === null) continue;
     // R-CAL-8: esta identidad sigue siendo correcta cuando una tarea se pausa durante el
     // cierre de calendario. En M1 las esperas valen cero y se reduce a endedAt - startedAt.
@@ -162,9 +276,51 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
     metrics.processing = stat(processingByElement.get(nodeId) ?? []);
     metrics.resourceWait = statSd(resourceWaitByElement.get(nodeId) ?? []);
     metrics.offHoursWait = statSd(offHoursWaitByElement.get(nodeId) ?? []);
+    metrics.queueLength = queueLength(queueByElement.get(nodeId) ?? [], windowDuration);
     metrics.fixedCostTotal = fixedCostByElement.get(nodeId) ?? 0;
     elements[nodeId] = metrics;
   }
+
+  // R-COST-2 y R-CAL-9. Todo pool declarado aparece aunque no se haya usado, para que los mapas
+  // de KPI de todas las replicaciones tengan el mismo conjunto de claves (LILA-027). Sin
+  // `resources` en el escenario el mapa queda `{}`, igual que en M1 (R-DEG-1).
+  const resources: Record<string, ResourceMetrics> = {};
+  // ponytail: el mapa se construye solo desde los pools declarados; una `ref` a un pool
+  // inexistente no llega hasta aquí porque `validateScenario` la rechaza con
+  // `E-REC-DESCONOCIDO`. Techo: un pool que apareciese en el log sin estar declarado quedaría
+  // fuera del mapa (su ocupación sí seguiría en las filas del log).
+  for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
+    const busyTime = busyByPool.get(poolId) ?? 0;
+    const available = pool.capacity * windowDuration;
+    const fixedCost = (pool.fixedCost ?? 0) * (usesByPool.get(poolId) ?? 0);
+    const unitCost = ((pool.costPerHour ?? 0) * busyTime) / 3600;
+    resources[poolId] = {
+      utilization: available > 0 ? busyTime / available : 0,
+      busyTime,
+      fixedCost,
+      unitCost,
+      totalCost: fixedCost + unitCost,
+    };
+  }
+
+  // Ranking de cuellos de botella (sección 6 de RESULTS_FORMAT.md): `resourceWait.total`
+  // descendente, desempate por la mayor utilización entre los pools que el elemento usó de
+  // hecho — leídos del log, no del escenario, así que AND y OR se ordenan igual.
+  const bottlenecks: BottleneckEntry[] = Object.entries(elements)
+    .filter(([, metrics]) => metrics.resourceWait.total > 0)
+    .map(([elementId, metrics]) => {
+      let utilization = 0;
+      for (const poolId of poolsByElement.get(elementId) ?? []) {
+        utilization = Math.max(utilization, resources[poolId]?.utilization ?? 0);
+      }
+      return { elementId, resourceWaitTotal: metrics.resourceWait.total, utilization };
+    })
+    .sort(
+      (left, right) =>
+        right.resourceWaitTotal - left.resourceWaitTotal ||
+        right.utilization - left.utilization ||
+        (left.elementId < right.elementId ? -1 : left.elementId > right.elementId ? 1 : 0),
+    );
 
   const flows: RunResult['flows'] = {};
   for (const flowId of Object.keys(ir.flows)) flows[flowId] = { count: run.flows[flowId] ?? 0 };
@@ -179,7 +335,7 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
   return {
     elements,
     flows,
-    resources: {},
+    resources,
     process: {
       started: run.cases.length,
       completed: completedCases.length,
@@ -193,7 +349,7 @@ export function aggregateReplication(ir: ProcessIR, run: ReplicationRun): RunRes
           : 0,
       totalCost,
     },
-    bottlenecks: [],
+    bottlenecks,
     warnings: [...run.warnings],
   };
 }

@@ -42,15 +42,15 @@
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "offHoursWait": {
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "queueLength": {
         "mean": 0,
@@ -100,15 +100,15 @@
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "offHoursWait": {
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "queueLength": {
         "mean": 0,
@@ -129,15 +129,15 @@
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "offHoursWait": {
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "queueLength": {
         "mean": 0,
@@ -187,15 +187,15 @@
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "offHoursWait": {
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "queueLength": {
         "mean": 0,
@@ -245,15 +245,15 @@
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "offHoursWait": {
         "min": 0,
         "max": 0,
         "mean": 0,
-        "total": 0,
-        "sd": 0
+        "sd": 0,
+        "total": 0
       },
       "queueLength": {
         "mean": 0,
@@ -613,7 +613,7 @@
           0
         ]
       },
-      "elements.Task_TomarPedido.resourceWait.total": {
+      "elements.Task_TomarPedido.resourceWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -621,7 +621,7 @@
           0
         ]
       },
-      "elements.Task_TomarPedido.resourceWait.sd": {
+      "elements.Task_TomarPedido.resourceWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -653,7 +653,7 @@
           0
         ]
       },
-      "elements.Task_TomarPedido.offHoursWait.total": {
+      "elements.Task_TomarPedido.offHoursWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -661,7 +661,7 @@
           0
         ]
       },
-      "elements.Task_TomarPedido.offHoursWait.sd": {
+      "elements.Task_TomarPedido.offHoursWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -917,7 +917,7 @@
           0
         ]
       },
-      "elements.Task_Preparar.resourceWait.total": {
+      "elements.Task_Preparar.resourceWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -925,7 +925,7 @@
           0
         ]
       },
-      "elements.Task_Preparar.resourceWait.sd": {
+      "elements.Task_Preparar.resourceWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -957,7 +957,7 @@
           0
         ]
       },
-      "elements.Task_Preparar.offHoursWait.total": {
+      "elements.Task_Preparar.offHoursWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -965,7 +965,7 @@
           0
         ]
       },
-      "elements.Task_Preparar.offHoursWait.sd": {
+      "elements.Task_Preparar.offHoursWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1069,7 +1069,7 @@
           0
         ]
       },
-      "elements.Task_Empacar.resourceWait.total": {
+      "elements.Task_Empacar.resourceWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1077,7 +1077,7 @@
           0
         ]
       },
-      "elements.Task_Empacar.resourceWait.sd": {
+      "elements.Task_Empacar.resourceWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1109,7 +1109,7 @@
           0
         ]
       },
-      "elements.Task_Empacar.offHoursWait.total": {
+      "elements.Task_Empacar.offHoursWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1117,7 +1117,7 @@
           0
         ]
       },
-      "elements.Task_Empacar.offHoursWait.sd": {
+      "elements.Task_Empacar.offHoursWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1373,7 +1373,7 @@
           0
         ]
       },
-      "elements.Task_Revisar.resourceWait.total": {
+      "elements.Task_Revisar.resourceWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1381,7 +1381,7 @@
           0
         ]
       },
-      "elements.Task_Revisar.resourceWait.sd": {
+      "elements.Task_Revisar.resourceWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1413,7 +1413,7 @@
           0
         ]
       },
-      "elements.Task_Revisar.offHoursWait.total": {
+      "elements.Task_Revisar.offHoursWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1421,7 +1421,7 @@
           0
         ]
       },
-      "elements.Task_Revisar.offHoursWait.sd": {
+      "elements.Task_Revisar.offHoursWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1677,7 +1677,7 @@
           0
         ]
       },
-      "elements.Timer_Reposo.resourceWait.total": {
+      "elements.Timer_Reposo.resourceWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1685,7 +1685,7 @@
           0
         ]
       },
-      "elements.Timer_Reposo.resourceWait.sd": {
+      "elements.Timer_Reposo.resourceWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1717,7 +1717,7 @@
           0
         ]
       },
-      "elements.Timer_Reposo.offHoursWait.total": {
+      "elements.Timer_Reposo.offHoursWait.sd": {
         "mean": 0,
         "sd": 0,
         "ci95": [
@@ -1725,7 +1725,7 @@
           0
         ]
       },
-      "elements.Timer_Reposo.offHoursWait.sd": {
+      "elements.Timer_Reposo.offHoursWait.total": {
         "mean": 0,
         "sd": 0,
         "ci95": [
