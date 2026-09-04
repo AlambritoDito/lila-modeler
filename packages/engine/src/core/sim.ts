@@ -125,6 +125,19 @@ export interface ReplicationOptions {
   log?: boolean | undefined;
 }
 
+/**
+ * Preflight de capacidades de M2 que debe ocurrir antes de cualquier callback público.
+ * Se exporta solo desde el módulo interno para que `simulate` y `runReplication` compartan
+ * exactamente el mismo guard; no forma parte del barrel de `@lila/engine`.
+ */
+export function assertSupportedResourceScenario(scenario: SimScenario): void {
+  for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
+    if ((element.resources?.length ?? 0) > 1) {
+      throw new Error(`E-REC-MULTIPOOL-PENDIENTE: ${elementId}: múltiples pools requieren LILA-034/035.`);
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Eventos del scheduler
  * ------------------------------------------------------------------ */
@@ -214,11 +227,7 @@ export function runReplication(
 
   // La API core no depende del validador zod. Mantiene el mismo fail-fast para que un escenario
   // multi-pool no emita callbacks ni avance tiempo antes de fallar (#34/#35).
-  for (const [elementId, element] of Object.entries(spec)) {
-    if ((element.resources?.length ?? 0) > 1) {
-      throw new Error(`E-REC-MULTIPOOL-PENDIENTE: ${elementId}: múltiples pools requieren LILA-034/035.`);
-    }
-  }
+  assertSupportedResourceScenario(scenario);
 
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).
   const rngs = new Map<string, Rng>();

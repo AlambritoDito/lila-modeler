@@ -9,7 +9,12 @@ import type { ProcessIR } from './ir.js';
 import { aggregateReplication } from './metrics.js';
 import { summarizeRunResults } from './replications.js';
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
-import { runReplication, type AbortSignalLike, type SimScenario } from './sim.js';
+import {
+  assertSupportedResourceScenario,
+  runReplication,
+  type AbortSignalLike,
+  type SimScenario,
+} from './sim.js';
 
 export interface SimulationProgress {
   /** Replicación que está corriendo o que acaba de terminar, 0-indexada. */
@@ -102,6 +107,9 @@ function meanRunResults(results: readonly RunResult[]): RunResult {
  * `replications.kpis`, evitando intervalos de confianza estadísticamente inválidos.
  */
 export function simulate(ir: ProcessIR, scenario: SimScenario, options: SimulateOptions = {}): RunResult {
+  // El preflight precede incluso al progreso inicial: un input no soportado no puede dejar
+  // callbacks observables antes de lanzar el error estable.
+  assertSupportedResourceScenario(scenario);
   const totalReplications = scenario.run.replications ?? 1;
   const completed: RunResult[] = [];
   let partial: RunResult | undefined;
