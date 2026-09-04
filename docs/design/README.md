@@ -1,0 +1,92 @@
+# Diseño de la interfaz
+
+Fuente visual: el proyecto de **Claude Design** de Lila Modeler, archivo
+`Lila Modeler.dc.html` (diez artboards en un mismo lienzo, tabla de tokens con
+los dos temas, inventario de componentes y notas de React al final):
+
+<https://claude.ai/design/p/37922743-d30e-41a6-b361-fce3cd3714fa?file=Lila+Modeler.dc.html>
+
+El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
+**referencia, no código a copiar**: la app se construye con los tokens del brief
+(`apps/web/src/theme/`), no con el design system del artefacto.
+
+## Capturas de los artboards — PENDIENTES
+
+Descargar el `.dc.html` requiere iniciar sesión en Claude Design, cosa que la
+sesión que implementó LILA-112 no podía hacer. Hasta que se descargue, estas
+capturas **no existen**; los nombres de archivo ya están decididos para que
+quien las suba no tenga que inventar convención:
+
+| # | Artboard | Archivo | Estado |
+|---|---|---|---|
+| 1 | Modelar 1440×900 | `docs/design/01-modelar-1440.png` | PENDIENTE |
+| 2 | Modelar 1920×1080 | `docs/design/02-modelar-1920.png` | PENDIENTE |
+| 3 | Simular con panel de escenario | `docs/design/03-simular-escenario.png` | PENDIENTE |
+| 4 | Lienzo con overlay de cuellos de botella | `docs/design/04-overlay-cuellos.png` | PENDIENTE |
+| 5 | Resultados | `docs/design/05-resultados.png` | PENDIENTE |
+| 6 | Comparar | `docs/design/06-comparar.png` | PENDIENTE |
+| 7 | Validar rutas | `docs/design/07-validar-rutas.png` | PENDIENTE |
+| 8 | Bienvenida | `docs/design/08-bienvenida.png` | PENDIENTE |
+| 9 | Ajustes → Apariencia (Eva-01) | `docs/design/09-apariencia.png` | PENDIENTE |
+| 10 | Modelar con el tema Papel | `docs/design/10-modelar-papel.png` | PENDIENTE |
+
+## Inventario de componentes React
+
+Derivado del brief. La columna de ticket dice quién lo construye; LILA-112 solo
+deja los tokens y los temas, no construye ninguno.
+
+| Componente | Para qué | Ticket |
+|---|---|---|
+| Botón (primario, secundario, fantasma, icono) | ejecutar simulación, acciones de barra | LILA-057 |
+| Campos de formulario (texto, número, select, checkbox, color+hex) | propiedades, escenario, editor de tokens | LILA-060 / LILA-114 |
+| Pestañas (modos superiores, panel derecho, diagramas abajo) | Modelar/Simular/Resultados/Comparar y sub-paneles | LILA-057 |
+| Paneles redimensionables y colapsables | paleta izquierda y panel derecho | LILA-057 |
+| Paleta de figuras BPMN agrupable y con búsqueda | arrastrar al lienzo | LILA-057 |
+| Tooltip con atajo de teclado | descubribilidad de acciones | LILA-057 |
+| Barra de estado (validación, escenario, semilla, zoom) | pie de ventana | LILA-057 |
+| Marcadores de validación sobre el elemento | errores y avisos en vivo | LILA-057 |
+| Tabla densa ordenable con encabezado fijo y export CSV | Resultados y Comparar | LILA-062 |
+| Resalte de celda con marca de significancia | Comparar | LILA-063 |
+| Selector de escenario (duplicar, hereda de) | modo Simular | LILA-061 |
+| Editor semanal de calendarios por franjas | recursos y calendarios | LILA-061 |
+| Tabla de recursos | modo Simular | LILA-061 |
+| Barra de progreso de corrida con cancelar | ejecutar simulación | LILA-059 |
+| Overlay de simulación sobre el lienzo (tinte + etiqueta) | cuellos de botella | LILA-064 |
+| Controles reproducir/pausa/paso | validar rutas | LILA-065 |
+| Paleta de comandos (buscador tipo Cmd+K) | navegación rápida | LILA-066 |
+| Pantalla de bienvenida (recientes, abrir, ejemplo) | arranque de escritorio | LILA-070 |
+| Lista de temas + editor de tokens + vista previa | Ajustes → Apariencia | LILA-114 |
+
+## Decisiones de diseño
+
+**Tipografía: Archivo.** `font.ui` es `Archivo, Inter, system-ui, sans-serif`
+(el brief decía Inter; la sesión de Claude Design eligió Archivo y esa elección
+manda). `font.diagram` usa la misma pila; `font.mono` sigue siendo JetBrains
+Mono con `ui-monospace` de reserva. Todavía **no** se carga la webfont: eso lo
+hace LILA-057 junto con el shell, para no meter un `@font-face` en un ticket
+que solo define tokens.
+
+**Papel usa rojo tinta como acento.** `accent.primary` del tema claro es
+`#EC3013`, no un neutro apagado, para demostrar que el sistema aguanta un acento
+de familia distinta a la del tema oscuro. Consecuencia medida: sobre ese rojo el
+blanco solo alcanza 4,2:1, por debajo de AA, así que `fg.onAccent` de Papel es
+un casi-negro cálido (`#0B0603`, 4,8:1) en vez de blanco. Se ajustó Papel, no el
+umbral del test.
+
+**Valores de Papel derivados, pendientes de reconciliar.** Salvo
+`accent.primary`, el resto de Papel (grises cálidos claros, texto casi negro,
+acentos ámbar y azul tinta) lo derivó la implementación como tema claro neutro
+con contraste AA. Cuando se descargue el `.dc.html` hay que **reconciliar la
+tabla de tokens y el inventario de componentes** con los del artefacto y
+corregir aquí lo que difiera.
+
+**`sim.utilization.*` inventado.** El brief no da valores para la escala de
+utilización de recursos. Se eligieron tres pasos que no se confundan con la
+escala de cuellos de botella (ámbar → naranja → rojo): infrautilizado en el azul
+de `status.info`, sano en el verde de `status.success` y saturado en el naranja
+de `accent.secondary`. Si el artefacto trae otros, ganan los del artefacto.
+
+**`shadow` es un color, no una sombra completa.** El token guarda un hex con
+alfa (`#00000099` en Eva-01) y la sombra se compone en CSS
+(`box-shadow: 0 6px 20px var(--shadow)`). Así el editor de tokens de LILA-114
+puede ofrecer un selector de color para él como para cualquier otro.
