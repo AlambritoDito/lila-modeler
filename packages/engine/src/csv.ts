@@ -137,38 +137,91 @@ export function processCsv(result: RunResult): string {
   ]);
 }
 
+/**
+ * Event log (docs/RESULTS_FORMAT.md § 7). Las 17 columnas en bruto conservan el contrato de
+ * ADR-025 completo — una fila por asignación de pool, agrupadas por `activityInstanceId` — con
+ * los tiempos en segundos relativos a `run.start`, que es lo que consume el procesamiento
+ * programático. Reducir este conjunto rompería a los consumidores v1.
+ */
 const EVENT_LOG_HEADERS = [
-    'replication',
-    'caseId',
-    'elementId',
-    'resourceId',
-    'enabledAt',
-    'startedAt',
-    'endedAt',
-    'resourceWait',
-    'offHoursWait',
-    'cost',
-  ] as const;
+  'replication',
+  'caseId',
+  'activityInstanceId',
+  'elementId',
+  'resourceId',
+  'allocationIndex',
+  'resourceQuantity',
+  'status',
+  'enabledAt',
+  'startedAt',
+  'endedAt',
+  'observedUntil',
+  'resourceWait',
+  'offHoursWait',
+  'elementCost',
+  'resourceCost',
+  'cost',
+] as const;
 
-export function eventLogCsvHeader(): string {
-  return csvRow(EVENT_LOG_HEADERS);
+/** Columnas derivadas que solo existen cuando el exportador conoce `run.start` (LILA-037). */
+const EVENT_LOG_ISO_HEADERS = ['enabledAtIso', 'startedAtIso', 'endedAtIso'] as const;
+
+/** Milisegundos epoch de `run.start`; `NaN` si la cadena no es una fecha válida. */
+export function runStartMs(start: string): number {
+  // `Date.parse` sobre el ISO 8601 con offset que valida el esquema del escenario es
+  // determinista y no lee el reloj: R-DET-5 prohíbe la hora real, no aritmética de fechas.
+  return Date.parse(start);
 }
 
-export function eventLogRowCsv(row: EventLogRow): string {
-  return csvRow([
+/** Instante absoluto de una columna de tiempo: `run.start + segundos`, en ISO 8601 UTC. */
+function isoAt(startMs: number, seconds: number | null): string {
+  if (seconds === null) return '';
+  const ms = Math.round(startMs + seconds * 1000);
+  // ponytail: fuera del rango representable por Date (o con un `run.start` ilegible) la celda
+  // queda vacía en vez de lanzar a mitad de un CSV de millones de filas; las columnas en
+  // segundos siguen siendo las autoritativas y conservan el valor exacto.
+  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '';
+  return new Date(ms).toISOString();
+}
+
+/**
+ * Cabecera del event log. Con `startMs` (ver `runStartMs`) añade las tres columnas ISO 8601;
+ * sin él, el CSV conserva solo los segundos relativos.
+ */
+export function eventLogCsvHeader(startMs?: number): string {
+  return csvRow(
+    startMs === undefined ? EVENT_LOG_HEADERS : [...EVENT_LOG_HEADERS, ...EVENT_LOG_ISO_HEADERS],
+  );
+}
+
+/** Serializa una fila; se llama una vez por fila para poder escribir en streaming. */
+export function eventLogRowCsv(row: EventLogRow, startMs?: number): string {
+  const values: CsvValue[] = [
     row.replication,
     row.caseId,
+    row.activityInstanceId,
     row.elementId,
     row.resourceId,
+    row.allocationIndex,
+    row.resourceQuantity,
+    row.status,
     row.enabledAt,
     row.startedAt,
     row.endedAt,
+    row.observedUntil,
     row.resourceWait,
     row.offHoursWait,
+    row.elementCost,
+    row.resourceCost,
     row.cost,
-  ]);
+  ];
+  if (startMs !== undefined) {
+    values.push(isoAt(startMs, row.enabledAt), isoAt(startMs, row.startedAt), isoAt(startMs, row.endedAt));
+  }
+  return csvRow(values);
 }
 
-export function eventLogCsv(rows: readonly EventLogRow[]): string {
-  return eventLogCsvHeader() + rows.map(eventLogRowCsv).join('');
+/** Event log completo en memoria. La CLI usa header + fila a fila para no materializarlo. */
+export function eventLogCsv(rows: readonly EventLogRow[], startMs?: number): string {
+  return eventLogCsvHeader(startMs) + rows.map((row) => eventLogRowCsv(row, startMs)).join('');
 }

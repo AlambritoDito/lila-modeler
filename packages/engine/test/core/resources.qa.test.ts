@@ -69,13 +69,18 @@ describe('QA adversarial de recursos (LILA-033)', () => {
   });
 
   test('sin resources conserva exactamente el RunResult M1', () => {
-    const result = publicApi.simulate(IR, {
-      run: { seed: 7 },
-      elements: {
-        Start: { interTriggerTimer: { type: 'constant', value: 10 }, triggerCount: 2 },
-        Task: { processingTime: { type: 'constant', value: 5 }, fixedCost: 2 },
+    const result = publicApi.simulate(
+      IR,
+      {
+        run: { seed: 7 },
+        elements: {
+          Start: { interTriggerTimer: { type: 'constant', value: 10 }, triggerCount: 2 },
+          Task: { processingTime: { type: 'constant', value: 5 }, fixedCost: 2 },
+        },
       },
-    });
+      // `log: false` mantiene el RunResult en la forma exacta de M1: sin `log` (LILA-037 § 7).
+      { log: false },
+    );
 
     expect(result).toEqual({
       elements: {
