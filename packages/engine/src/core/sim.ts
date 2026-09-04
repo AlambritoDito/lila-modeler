@@ -45,6 +45,10 @@ export interface SimElement {
 export interface SimRun {
   duration?: number | undefined;
   seed?: number | undefined;
+  /** Segundos iniciales excluidos de todas las estadísticas (R-ARR-7). */
+  warmup?: number | undefined;
+  /** Número de corridas independientes; `runReplication` ejecuta una sola (R-ARR-8). */
+  replications?: number | undefined;
 }
 
 /** Escenario visto por el motor. */
@@ -78,7 +82,12 @@ export interface ReplicationRun {
   replication: number;
   /** Instante en que paró la corrida: `run.duration` o el vaciado del heap (R-ARR-3). */
   stoppedAt: number;
-  /** En orden de llegada; `caseId` es un entero monótono desde 1 (R-TOK-2). */
+  /** Segundos que pueden alimentar estadísticas: `max(0, stoppedAt - warmup)` (R-ARR-7). */
+  statisticsDuration: number;
+  /**
+   * Casos incluidos en estadísticas (inicio >= warmup), en orden de llegada. `caseId`
+   * conserva el id real del log y por eso puede empezar después de 1 (R-ARR-7, R-TOK-2).
+   */
   cases: CaseRecord[];
   /** Una fila por instancia de `task` o `timer` completada (R-TOK-5). */
   rows: EventLogRow[];
@@ -152,6 +161,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   // `duration` ni ningún `triggerCount` es `E-SIN-PARADA`, y lo caza `validateScenario`.
   const tStop = scenario.run.duration ?? Infinity;
   const seed = scenario.run.seed ?? 1;
+  const warmup = scenario.run.warmup ?? 0;
 
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).
   const rngs = new Map<string, Rng>();
@@ -178,6 +188,14 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   const rows: EventLogRow[] = [];
   const caseStates: CaseState[] = [];
   const heap = new Heap<SimEvent>();
+
+  /**
+   * R-ARR-7: la inclusión depende únicamente del instante en que nació el caso. El caso
+   * sigue atravesando el modelo y sus tareas siguen emitiendo filas; solo se excluye de los
+   * acumuladores que alimentarán las métricas. Esto también evita el error sutil de incluir
+   * un caso que nació antes del warmup pero terminó después.
+   */
+  const isMeasuredCase = (caseId: number): boolean => (caseStates[caseId - 1]?.startedAt ?? -Infinity) >= warmup;
 
   /* --- ramaje: pesos por gateway, calculados una vez --------------- */
 
@@ -260,7 +278,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   /** Recorre los flujos (0 segundos, R-TOK-4) y encola la llegada al nodo destino. */
   const emit = (flowIds: readonly string[], caseId: number, marks: readonly number[], t: number): void => {
     for (const flowId of flowIds) {
-      flows[flowId] = (flows[flowId] ?? 0) + 1;
+      if (isMeasuredCase(caseId)) flows[flowId] = (flows[flowId] ?? 0) + 1;
       const to = ir.flows[flowId]?.to;
       if (to !== undefined) heap.push({ t, kind: 'enter', caseId, nodeId: to, marks });
     }
@@ -361,7 +379,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       // Fin de la duración de una task o un timer. Capacidad infinita ⇒ started = enabled y
       // resourceWait = 0 (R-TOK-5, R-DEG-1). R-EVT-6: si el caso murió antes, la instancia
       // cuenta como `started` y no como `completed`, y no emite fila.
-      counters.completed++;
+      if (isMeasuredCase(next.caseId)) counters.completed++;
       rows.push({
         replication,
         caseId: String(next.caseId),
@@ -378,12 +396,12 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       continue;
     }
 
-    counters.started++;
+    if (isMeasuredCase(next.caseId)) counters.started++;
 
     switch (node.type) {
       case 'start':
         // El start no consume tiempo ni recursos: reenvía el token.
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         forward(node, next.caseId, next.marks, next.t);
         break;
 
@@ -412,7 +430,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       }
 
       case 'xor':
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         // R-PERF-2: un XOR convergente (una sola salida) es una mezcla sin espera.
         if (node.outgoing.length <= 1) forward(node, next.caseId, next.marks, next.t);
         else emit([drawXor(next.nodeId, node.outgoing)], next.caseId, next.marks, next.t);
@@ -431,7 +449,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
           state.andCounts.delete(next.nodeId);
           state.tokens -= node.incoming.length - 1;
         }
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens += node.outgoing.length - 1; // R-AND-1: un token por salida, sin sorteo.
         emit(node.outgoing, next.caseId, next.marks, next.t);
         break;
@@ -460,7 +478,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
             marks = marks.slice(0, -1); // se desapila la marca (R-OR-4, LIFO).
           }
         }
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         if (node.outgoing.length <= 1) {
           forward(node, next.caseId, marks, next.t);
           break;
@@ -477,7 +495,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       case 'end':
         // R-EVT-4: el end consume el token; el caso termina cuando se queda sin tokens, no
         // cuando el primero toca un end.
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens -= 1;
         if (state.tokens <= 0) state.endedAt = next.t;
         break;
@@ -485,7 +503,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       case 'terminate':
         // R-EVT-5: mata todos los tokens del caso, sus contadores de join y sus marcas; el
         // caso cuenta como completado en ese instante y no afecta a los demás.
-        counters.completed++;
+        if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens = 0;
         state.alive = false;
         state.andCounts.clear();
@@ -517,12 +535,15 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   return {
     replication,
     stoppedAt,
-    cases: caseStates.map((state) => ({
-      caseId: state.id,
-      startId: state.startId,
-      startedAt: state.startedAt,
-      endedAt: state.endedAt,
-    })),
+    statisticsDuration: Math.max(0, stoppedAt - warmup),
+    cases: caseStates
+      .filter((state) => state.startedAt >= warmup)
+      .map((state) => ({
+        caseId: state.id,
+        startId: state.startId,
+        startedAt: state.startedAt,
+        endedAt: state.endedAt,
+      })),
     rows,
     flows,
     elements,

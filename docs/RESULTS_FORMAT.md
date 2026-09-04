@@ -176,6 +176,11 @@ interface ReplicationSummary {
 }
 ```
 
+Los segmentos dinámicos de esos nombres (ids BPMN de elementos, flujos y recursos) escapan
+`.` como `\.` antes de formar el path. Así, por ejemplo, el KPI `processing.mean` del elemento
+`Task.A` se llama `elements.Task\.A.processing.mean`, sin colisionar con otros ids válidos.
+Los ids sin punto conservan exactamente los nombres mostrados arriba. *(prueba: LILA-027)*
+
 - **`mean`/`sd`** — media y desviación estándar muestral del KPI a través de las `N` replicaciones (una observación por replicación, no por caso).
 - **`ci95`** — intervalo de confianza al 95 % para la media, `mean ± t(N-1, 0.975) × sd / √N` (t de Student con `N-1` grados de libertad; con `N` grande se aproxima a `1.96 × sd/√N`). Es la métrica que Bizagi solo ofrece desde What-If (sección 3: "Replicaciones — Bizagi ✓ solo en what-if / Lila ✓ siempre, con IC 95 %"); en Lila se calcula siempre que `replications > 1`.
 
