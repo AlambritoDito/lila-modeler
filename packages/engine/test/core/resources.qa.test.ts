@@ -21,7 +21,7 @@ const IR: ProcessIR = {
 };
 
 describe('QA adversarial de recursos (LILA-033)', () => {
-  test('simulate rechaza OR multi-pool antes de onProgress y onEvent', () => {
+  test('simulate acepta OR multi-pool y emite una sola fila con el pool elegido (LILA-035)', () => {
     const scenario: SimScenario = {
       run: { seed: 1 },
       resources: { a: { capacity: 1 }, b: { capacity: 1 } },
@@ -34,15 +34,12 @@ describe('QA adversarial de recursos (LILA-033)', () => {
         },
       },
     };
-    const callbacks: string[] = [];
+    const rows: { resourceId: string | null }[] = [];
 
     expect(() =>
-      publicApi.simulate(IR, scenario, {
-        onProgress: () => callbacks.push('progress'),
-        onEvent: () => callbacks.push('event'),
-      }),
-    ).toThrow(/E-REC-OR-PENDIENTE/);
-    expect(callbacks).toEqual([]);
+      publicApi.simulate(IR, scenario, { onEvent: (row) => rows.push(row) }),
+    ).not.toThrow();
+    expect(rows.map((row) => row.resourceId)).toEqual(['a']);
   });
 
   test('FIFO estricto no deja que quantity=1 adelante al head quantity=2', () => {

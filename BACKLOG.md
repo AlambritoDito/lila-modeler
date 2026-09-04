@@ -232,8 +232,8 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 
 #### LILA-035 · Selección OR de recursos
 - Épica E4 · Hito M2 · Tamaño S · Depende de LILA-033
-- Qué: encolar en todos los pools alternativos, arrancar con el primero disponible, retirar de los demás.
-- Aceptación: con un pool saturado y otro libre, todas las tareas OR arrancan sin esperar; el log registra el pool usado.
+- Qué: encolar en todos los pools alternativos, arrancar con el primero disponible, retirar de los demás. Cada alternativa es una entrada single-pool más en la cola FIFO de su pool, con el mismo `seq`, así que OR, AND y single conviven sin reordenar nada (ADR-026). Desempate entre alternativas libres a la vez: el orden de declaración en `resources`. Desaparece el fail-fast `E-REC-OR-PENDIENTE`.
+- Aceptación: con un pool saturado y otro libre, todas las tareas OR arrancan sin esperar; el log registra el pool usado, con una sola fila por asignación y los costos del pool elegido.
 - Archivos: `packages/engine/src/core/resources.ts`.
 
 #### LILA-036 · Métricas de nivel 3

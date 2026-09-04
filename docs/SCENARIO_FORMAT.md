@@ -89,7 +89,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 |---|---|---|---|---|
 | `processingTime` | distribución (§ 3) | tareas, timers | sin tiempo (0 s) | Duración del trabajo, en segundos. En un timer intermedio es el retardo, sin recurso. |
 | `resources` | array de `{ ref, quantity }` | tareas | — | `ref` = clave de `resources`; `quantity` integer ≥ 1, default `1`. Sin `resources` ⇒ capacidad infinita. |
-| `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás. |
+| `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás; si hay varios libres a la vez gana el que aparece primero en `resources` (R-REC-6). |
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |
 | `interTriggerTimer` | distribución (§ 3) | starts y timers generadores | — | Tiempo entre llegadas, en segundos. |
 | `triggerCount` | integer ≥ 1 | starts y timers generadores | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
