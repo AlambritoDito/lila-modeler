@@ -312,6 +312,12 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Aceptación: AS-IS vs TO-BE muestra menor utilización y espera del cajero.
 - Archivos: `packages/engine/src/cli.ts`.
 
+#### LILA-184 · `lila run` acepta `resources` y avisa de `calendars` como `lila compare`
+- Épica E6 · Hito M2 · Tamaño S · Depende de LILA-036, LILA-046, LILA-047
+- Qué: el gate `unsupportedM1` de `lila run` seguía rechazando `resources`, `elements[id].resources` y `selection` con `E-NIVEL-M2` aunque el motor simula nivel 3 desde LILA-033…036, y `lila compare` no aplicaba ese gate. Se elimina la parte de recursos del gate. La parte de calendarios (`calendars`, `elements[id].calendar`) deja de ser error `E-NIVEL-M3` y pasa a ser el mismo aviso al pie que ya imprime `lila compare` (el escenario declara calendarios; el motor todavía no los simula, M3/LILA-041; sus números salen 24×7), extraído a un helper compartido por `run` y `compare` (`declaresCalendars`/`calendarsWarning`).
+- Aceptación: `lila run examples/pedido/model.bpmn examples/pedido/as-is.scenario.json` sale 0, imprime la tabla Resources y el aviso de calendarios al pie; con `--json` dos corridas producen bytes idénticos y el JSON incluye `resources` y `bottlenecks`. Un escenario con `elements[id].calendar` o `calendars` ya no produce `E-NIVEL-M3`; uno con `resources` ya no produce `E-NIVEL-M2`. `lila run --csv` sobre `examples/pedido` produce `log.csv` con `resourceId` no nulo.
+- Archivos: `packages/engine/src/cli.ts`, `packages/engine/test/cli-run.test.ts`, `packages/engine/test/cli-compare.qa.test.ts`.
+
 #### LILA-048 · Publicación en npm y `npx lila`
 - Épica E6 · Hito M3 · Tamaño S · Depende de LILA-046, LILA-047, LILA-044
 - Qué: `@lila/engine` con `bin: lila`, `exports` (`.`, `./bpmn`, `./schema`), `files`, versión 0.x; publicación desde CI con tag.
