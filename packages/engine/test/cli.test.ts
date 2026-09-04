@@ -25,7 +25,8 @@ test('validate sobre examples/pedido imprime el IR y sale con 0', async () => {
   const text = out.join('\n');
 
   expect(code).toBe(0);
-  expect(text).toContain('0 errores, 0 avisos.');
+  expect(text).toContain('0 errores, 1 avisos.');
+  expect(text).toContain('W-MSGFLOW');
   expect(text).toContain('Task_TomarPedido');
   expect(text).toContain('Flow_Aprobado: Gateway_Aprobacion -> Timer_Reposo');
   expect(text).toContain('Nodos (11)');
@@ -47,13 +48,15 @@ test('--json imprime JSON parseable con ir, errores y avisos', async () => {
   const parsed = JSON.parse(out.join('\n')) as {
     ir: { nodes: Record<string, unknown> };
     errors: unknown[];
-    warnings: unknown[];
+    warnings: { code: string; id: string }[];
   };
 
   expect(code).toBe(0);
   expect(Object.keys(parsed.ir.nodes)).toContain('Task_TomarPedido');
   expect(parsed.errors).toEqual([]);
-  expect(parsed.warnings).toEqual([]);
+  expect(parsed.warnings).toMatchObject([
+    { code: 'W-MSGFLOW', id: 'Process_Restaurante' },
+  ]);
 });
 
 test('sin argumentos imprime el uso y sale con 1', async () => {

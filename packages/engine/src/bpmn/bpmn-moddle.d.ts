@@ -28,9 +28,15 @@ declare module 'bpmn-moddle' {
     flowNodeRef?: ModdleElement[];
     /** eventos */
     eventDefinitions?: ModdleElement[];
+    parallelMultiple?: boolean;
+    /** `bpmn:Activity` */
+    loopCharacteristics?: ModdleElement;
+    startQuantity?: number;
+    completionQuantity?: number;
     /** `bpmn:SequenceFlow` (referencias ya resueltas por moddle) */
     sourceRef?: ModdleElement;
     targetRef?: ModdleElement;
+    conditionExpression?: ModdleElement;
     /** flujo por defecto de un gateway o actividad */
     default?: ModdleElement;
     /** `bpmn:documentation` de cualquier elemento */
@@ -44,6 +50,8 @@ declare module 'bpmn-moddle' {
     /** `bpmn:Collaboration` */
     participants?: ModdleElement[];
     messageFlows?: ModdleElement[];
+    conversations?: ModdleElement[];
+    conversationNodes?: ModdleElement[];
     artifacts?: ModdleElement[];
     /** atributos de los elementos `lila:` */
     type?: string;

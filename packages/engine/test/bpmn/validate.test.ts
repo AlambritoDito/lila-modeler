@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { parseBpmn } from '../../src/bpmn/parse.js';
 import { validate } from '../../src/bpmn/validate.js';
 import type { ProcessIR } from '../../src/core/ir.js';
+import { UNSUPPORTED_FIXTURES, WARNINGS_FIXTURE } from './unsupported.fixtures.js';
 
 function read(url: URL): string {
   return readFileSync(url, 'utf8');
@@ -132,4 +133,38 @@ test('sin nombre, el mensaje de E-NOSOP usa la plantilla corta', () => {
   expect(errors[0]?.message).toBe(
     'Gateway_9 (bpmn:complexGateway): gateway complejo no soportado por el simulador.',
   );
+});
+
+test('cada fila de SEMANTICS § 3 produce el texto normativo exacto (LILA-163)', async () => {
+  expect(UNSUPPORTED_FIXTURES).toHaveLength(24);
+
+  for (const fixtureCase of UNSUPPORTED_FIXTURES) {
+    const parsed = await parseBpmn(fixtureCase.xml);
+    const errors = validate(parsed.ir, { unsupported: parsed.unsupported }).errors
+      .filter((error) => error.code === 'E-NOSOP')
+      .map((error) => error.message);
+    expect(errors, fixtureCase.row).toEqual(fixtureCase.messages);
+  }
+});
+
+test('W-MSGFLOW agrega el conteo y W-COND cita cada flujo condicionado (LILA-163)', async () => {
+  const parsed = await parseBpmn(WARNINGS_FIXTURE);
+  const { warnings } = validate(parsed.ir, {
+    unsupported: parsed.unsupported,
+    messageFlowCount: parsed.messageFlowCount,
+    conditionFlowIds: parsed.conditionFlowIds,
+  });
+
+  expect(warnings).toEqual([
+    {
+      code: 'W-MSGFLOW',
+      id: 'Process_1',
+      message: 'Process_1: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).',
+    },
+    {
+      code: 'W-COND',
+      id: 'Flow_Condition',
+      message: 'Flow_Condition: conditionExpression se ignora; el ramaje es probabilístico.',
+    },
+  ]);
 });

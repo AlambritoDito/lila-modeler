@@ -18,13 +18,23 @@ import type { UnsupportedElement } from './parse.js';
  */
 export interface ValidationResult {
   errors: IrProblem[];
-  warnings: IrProblem[];
+  warnings: ValidationWarning[];
+}
+
+export interface ValidationWarning {
+  code: 'W-MSGFLOW' | 'W-COND';
+  id: string;
+  message: string;
 }
 
 /** Segundo argumento de `validate`: lo que el parser sabe y el IR ya no. */
 export interface ValidateOptions {
   /** `ParseResult.unsupported`, en orden de aparición en el documento. */
   unsupported?: readonly UnsupportedElement[];
+  /** `ParseResult.messageFlowCount`; se agrega en un solo W-MSGFLOW por archivo. */
+  messageFlowCount?: number;
+  /** `ParseResult.conditionFlowIds`; un W-COND por sequence flow. */
+  conditionFlowIds?: readonly string[];
 }
 
 /**
@@ -68,15 +78,8 @@ const NOT_A_NODE = new Set([
 ]);
 
 /**
- * ponytail: `ParseResult.unsupported` solo trae `{ id, qname, name }`, así que las filas del
- * catálogo que dependen de un detalle del XML —el `eventDefinition` concreto (`evento de
- * mensaje`, `de señal`, `de enlace`…), `startQuantity`/`completionQuantity`, los marcadores de
- * bucle y multi-instancia, y el disparador de un `start`/`end` fuera de perfil— caen aquí.
- * Techo: el error se emite igual y cita el id y el qname, pero con este texto genérico en vez
- * del de la tabla; los casos que el parser hoy ni siquiera descarta (start/end con disparador,
- * marcadores de bucle, quantities) no producen error todavía. Camino: que `parse.ts` amplíe
- * `UnsupportedElement` con el `$type` del `eventDefinition` y detecte esas filas (va con
- * LILA-020 / un ticket propio del parser); aquí basta con ampliar `CONSTRUCTIONS`.
+ * Respaldo para listas `unsupported` construidas a mano por consumidores antiguos. LILA-163 hace
+ * que `parseBpmn` entregue siempre la construcción concreta del catálogo cuando puede detectarla.
  */
 const FALLBACK_CONSTRUCTION = 'elemento fuera del perfil v1';
 
@@ -90,7 +93,7 @@ function xmlQName(qname: string): string {
 function unsupportedProblem(el: UnsupportedElement): IrProblem {
   const qname = xmlQName(el.qname);
   const head = el.name === '' ? `${el.id} (${qname})` : `${el.id} (${qname}, "${el.name}")`;
-  const construction = CONSTRUCTIONS[el.qname] ?? FALLBACK_CONSTRUCTION;
+  const construction = el.construction ?? CONSTRUCTIONS[el.qname] ?? FALLBACK_CONSTRUCTION;
   return {
     code: 'E-NOSOP',
     id: el.id,
@@ -124,11 +127,27 @@ function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
  */
 export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationResult {
   const errors: IrProblem[] = [];
-  const warnings: IrProblem[] = [];
+  const warnings: ValidationWarning[] = [];
 
   for (const el of opts.unsupported ?? []) {
     if (NOT_A_NODE.has(el.qname)) continue;
     errors.push(unsupportedProblem(el));
+  }
+
+  if ((opts.messageFlowCount ?? 0) > 0) {
+    const count = opts.messageFlowCount!;
+    warnings.push({
+      code: 'W-MSGFLOW',
+      id: ir.id,
+      message: `${ir.id}: se ignoraron ${count} flujos de mensaje (bpmn:messageFlow).`,
+    });
+  }
+  for (const flowId of opts.conditionFlowIds ?? []) {
+    warnings.push({
+      code: 'W-COND',
+      id: flowId,
+      message: `${flowId}: conditionExpression se ignora; el ramaje es probabilístico.`,
+    });
   }
 
   // Flujo colgante, id duplicado y referencia inexistente (E-FLUJO-COLGANTE, E-ID-DUPLICADO,
@@ -184,12 +203,5 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     }
   }
 
-  // ponytail: `warnings` sale vacío hasta que haya quien los produzca. Los dos avisos que
-  // `docs/SEMANTICS.md` § 18 asigna a este ticket, `W-MSGFLOW` (R-PERF-3) y `W-COND`
-  // (R-PERF-4), dependen de datos que hoy no llegan hasta aquí: `parse.ts` ni cuenta los
-  // `bpmn:messageFlow` ni conserva el `conditionExpression` de los flujos, y el IR tampoco.
-  // Techo: un modelo con message flows o con condiciones se valida en silencio. Camino:
-  // que `ParseResult` los reporte y emitirlos aquí; el resto de los avisos del catálogo son
-  // del escenario o de la corrida, no del IR.
   return { errors, warnings };
 }

@@ -31,8 +31,13 @@ function countByType(nodes: Record<string, { type: string }>): string {
 
 async function validateCommand(file: string, json: boolean): Promise<number> {
   const xml = readFileSync(file, 'utf8');
-  const { ir, ignoredProcessIds, unsupported } = await parseBpmn(xml);
-  const { errors, warnings } = validate(ir, { unsupported });
+  const { ir, ignoredProcessIds, unsupported, messageFlowCount, conditionFlowIds } =
+    await parseBpmn(xml);
+  const { errors, warnings } = validate(ir, {
+    unsupported,
+    messageFlowCount,
+    conditionFlowIds,
+  });
 
   if (json) {
     console.log(JSON.stringify({ ir, ignoredProcessIds, errors, warnings }, null, 2));
