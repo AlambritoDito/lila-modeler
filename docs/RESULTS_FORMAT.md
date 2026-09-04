@@ -185,7 +185,7 @@ log; los otros dos la acotan por el pico de **una** replicación.
 | `resourceQuantity` | integer \| null | unidades | Cantidad ocupada del pool; `null` para el sentinel. |
 | `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
 | `enabledAt` | number | segundos desde `run.start` | Instante en que el token llegó al elemento y quedó habilitado para empezar. |
-| `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` para `queued`. |
+| `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` si la actividad se cerró todavía en cola. |
 | `endedAt` | number \| null | segundos desde `run.start` | Instante en que terminó normalmente; solo existe con `status = "completed"`. |
 | `observedUntil` | number | segundos desde `run.start` | `endedAt` al completar; instante de `terminate`, cancelación o parada para lifecycle parcial. |
 | `resourceWait` | number | segundos | Porción de la espera atribuible a falta de recurso; si `startedAt = null`, se observa hasta `observedUntil`. No incluye tiempo de calendario cerrado. |
@@ -215,7 +215,7 @@ Al exportar (CSV de la CLI, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` se der
 timestamps ISO 8601 absolutos (`run.start + segundos`) en tres columnas **añadidas al final**,
 `enabledAtIso`/`startedAtIso`/`endedAtIso`; el CSV en bruto para procesamiento programático
 conserva los segundos relativos, que siguen siendo los valores autoritativos porque el ISO se
-trunca a milisegundos. Una columna de tiempo nula (el `startedAt` de una fila que nunca arrancó)
+redondea al milisegundo más cercano. Una columna de tiempo nula (el `startedAt` de una fila que nunca arrancó)
 deja también su celda ISO vacía, y un `run.start` ilegible vacía las tres en lugar de abortar el
 archivo. Sin `run.start` el CSV se queda en las 17 columnas.
 
