@@ -113,6 +113,17 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     options.onProgress?.(progress);
   };
 
+  // Incluso una réplica cuyo heap nazca vacío tiene un inicio observable y coherente.
+  if (options.onProgress !== undefined) {
+    emitProgress({
+      replication: 0,
+      completedReplications: 0,
+      totalReplications,
+      fraction: 0,
+      simulatedTime: 0,
+    });
+  }
+
   for (let replication = 0; replication < totalReplications; replication++) {
     // Una señal activada por el callback de cierre anterior detiene entre replicaciones.
     if (replication > 0 && options.signal?.aborted === true) break;
@@ -122,19 +133,22 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
       signal: options.signal,
       log: options.log,
       onEvent: options.onEvent,
-      onStep: (simulatedTime) => {
-        const localFraction =
-          duration !== undefined && duration > 0
-            ? Math.min(1, Math.max(0, simulatedTime / duration))
-            : 0;
-        emitProgress({
-          replication,
-          completedReplications: completed.length,
-          totalReplications,
-          fraction: (replication + localFraction) / totalReplications,
-          simulatedTime,
-        });
-      },
+      onStep:
+        options.onProgress === undefined
+          ? undefined
+          : (simulatedTime) => {
+              const localFraction =
+                duration !== undefined && duration > 0
+                  ? Math.min(1, Math.max(0, simulatedTime / duration))
+                  : 0;
+              emitProgress({
+                replication,
+                completedReplications: completed.length,
+                totalReplications,
+                fraction: (replication + localFraction) / totalReplications,
+                simulatedTime,
+              });
+            },
     });
     const result = aggregateReplication(ir, run);
 

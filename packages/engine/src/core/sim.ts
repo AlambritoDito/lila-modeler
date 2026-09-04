@@ -431,12 +431,15 @@ export function runReplication(
       // El callback es una frontera pública: una mutación accidental de su argumento no debe
       // alterar las filas internas que luego alimentan las métricas.
       if (options.log !== false) options.onEvent?.({ ...row });
+      // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
+      // Una cancelación activada por onEvent se observa después de cerrar esa transición
+      // atómica, nunca entre el contador/row de la tarea y su forward.
+      forward(node, next.caseId, next.marks, next.t);
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
         break simulation;
       }
-      forward(node, next.caseId, next.marks, next.t);
       continue;
     }
 
