@@ -199,7 +199,7 @@ export type ScenarioProblemCode =
   | 'E-REC-DESCONOCIDO'
   | 'E-REC-DUPLICADO'
   | 'E-REC-CANTIDAD'
-  | 'E-REC-MULTIPOOL-PENDIENTE'
+  | 'E-REC-OR-PENDIENTE'
   | 'E-CAMPO-NO-APLICA'
   | 'E-SIN-PARADA'
   | 'W-ELEMENTO-SIN-PARAMETROS';
@@ -330,12 +330,12 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         message: `elements.${id}.resources: solo una tarea puede consumir recursos.`,
       });
     }
-    if ((element.resources?.length ?? 0) > 1) {
+    if ((element.resources?.length ?? 0) > 1 && element.selection === 'or') {
       problems.push({
-        code: 'E-REC-MULTIPOOL-PENDIENTE',
+        code: 'E-REC-OR-PENDIENTE',
         path: `elements.${id}.resources`,
         severity: 'error',
-        message: `elements.${id}.resources: múltiples pools requieren LILA-034/035.`,
+        message: `elements.${id}.resources: selección OR multi-pool requiere LILA-035.`,
       });
     }
     const seenResources = new Set<string>();

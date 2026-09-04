@@ -1,9 +1,4 @@
-/**
- * Gestor determinista de pools (LILA-033).
- *
- * Mantiene FIFO global por `(enabledAt, seq)` dentro de cada pool. El estado vive en la instancia:
- * cada replicación crea un manager nuevo y no comparte capacidad, cola ni contadores.
- */
+/** Gestor determinista de pools, FIFO y adquisición AND atómica (LILA-033/034). */
 
 import { Heap } from './heap.js';
 
@@ -20,7 +15,6 @@ export interface ResourceRequest {
   readonly id: string;
   readonly enabledAt: number;
   readonly requirements: readonly ResourceRequirement[];
-  /** Reservado para LILA-034/035; con una asignación ambos valores son equivalentes. */
   readonly selection?: 'and' | 'or' | undefined;
 }
 
@@ -29,130 +23,159 @@ export interface ResourceAllocation {
   readonly enabledAt: number;
   readonly startedAt: number;
   readonly seq: number;
+  /** Conserva exactamente el orden del array del escenario. */
   readonly assignments: readonly ResourceRequirement[];
+}
+
+interface QueuedRequest {
+  readonly t: number;
+  readonly seq: number;
+  readonly request: ResourceRequest;
+  readonly classKey: string;
+}
+
+interface RequestClass {
+  readonly waiters: Heap<QueuedRequest>;
+  version: number;
 }
 
 interface PoolState {
   readonly capacity: number;
   used: number;
-  readonly waiters: Heap<QueuedRequest>;
-}
-
-interface QueuedRequest {
-  /** `Heap` ordena primero por este instante y luego por inserción estable. */
-  readonly t: number;
-  readonly seq: number;
-  readonly request: ResourceRequest;
+  readonly classes: Set<string>;
 }
 
 type RequestState =
   | { status: 'queued'; queued: QueuedRequest }
   | { status: 'active'; allocation: ResourceAllocation };
 
+interface ReadyHead {
+  readonly enabledAt: number;
+  readonly seq: number;
+  readonly classKey: string;
+  readonly requestId: string;
+  readonly version: number;
+}
+
+/** Heap con comparator explícito: reinsertar una clase nunca puede alterar el `seq` original. */
+class ReadyHeap {
+  readonly #items: ReadyHead[] = [];
+
+  get size(): number {
+    return this.#items.length;
+  }
+
+  push(value: ReadyHead): void {
+    let index = this.#items.length;
+    this.#items.push(value);
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (!ReadyHeap.#before(value, this.#items[parent]!)) break;
+      this.#items[index] = this.#items[parent]!;
+      index = parent;
+    }
+    this.#items[index] = value;
+  }
+
+  pop(): ReadyHead | undefined {
+    const root = this.#items[0];
+    const tail = this.#items.pop();
+    if (root === undefined || tail === undefined || this.#items.length === 0) return root;
+    let index = 0;
+    while (true) {
+      const left = index * 2 + 1;
+      if (left >= this.#items.length) break;
+      const right = left + 1;
+      let child = left;
+      if (right < this.#items.length && ReadyHeap.#before(this.#items[right]!, this.#items[left]!)) child = right;
+      if (!ReadyHeap.#before(this.#items[child]!, tail)) break;
+      this.#items[index] = this.#items[child]!;
+      index = child;
+    }
+    this.#items[index] = tail;
+    return root;
+  }
+
+  static #before(left: ReadyHead, right: ReadyHead): boolean {
+    return left.enabledAt < right.enabledAt || (left.enabledAt === right.enabledAt && left.seq < right.seq);
+  }
+}
+
 function assertPositiveInteger(value: number, message: string): void {
   if (!Number.isInteger(value) || value < 1) throw new RangeError(message);
 }
 
-/** API pura de I/O y aislada por replicación para capacidad y FIFO global. */
+/**
+ * Estado puro, aislado por replicación. Las solicitudes single-pool comparten una clase por pool
+ * (FIFO estricto incluso con quantities distintos); las AND se agrupan por firma de requisitos.
+ * El scheduler inspecciona cabezas de clase, nunca recorre todos los casos en espera.
+ */
 export class ResourceManager {
   readonly #pools = new Map<string, PoolState>();
+  readonly #classes = new Map<string, RequestClass>();
   readonly #requests = new Map<string, RequestState>();
+  readonly #ready = new ReadyHeap();
   #nextSeq = 0;
   #headInspections = 0;
 
   constructor(definitions: Readonly<Record<string, ResourcePoolDefinition>>) {
     for (const [poolId, definition] of Object.entries(definitions)) {
-      assertPositiveInteger(
-        definition.capacity,
-        `E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`,
-      );
-      this.#pools.set(poolId, { capacity: definition.capacity, used: 0, waiters: new Heap() });
+      assertPositiveInteger(definition.capacity, `E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+      this.#pools.set(poolId, { capacity: definition.capacity, used: 0, classes: new Set() });
     }
   }
 
-  /** Encola y devuelve todas las solicitudes que pueden arrancar en `at`. */
   enqueue(request: ResourceRequest, at = request.enabledAt): ResourceAllocation[] {
-    if (this.#requests.has(request.id)) {
-      throw new Error(`E-REC-SOLICITUD-DUPLICADA: ya existe la solicitud ${request.id}.`);
-    }
-    if (request.requirements.length === 0) {
-      throw new Error(`E-REC-SIN-ASIGNACION: ${request.id}: falta un pool.`);
-    }
-
-    const seen = new Set<string>();
-    for (const requirement of request.requirements) {
-      if (seen.has(requirement.poolId)) {
-        throw new Error(`E-REC-DUPLICADO: ${request.id}: el pool ${requirement.poolId} aparece más de una vez.`);
-      }
-      seen.add(requirement.poolId);
-      const pool = this.#pools.get(requirement.poolId);
-      if (pool === undefined) {
-        throw new Error(`E-REC-DESCONOCIDO: ${request.id}: el pool ${requirement.poolId} no existe.`);
-      }
-      assertPositiveInteger(
-        requirement.quantity,
-        `E-REC-CANTIDAD: ${request.id}: quantity de ${requirement.poolId} debe ser un entero mayor o igual que 1.`,
-      );
-      if (requirement.quantity > pool.capacity) {
-        throw new RangeError(
-          `E-REC-CANTIDAD: ${request.id}: quantity ${requirement.quantity} excede capacity ${pool.capacity} de ${requirement.poolId}.`,
-        );
-      }
-    }
-    if (request.requirements.length !== 1) {
-      throw new Error(`E-REC-MULTIPOOL-PENDIENTE: ${request.id}: LILA-034/035 implementan AND/OR multi-pool.`);
+    this.#validate(request);
+    const classKey = this.#classKey(request);
+    let requestClass = this.#classes.get(classKey);
+    if (requestClass === undefined) {
+      requestClass = { waiters: new Heap(), version: 0 };
+      this.#classes.set(classKey, requestClass);
+      for (const requirement of request.requirements) this.#pools.get(requirement.poolId)!.classes.add(classKey);
     }
 
-    const queued: QueuedRequest = {
-      t: request.enabledAt,
-      seq: this.#nextSeq++,
-      request,
-    };
+    const queued: QueuedRequest = { t: request.enabledAt, seq: this.#nextSeq++, request, classKey };
     this.#requests.set(request.id, { status: 'queued', queued });
-    this.#pools.get(request.requirements[0]!.poolId)!.waiters.push(queued);
-    return this.#drainPool(request.requirements[0]!.poolId, at);
+    requestClass.waiters.push(queued);
+    return this.#drain(new Set([classKey]), at);
   }
 
-  /** Libera solicitudes activas en bloque y planifica una sola vez al final. */
+  /** Valida todo el lote antes de mutar; luego libera y planifica una sola vez. */
   release(requestIds: readonly string[], at: number): ResourceAllocation[] {
-    const uniqueIds = [...new Set(requestIds)];
-    // La validación completa precede toda mutación: un id inválido no puede dejar una
-    // liberación parcial que abra capacidad de forma accidental.
-    for (const requestId of uniqueIds) {
-      const state = this.#requests.get(requestId);
-      if (state?.status !== 'active') {
-        throw new Error(`E-REC-LIBERACION: ${requestId} no tiene una asignación activa.`);
-      }
+    const ids = [...new Set(requestIds)];
+    const allocations: ResourceAllocation[] = [];
+    for (const id of ids) {
+      const state = this.#requests.get(id);
+      if (state?.status !== 'active') throw new Error(`E-REC-LIBERACION: ${id} no tiene una asignación activa.`);
+      allocations.push(state.allocation);
     }
-    const releasedPools = new Set<string>();
-    for (const requestId of uniqueIds) {
-      const state = this.#requests.get(requestId)!;
-      if (state.status !== 'active') throw new Error('E-REC-ESTADO: estado cambió durante release.');
-      this.#free(state.allocation);
-      for (const assignment of state.allocation.assignments) releasedPools.add(assignment.poolId);
-      this.#requests.delete(requestId);
+
+    const dirty = new Set<string>();
+    for (let i = 0; i < ids.length; i++) {
+      const allocation = allocations[i]!;
+      this.#free(allocation);
+      this.#requests.delete(ids[i]!);
+      this.#markPoolsDirty(allocation.assignments, dirty);
     }
-    return this.#drainPools(releasedPools, at);
+    return this.#drain(dirty, at);
   }
 
-  /**
-   * Retira solicitudes de un caso al ejecutar `terminate` o cortar la corrida. Las activas se
-   * liberan juntas antes de conceder otras, y las encoladas se descartan perezosamente del heap.
-   */
+  /** Cancela activos/queued en bloque; no concede hasta liberar todo el lote. */
   cancel(requestIds: readonly string[], at: number): ResourceAllocation[] {
-    const touchedPools = new Set<string>();
-    for (const requestId of new Set(requestIds)) {
-      const state = this.#requests.get(requestId);
+    const dirty = new Set<string>();
+    for (const id of new Set(requestIds)) {
+      const state = this.#requests.get(id);
       if (state === undefined) continue;
       if (state.status === 'active') {
         this.#free(state.allocation);
-        for (const assignment of state.allocation.assignments) touchedPools.add(assignment.poolId);
+        this.#markPoolsDirty(state.allocation.assignments, dirty);
       } else {
-        touchedPools.add(state.queued.request.requirements[0]!.poolId);
+        dirty.add(state.queued.classKey);
       }
-      this.#requests.delete(requestId);
+      this.#requests.delete(id);
     }
-    return this.#drainPools(touchedPools, at);
+    return this.#drain(dirty, at);
   }
 
   used(poolId: string): number {
@@ -161,14 +184,44 @@ export class ResourceManager {
     return pool.used;
   }
 
-  /** Instrumentación determinista para probar que una cola bloqueada no se reescanea. */
   get headInspections(): number {
     return this.#headInspections;
   }
 
-  /** Solicitudes vivas; no incluye tombstones del heap y debe volver a cero tras liberar. */
   get liveRequestCount(): number {
     return this.#requests.size;
+  }
+
+  #validate(request: ResourceRequest): void {
+    if (this.#requests.has(request.id)) throw new Error(`E-REC-SOLICITUD-DUPLICADA: ya existe la solicitud ${request.id}.`);
+    if (request.requirements.length === 0) throw new Error(`E-REC-SIN-ASIGNACION: ${request.id}: falta un pool.`);
+    if (request.requirements.length > 1 && request.selection === 'or') {
+      throw new Error(`E-REC-OR-PENDIENTE: ${request.id}: LILA-035 implementa selección OR multi-pool.`);
+    }
+    const seen = new Set<string>();
+    for (const requirement of request.requirements) {
+      if (seen.has(requirement.poolId)) throw new Error(`E-REC-DUPLICADO: ${request.id}: el pool ${requirement.poolId} aparece más de una vez.`);
+      seen.add(requirement.poolId);
+      const pool = this.#pools.get(requirement.poolId);
+      if (pool === undefined) throw new Error(`E-REC-DESCONOCIDO: ${request.id}: el pool ${requirement.poolId} no existe.`);
+      assertPositiveInteger(requirement.quantity, `E-REC-CANTIDAD: ${request.id}: quantity de ${requirement.poolId} debe ser un entero mayor o igual que 1.`);
+      if (requirement.quantity > pool.capacity) {
+        throw new RangeError(`E-REC-CANTIDAD: ${request.id}: quantity ${requirement.quantity} excede capacity ${pool.capacity} de ${requirement.poolId}.`);
+      }
+    }
+  }
+
+  /**
+   * Firma de clase (ADR-026). Single-pool ignora `quantity` para conservar FIFO estricto por pool;
+   * la firma AND se ordena por `(poolId, quantity)` para que dos tareas que declaran los mismos
+   * pools en distinto orden compartan una única cola y no dupliquen clases equivalentes.
+   */
+  #classKey(request: ResourceRequest): string {
+    if (request.requirements.length === 1) return `single:${JSON.stringify(request.requirements[0]!.poolId)}`;
+    const signature = request.requirements
+      .map((requirement) => [requirement.poolId, requirement.quantity] as const)
+      .sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : left[1] - right[1]));
+    return `and:${JSON.stringify(signature)}`;
   }
 
   #free(allocation: ResourceAllocation): void {
@@ -179,42 +232,64 @@ export class ResourceManager {
     }
   }
 
-  #drainPools(poolIds: ReadonlySet<string>, at: number): ResourceAllocation[] {
-    const granted: ResourceAllocation[] = [];
-    for (const poolId of poolIds) granted.push(...this.#drainPool(poolId, at));
-    return granted.sort((left, right) => left.enabledAt - right.enabledAt || left.seq - right.seq);
+  #markPoolsDirty(requirements: readonly ResourceRequirement[], dirty: Set<string>): void {
+    for (const requirement of requirements) {
+      for (const classKey of this.#pools.get(requirement.poolId)!.classes) dirty.add(classKey);
+    }
   }
 
-  #drainPool(poolId: string, at: number): ResourceAllocation[] {
-    const granted: ResourceAllocation[] = [];
-    const pool = this.#pools.get(poolId)!;
-
+  #head(requestClass: RequestClass): QueuedRequest | undefined {
     for (;;) {
-      const queued = pool.waiters.peek();
-      if (queued === undefined) break;
+      const head = requestClass.waiters.peek();
+      if (head === undefined) return undefined;
       this.#headInspections++;
-      const state = this.#requests.get(queued.request.id);
-      if (state?.status !== 'queued') {
-        pool.waiters.pop(); // tombstone de cancelación
-        continue;
-      }
+      if (this.#requests.get(head.request.id)?.status === 'queued') return head;
+      requestClass.waiters.pop();
+    }
+  }
 
-      const assignment = queued.request.requirements[0]!;
-      // FIFO estricto: si el head todavía no está habilitado o no cabe, ningún sucesor del
-      // mismo pool puede adelantarlo. Así cada enqueue inspecciona O(1) heads, no toda Q.
-      if (queued.t > at || pool.capacity - pool.used < assignment.quantity) break;
-      pool.waiters.pop();
+  #satisfiable(request: ResourceRequest): boolean {
+    for (const requirement of request.requirements) {
+      const pool = this.#pools.get(requirement.poolId)!;
+      if (pool.capacity - pool.used < requirement.quantity) return false;
+    }
+    return true;
+  }
 
-      pool.used += assignment.quantity;
+  #evaluate(classKey: string, at: number): void {
+    const requestClass = this.#classes.get(classKey);
+    if (requestClass === undefined) return;
+    const version = ++requestClass.version;
+    const head = this.#head(requestClass);
+    if (head === undefined || head.t > at || !this.#satisfiable(head.request)) return;
+    this.#ready.push({ enabledAt: head.t, seq: head.seq, classKey, requestId: head.request.id, version });
+  }
+
+  #drain(initialDirty: Set<string>, at: number): ResourceAllocation[] {
+    for (const classKey of initialDirty) this.#evaluate(classKey, at);
+    const granted: ResourceAllocation[] = [];
+    while (this.#ready.size > 0) {
+      const ready = this.#ready.pop()!;
+      const requestClass = this.#classes.get(ready.classKey);
+      if (requestClass === undefined || requestClass.version !== ready.version) continue;
+      const head = this.#head(requestClass);
+      if (head === undefined || head.request.id !== ready.requestId || head.t > at || !this.#satisfiable(head.request)) continue;
+
+      requestClass.waiters.pop();
+      for (const requirement of head.request.requirements) this.#pools.get(requirement.poolId)!.used += requirement.quantity;
       const allocation: ResourceAllocation = {
-        requestId: queued.request.id,
-        enabledAt: queued.request.enabledAt,
+        requestId: head.request.id,
+        enabledAt: head.request.enabledAt,
         startedAt: at,
-        seq: queued.seq,
-        assignments: queued.request.requirements,
+        seq: head.seq,
+        assignments: head.request.requirements,
       };
-      this.#requests.set(queued.request.id, { status: 'active', allocation });
+      this.#requests.set(head.request.id, { status: 'active', allocation });
       granted.push(allocation);
+
+      const dirty = new Set<string>();
+      this.#markPoolsDirty(allocation.assignments, dirty);
+      for (const classKey of dirty) this.#evaluate(classKey, at);
     }
     return granted;
   }

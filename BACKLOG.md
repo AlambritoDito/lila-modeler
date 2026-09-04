@@ -226,8 +226,8 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 
 #### LILA-034 · Asignación AND multi-pool atómica
 - Épica E4 · Hito M2 · Tamaño M · Depende de LILA-033
-- Qué: la tarea arranca cuando todos los pools tienen capacidad simultáneamente; sin retención parcial.
-- Aceptación: 100 000 casos con dos pools en orden adverso de ids no producen deadlock; costos por pool correctos.
+- Qué: la tarea arranca cuando todos los pools tienen capacidad simultáneamente; sin retención parcial. Las solicitudes se agrupan por firma, los pools indexan las firmas afectadas y un heap de cabezas elegibles conserva `(enabledAt, seq)` sin recorrer toda la cola. OR permanece en fail-fast hasta LILA-035.
+- Aceptación: 100 000 casos con dos pools en orden adverso de ids no producen deadlock ni reescaneo cuadrático; una AND bloqueada se salta sin retener capacidad, assignments/log conservan el orden del escenario y los costos por pool son reconstruibles.
 - Archivos: `packages/engine/src/core/resources.ts`.
 
 #### LILA-035 · Selección OR de recursos

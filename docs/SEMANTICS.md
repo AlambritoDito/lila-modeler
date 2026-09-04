@@ -385,9 +385,12 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 - **R-REC-2 — Defaults de la asignación.** `quantity` ausente vale 1. `selection` ausente vale
   `"and"`. Con un solo pool, `and` y `or` son equivalentes. `quantity > capacity` del pool es error
   `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre). Una `ref` a un pool inexistente es
-  error `E-REC-DESCONOCIDO`. En LILA-033 más de un pool falla antes de simular con
-  `E-REC-MULTIPOOL-PENDIENTE`; LILA-034/035 sustituyen ese guard por AND/OR. *(prueba: LILA-013,
-  LILA-033, LILA-042)*
+  error `E-REC-DESCONOCIDO`, un pool repetido en la misma tarea es `E-REC-DUPLICADO` y una
+  `capacity` que no sea entero ≥ 1 es `E-REC-CAPACIDAD`. Los cuatro se comprueban en un preflight
+  **antes de cualquier callback público**: una corrida no puede emitir filas ni progreso y fallar
+  después. Desde LILA-034 múltiples pools con selección ausente o `"and"` son
+  válidos; `"or"` falla antes de simular con `E-REC-OR-PENDIENTE` hasta LILA-035.
+  *(prueba: LILA-013, LILA-033, LILA-034, LILA-042)*
 - **R-REC-3 — Cola FIFO por instante de habilitación.** Cada pool tiene una cola ordenada por
   `(enabled, seq)` ascendente, donde `seq` es el contador monótono del evento que habilitó al token.
   Como `seq` es único, el orden es total y determinista: **no hay empates reales**.
@@ -395,12 +398,15 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 - **R-REC-4 — Selección AND: atómica, sin retención parcial.** La tarea entra en la cola de todos
   sus pools. Arranca cuando **todos** ellos tienen simultáneamente `quantity` unidades libres; en
   ese instante se descuentan todas de golpe. Nunca se retiene un recurso mientras se espera otro,
-  así que **no puede haber deadlock**. *(prueba: LILA-034)*
+  así que **no puede haber deadlock**. Las filas y `assignments` conservan el orden declarado en
+  el escenario aunque el índice interno use todos los pools. *(prueba: LILA-034)*
 - **R-REC-5 — FIFO con salto en la asignación AND.** En cada liberación se recorre la cola en orden
   FIFO global `(enabled, seq)` y arranca el **primer candidato satisfacible**; un candidato que no
   puede arrancar no bloquea a los que van detrás. Es una desviación deliberada del FIFO estricto:
-  sin ella, un candidato multi-pool bloqueado congelaría el pool entero. Con un solo pool el
-  comportamiento es FIFO estricto. *(prueba: LILA-034, LILA-033)*
+  sin ella, un candidato multi-pool bloqueado congelaría el pool entero. El salto es **entre
+  firmas de requisitos distintas**: todas las solicitudes que piden un único pool comparten una sola
+  cola FIFO por pool, así que una cabeza single-pool que no cabe sí bloquea a las que van detrás en
+  ese mismo pool, aunque pidan menos unidades (ADR-026). *(prueba: LILA-034, LILA-033)*
 - **R-REC-6 — Selección OR.** La tarea se encola en **todos** los pools alternativos y arranca con
   el primero que tenga `quantity` unidades libres; al arrancar se retira de las demás colas. Si en
   el instante de habilitación hay varios pools disponibles, gana el que aparece **primero en el
@@ -424,7 +430,7 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   también emite una sola sentinel, porque todavía no existe asignación; una vez iniciada emite sus
   asignaciones efectivas. Las filas se agrupan por `activityInstanceId`, nunca mediante un array
   anidado. Métricas de actividad y caso deduplican por `(replication, activityInstanceId)`; costos y
-  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033,
+  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
   LILA-037)*
 
 ---
