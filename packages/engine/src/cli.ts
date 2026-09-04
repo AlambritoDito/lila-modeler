@@ -5,7 +5,7 @@
  * Es el único borde que toca disco: el parser y el validador reciben cadenas y objetos. Sin
  * dependencias: `node:util.parseArgs` viene con Node.
  */
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { parseBpmn } from './bpmn/parse.js';
 import { validate } from './bpmn/validate.js';
@@ -103,20 +103,4 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   return validateCommand(file, values.json === true);
-}
-
-// Se ejecuta solo cuando se invoca como programa, no cuando el test importa `main`. `realpath`
-// porque npm instala el bin como symlink en `node_modules/.bin/lila`.
-const invoked =
-  process.argv[1] !== undefined && realpathSync(process.argv[1]) === import.meta.filename;
-if (invoked) {
-  main(process.argv.slice(2)).then(
-    (code) => {
-      process.exitCode = code;
-    },
-    (error: unknown) => {
-      console.error(`lila: ${error instanceof Error ? error.message : String(error)}`);
-      process.exitCode = 1;
-    },
-  );
 }
