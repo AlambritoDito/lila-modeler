@@ -362,3 +362,59 @@ La tabla lista **una fila por pool declarado**, también los que quedaron con 0 
 | `count` | Instances/Tokens completed (para el sequence flow) |
 
 Nota de confianza: los nombres exactos arriba están marcados `[verified]` en la investigación citada salvo el desglose de "waiting for resource" en columnas separadas Min/Max/Avg/Std.Dev/Total, que la ayuda de Bizagi describe como grupo pero sin dar el texto literal de cada subcolumna — se usa el patrón `Minimum/Maximum/Average/Standard deviation/Total time` por consistencia con el grupo de `processing`. Si al reproducir el ejemplo oficial de nivel 3/4 de Bizagi (prueba de aceptación de M1, sección 7 del documento de estructura) el texto real difiere, este documento se corrige entonces sin abrir un ticket aparte.
+
+---
+
+## 11. `compare(results[])` *(LILA-038)*
+
+`compare` (`packages/engine/src/core/compare.ts`) pone varios `RunResult` lado a lado para leer un
+what-if. Es una función pura de `core/`: no imprime nada — la tabla de consola es `lila compare`
+(LILA-047) y la vista de la web LILA-064.
+
+```ts
+function compare(results: readonly RunResult[]): CompareResult;
+
+interface CompareResult {
+  count: number;        // resultados comparados; el índice 0 de cada array es la base
+  rows: CompareRow[];
+}
+
+interface CompareRow {
+  kpi: string;                    // path idéntico al de replications.kpis (sección 8)
+  scope: 'elements' | 'flows' | 'resources' | 'process';
+  id: string | null;              // id BPMN sin escapar; null cuando scope = "process"
+  metric: string;                 // p. ej. "resourceWait.mean", "cycleTime.p95"
+  base: number | null;
+  values: (number | null)[];      // values[0] === base
+  deltaAbs: (number | null)[];    // values[i] − base
+  deltaRel: (number | null)[];    // (values[i] − base) / base
+  significant: boolean[];         // significant[0] siempre false
+}
+```
+
+- **Base**: `results[0]`. Todo delta se mide contra ella, nunca contra la columna anterior.
+- **Filas**: una por KPI numérico escalar, los mismos que aplana `numericKpis` (secciones 2–5), con
+  el mismo escape de `.` en los ids dinámicos (sección 8). `scope`/`id`/`metric` son ese path ya
+  partido, para que la CLI agrupe por elemento, recurso o proceso sin volver a implementar el
+  escape.
+- **Orden**: los KPI del resultado base en su orden de aparición (elementos, flujos, recursos,
+  proceso) y, detrás, los que solo existen en resultados posteriores —un pool nuevo en el TO-BE—,
+  en orden de resultado. Dos llamadas con la misma entrada producen `JSON.stringify` idéntico.
+- **Claves ausentes**: un KPI que no existe en algún resultado vale `null` ahí; no es un error, y su
+  `deltaAbs`/`deltaRel` también son `null`.
+- **`deltaRel` con base 0**: `null`, nunca `Infinity` ni `NaN`, para que el JSON siga siendo válido.
+- **Lista vacía**: `compare([])` lanza `RangeError` con `E-COMPARE-VACIO`. Un solo resultado sí es
+  válido: da deltas 0 y ninguna significancia.
+- **Significancia**: `significant[i]` es `true` cuando los intervalos `ci95` de la base y del
+  resultado `i` (sección 8) **no se solapan**. Dos intervalos que solo se tocan en un extremo cuentan
+  como solapados. Un resultado sin `replications` —una sola replicación, o una corrida cancelada con
+  menos de dos completas— no tiene IC: `significant` vale `false`, y los deltas siguen siendo
+  válidos, solo que sin respaldo estadístico.
+- Los deltas se leen limpios porque R-DET-3 garantiza números aleatorios comunes: cambiar la
+  capacidad de un pool no altera el stream de los elementos que no se tocaron.
+
+Aceptación (`examples/pedido`, `seed: 42`, 30 replicaciones): pasar de 2 a 3 cajeros marca
+`elements.Task_TomarPedido.resourceWait.mean` como significativa (14,94 s → 2,19 s, IC
+[14,70; 15,19] y [2,12; 2,27], disjuntos) y **no** marca `elements.Task_Preparar.resourceWait.mean`,
+cuyo cuello de botella es el pool `horno` con `capacity 1`, que el TO-BE no toca.
+*(prueba: LILA-038)*
