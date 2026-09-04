@@ -68,7 +68,7 @@ describe('degradación semántica (LILA-039)', () => {
 
     const actual = await renderPedidoScenario(withCajero);
     expect(actual).not.toBe(readFileSync(PEDIDO_GOLDEN_PATH, 'utf8'));
-  });
+  }, 60_000); // ponytail: 30 réplicas con pool real rondan los 5 s en CI Node 22; techo holgado, no medida de rendimiento
 
   // El golden solo contiene el resumen agregado: sin esta prueba, el event log del escenario
   // degradado podría inventar asignaciones (R-REC-11) o costos (R-DEG-5) sin romper los bytes.
