@@ -33,6 +33,23 @@ declare module 'bpmn-moddle' {
     targetRef?: ModdleElement;
     /** flujo por defecto de un gateway o actividad */
     default?: ModdleElement;
+    /** `bpmn:documentation` de cualquier elemento */
+    documentation?: ModdleElement[];
+    /** texto de un `bpmn:Documentation` */
+    text?: string;
+    /** `bpmn:extensionElements` */
+    extensionElements?: ModdleElement;
+    /** hijos de `bpmn:ExtensionElements` */
+    values?: ModdleElement[];
+    /** `bpmn:Collaboration` */
+    participants?: ModdleElement[];
+    messageFlows?: ModdleElement[];
+    artifacts?: ModdleElement[];
+    /** atributos de los elementos `lila:` */
+    type?: string;
+    roleRef?: string;
+    ref?: string;
+    value?: string;
   }
 
   export interface Moddle {
