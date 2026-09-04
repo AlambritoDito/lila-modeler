@@ -119,3 +119,68 @@ test('un elemento sin anotaciones no aparece en readAnnotations', async () => {
   const read = await readAnnotations(pedido);
   expect(read['Task_TomarPedido']).toBeUndefined();
 });
+
+// Fallos encontrados por el QA adversarial del PR 158.
+
+test('un archivo cuyo contenido bpmn-moddle no sabe reescribir falla en vez de perderlo', async () => {
+  const b20 = readFileSync(
+    fileURLToPath(
+      new URL(
+        '../../../../examples/bizagi-exports/bizagi-miwg-B.2.0-roundtrip.bpmn',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  );
+  await expect(readAnnotations(b20)).rejects.toThrow(/se perdería al guardarlo/);
+});
+
+test('un id duplicado falla en vez de borrar el elemento repetido', async () => {
+  const dup = pedido.replace('id="Task_Empacar"', 'id="Task_Revisar"');
+  await expect(annotateElement(dup, 'Task_Revisar', { documentation: 'x' })).rejects.toThrow(
+    /se perdería al guardarlo/,
+  );
+});
+
+test('anota y lee un bpmn:lane, que no cuelga de flowElements', async () => {
+  const conLane = pedido.replace(
+    '<bpmn:startEvent id="StartEvent_Pedido"',
+    '<bpmn:laneSet id="LaneSet_1"><bpmn:lane id="Lane_Caja" name="Caja" /></bpmn:laneSet><bpmn:startEvent id="StartEvent_Pedido"',
+  );
+  const written = await annotateElement(conLane, 'Lane_Caja', {
+    responsibilities: [{ type: 'A', roleRef: 'rol-jefe' }],
+  });
+  expect((await readAnnotations(written))['Lane_Caja']?.responsibilities).toEqual([
+    { type: 'A', roleRef: 'rol-jefe' },
+  ]);
+});
+
+test('anota y lee un bpmn:participant de la colaboración', async () => {
+  const written = await annotateElement(pedido, 'Participant_Restaurante', {
+    refs: { systemRef: ['sys-pos'] },
+  });
+  expect((await readAnnotations(written))['Participant_Restaurante']?.refs).toEqual({
+    systemRef: ['sys-pos'],
+  });
+});
+
+test('lee y escribe lila:versionTag en el proceso', async () => {
+  const written = await annotateElement(pedido, 'Process_Restaurante', { versionTag: '1.3.0' });
+  expect((await readAnnotations(written))['Process_Restaurante']?.versionTag).toBe('1.3.0');
+});
+
+test('documentation vacía borra la documentación', async () => {
+  const conDoc = await annotateElement(pedido, 'Task_Revisar', { documentation: 'algo' });
+  const sinDoc = await annotateElement(conDoc, 'Task_Revisar', { documentation: '' });
+
+  expect((await readAnnotations(conDoc))['Task_Revisar']?.documentation).toBe('algo');
+  expect((await readAnnotations(sinDoc))['Task_Revisar']).toBeUndefined();
+});
+
+test('varias bpmn:documentation se leen todas', async () => {
+  const dos = pedido.replace(
+    '<bpmn:task id="Task_Revisar"',
+    '<bpmn:task id="Task_X" name="X"><bpmn:documentation>uno</bpmn:documentation><bpmn:documentation>dos</bpmn:documentation></bpmn:task><bpmn:task id="Task_Revisar"',
+  );
+  expect((await readAnnotations(dos))['Task_X']?.documentation).toBe('uno\ndos');
+});

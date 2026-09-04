@@ -37,6 +37,8 @@ export interface Annotations {
   documentation?: string;
   responsibilities?: Responsibility[];
   refs?: Refs;
+  /** `lila:versionTag`, que cuelga del `bpmn:process`. */
+  versionTag?: string;
 }
 
 /** `lila:responsibility` -> `lila:Responsibility`, `lila:systemRef` -> `lila:SystemRef`. */
@@ -45,27 +47,68 @@ function moddleType(tag: string): string {
 }
 
 const RESPONSIBILITY_TYPE = moddleType('responsibility');
+const VERSION_TAG_TYPE = moddleType('versionTag');
 const REF_TYPE_TO_KIND = new Map<string, RefKind>(REF_KINDS.map((k) => [moddleType(k), k]));
 
-/** Recorre el árbol y devuelve todo elemento que tenga `id`, incluidos los anidados. */
+/**
+ * Recorre el árbol y devuelve todo elemento que tenga `id`, incluidos los anidados. Cubre lo que
+ * `docs/BPMN_EXTENSION.md` §2 declara anotable: procesos, nodos de flujo (también dentro de
+ * subprocesos), sequence flows, colaboraciones, participantes, message flows, lanes y artefactos.
+ */
 function* walk(el: ModdleElement): Generator<ModdleElement> {
   if (typeof el.id === 'string') yield el;
-  for (const child of [...(el.rootElements ?? []), ...(el.flowElements ?? [])]) {
-    yield* walk(child);
-  }
+  const children = [
+    ...(el.rootElements ?? []),
+    ...(el.flowElements ?? []),
+    ...(el.participants ?? []),
+    ...(el.messageFlows ?? []),
+    ...(el.artifacts ?? []),
+    ...(el.laneSets ?? []),
+    ...(el.lanes ?? []),
+    ...(el.childLaneSet === undefined ? [] : [el.childLaneSet]),
+  ];
+  for (const child of children) yield* walk(child);
+}
+
+/**
+ * bpmn-moddle DESCARTA en silencio lo que no sabe parsear (un elemento con un id duplicado, o
+ * contenido no reconocido dentro de una extensión ajena) y lo reporta solo como `warning`. Si
+ * reserializáramos ese árbol, el archivo del usuario perdería contenido sin que nadie se entere,
+ * que es justo lo que ADR-021 prohíbe. Así que se convierte en error.
+ *
+ * ponytail: se aborta en vez de conservar el fragmento intacto. Techo: hay archivos reales de
+ * Bizagi (`bizagi-miwg-B.2.0`) que hoy no se pueden anotar. Camino de mejora, cuando haga falta:
+ * parchear el XML por rangos de texto en vez de reserializar el documento entero.
+ */
+function assertNoContentLoss(warnings: readonly unknown[]): void {
+  if (warnings.length === 0) return;
+  const detail = warnings
+    .map((w) => (w instanceof Error ? w.message : String(w)))
+    .join('; ');
+  throw new Error(
+    `el archivo tiene contenido que bpmn-moddle no sabe reescribir y se perdería al guardarlo: ${detail}`,
+  );
 }
 
 function readOne(el: ModdleElement): Annotations {
   const annotations: Annotations = {};
 
-  const text = el.documentation?.[0]?.text;
-  if (text !== undefined && text !== '') annotations.documentation = text;
+  // BPMN admite varios `bpmn:documentation` por elemento; se leen todos, en orden.
+  const text = (el.documentation ?? [])
+    .map((doc) => doc.text ?? '')
+    .filter((t) => t !== '')
+    .join('\n');
+  if (text !== '') annotations.documentation = text;
 
   const responsibilities: Responsibility[] = [];
   const refs: Refs = {};
   for (const value of el.extensionElements?.values ?? []) {
     if (value.$type === RESPONSIBILITY_TYPE) {
       responsibilities.push({ type: value.type ?? '', roleRef: value.roleRef ?? '' });
+      continue;
+    }
+    if (value.$type === VERSION_TAG_TYPE) {
+      annotations.versionTag = value.value ?? '';
       continue;
     }
     const kind = REF_TYPE_TO_KIND.get(value.$type);
@@ -83,7 +126,8 @@ function readOne(el: ModdleElement): Annotations {
  */
 export async function readAnnotations(xml: string): Promise<Record<string, Annotations>> {
   const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions } = await moddle.fromXML(xml);
+  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
+  assertNoContentLoss(warnings);
 
   const result: Record<string, Annotations> = {};
   for (const el of walk(definitions)) {
@@ -112,7 +156,8 @@ export async function annotateElement(
   annotations: Annotations,
 ): Promise<string> {
   const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions } = await moddle.fromXML(xml);
+  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
+  assertNoContentLoss(warnings);
 
   let target: ModdleElement | undefined;
   for (const el of walk(definitions)) {
@@ -126,15 +171,23 @@ export async function annotateElement(
   }
 
   if (annotations.documentation !== undefined) {
-    target.documentation = [
-      moddle.create('bpmn:Documentation', { text: annotations.documentation }),
-    ];
+    // La cadena vacía BORRA la documentación; si no, `readAnnotations` devolvería `undefined`
+    // para algo que sí está escrito en el archivo.
+    target.documentation =
+      annotations.documentation === ''
+        ? []
+        : [moddle.create('bpmn:Documentation', { text: annotations.documentation })];
   }
 
-  if (annotations.responsibilities !== undefined || annotations.refs !== undefined) {
+  if (
+    annotations.responsibilities !== undefined ||
+    annotations.refs !== undefined ||
+    annotations.versionTag !== undefined
+  ) {
     const existing = target.extensionElements?.values ?? [];
     const kept = existing.filter((value) => {
       if (value.$type === RESPONSIBILITY_TYPE) return annotations.responsibilities === undefined;
+      if (value.$type === VERSION_TAG_TYPE) return annotations.versionTag === undefined;
       const kind = REF_TYPE_TO_KIND.get(value.$type);
       if (kind === undefined) return true; // extensión ajena: intacta
       return annotations.refs?.[kind] === undefined;
@@ -148,6 +201,9 @@ export async function annotateElement(
       for (const ref of annotations.refs?.[kind] ?? []) {
         added.push(moddle.create(moddleType(kind), { ref }));
       }
+    }
+    if (annotations.versionTag !== undefined && annotations.versionTag !== '') {
+      added.push(moddle.create(VERSION_TAG_TYPE, { value: annotations.versionTag }));
     }
 
     target.extensionElements = moddle.create('bpmn:ExtensionElements', {

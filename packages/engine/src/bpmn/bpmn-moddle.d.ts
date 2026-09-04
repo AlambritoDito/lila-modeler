@@ -41,6 +41,10 @@ declare module 'bpmn-moddle' {
     extensionElements?: ModdleElement;
     /** hijos de `bpmn:ExtensionElements` */
     values?: ModdleElement[];
+    /** `bpmn:Collaboration` */
+    participants?: ModdleElement[];
+    messageFlows?: ModdleElement[];
+    artifacts?: ModdleElement[];
     /** atributos de los elementos `lila:` */
     type?: string;
     roleRef?: string;
