@@ -12,7 +12,8 @@
     "./schema": "./dist/scenario.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "scripts": {
     "build": "tsc --build"
@@ -22,6 +23,6 @@
     "zod": "^4.5.4"
   },
   "bin": {
-    "lila": "./dist/cli.js"
+    "lila": "./bin/lila.js"
   }
 }
