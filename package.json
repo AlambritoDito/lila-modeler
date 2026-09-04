@@ -13,8 +13,9 @@
   "scripts": {
     "test": "vitest run",
     "build": "tsc --build",
-    "typecheck": "tsc --build --force",
-    "golden:update": "npm run golden:update --workspace @lila/engine"
+    "typecheck": "tsc --build --force && tsc --project packages/engine/bench/tsconfig.json",
+    "golden:update": "npm run golden:update --workspace @lila/engine",
+    "bench": "tsx packages/engine/bench/linear-100k.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
