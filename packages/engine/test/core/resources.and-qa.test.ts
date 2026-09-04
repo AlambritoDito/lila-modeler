@@ -9,7 +9,7 @@
 import { describe, expect, test } from 'vitest';
 
 import type { Flow, Node, ProcessIR } from '../../src/core/ir.js';
-import type { EventLogRow } from '../../src/core/result.js';
+import type { EventLogRow, RunResult } from '../../src/core/result.js';
 import { simulate } from '../../src/core/run.js';
 import { runReplication, type SimScenario } from '../../src/core/sim.js';
 import { ResourceManager, type ResourceRequirement } from '../../src/core/resources.js';
@@ -417,7 +417,19 @@ describe('QA LILA-034 · integración DES', () => {
       },
     };
     const withPools: SimScenario = { ...bare, resources: { zzz: { capacity: 1 }, aaa: { capacity: 3 } } };
-    expect(JSON.stringify(simulate(linearIr(), withPools))).toBe(JSON.stringify(simulate(linearIr(), bare)));
+    // Declarar pools que nadie usa no es la degradación R-DEG-1 (esa es la ausencia de la
+    // sección `resources`): la tabla Resources lista todo pool declarado, con utilización 0,
+    // para que las replicaciones compartan el mismo conjunto de claves de KPI
+    // (RESULTS_FORMAT § 4, LILA-036). Lo que no puede cambiar es nada más del resultado.
+    const withoutResources = ({ resources: _resources, ...rest }: RunResult): Omit<RunResult, 'resources'> => rest;
+    expect(JSON.stringify(withoutResources(simulate(linearIr(), withPools)))).toBe(
+      JSON.stringify(withoutResources(simulate(linearIr(), bare))),
+    );
+    expect(simulate(linearIr(), bare).resources).toEqual({});
+    expect(simulate(linearIr(), withPools).resources).toEqual({
+      zzz: { utilization: 0, busyTime: 0, fixedCost: 0, unitCost: 0, totalCost: 0 },
+      aaa: { utilization: 0, busyTime: 0, fixedCost: 0, unitCost: 0, totalCost: 0 },
+    });
     // Capacidad infinita: todas las tareas arrancan en su enabledAt.
     const run = runReplication(linearIr(), bare);
     expect(run.rows.every((row) => row.startedAt === row.enabledAt)).toBe(true);
