@@ -80,66 +80,6 @@ const replicationSummarySchema = z.object({
   kpis: z.record(z.string(), kpiSummarySchema),
 });
 
-// Nota: sin `satisfies z.ZodType<RunResult>` — zod modela un campo `.optional()` como
-// "puede valer undefined" (`T | undefined`), mientras que `exactOptionalPropertyTypes`
-// exige que un campo opcional de RunResult, si está presente, tenga el tipo exacto (nunca
-// `undefined` explícito). Ambas cosas describen el mismo contrato en la práctica (JSON no
-// tiene un valor `undefined`); el desacuerdo es solo de representación en TypeScript. El
-// mínimo que funciona: los tests (`result.test.ts`) verifican que este esquema valida
-// contra `RunResult` de verdad, en tiempo de ejecución.
-export const runResultSchema = z
-  .object({
-    elements: z.record(z.string(), elementMetricsSchema),
-    flows: z.record(z.string(), flowMetricsSchema),
-    resources: z.record(z.string(), resourceMetricsSchema),
-    process: processMetricsSchema,
-    bottlenecks: z.array(bottleneckEntrySchema),
-    replications: replicationSummarySchema.optional(),
-    cancelled: z.literal(true).optional(),
-    completedReplications: z.number().int().nonnegative().optional(),
-    warnings: z.array(z.string()),
-  })
-  .superRefine((result, context) => {
-    if (result.cancelled === true && result.completedReplications === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['completedReplications'],
-        message: 'completedReplications es obligatorio cuando cancelled es true.',
-      });
-    }
-    if (result.cancelled === undefined && result.completedReplications !== undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['completedReplications'],
-        message: 'completedReplications solo puede aparecer cuando cancelled es true.',
-      });
-    }
-    if (result.cancelled === true && result.completedReplications !== undefined) {
-      const completed = result.completedReplications;
-      if (completed < 2 && result.replications !== undefined) {
-        context.addIssue({
-          code: 'custom',
-          path: ['replications'],
-          message: 'replications se omite cuando hay menos de dos replicaciones completas.',
-        });
-      }
-      if (completed >= 2 && result.replications === undefined) {
-        context.addIssue({
-          code: 'custom',
-          path: ['replications'],
-          message: 'replications es obligatorio con al menos dos replicaciones completas.',
-        });
-      }
-      if (result.replications !== undefined && result.replications.count !== completed) {
-        context.addIssue({
-          code: 'custom',
-          path: ['replications', 'count'],
-          message: 'replications.count debe coincidir con completedReplications.',
-        });
-      }
-    }
-  });
-
 export const eventLogRowSchema = z.object({
   replication: z.number(),
   caseId: z.string(),
@@ -188,3 +128,65 @@ export const eventLogRowSchema = z.object({
     context.addIssue({ code: 'custom', path: ['cost'], message: 'cost debe ser elementCost + resourceCost.' });
   }
 }) satisfies z.ZodType<EventLogRow>;
+
+// Nota: sin `satisfies z.ZodType<RunResult>` — zod modela un campo `.optional()` como
+// "puede valer undefined" (`T | undefined`), mientras que `exactOptionalPropertyTypes`
+// exige que un campo opcional de RunResult, si está presente, tenga el tipo exacto (nunca
+// `undefined` explícito). Ambas cosas describen el mismo contrato en la práctica (JSON no
+// tiene un valor `undefined`); el desacuerdo es solo de representación en TypeScript. El
+// mínimo que funciona: los tests (`result.test.ts`) verifican que este esquema valida
+// contra `RunResult` de verdad, en tiempo de ejecución.
+export const runResultSchema = z
+  .object({
+    elements: z.record(z.string(), elementMetricsSchema),
+    flows: z.record(z.string(), flowMetricsSchema),
+    resources: z.record(z.string(), resourceMetricsSchema),
+    process: processMetricsSchema,
+    bottlenecks: z.array(bottleneckEntrySchema),
+    replications: replicationSummarySchema.optional(),
+    cancelled: z.literal(true).optional(),
+    completedReplications: z.number().int().nonnegative().optional(),
+    warnings: z.array(z.string()),
+    // Presente solo cuando simulate materializó el log (sin onEvent y sin log: false).
+    log: z.array(eventLogRowSchema).optional(),
+  })
+  .superRefine((result, context) => {
+    if (result.cancelled === true && result.completedReplications === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedReplications'],
+        message: 'completedReplications es obligatorio cuando cancelled es true.',
+      });
+    }
+    if (result.cancelled === undefined && result.completedReplications !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedReplications'],
+        message: 'completedReplications solo puede aparecer cuando cancelled es true.',
+      });
+    }
+    if (result.cancelled === true && result.completedReplications !== undefined) {
+      const completed = result.completedReplications;
+      if (completed < 2 && result.replications !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications'],
+          message: 'replications se omite cuando hay menos de dos replicaciones completas.',
+        });
+      }
+      if (completed >= 2 && result.replications === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications'],
+          message: 'replications es obligatorio con al menos dos replicaciones completas.',
+        });
+      }
+      if (result.replications !== undefined && result.replications.count !== completed) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications', 'count'],
+          message: 'replications.count debe coincidir con completedReplications.',
+        });
+      }
+    }
+  });

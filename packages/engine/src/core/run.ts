@@ -34,7 +34,10 @@ export interface SimulateOptions {
   onProgress?: ((progress: SimulationProgress) => void) | undefined;
   /** Señal estructural: basta cualquier objeto con un booleano `aborted`. */
   signal?: AbortSignalLike | undefined;
-  /** `false` desactiva `onEvent`; por defecto el stream está habilitado. */
+  /**
+   * `false` desactiva el event log entero: ni llama a `onEvent` ni publica `result.log`.
+   * Por defecto el log está habilitado (sección 7 de docs/RESULTS_FORMAT.md).
+   */
   log?: boolean | undefined;
 }
 
@@ -110,6 +113,11 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   // El preflight precede incluso al progreso inicial: un input no soportado no puede dejar
   // callbacks observables antes de lanzar el error estable.
   assertSupportedResourceScenario(scenario);
+  // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
+  // nadie más se hizo cargo de las filas. Con `onEvent` el consumidor ya las recibe una a una —la
+  // CLI las escribe directas a `log.csv`— y retenerlas otra vez duplicaría hasta 6 M de objetos.
+  const log: EventLogRow[] | undefined =
+    options.log === false || options.onEvent !== undefined ? undefined : [];
   const totalReplications = scenario.run.replications ?? 1;
   const completed: RunResult[] = [];
   let partial: RunResult | undefined;
@@ -158,6 +166,9 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
               });
             },
     });
+    // Solo el modo retenido conserva las filas más allá de la iteración; en los otros dos el
+    // `ReplicationRun` entero queda libre al cerrarla, así que el pico es el de una replicación.
+    if (log !== undefined) for (const row of run.rows) log.push(row);
     const result = aggregateReplication(ir, run, scenario);
 
     if (run.cancelled === true) {
@@ -186,5 +197,6 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     result.cancelled = true;
     result.completedReplications = completed.length;
   }
+  if (log !== undefined) result.log = log;
   return result;
 }

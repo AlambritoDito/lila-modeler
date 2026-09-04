@@ -25,6 +25,7 @@ interface RunResult {
   cancelled?: true;                           // ausencia = corrida completa
   completedReplications?: number;             // solo si cancelled = true
   warnings: string[];                         // ver sección 8
+  log?: EventLogRow[];                        // solo en modo retenido, ver sección 7
 }
 ```
 
@@ -197,6 +198,22 @@ memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas
 `opts.log` vale `true` por defecto; `log: false` suprime el callback incluso si se proporcionó
 `onEvent`, pero no cambia ninguna métrica. *(prueba: LILA-029)*
 
+### Quién se queda con las filas: los tres modos de `result.log`
+
+`simulate` nunca entrega las mismas filas dos veces. Qué contiene `result.log` depende solo de las
+opciones, y en ningún caso cambia una métrica ni el orden de las filas *(prueba: LILA-037)*:
+
+| Opciones | `onEvent` | `result.log` |
+|---|---|---|
+| ninguna (`log` ausente) — **modo retenido** | no se llama | el log completo de la corrida, en orden de simulación y de replicación, incluidas las filas anteriores al `warmup` y las de la réplica parcial de una corrida cancelada |
+| `onEvent` presente — **modo streaming** | una llamada por fila | **ausente**: el consumidor ya las recibió y retenerlas duplicaría hasta 6 M de objetos |
+| `log: false` — **desactivado** | no se llama, aunque se haya pasado | **ausente** |
+
+`lila run` usa siempre uno de los dos modos sin retención: con `--csv` pasa `onEvent` y escribe
+cada fila a `log.csv` según llega; sin `--csv` pasa `log: false`, de modo que el `RunResult` de
+`--json` nunca engorda con el event log. Solo el modo retenido acota su memoria por el tamaño del
+log; los otros dos la acotan por el pico de **una** replicación.
+
 | Columna | Tipo | Unidad | Definición |
 |---|---|---|---|
 | `replication` | integer | — | Índice de la replicación, `0..scenario.run.replications-1`. |
@@ -229,7 +246,25 @@ LILA-036, LILA-037)*
 cola que alimenta `queueLength` se agregan una vez por `(replication, activityInstanceId)`; costos
 y ocupación de pool se agregan por fila.
 
-Al exportar (CSV de la CLI, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` se pueden derivar además a timestamps ISO 8601 absolutos (`run.start + segundos`); el CSV en bruto para procesamiento programático conserva los segundos relativos. El event log, con un mapeo trivial de columnas, es compatible con XES (IEEE 1849) y OCEL 2.0 (ver sección 6 del documento de estructura).
+### `log.csv`
+
+`log.csv` lleva las **17 columnas** de la tabla anterior, en ese mismo orden y con los mismos
+nombres internos (Bizagi no publica un event log, así que aquí no hay nombres de columna que
+replicar; ver sección 10). Reducir el conjunto rompería a los consumidores v1 (ADR-025).
+
+Al exportar (CSV de la CLI, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` se derivan además a
+timestamps ISO 8601 absolutos (`run.start + segundos`) en tres columnas **añadidas al final**,
+`enabledAtIso`/`startedAtIso`/`endedAtIso`; el CSV en bruto para procesamiento programático
+conserva los segundos relativos, que siguen siendo los valores autoritativos porque el ISO se
+trunca a milisegundos. Una columna de tiempo nula (el `startedAt` de una fila que nunca arrancó)
+deja también su celda ISO vacía, y un `run.start` ilegible vacía las tres en lugar de abortar el
+archivo. Sin `run.start` el CSV se queda en las 17 columnas.
+
+`lila run --csv` escribe `log.csv` **en streaming**, fila a fila desde `opts.onEvent`, con un búfer
+de 1 MiB y publicación atómica por `rename`: el archivo completo nunca está en memoria y el
+`RunResult` no retiene el log (modo streaming, arriba). *(prueba: LILA-037)*
+
+El event log, con un mapeo trivial de columnas, es compatible con XES (IEEE 1849) y OCEL 2.0 (ver sección 6 del documento de estructura).
 
 ---
 

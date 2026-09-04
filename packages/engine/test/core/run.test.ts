@@ -71,7 +71,9 @@ describe('simulate (LILA-029)', () => {
   });
 
   test('una mutación desde onEvent no contamina las métricas internas', () => {
-    const baseline = publicSimulate(IR, scenario());
+    // LILA-037 § 7: pasar `onEvent` suprime `result.log`, así que la línea base se pide sin log
+    // para que la comparación sea de métricas y no del contrato de retención.
+    const baseline = publicSimulate(IR, scenario(), { log: false });
     const result = publicSimulate(IR, scenario(), {
       onEvent: (row) => {
         row.cost = 999;

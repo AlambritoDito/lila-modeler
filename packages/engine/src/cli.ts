@@ -25,6 +25,7 @@ import {
   flowsCsv,
   processCsv,
   resourcesCsv,
+  runStartMs,
 } from './csv.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
@@ -54,6 +55,7 @@ Opciones de run:
   --replications n  Sobrescribe run.replications con un entero >= 1.
   --json archivo    Escribe el RunResult determinista como JSON.
   --csv directorio  Escribe elements, flows, resources, process y log como CSV RFC 4180.
+                    log.csv se escribe en streaming y lleva timestamps ISO desde run.start.
 
 Opciones generales:
   -h, --help Muestra esta ayuda.`;
@@ -438,14 +440,20 @@ interface EventLogSink {
 /**
  * Escribe el log por bloques mientras corre `simulate`, sin retener todas las replicaciones.
  * El archivo temporal solo se publica como `log.csv` después de una corrida completa.
+ *
+ * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
+ * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se
+ * limitaría a acumular en memoria justo lo que este ticket quiere evitar. La escritura bloqueante
+ * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
+ * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
  */
-function openEventLogSink(directory: string): EventLogSink {
+function openEventLogSink(directory: string, startMs: number): EventLogSink {
   const targetDirectory = absolutePath(directory);
   mkdirSync(targetDirectory, { recursive: true });
   const target = resolve(targetDirectory, 'log.csv');
   assertReplaceableFile(target);
   const staged = stageFile(target);
-  let buffer = eventLogCsvHeader();
+  let buffer = eventLogCsvHeader(startMs);
   let closed = false;
 
   const flush = (): void => {
@@ -462,7 +470,7 @@ function openEventLogSink(directory: string): EventLogSink {
 
   return {
     onEvent(row) {
-      buffer += eventLogRowCsv(row);
+      buffer += eventLogRowCsv(row, startMs);
       if (buffer.length >= 1_048_576) flush();
     },
     close,
@@ -532,7 +540,8 @@ async function runCommand(
     return 1;
   }
 
-  const logSink = options.csv === undefined ? undefined : openEventLogSink(options.csv);
+  const logSink =
+    options.csv === undefined ? undefined : openEventLogSink(options.csv, runStartMs(scenario.run.start));
   try {
     const simulated = simulate(parsedModel.ir, scenario, {
       log: logSink !== undefined,
