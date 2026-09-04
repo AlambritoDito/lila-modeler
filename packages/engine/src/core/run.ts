@@ -158,7 +158,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
               });
             },
     });
-    const result = aggregateReplication(ir, run);
+    const result = aggregateReplication(ir, run, scenario);
 
     if (run.cancelled === true) {
       partial = result;
