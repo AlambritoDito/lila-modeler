@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  id="Definitions_Warnings" targetNamespace="urn:lila:qa">
+  <bpmn:process id="Process_Warnings" isExecutable="true">
+    <bpmn:startEvent id="Start_1" />
+    <bpmn:sequenceFlow id="Flow_Condition" sourceRef="Start_1" targetRef="End_1">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:endEvent id="End_1" />
+  </bpmn:process>
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Participant_1" />
+    <bpmn:participant id="Participant_2" />
+    <bpmn:messageFlow id="MessageFlow_1" sourceRef="Participant_1" targetRef="Participant_2" />
+    <bpmn:messageFlow id="MessageFlow_2" sourceRef="Participant_2" targetRef="Participant_1" />
+  </bpmn:collaboration>
+</bpmn:definitions>
