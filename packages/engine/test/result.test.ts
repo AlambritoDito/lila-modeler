@@ -59,6 +59,21 @@ test('un RunResult sin `replications` también es válido (campo opcional)', () 
   expect(result.success).toBe(true);
 });
 
+test('un RunResult cancelado admite la marca y el conteo de replicaciones completas', () => {
+  const result = runResultSchema.safeParse({
+    ...exampleRunResult(),
+    cancelled: true,
+    completedReplications: 2,
+  });
+
+  expect(result.success).toBe(true);
+});
+
+test('la marca y el conteo de cancelación deben aparecer juntos', () => {
+  expect(runResultSchema.safeParse({ ...exampleRunResult(), cancelled: true }).success).toBe(false);
+  expect(runResultSchema.safeParse({ ...exampleRunResult(), completedReplications: 1 }).success).toBe(false);
+});
+
 test('un RunResult con un campo faltante falla la validación', () => {
   const example = exampleRunResult() as Record<string, unknown>;
   delete example.process;

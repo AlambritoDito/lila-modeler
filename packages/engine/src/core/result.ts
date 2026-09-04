@@ -114,6 +114,10 @@ export interface RunResult {
   bottlenecks: BottleneckEntry[];
   /** Solo presente si scenario.run.replications > 1. */
   replications?: ReplicationSummary;
+  /** Presente y siempre `true` cuando `opts.signal` detuvo la simulación. */
+  cancelled?: true;
+  /** Solo con `cancelled`: número de replicaciones completas incluidas en el agregado. */
+  completedReplications?: number;
   warnings: string[];
 }
 

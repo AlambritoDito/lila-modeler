@@ -87,15 +87,34 @@ const replicationSummarySchema = z.object({
 // tiene un valor `undefined`); el desacuerdo es solo de representación en TypeScript. El
 // mínimo que funciona: los tests (`result.test.ts`) verifican que este esquema valida
 // contra `RunResult` de verdad, en tiempo de ejecución.
-export const runResultSchema = z.object({
-  elements: z.record(z.string(), elementMetricsSchema),
-  flows: z.record(z.string(), flowMetricsSchema),
-  resources: z.record(z.string(), resourceMetricsSchema),
-  process: processMetricsSchema,
-  bottlenecks: z.array(bottleneckEntrySchema),
-  replications: replicationSummarySchema.optional(),
-  warnings: z.array(z.string()),
-});
+export const runResultSchema = z
+  .object({
+    elements: z.record(z.string(), elementMetricsSchema),
+    flows: z.record(z.string(), flowMetricsSchema),
+    resources: z.record(z.string(), resourceMetricsSchema),
+    process: processMetricsSchema,
+    bottlenecks: z.array(bottleneckEntrySchema),
+    replications: replicationSummarySchema.optional(),
+    cancelled: z.literal(true).optional(),
+    completedReplications: z.number().int().nonnegative().optional(),
+    warnings: z.array(z.string()),
+  })
+  .superRefine((result, context) => {
+    if (result.cancelled === true && result.completedReplications === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedReplications'],
+        message: 'completedReplications es obligatorio cuando cancelled es true.',
+      });
+    }
+    if (result.cancelled === undefined && result.completedReplications !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedReplications'],
+        message: 'completedReplications solo puede aparecer cuando cancelled es true.',
+      });
+    }
+  });
 
 export const eventLogRowSchema = z.object({
   replication: z.number(),

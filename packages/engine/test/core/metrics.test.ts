@@ -125,6 +125,7 @@ describe('casos adversos de agregación', () => {
     const manual: ReplicationRun = {
       replication: 0,
       stoppedAt: 20,
+      statisticsDuration: 20,
       cases: [
         { caseId: 1, startId: 'Start', startedAt: 0, endedAt: 10 },
         { caseId: 2, startId: 'Start', startedAt: 0, endedAt: 20 },
@@ -147,6 +148,7 @@ describe('casos adversos de agregación', () => {
     const manual: ReplicationRun = {
       replication: 0,
       stoppedAt: 100,
+      statisticsDuration: 50,
       // LILA-027 deja aquí solo el caso observable; la fila del caso 1 se conserva en el log.
       cases: [{ caseId: 2, startId: 'Start', startedAt: 50, endedAt: 60 }],
       rows: [
@@ -183,7 +185,7 @@ describe('casos adversos de agregación', () => {
       },
       warnings: ['aviso estable'],
     };
-    const result = aggregateReplication(ir, manual, { statisticsDuration: 50 });
+    const result = aggregateReplication(ir, manual);
 
     expect(result.elements.A?.processing).toEqual({ min: 10, max: 10, mean: 10, total: 10 });
     expect(result.elements.A?.fixedCostTotal).toBe(3);
@@ -197,6 +199,7 @@ describe('casos adversos de agregación', () => {
     const manual: ReplicationRun = {
       replication: 0,
       stoppedAt: 100,
+      statisticsDuration: 100,
       cases: [{ caseId: 1, startId: 'Start', startedAt: 0, endedAt: 100 }],
       rows: [
         {
@@ -232,6 +235,7 @@ describe('casos adversos de agregación', () => {
     const manual: ReplicationRun = {
       replication: 0,
       stoppedAt: 0,
+      statisticsDuration: 0,
       cases: [],
       rows: [],
       flows: { Flow_SA: 0, Flow_AE: 0 },
