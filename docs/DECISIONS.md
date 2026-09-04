@@ -6,6 +6,7 @@ Fuentes:
 
 - **ADR-001 a ADR-008**: corpus previo del proyecto (entonces llamado *Open Process Platform*), `open-process-platform-docs/DECISIONS.md`. Se copian aquí verbatim.
 - **ADR-009 a ADR-023**: `LILA_MODELER_ESTRUCTURA.md`, sección 4 ("Decisiones (ADR)"). Se copian aquí verbatim; ese documento es la fuente de verdad — ante cualquier discrepancia entre este archivo y `LILA_MODELER_ESTRUCTURA.md`, gana el documento de estructura y este archivo se corrige para reflejarlo.
+- **ADR-024 en adelante**: decisiones surgidas durante la implementación, con su ticket de prueba.
 
 Varias ADR del corpus previo quedan cerradas o reinterpretadas por decisiones posteriores; cada una lo indica en una nota al final de su entrada, con el ADR que la cierra o reinterpreta.
 
@@ -265,6 +266,26 @@ Soportado en v1: la lista de la sección 3 de `LILA_MODELER_ESTRUCTURA.md` (ver 
 **Porqué Electron y no Tauri**: Tauri 2 produce instaladores de ~10 MB frente a ~150 MB y usa menos memoria, pero depende del webview del sistema, y en Linux (WebKitGTK) hay problemas de rendimiento y estabilidad documentados (reportes de 40 fps frente a 240 fps en Chromium para la misma app; hilo "WebKit is totally unstable" en las discusiones de Tauri); bpmn-js es un canvas SVG intensivo donde la consistencia de Chromium en los tres sistemas vale más que el tamaño; y Tauri exige toolchain Rust. Electron 43, electron-builder 26 y electron-forge (ESM, Node ≥ 22.12) están activos en 2026. Descarta: PWA como modalidad principal (sin diálogos nativos en Safari/Firefox, sin asociación de archivos). Reversible: si el tamaño del instalador se vuelve problema real, Tauri envuelve la misma SPA y solo cambia `DesktopStore`.
 
 **Porqué TypeScript sale reforzado**: el mismo bundle corre en el Worker de la app de escritorio y en el Node del servidor; un motor Python habría exigido empaquetar un runtime Python dentro del instalador o cargar Pyodide (~12 MB).
+
+---
+
+## ADR-024 — Agregado top-level de varias replicaciones
+
+**Status:** Accepted
+
+`simulate()` publica en los campos numéricos top-level la media aritmética del mismo campo ya
+agregado en cada replicación. `replications.kpis` conserva, para esos mismos paths, media,
+desviación muestral e IC95. Esto deja un resultado directamente consumible por CLI/UI sin obligar
+a navegar el mapa de KPI y mantiene una observación estadística por replicación.
+
+Se descarta usar la primera replicación: sería determinista pero no representativa y podría
+contradecir el `mean` publicado al lado. Se descarta agrupar todos los casos de todas las
+replicaciones: daría más peso a las corridas con más observaciones y rompería la unidad estadística
+con la que se calcula el IC. En cancelación, el top-level incluye el trabajo de la réplica parcial
+para no ocultarlo; el IC usa solo replicaciones completas y se omite con menos de dos.
+
+Revisar solo si un consumidor necesita explícitamente resultados por réplica; en ese caso se añade
+un campo separado, sin cambiar el significado del top-level. *(prueba: LILA-029)*
 
 ---
 

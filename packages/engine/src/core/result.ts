@@ -92,7 +92,7 @@ export interface KpiSummary {
 
 /** Resumen entre replicaciones (`RunResult.replications`), sección 8. Solo si `scenario.run.replications > 1`. */
 export interface ReplicationSummary {
-  /** = scenario.run.replications. */
+  /** Replicaciones completas resumidas; igual a las solicitadas salvo cancelación. */
   count: number;
   /** Keyed por nombre de KPI, p. ej. "process.cycleTime.mean". */
   kpis: Record<string, KpiSummary>;
@@ -114,6 +114,10 @@ export interface RunResult {
   bottlenecks: BottleneckEntry[];
   /** Solo presente si scenario.run.replications > 1. */
   replications?: ReplicationSummary;
+  /** Presente y siempre `true` cuando `opts.signal` detuvo la simulación. */
+  cancelled?: true;
+  /** Solo con `cancelled`: número de replicaciones completas incluidas en el agregado. */
+  completedReplications?: number;
   warnings: string[];
 }
 

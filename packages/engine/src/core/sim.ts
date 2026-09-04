@@ -96,6 +96,22 @@ export interface ReplicationRun {
   /** Todo nodo del IR aparece, aunque su conteo sea cero. */
   elements: Record<string, ElementCounters>;
   warnings: string[];
+  /** Presente solo cuando la señal detuvo cooperativamente esta replicación. */
+  cancelled?: true;
+}
+
+/** Subconjunto estructural de AbortSignal; mantiene `core/` utilizable sin DOM ni Node. */
+export interface AbortSignalLike {
+  readonly aborted: boolean;
+}
+
+/** Hooks internos que `simulate` conecta con su API pública. */
+export interface ReplicationOptions {
+  signal?: AbortSignalLike | undefined;
+  onEvent?: ((row: EventLogRow) => void) | undefined;
+  onStep?: ((simulatedTime: number) => void) | undefined;
+  /** `false` suprime el stream externo; las filas internas siguen alimentando métricas. */
+  log?: boolean | undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -155,8 +171,15 @@ const NO_MARKS: readonly number[] = [];
  * No valida: `validateIr`, `bpmn/validate.ts` y `validateScenario` ya rechazan lo que no se
  * puede simular (elementos fuera del perfil, `E-SIN-PARADA`, `E-XOR-SUMA-CERO`…).
  */
-export function runReplication(ir: ProcessIR, scenario: SimScenario, replication = 0): ReplicationRun {
+export function runReplication(
+  ir: ProcessIR,
+  scenario: SimScenario,
+  replication = 0,
+  options: ReplicationOptions = {},
+): ReplicationRun {
   const spec = scenario.elements ?? {};
+  // Función (en vez de acceso inline) porque los callbacks pueden activar la señal entre checks.
+  const isAborted = (): boolean => options.signal?.aborted === true;
   // R-ARR-3: sin `run.duration` la corrida termina cuando se vacía el heap. Que no haya ni
   // `duration` ni ningún `triggerCount` es `E-SIN-PARADA`, y lo caza `validateScenario`.
   const tStop = scenario.run.duration ?? Infinity;
@@ -323,8 +346,14 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
   const activationSize = new Map<number, number>();
   let clock = 0;
   let stoppedAt = 0;
+  let cancelled = false;
 
-  for (;;) {
+  simulation: for (;;) {
+    if (isAborted()) {
+      cancelled = true;
+      stoppedAt = clock;
+      break;
+    }
     const next = heap.peek();
     if (next === undefined) {
       stoppedAt = clock;
@@ -337,6 +366,12 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
     }
     heap.pop();
     clock = next.t;
+    options.onStep?.(clock);
+    if (isAborted()) {
+      cancelled = true;
+      stoppedAt = clock;
+      break;
+    }
 
     if (next.kind === 'arrive') {
       const caseId = caseStates.length + 1; // R-TOK-2: entero monótono en orden de llegada.
@@ -380,7 +415,7 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
       // resourceWait = 0 (R-TOK-5, R-DEG-1). R-EVT-6: si el caso murió antes, la instancia
       // cuenta como `started` y no como `completed`, y no emite fila.
       if (isMeasuredCase(next.caseId)) counters.completed++;
-      rows.push({
+      const row: EventLogRow = {
         replication,
         caseId: String(next.caseId),
         elementId: next.nodeId,
@@ -391,8 +426,20 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
         resourceWait: 0,
         offHoursWait: 0,
         cost: spec[next.nodeId]?.fixedCost ?? 0, // R-COST-3 sin recursos.
-      });
+      };
+      rows.push(row);
+      // El callback es una frontera pública: una mutación accidental de su argumento no debe
+      // alterar las filas internas que luego alimentan las métricas.
+      if (options.log !== false) options.onEvent?.({ ...row });
+      // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
+      // Una cancelación activada por onEvent se observa después de cerrar esa transición
+      // atómica, nunca entre el contador/row de la tarea y su forward.
       forward(node, next.caseId, next.marks, next.t);
+      if (isAborted()) {
+        cancelled = true;
+        stoppedAt = clock;
+        break simulation;
+      }
       continue;
     }
 
@@ -548,5 +595,6 @@ export function runReplication(ir: ProcessIR, scenario: SimScenario, replication
     flows,
     elements,
     warnings: [...warningCounts].map(([message, count]) => (count > 1 ? `${message} (${count} veces)` : message)),
+    ...(cancelled ? { cancelled: true as const } : {}),
   };
 }

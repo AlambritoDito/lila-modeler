@@ -353,6 +353,16 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
   `mean`, `sd` (muestral, `n − 1`) y `ci95 = mean ± t(0,975; R−1) · sd / √R`. Con `R = 1` no hay
   `ci95`. Los casos **no** se comparten entre replicaciones: cada una parte del estado vacío.
   *(prueba: LILA-027)*
+- **R-ARR-9 — Agregado público multi-réplica.** En `simulate()`, cada campo numérico top-level es
+  la media del mismo campo agregado por replicación; no es la primera replicación ni una muestra
+  agrupada de todos los casos. En una corrida completa coincide con el `mean` del mismo path en
+  `replications.kpis`. *(prueba: LILA-029; decisión: ADR-024)*
+- **R-ARR-10 — Cancelación cooperativa.** `opts.signal` se comprueba entre eventos y entre
+  replicaciones. El resultado parcial lleva `cancelled: true` y `completedReplications`; el
+  top-level conserva la réplica parcial, pero `replications.kpis` solo usa replicaciones completas
+  y se omite si hay menos de dos. Cada evento DES se cierra atómicamente: una señal activada desde
+  `onEvent` surte efecto antes del siguiente evento, no entre completar una tarea y recorrer sus
+  flujos salientes instantáneos. *(prueba: LILA-029)*
 
 ---
 
@@ -645,6 +655,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |
 | R-ARR-8 | replicaciones e IC 95 % | LILA-027 |
+| R-ARR-9, R-ARR-10 | agregado público y cancelación | LILA-029 |
 | R-REC-1 … R-REC-3 | pools, defaults y FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
 | R-REC-4, R-REC-5 | AND atómico sin retención parcial; sin deadlock | LILA-034 |
 | R-REC-6 | selección OR | LILA-035 |

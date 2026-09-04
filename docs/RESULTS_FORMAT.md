@@ -22,11 +22,18 @@ interface RunResult {
   process: ProcessMetrics;                    // agregado único, todo el proceso
   bottlenecks: BottleneckEntry[];             // ranking, ver sección 6
   replications?: ReplicationSummary;          // solo si scenario.run.replications > 1
+  cancelled?: true;                           // ausencia = corrida completa
+  completedReplications?: number;             // solo si cancelled = true
   warnings: string[];                         // ver sección 8
 }
 ```
 
 Todo elemento, flujo o recurso que exista en el IR aparece en el mapa correspondiente aunque su conteo sea cero (por ejemplo, una rama de XOR que nunca se tomó en una corrida corta). El `id` usado como clave es siempre el `id` BPMN — nunca el nombre visible (regla del repositorio, ver cabecera de `BACKLOG.md`).
+
+Con más de una replicación, todos los campos numéricos top-level son la **media aritmética del
+mismo campo calculado en cada replicación**. No representan la primera replicación ni un pool de
+todos los casos. `replications.kpis[path].mean` coincide con el campo top-level correspondiente en
+una corrida completa. Esta decisión se detalla en ADR-024. *(prueba: LILA-029)*
 
 ---
 
@@ -142,7 +149,11 @@ Ranking de elementos ordenado descendentemente por `elements[elementId].resource
 
 ## 7. Event log
 
-Filas planas, una por instancia de elemento por caso por replicación. Se emiten por streaming (`opts.onEvent`) para que la CLI escriba a CSV y la web pueda agregar/muestrear sin cargar todo en memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas grandes).
+Filas planas, una por instancia de elemento por caso por replicación. Se emiten por streaming
+(`opts.onEvent`) para que la CLI escriba a CSV y la web pueda agregar/muestrear sin cargar todo en
+memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas grandes).
+`opts.log` vale `true` por defecto; `log: false` suprime el callback incluso si se proporcionó
+`onEvent`, pero no cambia ninguna métrica. *(prueba: LILA-029)*
 
 | Columna | Tipo | Unidad | Definición |
 |---|---|---|---|
@@ -167,7 +178,7 @@ Cuando `scenario.run.replications > 1`, cada KPI numérico de interés (los de `
 
 ```ts
 interface ReplicationSummary {
-  count: number;                     // = scenario.run.replications
+  count: number;                     // replicaciones completas resumidas; >= 2
   kpis: Record<string, {             // keyed por nombre de KPI, p. ej. "process.cycleTime.mean"
     mean: number;
     sd: number;
@@ -183,6 +194,19 @@ Los ids sin punto conservan exactamente los nombres mostrados arriba. *(prueba: 
 
 - **`mean`/`sd`** — media y desviación estándar muestral del KPI a través de las `N` replicaciones (una observación por replicación, no por caso).
 - **`ci95`** — intervalo de confianza al 95 % para la media, `mean ± t(N-1, 0.975) × sd / √N` (t de Student con `N-1` grados de libertad; con `N` grande se aproxima a `1.96 × sd/√N`). Es la métrica que Bizagi solo ofrece desde What-If (sección 3: "Replicaciones — Bizagi ✓ solo en what-if / Lila ✓ siempre, con IC 95 %"); en Lila se calcula siempre que `replications > 1`.
+
+Si `opts.signal.aborted` detiene la corrida, el resultado lleva `cancelled: true` y
+`completedReplications`, que cuenta exclusivamente replicaciones terminadas; la ausencia de
+`cancelled` significa corrida completa. El top-level conserva el trabajo procesado: promedia las
+replicaciones completas y la parcial si existe. `replications`, cuando puede calcularse con al
+menos dos replicaciones completas, excluye siempre la parcial; con menos de dos completas se omite
+para no publicar una desviación o un IC inválidos. Una cancelación entre replicaciones no agrega
+una réplica parcial ficticia. *(prueba: LILA-029)*
+
+`opts.onProgress`, cuando existe, recibe primero `fraction = 0`, aun si la primera réplica no
+tiene eventos. La fracción es estrictamente monótona y una corrida completa termina en 1; una
+cancelada puede terminar antes. No se instala ningún hook por evento cuando el callback está
+ausente. *(prueba: LILA-029)*
 
 **`warmup`**: `scenario.run.warmup` (segundos desde `run.start`) excluye de **todas** las estadísticas de `process` (y, por consistencia, de `elements`) los casos que se **iniciaron** antes de que terminara el warmup — sus eventos igual se emiten en el event log (no se descartan datos), pero no participan en `started`/`completed`/`cycleTime`/`waitTime`/`throughputPerHour`/costos. `throughputPerHour` usa como denominador la duración efectiva de la corrida excluyendo el propio warmup.
 

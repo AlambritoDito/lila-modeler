@@ -59,6 +59,63 @@ test('un RunResult sin `replications` también es válido (campo opcional)', () 
   expect(result.success).toBe(true);
 });
 
+test('un RunResult cancelado admite la marca y el conteo de replicaciones completas', () => {
+  const result = runResultSchema.safeParse({
+    ...exampleRunResult(),
+    replications: undefined,
+    cancelled: true,
+    completedReplications: 1,
+  });
+
+  expect(result.success).toBe(true);
+});
+
+test('la marca y el conteo de cancelación deben aparecer juntos', () => {
+  expect(runResultSchema.safeParse({ ...exampleRunResult(), cancelled: true }).success).toBe(false);
+  expect(runResultSchema.safeParse({ ...exampleRunResult(), completedReplications: 1 }).success).toBe(false);
+});
+
+test('un resumen de cancelación coincide exactamente con las replicaciones completas', () => {
+  const summary = {
+    count: 2,
+    kpis: {
+      'process.completed': { mean: 1, sd: 0, ci95: [1, 1] },
+    },
+  };
+
+  expect(
+    runResultSchema.safeParse({
+      ...exampleRunResult(),
+      cancelled: true,
+      completedReplications: 2,
+      replications: summary,
+    }).success,
+  ).toBe(true);
+  expect(
+    runResultSchema.safeParse({
+      ...exampleRunResult(),
+      cancelled: true,
+      completedReplications: 3,
+      replications: summary,
+    }).success,
+  ).toBe(false);
+  expect(
+    runResultSchema.safeParse({
+      ...exampleRunResult(),
+      cancelled: true,
+      completedReplications: 1,
+      replications: summary,
+    }).success,
+  ).toBe(false);
+  expect(
+    runResultSchema.safeParse({
+      ...exampleRunResult(),
+      cancelled: true,
+      completedReplications: 2,
+    }).success,
+  ).toBe(false);
+});
+
 test('un RunResult con un campo faltante falla la validación', () => {
   const example = exampleRunResult() as Record<string, unknown>;
   delete example.process;
