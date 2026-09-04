@@ -212,28 +212,26 @@ function withRunOverrides(
   };
 }
 
-/** Campos válidos de v1 cuyo comportamiento aún no existe en el motor de M1. */
-function unsupportedM1(scenario: ResolvedScenario): string[] {
-  const errors: string[] = [];
-  if (Object.keys(scenario.resources ?? {}).length > 0) {
-    errors.push('E-NIVEL-M2 resources: los pools de recursos todavía no están soportados por lila run.');
-  }
-  if (Object.keys(scenario.calendars ?? {}).length > 0) {
-    errors.push('E-NIVEL-M3 calendars: los calendarios todavía no están soportados por lila run.');
-  }
-  for (const [id, element] of Object.entries(scenario.elements ?? {})) {
-    if ((element.resources?.length ?? 0) > 0 || element.selection !== undefined) {
-      errors.push(
-        `E-NIVEL-M2 elements.${id}.resources: la asignación de recursos todavía no está soportada por lila run.`,
-      );
-    }
-    if (element.calendar !== undefined) {
-      errors.push(
-        `E-NIVEL-M3 elements.${id}.calendar: los calendarios de elemento todavía no están soportados por lila run.`,
-      );
-    }
-  }
-  return errors;
+/** ¿El escenario declara calendarios, en `calendars` o en la referencia de un pool/elemento? */
+function declaresCalendars(scenario: ResolvedScenario): boolean {
+  if (Object.keys(scenario.calendars ?? {}).length > 0) return true;
+  if (Object.values(scenario.resources ?? {}).some((resource) => resource.calendar !== undefined)) return true;
+  return Object.values(scenario.elements ?? {}).some((element) => element.calendar !== undefined);
+}
+
+/**
+ * Aviso de que un escenario declara calendarios que el motor todavía no simula (M3, LILA-041):
+ * sus números salen 24×7. Compartido por `lila run` y `lila compare` (LILA-184) para que ambos
+ * avisen exactamente igual; antes `run` rechazaba estos escenarios con `E-NIVEL-M3` y `compare`
+ * no aplicaba ningún gate.
+ */
+function calendarsWarning(scenarioName: string): string {
+  return `"${scenarioName}" declara calendarios; el motor todavía no los simula (M3, LILA-041) y sus números salen 24×7.`;
+}
+
+/** Avisos de nivel 3 (M3) pendientes de un escenario: hoy solo calendarios. Usado por `lila run`. */
+function pendingM3Warnings(scenario: ResolvedScenario): string[] {
+  return declaresCalendars(scenario) ? [calendarsWarning(scenario.name)] : [];
 }
 
 function printScenarioProblems(problems: readonly ScenarioProblem[]): void {
@@ -246,6 +244,7 @@ function resultWithBoundaryWarnings(
   result: RunResult,
   modelValidation: ValidationResult,
   scenarioProblems: readonly ScenarioProblem[],
+  extraWarnings: readonly string[] = [],
 ): RunResult {
   const warnings = new Set<string>();
   for (const warning of modelValidation.warnings) warnings.add(`${warning.code}: ${warning.message}`);
@@ -253,6 +252,7 @@ function resultWithBoundaryWarnings(
     if (warning.severity === 'warning') warnings.add(`${warning.code}: ${warning.message}`);
   }
   for (const warning of result.warnings) warnings.add(warning);
+  for (const warning of extraWarnings) warnings.add(warning);
   return { ...result, warnings: [...warnings] };
 }
 
@@ -331,6 +331,27 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
       }),
     ),
   );
+
+  if (Object.keys(result.resources).length > 0) {
+    const resourceNames: Record<string, string> = {};
+    for (const [id, resource] of Object.entries(scenario.resources ?? {})) resourceNames[id] = resource.name ?? id;
+    console.log('');
+    console.log('Resources');
+    console.log(
+      formatTable(
+        ['Id', 'Name', 'Utilization (%)', `Busy time (${unit})`, 'Fixed cost', 'Unit cost', 'Total cost'],
+        Object.entries(result.resources).map(([id, metrics]) => [
+          id,
+          resourceNames[id] ?? '',
+          formatNumber(metrics.utilization * 100),
+          formatDuration(metrics.busyTime, unit),
+          formatNumber(metrics.fixedCost),
+          formatNumber(metrics.unitCost),
+          formatNumber(metrics.totalCost),
+        ]),
+      ),
+    );
+  }
 
   const process = result.process;
   console.log('');
@@ -565,12 +586,6 @@ async function runCommand(
 
   const scenario = withRunOverrides(resolvedScenario, options);
 
-  const unsupported = unsupportedM1(scenario);
-  if (unsupported.length > 0) {
-    for (const message of unsupported) console.error(`lila run: ${message}`);
-    return 1;
-  }
-
   const scenarioProblems = validateScenario(scenario, ir);
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
@@ -586,7 +601,12 @@ async function runCommand(
       ...(logSink === undefined ? {} : { onEvent: (row: EventLogRow) => logSink.onEvent(row) }),
     });
     logSink?.close();
-    const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
+    const result = resultWithBoundaryWarnings(
+      simulated,
+      modelValidation,
+      scenarioProblems,
+      pendingM3Warnings(scenario),
+    );
 
     printRunResult(ir, scenario, result);
     if (options.json !== undefined) writeJson(options.json, result);
@@ -721,13 +741,6 @@ function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>,
   return '';
 }
 
-/** ¿El escenario declara calendarios, en `calendars` o en la referencia de un pool/elemento? */
-function declaresCalendars(scenario: ResolvedScenario): boolean {
-  if (Object.keys(scenario.calendars ?? {}).length > 0) return true;
-  if (Object.values(scenario.resources ?? {}).some((resource) => resource.calendar !== undefined)) return true;
-  return Object.values(scenario.elements ?? {}).some((element) => element.calendar !== undefined);
-}
-
 /**
  * Avisos de la corrida completa, en un solo bloque al pie de la tabla.
  *
@@ -759,10 +772,7 @@ function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTime
   }
 
   for (const entry of loaded.filter((entry) => declaresCalendars(entry.scenario))) {
-    lines.push(
-      `${label(entry)} declara calendarios; el motor todavía no los simula (M3, LILA-041) y sus ` +
-        'números salen 24×7. `lila run` rechaza ese escenario con E-NIVEL-M3.',
-    );
+    lines.push(calendarsWarning(entry.scenario.name));
   }
 
   for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
@@ -890,10 +900,10 @@ async function compareCommand(
   const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
   if (modelHasErrors(modelValidation)) return 1;
 
-  // A diferencia de `lila run`, `compare` no aplica `unsupportedM1`: LILA-038 (compare()) ya agrega
-  // métricas de recursos de nivel 3, que el motor simula desde LILA-033…036, y la aceptación de
-  // este ticket depende de ellas. Los `calendars` de M3 sí siguen sin simularse: no se rechazan
-  // aquí —examples/pedido, el caso de aceptación, los declara— pero salen avisados al pie.
+  // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources`, que el
+  // motor simula desde LILA-033…036 (LILA-038 ya los agrega a `compare()`). Los `calendars` de M3
+  // sí siguen sin simularse —el motor los ignora, sus números salen 24×7— pero tampoco se rechazan:
+  // ambos comandos avisan igual al pie (`pendingM3Warnings`/`compareWarnings`, `calendarsWarning`).
   const validated: Array<{
     file: string;
     scenario: ResolvedScenario;
