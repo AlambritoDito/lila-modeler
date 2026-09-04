@@ -92,7 +92,7 @@ export interface KpiSummary {
 
 /** Resumen entre replicaciones (`RunResult.replications`), sección 8. Solo si `scenario.run.replications > 1`. */
 export interface ReplicationSummary {
-  /** = scenario.run.replications. */
+  /** Replicaciones completas resumidas; igual a las solicitadas salvo cancelación. */
   count: number;
   /** Keyed por nombre de KPI, p. ej. "process.cycleTime.mean". */
   kpis: Record<string, KpiSummary>;

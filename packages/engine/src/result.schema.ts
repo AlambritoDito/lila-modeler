@@ -76,7 +76,7 @@ const kpiSummarySchema = z.object({
 });
 
 const replicationSummarySchema = z.object({
-  count: z.number(),
+  count: z.number().int().min(2),
   kpis: z.record(z.string(), kpiSummarySchema),
 });
 
@@ -113,6 +113,30 @@ export const runResultSchema = z
         path: ['completedReplications'],
         message: 'completedReplications solo puede aparecer cuando cancelled es true.',
       });
+    }
+    if (result.cancelled === true && result.completedReplications !== undefined) {
+      const completed = result.completedReplications;
+      if (completed < 2 && result.replications !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications'],
+          message: 'replications se omite cuando hay menos de dos replicaciones completas.',
+        });
+      }
+      if (completed >= 2 && result.replications === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications'],
+          message: 'replications es obligatorio con al menos dos replicaciones completas.',
+        });
+      }
+      if (result.replications !== undefined && result.replications.count !== completed) {
+        context.addIssue({
+          code: 'custom',
+          path: ['replications', 'count'],
+          message: 'replications.count debe coincidir con completedReplications.',
+        });
+      }
     }
   });
 

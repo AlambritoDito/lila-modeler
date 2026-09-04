@@ -178,7 +178,7 @@ Cuando `scenario.run.replications > 1`, cada KPI numérico de interés (los de `
 
 ```ts
 interface ReplicationSummary {
-  count: number;                     // = scenario.run.replications
+  count: number;                     // replicaciones completas resumidas; >= 2
   kpis: Record<string, {             // keyed por nombre de KPI, p. ej. "process.cycleTime.mean"
     mean: number;
     sd: number;
@@ -202,6 +202,11 @@ replicaciones completas y la parcial si existe. `replications`, cuando puede cal
 menos dos replicaciones completas, excluye siempre la parcial; con menos de dos completas se omite
 para no publicar una desviación o un IC inválidos. Una cancelación entre replicaciones no agrega
 una réplica parcial ficticia. *(prueba: LILA-029)*
+
+`opts.onProgress`, cuando existe, recibe primero `fraction = 0`, aun si la primera réplica no
+tiene eventos. La fracción es estrictamente monótona y una corrida completa termina en 1; una
+cancelada puede terminar antes. No se instala ningún hook por evento cuando el callback está
+ausente. *(prueba: LILA-029)*
 
 **`warmup`**: `scenario.run.warmup` (segundos desde `run.start`) excluye de **todas** las estadísticas de `process` (y, por consistencia, de `elements`) los casos que se **iniciaron** antes de que terminara el warmup — sus eventos igual se emiten en el event log (no se descartan datos), pero no participan en `started`/`completed`/`cycleTime`/`waitTime`/`throughputPerHour`/costos. `throughputPerHour` usa como denominador la duración efectiva de la corrida excluyendo el propio warmup.
 

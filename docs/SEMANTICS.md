@@ -360,7 +360,9 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 - **R-ARR-10 — Cancelación cooperativa.** `opts.signal` se comprueba entre eventos y entre
   replicaciones. El resultado parcial lleva `cancelled: true` y `completedReplications`; el
   top-level conserva la réplica parcial, pero `replications.kpis` solo usa replicaciones completas
-  y se omite si hay menos de dos. *(prueba: LILA-029)*
+  y se omite si hay menos de dos. Cada evento DES se cierra atómicamente: una señal activada desde
+  `onEvent` surte efecto antes del siguiente evento, no entre completar una tarea y recorrer sus
+  flujos salientes instantáneos. *(prueba: LILA-029)*
 
 ---
 
