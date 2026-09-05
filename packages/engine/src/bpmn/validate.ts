@@ -109,6 +109,21 @@ function unsupportedProblem(el: UnsupportedElement): IrProblem {
  */
 const DISCARDED_ID_MESSAGE = /(?:illegal|duplicate) ID </;
 
+/** Prefijo del elemento que moddle no pudo leer, dentro de `unparsable content <prefijo:Tipo>`. */
+const UNPARSABLE_PREFIX = /unparsable content <([^:>]+):/;
+
+/**
+ * Prefijos de la capa de diagrama (BPMN DI: `bpmndi`, `di`, `dc`, `dd`). Es geometría pura —
+ * `parseBpmn` no la lee y el IR no la guarda —, así que un id repetido o ilegal ahí descarta una
+ * forma del dibujo, nunca un nodo ni un flujo: se queda en `W-PARSE` (R-NOSOP-6).
+ */
+const DIAGRAM_PREFIXES = new Set(['bpmndi', 'di', 'dc', 'dd']);
+
+function isDiagramOnly(message: string): boolean {
+  const prefix = UNPARSABLE_PREFIX.exec(message)?.[1];
+  return prefix !== undefined && DIAGRAM_PREFIXES.has(prefix);
+}
+
 /**
  * Propiedades de moddle-xml que son topología del grafo de tokens: una referencia rota ahí
  * significa que un nodo o un flujo desapareció del IR sin dejar rastro. Las demás que
@@ -130,7 +145,7 @@ const GRAPH_REFERENCE_PROPERTIES = new Set([
  * sobre una propiedad de topología. Todo lo demás es inofensivo y se queda en `W-PARSE`.
  */
 function impliesDiscardedElement(w: SourceWarning): boolean {
-  if (DISCARDED_ID_MESSAGE.test(w.message)) return true;
+  if (DISCARDED_ID_MESSAGE.test(w.message)) return !isDiagramOnly(w.message);
   return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property);
 }
 

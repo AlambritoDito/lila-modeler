@@ -163,8 +163,9 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   descartar ninguno:
 
   - **Error `E-PARSE-INCOMPLETO`** cuando el aviso implica que se perdió algo del grafo: un
-    elemento entero que moddle tiró por `id` ilegal o duplicado (`unparsable content … nested
-    error: illegal ID <X>` / `duplicate ID <X>`), o una referencia sin resolver sobre una
+    elemento entero **del modelo** que moddle tiró por `id` ilegal o duplicado (`unparsable
+    content … nested error: illegal ID <X>` / `duplicate ID <X>`), o una referencia sin resolver
+    sobre una
     propiedad de topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`,
     `bpmn:flowNodeRef`, `bpmn:default`). Texto exacto:
 
@@ -175,7 +176,9 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   - **Aviso `W-PARSE`** en todo lo demás: referencias sin resolver a construcciones que el perfil
     de la sección 2 ya ignora (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`) y
     tipos que moddle no conoce (`unparsable content … unknown type <bpmn:LoopCounter>`, típico de
-    los exports de Bizagi). No se pierde ningún nodo ni ningún flujo. Texto exacto:
+    los exports de Bizagi). También lo que se descarta de la capa de diagrama (`bpmndi:`, `di:`,
+    `dc:`, `dd:`), aunque sea por id ilegal o duplicado: es geometría, el IR no la lee y perderla
+    no quita ni un nodo ni un flujo. No se pierde ningún nodo ni ningún flujo. Texto exacto:
 
     ```
     {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.

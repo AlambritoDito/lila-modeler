@@ -110,3 +110,21 @@ test('validate sobre un export que pierde elementos sale con 1 e imprime E-PARSE
     'aviso  W-PARSE  Process_Incompleto: aviso del lector XML, sin pérdida de nodos ni flujos:',
   );
 });
+
+// QA LILA-185: un export con solo avisos de lectura (`W-PARSE`) no puede salir con 1, y el JSON
+// de `--json` tiene que seguir siendo JSON con los mensajes crudos de moddle (traen `<` y `>`).
+test('validate --json lleva los avisos del lector y sale con 0 si no hay errores', async () => {
+  const code = await main(['validate', '--json', `${repo}examples/bizagi-exports/bizagi-miwg-B.1.0-roundtrip.bpmn`]);
+  const report = JSON.parse(out.join('\n')) as {
+    ir: { source: { warnings: { message: string }[] } };
+    errors: unknown[];
+    warnings: { code: string; message: string }[];
+  };
+
+  expect(code).toBe(0);
+  expect(report.errors).toEqual([]);
+  expect(report.ir.source.warnings.length).toBeGreaterThan(0);
+  expect(report.warnings.filter((w) => w.code === 'W-PARSE')).toHaveLength(
+    report.ir.source.warnings.length,
+  );
+});
