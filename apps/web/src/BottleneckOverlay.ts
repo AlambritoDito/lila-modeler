@@ -232,6 +232,9 @@ function redibujar(modeler: Modeler, ids: Iterable<string>): void {
  * `type`), el marcador del cuello de botella principal y el tinte de las tareas (repintadas con
  * el renderer por defecto, al vaciar `niveles` antes de repintar). Llamarla dos veces seguidas, o
  * antes de un `applyOverlay` con otro resultado, no acumula nada — no hay fuga de overlays.
+ * Los elementos que ya no están en el lienzo (borrados en el diagrama después de simular) se
+ * saltan en vez de reventar: limpiar tiene que funcionar siempre, es el camino de apagar el
+ * interruptor, cambiar de escenario y abrir otro `.bpmn`.
  */
 export function clearOverlay(modeler: Modeler): void {
   const estado = estados.get(modeler);
@@ -239,7 +242,14 @@ export function clearOverlay(modeler: Modeler): void {
 
   modeler.get<Overlays>('overlays').remove({ type: OVERLAY_TYPE });
   const canvas = modeler.get<Canvas>('canvas');
-  for (const id of estado.marcados) canvas.removeMarker(id, MARKER_PRINCIPAL);
+  const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
+  for (const id of estado.marcados) {
+    // El diagrama pudo cambiar después de pintar: si el usuario borró la tarea marcada,
+    // `canvas.removeMarker` la resuelve contra el `elementRegistry` y escribe `element.markers`
+    // sobre `undefined` (diagram-js `Canvas._updateMarker`), tumbando el efecto de `main.tsx`
+    // que apaga el interruptor o cambia de escenario. Mismo guardia que `redibujar`.
+    if (elementRegistry.get(id) !== undefined) canvas.removeMarker(id, MARKER_PRINCIPAL);
+  }
   estado.marcados.clear();
 
   const previos = [...estado.niveles.keys()];
