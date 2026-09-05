@@ -393,15 +393,18 @@ export function capacityAt(schedule: CapacitySchedule, t: number): number {
  */
 export function nextCapacityRise(schedule: CapacitySchedule, t: number): number {
   const { segments } = schedule;
+  const length = (index: number): number => (segments[index + 1]?.[0] ?? WEEK) - segments[index]![0];
   const p = (t + schedule.offset) % WEEK;
   let index = segmentAt(schedule, p);
-  const current = segments[index]![1];
-  // Fin absoluto del segmento en curso.
-  let boundary = t + ((segments[index + 1]?.[0] ?? WEEK) - p);
+  // Fin absoluto del segmento en curso; a partir de ahí, un segmento entero por vuelta.
+  let boundary = t + (length(index) - (p - segments[index]![0]));
+  // Se compara cada segmento con el **anterior**, no con el de `t`: desde el turno de mayor
+  // capacidad la siguiente subida llega después de una bajada, y comparar contra `t` no la vería.
   for (let step = 0; step < segments.length; step++) {
-    index = (index + 1) % segments.length;
-    if (segments[index]![1] > current) return boundary;
-    boundary += (segments[index + 1]?.[0] ?? WEEK) - segments[index]![0];
+    const next = (index + 1) % segments.length;
+    if (segments[next]![1] > segments[index]![1]) return boundary;
+    boundary += length(next);
+    index = next;
   }
   throw new RangeError('E-REC-CAPACIDAD: la capacidad no sube nunca; el horario debería ser constante.');
 }

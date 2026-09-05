@@ -553,6 +553,29 @@ export function runReplication(
   let nextActivityInstanceId = 1;
 
   /**
+   * R-CAL-11: los eventos de subida de capacidad se agendan **solo cuando hay alguien esperando**
+   * en ese pool, y a lo sumo uno vivo por pool. Agendarlos de oficio dejaría el heap lleno para
+   * siempre y una corrida sin `run.duration` (que para al vaciarse el heap, R-ARR-3) no
+   * terminaría nunca.
+   */
+  const pendingCapacity = new Set<string>();
+  const waitsOnPool = (poolId: string): boolean => {
+    for (const activity of activities.values()) {
+      if (activity.closed || activity.allocation !== undefined) continue;
+      for (const requirement of activity.requirements) if (requirement.poolId === poolId) return true;
+    }
+    return false;
+  };
+  const scheduleCapacityRise = (poolId: string, from: number): void => {
+    const schedule = capacitySchedules.get(poolId);
+    if (schedule === undefined || pendingCapacity.has(poolId)) return;
+    const at = nextCapacityRise(schedule, from);
+    if (at >= tStop) return;
+    pendingCapacity.add(poolId);
+    heap.push({ t: at, kind: 'capacity', poolId });
+  };
+
+  /**
    * R-ARR-7: la inclusión depende únicamente del instante en que nació el caso. El caso
    * sigue atravesando el modelo y sus tareas siguen emitiendo filas; solo se excluye de los
    * acumuladores que alimentarán las métricas. Esto también evita el error sutil de incluir
@@ -790,14 +813,6 @@ export function runReplication(
     if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
 
-  // R-CAL-11: los únicos eventos de calendario del heap. Cada pool de capacidad variable agenda
-  // su próxima **subida**; una bajada no planifica nada (las tareas en curso no se interrumpen,
-  // R-CAL-11) y el evento reagenda el siguiente, así que hay a lo sumo uno vivo por pool.
-  for (const [poolId, schedule] of capacitySchedules) {
-    const at = nextCapacityRise(schedule, 0);
-    if (at < tStop) heap.push({ t: at, kind: 'capacity', poolId });
-  }
-
   // R-AND-1: `probability` en las salidas de un AND no se usa.
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
     if (node.type !== 'and') continue;
@@ -875,10 +890,12 @@ export function runReplication(
     }
 
     if (next.kind === 'capacity') {
-      const schedule = capacitySchedules.get(next.poolId)!;
+      // R-CAL-11: la capacidad acaba de subir; se reevalúa la cola del pool. Una bajada no genera
+      // evento: las tareas en curso no se interrumpen y `used` puede quedar por encima de la
+      // capacidad hasta que terminen.
+      pendingCapacity.delete(next.poolId);
       startAllocations(resourceManager.refresh([next.poolId], next.t));
-      const at = nextCapacityRise(schedule, next.t);
-      if (at < tStop) heap.push({ t: at, kind: 'capacity', poolId: next.poolId });
+      if (waitsOnPool(next.poolId)) scheduleCapacityRise(next.poolId, next.t);
       continue;
     }
 
@@ -986,6 +1003,11 @@ export function runReplication(
             requirements,
             selection: spec[next.nodeId]?.selection,
           }, next.t));
+          // R-CAL-11: si se quedó en cola, hay que despertarla cuando suba la capacidad de alguno
+          // de sus pools; sin capacidad variable no agenda nada.
+          if (activity.allocation === undefined) {
+            for (const requirement of requirements) scheduleCapacityRise(requirement.poolId, next.t);
+          }
         }
         break;
       }
