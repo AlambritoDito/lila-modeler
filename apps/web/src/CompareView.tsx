@@ -4,9 +4,9 @@
  * imprime `lila compare` (LILA-047) en la CLI. Reutiliza `DataTable`/`sortRows`/estilos de
  * `ResultsView.tsx` (LILA-062): ninguna tabla ni función de formato se duplica aquí.
  *
- * Aceptación literal (BACKLOG LILA-063): "AS-IS vs TO-BE marca solo las celdas que cambian" — una
- * celda se resalta si y solo si `deltaAbs !== 0` para esa columna; nunca la columna base, cuyo
- * delta contra sí misma es siempre 0 (invariante de `compare()`).
+ * Aceptación literal (BACKLOG LILA-063): "AS-IS vs TO-BE marca solo las celdas que cambian" — se
+ * resalta la celda cuyo texto mostrado difiere del de la base, ver `cellChanged()`; nunca la
+ * columna base, que se compara contra sí misma.
  *
  * ponytail: el subconjunto curado de KPIs y las etiquetas Bizagi (docs/RESULTS_FORMAT.md §10) se
  * repiten aquí en vez de importarse de `packages/engine/src/cli.ts`: ese archivo es el binario de
@@ -31,7 +31,11 @@ export interface CompareViewProps {
   /** En el mismo orden que los `RunResult` pasados a `compare()`; `scenarioNames[0]` es la base. */
   scenarioNames: readonly string[];
   baseTimeUnit: BaseTimeUnit;
-  /** id de recurso -> nombre declarado en el escenario; cualquiera de los comparados sirve. */
+  /**
+   * id de recurso -> nombre, fusionando **todos** los escenarios comparados y no solo el base
+   * (`printCompareResult` en cli.ts hace lo mismo): un pool puede nacer en el TO-BE, y su fila
+   * existe igual con la base en guion.
+   */
   resourceNames?: Readonly<Record<string, string>>;
 }
 
@@ -102,6 +106,31 @@ function formatCellValue(metric: string, value: number | null, unit: BaseTimeUni
   return formatNumber(value);
 }
 
+/** Texto completo de una celda no base: valor y delta relativo, como `lila compare` en la CLI. */
+function cellText(row: CompareRow, index: number, unit: BaseTimeUnit): string {
+  const value = row.values[index] ?? null;
+  const valueText = formatCellValue(row.metric, value, unit);
+  if (index === 0 || value === null) return valueText;
+  const deltaRel = row.deltaRel[index] ?? null;
+  return `${valueText} (${deltaRel === null ? '-' : formatSignedPercent(deltaRel)})`;
+}
+
+/**
+ * "Celdas que cambian" (aceptación de LILA-063) = las que el usuario ve distintas de la base, y
+ * no `deltaAbs !== 0`: en `examples/pedido`, `Task_Preparar.processing.mean` difiere en 5.7e-14
+ * entre AS-IS y TO-BE, así que se resaltaba una celda con el mismo número que la base y "(0%)" al
+ * lado. Comparar los textos ya formateados no necesita ningún umbral y también cubre el caso
+ * contrario: una fila que solo existe en el TO-BE tiene `deltaAbs === null` (base ausente) y sí
+ * cambia, porque la base muestra un guion.
+ */
+function cellChanged(row: CompareRow, index: number, unit: BaseTimeUnit): boolean {
+  if (index === 0) return false;
+  const value = formatCellValue(row.metric, row.values[index] ?? null, unit);
+  if (value !== formatCellValue(row.metric, row.values[0] ?? null, unit)) return true;
+  const deltaRel = row.deltaRel[index] ?? null;
+  return deltaRel !== null && formatSignedPercent(deltaRel) !== '0%';
+}
+
 /** Filas de un scope; con `showAll = false` solo el subconjunto curado (BACKLOG LILA-047). */
 export function visibleCompareRows(
   rows: readonly CompareRow[],
@@ -128,6 +157,8 @@ function rowName(
  * Columnas: Id/Name (salvo Proceso), Metric, y una por escenario visible.
  * ------------------------------------------------------------------ */
 
+const SIGNIFICANT_LABEL = 'Diferencia significativa (IC95 disjuntos)';
+
 const highlightStyle: CSSProperties = { background: 'var(--bg-hover)' };
 
 const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', fontWeight: 700 };
@@ -135,25 +166,21 @@ const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', 
 function scenarioColumn(index: number, name: string, unit: BaseTimeUnit): ColumnDef<CompareRow> {
   return {
     display: (row): ReactNode => {
-      const value = row.values[index] ?? null;
-      const valueText = formatCellValue(row.metric, value, unit);
-      if (index === 0 || value === null) return valueText;
-      const deltaRel = row.deltaRel[index] ?? null;
-      const deltaText = deltaRel === null ? '-' : formatSignedPercent(deltaRel);
-      const significant = row.significant[index] ?? false;
+      const text = cellText(row, index, unit);
+      if (row.significant[index] !== true) return text;
       return (
         <>
-          {valueText} ({deltaText})
-          {significant && (
-            <span style={significantMarkStyle} title="Diferencia significativa (IC95 disjuntos)">
-              {' '}
-              *
-            </span>
-          )}
+          {text}
+          {/* `title` solo lo anuncian algunos lectores de pantalla; `role="img"` + `aria-label`
+              convierten el asterisco en una imagen con texto alternativo, que sí se lee. */}
+          <span aria-label={SIGNIFICANT_LABEL} role="img" style={significantMarkStyle} title={SIGNIFICANT_LABEL}>
+            {' '}
+            *
+          </span>
         </>
       );
     },
-    cellStyle: (row): CSSProperties => ((row.deltaAbs[index] ?? 0) !== 0 ? highlightStyle : {}),
+    cellStyle: (row): CSSProperties => (cellChanged(row, index, unit) ? highlightStyle : {}),
     header: index === 0 ? `${name} (base)` : name,
     key: `scenario-${index}`,
     numeric: true,
@@ -166,7 +193,7 @@ function scopeColumns(
   ir: ProcessIR,
   resourceNames: Readonly<Record<string, string>>,
   scenarioNames: readonly string[],
-  visible: readonly boolean[],
+  isVisible: (index: number) => boolean,
   unit: BaseTimeUnit,
 ): ColumnDef<CompareRow>[] {
   const idColumns: ColumnDef<CompareRow>[] =
@@ -188,7 +215,7 @@ function scopeColumns(
     sortValue: (row) => row.metric,
   };
   const scenarioColumns = scenarioNames
-    .map((name, index) => (visible[index] === true ? scenarioColumn(index, name, unit) : null))
+    .map((name, index) => (isVisible(index) ? scenarioColumn(index, name, unit) : null))
     .filter((column): column is ColumnDef<CompareRow> => column !== null);
 
   return [...idColumns, metricColumn, ...scenarioColumns];
@@ -233,12 +260,18 @@ export function CompareView({
   baseTimeUnit,
   resourceNames = {},
 }: CompareViewProps): ReactNode {
-  const [visible, setVisible] = useState<boolean[]>(scenarioNames.map(() => true));
+  // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
+  // shell puede recomparar con uno más sin remontar la vista) nace visible en vez de quedar
+  // atrapado fuera de un array de booleanos que se quedó corto.
+  const [hidden, setHidden] = useState<readonly number[]>([]);
   const [showAll, setShowAll] = useState(false);
+  const isVisible = (index: number): boolean => index === 0 || !hidden.includes(index);
 
   function toggle(index: number): void {
     if (index === 0) return; // la base nunca se oculta.
-    setVisible((current) => current.map((value, candidate) => (candidate === index ? !value : value)));
+    setHidden((current) =>
+      current.includes(index) ? current.filter((value) => value !== index) : [...current, index],
+    );
   }
 
   return (
@@ -249,9 +282,10 @@ export function CompareView({
 
       <div style={selectorRowStyle}>
         {scenarioNames.map((name, index) => (
-          <label key={name} style={chipStyle(index === 0)}>
+          // Por índice y no por nombre: dos escenarios pueden llamarse igual.
+          <label key={index} style={chipStyle(index === 0)}>
             <input
-              checked={visible[index] === true}
+              checked={isVisible(index)}
               disabled={index === 0}
               onChange={() => toggle(index)}
               type="checkbox"
@@ -272,7 +306,7 @@ export function CompareView({
         return (
           <DataTable
             key={scope}
-            columns={scopeColumns(scope, ir, resourceNames, scenarioNames, visible, baseTimeUnit)}
+            columns={scopeColumns(scope, ir, resourceNames, scenarioNames, isVisible, baseTimeUnit)}
             rowKey={(row) => row.kpi}
             rows={rows}
             title={TAB_LABELS[scope]}
