@@ -9,6 +9,7 @@
  * todos los mapas usan ids BPMN como clave (R-DURA-1, R-DURA-4).
  */
 
+import { openTime, type Calendar } from './calendar.js';
 import type { ProcessIR } from './ir.js';
 import type {
   BottleneckEntry,
@@ -20,6 +21,7 @@ import type {
   Stat,
   StatSd,
 } from './result.js';
+import { activityCalendar, compileCalendars, poolCalendar } from './sim.js';
 import type { ReplicationRun, SimScenario } from './sim.js';
 
 const EMPTY_STAT: Readonly<Stat> = { min: 0, max: 0, mean: 0, total: 0 };
@@ -204,6 +206,11 @@ export function aggregateReplication(
   const windowDuration = Math.max(0, run.statisticsDuration);
   const windowStart = windowEnd - windowDuration;
 
+  // R-CAL-6 y R-CAL-9: los calendarios solo cambian dos cosas aquí, el tiempo **abierto** que
+  // cada fila ocupó y el denominador de la utilización. Sin `calendars` el mapa queda vacío,
+  // `undefined` es 24×7 y las dos expresiones son literalmente las de M2 (R-DEG-2).
+  const calendars = compileCalendars(scenario);
+
   for (const row of includedRows) {
     const activityRows = rowsByActivity.get(row.activityInstanceId) ?? [];
     activityRows.push(row);
@@ -215,29 +222,37 @@ export function aggregateReplication(
     );
     costByCase.set(row.caseId, (costByCase.get(row.caseId) ?? 0) + row.cost);
 
-    // Ocupación y usos se agregan **por fila** (ADR-025): una tarea AND con dos pools ocupa
-    // los dos, y una fila con `resourceId = null` (sentinel) o que nunca arrancó no ocupa nada.
-    // Cada fila trae el pool efectivamente usado, así que la selección OR de LILA-035 entra por
-    // aquí sin cambios.
-    if (row.resourceId === null) continue;
-    const pools = poolsByElement.get(row.elementId) ?? new Set<string>();
-    pools.add(row.resourceId);
-    poolsByElement.set(row.elementId, pools);
-    if (row.startedAt === null) continue;
-    const quantity = row.resourceQuantity ?? 1;
-    const occupiedFrom = Math.max(row.startedAt, windowStart);
-    const occupiedTo = Math.min(row.endedAt ?? row.observedUntil, windowEnd);
-    busyByPool.set(
-      row.resourceId,
-      (busyByPool.get(row.resourceId) ?? 0) + quantity * Math.max(0, occupiedTo - occupiedFrom),
-    );
-    usesByPool.set(row.resourceId, (usesByPool.get(row.resourceId) ?? 0) + quantity);
   }
 
   // Una actividad AND tendrá varias filas: processing/esperas pertenecen a la instancia y se
   // agregan una sola vez; costos por pool sí se sumaron fila por fila arriba (ADR-025).
   for (const activityRows of rowsByActivity.values()) {
     const row = activityRows[0]!;
+
+    // Ocupación y usos se agregan **por fila** (ADR-025): una tarea AND con dos pools ocupa los
+    // dos, y una fila con `resourceId = null` (sentinel) o que nunca arrancó no ocupa nada. El
+    // calendario efectivo de la actividad se reconstruye desde sus propias filas —los pools que
+    // de hecho ocupó— para que sea exactamente el que usó `sim.ts` al calcular `resourceCost`,
+    // y así se conserve la identidad de R-COST-4. Las filas de una actividad son contiguas en el
+    // log, así que recorrerlas agrupadas suma los flotantes en el mismo orden que antes.
+    const usedPools = activityRows.flatMap((entry) => (entry.resourceId === null ? [] : [entry.resourceId]));
+    let calendar: Calendar | undefined;
+    for (const entry of activityRows) {
+      if (entry.resourceId === null) continue;
+      const pools = poolsByElement.get(entry.elementId) ?? new Set<string>();
+      pools.add(entry.resourceId);
+      poolsByElement.set(entry.elementId, pools);
+      if (entry.startedAt === null) continue;
+      if (calendar === undefined) calendar = activityCalendar(scenario, calendars, entry.elementId, usedPools);
+      const quantity = entry.resourceQuantity ?? 1;
+      const occupiedFrom = Math.max(entry.startedAt, windowStart);
+      const occupiedTo = Math.min(entry.endedAt ?? entry.observedUntil, windowEnd);
+      const occupied = calendar === undefined
+        ? Math.max(0, occupiedTo - occupiedFrom)
+        : openTime(calendar, occupiedFrom, occupiedTo);
+      busyByPool.set(entry.resourceId, (busyByPool.get(entry.resourceId) ?? 0) + quantity * occupied);
+      usesByPool.set(entry.resourceId, (usesByPool.get(entry.resourceId) ?? 0) + quantity);
+    }
 
     // La cola pertenece a la instancia, no a la fila: todas las filas de una AND comparten
     // `enabledAt`/`startedAt`. Una instancia que seguía esperando al corte sí estuvo en la cola
@@ -291,7 +306,11 @@ export function aggregateReplication(
   // fuera del mapa (su ocupación sí seguiría en las filas del log).
   for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
     const busyTime = busyByPool.get(poolId) ?? 0;
-    const available = pool.capacity * windowDuration;
+    // R-CAL-9: el denominador son las horas **abiertas** del calendario del pool dentro de la
+    // ventana `[warmup, t_stop]`; sin calendario, la ventana entera.
+    const calendar = poolCalendar(calendars, pool);
+    const available = pool.capacity
+      * (calendar === undefined ? windowDuration : openTime(calendar, windowStart, windowEnd));
     const fixedCost = (pool.fixedCost ?? 0) * (usesByPool.get(poolId) ?? 0);
     const unitCost = ((pool.costPerHour ?? 0) * busyTime) / 3600;
     resources[poolId] = {

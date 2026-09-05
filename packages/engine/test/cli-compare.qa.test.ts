@@ -151,7 +151,10 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
     expect(compareRow[3]).toBe(`${runRow[2]}%`);
   });
 
-  test('los `calendars` declarados no cambian ningún número: el motor los ignora, y compare lo avisa', async () => {
+  // Invertida por LILA-041: hasta M3 esta prueba anclaba que el motor **ignoraba** los
+  // calendarios; ahora los simula y el ataque consiste en comprobar que de verdad mueven los
+  // números que tienen que moverse.
+  test('los `calendars` declarados sí mueven los números: el motor los simula (LILA-041)', async () => {
     const sinCalendario = writeScenario('sin.scenario.json', { name: 'Sin calendario', capacity: 1 });
     const conCalendario = writeScenario('con.scenario.json', {
       name: 'Con calendario',
@@ -162,18 +165,13 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
     expect(await main(['compare', model, sinCalendario, conCalendario])).toBe(0);
     const all = text();
 
-    // Un calendario L 09:00–18:00 con run.start un lunes a las 08:00 tendría que mover llegadas y
-    // asignaciones. Todos los deltas son 0: los calendarios no llegan al motor (no existe
-    // core/calendar.ts en esta rama; SEMANTICS §12 y R-DEG-2 quedan sin implementar hasta M3).
-    expect(rowLine(all, LONG_ID, 'Average time (waiting for resource)')).toMatch(/\(0%\)/);
-    expect(rowLine(all, 'agente', 'Utilization (%)')).toMatch(/\(0%\)/);
-    expect(all).not.toContain('%)*');
-
-    // El aviso es la única señal que recibe el usuario, y por eso tiene que estar.
-    expect(all).toContain('"Con calendario" declara calendarios');
-    expect(all).toContain('M3');
-    expect(all).toContain('24×7');
-    expect(all).not.toContain('"Sin calendario" declara calendarios');
+    // Calendario L 09:00–18:00 y run.start un lunes a las 08:00: las 12 llegadas caen entre las
+    // 08:00 y las 08:05:30 y ninguna puede arrancar antes de las 09:00, así que la cola pasa a
+    // servirse en bloque. La espera abierta media sube de 30·5,5 s a 60·5,5 s (R-REC-8/R-CAL-7).
+    expect(rowLine(all, LONG_ID, 'Average time (waiting for resource)')).toContain('2.75');
+    expect(rowLine(all, LONG_ID, 'Average time (waiting for resource)')).toContain('5.5 (+100%)');
+    // El tiempo de proceso no se mueve: 60 s abiertos siguen siendo 60 s (R-CAL-5).
+    expect(rowLine(all, LONG_ID, 'Average time  ')).toMatch(/\(0%\)/);
   });
 
   test('los avisos de modelo y escenario de `lila run` no se pierden en `lila compare`', async () => {

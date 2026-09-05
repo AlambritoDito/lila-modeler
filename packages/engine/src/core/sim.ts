@@ -18,6 +18,16 @@
  * es LILA-029; ninguna de las dos se adelanta aquí.
  */
 
+import {
+  addWorkingTime,
+  compileCalendar,
+  intersect,
+  nextOpen,
+  openTime,
+  weekOffsetSeconds,
+  type Calendar,
+  type CalendarDef,
+} from './calendar.js';
 import { sample, type Distribution } from './distributions.js';
 import { Heap } from './heap.js';
 import type { ProcessIR, Node } from './ir.js';
@@ -42,6 +52,8 @@ export interface SimElement {
   fixedCost?: number | undefined;
   resources?: readonly { readonly ref: string; readonly quantity?: number | undefined }[] | undefined;
   selection?: 'and' | 'or' | undefined;
+  /** Calendario propio del elemento (llegadas, timer o tarea); se intersecta con el de sus pools. */
+  calendar?: string | undefined;
 }
 
 export interface SimResource {
@@ -49,10 +61,17 @@ export interface SimResource {
   type?: 'role' | 'equipment' | undefined;
   fixedCost?: number | undefined;
   costPerHour?: number | undefined;
+  /** Clave de `calendars`; ausente ⇒ `default` si existe, y si no 24×7 (R-CAL-10). */
+  calendar?: string | undefined;
 }
 
 /** Subconjunto de `run` que consume el motor. `warmup` y `replications` son LILA-027. */
 export interface SimRun {
+  /**
+   * `run.start` en ISO 8601. Único uso en `core/`: situar el patrón semanal de los calendarios
+   * dentro de la semana (R-CAL-1). Sin calendarios no se lee nunca.
+   */
+  start?: string | undefined;
   duration?: number | undefined;
   seed?: number | undefined;
   /** Segundos iniciales excluidos de todas las estadísticas (R-ARR-7). */
@@ -64,6 +83,7 @@ export interface SimRun {
 /** Escenario visto por el motor. */
 export interface SimScenario {
   run: SimRun;
+  calendars?: Record<string, CalendarDef> | undefined;
   resources?: Record<string, SimResource> | undefined;
   elements?: Record<string, SimElement> | undefined;
 }
@@ -169,6 +189,108 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
 }
 
 /* ------------------------------------------------------------------ *
+ * Calendarios (§12, LILA-041)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Compila `scenario.calendars` una vez. Sin `calendars` el mapa queda **vacío** y todo el motor
+ * toma literalmente el camino de M2: `undefined` es 24×7 y no se llama a ninguna primitiva de
+ * calendario, que es lo que hace posible la igualdad bit a bit de R-DEG-2.
+ */
+export function compileCalendars(scenario: SimScenario): Map<string, Calendar> {
+  const compiled = new Map<string, Calendar>();
+  const defs = Object.entries(scenario.calendars ?? {});
+  if (defs.length === 0) return compiled;
+  // R-CAL-1: el patrón semanal se ancla en `run.start`. Sin `start` (solo ocurre en pruebas de
+  // `core/`, el esquema lo exige) el instante 0 es lunes 00:00, el offset neutro.
+  const offset = scenario.run.start === undefined ? 0 : weekOffsetSeconds(scenario.run.start);
+  for (const [name, def] of defs) {
+    if (def.intervals.length === 0) {
+      throw new RangeError(`E-CAL-VACIO: ${name}: el calendario no tiene intervalos abiertos.`);
+    }
+    compiled.set(name, compileCalendar(def, offset));
+  }
+  return compiled;
+}
+
+/** R-CAL-10: el pool usa su `calendar`; si no lo declara, el llamado `default`; si no, 24×7. */
+export function poolCalendar(
+  calendars: ReadonlyMap<string, Calendar>,
+  pool: { readonly calendar?: string | undefined } | undefined,
+): Calendar | undefined {
+  if (calendars.size === 0 || pool === undefined) return undefined;
+  return calendars.get(pool.calendar ?? 'default');
+}
+
+/**
+ * Calendario efectivo de una actividad (R-CAL-4): intersección de los calendarios de los pools
+ * que ocupa —todos en AND, el elegido en OR— con el de `elements[id].calendar`. `undefined` es
+ * 24×7. Una intersección vacía es `E-CAL-VACIO` citando el elemento.
+ *
+ * A diferencia de los pools, un elemento **no** hereda el calendario `default`: R-CAL-10 habla de
+ * la matriz recurso × calendario, y R-EVT-3 exige que un timer corra 24×7 salvo calendario propio.
+ */
+export function activityCalendar(
+  scenario: SimScenario,
+  calendars: ReadonlyMap<string, Calendar>,
+  elementId: string,
+  poolIds: readonly string[],
+): Calendar | undefined {
+  if (calendars.size === 0) return undefined;
+  const own = scenario.elements?.[elementId]?.calendar;
+  let result = own === undefined ? undefined : calendars.get(own);
+  for (const poolId of poolIds) {
+    const pool = poolCalendar(calendars, scenario.resources?.[poolId]);
+    if (pool === undefined) continue;
+    if (result === undefined) {
+      result = pool;
+      continue;
+    }
+    try {
+      result = intersect(result, pool);
+    } catch {
+      throw new RangeError(
+        `E-CAL-VACIO: ${elementId}: la intersección de los calendarios de la tarea es vacía.`,
+      );
+    }
+  }
+  return result;
+}
+
+/**
+ * Preflight de calendarios, hermano de `assertSupportedResourceScenario` y con el mismo contrato:
+ * ocurre **antes de cualquier callback público** (R-CAL-4, R-CAL-10). Devuelve el mapa compilado
+ * para que `runReplication` no lo compile dos veces.
+ *
+ * `validateScenario` reporta `E-REF-DESCONOCIDA` para lo mismo (R9 de SCENARIO_FORMAT), pero
+ * `core/` no importa el validador zod y tiene que defenderse solo.
+ */
+export function assertSupportedCalendarScenario(scenario: SimScenario): Map<string, Calendar> {
+  const calendars = compileCalendars(scenario);
+
+  for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
+    if (pool.calendar !== undefined && !calendars.has(pool.calendar)) {
+      throw new Error(`E-CAL-DESCONOCIDO: resources.${poolId}: el calendario ${pool.calendar} no existe.`);
+    }
+  }
+  for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
+    if (element.calendar !== undefined && !calendars.has(element.calendar)) {
+      throw new Error(`E-CAL-DESCONOCIDO: ${elementId}: el calendario ${element.calendar} no existe.`);
+    }
+  }
+  if (calendars.size === 0) return calendars;
+
+  for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
+    const uses = element.resources ?? [];
+    // R-CAL-4: en OR cada alternativa se comprueba por separado (una tarea puede arrancar por
+    // cualquiera de ellas); en AND y sin recursos, la única combinación posible.
+    if (element.selection === 'or') for (const use of uses) activityCalendar(scenario, calendars, elementId, [use.ref]);
+    else activityCalendar(scenario, calendars, elementId, uses.map((use) => use.ref));
+  }
+  return calendars;
+}
+
+/* ------------------------------------------------------------------ *
  * Eventos del scheduler
  * ------------------------------------------------------------------ */
 
@@ -203,6 +325,8 @@ interface ActivityState {
   readonly enabledAt: number;
   readonly duration: number;
   readonly requirements: readonly ResourceRequirement[];
+  /** Calendario efectivo (R-CAL-4); `undefined` es 24×7. Se afina al conceder los recursos. */
+  calendar: Calendar | undefined;
   requestId?: string;
   allocation?: ResourceAllocation;
   startedAt: number | null;
@@ -257,6 +381,20 @@ export function runReplication(
 
   // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
   assertSupportedResourceScenario(scenario);
+  // R-CAL-4 / R-CAL-10: compilado una sola vez por replicación. Vacío ⇒ 24×7 en todas partes.
+  const calendars = assertSupportedCalendarScenario(scenario);
+
+  // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
+  // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.
+  const calendarCache = new Map<string, Calendar | undefined>();
+  const calendarFor = (nodeId: string, poolIds: readonly string[]): Calendar | undefined => {
+    if (calendars.size === 0) return undefined;
+    const key = poolIds.length === 0 ? nodeId : `${nodeId}\u0000${poolIds.join('\u0000')}`;
+    if (calendarCache.has(key)) return calendarCache.get(key);
+    const calendar = activityCalendar(scenario, calendars, nodeId, poolIds);
+    calendarCache.set(key, calendar);
+    return calendar;
+  };
 
   // R-DET-2: un stream por elemento (common random numbers, R-DET-3).
   const rngs = new Map<string, Rng>();
@@ -302,9 +440,15 @@ export function runReplication(
       const activity = activities.get(allocation.requestId);
       if (activity === undefined || activity.closed) continue;
       activity.allocation = allocation;
-      activity.startedAt = allocation.startedAt;
+      // R-CAL-4: el calendario de la tarea sale de los pools **efectivamente** concedidos, así
+      // que una OR toma el del pool elegido. R-CAL-6: la unidad se reserva desde el instante de
+      // concesión (`allocation.startedAt`) aunque el trabajo no empiece hasta la apertura.
+      const calendar = calendarFor(activity.nodeId, allocation.assignments.map((a) => a.poolId));
+      activity.calendar = calendar;
+      const startedAt = calendar === undefined ? allocation.startedAt : nextOpen(calendar, allocation.startedAt);
+      activity.startedAt = startedAt;
       heap.push({
-        t: allocation.startedAt + activity.duration,
+        t: calendar === undefined ? startedAt + activity.duration : addWorkingTime(calendar, startedAt, activity.duration),
         kind: 'done',
         activityInstanceId: activity.id,
         caseId: activity.caseId,
@@ -335,7 +479,13 @@ export function runReplication(
       const assignment = assignments[index]!;
       const startedAt = activity.startedAt;
       const endedAt = status === 'completed' ? observedUntil : null;
-      const occupied = startedAt === null ? 0 : Math.max(0, observedUntil - startedAt);
+      const calendar = activity.calendar;
+      // R-CAL-6: durante el cierre la unidad sigue reservada pero no acumula ocupación ni costo.
+      const occupied = startedAt === null
+        ? 0
+        : calendar === undefined
+          ? Math.max(0, observedUntil - startedAt)
+          : openTime(calendar, startedAt, observedUntil);
       const pool = assignment.poolId === null ? undefined : resources[assignment.poolId];
       const elementCost = status === 'completed' && index === 0 ? (spec[activity.nodeId]?.fixedCost ?? 0) : 0;
       const resourceCost = startedAt === null || pool === undefined
@@ -355,8 +505,14 @@ export function runReplication(
         startedAt,
         endedAt,
         observedUntil,
-        resourceWait: startedAt === null ? Math.max(0, observedUntil - activity.enabledAt) : startedAt - activity.enabledAt,
-        offHoursWait: 0,
+        // R-REC-8 y R-CAL-7: la espera se parte en abierta (falta de recurso) y cerrada. Sin
+        // calendario las dos expresiones son literalmente las de M2 (R-DEG-2).
+        resourceWait: calendar === undefined
+          ? (startedAt === null ? Math.max(0, observedUntil - activity.enabledAt) : startedAt - activity.enabledAt)
+          : openTime(calendar, activity.enabledAt, startedAt ?? observedUntil),
+        offHoursWait: calendar === undefined
+          ? 0
+          : Math.max(0, observedUntil - activity.enabledAt - openTime(calendar, activity.enabledAt, observedUntil)),
         elementCost,
         resourceCost,
         cost: elementCost + resourceCost,
@@ -471,8 +627,11 @@ export function runReplication(
       continue;
     }
     emitted.set(nodeId, 0);
-    // R-ARR-1: la primera llegada ocurre en t = 0.
-    if (0 < tStop) heap.push({ t: 0, kind: 'arrive', startId: nodeId });
+    // R-ARR-1 / R-ARR-6: la primera llegada ocurre en t = 0, desplazada a la siguiente apertura
+    // si el start declara calendario. El corte contra `tStop` se aplica al valor ya desplazado.
+    const calendar = calendarFor(nodeId, []);
+    const first = calendar === undefined ? 0 : nextOpen(calendar, 0);
+    if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
 
   // R-AND-1: `probability` en las salidas de un AND no se usa.
@@ -541,7 +700,11 @@ export function runReplication(
       const element = spec[next.startId];
       const interTrigger = element?.interTriggerTimer;
       if (interTrigger !== undefined && count < (element?.triggerCount ?? Infinity)) {
-        const at = next.t + Math.max(0, sample(interTrigger, rngFor(next.startId)));
+        // La cadencia se mide en tiempo de reloj y **después** se desplaza a la apertura
+        // (R-ARR-6): el muestreo consume el mismo uniforme haya calendario o no (R-DET-3).
+        const sampled = next.t + Math.max(0, sample(interTrigger, rngFor(next.startId)));
+        const calendar = calendarFor(next.startId, []);
+        const at = calendar === undefined ? sampled : nextOpen(calendar, sampled);
         if (at < tStop) heap.push({ t: at, kind: 'arrive', startId: next.startId });
       }
       continue;
@@ -606,6 +769,19 @@ export function runReplication(
           poolId: use.ref,
           quantity: use.quantity ?? 1,
         }));
+        // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
+        // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
+        // AND y sin recursos la combinación ya es definitiva.
+        const calendar = calendarFor(
+          next.nodeId,
+          spec[next.nodeId]?.selection === 'or' ? [] : requirements.map((requirement) => requirement.poolId),
+        );
+        // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
+        const startedAt = requirements.length > 0
+          ? null
+          : calendar === undefined
+            ? next.t
+            : nextOpen(calendar, next.t);
         const activity: ActivityState = {
           id: String(nextActivityInstanceId++),
           caseId: next.caseId,
@@ -614,14 +790,15 @@ export function runReplication(
           enabledAt: next.t,
           duration,
           requirements,
-          startedAt: requirements.length === 0 ? next.t : null,
+          calendar,
+          startedAt,
           closed: false,
         };
         activities.set(activity.id, activity);
         state.activityIds.add(activity.id);
         if (requirements.length === 0) {
           heap.push({
-            t: next.t + duration,
+            t: calendar === undefined ? next.t + duration : addWorkingTime(calendar, startedAt!, duration),
             kind: 'done',
             activityInstanceId: activity.id,
             caseId: activity.caseId,
