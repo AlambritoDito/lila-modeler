@@ -6,12 +6,14 @@
  * responsabilidad de quien lo use — ver `src/bin.ts` para el caso stdio real.
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 
 import { validateBpmnXml, type ValidateBpmnReport, type ValidationResult } from '@lila/engine/bpmn';
 import {
   absolutePath,
   comparablePath,
   compareWarnings,
+  loadResolvedScenario,
   loadValidatedModel,
   readJsonFile,
   resultWithBoundaryWarnings,
@@ -35,6 +37,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
+import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 
 const NAME = 'lila-mcp';
@@ -373,6 +376,136 @@ async function compareScenarios({
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: false, structuredContent: payload };
 }
 
+/* ------------------------------------------------------------------ *
+ * `patch_scenario` (LILA-055)
+ * ------------------------------------------------------------------ */
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * ScenarioSchema + modelo + `validateScenario`, en una sola pasada: la misma comprobación sirve
+ * para el modo (a) sobre el escenario ya parcheado, y para el modo (b) sobre el candidato que
+ * realmente se va a escribir (que puede no coincidir con el parcheado si `extendsFrom` no es el
+ * mismo archivo que `scenario`). Solo si esto no devuelve error se escribe algo a disco.
+ */
+async function validatePatchedScenario(
+  raw: unknown,
+): Promise<{ ok: true; scenario: ResolvedScenario; notes: string[] } | { ok: false; error: string }> {
+  const parsed = ScenarioSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`);
+    return { ok: false, error: `escenario inválido tras el patch: ${issues.join('; ')}` };
+  }
+  const scenario = parsed.data as ResolvedScenario;
+
+  let ir: ParsedIr;
+  let modelValidation: ValidationResult;
+  try {
+    ({ ir, validation: modelValidation } = await loadValidatedModel(scenario.model));
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+  if (modelValidation.errors.length > 0) {
+    return { ok: false, error: `el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}` };
+  }
+
+  const problems = validateScenario(scenario, ir);
+  const issues = scenarioErrors(problems);
+  if (issues.length > 0) return { ok: false, error: `escenario inválido tras el patch: ${JSON.stringify(issues)}` };
+
+  const notes = problems.filter((p) => p.severity === 'warning').map((p) => `${p.code}: ${p.message}`);
+  return { ok: true, scenario, notes };
+}
+
+interface PatchScenarioInput {
+  scenario: string;
+  patch: JsonPatchOp[];
+  saveTo?: string | undefined;
+  extendsFrom?: string | undefined;
+  name?: string | undefined;
+  description?: string | undefined;
+}
+
+/**
+ * Dos modos (LILA-055): sin `saveTo`, parchea `scenario` en sitio (escenario resuelto completo,
+ * sin `extends`: el patch se aplica sobre el escenario ya fusionado). Con `saveTo`, crea un
+ * archivo nuevo que declara `extends: extendsFrom` (por defecto, el propio `scenario`) y contiene
+ * solo el delta del patch — como `to-be-3-cajeros.scenario.json`. En ambos casos, solo se escribe
+ * si el escenario resultante valida contra el modelo; nunca dos veces (primero se valida, después
+ * se escribe una única vez).
+ */
+async function patchScenario({
+  scenario,
+  patch,
+  saveTo,
+  extendsFrom,
+  name,
+  description,
+}: PatchScenarioInput): Promise<CallToolResult> {
+  const scenarioPath = absolutePath(scenario);
+  let base: ResolvedScenario;
+  try {
+    base = loadResolvedScenario(scenarioPath);
+  } catch (error) {
+    return errorResult(`patch_scenario: ${message(error)}`);
+  }
+
+  let patchedRaw: unknown;
+  try {
+    patchedRaw = applyJsonPatch(base, patch);
+  } catch (error) {
+    return errorResult(`patch_scenario: ${message(error)}`);
+  }
+
+  if (saveTo === undefined) {
+    // Modo (a): patchear en sitio.
+    if (isPlainObject(patchedRaw)) {
+      if (name !== undefined) patchedRaw.name = name;
+      if (description !== undefined) patchedRaw.description = description;
+    }
+    const outcome = await validatePatchedScenario(patchedRaw);
+    if (!outcome.ok) return errorResult(`patch_scenario: ${outcome.error}`);
+    try {
+      const file = writeJsonAtomic(scenarioPath, outcome.scenario);
+      return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
+    } catch (error) {
+      return errorResult(`patch_scenario: ${message(error)}`);
+    }
+  }
+
+  // Modo (b): archivo nuevo con `extends` al padre, solo el delta del patch.
+  if (!isPlainObject(patchedRaw)) {
+    return errorResult('patch_scenario: el patch no produjo un objeto de escenario.');
+  }
+  const saveToPath = absolutePath(saveTo);
+  const extendsFromPath = absolutePath(extendsFrom ?? scenario);
+  const relExtends = posix.relative(posix.dirname(saveToPath), extendsFromPath);
+  const delta = buildPatchDelta(patch, patchedRaw);
+
+  const candidate: Record<string, unknown> = { version: base.version, extends: relExtends, ...delta };
+  candidate['name'] = name ?? (typeof delta['name'] === 'string' ? delta['name'] : `${base.name} (parcheado)`);
+  if (description !== undefined) candidate['description'] = description;
+
+  let resolvedCandidate: ResolvedScenario;
+  try {
+    resolvedCandidate = loadResolvedScenario(saveToPath, (file) => (file === saveToPath ? candidate : readJsonFile(file)));
+  } catch (error) {
+    return errorResult(`patch_scenario: ${message(error)}`);
+  }
+
+  const outcome = await validatePatchedScenario(resolvedCandidate);
+  if (!outcome.ok) return errorResult(`patch_scenario: ${outcome.error}`);
+
+  try {
+    const file = writeJsonAtomic(saveToPath, candidate);
+    return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
+  } catch (error) {
+    return errorResult(`patch_scenario: ${message(error)}`);
+  }
+}
+
 export function createServer(): McpServer {
   const server = new McpServer({ name: NAME, version: VERSION }, { capabilities: { tools: {} } });
 
@@ -489,6 +622,46 @@ export function createServer(): McpServer {
       }),
     },
     compareScenarios,
+  );
+
+  server.registerTool(
+    'patch_scenario',
+    {
+      title: 'Parchear escenario',
+      description:
+        'Aplica un JSON Patch (RFC 6902; solo add/replace/remove/test, sin move/copy) a un ' +
+        'escenario, valida el resultado contra su modelo y solo si valida lo escribe a disco. Sin ' +
+        '`saveTo`, parchea `scenario` en sitio (escenario resuelto completo, sin `extends`). Con ' +
+        '`saveTo`, crea un archivo nuevo con `extends` hacia `extendsFrom` (por defecto, el propio ' +
+        '`scenario`) y solo las claves que tocó el patch — como `to-be-3-cajeros.scenario.json`. ' +
+        'Devuelve el escenario resultante ya resuelto, la ruta escrita y `notes` con los avisos de ' +
+        'lint. Un patch que deja el escenario inválido (`probability` fuera de `[0,1]`, `capacity` ' +
+        '< 1, una `ref` que no existe en `resources`, …) se rechaza sin escribir nada.',
+      inputSchema: z.object({
+        scenario: z.string().describe('Ruta al escenario .json a leer y patchear, relativa al cwd.'),
+        patch: z
+          .array(
+            z.object({
+              op: z.string().describe('add | replace | remove | test (move/copy no soportadas).'),
+              path: z.string().describe('Puntero RFC 6901, p. ej. "/resources/cajero/capacity".'),
+              value: z.unknown().optional().describe('Requerido por add/replace/test.'),
+              from: z.string().optional().describe('No usado: move/copy no están implementadas.'),
+            }),
+          )
+          .min(1),
+        saveTo: z
+          .string()
+          .optional()
+          .describe('Ausente: escribe sobre `scenario`. Presente: crea un escenario nuevo con `extends` ahí.'),
+        extendsFrom: z
+          .string()
+          .optional()
+          .describe('Padre del `extends` del archivo nuevo (solo con `saveTo`). Por defecto, `scenario`.'),
+        name: z.string().optional().describe('Nombre del escenario resultante; por defecto, uno generado.'),
+        description: z.string().optional().describe('Descripción del escenario resultante.'),
+      }),
+    },
+    patchScenario,
   );
 
   return server;
