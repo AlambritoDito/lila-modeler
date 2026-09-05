@@ -56,6 +56,12 @@ interface Props {
   onListo: (modelador: Modelador) => void;
   /** Se llama cada vez que cambia el zoom o el número de elementos. */
   onEstado: (estado: EstadoLienzo) => void;
+  /**
+   * Id del elemento seleccionado, o `null` si no hay ninguno o hay varios (LILA-061: el panel
+   * de escenario edita `elements[id]`, y con dos seleccionados no hay un `id` que editar).
+   * Debe ser estable entre renders: entra en las dependencias del efecto que monta bpmn-js.
+   */
+  onSeleccion: (id: string | null) => void;
 }
 
 /** Valor de un token de diseño, ya resuelto a color por el navegador. */
@@ -63,7 +69,7 @@ function token(nombre: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
 }
 
-export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Element {
+export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): React.JSX.Element {
   const contenedor = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -118,6 +124,13 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       publicar(null);
     });
 
+    // Única fuente de la selección para el resto de la app (LILA-061). `selection.changed` es
+    // el evento de diagram-js; el shell nunca ve el `elementRegistry`.
+    modeler.on('selection.changed', (evento: { newSelection: Array<{ id: string }> }) => {
+      const elegidos = evento.newSelection;
+      onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
+    });
+
     const abrir = async (xml: string): Promise<boolean> => {
       // Antes de importar, no después: `clearOverlay` repinta por id, y tras `importXML` los ids
       // del overlay anterior o no existen o son de otro diagrama. Sin esto, abrir un `.bpmn`
@@ -159,7 +172,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       vivo = false;
       modeler.destroy();
     };
-  }, [xmlInicial, onListo, onEstado]);
+  }, [xmlInicial, onListo, onEstado, onSeleccion]);
 
   return <div className="lienzo" ref={contenedor} />;
 }
