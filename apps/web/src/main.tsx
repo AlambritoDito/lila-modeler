@@ -22,15 +22,25 @@ const panel: CSSProperties = {
 function Smoke() {
   const [slug, setSlug] = useState('eva-01');
   const [theme, setTheme] = useState<Theme | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
+    setError(null);
     void fetch(THEME_FILES[slug]!)
-      .then((r) => r.json() as Promise<Theme>)
+      .then((r) => {
+        if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
+        return r.json() as Promise<Theme>;
+      })
       .then((t) => {
         if (!vivo) return;
         applyTheme(t);
         setTheme(t);
+      })
+      .catch((e: unknown) => {
+        // Un tema roto (JSON inválido, token desconocido, valor no textual) se ve
+        // en pantalla; si no, la página se queda muda con el tema anterior puesto.
+        if (vivo) setError(e instanceof Error ? e.message : String(e));
       });
     return () => {
       vivo = false;
@@ -51,6 +61,12 @@ function Smoke() {
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 20px' }}>
         Página de humo de LILA-112. Tema activo: {theme?.name ?? '…'}
       </p>
+
+      {error !== null && (
+        <p role="alert" style={{ color: 'var(--status-error)', margin: '0 0 20px' }}>
+          No se pudo cargar el tema: {error}
+        </p>
+      )}
 
       <div style={panel}>
         <label style={{ color: 'var(--fg-muted)', marginRight: 8 }} htmlFor="tema">
