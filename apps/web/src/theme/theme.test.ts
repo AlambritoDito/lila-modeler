@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyTheme, tokenToCssVar, type Theme } from './applyTheme';
-import { COLOR_TOKEN_NAMES, TOKEN_NAMES } from './tokens';
+import { COLOR_TOKEN_NAMES, TOKEN_NAMES, type TokenName } from './tokens';
 
 const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const readTheme = (rel: string): Theme => JSON.parse(read(rel)) as Theme;
@@ -38,6 +38,19 @@ describe('tokens.css', () => {
     expect(missing).toEqual([]);
     expect(declared.size).toBe(TOKEN_NAMES.length);
   });
+
+  it('sus valores por defecto son exactamente los de Eva-01', () => {
+    // Si alguien retoca eva-01.json y no tokens.css, la app pinta otro tema
+    // durante el primer frame y nadie se entera. Aquí sí.
+    const eva = themes[0]![1];
+    const declarados = Object.fromEntries(
+      [...tokensCss.matchAll(/^\s*(--[\w-]+)\s*:\s*(.+?);\s*$/gm)].map((m) => [m[1]!, m[2]!]),
+    );
+    const distintos = TOKEN_NAMES.filter(
+      (name) => declarados[tokenToCssVar(name)] !== eva.tokens[name],
+    );
+    expect(distintos).toEqual([]);
+  });
 });
 
 describe.each(themes)('tema %s', (_slug, theme) => {
@@ -57,9 +70,23 @@ describe.each(themes)('tema %s', (_slug, theme) => {
 
   it('el texto cumple contraste AA (>= 4.5) sobre los fondos y sobre el acento', () => {
     const t = theme.tokens;
-    expect(contrast(t['fg.primary']!, t['bg.base']!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t['fg.primary']!, t['bg.surface']!)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(t['fg.onAccent']!, t['accent.primary']!)).toBeGreaterThanOrEqual(4.5);
+    // Pares que de verdad llevan texto encima. `fg.disabled` queda fuera a
+    // propósito: WCAG 1.4.3 exime a los controles inactivos. `fg.onAccent` solo
+    // se garantiza sobre `accent.primary`; ver docs/design/README.md.
+    const pares: Array<[string, string]> = [
+      ['fg.primary', 'bg.base'],
+      ['fg.primary', 'bg.surface'],
+      ['fg.primary', 'bg.elevated'],
+      ['fg.muted', 'bg.base'],
+      ['fg.muted', 'bg.surface'],
+      ['fg.muted', 'bg.elevated'],
+      ['diagram.label', 'diagram.fill'],
+      ['diagram.label', 'canvas.bg'],
+      ['fg.onAccent', 'accent.primary'],
+    ];
+    for (const [fg, bg] of pares) {
+      expect(contrast(t[fg as TokenName]!, t[bg as TokenName]!), `${fg} sobre ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 
@@ -73,13 +100,18 @@ describe('tokenToCssVar', () => {
   });
 });
 
+// ponytail: un doble mínimo en vez de jsdom; applyTheme solo usa `style.setProperty`.
+function doble(): { root: HTMLElement; written: Map<string, string> } {
+  const written = new Map<string, string>();
+  const root = {
+    style: { setProperty: (k: string, v: string) => void written.set(k, v) },
+  } as unknown as HTMLElement;
+  return { root, written };
+}
+
 describe('applyTheme', () => {
   it('escribe cada token como variable CSS y cambiar de tema cambia los valores', () => {
-    const written = new Map<string, string>();
-    // ponytail: un doble mínimo en vez de jsdom; applyTheme solo usa `style.setProperty`.
-    const root = {
-      style: { setProperty: (k: string, v: string) => void written.set(k, v) },
-    } as unknown as HTMLElement;
+    const { root, written } = doble();
 
     applyTheme(themes[0]![1], root);
     expect(written.size).toBe(TOKEN_NAMES.length);
@@ -88,5 +120,30 @@ describe('applyTheme', () => {
     applyTheme(themes[1]![1], root);
     expect(written.get('--accent-primary')).toBe('#EC3013');
     expect(written.get('--bg-base')).toBe('#F4F1EC');
+  });
+
+  it('rechaza un token que no existe en vez de escribir una variable basura', () => {
+    const { root, written } = doble();
+    // La clave mala va la última: si validara sobre la marcha, el tema quedaría
+    // aplicado a medias antes de lanzar.
+    const roto = {
+      name: 'roto',
+      tokens: { 'bg.base': '#000000', 'foo.bar': '#ff00ff' },
+    } as unknown as Theme;
+    expect(() => applyTheme(roto, root)).toThrow(/foo\.bar/);
+    expect(written.size).toBe(0);
+  });
+
+  it('rechaza un valor que no es texto en vez de escribir CSS inválido', () => {
+    const { root, written } = doble();
+    const roto = { name: 'roto', tokens: { 'bg.base': 123 } } as unknown as Theme;
+    expect(() => applyTheme(roto, root)).toThrow(/bg\.base/);
+    expect(written.size).toBe(0);
+  });
+
+  it('un tema parcial solo escribe lo que trae: el resto se queda con el default de tokens.css', () => {
+    const { root, written } = doble();
+    applyTheme({ name: 'parcial', tokens: { 'accent.primary': '#00FFAA' } }, root);
+    expect([...written]).toEqual([['--accent-primary', '#00FFAA']]);
   });
 });
