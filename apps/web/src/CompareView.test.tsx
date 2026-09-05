@@ -111,7 +111,11 @@ describe('CompareView (LILA-063): AS-IS vs TO-BE 3 cajeros', () => {
         const cell = cells[cells.length - 1]!;
         const base = textOf(cells[cells.length - 2]!);
         // El texto de una celda que no cambió es el de la base más "(0%)", o "(-)" si la base es 0.
-        const unchanged = textOf(cell) === `${base} (0%)` || textOf(cell) === `${base} (-)`;
+        // Tercer caso (QA, LILA-063): un KPI ausente en los dos escenarios imprime el mismo guion
+        // en ambas columnas y tampoco cambió; en `examples/pedido` no ocurre, pero el predicado no
+        // puede depender de eso.
+        const unchanged =
+          textOf(cell) === `${base} (0%)` || textOf(cell) === `${base} (-)` || textOf(cell) === base;
         expect(cell.includes(HIGHLIGHT), `${row.kpi}: "${base}" -> "${textOf(cell)}"`).toBe(!unchanged);
       }
     }
