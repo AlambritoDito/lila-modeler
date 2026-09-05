@@ -43,7 +43,7 @@ describe('degradación semántica (LILA-039)', () => {
     const actual = await renderPedidoScenario(degraded);
     const expected = readFileSync(PEDIDO_GOLDEN_PATH, 'utf8');
     expect(actual).toBe(expected);
-  });
+  }, 60_000); // ponytail: 30 réplicas; mismo techo holgado que el control positivo de abajo
 
   // Control positivo: sin él, la igualdad byte a byte anterior también se cumpliría si el motor
   // ignorara `resources` por completo, que es justo lo que R-DEG-1 tiene que distinguir.
