@@ -16,8 +16,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx tsx tools/dump-nivel3.ts linux.json
-      - run: sha256sum linux.json
+      - run: npx tsx tools/diag-rows.ts linux-rows.txt
+      - run: sha256sum linux.json linux-rows.txt
       - uses: actions/upload-artifact@v4
         with:
           name: nivel3-linux
-          path: linux.json
+          path: |
+            linux.json
+            linux-rows.txt
