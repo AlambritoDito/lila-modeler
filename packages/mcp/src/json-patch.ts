@@ -23,13 +23,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * RFC 6901 no reserva ningún nombre de clave, pero en JavaScript `obj['__proto__'] = x` no crea
+ * una clave: escribe en el prototipo. Un patch con `/__proto__/loQueSea` contaminaba
+ * `Object.prototype` del **proceso servidor** entero —un servidor MCP por stdio es de vida larga—
+ * y dejaba colgada la llamada y todas las siguientes. `constructor` y `prototype` van a la misma
+ * lista: ningún escenario tiene claves así (`docs/SCENARIO_FORMAT.md` § 2).
+ */
+const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function parsePointer(pointer: string): string[] {
   if (pointer === '') throw new Error('json patch: la raíz del documento no se puede parchear.');
   if (!pointer.startsWith('/')) throw new Error(`json patch: puntero inválido: ${pointer}`);
   return pointer
     .slice(1)
     .split('/')
-    .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+    .map((segment) => {
+      const key = segment.replaceAll('~1', '/').replaceAll('~0', '~');
+      if (FORBIDDEN_SEGMENTS.has(key)) {
+        throw new Error(`json patch: segmento prohibido "${key}" en ${pointer}: escribiría en el prototipo del objeto.`);
+      }
+      return key;
+    });
 }
 
 function child(container: unknown, key: string): unknown {
@@ -65,6 +80,11 @@ export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): 
       throw new Error(
         `json patch: operación no soportada: "${op.op}" (solo add/replace/remove/test; move/copy no están implementadas).`,
       );
+    }
+    // RFC 6902 § 4: `add`, `replace` y `test` requieren `value`. Sin esto, un `add` sin `value`
+    // escribía `undefined`, que `JSON.stringify` descarta: un borrado silencioso en vez de error.
+    if (op.op !== 'remove' && op.value === undefined) {
+      throw new Error(`json patch: la operación "${op.op}" requiere "value" (${op.path}).`);
     }
     const segments = parsePointer(op.path);
 
