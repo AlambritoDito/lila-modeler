@@ -24,7 +24,7 @@ Fuente de la comparación original: ayuda oficial de Bizagi (niveles 1–4, esce
 | Costo fijo por actividad | ✓ | ✓ | M2 | Pendiente |
 | Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Pendiente |
 | Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Pendiente |
-| Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Pendiente |
+| Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041); paridad numérica en LILA-044 |
 | What-if: varios escenarios, lado a lado, diferencias resaltadas | ✓ | ✓ (`lila compare`) | M3 | Pendiente |
 | Replicaciones (recomiendan 30) | ✓ solo en what-if | ✓ siempre, con IC 95 % | M2 | Pendiente |
 | Export de resultados | Excel | CSV (Excel lo abre; XLSX después si lo piden) | M2 | Pendiente |
