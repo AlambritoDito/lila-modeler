@@ -18,6 +18,7 @@ import { parseArgs } from 'node:util';
 
 import { parseBpmn } from './bpmn/parse.js';
 import { validate, type ValidationResult } from './bpmn/validate.js';
+import { validateBpmnXml } from './bpmn/validate-report.js';
 import {
   elementsCsv,
   eventLogCsvHeader,
@@ -94,22 +95,13 @@ function printValidationProblems({ errors, warnings }: ValidationResult): void {
 
 async function validateCommand(file: string, json: boolean): Promise<number> {
   const xml = readFileSync(file, 'utf8');
-  const { ir, ignoredProcessIds, unsupported, messageFlowCount, conditionFlowIds } =
-    await parseBpmn(xml);
-  const validation = validate(ir, {
-    unsupported,
-    messageFlowCount,
-    conditionFlowIds,
-  });
+  // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
+  const report = await validateBpmnXml(xml);
+  const { ir, ignoredProcessIds } = report;
+  const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
 
   if (json) {
-    console.log(
-      JSON.stringify(
-        { ir, ignoredProcessIds, errors: validation.errors, warnings: validation.warnings },
-        null,
-        2,
-      ),
-    );
+    console.log(JSON.stringify(report, null, 2));
     return validation.errors.length > 0 ? 1 : 0;
   }
 
