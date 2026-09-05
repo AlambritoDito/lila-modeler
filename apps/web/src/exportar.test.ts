@@ -65,6 +65,17 @@ describe('el XML que exporta la app web', () => {
     },
   );
 
+  // Lo mismo que promete LILA-020 para la CLI: la app tampoco puede comerse las extensiones
+  // ajenas. Se cuentan las etiquetas, no se compara el XML entero, porque bpmn-moddle
+  // reordena atributos y reindenta al serializar.
+  it.each(BIZAGI)('exportar %s conserva uno a uno los bizagi:', async (ruta) => {
+    const original = leer(ruta);
+    const etiquetas = (xml: string): number => (xml.match(/<bizagi:[A-Za-z]+/g) ?? []).length;
+
+    expect(etiquetas(original)).toBeGreaterThan(0);
+    expect(etiquetas(await exportar(original))).toBe(etiquetas(original));
+  });
+
   it('conserva los elementos lila: al exportar', async () => {
     // Es lo que compra `moddleExtensions: { lila }`: sin el descriptor, bpmn-moddle trata los
     // `lila:*` como nodos genéricos.
