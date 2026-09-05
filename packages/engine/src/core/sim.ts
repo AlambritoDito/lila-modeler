@@ -447,6 +447,12 @@ export function runReplication(
       // R-CAL-4: el calendario de la tarea sale de los pools **efectivamente** concedidos, así
       // que una OR toma el del pool elegido. R-CAL-6: la unidad se reserva desde el instante de
       // concesión (`allocation.startedAt`) aunque el trabajo no empiece hasta la apertura.
+      //
+      // ponytail: reservar desde la concesión es lo que impide que dos tokens arranquen a la vez
+      // al abrir, y tiene un techo conocido: si la tarea mezcla un pool 24×7 con uno de horario
+      // reducido, el pool 24×7 queda retenido toda la noche sin acumular `busyTime`, así que otra
+      // tarea que solo lo necesita a él espera hasta la mañana. Bizagi no documenta qué hace aquí;
+      // se corrige cuando LILA-044 compare contra su nivel 4, no antes.
       const calendar = hasCalendars
         ? calendarFor(activity.nodeId, allocation.assignments.map((assignment) => assignment.poolId))
         : undefined;
