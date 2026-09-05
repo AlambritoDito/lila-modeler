@@ -155,7 +155,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | **R5** | `interTriggerTimer` / `triggerCount` solo en **starts y timers generadores**. |
 | **R6** | Al menos uno de `run.duration` o `triggerCount`. |
 | R7 | `version` debe ser `1`; la raíz y todos los objetos son estrictos (clave desconocida ⇒ error). |
-| R8 | `model` y `run` deben existir **en el escenario resuelto**; `run.start` debe ser ISO 8601 **con offset**. |
+| R8 | `model` y `run` deben existir **en el escenario resuelto**; `run.start` debe ser ISO 8601 **con offset** y designar un instante que **existe**: fecha civil real (`2026-02-31`, `2026-13-01` y `2026-02-29` son error, `2024-02-29` no), hora `00:00:00`–`23:59:59` y offset `±00:00`–`±23:59`. `24:00` no se admite aquí (sí en `intervals[].to`, R13): como instante de arranque se escribe `00:00` del día siguiente. |
 | R9 | Toda `ref` de `elements[*].resources[]` debe existir en `resources`; toda clave de `calendar` debe existir en `calendars`. Error citando el `id` y la clave. |
 | R10 | Las probabilidades de las salidas de un mismo gateway XOR: si faltan, reparto equitativo; si no suman 1, se **normalizan con warning**; el flujo `isDefault` recibe el residuo. En OR cada salida es independiente y no se normaliza. |
 | R11 | Los parámetros de cada distribución deben cumplir sus restricciones (§ 3). `normal` con `P(x < 0) > 1 %` produce **warning**, no error. |
