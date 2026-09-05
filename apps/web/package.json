@@ -10,6 +10,9 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
+  "dependencies": {
+    "@lila/engine": "*"
+  },
   "devDependencies": {
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

@@ -11,6 +11,7 @@
     "apps/*"
   ],
   "scripts": {
+    "pretest": "npm run build --workspace @lila/engine",
     "test": "vitest run",
     "build": "tsc --build",
     "typecheck": "tsc --build --force && tsc --project packages/engine/bench/tsconfig.json && npm run typecheck --workspace @lila/web",
