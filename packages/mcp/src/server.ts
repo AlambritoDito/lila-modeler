@@ -417,6 +417,13 @@ async function validatePatchedScenario(
     const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`);
     return { ok: false, error: `escenario inválido tras el patch: ${issues.join('; ')}` };
   }
+  // `ScenarioSchema` tiene `model` y `run` opcionales (un archivo con `extends` los hereda), así
+  // que un patch puede borrarlos y aun así pasar el esquema. `loadResolvedScenario` los exige y es
+  // lo que hace el modo (b); sin este par de guardas el modo (a) escribía un escenario que la
+  // propia `run_simulation` rechaza después — y el `remove /model` filtraba el TypeError de
+  // `node:path` en vez de un mensaje del dominio.
+  if (parsed.data.model === undefined) return { ok: false, error: 'el escenario resultante no declara model.' };
+  if (parsed.data.run === undefined) return { ok: false, error: 'el escenario resultante no declara run.' };
   const scenario = parsed.data as ResolvedScenario;
 
   let ir: ParsedIr;
@@ -449,6 +456,17 @@ function withoutPhantomFile(error: unknown, phantom: string): string {
   return raw.startsWith(`${phantom}: `)
     ? raw.slice(phantom.length + 2).replace('escenario inválido:', 'escenario inválido tras el patch:')
     : raw;
+}
+
+/**
+ * El escenario resuelto trae `model` como ruta absoluta: `resolveExtends` la ancla al archivo que
+ * la declara. Escribirla tal cual en el modo (a) vuelve el archivo dependiente de la máquina que
+ * corrió la tool (`/Users/quien-sea/...`), y deja de resolver en cualquier otro checkout. Se
+ * reescribe relativa al propio escenario, que es como la declaran los del repo y la misma regla
+ * que el modo (b) aplica a `extends`.
+ */
+function withRelativeModel(scenario: ResolvedScenario, file: string): ResolvedScenario {
+  return { ...scenario, model: posix.relative(posix.dirname(file), scenario.model) };
 }
 
 interface PatchScenarioInput {
@@ -500,7 +518,7 @@ async function patchScenario({
     const outcome = await validatePatchedScenario(patchedRaw);
     if (!outcome.ok) return errorResult(`patch_scenario: ${outcome.error}`);
     try {
-      const file = writeJsonAtomic(scenarioPath, outcome.scenario);
+      const file = writeJsonAtomic(scenarioPath, withRelativeModel(outcome.scenario, scenarioPath));
       return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
     } catch (error) {
       return errorResult(`patch_scenario: ${message(error)}`);
