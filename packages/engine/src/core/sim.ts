@@ -20,19 +20,29 @@
 
 import {
   addWorkingTime,
+  capacityAt,
   compileCalendar,
+  compileCapacity,
   intersect,
+  nextCapacityRise,
   nextOpen,
   openTime,
+  union,
   weekOffsetSeconds,
   type Calendar,
   type CalendarDef,
+  type CapacitySchedule,
 } from './calendar.js';
 import { sample, type Distribution } from './distributions.js';
 import { Heap } from './heap.js';
 import type { ProcessIR, Node } from './ir.js';
 import type { EventLogRow } from './result.js';
-import { ResourceManager, type ResourceAllocation, type ResourceRequirement } from './resources.js';
+import {
+  ResourceManager,
+  type ResourceAllocation,
+  type ResourcePoolDefinition,
+  type ResourceRequirement,
+} from './resources.js';
 import { stream, type Rng } from './rng.js';
 
 /* ------------------------------------------------------------------ *
@@ -56,13 +66,66 @@ export interface SimElement {
   calendar?: string | undefined;
 }
 
+/** Un tramo de `resources[pool].capacity` por intervalos: `capacity` unidades durante `calendar`. */
+export interface SimCapacityInterval {
+  readonly calendar: string;
+  readonly capacity: number;
+}
+
 export interface SimResource {
-  capacity: number;
+  /**
+   * Entero ≥ 1, o la lista de tramos `{ calendar, capacity }` de R-CAL-11 (LILA-164): 3 enfermeras
+   * de día y 1 de noche es **un** pool con dos tramos, no dos pools. Excluyente con `calendar`.
+   */
+  capacity: number | readonly SimCapacityInterval[];
   type?: 'role' | 'equipment' | undefined;
   fixedCost?: number | undefined;
   costPerHour?: number | undefined;
   /** Clave de `calendars`; ausente ⇒ `default` si existe, y si no 24×7 (R-CAL-10). */
   calendar?: string | undefined;
+}
+
+/** Forma interna única de la capacidad de un pool (R-CAL-11): siempre una lista de tramos. */
+export interface CapacitySlice {
+  readonly calendar: string | undefined;
+  readonly capacity: number;
+}
+
+/**
+ * Los tramos de capacidad de un pool. Es el **único** camino por el que `core/` lee `capacity`:
+ * la forma numérica es el tramo único `{ calendar: pool.calendar, capacity }`, así que ni el
+ * planificador ni las métricas distinguen las dos formas del contrato.
+ */
+export function capacitySlices(pool: SimResource): readonly CapacitySlice[] {
+  return typeof pool.capacity === 'number'
+    ? [{ calendar: pool.calendar, capacity: pool.capacity }]
+    : pool.capacity;
+}
+
+/**
+ * Tope de capacidad del pool en toda la semana: el bound contra el que se valida `quantity`
+ * (R-REC-2). Con capacidad por intervalos es el máximo de la función escalonada, que **no**
+ * depende del `offset` y por eso se puede calcular sin `run.start`. Si un calendario citado no
+ * existe o no compila, degrada a la suma declarada: ese caso ya lo reporta `E-CAL-DESCONOCIDO`
+ * (o `E-REF-DESCONOCIDA` en el lint) y no toca inventar un segundo error encima.
+ */
+export function poolCapacityBound(
+  pool: SimResource,
+  calendars: Readonly<Record<string, CalendarDef>> = {},
+): number {
+  if (typeof pool.capacity === 'number') return pool.capacity;
+  const slices = pool.capacity;
+  try {
+    return compileCapacity(
+      slices.map((slice) => {
+        const def = calendars[slice.calendar];
+        return { calendar: def === undefined ? undefined : compileCalendar(def, 0), capacity: slice.capacity };
+      }),
+      0,
+    ).max;
+  } catch {
+    return slices.reduce((total, slice) => total + slice.capacity, 0);
+  }
 }
 
 /** Subconjunto de `run` que consume el motor. `warmup` y `replications` son LILA-027. */
@@ -156,10 +219,24 @@ export interface ReplicationOptions {
  */
 export function assertSupportedResourceScenario(scenario: SimScenario): void {
   const pools = scenario.resources ?? {};
+  const bounds = new Map<string, number>();
   for (const [poolId, pool] of Object.entries(pools)) {
-    if (!Number.isInteger(pool.capacity) || pool.capacity < 1) {
-      throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+    // R-CAL-11: `capacity` por intervalos y `calendar` del pool son excluyentes; el calendario del
+    // pool ya está en cada tramo y declarar los dos deja sin definir cuál manda.
+    if (typeof pool.capacity !== 'number' && pool.calendar !== undefined) {
+      throw new RangeError(
+        `E-CAPACIDAD-Y-CALENDARIO: ${poolId}: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.`,
+      );
     }
+    if (typeof pool.capacity !== 'number' && pool.capacity.length === 0) {
+      throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe declarar al menos un tramo.`);
+    }
+    for (const slice of capacitySlices(pool)) {
+      if (!Number.isInteger(slice.capacity) || slice.capacity < 1) {
+        throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+      }
+    }
+    bounds.set(poolId, poolCapacityBound(pool, scenario.calendars ?? {}));
   }
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
     const uses = element.resources ?? [];
@@ -179,9 +256,12 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
           `E-REC-CANTIDAD: ${elementId}: quantity de ${use.ref} debe ser un entero mayor o igual que 1.`,
         );
       }
-      if (quantity > pool.capacity) {
+      // R-CAL-11: con capacidad variable el tope es el máximo de la semana; una `quantity` mayor
+      // no cabe nunca, en ningún turno.
+      const bound = bounds.get(use.ref)!;
+      if (quantity > bound) {
         throw new RangeError(
-          `E-REC-CANTIDAD: ${elementId}: quantity ${quantity} excede capacity ${pool.capacity} de ${use.ref}.`,
+          `E-REC-CANTIDAD: ${elementId}: quantity ${quantity} excede capacity ${bound} de ${use.ref}.`,
         );
       }
     }
@@ -213,13 +293,26 @@ export function compileCalendars(scenario: SimScenario): Map<string, Calendar> {
   return compiled;
 }
 
-/** R-CAL-10: el pool usa su `calendar`; si no lo declara, el llamado `default`; si no, 24×7. */
+/**
+ * R-CAL-10: el pool usa su `calendar`; si no lo declara, el llamado `default`; si no, 24×7.
+ *
+ * R-CAL-11: con capacidad por intervalos el pool está abierto cuando lo está **cualquiera** de
+ * sus tramos, así que su calendario es la **unión** de los de los tramos (los tres turnos que
+ * cubren las 24 h dan un 24×7, sin `offHoursWait`). Un tramo cuyo calendario no existe abre
+ * siempre y por tanto absorbe la unión entera; ese escenario ya es error por R9.
+ */
 export function poolCalendar(
   calendars: ReadonlyMap<string, Calendar>,
-  pool: { readonly calendar?: string | undefined } | undefined,
+  pool: SimResource | undefined,
 ): Calendar | undefined {
   if (calendars.size === 0 || pool === undefined) return undefined;
-  return calendars.get(pool.calendar ?? 'default');
+  let result: Calendar | undefined;
+  for (const slice of capacitySlices(pool)) {
+    const calendar = calendars.get(slice.calendar ?? 'default');
+    if (calendar === undefined) return undefined;
+    result = result === undefined ? calendar : union(result, calendar);
+  }
+  return result;
 }
 
 /**
@@ -269,8 +362,12 @@ export function assertSupportedCalendarScenario(scenario: SimScenario): Map<stri
   const calendars = compileCalendars(scenario);
 
   for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
-    if (pool.calendar !== undefined && !calendars.has(pool.calendar)) {
-      throw new Error(`E-CAL-DESCONOCIDO: resources.${poolId}: el calendario ${pool.calendar} no existe.`);
+    // R-CAL-11: se comprueban los calendarios de todos los tramos, que en la forma numérica es
+    // exactamente el `calendar` del pool.
+    for (const slice of capacitySlices(pool)) {
+      if (slice.calendar !== undefined && !calendars.has(slice.calendar)) {
+        throw new Error(`E-CAL-DESCONOCIDO: resources.${poolId}: el calendario ${slice.calendar} no existe.`);
+      }
     }
   }
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
@@ -315,7 +412,9 @@ type SimEvent =
       readonly activityInstanceId: string;
       readonly caseId: number;
       readonly nodeId: string;
-    };
+    }
+  /** R-CAL-11: la capacidad del pool acaba de subir; hay que despertar su cola. */
+  | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string };
 
 interface ActivityState {
   readonly id: string;
@@ -426,7 +525,30 @@ export function runReplication(
   const caseStates: CaseState[] = [];
   const heap = new Heap<SimEvent>();
   const resources = scenario.resources ?? {};
-  const resourceManager = new ResourceManager(resources);
+  // R-CAL-11: la capacidad de un pool es una función escalonada de la semana. Con `capacity`
+  // numérica (o sin calendarios) esa función es constante y **no** se pasa `capacityAt`: el
+  // planificador toma literalmente el camino de M2, sin una sola llamada extra (R-DEG-2).
+  const capacityOffset = scenario.run.start === undefined ? 0 : weekOffsetSeconds(scenario.run.start);
+  const capacitySchedules = new Map<string, CapacitySchedule>();
+  const poolDefinitions: Record<string, ResourcePoolDefinition> = {};
+  for (const [poolId, pool] of Object.entries(resources)) {
+    const schedule = hasCalendars
+      ? compileCapacity(
+          capacitySlices(pool).map((slice) => ({
+            calendar: calendars.get(slice.calendar ?? 'default'),
+            capacity: slice.capacity,
+          })),
+          capacityOffset,
+        )
+      : undefined;
+    if (schedule === undefined || schedule.constant !== undefined) {
+      poolDefinitions[poolId] = { capacity: schedule?.constant ?? poolCapacityBound(pool, scenario.calendars ?? {}) };
+      continue;
+    }
+    capacitySchedules.set(poolId, schedule);
+    poolDefinitions[poolId] = { capacity: schedule.max, capacityAt: (t) => capacityAt(schedule, t) };
+  }
+  const resourceManager = new ResourceManager(poolDefinitions);
   const activities = new Map<string, ActivityState>();
   let nextActivityInstanceId = 1;
 
@@ -668,6 +790,14 @@ export function runReplication(
     if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
 
+  // R-CAL-11: los únicos eventos de calendario del heap. Cada pool de capacidad variable agenda
+  // su próxima **subida**; una bajada no planifica nada (las tareas en curso no se interrumpen,
+  // R-CAL-11) y el evento reagenda el siguiente, así que hay a lo sumo uno vivo por pool.
+  for (const [poolId, schedule] of capacitySchedules) {
+    const at = nextCapacityRise(schedule, 0);
+    if (at < tStop) heap.push({ t: at, kind: 'capacity', poolId });
+  }
+
   // R-AND-1: `probability` en las salidas de un AND no se usa.
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
     if (node.type !== 'and') continue;
@@ -741,6 +871,14 @@ export function runReplication(
         const at = calendar === undefined ? sampled : nextOpen(calendar, sampled);
         if (at < tStop) heap.push({ t: at, kind: 'arrive', startId: next.startId });
       }
+      continue;
+    }
+
+    if (next.kind === 'capacity') {
+      const schedule = capacitySchedules.get(next.poolId)!;
+      startAllocations(resourceManager.refresh([next.poolId], next.t));
+      const at = nextCapacityRise(schedule, next.t);
+      if (at < tStop) heap.push({ t: at, kind: 'capacity', poolId: next.poolId });
       continue;
     }
 
