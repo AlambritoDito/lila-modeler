@@ -3,17 +3,19 @@
 Modelador y simulador de procesos BPMN, open source (Apache-2.0), con paridad de funciones con
 Bizagi Modeler y su simulador de cuatro niveles.
 
-Estado: en construcción. El motor de niveles 1–2 y los comandos `validate` y `run` ya son
-ejecutables; recursos y calendarios llegan en M2/M3.
+Estado: en construcción. El motor de niveles 1–4 (validación, tiempos, recursos y calendarios) y
+los comandos `validate`, `run` y `compare` de la CLI ya son ejecutables.
 
 ## Qué es
 
 - Un **motor de simulación de eventos discretos** (`packages/engine`) escrito en TypeScript, sin
   dependencias en su núcleo, que corre igual en la CLI, en un Web Worker del navegador y detrás de
   un servidor MCP.
-- Una **CLI** (`npx lila validate | run`) para validar un `.bpmn` y simular un escenario. La
-  comparación AS-IS contra TO-BE llega en M3.
-- Más adelante, una **app web y de escritorio** para modelar y ver resultados.
+- Una **CLI** (`npx lila validate | run | compare`) para validar un `.bpmn`, simular un escenario y
+  comparar dos o más escenarios (AS-IS contra TO-BE) lado a lado.
+- Un **servidor MCP** (`packages/mcp`, binario `lila-mcp`) que expone el mismo motor a agentes vía
+  el protocolo [MCP](https://modelcontextprotocol.io); ver `docs/MCP.md`.
+- Una **app web** (`apps/web`) en construcción para modelar y ver resultados.
 
 Los contratos —el IR del proceso, el formato de escenario y el de resultados— están documentados en
 `docs/` antes que el código, y son la parte del proyecto que se mantiene estable.
@@ -33,7 +35,8 @@ Validar un modelo:
 npx lila validate examples/bizagi-levels/level-2/model.bpmn
 ```
 
-Simular un escenario de nivel 1–2, mostrar las tablas Bizagi y escribir JSON + cinco CSV:
+Simular un escenario (niveles 1–4: tiempos, recursos y calendarios), mostrar las tablas Bizagi más
+las extras de Lila (cuellos de botella, costo por caso) y escribir JSON + cinco CSV:
 
 ```bash
 npx lila run \
@@ -56,8 +59,8 @@ Arranca con `examples/pedido/model.bpmn` cargado; «Abrir .bpmn» acepta cualqui
 que exporta «Exportar .bpmn» lo acepta `npx lila validate`.
 
 `scenario.model` y `extends` se resuelven respecto al archivo que los declara. El modelo pasado
-como primer argumento debe coincidir con `scenario.model`. En M1, un escenario con `resources` o
-`calendars` se rechaza explícitamente en vez de simularlo como si esos parámetros no existieran.
+como primer argumento debe coincidir con `scenario.model`. Un escenario con `resources` o
+`calendars` se simula igual que uno sin ellos: no hace falta ningún gate ni bandera aparte.
 
 ## Documentación
 
