@@ -35,6 +35,7 @@ import {
 import { compare, simulate, type CompareResult, type RunResult } from '@lila/engine';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 
 import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
@@ -68,6 +69,24 @@ function readModel(tool: string, file: string): { xml: string } | { error: strin
   } catch (error) {
     return { error: `${tool}: ${message(error)}` };
   }
+}
+
+/**
+ * Resuelve el par `path` | `xml` que aceptan `validate_bpmn` y `describe_process`: exactamente uno
+ * de los dos, nunca los dos a la vez (pasar ambos sería una precedencia silenciosa sobre un modelo
+ * que el usuario no pidió).
+ */
+function modelXml(
+  tool: string,
+  path: string | undefined,
+  xml: string | undefined,
+): { xml: string } | { error: string } {
+  if (path !== undefined && xml !== undefined) {
+    return { error: `${tool}: hay que pasar \`path\` o \`xml\`, no los dos.` };
+  }
+  if (xml !== undefined) return { xml };
+  if (path !== undefined) return readModel(tool, absolutePath(path));
+  return { error: `${tool}: hay que pasar \`path\` o \`xml\`.` };
 }
 
 const CONTEO_TIPOS: Record<string, string> = {
@@ -538,22 +557,11 @@ export function createServer(): McpServer {
       }),
     },
     async ({ path, xml }): Promise<CallToolResult> => {
-      if (path !== undefined && xml !== undefined) {
-        return errorResult('validate_bpmn: hay que pasar `path` o `xml`, no los dos.');
-      }
-      let content: string;
-      if (xml !== undefined) {
-        content = xml;
-      } else if (path !== undefined) {
-        const read = readModel('validate_bpmn', absolutePath(path));
-        if ('error' in read) return errorResult(read.error);
-        content = read.xml;
-      } else {
-        return errorResult('validate_bpmn: hay que pasar `path` o `xml`.');
-      }
+      const read = modelXml('validate_bpmn', path, xml);
+      if ('error' in read) return errorResult(read.error);
 
       try {
-        return textResult(await validateBpmnXml(content));
+        return textResult(await validateBpmnXml(read.xml));
       } catch (error) {
         return errorResult(`validate_bpmn: ${message(error)}`);
       }
@@ -565,17 +573,19 @@ export function createServer(): McpServer {
     {
       title: 'Describir proceso',
       description:
-        'Parsea un .bpmn y devuelve su IR (ProcessIR) junto con un resumen legible en español: ' +
+        'Parsea un .bpmn (por ruta o XML inline, uno de los dos) y devuelve su IR (ProcessIR) ' +
+        'junto con un resumen legible en español: ' +
         'conteo de nodos por tipo, gateways con sus salidas, lanes, subprocesos, otros procesos ' +
         'del archivo y si el modelo pasa la validación. Con `scenario` opcional (ruta a un ' +
         'escenario .json, resuelve `extends`), agrega los recursos referenciados por elemento.',
       inputSchema: z.object({
-        path: z.string().describe('Ruta al .bpmn, relativa al cwd del proceso servidor.'),
+        path: z.string().optional().describe('Ruta al .bpmn, relativa al cwd del proceso servidor.'),
+        xml: z.string().optional().describe('Contenido XML del .bpmn, en vez de una ruta.'),
         scenario: z.string().optional().describe('Ruta a un escenario .json, relativa al cwd.'),
       }),
     },
-    async ({ path, scenario }): Promise<CallToolResult> => {
-      const read = readModel('describe_process', absolutePath(path));
+    async ({ path, xml, scenario }): Promise<CallToolResult> => {
+      const read = modelXml('describe_process', path, xml);
       if ('error' in read) return errorResult(read.error);
 
       let report: ValidateBpmnReport;
@@ -678,4 +688,13 @@ export function createServer(): McpServer {
   );
 
   return server;
+}
+
+/**
+ * Arranca el servidor sobre stdio. Lo usan el bin `lila-mcp` de este paquete y el subcomando
+ * `lila mcp` de `@lila/engine` (LILA-056), que lo carga con `import()` dinámico para no crear un
+ * ciclo de dependencia entre los dos paquetes. stdout es el transporte: nada más puede escribir ahí.
+ */
+export async function startStdioServer(): Promise<void> {
+  await createServer().connect(new StdioServerTransport());
 }
