@@ -57,10 +57,16 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las cuatro tools', async () => {
+test('listTools devuelve las cinco tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
-  expect(names).toEqual(['compare_scenarios', 'describe_process', 'run_simulation', 'validate_bpmn']);
+  expect(names).toEqual([
+    'compare_scenarios',
+    'describe_process',
+    'patch_scenario',
+    'run_simulation',
+    'validate_bpmn',
+  ]);
 });
 
 test('validate_bpmn sobre examples/pedido: 0 errores, mismo JSON que la CLI', async () => {
