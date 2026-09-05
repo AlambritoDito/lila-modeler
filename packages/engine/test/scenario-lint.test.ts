@@ -361,6 +361,61 @@ describe('R9 — las cuatro refs colgantes del ticket (QA LILA-042)', () => {
   });
 });
 
+describe('R16 — `capacity` por intervalos (LILA-164)', () => {
+  const CAL = {
+    dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] },
+    noche: { intervals: [{ days: ['MON'], from: '20:00', to: '24:00' }] },
+  };
+
+  test('capacity por intervalos y calendar del pool son excluyentes', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      calendars: CAL,
+      resources: { pool: { capacity: [{ calendar: 'dia', capacity: 3 }], calendar: 'noche' } },
+      elements: { Task_R: { resources: [{ ref: 'pool' }] } },
+    });
+    const errors = scenarioErrors(validateScenario(scenario, pedidoIrWithTask('Task_R')));
+    const problema = errors.find((e) => e.path === 'resources.pool.capacity');
+    expect(problema?.code).toBe('E-CAPACIDAD-Y-CALENDARIO');
+    expect(problema?.message).toMatch(/excluyentes/);
+  });
+
+  test('R9: el calendario de cada tramo tiene que existir, y el error cita el tramo', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      calendars: CAL,
+      resources: {
+        pool: { capacity: [{ calendar: 'dia', capacity: 3 }, { calendar: 'fantasma', capacity: 1 }] },
+      },
+      elements: { Task_R: { resources: [{ ref: 'pool' }] } },
+    });
+    const errors = scenarioErrors(validateScenario(scenario, pedidoIrWithTask('Task_R')));
+    const byPath = Object.fromEntries(errors.map((e) => [e.path, e.code]));
+    expect(byPath['resources.pool.capacity[1].calendar']).toBe('E-REF-DESCONOCIDA');
+    expect(byPath['resources.pool.capacity[0].calendar']).toBeUndefined();
+  });
+
+  test('R-REC-2: `quantity` se valida contra el máximo de la semana, no contra la suma', () => {
+    const escenario = (quantity: number) =>
+      ScenarioSchema.parse({
+        ...BASE,
+        calendars: CAL,
+        resources: {
+          pool: { capacity: [{ calendar: 'dia', capacity: 3 }, { calendar: 'noche', capacity: 1 }] },
+        },
+        elements: { Task_R: { resources: [{ ref: 'pool', quantity }] } },
+      });
+    const ir = pedidoIrWithTask('Task_R');
+    expect(scenarioErrors(validateScenario(escenario(3), ir))).toEqual([]);
+    const error = scenarioErrors(validateScenario(escenario(4), ir)).find(
+      (e) => e.path === 'elements.Task_R.resources[0].quantity',
+    );
+    // 3 + 1 = 4 unidades declaradas, pero nunca simultáneas: el tope es 3.
+    expect(error?.code).toBe('E-REC-CANTIDAD');
+    expect(error?.message).toMatch(/excede capacity 3/);
+  });
+});
+
 describe('run.start — hora y offset inexistentes (QA LILA-042)', () => {
   /**
    * Todos estos pasaban el regex de R8 y dejaban `Date.parse` en `NaN`: las tres columnas ISO de

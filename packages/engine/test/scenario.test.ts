@@ -239,6 +239,52 @@ describe('validateScenario contra el IR', () => {
   });
 });
 
+describe('§ 2.4 — capacity por intervalos (LILA-164)', () => {
+  const pool = (capacity: unknown, extra: Record<string, unknown> = {}) =>
+    ScenarioSchema.safeParse({
+      version: 1,
+      name: 'turnos',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', duration: 3600 },
+      calendars: { dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] } },
+      resources: { enfermera: { capacity, ...extra } },
+    });
+
+  test('acepta el entero y la lista de tramos', () => {
+    expect(pool(3).success).toBe(true);
+    expect(pool([{ calendar: 'dia', capacity: 3 }]).success).toBe(true);
+    const parsed = pool([{ calendar: 'dia', capacity: 3 }]);
+    expect(parsed.success && parsed.data.resources!.enfermera!.capacity).toEqual([
+      { calendar: 'dia', capacity: 3 },
+    ]);
+  });
+
+  test('rechaza la lista vacía, el tramo sin calendario, la capacidad no entera y las claves de más', () => {
+    expect(pool([]).success).toBe(false);
+    expect(pool([{ capacity: 3 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 0 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 1.5 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 3, priority: 1 }]).success).toBe(false);
+  });
+
+  test('el JSON Schema generado acepta y rechaza lo mismo que zod', () => {
+    const committed: unknown = JSON.parse(
+      readFileSync(fileURLToPath(new URL('docs/scenario.schema.json', repoRoot)), 'utf8'),
+    );
+    const escenario = (capacity: unknown) => ({
+      version: 1,
+      name: 'turnos',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', duration: 3600 },
+      calendars: { dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] } },
+      resources: { enfermera: { capacity } },
+    });
+    expect(validateJsonSchema(committed, escenario([{ calendar: 'dia', capacity: 3 }]))).toEqual([]);
+    expect(validateJsonSchema(committed, escenario(3))).toEqual([]);
+    expect(validateJsonSchema(committed, escenario([{ capacity: 3 }])).length).toBeGreaterThan(0);
+  });
+});
+
 describe('JSON Schema generado', () => {
   const committed: unknown = JSON.parse(
     readFileSync(fileURLToPath(new URL('docs/scenario.schema.json', repoRoot)), 'utf8'),
