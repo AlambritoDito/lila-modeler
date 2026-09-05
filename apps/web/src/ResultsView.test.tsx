@@ -148,6 +148,60 @@ describe('ResultsView (LILA-062)', () => {
     expect(rows.map((r) => r.id)).toEqual(['b', 'a', 'c']);
   });
 
+  it('sortRows ordena texto con acentos como el español, no por punto de código', () => {
+    interface Row {
+      name: string;
+    }
+    // Sin `localeCompare`, "Ánimo" (U+00C1 = 193) se iría detrás de "Zorro" (U+005A = 90).
+    const rows: Row[] = [{ name: 'Zorro' }, { name: 'Ánimo' }, { name: 'animo' }, { name: 'Balde' }];
+    const columns: ColumnDef<Row>[] = [
+      { display: (r) => r.name, header: 'Name', key: 'name', sortValue: (r) => r.name },
+    ];
+
+    expect(sortRows(rows, columns, { dir: 'asc', key: 'name' }).map((r) => r.name)).toEqual([
+      'animo',
+      'Ánimo',
+      'Balde',
+      'Zorro',
+    ]);
+  });
+
+  it('los números se ordenan como números: 9 antes que 10, no "10" antes que "9"', () => {
+    interface Row {
+      value: number;
+    }
+    const rows: Row[] = [{ value: 10 }, { value: 9 }, { value: 100 }];
+    const columns: ColumnDef<Row>[] = [
+      { display: (r) => String(r.value), header: 'V', key: 'v', numeric: true, sortValue: (r) => r.value },
+    ];
+
+    expect(sortRows(rows, columns, { dir: 'asc', key: 'v' }).map((r) => r.value)).toEqual([9, 10, 100]);
+  });
+
+  it('las columnas de costo conservan el nombre Bizagi y la moneda va en la cabecera', async () => {
+    const ir = await loadIr();
+    const html = renderToStaticMarkup(
+      <ResultsView ir={ir} scenario={scenarioWithUnit('min')} result={loadGolden()} />,
+    );
+
+    // `Total fixed cost` es el nombre de columna de Bizagi (docs/RESULTS_FORMAT.md §10) y es el
+    // header literal de `elementsCsv`: si la tabla le pegara " (MXN)" dejaría de coincidir.
+    expect(html).toContain('Total fixed cost');
+    expect(html).not.toContain('Total fixed cost (MXN)');
+    expect(html).toContain('moneda MXN');
+  });
+
+  it('los encabezados ordenables son alcanzables por teclado y anuncian su orden', async () => {
+    const ir = await loadIr();
+    const html = renderToStaticMarkup(
+      <ResultsView ir={ir} scenario={scenarioWithUnit('min')} result={loadGolden()} />,
+    );
+
+    expect(html).toContain('aria-sort="none"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('scope="col"');
+  });
+
   it('la tarjeta de cuellos de botella sigue el orden de `result.bottlenecks`, sin reordenar', async () => {
     const ir = await loadIr();
     const bottlenecks: BottleneckEntry[] = [
