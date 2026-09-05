@@ -43,6 +43,18 @@ npx lila run \
   --json out/result.json --csv out/csv
 ```
 
+### App web
+
+El editor BPMN (`apps/web`) ya abre, edita y exporta modelos; simular, resultados y comparar
+llegan después. Necesita el motor compilado, y su script `dev` lo compila antes de arrancar:
+
+```bash
+npm run dev --workspace @lila/web    # http://localhost:5173
+```
+
+Arranca con `examples/pedido/model.bpmn` cargado; «Abrir .bpmn» acepta cualquier archivo, y lo
+que exporta «Exportar .bpmn» lo acepta `npx lila validate`.
+
 `scenario.model` y `extends` se resuelven respecto al archivo que los declara. El modelo pasado
 como primer argumento debe coincidir con `scenario.model`. En M1, un escenario con `resources` o
 `calendars` se rechaza explícitamente en vez de simularlo como si esos parámetros no existieran.

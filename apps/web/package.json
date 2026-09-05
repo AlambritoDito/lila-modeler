@@ -2,12 +2,12 @@
   "name": "@lila/web",
   "version": "0.0.0",
   "private": true,
-  "description": "App web de Lila Modeler (tokens de diseño y temas)",
+  "description": "App web de Lila Modeler: editor BPMN, escenarios y resultados",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm run build -w @lila/engine && vite",
+    "build": "npm run build -w @lila/engine && vite build",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
@@ -20,5 +20,9 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@lila/engine": "0.0.0",
+    "bpmn-js": "^18.28.0"
   }
 }

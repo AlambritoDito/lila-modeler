@@ -11,5 +11,12 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src", "vite.config.ts"]
+  // `src/exportar.test.ts` importa el parser del motor, que a su vez importa `bpmn-moddle`.
+  // El paquete no publica tipos del constructor y la declaración ambiente que los suple vive
+  // en `packages/engine`; sin traerla aquí, este proyecto la da por `any` implícito.
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../../packages/engine/src/bpmn/bpmn-moddle.d.ts"
+  ]
 }

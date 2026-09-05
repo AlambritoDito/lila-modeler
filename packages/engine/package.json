@@ -9,6 +9,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./bpmn": "./dist/bpmn/index.js",
+    "./bpmn/lila.moddle.json": "./dist/bpmn/lila.moddle.json",
     "./schema": "./dist/scenario.js"
   },
   "files": [

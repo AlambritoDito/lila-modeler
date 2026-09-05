@@ -10,6 +10,12 @@ El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
 **referencia, no código a copiar**: la app se construye con los tokens del brief
 (`apps/web/src/theme/`), no con el design system del artefacto.
 
+## Captura de la app real
+
+`shell-modelar.png` **no** es un artboard: es una captura de 1440×900 de la app que corre en
+`apps/web`, con `examples/pedido/model.bpmn` cargado (LILA-057). Sirve para comparar lo
+construido contra los artboards de abajo cuando estos existan.
+
 ## Capturas de los artboards — PENDIENTES
 
 Descargar el `.dc.html` requiere iniciar sesión en Claude Design, cosa que la
@@ -62,9 +68,13 @@ deja los tokens y los temas, no construye ninguno.
 **Tipografía: Archivo.** `font.ui` es `Archivo, Inter, system-ui, sans-serif`
 (el brief decía Inter; la sesión de Claude Design eligió Archivo y esa elección
 manda). `font.diagram` usa la misma pila; `font.mono` sigue siendo JetBrains
-Mono con `ui-monospace` de reserva. Todavía **no** se carga la webfont: eso lo
-hace LILA-057 junto con el shell, para no meter un `@font-face` en un ticket
-que solo define tokens.
+Mono con `ui-monospace` de reserva. La webfont sigue **sin cargarse** después de
+LILA-057: traerla exige o una dependencia nueva (`@fontsource/archivo`) o un
+`<link>` a Google Fonts, y ninguna de las dos cabe en un ticket que no puede
+añadir dependencias y en una app que también se empaqueta con Electron y tiene
+que funcionar sin red. Mientras tanto manda el fallback (`system-ui`). Decidirlo
+—bajar los `.woff2` al repositorio con su licencia SIL OFL, o quedarse con el
+fallback— es trabajo de LILA-113 o de un ticket propio.
 
 **Papel usa rojo tinta como acento.** `accent.primary` del tema claro es
 `#EC3013`, no un neutro apagado, para demostrar que el sistema aguanta un acento
