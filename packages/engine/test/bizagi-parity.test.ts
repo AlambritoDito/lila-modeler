@@ -35,10 +35,10 @@ import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario
 //       la corrida oficial trae exactamente 2017 instancias (10080/5 + 1), imposible con Poisson.
 //   (3) Bizagi drena la corrida (2017 iniciadas = 2017 completadas); el escenario publicado corta
 //       a la semana y deja casos en vuelo, que por LILA-036 no entran en las medias.
-//   (4) el nivel 1 no genera un solo token: el escenario declara `triggerCount` sin
-//       `interTriggerTimer` y R-ARR-1 solo genera casos en un start **con** timer. La corrida no
-//       sale en silencio: el motor avisa `W-START-SIN-LLEGADAS` (SEMANTICS §10). Lo que falta es
-//       la decisión de contrato, que es LILA-186.
+//   (4) [resuelta por LILA-186] el nivel 1 declaraba `triggerCount` sin `interTriggerTimer` y no
+//       generaba un solo token. R-ARR-1 ya dice que esa combinación son N llegadas en `t = 0`,
+//       que es lo que hace Bizagi en el nivel 1; el aviso `W-START-SIN-LLEGADAS` queda para el
+//       start que no declara ninguno de los dos campos.
 //   (5) el nivel 4 modela la capacidad por turno como 3 pools con `selection: "or"`; el calendario
 //       efectivo de la tarea pasa a ser el del turno concedido, así que el trabajo se pausa al
 //       cerrar el turno. Bizagi no tiene tiempo cerrado ahí (los 3 turnos cubren las 24 h): es
@@ -136,23 +136,20 @@ function correr(ir: Awaited<ReturnType<typeof irDe>>, scenario: ResolvedScenario
 // ---------------------------------------------------------------------------------------------
 
 describe('examples/bizagi-levels tal cual: qué cuadra hoy contra expected.json', () => {
-  test('nivel 1 — validación de rutas: el escenario publicado no genera ningún token', async () => {
+  test('nivel 1 — validación de rutas: el escenario publicado emite sus 1000 tokens en t = 0', async () => {
     const ir = await irDe(resolve(levelsDir, 'level-1/model.bpmn'));
     const r = correr(ir, escenarioDe(1));
     const esperado = expectedDe(1).values.correctedRun!.instancesCompleted;
 
-    // Causa (4): `triggerCount` sin `interTriggerTimer`; R-ARR-1 solo genera casos en un start con
-    // timer, y R-ARR-3 no lo considera error porque hay triggerCount. La corrida sale vacía, pero
-    // no en silencio: `simulate()` emite el aviso `W-START-SIN-LLEGADAS` y `lila run` lo imprime.
-    // Es la decisión de contrato que LILA-186 tiene que tomar.
-    expect(r.process.started, 'el nivel 1 hoy sale con cero llegadas').toBe(0);
-    expect(r.warnings, 'la corrida vacía sí avisa').toContain(
-      'W-START-SIN-LLEGADAS: StartEvent_Llegada: el start no declara interTriggerTimer y no genera casos.',
-    );
+    // Causa (4), resuelta por LILA-186: `triggerCount` sin `interTriggerTimer` significa N
+    // llegadas en `t = 0` (R-ARR-1), que es la configuración del nivel 1 de Bizagi (solo "Max.
+    // arrival count" y porcentajes de gateway). Ya no hay `W-START-SIN-LLEGADAS` ni corrida vacía.
+    expect(r.process.started, 'el nivel 1 emite sus 1000 tokens').toBe(1000);
+    expect(r.warnings.filter((w) => w.startsWith('W-START-SIN-LLEGADAS'))).toEqual([]);
 
     comprobar([
-      { metrica: 'nivel 1 tokens creados', esperado: 1000, obtenido: r.process.started, cuadra: false },
-      { metrica: 'nivel 1 total completado en end events', esperado: esperado.total, obtenido: r.process.completed, cuadra: false },
+      { metrica: 'nivel 1 tokens creados', esperado: 1000, obtenido: r.process.started, cuadra: true },
+      { metrica: 'nivel 1 total completado en end events', esperado: esperado.total, obtenido: r.process.completed, cuadra: true },
     ]);
   }, 60_000);
 
