@@ -37,7 +37,7 @@ Valen en todo el documento y en todo el código.
   son NCName se sanitizan con un mapa reversible (ADR-012) y el escenario se escribe contra el id
   **sanitizado**. *(prueba: LILA-013, LILA-017)*
 - **R-DURA-5 — `elements` faltante es error, sobrante es aviso.** Una clave de `elements` que no
-  existe en el IR produce error `E-ELEM-DESCONOCIDO` citando el id. Un elemento del IR sin entrada
+  existe en el IR produce error `E-ELEMENTO-DESCONOCIDO` citando el id. Un elemento del IR sin entrada
   en `elements` toma los defaults degradantes (sección 14) y produce aviso solo cuando la ausencia
   cambia la semántica (start sin `interTriggerTimer`). *(prueba: LILA-013, LILA-042)*
 - **R-DURA-6 — Pureza.** `simulate(ir, scenario, opts)` es una función pura: mismos argumentos,
@@ -502,7 +502,10 @@ comportamiento real de L-Sim/Bizagi.
   *(prueba: LILA-041, LILA-036)*
 - **R-CAL-10 — Matriz recurso × calendario con calendario por defecto.** Cada pool puede declarar
   `calendar`; si no lo hace, usa el calendario llamado `default` si existe, y si no existe, 24×7.
-  Una `calendar` que no existe en `calendars` es error `E-CAL-DESCONOCIDO` citando el pool.
+  Una `calendar` que no existe en `calendars` es error citando el pool: `E-REF-DESCONOCIDA` si lo
+  caza el lint estático de `validateScenario` (el camino normal, R9 de `SCENARIO_FORMAT.md`) y
+  `E-CAL-DESCONOCIDO` si lo caza el guardia de `core/sim.ts`, que no puede importar el validador
+  y se defiende solo. Unificar los dos códigos en uno toca `core/`.
   *(prueba: LILA-041, LILA-042)*
 
 ---
@@ -641,7 +644,7 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-GATEWAY-SIN-ARISTAS` | gateway sin entradas o sin salidas |
 | `E-INALCANZABLE` | nodo no alcanzable desde ningún `start` |
 | `E-SIN-START` / `E-SIN-END` | proceso sin start, o sin `end` ni `terminate` |
-| `E-ELEM-DESCONOCIDO` | clave de `elements` que no existe en el IR |
+| `E-ELEMENTO-DESCONOCIDO` | clave de `elements` que no existe en el IR |
 | `E-CLAVE-DESCONOCIDA` | clave no reconocida por el esquema |
 | `E-PROB-RANGO` | `probability` fuera de `[0,1]` |
 | `E-PROB-EN-NODO` | `probability` declarada en un nodo |
@@ -651,7 +654,9 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-REC-DESCONOCIDO` | `ref` a un pool inexistente |
 | `E-REC-DUPLICADO` | el mismo pool dos veces en una tarea |
 | `E-REC-CANTIDAD` | `quantity` mayor que la `capacity` del pool |
-| `E-CAL-DESCONOCIDO` | `calendar` que no existe en `calendars` |
+| `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`) |
+| `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10) |
+| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
 | `E-CAL-VACIO` | calendario sin intervalos, o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
@@ -662,7 +667,13 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`.
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`.
+
+Los códigos de este catálogo son los que emite el código de hoy. `E-PROB-EN-NODO`,
+`E-PROB-RANGO`, `E-CLAVE-DESCONOCIDA`, `E-SUBPROC-PARAMETRO`, `E-TIMER-RECURSO` y `W-SIN-SEED`
+siguen listados como contrato pero todavía no se emiten con ese nombre: los tres primeros los
+rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy dentro de
+`E-CAMPO-NO-APLICA`. Cerrar ese desajuste no es de LILA-042.
 
 ---
 

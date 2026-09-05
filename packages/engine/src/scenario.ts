@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 
+import { checkDistribution } from './core/distributions.js';
 import type { ProcessIR } from './core/ir.js';
 
 /* ------------------------------------------------------------------ *
@@ -82,9 +83,58 @@ export type Distribution = z.output<typeof DistributionSchema>;
 
 /** ISO 8601 con offset explícito (R8). `Z` cuenta como offset. */
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+/** Descompone un `start` que ya pasó `ISO_WITH_OFFSET` en fecha, hora y offset. */
+const ISO_PARTS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+/**
+ * `run.start` con fecha u hora civil inexistente (`2026-02-31`, `2026-13-01`, `23:60`, `+24:00`)
+ * pasaba el regex de arriba y seguía adelante en silencio (hallazgo de QA de LILA-037/LILA-040 y
+ * de LILA-042): `Date.parse` devuelve `NaN` y las tres columnas ISO del `log.csv` salen **vacías**
+ * en todas las filas, o peor, `2026-02-31` se normaliza sola a `2026-03-03`.
+ *
+ * Aritmética civil pura, sin `Date` (R-DET-5): meses de 1 a 12 y bisiesto = múltiplo de 4, salvo
+ * de 100 que no sea también de 400. La hora `24:00` se rechaza aunque ISO 8601 la admita como fin
+ * de día: es ambigua como instante de arranque y `24:00:01` ya no la entiende nadie; se escribe
+ * como las `00:00` del día siguiente (R8 de `docs/SCENARIO_FORMAT.md`).
+ */
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+function isValidCivilDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12) return false;
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1]!;
+  return day >= 1 && day <= maxDay;
+}
+
+/** Mensaje del primer defecto civil de `start`, o `null` si el instante existe. */
+function civilStartError(start: string): string | null {
+  const match = ISO_PARTS.exec(start);
+  if (match === null) return null; // ya lo rechazó `ISO_WITH_OFFSET`.
+  const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match;
+  if (!isValidCivilDate(Number(year), Number(month), Number(day))) {
+    return `run.start: ${start} no es una fecha válida; ${month}-${day} no existe en el calendario civil.`;
+  }
+  if (Number(hour) > 23 || Number(minute) > 59 || (second !== undefined && Number(second) > 59)) {
+    const clock = second === undefined ? `${hour}:${minute}` : `${hour}:${minute}:${second}`;
+    return `run.start: ${start} no es una hora válida; ${clock} no existe en el reloj civil.`;
+  }
+  if (offsetHour !== undefined && (Number(offsetHour) > 23 || Number(offsetMinute) > 59)) {
+    return `run.start: ${start} no tiene un offset válido; ${offsetHour}:${offsetMinute} no es un desplazamiento horario.`;
+  }
+  return null;
+}
 
 export const RunSchema = z.strictObject({
-  start: z.string().regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset'),
+  start: z
+    .string()
+    .regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset')
+    .superRefine((value, ctx) => {
+      const message = civilStartError(value);
+      if (message !== null) ctx.addIssue({ code: 'custom', message });
+    }),
   duration: positive.optional(),
   warmup: nonNegative.default(0),
   replications: z.int().min(1).default(1),
@@ -123,7 +173,8 @@ export const CalendarSchema = z.strictObject({
           message: 'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',
         }),
     )
-    .min(1),
+    // R-CAL-2: sin intervalos el calendario nunca abriría (E-CAL-VACIO, § 17 de SEMANTICS.md).
+    .min(1, 'E-CAL-VACIO: el calendario no tiene intervalos abiertos.'),
   // § 4 — reservados.
   holidays: z.unknown().optional(),
   timezone: z.unknown().optional(),
@@ -168,6 +219,8 @@ export const ElementSchema = z.strictObject({
   conditions: z.unknown().optional(),
 });
 
+export type ElementSpec = z.output<typeof ElementSchema>;
+
 /* ------------------------------------------------------------------ *
  * § 2.1 — raíz
  * ------------------------------------------------------------------ */
@@ -208,7 +261,12 @@ export type ScenarioProblemCode =
   | 'E-REC-CANTIDAD'
   | 'E-CAMPO-NO-APLICA'
   | 'E-SIN-PARADA'
-  | 'W-ELEMENTO-SIN-PARAMETROS';
+  | 'E-XOR-SUMA-CERO'
+  | 'W-ELEMENTO-SIN-PARAMETROS'
+  | 'W-XOR-NORMALIZADA'
+  | 'W-XOR-RESIDUO-COMPARTIDO'
+  | 'W-NORMAL-NEGATIVA'
+  | 'W-USER-NORMALIZADA';
 
 export interface ScenarioProblem {
   code: ScenarioProblemCode;
@@ -253,13 +311,92 @@ function reserved(
 const GENERATORS = new Set(['start', 'timer']);
 
 /**
+ * R10 — probabilidades de un XOR divergente (§ 6 de `docs/SEMANTICS.md`, R-XOR-1…5). Duplica a
+ * propósito el cálculo de `core/sim.ts::xorWeights`: `core/` no se toca y esta versión corre
+ * **sin simular**, así un gateway que ningún token visita también queda linteado.
+ *
+ * El `message` es **byte a byte** el que emite `core/sim.ts` para el mismo gateway (`Gateway_X: …`,
+ * sin el prefijo `elements.` que llevan los demás problemas de este archivo). No es cosmético: la
+ * CLI mezcla los avisos del lint y los del motor en un `Set<string>` de `${code}: ${message}`
+ * (`cli.ts::resultWithBoundaryWarnings`), así que un texto distinto salía **dos veces** en consola
+ * y en `RunResult.warnings[]`. El `path` sí conserva `elements.${gatewayId}` para el panel y el
+ * JSON. Si alguna vez cambia el texto del motor, hay que cambiar este a la vez (lo fija un test).
+ *
+ * `E-XOR-SUMA-CERO` no entra en el trato: es error, aborta antes de simular y el motor nunca lo
+ * emite, así que conserva el prefijo `elements.` de los demás errores de este archivo.
+ */
+function checkXorGateway(
+  problems: ScenarioProblem[],
+  gatewayId: string,
+  outs: readonly string[],
+  elements: Record<string, ElementSpec>,
+): void {
+  if (outs.length === 0) return; // sin salidas: lo caza el validador del IR (E-GATEWAY-SIN-ARISTAS).
+  const declared = outs.map((flowId) => elements[flowId]?.probability);
+  const missingIds = outs.filter((_, i) => declared[i] === undefined);
+  const declaredSum = declared.reduce<number>((acc, p) => acc + (p ?? 0), 0);
+  const share =
+    missingIds.length === outs.length ? 1 / outs.length : Math.max(0, 1 - declaredSum) / missingIds.length;
+
+  // R-XOR-3: dos o más flujos sin probability se reparten el residuo por igual, con aviso.
+  if (missingIds.length >= 2 && missingIds.length < outs.length) {
+    problems.push({
+      code: 'W-XOR-RESIDUO-COMPARTIDO',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: `${gatewayId}: el residuo se reparte entre ${missingIds.join(', ')}.`,
+    });
+  }
+
+  const total = declared.reduce<number>((acc, p) => acc + (p ?? share), 0);
+  if (total === 0) {
+    // R-XOR-5: suma cero, ninguna ruta posible.
+    problems.push({
+      code: 'E-XOR-SUMA-CERO',
+      path: `elements.${gatewayId}`,
+      severity: 'error',
+      message: `elements.${gatewayId}: las probabilidades del XOR suman 0; no hay ruta posible.`,
+    });
+  } else if (Math.abs(total - 1) > 1e-9) {
+    // R-XOR-4: no suman 1, se normalizan con aviso.
+    problems.push({
+      code: 'W-XOR-NORMALIZADA',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: `${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`,
+    });
+  }
+}
+
+/**
+ * R11 — avisos de una distribución (`core/distributions.ts::checkDistribution`, § 16 R-DET-7):
+ * `normal` con `P(x < 0) > 1 %` y `user` cuyas probabilidades no suman 1. Se reutiliza la función
+ * de `core/` tal cual para no duplicar la matemática (erf); aquí solo se le añade el id.
+ */
+function checkElementDistributions(
+  problems: ScenarioProblem[],
+  id: string,
+  element: ElementSpec,
+): void {
+  for (const field of ['processingTime', 'interTriggerTimer'] as const) {
+    const dist = element[field];
+    if (dist === undefined) continue;
+    for (const warning of checkDistribution(dist)) {
+      problems.push({
+        code: warning.code,
+        path: `elements.${id}.${field}`,
+        severity: 'warning',
+        message: `elements.${id}.${field}: ${warning.message}`,
+      });
+    }
+  }
+}
+
+/**
  * Aplica al escenario **resuelto** las reglas de `docs/SCENARIO_FORMAT.md` § 5 que necesitan el
- * IR o el escenario completo: R3, R4, R5, R6, R9, R12 y R14.
+ * IR o el escenario completo: R3, R4, R5, R6, R9, R10, R11, R12 y R14.
  *
  * Devuelve la lista completa en una pasada; `severity: 'error'` impide simular.
- *
- * ponytail: las reglas puramente numéricas (R10 normalización de probabilidades, R11 aviso de
- * `normal` con P(x<0) > 1 %) se comprueban donde se usan, en el motor, no aquí.
  */
 export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioProblem[] {
   const problems: ScenarioProblem[] = [];
@@ -301,6 +438,8 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
       });
       continue;
     }
+
+    checkElementDistributions(problems, id, element);
 
     // R4 — `probability` solo en sequence flows.
     if (element.probability !== undefined && flow === undefined) {
@@ -383,6 +522,11 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         message: `elements.${id}.selection: solo tiene sentido con resources.`,
       });
     }
+  }
+
+  // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
+  for (const [gatewayId, node] of Object.entries(ir.nodes)) {
+    if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements);
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.
