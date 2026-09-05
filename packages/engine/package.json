@@ -12,7 +12,9 @@
     "./bpmn/lila.moddle.json": "./dist/bpmn/lila.moddle.json",
     "./schema": "./dist/scenario.js",
     "./cli-shared": "./dist/cli-shared.js",
-    "./result-schema": "./dist/result.schema.js"
+    "./result-schema": "./dist/result.schema.js",
+    "./csv": "./dist/csv.js",
+    "./format": "./dist/format.js"
   },
   "files": [
     "dist",
