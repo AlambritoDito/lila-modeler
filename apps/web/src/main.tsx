@@ -86,6 +86,8 @@ function App(): React.JSX.Element {
     // clave y abra el selector de archivo; el id real es irrelevante en esta modalidad.
     const id = crypto.randomUUID();
     const datos = await store.getProcess(id);
+    // Cerrar el selector sin elegir nada no cambia nada y no se avisa de nada.
+    if (datos === null) return;
     // El proceso activo y el nombre solo cambian si el archivo se pudo abrir. Si no, el lienzo
     // se queda con el diagrama anterior, y renombrarlo haría que la barra dijera un archivo y
     // el lienzo mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre

@@ -54,14 +54,36 @@ describe('BrowserStore', () => {
       await expect(store.getProcess('x')).resolves.toEqual({ xml: '<a/>', name: 'a.bpmn' });
     });
 
-    it('rechaza si el selector se cierra sin elegir nada', async () => {
+    // Lo que dispara de verdad cerrar el diálogo nativo: `cancel`, no `change`. Antes no se
+    // escuchaba, así que la promesa se quedaba pendiente para siempre y el `<input>` vivía en
+    // el `<body>` hasta recargar la página: seis «Abrir .bpmn» cancelados, seis huérfanos.
+    it('resuelve con null y limpia el DOM si el diálogo se cierra sin elegir nada', async () => {
       const store = new BrowserStore();
       const promesa = store.getProcess('nuevo');
-      const input = document.body.querySelector('input[type="file"]');
-      input?.dispatchEvent(new Event('change'));
+      document.body.querySelector('input[type="file"]')?.dispatchEvent(new Event('cancel'));
 
-      await expect(promesa).rejects.toThrow('No se eligió ningún archivo.');
-    });
+      await expect(promesa).resolves.toBeNull();
+      expect(document.body.querySelector('input[type="file"]')).toBeNull();
+    }, 1000);
+
+    it('no deja inputs huérfanos tras varias cancelaciones seguidas', async () => {
+      const store = new BrowserStore();
+      for (let i = 0; i < 5; i++) {
+        const promesa = store.getProcess(`nuevo-${String(i)}`);
+        document.body.querySelector('input[type="file"]')?.dispatchEvent(new Event('cancel'));
+        await promesa;
+      }
+
+      expect(document.body.querySelectorAll('input[type="file"]')).toHaveLength(0);
+    }, 1000);
+
+    it('un `change` sin archivo también se trata como cancelación', async () => {
+      const store = new BrowserStore();
+      const promesa = store.getProcess('nuevo');
+      document.body.querySelector('input[type="file"]')?.dispatchEvent(new Event('change'));
+
+      await expect(promesa).resolves.toBeNull();
+    }, 1000);
   });
 
   describe('listProcesses', () => {

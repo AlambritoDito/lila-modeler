@@ -8,26 +8,27 @@ import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
 import type { ProcessData, ProcessSummary, ProjectStore } from './ProjectStore';
 
-/** Crea, dispara y limpia un `<input type=file>` invisible; resuelve con el archivo elegido. */
-function elegirArchivo(): Promise<File> {
-  return new Promise((resolve, reject) => {
+/**
+ * Crea, dispara y limpia un `<input type=file>` invisible; resuelve con el archivo elegido, o
+ * con `null` si el diálogo se cerró sin elegir nada.
+ *
+ * Cerrar el diálogo nativo **no** dispara `change`: dispara `cancel`. Sin escucharlo, la
+ * promesa no se resolvía nunca y el `<input>` se quedaba en el `<body>` para siempre — un
+ * huérfano por cada vez que alguien pulsa «Abrir .bpmn» y se arrepiente.
+ */
+function elegirArchivo(): Promise<File | null> {
+  return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.bpmn,.xml';
     input.hidden = true;
-    input.addEventListener(
-      'change',
-      () => {
-        const file = input.files?.[0];
-        input.remove();
-        if (file === undefined) {
-          reject(new Error('No se eligió ningún archivo.'));
-          return;
-        }
-        resolve(file);
-      },
-      { once: true },
-    );
+    const terminar = (file: File | null): void => {
+      input.remove();
+      resolve(file);
+    };
+    // `change` sin archivo no lo produce ningún navegador actual, pero cuesta cero cubrirlo.
+    input.addEventListener('change', () => terminar(input.files?.[0] ?? null), { once: true });
+    input.addEventListener('cancel', () => terminar(null), { once: true });
     document.body.appendChild(input);
     input.click();
   });
@@ -56,10 +57,11 @@ export class BrowserStore implements ProjectStore {
     return [...this.procesos].map(([id, { name }]) => ({ id, name }));
   }
 
-  async getProcess(id: string): Promise<ProcessData> {
+  async getProcess(id: string): Promise<ProcessData | null> {
     const cargado = this.procesos.get(id);
     if (cargado !== undefined) return cargado;
     const archivo = await elegirArchivo();
+    if (archivo === null) return null;
     const datos: ProcessData = { xml: await archivo.text(), name: archivo.name };
     this.procesos.set(id, datos);
     return datos;

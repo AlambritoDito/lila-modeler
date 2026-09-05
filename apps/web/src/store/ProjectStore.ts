@@ -33,8 +33,13 @@ export interface ProcessData {
 export interface ProjectStore {
   /** Procesos disponibles en esta modalidad (en `BrowserStore`, los de esta sesión). */
   listProcesses(): Promise<readonly ProcessSummary[]>;
-  /** Carga el proceso `id`. En `BrowserStore`, si no está en memoria abre un selector de archivo. */
-  getProcess(id: string): Promise<ProcessData>;
+  /**
+   * Carga el proceso `id`. En `BrowserStore`, si no está en memoria abre un selector de
+   * archivo. `null` es «se cerró el diálogo sin elegir nada»: no es un error y no se le
+   * enseña a nadie. `DesktopStore` (LILA-071) devuelve `null` en el mismo caso, al cancelarse
+   * `dialog.showOpenDialog`; que un proceso pedido por id no exista sí es una excepción.
+   */
+  getProcess(id: string): Promise<ProcessData | null>;
   /** Guarda `xml` como el proceso `id`. En `BrowserStore`, descarga el archivo. */
   putProcess(id: string, xml: string): Promise<void>;
   /** Nombres de los escenarios guardados para `processId`. */
