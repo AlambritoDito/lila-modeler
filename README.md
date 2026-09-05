@@ -40,8 +40,8 @@ las extras de Lila (cuellos de botella, costo por caso) y escribir JSON + cinco 
 
 ```bash
 npx lila run \
-  examples/bizagi-levels/level-2/model.bpmn \
-  examples/bizagi-levels/level-2/scenario.json \
+  examples/pedido/model.bpmn \
+  examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
   --json out/result.json --csv out/csv
 ```

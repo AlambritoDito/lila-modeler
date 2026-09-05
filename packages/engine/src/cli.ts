@@ -238,22 +238,27 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
     );
   }
 
-  console.log('');
-  console.log('Cuellos de botella');
-  if (result.bottlenecks.length === 0) {
-    console.log('Sin espera por recurso detectada.');
-  } else {
-    console.log(
-      formatTable(
-        ['Id', 'Name', `Total time (waiting for resource) (${unit})`, 'Utilization (%)'],
-        result.bottlenecks.map((entry) => [
-          entry.elementId,
-          ir.nodes[entry.elementId]?.name ?? '',
-          formatDuration(entry.resourceWaitTotal, unit),
-          formatNumber(entry.utilization * 100),
-        ]),
-      ),
-    );
+  // Misma puerta que la tabla `Resources`: sin un solo pool declarado no existe la espera por
+  // recurso (R-DEG-1) y la sección sobra. Con pools, en cambio, un ranking vacío es información
+  // —nadie hizo cola— y se dice explícitamente.
+  if (Object.keys(result.resources).length > 0) {
+    console.log('');
+    console.log('Cuellos de botella');
+    if (result.bottlenecks.length === 0) {
+      console.log('Sin espera por recurso detectada.');
+    } else {
+      console.log(
+        formatTable(
+          ['Id', 'Name', `Total time (waiting for resource) (${unit})`, 'Utilization (%)'],
+          result.bottlenecks.map((entry) => [
+            entry.elementId,
+            ir.nodes[entry.elementId]?.name ?? '',
+            formatDuration(entry.resourceWaitTotal, unit),
+            formatNumber(entry.utilization * 100),
+          ]),
+        ),
+      );
+    }
   }
 
   const process = result.process;

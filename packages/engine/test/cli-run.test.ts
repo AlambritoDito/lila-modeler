@@ -116,6 +116,10 @@ describe('lila run (LILA-046)', () => {
     // R-DEG-1: sin `resources` en el escenario no hay tabla de recurso (SEMANTICS.md § 14). La
     // salida tiene que seguir siendo la de M1, byte a byte, después de LILA-184.
     expect(text).not.toContain('Resources');
+    // LILA-188: la sección de cuellos de botella se cierra con la misma puerta que `Resources`.
+    // Sin un solo pool declarado no hay «espera por recurso» de la que hablar, y anunciar su
+    // ausencia en un escenario de nivel 1–2 es ruido que la tabla de recursos no imprime.
+    expect(text).not.toContain('Cuellos de botella');
     expect(formatDuration(90, 'min')).toBe('1.5');
   });
 
@@ -378,5 +382,48 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       expect(rows.some((row) => row.split(',')[resourceIdColumn] !== '')).toBe(true);
     },
     30_000,
+  );
+});
+
+describe('README · el ejemplo de `lila run` (LILA-188)', () => {
+  test(
+    'el escenario documentado sí produce las extras que el texto promete',
+    async () => {
+      const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+      const readme = readFileSync(join(repositoryRoot, 'README.md'), 'utf8');
+      // El único bloque `npx lila run` del README; el texto que lo precede promete tablas
+      // Bizagi *más* las extras de Lila (cuellos de botella, costo por caso), así que el
+      // ejemplo tiene que correr sobre un escenario con recursos y costos, no de nivel 1–2.
+      const block = /```bash\nnpx lila run((?:.|\n)*?)```/.exec(readme);
+      expect(block).not.toBeNull();
+      const [model, scenario] = block![1]!
+        .replace(/\\\n/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((token) => token.endsWith('.bpmn') || token.endsWith('.json'));
+      expect(model).toBeDefined();
+      expect(scenario).toBeDefined();
+
+      expect(
+        await main([
+          'run',
+          resolve(repositoryRoot, model!),
+          resolve(repositoryRoot, scenario!),
+          '--replications',
+          '3',
+        ]),
+      ).toBe(0);
+
+      const lines = output.join('\n').split('\n');
+      const bottleneckIndex = lines.indexOf('Cuellos de botella');
+      expect(bottleneckIndex).toBeGreaterThanOrEqual(0);
+      expect(lines[bottleneckIndex + 1]).toMatch(/^Id +Name +Total time \(waiting for resource\)/);
+      expect(lines[bottleneckIndex + 3]).not.toBe('');
+
+      const processIndex = lines.indexOf('Process summary (extras)');
+      const costPerCase = Number(lines[processIndex + 3]!.split(/ {2,}/).at(-1));
+      expect(costPerCase).toBeGreaterThan(0);
+    },
+    60_000,
   );
 });
