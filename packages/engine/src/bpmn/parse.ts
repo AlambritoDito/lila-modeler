@@ -8,10 +8,10 @@
  * Reglas: el `id` BPMN es la única clave (nunca el nombre), el perfil soportado es el de
  * `docs/SEMANTICS.md` sección 2 y el aplanado de subprocesos y call activities es su sección 4.
  */
-import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
+import { BpmnModdle, type ModdleElement, type ModdleWarning } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { newId, sanitizeXmlIds } from './ids.js';
-import type { Flow, Node, NodeType, ProcessIR } from '../core/ir.js';
+import type { Flow, Node, NodeType, ProcessIR, SourceWarning } from '../core/ir.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
 const TASK_TYPES = new Set([
@@ -423,6 +423,26 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
   return (el.flowElements ?? []).length > 0;
 }
 
+/** "illegal ID <9Task_bad>" dentro de un mensaje de "unparsable content"; ver `toSourceWarning`. */
+const ILLEGAL_ID = /illegal ID <([^>]+)>/;
+
+/**
+ * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
+ * una sola línea y rescata el id afectado de donde lo haya. Para una referencia rota
+ * (`unresolved reference`), moddle da `element` (quien declara la referencia) y `property`
+ * (la propiedad rota). Para un elemento descartado por completo (`unparsable content ... illegal
+ * ID <X>`) no hay `element` — el id solo aparece dentro del texto del mensaje.
+ */
+function toSourceWarning(w: ModdleWarning): SourceWarning {
+  const message = w.message.replace(/\s+/g, ' ').trim();
+  const elementId = w.element?.id ?? ILLEGAL_ID.exec(message)?.[1];
+  return {
+    message,
+    ...(elementId === undefined ? {} : { elementId }),
+    ...(w.property === undefined ? {} : { property: w.property }),
+  };
+}
+
 /**
  * Lee el XML con bpmn-moddle (con la extensión `lila` cargada) y produce el IR ya aplanado.
  *
@@ -434,7 +454,7 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
 export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   const { xml, sanitizedToOriginal } = sanitizeXmlIds(xmlIn);
   const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions } = await moddle.fromXML(xml);
+  const { rootElement: definitions, warnings: moddleWarnings } = await moddle.fromXML(xml);
 
   const processes = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
   const main =
@@ -519,6 +539,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',
         originalIds,
+        warnings: moddleWarnings.map(toSourceWarning),
       },
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),

@@ -9,7 +9,7 @@
  * El texto de los errores `E-NOSOP` es normativo y sale literal de `docs/SEMANTICS.md` § 3
  * (R-NOSOP-1 y R-NOSOP-2); los códigos, de la § 17.
  */
-import { validateIr, type IrProblem, type ProcessIR } from '../core/ir.js';
+import { validateIr, type IrProblem, type ProcessIR, type SourceWarning } from '../core/ir.js';
 import type { UnsupportedElement } from './parse.js';
 
 /**
@@ -22,7 +22,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationWarning {
-  code: 'W-MSGFLOW' | 'W-COND';
+  code: 'W-MSGFLOW' | 'W-COND' | 'W-PARSE';
   id: string;
   message: string;
 }
@@ -101,6 +101,54 @@ function unsupportedProblem(el: UnsupportedElement): IrProblem {
   };
 }
 
+/** `unparsable content <X> ... illegal ID <Y>`: moddle tiró el elemento entero, id incluido. */
+const ILLEGAL_ID_MESSAGE = /illegal ID/;
+
+/**
+ * Propiedades de moddle-xml que son topología del grafo de tokens: una referencia rota ahí
+ * significa que un nodo o un flujo desapareció del IR sin dejar rastro. Las demás que
+ * bpmn-moddle reporta (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`, …)
+ * cuelgan de construcciones que el perfil v1 ya ignora (mensajes, data stores, categorías): una
+ * referencia rota ahí no descarta nada del grafo.
+ */
+const GRAPH_REFERENCE_PROPERTIES = new Set([
+  'bpmn:sourceRef',
+  'bpmn:targetRef',
+  'bpmn:attachedToRef',
+  'bpmn:flowNodeRef',
+  'bpmn:default',
+]);
+
+/**
+ * `docs/SEMANTICS.md` R-NOSOP-6: un aviso de bpmn-moddle implica un elemento descartado del IR
+ * en dos casos — un elemento completo que moddle tiró por id ilegal ("unparsable content ...
+ * illegal ID"), o una referencia rota sobre una propiedad de topología del grafo. Todo lo demás
+ * (mensajes, data stores, categorías, extensiones ajenas que moddle no reconoce) es inofensivo:
+ * no era, ni iba a ser, un nodo o un flujo del IR.
+ */
+function impliesDiscardedElement(w: SourceWarning): boolean {
+  if (ILLEGAL_ID_MESSAGE.test(w.message)) return true;
+  return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property);
+}
+
+function parseWarningProblem(w: SourceWarning, fallbackId: string): IrProblem {
+  const id = w.elementId ?? fallbackId;
+  return {
+    code: 'E-PARSE-INCOMPLETO',
+    id,
+    message: `${id}: bpmn-moddle descartó el elemento al leer el XML (${w.message}).`,
+  };
+}
+
+function parseWarningNotice(w: SourceWarning, fallbackId: string): ValidationWarning {
+  const id = w.elementId ?? fallbackId;
+  return {
+    code: 'W-PARSE',
+    id,
+    message: `${id}: bpmn-moddle emitió un aviso al leer el XML (${w.message}).`,
+  };
+}
+
 /** Ids alcanzables siguiendo los flujos salientes desde cada `start`. */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
   const seen = new Set<string>(starts);
@@ -132,6 +180,14 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
   for (const el of opts.unsupported ?? []) {
     if (NOT_A_NODE.has(el.qname)) continue;
     errors.push(unsupportedProblem(el));
+  }
+
+  for (const w of ir.source.warnings) {
+    if (impliesDiscardedElement(w)) {
+      errors.push(parseWarningProblem(w, ir.id));
+    } else {
+      warnings.push(parseWarningNotice(w, ir.id));
+    }
   }
 
   if ((opts.messageFlowCount ?? 0) > 0) {
