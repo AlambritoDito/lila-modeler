@@ -129,3 +129,44 @@ export async function renderPedidoGolden(seed: number): Promise<string> {
 export async function renderPedidoNivel3Golden(seed: number): Promise<string> {
   return renderPedidoScenario(withoutCalendars(loadPedidoScenario(seed)));
 }
+
+/**
+ * Compara dos `RunResult` ya parseados con tolerancia **relativa** en los números y estricta en
+ * todo lo demás (claves, orden de claves, strings, longitudes). Es lo que se usa fuera del CI:
+ * entre arquitecturas `Math.log`/`Math.exp`/`Math.cos` difieren en el último bit, y con colas de
+ * por medio esa diferencia deja de cancelarse (R-DET-6). Devuelve las rutas que se salen de `tol`.
+ *
+ * Vive aquí, y no dentro del test, para poder atacarlo sin re-ejecutar las 30 réplicas.
+ */
+export function numericDiffs(actual: unknown, expected: unknown, tol: number, path = ''): string[] {
+  if (typeof expected === 'number' && typeof actual === 'number') {
+    if (Object.is(actual, expected)) return [];
+    // Un `scale` infinito (±Infinity contra un finito) haría que `<= tol * scale` fuese siempre
+    // cierto y el par se daría por igual; el guardia de finitud lo convierte en diferencia.
+    const scale = Math.max(Math.abs(expected), Math.abs(actual), 1);
+    return Number.isFinite(scale) && Math.abs(actual - expected) <= tol * scale
+      ? []
+      : [`${path}: ${actual} != ${expected}`];
+  }
+  if (Array.isArray(expected) || Array.isArray(actual)) {
+    if (!Array.isArray(expected) || !Array.isArray(actual) || actual.length !== expected.length) {
+      return [`${path}: arrays distintos`];
+    }
+    return expected.flatMap((item, index) => numericDiffs(actual[index], item, tol, `${path}[${index}]`));
+  }
+  if (expected !== null && actual !== null && typeof expected === 'object' && typeof actual === 'object') {
+    const expectedKeys = Object.keys(expected);
+    const actualKeys = Object.keys(actual);
+    // El orden de claves es parte del contrato del golden, no solo el conjunto.
+    if (expectedKeys.join('\u0000') !== actualKeys.join('\u0000')) return [`${path}: claves distintas`];
+    return expectedKeys.flatMap((key) =>
+      numericDiffs(
+        (actual as Record<string, unknown>)[key],
+        (expected as Record<string, unknown>)[key],
+        tol,
+        path === '' ? key : `${path}.${key}`,
+      ),
+    );
+  }
+  return Object.is(actual, expected) ? [] : [`${path}: ${String(actual)} != ${String(expected)}`];
+}
