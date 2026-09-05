@@ -21,6 +21,17 @@ jobs:
           node-version: '22'
           cache: npm
           registry-url: https://registry.npmjs.org
+      # El tag manda el número que se publica: si no coincide con la versión del
+      # package.json, npm publicaría otra versión (o fallaría con 403 por duplicada)
+      # y las versiones de npm son inmutables. Falla antes de tocar el registro.
+      - name: El tag coincide con la versión de @lila/engine
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./packages/engine/package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "El tag $GITHUB_REF_NAME no coincide con @lila/engine@$pkg" >&2
+            exit 1
+          fi
       - run: npm ci
       - run: npm run build
       - run: npm test

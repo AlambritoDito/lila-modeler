@@ -18,7 +18,7 @@
     "build": "tsc --build"
   },
   "dependencies": {
-    "@lila/engine": "^0.1.0",
+    "@lila/engine": "*",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.5.4"
   },

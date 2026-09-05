@@ -56,6 +56,7 @@
   },
   "scripts": {
     "build": "tsc --build",
+    "prepack": "npm run build",
     "golden:update": "tsx test/golden/generate.ts"
   },
   "dependencies": {
