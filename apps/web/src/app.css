@@ -202,13 +202,27 @@ body {
   background: transparent;
 }
 
-/* Marca de agua: el logo usa `fill: currentColor`, así que basta darle un color legible
-   sobre el lienzo oscuro. No se oculta, no se mueve, no se reescala. */
-.lienzo .bjs-powered-by {
-  color: var(--fg-muted);
+/* Marca de agua: obligatoria por la licencia de bpmn.io, así que tiene que verse. No se
+   oculta, no se mueve, no se reescala; solo se le da un color legible sobre el lienzo oscuro.
+   El color va en el `fill` del trazado, no en el `color` del enlace: bpmn-js escribe
+   `color: #404040` como estilo en línea del `<a>` y eso gana a cualquier selector (sobre
+   `--canvas-bg` daba 1,7:1, o sea invisible). Un `fill` en CSS, en cambio, gana al atributo
+   de presentación `fill="currentColor"` del SVG sin necesidad de `!important`. */
+.lienzo .bjs-powered-by path {
+  fill: var(--fg-muted);
 }
 
-.lienzo .bjs-powered-by:hover {
+.lienzo .bjs-powered-by:hover path {
+  fill: var(--fg-primary);
+}
+
+/* Edición del nombre de un elemento. Para las etiquetas externas (eventos, compuertas,
+   flujos) bpmn-js pinta la caja de blanco con un estilo en línea, y el texto heredaba el
+   `--fg-primary` del `body`: blanco sobre blanco, 1,2:1, no se veía lo que se escribía.
+   Dándole fondo y color propios al contenido se cubre ese blanco sin `!important`, y la
+   edición dentro de una figura (tareas) también gana un fondo legible. */
+.lienzo .djs-direct-editing-content {
+  background: var(--bg-elevated);
   color: var(--fg-primary);
 }
 
