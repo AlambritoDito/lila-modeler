@@ -164,7 +164,7 @@ describe('lila run (LILA-046)', () => {
     expect(readdirSync(first).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
-  test('acepta recursos y avisa (no rechaza) calendarios (LILA-184)', async () => {
+  test('acepta recursos y calendarios sin gate ni aviso de nivel (LILA-184, LILA-041)', async () => {
     const scenario = join(fixture.root, 'con-recursos.scenario.json');
     const jsonOutput = join(fixture.root, 'con-recursos.json');
     const csvOutput = join(fixture.root, 'con-recursos-csv');
@@ -201,9 +201,8 @@ describe('lila run (LILA-046)', () => {
     const text = output.join('\n');
     expect(text).toContain('Resources');
     expect(text).toContain('Utilization (%)');
-    expect(text).toContain('"Con recursos y calendarios" declara calendarios');
-    expect(text).toContain('M3');
-    expect(text).toContain('24×7');
+    // LILA-041 simula los calendarios, así que ya no queda ni gate ni aviso de nivel pendiente.
+    expect(text).not.toContain('declara calendarios');
     expect(text).not.toContain('E-NIVEL-M2');
     expect(text).not.toContain('E-NIVEL-M3');
     expect(existsSync(jsonOutput)).toBe(true);
@@ -214,7 +213,7 @@ describe('lila run (LILA-046)', () => {
       warnings: string[];
     };
     expect(Object.keys(json.resources)).toContain('agente');
-    expect(json.warnings.some((warning) => warning.includes('declara calendarios'))).toBe(true);
+    expect(json.warnings.some((warning) => warning.includes('declara calendarios'))).toBe(false);
   });
 
   test('rechaza un model posicional distinto de scenario.model', async () => {
@@ -276,7 +275,7 @@ describe('lila run (LILA-046)', () => {
 
 describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
   test(
-    'AS-IS sale 0, imprime Resources y el aviso de calendarios; --json es determinista con resources y bottlenecks',
+    'AS-IS sale 0, imprime Resources sin aviso de nivel; --json es determinista con resources y bottlenecks',
     async () => {
       const model = join(exampleDir, 'model.bpmn');
       const scenario = join(exampleDir, 'as-is.scenario.json');
@@ -293,9 +292,8 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       expect(first).toBe(0);
       expect(second).toBe(0);
       expect(firstText).toBe(secondText);
-      expect(firstText).toContain('declara calendarios');
-      expect(firstText).toContain('M3');
-      expect(firstText).toContain('24×7');
+      // El escenario declara `oficina` y desde LILA-041 el motor lo simula: sin aviso de nivel.
+      expect(firstText).not.toContain('declara calendarios');
 
       // Nombres de columna exactos de RESULTS_FORMAT.md § 10 y unidad en `Busy time`, que son
       // segundos-unidad convertidos a `baseTimeUnit` como en `lila compare` (QA de #47).
