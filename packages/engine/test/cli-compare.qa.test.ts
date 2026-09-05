@@ -130,18 +130,25 @@ function rowLine(all: string, needle: string, metricLabel: string): string {
 }
 
 describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los calendarios', () => {
-  test('`lila run` rechaza por unsupportedM1 lo que `lila compare` sí simula (recursos)', async () => {
+  test('`lila run` y `lila compare` aceptan el mismo escenario con recursos (LILA-184)', async () => {
     const a = writeScenario('a.scenario.json', { capacity: 1 });
     const b = writeScenario('b.scenario.json', { capacity: 3 });
 
-    // El gate E-NIVEL-M2 sigue vivo en `run` aunque el motor simule recursos desde LILA-033…036.
-    expect(await main(['run', model, a])).toBe(1);
-    expect(text()).toContain('E-NIVEL-M2 resources');
+    // Antes de LILA-184, `run` rechazaba con E-NIVEL-M2 lo que `compare` ya simulaba: la
+    // incoherencia que fijaba este test. Ahora ambos aceptan el mismo escenario e imprimen la
+    // misma tabla de recursos.
+    expect(await main(['run', model, a])).toBe(0);
+    expect(tableBlock(text(), 'Resources')[0]).toContain('Utilization (%)');
+    const runRow = rowLine(text(), 'agente', 'Agente de mostrador').split(/ {2,}/);
 
     output = [];
     expect(await main(['compare', model, a, b])).toBe(0);
-    expect(text()).toContain('Resources');
-    expect(text()).toContain('Utilization (%)');
+    const compareRow = rowLine(text(), 'agente', 'Utilization (%)').split(/ {2,}/);
+
+    // Coherencia de verdad: los dos comandos imprimen el mismo pool con el mismo número, no solo
+    // una tabla con el mismo título. `compare` marca el porcentaje en la celda; `run`, en la
+    // cabecera de columna.
+    expect(compareRow[3]).toBe(`${runRow[2]}%`);
   });
 
   test('los `calendars` declarados no cambian ningún número: el motor los ignora, y compare lo avisa', async () => {

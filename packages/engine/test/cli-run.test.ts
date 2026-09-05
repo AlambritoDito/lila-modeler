@@ -9,13 +9,16 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../src/cli.js';
-import { formatDuration } from '../src/format.js';
+import { formatDuration, formatNumber } from '../src/format.js';
 import { runResultSchema } from '../src/result.schema.js';
+
+const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../examples/pedido');
 
 const MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -110,6 +113,9 @@ describe('lila run (LILA-046)', () => {
     expect(text).toContain('Instances completed');
     expect(text).toContain('Average time (min)');
     expect(text).toContain('Process summary (extras)');
+    // R-DEG-1: sin `resources` en el escenario no hay tabla de recurso (SEMANTICS.md § 14). La
+    // salida tiene que seguir siendo la de M1, byte a byte, después de LILA-184.
+    expect(text).not.toContain('Resources');
     expect(formatDuration(90, 'min')).toBe('1.5');
   });
 
@@ -158,15 +164,15 @@ describe('lila run (LILA-046)', () => {
     expect(readdirSync(first).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
-  test('rechaza explícitamente recursos y calendarios de hitos posteriores', async () => {
-    const scenario = join(fixture.root, 'unsupported.scenario.json');
-    const jsonOutput = join(fixture.root, 'should-not-exist.json');
-    const csvOutput = join(fixture.root, 'should-not-exist-csv');
+  test('acepta recursos y avisa (no rechaza) calendarios (LILA-184)', async () => {
+    const scenario = join(fixture.root, 'con-recursos.scenario.json');
+    const jsonOutput = join(fixture.root, 'con-recursos.json');
+    const csvOutput = join(fixture.root, 'con-recursos-csv');
     writeFileSync(
       scenario,
       JSON.stringify({
         version: 1,
-        name: 'Fuera de M1',
+        name: 'Con recursos y calendarios',
         model: 'models/model.bpmn',
         run: { start: '2026-09-07T08:00:00-06:00', duration: 60 },
         calendars: {
@@ -191,13 +197,24 @@ describe('lila run (LILA-046)', () => {
         '--csv',
         csvOutput,
       ]),
-    ).toBe(1);
-    expect(output.join('\n')).toContain('E-NIVEL-M2 resources');
-    expect(output.join('\n')).toContain('E-NIVEL-M3 calendars');
-    expect(output.join('\n')).toContain('elements.Task.resources');
-    expect(output.join('\n')).toContain('elements.Task.calendar');
-    expect(existsSync(jsonOutput)).toBe(false);
-    expect(existsSync(csvOutput)).toBe(false);
+    ).toBe(0);
+    const text = output.join('\n');
+    expect(text).toContain('Resources');
+    expect(text).toContain('Utilization (%)');
+    expect(text).toContain('"Con recursos y calendarios" declara calendarios');
+    expect(text).toContain('M3');
+    expect(text).toContain('24×7');
+    expect(text).not.toContain('E-NIVEL-M2');
+    expect(text).not.toContain('E-NIVEL-M3');
+    expect(existsSync(jsonOutput)).toBe(true);
+    expect(existsSync(csvOutput)).toBe(true);
+
+    const json = JSON.parse(readFileSync(jsonOutput, 'utf8')) as {
+      resources: Record<string, unknown>;
+      warnings: string[];
+    };
+    expect(Object.keys(json.resources)).toContain('agente');
+    expect(json.warnings.some((warning) => warning.includes('declara calendarios'))).toBe(true);
   });
 
   test('rechaza un model posicional distinto de scenario.model', async () => {
@@ -255,4 +272,85 @@ describe('lila run (LILA-046)', () => {
     expect(await main(['run', fixture.model, fixture.scenario, 'extra'])).toBe(1);
     expect(output.join('\n')).toContain('se esperaba las rutas');
   });
+});
+
+describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
+  test(
+    'AS-IS sale 0, imprime Resources y el aviso de calendarios; --json es determinista con resources y bottlenecks',
+    async () => {
+      const model = join(exampleDir, 'model.bpmn');
+      const scenario = join(exampleDir, 'as-is.scenario.json');
+
+      // ponytail: 3 replicaciones bastan para la aceptación; el escenario declara 30 (~25 s en CI).
+      const args = ['run', model, scenario, '--replications', '3'];
+
+      const first = await main(args);
+      const firstText = output.join('\n');
+      output = [];
+      const second = await main(args);
+      const secondText = output.join('\n');
+
+      expect(first).toBe(0);
+      expect(second).toBe(0);
+      expect(firstText).toBe(secondText);
+      expect(firstText).toContain('declara calendarios');
+      expect(firstText).toContain('M3');
+      expect(firstText).toContain('24×7');
+
+      // Nombres de columna exactos de RESULTS_FORMAT.md § 10 y unidad en `Busy time`, que son
+      // segundos-unidad convertidos a `baseTimeUnit` como en `lila compare` (QA de #47).
+      const lines = firstText.split('\n');
+      const header = lines[lines.indexOf('Resources') + 1];
+      expect(header).toMatch(
+        /^Id +Name +Utilization \(%\) +Busy time \(min\) +Fixed cost +Unit cost +Total cost$/,
+      );
+
+      const firstJson = join(fixture.root, 'as-is-1.json');
+      const secondJson = join(fixture.root, 'as-is-2.json');
+      expect(await main([...args, '--json', firstJson])).toBe(0);
+      expect(await main([...args, '--json', secondJson])).toBe(0);
+      expect(readFileSync(firstJson)).toEqual(readFileSync(secondJson));
+
+      const parsed = JSON.parse(readFileSync(firstJson, 'utf8')) as {
+        resources: Record<string, { utilization: number; busyTime: number }>;
+        bottlenecks: unknown[];
+      };
+      expect(runResultSchema.safeParse(parsed).success).toBe(true);
+      expect(Object.keys(parsed.resources)).toContain('cajero');
+      // El ranking solo existe con contención de recursos: vacío significaría que el gate sigue
+      // recortando lo que la corrida mide, no que el escenario no tenga cuellos de botella.
+      expect(parsed.bottlenecks.length).toBeGreaterThan(0);
+
+      // La consola imprime los mismos números que el JSON, con la conversión de presentación.
+      const cajero = parsed.resources.cajero!;
+      const row = lines.find((line) => line.startsWith('cajero'))!.split(/ {2,}/);
+      expect(row.slice(0, 4)).toEqual([
+        'cajero',
+        'Cajero',
+        formatNumber(cajero.utilization * 100),
+        formatDuration(cajero.busyTime, 'min'),
+      ]);
+    },
+    30_000,
+  );
+
+  test(
+    '--csv produce log.csv con resourceId no nulo',
+    async () => {
+      const model = join(exampleDir, 'model.bpmn');
+      const scenario = join(exampleDir, 'as-is.scenario.json');
+      const csvOutput = join(fixture.root, 'as-is-csv');
+
+      expect(
+        await main(['run', model, scenario, '--replications', '3', '--csv', csvOutput]),
+      ).toBe(0);
+
+      const log = readFileSync(join(csvOutput, 'log.csv'), 'utf8');
+      const [header, ...rows] = log.trim().split('\r\n');
+      const resourceIdColumn = header!.split(',').indexOf('resourceId');
+      expect(resourceIdColumn).toBeGreaterThanOrEqual(0);
+      expect(rows.some((row) => row.split(',')[resourceIdColumn] !== '')).toBe(true);
+    },
+    30_000,
+  );
 });
