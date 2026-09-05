@@ -34,7 +34,12 @@ const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
 
 function App(): React.JSX.Element {
   const [modelador, setModelador] = useState<Modelador | null>(null);
-  const [estado, setEstado] = useState<EstadoLienzo>({ zoom: 1, elementos: 0, error: null });
+  const [estado, setEstado] = useState<EstadoLienzo>({
+    zoom: 1,
+    elementos: 0,
+    avisos: 0,
+    error: null,
+  });
   const [archivo, setArchivo] = useState('model.bpmn');
   const [pestana, setPestana] = useState<(typeof PESTANAS)[number]>('Propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
@@ -64,8 +69,10 @@ function App(): React.JSX.Element {
   async function abrirArchivo(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     if (file === undefined || modelador === null) return;
-    setArchivo(file.name);
-    await modelador.abrir(await file.text());
+    // El nombre solo cambia si el archivo se pudo abrir. Si no, el lienzo se queda con el
+    // diagrama anterior, y renombrarlo haría que la barra dijera un archivo y el lienzo
+    // mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre nuevo—.
+    if (await modelador.abrir(await file.text())) setArchivo(file.name);
     // Sin esto, volver a elegir el mismo archivo no dispara `change`.
     input.value = '';
   }
@@ -159,6 +166,11 @@ function App(): React.JSX.Element {
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
         <span>Tema: {tema?.name ?? 'Eva-01'}</span>
+        {estado.avisos > 0 && (
+          <span role="alert" className="aviso">
+            {estado.avisos} avisos al importar: hay elementos que no se dibujaron
+          </span>
+        )}
         {estado.error !== null && (
           <span role="alert" className="error">
             No se pudo abrir el diagrama: {estado.error}

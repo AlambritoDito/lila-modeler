@@ -21,13 +21,20 @@ export interface EstadoLienzo {
   zoom: number;
   /** Figuras y conexiones del diagrama, sin la raíz ni las etiquetas externas. */
   elementos: number;
+  /**
+   * Avisos del último import. bpmn-js no aborta cuando un elemento no se puede dibujar: lo
+   * descarta y lo devuelve como aviso. Sin enseñarlos, un archivo al que le faltan la mitad de
+   * las tareas se abre como si estuviera entero.
+   */
+  avisos: number;
   /** Mensaje del último import fallido, o `null` si todo fue bien. */
   error: string | null;
 }
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
-  abrir(xml: string): Promise<void>;
+  /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
+  abrir(xml: string): Promise<boolean>;
   exportar(): Promise<string>;
   ajustar(): void;
 }
@@ -82,10 +89,14 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
     /** Un contenedor sin tamaño (pestaña en segundo plano) hace que el viewbox sea NaN. */
     const conTamano = (): boolean => container.clientWidth > 0 && container.clientHeight > 0;
 
+    /** Avisos del último import: se conservan entre repintados de la barra de estado. */
+    let avisos = 0;
+
     const publicar = (error: string | null): void => {
       const zoom = canvas.zoom();
       onEstado({
         zoom: Number.isFinite(zoom) ? zoom : 1,
+        avisos,
         // La raíz no tiene padre y las etiquetas externas cuelgan de su elemento: ni una ni
         // otras son "elementos del diagrama" para quien mira la barra de estado.
         elementos: registro.filter((el) => el.parent != null && el.labelTarget == null).length,
@@ -97,18 +108,24 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       publicar(null);
     });
 
-    const abrir = async (xml: string): Promise<void> => {
+    const abrir = async (xml: string): Promise<boolean> => {
       try {
-        await modeler.importXML(xml);
-        if (!vivo) return;
+        const { warnings } = await modeler.importXML(xml);
+        if (!vivo) return false;
+        avisos = warnings.length;
         // `fit-viewport` divide por el ancho del contenedor: con la pestaña en segundo plano
         // eso es 0 y bpmn-js muere con «SVGMatrix: The provided float value is non-finite».
         // Sin ajustar, el diagrama queda al 100 % y el botón «ajustar» sigue estando ahí.
         if (conTamano()) canvas.zoom('fit-viewport');
         canvas.focus();
         publicar(null);
+        return true;
       } catch (e: unknown) {
+        // Un import fallido deja el diagrama anterior en el lienzo: no se borra el trabajo de
+        // nadie por elegir un archivo equivocado. Por eso `false` importa, y quien llama tiene
+        // que dejar también el nombre anterior.
         if (vivo) publicar(e instanceof Error ? e.message : String(e));
+        return false;
       }
     };
 
