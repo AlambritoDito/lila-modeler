@@ -11,6 +11,11 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { applyTheme, type Theme } from './theme/applyTheme';
+// Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
+// del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
+// `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
+import { BrowserStore } from './store/BrowserStore';
+import type { ProjectStore } from './store/ProjectStore';
 // El benchmark se compila dentro del bundle: es el único archivo que la app trae de serie, y
 // así no hay que copiarlo a `public/` ni abrir `examples/` con `server.fs.allow`.
 import pedido from '../../../examples/pedido/model.bpmn?raw';
@@ -26,6 +31,9 @@ const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 /** Tema por defecto. Se pide por fetch para que editar el JSON y recargar cambie la UI. */
 const TEMA_URL = '/eva-01.json';
 
+/** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
+const PROCESO_INICIAL = 'pedido';
+
 const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
   Propiedades: 'El panel de propiedades llega en LILA-060.',
   Documentación: 'Los campos lila: llegan en LILA-060.',
@@ -33,6 +41,11 @@ const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
 };
 
 function App(): React.JSX.Element {
+  // El store se crea una sola vez, con el benchmark ya cargado: así `listProcesses()` lo
+  // incluye desde el primer render, sin un viaje redundante por `getProcess()`.
+  const [store] = useState<ProjectStore>(
+    () => new BrowserStore(new Map([[PROCESO_INICIAL, { xml: pedido, name: 'model.bpmn' }]])),
+  );
   const [modelador, setModelador] = useState<Modelador | null>(null);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -40,6 +53,7 @@ function App(): React.JSX.Element {
     avisos: 0,
     error: null,
   });
+  const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
   const [archivo, setArchivo] = useState('model.bpmn');
   const [pestana, setPestana] = useState<(typeof PESTANAS)[number]>('Propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
@@ -66,27 +80,25 @@ function App(): React.JSX.Element {
       });
   }, []);
 
-  async function abrirArchivo(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    if (file === undefined || modelador === null) return;
-    // El nombre solo cambia si el archivo se pudo abrir. Si no, el lienzo se queda con el
-    // diagrama anterior, y renombrarlo haría que la barra dijera un archivo y el lienzo
-    // mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre nuevo—.
-    if (await modelador.abrir(await file.text())) setArchivo(file.name);
-    // Sin esto, volver a elegir el mismo archivo no dispara `change`.
-    input.value = '';
+  async function abrir(): Promise<void> {
+    if (modelador === null) return;
+    // Un id nuevo garantiza que `BrowserStore.getProcess` no tenga nada en memoria bajo esa
+    // clave y abra el selector de archivo; el id real es irrelevante en esta modalidad.
+    const id = crypto.randomUUID();
+    const datos = await store.getProcess(id);
+    // El proceso activo y el nombre solo cambian si el archivo se pudo abrir. Si no, el lienzo
+    // se queda con el diagrama anterior, y renombrarlo haría que la barra dijera un archivo y
+    // el lienzo mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre
+    // nuevo—.
+    if (await modelador.abrir(datos.xml)) {
+      setProcesoId(id);
+      setArchivo(datos.name);
+    }
   }
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
-    const url = URL.createObjectURL(
-      new Blob([await modelador.exportar()], { type: 'application/xml' }),
-    );
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = archivo;
-    a.click();
-    URL.revokeObjectURL(url);
+    await store.putProcess(procesoId, await modelador.exportar());
   }
 
   return (
@@ -107,15 +119,9 @@ function App(): React.JSX.Element {
             </button>
           ))}
         </nav>
-        <label className="boton">
+        <button type="button" className="boton" onClick={() => void abrir()}>
           Abrir .bpmn
-          <input
-            type="file"
-            accept=".bpmn,.xml"
-            hidden
-            onChange={(e) => void abrirArchivo(e.currentTarget)}
-          />
-        </label>
+        </button>
         <button type="button" className="boton primario" onClick={() => void exportar()}>
           Exportar .bpmn
         </button>
