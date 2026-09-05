@@ -477,7 +477,11 @@ export function runReplication(
         }));
     for (let index = 0; index < assignments.length; index++) {
       const assignment = assignments[index]!;
-      const startedAt = activity.startedAt;
+      // Una concesión que cae en tiempo cerrado fija `started` en la siguiente apertura, que
+      // puede quedar **después** del corte de la corrida. La fila se recorta a `observedUntil`
+      // para que nunca informe un arranque posterior al fin de la observación; sin calendarios
+      // la concesión ya es el arranque y el recorte no toca nada (R-DEG-2).
+      const startedAt = activity.startedAt === null ? null : Math.min(activity.startedAt, observedUntil);
       const endedAt = status === 'completed' ? observedUntil : null;
       const calendar = activity.calendar;
       // R-CAL-6: durante el cierre la unidad sigue reservada pero no acumula ocupación ni costo.
