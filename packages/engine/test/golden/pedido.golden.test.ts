@@ -11,7 +11,7 @@ describe('golden determinista de examples/pedido (LILA-030)', () => {
   beforeAll(async () => {
     seed42 = await renderPedidoGolden(42);
     seed43 = await renderPedidoGolden(43);
-  });
+  }, 60_000); // ponytail: dos renders de 30 réplicas; con la máquina cargada superaban el hookTimeout de 10 s
 
   test('seed 42 coincide byte a byte con el JSON versionado', () => {
     const expected = readFileSync(PEDIDO_GOLDEN_PATH, 'utf8');
