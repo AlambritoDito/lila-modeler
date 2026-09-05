@@ -1,11 +1,17 @@
 /**
  * Worker de simulación (LILA-059). Importa solo `@lila/engine` (que a su vez solo re-exporta
  * `core/`, sin bpmn-moddle/zod/React — ver packages/engine/test/worker-bundle.test.ts) y ejecuta
- * `simulate` fuera del hilo principal: progreso, cancelación y muestreo del log.
+ * `simulate` fuera del hilo principal: progreso y muestreo del log.
  *
- * `handleMessage` es la parte pura y testeable (sin `self.postMessage` real); el bloque final la
- * conecta al Worker de verdad. Así el test de igualdad byte a byte y el de rendimiento (10 000 ×
- * 30 casos) corren en Node llamando directo a la función, sin necesitar un Web Worker real.
+ * `handleMessage` es la parte pura y testeable (sin estado de módulo, sin `self.postMessage`
+ * real); el bloque final la conecta al Worker de verdad. Así el test de igualdad byte a byte y el
+ * de rendimiento (10 000 × 30 casos) corren en Node llamando directo a la función, sin necesitar
+ * un Web Worker real.
+ *
+ * Cancelar **no** es un mensaje: `simulate` es síncrono, así que mientras corre el worker no
+ * vacía su cola de mensajes y un `postMessage({ type: 'cancel' })` no se leería hasta que la
+ * corrida hubiese terminado sola. La cancelación la hace el cliente matando el worker
+ * (`simulationClient.ts`), que además libera la CPU al instante.
  */
 import {
   simulate,
@@ -29,11 +35,7 @@ export interface RunRequest {
   logSampleLimit?: number | undefined;
 }
 
-export interface CancelRequest {
-  type: 'cancel';
-}
-
-export type WorkerRequest = RunRequest | CancelRequest;
+export type WorkerRequest = RunRequest;
 
 export interface ProgressResponse {
   type: 'progress';
@@ -59,30 +61,27 @@ type Post = (message: WorkerResponse) => void;
 /** No más de ~10 mensajes de progreso por segundo de reloj real hacia el hilo principal. */
 const PROGRESS_THROTTLE_MS = 100;
 
-let activeController: AbortController | undefined;
-
 function withSeed(scenario: SimScenario, seed: number | undefined): SimScenario {
   if (seed === undefined) return scenario;
   return { ...scenario, run: { ...scenario.run, seed } };
 }
 
-function runSimulation(post: Post, request: RunRequest): void {
-  const controller = new AbortController();
-  activeController = controller;
-  const limit = request.logSampleLimit ?? DEFAULT_LOG_SAMPLE_LIMIT;
+/** Función pura: sin estado de módulo, sin `self`, sin `postMessage`. Es lo que testean las pruebas. */
+export function handleMessage(post: Post, message: WorkerRequest): void {
+  const limit = message.logSampleLimit ?? DEFAULT_LOG_SAMPLE_LIMIT;
   const logSample: EventLogRow[] = [];
   let lastProgressAt = -Infinity;
   let lastCompletedReplications = -1;
 
   try {
-    const result = simulate(request.ir, withSeed(request.scenario, request.seed), {
-      signal: controller.signal,
+    const result = simulate(message.ir, withSeed(message.scenario, message.seed), {
       onEvent: (row) => {
         // Solo la primera replicación se retiene en memoria (docs/RESULTS_FORMAT.md §7).
         if (row.replication === 0 && logSample.length < limit) logSample.push(row);
       },
       onProgress: (progress) => {
         const now = Date.now();
+        // Los límites de replicación nunca se tiran: así el 100 % final siempre llega.
         const replicationBoundary = progress.completedReplications !== lastCompletedReplications;
         if (!replicationBoundary && now - lastProgressAt < PROGRESS_THROTTLE_MS) return;
         lastProgressAt = now;
@@ -93,18 +92,7 @@ function runSimulation(post: Post, request: RunRequest): void {
     post({ type: 'done', result, logSample });
   } catch (error) {
     post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
-  } finally {
-    if (activeController === controller) activeController = undefined;
   }
-}
-
-/** Función pura: sin `self`, sin `postMessage`. Es lo que testean los tests de aceptación. */
-export function handleMessage(post: Post, message: WorkerRequest): void {
-  if (message.type === 'cancel') {
-    activeController?.abort();
-    return;
-  }
-  runSimulation(post, message);
 }
 
 // ponytail: wiring real del Web Worker; nada de lo de arriba depende de esto.
