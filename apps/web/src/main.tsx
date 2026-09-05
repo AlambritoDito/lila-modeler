@@ -7,7 +7,7 @@
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066 y sacarlos ahora solo
  * movería el problema de sitio.
  */
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { ScenarioSchema, resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
@@ -104,6 +104,18 @@ function App(): React.JSX.Element {
   const [corrida, setCorrida] = useState<Corrida | null>(null);
   const [verCuellos, setVerCuellos] = useState(true);
   const [sim, setSim] = useState<EstadoSim>({ tipo: 'inactivo' });
+  // Corrida en vuelo. `runInWorker` traduce `abort()` a `worker.terminate()` (LILA-059), que es
+  // la única forma real de pararla: `simulate` es síncrono y el worker no lee su cola mientras
+  // corre. Sin esto, cambiar de escenario a mitad de una corrida deja el worker vivo y su
+  // resultado llega tarde y pinta el overlay del escenario **anterior** sobre el selector nuevo
+  // — justo lo contrario de la aceptación de LILA-064, y verificado en navegador.
+  const enVuelo = useRef<AbortController | null>(null);
+
+  /** Mata la corrida en vuelo, si la hay. Idempotente. */
+  function cancelarCorrida(): void {
+    enVuelo.current?.abort();
+    enVuelo.current = null;
+  }
 
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
   // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
@@ -143,6 +155,9 @@ function App(): React.JSX.Element {
     // el lienzo mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre
     // nuevo—.
     if (await modelador.abrir(datos.xml)) {
+      // La corrida en vuelo es del proceso anterior: su resultado no puede pintarse sobre el
+      // diagrama nuevo (ni aunque los ids coincidan por casualidad).
+      cancelarCorrida();
       setProcesoId(id);
       setArchivo(datos.name);
       // El resultado anterior es de otro proceso: dejarlo puesto pintaría cuellos de botella que
@@ -160,11 +175,15 @@ function App(): React.JSX.Element {
    */
   async function simular(): Promise<void> {
     if (modelador === null) return;
+    cancelarCorrida();
+    const control = new AbortController();
+    enVuelo.current = control;
     setSim({ progreso: null, tipo: 'simulando' });
     try {
       const scenario = cargarEscenario(escenarioId);
       const { ir } = await parseBpmn(await modelador.exportar());
       const { result } = await runInWorker(ir, scenario, {
+        signal: control.signal,
         onProgress: (progreso) => {
           setSim({ progreso, tipo: 'simulando' });
         },
@@ -172,7 +191,13 @@ function App(): React.JSX.Element {
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
       setSim({ tipo: 'inactivo' });
     } catch (e: unknown) {
+      // Cancelar no es un error que enseñar: quien canceló ya dejó la UI como quería. Se
+      // comprueba la señal y no el nombre de la excepción, porque `parseBpmn` puede fallar por
+      // su cuenta después de que se haya cancelado.
+      if (control.signal.aborted) return;
       setSim({ mensaje: e instanceof Error ? e.message : String(e), tipo: 'error' });
+    } finally {
+      if (enVuelo.current === control) enVuelo.current = null;
     }
   }
 
@@ -240,7 +265,10 @@ function App(): React.JSX.Element {
                 onChange={(e) => {
                   setEscenarioId(e.target.value);
                   // Cambiar de escenario invalida el resultado anterior: el overlay se limpia
-                  // aquí y se vuelve a pintar cuando termine la corrida nueva.
+                  // aquí y se vuelve a pintar cuando termine la corrida nueva. La corrida en
+                  // vuelo es del escenario viejo, así que se mata: si no, terminaría después y
+                  // pintaría sus cuellos de botella bajo el nombre del escenario nuevo.
+                  cancelarCorrida();
                   setCorrida(null);
                   setSim({ tipo: 'inactivo' });
                 }}
