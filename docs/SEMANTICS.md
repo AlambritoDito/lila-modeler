@@ -156,6 +156,36 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   (`E-FLUJO-COLGANTE`), id duplicado (`E-ID-DUPLICADO`), gateway sin salidas o sin entradas
   (`E-GATEWAY-SIN-ARISTAS`), nodo inalcanzable desde algún `start` (`E-INALCANZABLE`), proceso sin
   `start` (`E-SIN-START`), proceso sin `end` ni `terminate` (`E-SIN-END`). *(prueba: LILA-021)*
+- **R-NOSOP-6 — Lo que el lector XML descarta también es error.** `bpmn-moddle` no lanza cuando
+  no puede leer una parte del archivo: la reporta como *warning* de `fromXML` y sigue. `parseBpmn`
+  conserva esos avisos tal cual en `ir.source.warnings` (texto de moddle en una línea, más el id
+  afectado y la propiedad rota cuando moddle los da) y `validate(ir)` los clasifica en dos, sin
+  descartar ninguno:
+
+  - **Error `E-PARSE-INCOMPLETO`** cuando el aviso implica que se perdió algo del grafo: un
+    elemento entero que moddle tiró por `id` ilegal o duplicado (`unparsable content … nested
+    error: illegal ID <X>` / `duplicate ID <X>`), o una referencia sin resolver sobre una
+    propiedad de topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`,
+    `bpmn:flowNodeRef`, `bpmn:default`). Texto exacto:
+
+    ```
+    {id}: el lector XML descartó contenido del modelo, que quedó incompleto: {aviso}.
+    ```
+
+  - **Aviso `W-PARSE`** en todo lo demás: referencias sin resolver a construcciones que el perfil
+    de la sección 2 ya ignora (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`) y
+    tipos que moddle no conoce (`unparsable content … unknown type <bpmn:LoopCounter>`, típico de
+    los exports de Bizagi). No se pierde ningún nodo ni ningún flujo. Texto exacto:
+
+    ```
+    {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.
+    ```
+
+  `{aviso}` es el mensaje de bpmn-moddle literal, aplanado a una sola línea. `{id}` es el id del
+  elemento que moddle señala (o el que aparece dentro del mensaje) y, si no hay ninguno, el id del
+  proceso. Un modelo que perdió elementos al cargarse nunca valida en verde: `E-PARSE-INCOMPLETO`
+  aborta y `lila validate` sale con 1. Los ids no NCName **no** entran aquí: `sanitizeIds`
+  (R-DURA-4, LILA-017/020) los reescribe antes de llegar a moddle. *(prueba: LILA-185)*
 
 ---
 
@@ -647,6 +677,7 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | Código | Cuándo |
 |---|---|
 | `E-NOSOP` | elemento fuera del perfil (§3, texto exacto en R-NOSOP-1/2) |
+| `E-PARSE-INCOMPLETO` | el lector XML descartó parte del modelo (§3, R-NOSOP-6) |
 | `E-FLUJO-COLGANTE` | sequence flow sin origen o sin destino |
 | `E-ID-DUPLICADO` | dos elementos con el mismo `id` |
 | `E-GATEWAY-SIN-ARISTAS` | gateway sin entradas o sin salidas |
@@ -675,7 +706,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`.
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-PARSE`.
 
 Los códigos de este catálogo son los que emite el código de hoy. `E-PROB-EN-NODO`,
 `E-PROB-RANGO`, `E-CLAVE-DESCONOCIDA`, `E-SUBPROC-PARAMETRO`, `E-TIMER-RECURSO` y `W-SIN-SEED`
@@ -701,6 +732,7 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-PERF-5 | varios starts | LILA-026 |
 | R-NOSOP-1 … R-NOSOP-3 | texto exacto y catálogo de no soportados | LILA-021, LILA-163 |
 | R-NOSOP-4, R-NOSOP-5 | no degradar; errores estructurales | LILA-021 |
+| R-NOSOP-6 | avisos de bpmn-moddle: `E-PARSE-INCOMPLETO` / `W-PARSE` | LILA-185 |
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |

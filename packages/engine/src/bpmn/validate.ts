@@ -101,15 +101,20 @@ function unsupportedProblem(el: UnsupportedElement): IrProblem {
   };
 }
 
-/** `unparsable content <X> ... illegal ID <Y>`: moddle tiró el elemento entero, id incluido. */
-const ILLEGAL_ID_MESSAGE = /illegal ID/;
+/**
+ * `unparsable content <X> ... nested error: illegal ID <Y>` / `... duplicate ID <Y>`: moddle-xml
+ * tiró el elemento entero (y todo su contenido) al leer el XML. Un `unknown type <...>` también
+ * es "unparsable content", pero lo que se pierde ahí es un elemento que el perfil no conoce
+ * (`bpmn:LoopCounter` de Bizagi, extensiones ajenas): no era ni iba a ser un nodo del IR.
+ */
+const DISCARDED_ID_MESSAGE = /(?:illegal|duplicate) ID </;
 
 /**
  * Propiedades de moddle-xml que son topología del grafo de tokens: una referencia rota ahí
  * significa que un nodo o un flujo desapareció del IR sin dejar rastro. Las demás que
- * bpmn-moddle reporta (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`, …)
- * cuelgan de construcciones que el perfil v1 ya ignora (mensajes, data stores, categorías): una
- * referencia rota ahí no descarta nada del grafo.
+ * bpmn-moddle reporta en los exports reales (`bpmn:messageRef`, `bpmn:dataStoreRef`,
+ * `bpmn:categoryValueRef`, …) cuelgan de construcciones que el perfil v1 ya ignora (mensajes,
+ * data stores, categorías): una referencia rota ahí no descarta nada del grafo.
  */
 const GRAPH_REFERENCE_PROPERTIES = new Set([
   'bpmn:sourceRef',
@@ -120,32 +125,32 @@ const GRAPH_REFERENCE_PROPERTIES = new Set([
 ]);
 
 /**
- * `docs/SEMANTICS.md` R-NOSOP-6: un aviso de bpmn-moddle implica un elemento descartado del IR
- * en dos casos — un elemento completo que moddle tiró por id ilegal ("unparsable content ...
- * illegal ID"), o una referencia rota sobre una propiedad de topología del grafo. Todo lo demás
- * (mensajes, data stores, categorías, extensiones ajenas que moddle no reconoce) es inofensivo:
- * no era, ni iba a ser, un nodo o un flujo del IR.
+ * `docs/SEMANTICS.md` R-NOSOP-6: un aviso de bpmn-moddle implica pérdida en el grafo en dos
+ * casos — un elemento completo que moddle tiró por id ilegal o duplicado, o una referencia rota
+ * sobre una propiedad de topología. Todo lo demás es inofensivo y se queda en `W-PARSE`.
  */
 function impliesDiscardedElement(w: SourceWarning): boolean {
-  if (ILLEGAL_ID_MESSAGE.test(w.message)) return true;
+  if (DISCARDED_ID_MESSAGE.test(w.message)) return true;
   return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property);
 }
 
+/** Texto normativo de R-NOSOP-6; `w.message` es el aviso de moddle, ya aplanado a una línea. */
 function parseWarningProblem(w: SourceWarning, fallbackId: string): IrProblem {
   const id = w.elementId ?? fallbackId;
   return {
     code: 'E-PARSE-INCOMPLETO',
     id,
-    message: `${id}: bpmn-moddle descartó el elemento al leer el XML (${w.message}).`,
+    message: `${id}: el lector XML descartó contenido del modelo, que quedó incompleto: ${w.message}.`,
   };
 }
 
+/** Texto normativo de R-NOSOP-6 para el aviso inofensivo. */
 function parseWarningNotice(w: SourceWarning, fallbackId: string): ValidationWarning {
   const id = w.elementId ?? fallbackId;
   return {
     code: 'W-PARSE',
     id,
-    message: `${id}: bpmn-moddle emitió un aviso al leer el XML (${w.message}).`,
+    message: `${id}: aviso del lector XML, sin pérdida de nodos ni flujos: ${w.message}.`,
   };
 }
 

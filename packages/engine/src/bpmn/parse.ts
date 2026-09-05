@@ -423,19 +423,23 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
   return (el.flowElements ?? []).length > 0;
 }
 
-/** "illegal ID <9Task_bad>" dentro de un mensaje de "unparsable content"; ver `toSourceWarning`. */
-const ILLEGAL_ID = /illegal ID <([^>]+)>/;
+/**
+ * Id rescatado del texto de un "unparsable content": moddle-xml tira el elemento entero cuando su
+ * `id` no pasa su gramática de QName ("illegal ID <9Task_bad>") o cuando ya lo había visto
+ * ("duplicate ID <Task_1>"). En los dos casos el id solo sobrevive dentro del mensaje.
+ */
+const DISCARDED_ID = /(?:illegal|duplicate) ID <([^>]+)>/;
 
 /**
  * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
  * una sola línea y rescata el id afectado de donde lo haya. Para una referencia rota
  * (`unresolved reference`), moddle da `element` (quien declara la referencia) y `property`
  * (la propiedad rota). Para un elemento descartado por completo (`unparsable content ... illegal
- * ID <X>`) no hay `element` — el id solo aparece dentro del texto del mensaje.
+ * ID <X>` o `... duplicate ID <X>`) no hay `element` — el id solo aparece dentro del mensaje.
  */
 function toSourceWarning(w: ModdleWarning): SourceWarning {
   const message = w.message.replace(/\s+/g, ' ').trim();
-  const elementId = w.element?.id ?? ILLEGAL_ID.exec(message)?.[1];
+  const elementId = w.element?.id ?? DISCARDED_ID.exec(message)?.[1];
   return {
     message,
     ...(elementId === undefined ? {} : { elementId }),
