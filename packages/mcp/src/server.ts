@@ -419,6 +419,19 @@ async function validatePatchedScenario(
   return { ok: true, scenario, notes };
 }
 
+/**
+ * `loadResolvedScenario` prefija sus errores con la ruta del archivo. En el modo (b) esa ruta es
+ * la de `saveTo`: un archivo que todavía no existe y que, si el escenario no valida, no se va a
+ * escribir. Citarlo manda al agente a abrir una ruta fantasma — el mismo problema que el escenario
+ * inline de LILA-054. Se le quita el prefijo y se alinea el texto con el del modo (a).
+ */
+function withoutPhantomFile(error: unknown, phantom: string): string {
+  const raw = message(error).replaceAll('\n', ' ');
+  return raw.startsWith(`${phantom}: `)
+    ? raw.slice(phantom.length + 2).replace('escenario inválido:', 'escenario inválido tras el patch:')
+    : raw;
+}
+
 interface PatchScenarioInput {
   scenario: string;
   patch: JsonPatchOp[];
@@ -492,7 +505,7 @@ async function patchScenario({
   try {
     resolvedCandidate = loadResolvedScenario(saveToPath, (file) => (file === saveToPath ? candidate : readJsonFile(file)));
   } catch (error) {
-    return errorResult(`patch_scenario: ${message(error)}`);
+    return errorResult(`patch_scenario: ${withoutPhantomFile(error, saveToPath)}`);
   }
 
   const outcome = await validatePatchedScenario(resolvedCandidate);
