@@ -233,6 +233,27 @@ export function escribir<T>(raiz: T, ruta: Ruta, valor: unknown): T {
   return copia as T;
 }
 
+/**
+ * Lo que hay que escribir en el delta para que el **resuelto** sea exactamente `valor` (§ 6).
+ *
+ * `deepMerge` fusiona objeto con objeto, así que escribir `{type:"normal",…}` encima de un
+ * `{type:"triangular",min,mode,max}` heredado deja `min`/`mode`/`max` pegados a la `normal`: el
+ * archivo deja de pasar el esquema y el panel no ofrece control para borrarlos, porque el
+ * formulario de la variante nueva no los dibuja. Las claves que el padre define y el valor nuevo
+ * no trae se borran con `null`, que es como § 6 dice "borra".
+ *
+ * ponytail: un solo nivel. Es donde se cambia de variante (las distribuciones, la `capacity` de
+ * LILA-164) y son objetos planos; un `null` en la clave de arriba se lleva el subárbol entero.
+ */
+export function conBorrados(valor: unknown, heredado: unknown): unknown {
+  if (!esObjeto(valor) || !esObjeto(heredado)) return valor;
+  const borrados: Record<string, unknown> = {};
+  for (const clave of Object.keys(heredado)) {
+    if (!(clave in valor)) borrados[clave] = null;
+  }
+  return { ...borrados, ...valor };
+}
+
 /** Copia `raiz` sin la clave de `ruta`; un índice de array se quita con `splice`, sin dejar hueco. */
 export function borrar<T>(raiz: T, ruta: Ruta): T {
   if (ruta.length === 0) return undefined as T;
@@ -305,9 +326,13 @@ export function duplicarEscenario(
 ): { archivo: string; escenario: Record<string, unknown> } {
   const base = archivo.replace(/\.scenario\.json$/, '');
   const nombre = typeof escenario['name'] === 'string' ? escenario['name'] : base;
+  // § 6: `extends` se resuelve **relativo al archivo del hijo**, y la copia vive en el mismo
+  // directorio que el original. Con la ruta entera dentro, `escenarios/x` acaba buscando a su
+  // padre en `escenarios/escenarios/x` y la cadena se rompe en cuanto hay carpetas.
+  const vecino = archivo.slice(archivo.lastIndexOf('/') + 1);
   return {
     archivo: `${base} (copia).scenario.json`,
-    escenario: { version: 1, name: `${nombre} (copia)`, extends: archivo },
+    escenario: { version: 1, name: `${nombre} (copia)`, extends: vecino },
   };
 }
 
@@ -411,14 +436,28 @@ function Propiedades({
   );
 }
 
-/** Añadir una clave a un registro (`calendars`, `resources`, `elements`). */
-function AnadirClave({ onAnadir }: { onAnadir: (clave: string) => void }): React.JSX.Element {
+/**
+ * Añadir una clave a un registro (`calendars`, `resources`, `elements`).
+ *
+ * Una clave repetida se rechaza en vez de escribirse: `valorVacio` produce el objeto **mínimo**
+ * del esquema, así que escribirlo encima del recurso que ya existe se llevaba por delante su
+ * nombre, su coste y su calendario sin decir nada.
+ */
+function AnadirClave({
+  onAnadir,
+  existe,
+}: {
+  onAnadir: (clave: string) => void;
+  existe: (clave: string) => boolean;
+}): React.JSX.Element {
   const [clave, setClave] = useState('');
+  const repetida = clave.trim() !== '' && existe(clave.trim());
   return (
     <div className="anadir">
       <input
         type="text"
         aria-label="clave nueva"
+        aria-invalid={repetida ? true : undefined}
         value={clave}
         onChange={(e) => {
           setClave(e.target.value);
@@ -428,12 +467,19 @@ function AnadirClave({ onAnadir }: { onAnadir: (clave: string) => void }): React
         type="button"
         className="boton"
         onClick={() => {
-          if (clave.trim() !== '') onAnadir(clave.trim());
+          const limpia = clave.trim();
+          if (limpia === '' || existe(limpia)) return;
+          onAnadir(limpia);
           setClave('');
         }}
       >
         Añadir
       </button>
+      {repetida && (
+        <p role="alert" className="error">
+          {clave.trim()} ya existe; edítalo abajo o usa otro id.
+        </p>
+      )}
     </div>
   );
 }
@@ -561,6 +607,7 @@ export function Campo({
           </fieldset>
         ))}
         <AnadirClave
+          existe={(clave) => claves.includes(clave)}
           onAnadir={(clave) => {
             ctx.editar([...ruta, clave], valorVacio(entrada));
           }}
@@ -720,16 +767,21 @@ export function ScenarioPanel({
     [escenarios],
   );
 
-  /** Lo que se enseña: el escenario con `extends` ya aplicado (§ 6). */
-  const resuelto = useMemo<Record<string, unknown>>(() => {
+  /**
+   * Lo que se enseña: el escenario con `extends` ya aplicado (§ 6), y el fallo de la cadena si
+   * la hay. Con la cadena rota (un padre que no existe, un ciclo) se sigue editando el archivo
+   * tal cual —dejar el panel en blanco sería la única forma de no poder arreglarlo— pero el
+   * fallo **se dice**: todo lo que la cabecera marca sobre un delta sin resolver (falta `run`,
+   * falta `model`, elementos sin parámetros) es consecuencia de él y no de lo que se tecleó.
+   */
+  const herencia = useMemo<{ resuelto: Record<string, unknown>; error: string | null }>(() => {
     try {
-      return resolveExtends(archivo, lector);
-    } catch {
-      // Cadena rota (padre que no existe, ciclo): se sigue editando el archivo tal cual, y el
-      // aviso sale abajo. Dejar el panel en blanco sería la única forma de no poder arreglarlo.
-      return delta;
+      return { resuelto: resolveExtends(archivo, lector), error: null };
+    } catch (e) {
+      return { resuelto: delta, error: e instanceof Error ? e.message : String(e) };
     }
   }, [archivo, lector, delta]);
+  const resuelto = herencia.resuelto;
 
   /** El padre resuelto, para saber si borrar un campo es `null` (§ 6) o quitarlo del hijo. */
   const padre = useMemo<Record<string, unknown> | null>(() => {
@@ -742,7 +794,14 @@ export function ScenarioPanel({
     }
   }, [archivo, delta, lector]);
 
-  const problemas = useMemo(() => problemasEscenario(resuelto, ir), [resuelto, ir]);
+  const problemas = useMemo(() => {
+    const propios = problemasEscenario(resuelto, ir);
+    if (herencia.error === null) return propios;
+    return [
+      { ruta: 'extends', mensaje: herencia.error, severidad: 'error' as const },
+      ...propios,
+    ];
+  }, [resuelto, ir, herencia.error]);
   const indice = useMemo(() => porRuta(problemas), [problemas]);
   const errores = problemas.filter((p) => p.severidad === 'error').length;
   const avisos = problemas.length - errores;
@@ -758,7 +817,9 @@ export function ScenarioPanel({
     editar(ruta, valor) {
       const corte = baseDeArray(ruta);
       if (corte === -1) {
-        onCambio(archivo, escribir(delta, ruta, valor));
+        // § 6: lo que el padre define y el valor nuevo no trae hay que borrarlo con `null`, o el
+        // merge profundo lo deja pegado (cambiar de variante de distribución, sobre todo).
+        onCambio(archivo, escribir(delta, ruta, conBorrados(valor, leer(padre, ruta))));
         return;
       }
       const base = ruta.slice(0, corte);
@@ -781,6 +842,20 @@ export function ScenarioPanel({
       onCambio(archivo, borrar(delta, ruta));
     },
   };
+
+  /**
+   * El id con el que se edita: el del **IR**, que es la clave del escenario (R3). bpmn-js
+   * selecciona con el id que traía el archivo, y para un id no-NCName —los que emite Bizagi— el
+   * IR lo saneó (`source.originalIds`, el mismo mapa que usa el overlay de LILA-064). Sin
+   * traducirlo, el panel escribía `elements["1Task"]` y el lint lo rechazaba con "no existe en
+   * el modelo", sin ninguna forma de llegar al id bueno desde el lienzo.
+   */
+  const idSeleccionado = useMemo<string | null>(() => {
+    if (seleccion === null || ir === null) return seleccion;
+    if (ir.nodes[seleccion] !== undefined || ir.flows[seleccion] !== undefined) return seleccion;
+    const enIr = Object.entries(ir.source.originalIds).find(([, original]) => original === seleccion);
+    return enIr?.[0] ?? seleccion;
+  }, [seleccion, ir]);
 
   const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
   const heredaDe = typeof delta['extends'] === 'string' ? delta['extends'] : null;
@@ -813,6 +888,7 @@ export function ScenarioPanel({
           Hereda de {heredaDe}: se muestran los valores resueltos y se edita solo el delta.
         </p>
       )}
+      <Problemas ruta={['extends']} ctx={ctx} />
 
       <details open>
         <summary>Corrida</summary>
@@ -844,7 +920,7 @@ export function ScenarioPanel({
 
       <details open>
         <summary>Elemento seleccionado</summary>
-        {seleccion === null ? (
+        {idSeleccionado === null ? (
           <ul className="ids">
             {Object.keys(elementos).map((id) => (
               <li key={id}>
@@ -862,13 +938,13 @@ export function ScenarioPanel({
           </ul>
         ) : (
           <>
-            <p className="vacio">{seleccion}</p>
+            <p className="vacio">{idSeleccionado}</p>
             <Propiedades
               esquema={esquemaEntrada(esquemaDe('elements'))}
-              ruta={['elements', seleccion]}
+              ruta={['elements', idSeleccionado]}
               ctx={ctx}
             />
-            <Problemas ruta={['elements', seleccion]} ctx={ctx} />
+            <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
           </>
         )}
       </details>
