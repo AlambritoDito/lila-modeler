@@ -3,8 +3,12 @@
   "level": 1,
   "title": "Level 1 - Process validation: Validating the Emergency attendance process",
   "values": {
-    "maxArrivalCount": 1000,
-    "triageProbabilities": { "green": 0.2, "yellow": 0.3, "red": 0.5 },
+    "configuration": {
+      "source": "https://help.bizagi.com/platform/en/level_1_example.htm",
+      "nota": "LILA-186/187 QA: los dos unicos parametros que el nivel 1 configura, y los unicos numeros de este archivo que la pagina da en prosa y no en una captura. 'Max. arrival count' 1000 en el Start Event y los porcentajes del gateway 'Triage type' (Green 20 % / Yellow 30 % / Red 50 %); el nivel 1 no habilita ningun campo de tiempo, de ahi que scenario.json declare triggerCount a solas (R-ARR-1). El 1000 lo corrobora la propia tabla de la corrida: 483 + 315 + 202 = 1000 (processvalidation42.png), y el reparto corrobora las probabilidades: el 483 solo puede ser la rama del 50 %.",
+      "maxArrivalCount": 1000,
+      "triageProbabilities": { "green": 0.2, "yellow": 0.3, "red": 0.5 }
+    },
     "correctedRun": {
       "nota": "LILA-187: las etiquetas green/yellow/red de esta corrida estaban invertidas (LILA-010). La frase publicada solo da la suma '(483+315+202)', pero la tabla fila por fila SI publica la asignacion -- https://help.bizagi.com/platform/en/processvalidation42.png: 'Red Triage end 483 | Yellow Triage end 315 | Green Triage end 202'. Con Red 50% / Yellow 30% / Green 20%, el 483 solo puede ser la rama del 50 % (Red). Ya corregido.",
       "quote": "The number of tokens created (1000) is equal to the sum of instances completed (483+315+202).",

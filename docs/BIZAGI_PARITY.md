@@ -26,11 +26,11 @@ escenario publicado.
 | Distribuciones: las 13 de BPSim 2.0 + constante + empírica | ✓ (subconjunto no documentado) | ✓ todas | M1 | Implementado (LILA-025) |
 | Escenario: nombre, descripción, autor, versión, inicio, duración, unidad de tiempo, moneda, replicaciones, semilla | ✓ | ✓ (+ `warmup`, `extends`) | M1 | Implementado (LILA-013, LILA-014) |
 | Parada: duración o max arrival count, lo primero | ✓ | ✓ | M1 | Implementado (LILA-026); paridad verificada (la corrida oficial drena sus 2017 casos, ver D4) |
-| Recursos: tipo rol/equipo, disponibilidad, costo fijo por token, costo por hora | ✓ | ✓ | M2 | Implementado (LILA-033); paridad verificada en el nivel 3 ([test](../packages/engine/test/bizagi-parity.test.ts)): utilización de los seis recursos y costo de cuatro de ellos; los dos vehículos no cuadran por D8 |
+| Recursos: tipo rol/equipo, disponibilidad, costo fijo por token, costo por hora | ✓ | ✓ | M2 | Implementado (LILA-033); paridad verificada en el nivel 3 ([test](../packages/engine/test/bizagi-parity.test.ts)): utilización **y** costo de los seis recursos, en las dos corridas publicadas (3 y 2 enfermeras), todos dentro del ±5 % desde que D8 quedó resuelta |
 | Asignación a tarea: uno o varios recursos, cantidad, AND / OR | ✓ | ✓ | M2 | Implementado (LILA-034, LILA-035) |
-| Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (8057,6 contra 8063 publicados, −0,07 %) |
+| Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (8057,6 contra 8063, −0,07 %). El 8063 no lo publica ninguna tabla: se **deriva** de los `fixedCost` por tarea del enunciado y de los conteos de instancias publicados (2·2017 + 1·2017 + 1·1006 + 1·1006), y el test lo declara así |
 | Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Implementado (LILA-036); nombres de columna revisados contra `RESULTS_FORMAT.md`. La paridad numérica que hay probada es la del **proceso** y la de los recursos del nivel 3 (ver D6 para el caso saturado); las columnas por elemento no están ancladas fila por fila |
-| Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (nurse 69,65 % contra 69,75 % publicado) |
+| Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3, las seis filas de la tabla publicada (p. ej. nurse 69,65 % contra 69,75 %) |
 | Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041) **con salvedad**: falta capacidad por turno dentro de un mismo pool (LILA-164), sin la cual el nivel 4 no cuadra; ver D7 |
 | What-if: varios escenarios, lado a lado, diferencias resaltadas | ✓ | ✓ (`lila compare`) | M3 | Implementado (LILA-038, LILA-047) |
 | Replicaciones (recomiendan 30) | ✓ solo en what-if | ✓ siempre, con IC 95 % | M2 | Implementado (LILA-027) |
@@ -87,26 +87,39 @@ replicaciones son una técnica de medición del test, no un parámetro de los ej
 | 3 | ciclo mín 16 min (3 enf.) | 16 min (0 %) | — |
 | 3 | ciclo máx 35 min (3 enf.) | 33,1 min (−5,3 %) | D5 |
 | 3 | ciclo medio 25 min 15 s (3 enf.) | 25 min 4 s (−0,74 %) | — |
-| 3 | utilización nurse 69,75 % (3 enf.) | 69,65 % (−0,14 %) | — |
-| 3 | utilización nurse 99,85 % (2 enf.) | 99,72 % (−0,13 %) | — |
+| 3 | utilización `Call center agent` 39,91 % (3 enf.) | 39,91 % (−0,01 %) | — |
+| 3 | utilización `Nurse` 69,75 % (3 enf.) | 69,65 % (−0,14 %) | — |
+| 3 | utilización `Ambulance` 49,76 % (3 enf.) | 49,63 % (−0,27 %) | — |
+| 3 | utilización `Quick attention vehicle` 21,40 % (3 enf.) | 20,95 % (−2,09 %) | — |
+| 3 | utilización `Basic ambulance` 19,44 % (3 enf.) | 20,21 % (+3,96 %) | — |
+| 3 | utilización `Receptionist` 19,91 % (3 enf.) | 19,85 % (−0,30 %) | — |
+| 3 | utilización `Call center agent` 38,09 % (2 enf.) | 38,09 % (+0,01 %) | — |
+| 3 | utilización `Nurse` 99,85 % (2 enf.) | 99,72 % (−0,13 %) | — |
+| 3 | utilización `Ambulance` 47,49 % (2 enf.) | 47,36 % (−0,27 %) | — |
+| 3 | utilización `Quick attention vehicle` 20,42 % (2 enf.) | 20,01 % (−2,03 %) | — |
+| 3 | utilización `Basic ambulance` 18,55 % (2 enf.) | 19,29 % (+4,01 %) | — |
+| 3 | utilización `Receptionist` 19,00 % (2 enf.) | 18,95 % (−0,29 %) | — |
 | 3 | ciclo mín 16 min (2 enf.) | 16,07 min (+0,42 %) | — |
 | 3 | ciclo máx 10 h 57 min (2 enf.) | 665,8 min (+1,34 %) | — |
 | 3 | ciclo medio 3 h 39 min 38 s (2 enf.) | 271,3 min (+23,5 %) | D6 |
-| 3 | costo fijo de actividades 8063 | 8057,6 (−0,07 %) | — |
+| 3 | costo fijo de actividades 8063 (derivado, no publicado) | 8057,6 (−0,07 %) | — |
 | 3 | costo `Call center agent` 6051 | 6051,0 (0 %) | — |
 | 3 | costo `Nurse` 15 115 | 15 101,5 (−0,09 %) | — |
 | 3 | costo `Ambulance` 30 314,13 | 30 232,8 (−0,27 %) | — |
 | 3 | costo `Receptionist` 3018 | 3009,9 (−0,27 %) | — |
 | 3 | costo `Quick attention vehicle` 11 139,86 | 10 907,9 (−2,08 %) | — |
 | 3 | costo `Basic ambulance` 9844,65 | 10 234,6 (+3,96 %) | — |
+| 3 | los seis costos, corrida de 2 enfermeras | los mismos valores y los mismos desvíos (el costo no depende de la capacidad) | — |
 | 4 | ciclo medio 25 min 26 s, con pools por turno | 84,4 min (+232 %) | D7 |
 | 4 | Arrive BA espera máx 15 min, con pools por turno | 13,3 min (−11,1 %) | D7 |
 | 4 | Arrive BA espera media 0,74 min, con pools por turno | 0,30 min (−59,1 %) | D7 |
 | 4 | ciclo medio 25 min 26 s, con **un pool por rol** | 25 min 4 s (−1,45 %) | prueba de D7 |
 | 4 | Arrive BA espera media 0,74 min, con **un pool por rol** | 0 (−100 %) | D7 (pide LILA-164) |
 
-Los niveles 1, 2 y 3 cuadran dentro del ±5 % salvo los dos residuos documentados (D5 y D6, ambos
-del nivel 3). El nivel 4 entero está pendiente de LILA-164.
+Los niveles 1, 2 y 3 cuadran dentro del ±5 % salvo **tres** residuos documentados: D2 (nivel 1,
+rama Yellow contra la corrida única de Bizagi) y D5 y D6 (nivel 3). El nivel 4 entero está
+pendiente de LILA-164. Las diferencias vivas hoy son, por tanto, **D2, D5, D6 y D7**; D1, D3, D4 y
+D8 quedaron resueltas en LILA-186/187.
 
 ### Causas
 

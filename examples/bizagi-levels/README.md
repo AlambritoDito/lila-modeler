@@ -93,8 +93,9 @@ réplica lo modela con tres pools —uno por turno, cada uno con su `calendar`�
 seleccionados con `selection: "or"`, y el efecto colateral está medido: el
 calendario efectivo de la tarea pasa a ser el del turno concedido (R-CAL-4), el
 trabajo se pausa al cerrar el turno y aparece una `offHoursWait` que en Bizagi
-es 0 (sus tres turnos cubren las 24 h). Es el único nivel que no cuadra dentro
-del ±5 %; el detalle está en `docs/BIZAGI_PARITY.md` § D7.
+es 0 (sus tres turnos cubren las 24 h). Es el único nivel que no cuadra **entero**
+dentro del ±5 % (los niveles 1 y 3 tienen además los residuos puntuales D2, D5 y
+D6); el detalle está en `docs/BIZAGI_PARITY.md` § D7.
 
 ## Cómo se verifica
 
@@ -104,4 +105,18 @@ del ±5 %; el detalle está en `docs/BIZAGI_PARITY.md` § D7.
   `SCENARIO_FORMAT.md` y la URL de `help.bizagi.com` en cada `expected.json`.
 - `packages/engine/test/bizagi-parity.test.ts`: simula estas cuatro carpetas
   **tal cual están committeadas** y compara cada número publicado con
-  tolerancia ±5 %. Los niveles 1–3 cuadran; el 4 no, por LILA-164.
+  tolerancia ±5 %. Cada fila lleva escrito de qué lado de la tolerancia está,
+  así que una que cambie de lado pone el test en rojo.
+- `packages/engine/test/bizagi-levels.qa.test.ts`: QA de LILA-186/187 — los
+  cuatro `model.bpmn` entran por `parseBpmn` sin nada fuera del perfil y con
+  ids NCName, los `scenario.json` validan contra el JSON Schema publicado (no
+  solo contra zod), el lint no dice nada salvo `W-ELEMENTO-SIN-PARAMETROS`,
+  los XOR suman 1 sin `W-XOR-NORMALIZADA` y ningún número de `expected.json`
+  se queda sin `quote`/`quotes` o `source`.
+
+Diferencias vivas hoy: **D2** (nivel 1, la rama Yellow contra la corrida única
+de Bizagi, −5,4 %), **D5** y **D6** (nivel 3: el máximo con 3 enfermeras y la
+media del caso saturado con 2) y **D7** (el nivel 4 entero, pendiente de
+LILA-164). Todo lo demás de los niveles 1–3 cuadra dentro del ±5 %. El detalle
+de cada una está en `docs/BIZAGI_PARITY.md` § Diferencias documentadas, que es
+la fuente de verdad de esta lista.

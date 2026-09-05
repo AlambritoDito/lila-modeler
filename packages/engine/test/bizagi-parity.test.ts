@@ -96,15 +96,43 @@ function escenarioDe(level: number): ResolvedScenario {
 }
 
 /** Forma de los `expected.json` publicados, en lo que este test consume. */
+interface FilaRecurso {
+  utilization: number;
+  totalFixedCost: number;
+  totalUnitCost: number;
+  totalCost: number;
+}
+
+interface CorridaNivel3 {
+  cycleTimeSeconds: { min: number; max: number; avg: number };
+  resourceUtilization: { nurse: number };
+  resourceTable: { rows: Record<string, FilaRecurso> };
+}
+
 interface Publicado {
   values: {
     correctedRun?: { instancesCompleted: { red: number; yellow: number; green: number; total: number } };
     cycleTimeSeconds?: { min: number; max: number; avg: number };
-    threeNurses?: { cycleTimeSeconds: { min: number; max: number; avg: number }; resourceUtilization: { nurse: number } };
-    twoNurses?: { cycleTimeSeconds: { min: number; max: number; avg: number }; resourceUtilization: { nurse: number } };
+    threeNurses?: CorridaNivel3;
+    twoNurses?: CorridaNivel3;
     arriveAtPatientPlaceBA?: { maxWaitSeconds: number; avgWaitSeconds: number };
   };
 }
+
+/**
+ * Nombre de la tabla de recursos de Bizagi → clave del pool en `level-3/scenario.json`. Las seis
+ * filas publicadas se comparan, no solo la de la enfermera: la tabla las trae todas y una
+ * utilización que se mueva sin que nadie mire es exactamente lo que este test tiene que cazar
+ * (LILA-186/187 QA).
+ */
+const RECURSOS_NIVEL_3 = {
+  'Call center agent': 'callCenterAgent',
+  Nurse: 'nurse',
+  Ambulance: 'ambulance',
+  'Quick Attention Vehicle': 'quickAttentionVehicle',
+  'Basic Ambulance': 'basicAmbulance',
+  Receptionist: 'receptionist',
+} as const;
 
 function expectedDe(level: number): Publicado {
   return JSON.parse(readFileSync(resolve(levelsDir, `level-${level}`, 'expected.json'), 'utf8')) as Publicado;
@@ -171,30 +199,47 @@ describe('examples/bizagi-levels: paridad contra expected.json (LILA-187)', () =
       // D5: el máximo publicado (35 min) es el camino Red de 33 min más 2 min de espera de
       // enfermera que en la corrida de Bizagi cayeron en el camino crítico.
       { metrica: 'nivel 3 (3 enf.) cycleTime.max', esperado: v.threeNurses.cycleTimeSeconds.max, obtenido: tres.process.cycleTime.max, cuadra: false },
-      { metrica: 'nivel 3 (3 enf.) utilización nurse', esperado: v.threeNurses.resourceUtilization.nurse, obtenido: tres.resources.nurse!.utilization, cuadra: true },
-      { metrica: 'nivel 3 (2 enf.) utilización nurse', esperado: v.twoNurses.resourceUtilization.nurse, obtenido: dos.resources.nurse!.utilization, cuadra: true },
       { metrica: 'nivel 3 (2 enf.) cycleTime.min', esperado: v.twoNurses.cycleTimeSeconds.min, obtenido: dos.process.cycleTime.min, cuadra: true },
       { metrica: 'nivel 3 (2 enf.) cycleTime.max', esperado: v.twoNurses.cycleTimeSeconds.max, obtenido: dos.process.cycleTime.max, cuadra: true },
       // D6: único residuo del nivel 3, ver cabecera del archivo.
       { metrica: 'nivel 3 (2 enf.) cycleTime.mean', esperado: v.twoNurses.cycleTimeSeconds.avg, obtenido: dos.process.cycleTime.mean, cuadra: false },
     ]);
 
-    // Costos publicados de la corrida de 3 enfermeras, tabla de recursos
-    // https://help.bizagi.com/platform/en/resourcesanalysis3.png (transcrita en expected.json) y
-    // total de costo fijo por actividad del proceso.
+    // Las SEIS filas de la tabla de recursos publicada, en las dos corridas, leídas de
+    // `expected.json` (transcripción de resourcesanalysis3.png y resourcesanalysis1.png) en vez
+    // de repetidas a mano aquí: utilización y costo total de cada pool. Antes solo se comparaba
+    // la enfermera y cuatro de los seis costos (LILA-186/187 QA).
+    //
+    // D8: `scenario.json` ya usa la asignación que cuadra con los costos publicados (QAV con
+    // quickAttentionVehicle, BA con basicAmbulance), no la lectura literal (y cruzada) de la
+    // tabla de requerimientos en prosa; con ella los seis costos entran en el ±5 %.
+    for (const [corrida, publicado, resultado] of [
+      ['3 enf.', v.threeNurses, tres],
+      ['2 enf.', v.twoNurses, dos],
+    ] as const) {
+      comprobar(
+        Object.entries(RECURSOS_NIVEL_3).flatMap(([fila, ref]) => {
+          const esperado = publicado.resourceTable.rows[fila]!;
+          const obtenido = resultado.resources[ref]!;
+          return [
+            { metrica: `nivel 3 (${corrida}) utilización ${ref}`, esperado: esperado.utilization, obtenido: obtenido.utilization, cuadra: true },
+            { metrica: `nivel 3 (${corrida}) costo ${ref}`, esperado: esperado.totalCost, obtenido: obtenido.totalCost, cuadra: true },
+          ];
+        }),
+      );
+      // La utilización que la página cita en prosa es la misma que la fila `Nurse` de la tabla.
+      expect(publicado.resourceUtilization.nurse).toBe(publicado.resourceTable.rows.Nurse!.utilization);
+    }
+
+    // Costo fijo por actividad. **No** es un número publicado: la tabla de recursos solo trae los
+    // costos de los pools (su `Total` 75 313 son justo esos seis), así que 8063 se DERIVA de datos
+    // que sí lo están —los `fixedCost` por tarea del enunciado (2/1/1/1) y los conteos de
+    // instancias de resourcesanalysis4.png (2017, 2017, 1006, 1006)—: 2·2017 + 1·2017 + 1·1006 +
+    // 1·1006 = 8063. Se compara como derivado, no como cita.
     const costoActividades = Object.values(tres.elements).reduce((suma, e) => suma + e.fixedCostTotal, 0);
-    comprobar([
-      { metrica: 'nivel 3 costo fijo de actividades', esperado: 8063, obtenido: costoActividades, cuadra: true },
-      { metrica: 'nivel 3 costo callCenterAgent', esperado: 6051, obtenido: tres.resources.callCenterAgent!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo nurse', esperado: 15115, obtenido: tres.resources.nurse!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo ambulance', esperado: 30314.13, obtenido: tres.resources.ambulance!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo receptionist', esperado: 3018, obtenido: tres.resources.receptionist!.totalCost, cuadra: true },
-      // D8: scenario.json ya usa la asignación que cuadra con los costos publicados (QAV con
-      // quickAttentionVehicle, BA con basicAmbulance), no la lectura literal (y cruzada) de la
-      // tabla de requerimientos en prosa.
-      { metrica: 'nivel 3 costo quickAttentionVehicle (tarea QAV)', esperado: 11139.86, obtenido: tres.resources.quickAttentionVehicle!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo basicAmbulance (tarea BA)', esperado: 9844.65, obtenido: tres.resources.basicAmbulance!.totalCost, cuadra: true },
-    ]);
+    const derivado8063 = 2 * 2017 + 1 * 2017 + 1 * 1006 + 1 * 1006;
+    expect(derivado8063, 'la derivación del costo fijo de actividades').toBe(8063);
+    comprobar([{ metrica: 'nivel 3 costo fijo de actividades (derivado)', esperado: derivado8063, obtenido: costoActividades, cuadra: true }]);
   }, 60_000);
 
   test('nivel 4 — sin el workaround de turnos el ciclo cuadra; con turnos, pendiente de LILA-164', async () => {
