@@ -309,3 +309,102 @@ body {
 
   --bjs-font-family: var(--font-diagram);
 }
+
+/* ---------- panel de escenario (LILA-061) ---------- */
+
+/* Todo el panel sale del JSON Schema, así que no hay una regla por campo: se estilan las tres
+   piezas que el generador produce —un campo, un objeto anidado y una entrada de registro— y
+   cualquier campo nuevo del esquema hereda el aspecto sin tocar este archivo. */
+
+.escenario {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.escenario-cabecera {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.escenario summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.campo-schema {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+
+.campo-schema label,
+.campo-schema .etiqueta {
+  color: var(--fg-muted);
+}
+
+.campo-schema input[type='text'],
+.campo-schema select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  padding: 3px 6px;
+  width: 100%;
+}
+
+.campo-schema input[type='checkbox'] {
+  width: auto;
+}
+
+.escenario .anidado {
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+  padding-left: 8px;
+}
+
+.escenario .entrada {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 4px 0;
+  padding: 4px 8px 8px;
+}
+
+.escenario .entrada legend {
+  color: var(--fg-primary);
+  display: flex;
+  gap: 8px;
+}
+
+.escenario .anadir {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.escenario .anadir input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  min-width: 0;
+  padding: 3px 6px;
+}
+
+.escenario .ids {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.escenario .error,
+.escenario .aviso {
+  margin: 0;
+}
