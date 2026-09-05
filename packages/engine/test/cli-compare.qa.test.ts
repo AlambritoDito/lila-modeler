@@ -618,6 +618,9 @@ describe('QA LILA-047 · ataque 10: ayuda y argumentos', () => {
 describe('QA LILA-047 · ataque 11: calidad del código', () => {
   test('cli.ts y format.ts no usan `any` ni dejan a compare duplicando la carga del modelo', () => {
     const cli = readFileSync(join(sourceDir, 'cli.ts'), 'utf8');
+    // LILA-054: `loadValidatedModel` se extrajo de `cli.ts` a `cli-shared.ts` para que
+    // `@lila/mcp` (`run_simulation`/`compare_scenarios`) también lo use, sin duplicarlo.
+    const cliShared = readFileSync(join(sourceDir, 'cli-shared.ts'), 'utf8');
     const format = readFileSync(join(sourceDir, 'format.ts'), 'utf8');
 
     for (const [name, source] of [['cli.ts', cli], ['format.ts', format]] as const) {
@@ -629,6 +632,7 @@ describe('QA LILA-047 · ataque 11: calidad del código', () => {
     const compareSource = cli.slice(cli.indexOf('async function compareCommand('));
     expect(compareSource).not.toContain('parseBpmn(');
     expect(compareSource).toContain('loadValidatedModel(');
-    expect(cli.match(/function loadValidatedModel\(/g)?.length).toBe(1);
+    expect(cli).not.toContain('function loadValidatedModel(');
+    expect(cliShared.match(/export async function loadValidatedModel\(/g)?.length).toBe(1);
   });
 });

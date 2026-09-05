@@ -1,24 +1,44 @@
 /**
- * Servidor MCP de Lila Modeler (LILA-053): dos tools sobre `@lila/engine`, sin lógica propia.
+ * Servidor MCP de Lila Modeler: tools sobre `@lila/engine`, sin lógica propia. `validate_bpmn` y
+ * `describe_process` son de LILA-053; `run_simulation` y `compare_scenarios` de LILA-054, sobre
+ * `@lila/engine/cli-shared` (extraído de `cli.ts` en el mismo ticket, sin cambiar su salida).
  * `createServer()` solo registra tools; conectar un transporte (stdio, in-memory para tests) es
  * responsabilidad de quien lo use — ver `src/bin.ts` para el caso stdio real.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-import { validateBpmnXml, type ValidateBpmnReport } from '@lila/engine/bpmn';
-import { resolveExtends, ScenarioSchema, type Scenario } from '@lila/engine/schema';
+import { validateBpmnXml, type ValidateBpmnReport, type ValidationResult } from '@lila/engine/bpmn';
+import {
+  absolutePath,
+  comparablePath,
+  compareWarnings,
+  loadValidatedModel,
+  readJsonFile,
+  resultWithBoundaryWarnings,
+  withRunOverrides,
+  writeJsonAtomic,
+  type LoadedScenarioResult,
+  type ParsedIr,
+} from '@lila/engine/cli-shared';
+import { runResultSchema } from '@lila/engine/result-schema';
+import {
+  resolveExtends,
+  scenarioErrors,
+  ScenarioSchema,
+  validateScenario,
+  type ResolvedScenario,
+  type Scenario,
+  type ScenarioProblem,
+} from '@lila/engine/schema';
+import { compare, simulate, type CompareResult, type RunResult } from '@lila/engine';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
+import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
+
 const NAME = 'lila-mcp';
 const VERSION = '0.0.0';
-
-/** Ruta absoluta relativa al cwd del proceso; `/` también en Windows (igual que `cli.ts`). */
-function absolutePath(file: string): string {
-  return resolve(process.cwd(), file).replaceAll('\\', '/');
-}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -29,17 +49,12 @@ function textResult(payload: unknown): CallToolResult {
 }
 
 /**
- * `isError` marca que **la tool** falló (argumentos malos, archivo ilegible, XML impenetrable),
- * no que el modelo tenga errores de validación: eso es un resultado correcto y viaja en el JSON
- * (`errors[]`). Ver `docs/MCP.md`.
+ * `isError` marca que **la tool** falló (argumentos malos, archivo ilegible, XML impenetrable,
+ * escenario inválido), no que el modelo tenga errores de validación en `validate_bpmn`: eso es un
+ * resultado correcto y viaja en el JSON (`errors[]`). Ver `docs/MCP.md`.
  */
 function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
-}
-
-/** Lee un JSON de disco; usado como `ScenarioReader` de `resolveExtends`. */
-function readJson(file: string): unknown {
-  return JSON.parse(readFileSync(file, 'utf8')) as unknown;
 }
 
 /** Lee un archivo del que ya se validó la existencia; devuelve el error legible si no se puede. */
@@ -165,7 +180,7 @@ function resourceLines(scenario: Scenario): string[] {
 /** Recursos por elemento del escenario, o el motivo por el que no se pudo leer. */
 function scenarioResources(file: string): { resources: string[] } | { error: string } {
   try {
-    const parsed = ScenarioSchema.safeParse(resolveExtends(absolutePath(file), readJson));
+    const parsed = ScenarioSchema.safeParse(resolveExtends(absolutePath(file), readJsonFile));
     if (parsed.success) return { resources: resourceLines(parsed.data) };
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`)
@@ -174,6 +189,188 @@ function scenarioResources(file: string): { resources: string[] } | { error: str
   } catch (error) {
     return { error: message(error) };
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * `run_simulation` / `compare_scenarios` (LILA-054)
+ * ------------------------------------------------------------------ */
+
+const scenarioInputSchema = z.union([
+  z.string().describe('Ruta a un escenario .json, relativa al cwd del proceso servidor.'),
+  z.record(z.string(), z.unknown()).describe('Escenario ya resuelto, inline.'),
+]);
+
+interface RunSimulationInput {
+  model?: string | undefined;
+  scenario: ScenarioInput;
+  seed?: number | undefined;
+  replications?: number | undefined;
+  saveTo?: string | undefined;
+}
+
+/**
+ * Igual pipeline que `runCommand` de `cli.ts` (compartida en `@lila/engine/cli-shared`): valida
+ * modelo y escenario, aplica overrides y simula con `log: false`. Ningún campo de nivel 2/3 se
+ * rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
+ * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
+ */
+async function runSimulation({
+  model,
+  scenario,
+  seed,
+  replications,
+  saveTo,
+}: RunSimulationInput): Promise<CallToolResult> {
+  let resolved: ResolvedScenario;
+  try {
+    resolved = resolveScenarioInput(scenario);
+  } catch (error) {
+    return errorResult(`run_simulation: ${message(error)}`);
+  }
+
+  const modelPath = model === undefined ? resolved.model : absolutePath(model);
+  if (model !== undefined && comparablePath(modelPath) !== comparablePath(resolved.model)) {
+    return errorResult(
+      `run_simulation: el modelo (${modelPath}) no coincide con scenario.model (${resolved.model}).`,
+    );
+  }
+
+  let ir: ParsedIr;
+  let modelValidation: ValidationResult;
+  try {
+    ({ ir, validation: modelValidation } = await loadValidatedModel(modelPath));
+  } catch (error) {
+    return errorResult(`run_simulation: ${message(error)}`);
+  }
+  if (modelValidation.errors.length > 0) {
+    return errorResult(`run_simulation: el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}`);
+  }
+
+  const withOverrides = withRunOverrides(resolved, { seed, replications });
+  const scenarioProblems = validateScenario(withOverrides, ir);
+  const scenarioIssues = scenarioErrors(scenarioProblems);
+  if (scenarioIssues.length > 0) return errorResult(`run_simulation: escenario inválido: ${JSON.stringify(scenarioIssues)}`);
+
+  let result: RunResult;
+  try {
+    const simulated = simulate(ir, withOverrides, { log: false });
+    result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
+  } catch (error) {
+    return errorResult(`run_simulation: ${message(error)}`);
+  }
+
+  if (saveTo !== undefined) {
+    try {
+      writeJsonAtomic(saveTo, result);
+    } catch (error) {
+      return errorResult(`run_simulation: ${message(error)}`);
+    }
+  }
+
+  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false, structuredContent: result };
+}
+
+interface CompareScenariosInput {
+  model?: string | undefined;
+  scenarios: ScenarioInput[];
+  seed?: number | undefined;
+  replications?: number | undefined;
+  saveTo?: string | undefined;
+}
+
+/** Etiqueta de un escenario en los mensajes de error: su ruta, o su posición si vino inline. */
+function scenarioLabel(entry: ScenarioInput, index: number): string {
+  return typeof entry === 'string' ? entry : `scenarios[${index}]`;
+}
+
+/**
+ * Igual pipeline que `compareCommand` de `cli.ts`: todo escenario se resuelve y valida contra el
+ * mismo modelo antes de simular ninguno (un escenario inválido en la posición n no cuesta simular
+ * los n − 1 anteriores). El `CompareResult` devuelto es el mismo objeto que produce
+ * `lila compare --json`; los avisos que la CLI imprime aparte de la tabla (semillas distintas,
+ * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
+ */
+async function compareScenarios({
+  model,
+  scenarios,
+  seed,
+  replications,
+  saveTo,
+}: CompareScenariosInput): Promise<CallToolResult> {
+  if (scenarios.length < 2) return errorResult('compare_scenarios: hacen falta al menos dos escenarios.');
+
+  const resolved: Array<{ label: string; scenario: ResolvedScenario }> = [];
+  for (const [index, entry] of scenarios.entries()) {
+    const label = scenarioLabel(entry, index);
+    try {
+      resolved.push({ label, scenario: resolveScenarioInput(entry) });
+    } catch (error) {
+      return errorResult(`compare_scenarios: ${label}: ${message(error)}`);
+    }
+  }
+
+  const referenceModel = model === undefined ? resolved[0]!.scenario.model : absolutePath(model);
+  for (const { label, scenario } of resolved) {
+    if (comparablePath(referenceModel) !== comparablePath(scenario.model)) {
+      return errorResult(
+        `compare_scenarios: ${label}: el modelo (${referenceModel}) no coincide con scenario.model (${scenario.model}).`,
+      );
+    }
+  }
+
+  let ir: ParsedIr;
+  let modelValidation: ValidationResult;
+  try {
+    ({ ir, validation: modelValidation } = await loadValidatedModel(referenceModel));
+  } catch (error) {
+    return errorResult(`compare_scenarios: ${message(error)}`);
+  }
+  if (modelValidation.errors.length > 0) {
+    return errorResult(`compare_scenarios: el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}`);
+  }
+
+  // Todo se valida antes de simular nada, igual que `compareCommand`.
+  const validated: Array<{ label: string; scenario: ResolvedScenario; problems: readonly ScenarioProblem[] }> = [];
+  for (const { label, scenario } of resolved) {
+    const withOverrides = withRunOverrides(scenario, { seed, replications });
+    const problems = validateScenario(withOverrides, ir);
+    const issues = scenarioErrors(problems);
+    if (issues.length > 0) return errorResult(`compare_scenarios: ${label}: escenario inválido: ${JSON.stringify(issues)}`);
+    validated.push({ label, scenario: withOverrides, problems });
+  }
+
+  let loaded: LoadedScenarioResult[];
+  try {
+    loaded = validated.map(({ label, scenario, problems }) => ({
+      file: label,
+      scenario,
+      result: resultWithBoundaryWarnings(simulate(ir, scenario, { log: false }), modelValidation, problems),
+    }));
+  } catch (error) {
+    return errorResult(`compare_scenarios: ${message(error)}`);
+  }
+
+  let comparison: CompareResult;
+  try {
+    comparison = compare(loaded.map((entry) => entry.result));
+  } catch (error) {
+    // E-COMPARE-VACIO u otro error de `compare()`: no debería pasar tras el check de arriba, pero
+    // se atrapa igual para no tumbar el servidor (mismo criterio que #53).
+    return errorResult(`compare_scenarios: ${message(error)}`);
+  }
+
+  const notes = compareWarnings(loaded, loaded[0]!.scenario.run.baseTimeUnit);
+
+  if (saveTo !== undefined) {
+    try {
+      writeJsonAtomic(saveTo, comparison);
+    } catch (error) {
+      return errorResult(`compare_scenarios: ${message(error)}`);
+    }
+  }
+
+  const payload = { comparison, notes };
+  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: false, structuredContent: payload };
 }
 
 export function createServer(): McpServer {
@@ -248,6 +445,50 @@ export function createServer(): McpServer {
 
       return textResult({ ir: report.ir, resumen: describeIr(report, resources, scenarioError) });
     },
+  );
+
+  server.registerTool(
+    'run_simulation',
+    {
+      title: 'Correr simulación',
+      description:
+        'Valida modelo y escenario, simula con `log: false` y devuelve el mismo `RunResult` que ' +
+        '`lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` ' +
+        'acepta una ruta .json (resuelve `extends`) o el escenario ya resuelto como objeto inline. ' +
+        '`saveTo` escribe el mismo JSON de forma atómica, como `lila run --json <ruta>`. ' +
+        'isError solo marca que la tool falló (modelo/escenario inválido, archivo ilegible).',
+      inputSchema: z.object({
+        model: z.string().optional().describe('Ruta al .bpmn; por defecto, scenario.model.'),
+        scenario: scenarioInputSchema,
+        seed: z.number().int().optional().describe('Sobrescribe run.seed.'),
+        replications: z.number().int().min(1).optional().describe('Sobrescribe run.replications.'),
+        saveTo: z.string().optional().describe('Ruta donde escribir el RunResult como JSON.'),
+      }),
+      outputSchema: runResultSchema,
+    },
+    runSimulation,
+  );
+
+  server.registerTool(
+    'compare_scenarios',
+    {
+      title: 'Comparar escenarios',
+      description:
+        'Valida y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y ' +
+        'devuelve el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que ' +
+        'la CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas ' +
+        'insuficientes para IC95). `scenarios` acepta rutas .json u objetos inline, mezclados. ' +
+        '`saveTo` escribe `comparison` como JSON, igual que `lila compare --json`.',
+      inputSchema: z.object({
+        model: z.string().optional().describe('Ruta al .bpmn; por defecto, el model del primer escenario.'),
+        // Sin `.min(2)`: así el mensaje lo da `compareScenarios` en español, no el validador del SDK.
+        scenarios: z.array(scenarioInputSchema),
+        seed: z.number().int().optional().describe('Sobrescribe run.seed en todos los escenarios.'),
+        replications: z.number().int().min(1).optional().describe('Sobrescribe run.replications en todos.'),
+        saveTo: z.string().optional().describe('Ruta donde escribir el CompareResult como JSON.'),
+      }),
+    },
+    compareScenarios,
   );
 
   return server;

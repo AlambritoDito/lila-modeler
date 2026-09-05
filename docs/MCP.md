@@ -1,7 +1,7 @@
-# MCP (LILA-053)
+# MCP (LILA-053/054)
 
 `packages/mcp` (`@lila/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila/engine`, sin lógica propia: dos tools por ahora.
+`@lila/engine`, sin lógica propia: cuatro tools por ahora.
 
 - **`validate_bpmn({ path | xml })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
@@ -14,9 +14,54 @@
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
+- **`run_simulation({ model?, scenario, seed?, replications?, saveTo? })`** (LILA-054) — valida
+  modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
+  `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
+  una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
+  inline; `model` es opcional y por defecto es `scenario.model`. Ningún campo de nivel 2/3 se
+  rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
+  `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
+  `outputSchema` (`@lila/engine/result-schema`) y responde `structuredContent` además del texto.
+- **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo? })`** (LILA-054) — valida
+  y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
+  exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
+  CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
+  insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
+  resuelve y valida contra el modelo antes de simular ninguno.
 
-`run_simulation`, `compare_scenarios` y `patch_scenario` llegan en LILA-054/055. El subcomando
-`lila mcp` llega en LILA-056 — mientras tanto se usa el bin `lila-mcp` de este paquete.
+Las dos tools nuevas reutilizan `@lila/engine/cli-shared`, extraído de `cli.ts` en el mismo ticket
+sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el mismo
+pipeline. `patch_scenario` llega en LILA-055. El subcomando `lila mcp` llega en LILA-056 —
+mientras tanto se usa el bin `lila-mcp` de este paquete.
+
+### Ejemplos
+
+```jsonc
+// run_simulation
+{
+  "scenario": "examples/pedido/as-is.scenario.json",
+  "seed": 42
+}
+// -> { "elements": {...}, "flows": {...}, "resources": {...}, "process": {...},
+//      "bottlenecks": [...], "replications": {...}, "warnings": [...] }
+```
+
+```jsonc
+// compare_scenarios
+{
+  "scenarios": [
+    "examples/pedido/as-is.scenario.json",
+    "examples/pedido/to-be-3-cajeros.scenario.json"
+  ],
+  "seed": 42
+}
+// -> { "comparison": { "count": 2, "rows": [...] }, "notes": [...] }
+```
+
+Un escenario inline (sin archivo en disco) es un objeto JS con el mismo `ResolvedScenario` que
+produciría `resolveExtends`: `{ "scenario": { "version": 1, "name": "...", "model": "...", "run":
+{...}, "elements": {...} } }`. Si declara `model` relativo, se resuelve contra el cwd del proceso
+servidor, igual que una ruta.
 
 ## Qué significa `isError`
 
@@ -28,6 +73,23 @@ completo y sus `errors[]` (mismo criterio que el catálogo de `docs/SEMANTICS.md
 rompió" (reintentar, corregir la llamada) de "el modelo tiene errores" (leer `errors[]` y arreglar
 el `.bpmn`). Ojo: la CLI sí sale con código 1 en ese caso — el código de salida y `isError` no son
 lo mismo.
+
+`run_simulation` y `compare_scenarios` mantienen el mismo criterio, y por eso responden
+`isError: true` cuando el modelo o el escenario no pasan la validación: a diferencia de
+`validate_bpmn`, ahí **no hay resultado que devolver** —no se puede simular—, así que el fallo es
+de la llamada, no un reporte válido. El mensaje lleva el nombre de la tool, el escenario culpable
+(su ruta, o `scenarios[n]` si vino inline) y los errores en JSON. Para saber *por qué* un modelo no
+se puede simular sin gastar una simulación, la tool es `validate_bpmn`, que devuelve el reporte
+completo con `isError: false`.
+
+## `saveTo`
+
+`saveTo` escribe en el sistema de archivos del **proceso servidor**, con sus permisos, la ruta que
+se le pase (relativa al cwd, como todo lo demás). Sobrescribe un archivo existente sin preguntar,
+igual que `lila run --json <ruta>`, y publica con `rename` desde un temporal en el mismo
+directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es un error de la
+tool, no un borrado. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
+bytes que `lila compare --json <ruta>`.
 
 ## Rutas
 
