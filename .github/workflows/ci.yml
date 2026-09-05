@@ -21,3 +21,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # `tsc --build` solo cubre packages/engine: apps/web es `noEmit` y queda
+      # fuera del build por proyectos. Sin este paso, un error de tipos en la
+      # app web pasa el CI sin que nadie lo vea.
+      - run: npm run typecheck
