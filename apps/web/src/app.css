@@ -393,3 +393,10 @@ body {
 .anadir:hover {
   color: var(--accent-primary);
 }
+
+/* El desplegable RACI se queda con el ancho de su opción más larga; el resto de la fila es
+   para el id del rol, que es lo que de verdad se escribe. */
+.fila select {
+  flex: none;
+  width: auto;
+}

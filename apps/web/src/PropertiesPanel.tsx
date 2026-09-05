@@ -188,8 +188,8 @@ export function escribirNombre(
 
 /** Tipos RACI de `lila:responsibility` (`docs/BPMN_EXTENSION.md` § 2). */
 export const RACI = [
-  ['R', 'R · Responsable de hacerlo'],
-  ['A', 'A · Aprueba y rinde cuentas'],
+  ['R', 'R · Responsable'],
+  ['A', 'A · Aprueba'],
   ['C', 'C · Consultado'],
   ['I', 'I · Informado'],
 ] as const;
@@ -494,12 +494,13 @@ function ListaDeReferencias({
       <button
         type="button"
         className="anadir"
+        aria-label={`Añadir a ${etiqueta}`}
         onClick={() => {
           anadirExtension(escritor, elemento, tipo, { ref: '' });
           refrescar();
         }}
       >
-        + Añadir a {etiqueta.toLowerCase()}
+        + Añadir
       </button>
     </section>
   );
