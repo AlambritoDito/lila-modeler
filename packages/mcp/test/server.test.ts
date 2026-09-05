@@ -182,6 +182,21 @@ test('describe_process lista los otros procesos del archivo, no simulados', asyn
   expect(resumen).toContain('Validación: 0 errores, 1 aviso.');
 });
 
+test('describe_process acepta `xml` inline igual que validate_bpmn (LILA-056)', async () => {
+  const xml = readFileSync(pedidoBpmn, 'utf8');
+  const inline = await client.callTool({ name: 'describe_process', arguments: { xml } });
+  const porRuta = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn } });
+  expect(inline.isError ?? false).toBe(false);
+  expect(textOf(inline)).toBe(textOf(porRuta));
+
+  const ambos = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn, xml } });
+  expect(ambos.isError).toBe(true);
+  expect(textOf(ambos)).toContain('no los dos');
+
+  const ninguno = await client.callTool({ name: 'describe_process', arguments: {} });
+  expect(ninguno.isError).toBe(true);
+});
+
 test('describe_process agrupa por lane y por subproceso embebido', async () => {
   const lanes = await client.callTool({ name: 'describe_process', arguments: { path: lanesBpmn } });
   expect((JSON.parse(textOf(lanes)) as { resumen: string }).resumen).toContain('Cajero: StartEvent_1, Task_A');
