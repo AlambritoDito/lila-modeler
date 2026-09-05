@@ -1,146 +1,181 @@
-import { StrictMode, useEffect, useState, type CSSProperties } from 'react';
+/**
+ * Shell de la app web (LILA-057): barra superior con los modos, paleta de bpmn-js a la
+ * izquierda, lienzo al centro, panel derecho con pestañas y barra de estado abajo. La
+ * disposición es la del brief `prompts/claude-design-ui.md`; los colores salen todos de los
+ * tokens de LILA-112, sin un solo hex aquí.
+ *
+ * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066 y sacarlos ahora solo
+ * movería el problema de sitio.
+ */
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { applyTheme, type Theme } from './theme/applyTheme';
+// El benchmark se compila dentro del bundle: es el único archivo que la app trae de serie, y
+// así no hay que copiarlo a `public/` ni abrir `examples/` con `server.fs.allow`.
+import pedido from '../../../examples/pedido/model.bpmn?raw';
+import 'bpmn-js/dist/assets/diagram-js.css';
+import 'bpmn-js/dist/assets/bpmn-js.css';
+import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
+import './app.css';
 
-// Los JSON se sirven desde `publicDir` (ver vite.config.ts): se piden por fetch,
-// así que editar un valor y recargar cambia la UI sin recompilar.
-const THEME_FILES: Record<string, string> = {
-  'eva-01': '/eva-01.json',
-  papel: '/papel.json',
+const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
+const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
+
+/** Tema por defecto. Se pide por fetch para que editar el JSON y recargar cambie la UI. */
+const TEMA_URL = '/eva-01.json';
+
+const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
+  Propiedades: 'El panel de propiedades llega en LILA-060.',
+  Documentación: 'Los campos lila: llegan en LILA-060.',
+  Simulación: 'Los parámetros del escenario llegan en LILA-061.',
 };
 
-const panel: CSSProperties = {
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  boxShadow: '0 6px 20px var(--shadow)',
-  padding: 16,
-  marginBottom: 16,
-};
-
-function Smoke() {
-  const [slug, setSlug] = useState('eva-01');
-  const [theme, setTheme] = useState<Theme | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function App(): React.JSX.Element {
+  const [modelador, setModelador] = useState<Modelador | null>(null);
+  const [estado, setEstado] = useState<EstadoLienzo>({ zoom: 1, elementos: 0, error: null });
+  const [archivo, setArchivo] = useState('model.bpmn');
+  const [pestana, setPestana] = useState<(typeof PESTANAS)[number]>('Propiedades');
+  // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
+  // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
+  // sabe"; `null`, "no se pudo cargar, seguimos con los valores por defecto de tokens.css".
+  const [tema, setTema] = useState<Theme | null | undefined>(undefined);
+  const [avisoTema, setAvisoTema] = useState<string | null>(null);
 
   useEffect(() => {
-    let vivo = true;
-    setError(null);
-    void fetch(THEME_FILES[slug]!)
+    void fetch(TEMA_URL)
       .then((r) => {
         if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
         return r.json() as Promise<Theme>;
       })
       .then((t) => {
-        if (!vivo) return;
         applyTheme(t);
-        setTheme(t);
+        setTema(t);
       })
       .catch((e: unknown) => {
-        // Un tema roto (JSON inválido, token desconocido, valor no textual) se ve
-        // en pantalla; si no, la página se queda muda con el tema anterior puesto.
-        if (vivo) setError(e instanceof Error ? e.message : String(e));
+        // Un tema roto no puede dejar la app en blanco: se avisa y se sigue con Eva-01, que
+        // es lo que `tokens.css` trae por defecto.
+        setAvisoTema(e instanceof Error ? e.message : String(e));
+        setTema(null);
       });
-    return () => {
-      vivo = false;
-    };
-  }, [slug]);
+  }, []);
+
+  async function abrirArchivo(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    if (file === undefined || modelador === null) return;
+    setArchivo(file.name);
+    await modelador.abrir(await file.text());
+    // Sin esto, volver a elegir el mismo archivo no dispara `change`.
+    input.value = '';
+  }
+
+  async function exportar(): Promise<void> {
+    if (modelador === null) return;
+    const url = URL.createObjectURL(
+      new Blob([await modelador.exportar()], { type: 'application/xml' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = archivo;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
-    <main
-      style={{
-        background: 'var(--bg-base)',
-        color: 'var(--fg-primary)',
-        font: 'var(--font-size-base) var(--font-ui)',
-        minHeight: '100vh',
-        padding: 24,
-      }}
-    >
-      <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>Lila Modeler · tokens y temas</h1>
-      <p style={{ color: 'var(--fg-muted)', margin: '0 0 20px' }}>
-        Página de humo de LILA-112. Tema activo: {theme?.name ?? '…'}
-      </p>
+    <div className="app">
+      <header className="barra">
+        <span className="proyecto">Lila Modeler</span>
+        <span className="archivo">{archivo}</span>
+        <nav className="modos">
+          {MODOS.map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={m === 'Modelar' ? 'modo activo' : 'modo'}
+              disabled={m !== 'Modelar'}
+              title={m === 'Modelar' ? undefined : 'Todavía no implementado'}
+            >
+              {m}
+            </button>
+          ))}
+        </nav>
+        <label className="boton">
+          Abrir .bpmn
+          <input
+            type="file"
+            accept=".bpmn,.xml"
+            hidden
+            onChange={(e) => void abrirArchivo(e.currentTarget)}
+          />
+        </label>
+        <button type="button" className="boton primario" onClick={() => void exportar()}>
+          Exportar .bpmn
+        </button>
+      </header>
 
-      {error !== null && (
-        <p role="alert" style={{ color: 'var(--status-error)', margin: '0 0 20px' }}>
-          No se pudo cargar el tema: {error}
-        </p>
+      {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
+          izquierda; la esquina inferior derecha queda libre para la marca de agua
+          «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
+      {tema === undefined ? (
+        <div className="lienzo" />
+      ) : (
+        <Lienzo xmlInicial={pedido} onListo={setModelador} onEstado={setEstado} />
       )}
 
-      <div style={panel}>
-        <label style={{ color: 'var(--fg-muted)', marginRight: 8 }} htmlFor="tema">
-          Tema
-        </label>
-        <select
-          id="tema"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-strong)',
-            borderRadius: 4,
-            color: 'var(--fg-primary)',
-            font: 'inherit',
-            padding: '4px 8px',
-          }}
-        >
-          {Object.keys(THEME_FILES).map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
+      <aside className="panel">
+        <nav className="pestanas">
+          {PESTANAS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={p === pestana ? 'pestana activa' : 'pestana'}
+              onClick={() => {
+                setPestana(p);
+              }}
+            >
+              {p}
+            </button>
           ))}
-        </select>
+        </nav>
+        <p className="vacio">{PLACEHOLDER[pestana]}</p>
+      </aside>
+
+      <nav className="diagramas">
+        <button type="button" className="pestana activa">
+          {archivo}
+        </button>
+      </nav>
+
+      <footer className="estado">
+        <span>{estado.elementos} elementos</span>
         <button
           type="button"
-          style={{
-            background: 'var(--accent-primary)',
-            border: 'none',
-            borderRadius: 4,
-            color: 'var(--fg-onAccent)',
-            cursor: 'pointer',
-            font: 'inherit',
-            fontWeight: 600,
-            marginLeft: 12,
-            padding: '6px 14px',
+          className="enlace"
+          onClick={() => {
+            modelador?.ajustar();
           }}
         >
-          Ejecutar simulación
+          Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
-      </div>
-
-      <div
-        style={{
-          background:
-            'linear-gradient(var(--canvas-grid) 1px, transparent 1px) 0 0 / 16px 16px,' +
-            'linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px) 0 0 / 16px 16px,' +
-            'var(--canvas-bg)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          height: 220,
-          padding: 16,
-        }}
-      >
-        <div
-          style={{
-            background: 'var(--diagram-fill)',
-            border: '2px solid var(--diagram-selected)',
-            borderRadius: 6,
-            color: 'var(--diagram-label)',
-            display: 'inline-block',
-            font: 'var(--font-size-base) var(--font-diagram)',
-            padding: '18px 24px',
-          }}
-        >
-          Tarea de ejemplo
-        </div>
-      </div>
-    </main>
+        <span>Tema: {tema?.name ?? 'Eva-01'}</span>
+        {estado.error !== null && (
+          <span role="alert" className="error">
+            No se pudo abrir el diagrama: {estado.error}
+          </span>
+        )}
+        {avisoTema !== null && (
+          <span role="alert" className="error">
+            No se pudo cargar el tema: {avisoTema}
+          </span>
+        )}
+      </footer>
+    </div>
   );
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Smoke />
+    <App />
   </StrictMode>,
 );
