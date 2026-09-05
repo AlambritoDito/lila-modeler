@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../src/cli.js';
-import { formatDuration } from '../src/format.js';
+import { formatDuration, formatNumber } from '../src/format.js';
 import { runResultSchema } from '../src/result.schema.js';
 
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../examples/pedido');
@@ -113,6 +113,9 @@ describe('lila run (LILA-046)', () => {
     expect(text).toContain('Instances completed');
     expect(text).toContain('Average time (min)');
     expect(text).toContain('Process summary (extras)');
+    // R-DEG-1: sin `resources` en el escenario no hay tabla de recurso (SEMANTICS.md § 14). La
+    // salida tiene que seguir siendo la de M1, byte a byte, después de LILA-184.
+    expect(text).not.toContain('Resources');
     expect(formatDuration(90, 'min')).toBe('1.5');
   });
 
@@ -290,11 +293,17 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       expect(first).toBe(0);
       expect(second).toBe(0);
       expect(firstText).toBe(secondText);
-      expect(firstText).toContain('Resources');
-      expect(firstText).toContain('Utilization (%)');
       expect(firstText).toContain('declara calendarios');
       expect(firstText).toContain('M3');
       expect(firstText).toContain('24×7');
+
+      // Nombres de columna exactos de RESULTS_FORMAT.md § 10 y unidad en `Busy time`, que son
+      // segundos-unidad convertidos a `baseTimeUnit` como en `lila compare` (QA de #47).
+      const lines = firstText.split('\n');
+      const header = lines[lines.indexOf('Resources') + 1];
+      expect(header).toMatch(
+        /^Id +Name +Utilization \(%\) +Busy time \(min\) +Fixed cost +Unit cost +Total cost$/,
+      );
 
       const firstJson = join(fixture.root, 'as-is-1.json');
       const secondJson = join(fixture.root, 'as-is-2.json');
@@ -303,12 +312,24 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       expect(readFileSync(firstJson)).toEqual(readFileSync(secondJson));
 
       const parsed = JSON.parse(readFileSync(firstJson, 'utf8')) as {
-        resources: Record<string, unknown>;
+        resources: Record<string, { utilization: number; busyTime: number }>;
         bottlenecks: unknown[];
       };
       expect(runResultSchema.safeParse(parsed).success).toBe(true);
-      expect(Object.keys(parsed.resources).length).toBeGreaterThan(0);
-      expect(Array.isArray(parsed.bottlenecks)).toBe(true);
+      expect(Object.keys(parsed.resources)).toContain('cajero');
+      // El ranking solo existe con contención de recursos: vacío significaría que el gate sigue
+      // recortando lo que la corrida mide, no que el escenario no tenga cuellos de botella.
+      expect(parsed.bottlenecks.length).toBeGreaterThan(0);
+
+      // La consola imprime los mismos números que el JSON, con la conversión de presentación.
+      const cajero = parsed.resources.cajero!;
+      const row = lines.find((line) => line.startsWith('cajero'))!.split(/ {2,}/);
+      expect(row.slice(0, 4)).toEqual([
+        'cajero',
+        'Cajero',
+        formatNumber(cajero.utilization * 100),
+        formatDuration(cajero.busyTime, 'min'),
+      ]);
     },
     30_000,
   );

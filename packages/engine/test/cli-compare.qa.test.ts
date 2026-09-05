@@ -138,13 +138,17 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
     // incoherencia que fijaba este test. Ahora ambos aceptan el mismo escenario e imprimen la
     // misma tabla de recursos.
     expect(await main(['run', model, a])).toBe(0);
-    expect(text()).toContain('Resources');
-    expect(text()).toContain('Utilization (%)');
+    expect(tableBlock(text(), 'Resources')[0]).toContain('Utilization (%)');
+    const runRow = rowLine(text(), 'agente', 'Agente de mostrador').split(/ {2,}/);
 
     output = [];
     expect(await main(['compare', model, a, b])).toBe(0);
-    expect(text()).toContain('Resources');
-    expect(text()).toContain('Utilization (%)');
+    const compareRow = rowLine(text(), 'agente', 'Utilization (%)').split(/ {2,}/);
+
+    // Coherencia de verdad: los dos comandos imprimen el mismo pool con el mismo número, no solo
+    // una tabla con el mismo título. `compare` marca el porcentaje en la celda; `run`, en la
+    // cabecera de columna.
+    expect(compareRow[3]).toBe(`${runRow[2]}%`);
   });
 
   test('los `calendars` declarados no cambian ningún número: el motor los ignora, y compare lo avisa', async () => {
