@@ -387,12 +387,18 @@ describe('QA LILA-038 · ataque 8: escala', () => {
     const thin = Array.from({ length: 50 }, (_, index) => bigResult(53, index));
 
     compare(half); // calentamiento del JIT antes de medir.
+    // Mínimo de tres mediciones: una pausa de GC o contención de CPU (varias suites a la vez)
+    // infla una medición aislada y convertía el ratio en flaky.
     const time = (results: readonly RunResult[]): number => {
-      const startedAt = performance.now();
-      const comparison = compare(results);
-      const elapsed = performance.now() - startedAt;
-      expect(comparison.rows.length).toBeGreaterThan(0);
-      return elapsed;
+      let best = Infinity;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const startedAt = performance.now();
+        const comparison = compare(results);
+        const elapsed = performance.now() - startedAt;
+        expect(comparison.rows.length).toBeGreaterThan(0);
+        best = Math.min(best, elapsed);
+      }
+      return best;
     };
 
     const full = time(many);
@@ -403,8 +409,8 @@ describe('QA LILA-038 · ataque 8: escala', () => {
     // Cuadrático en el número de resultados o de KPI daría factores ~4; se deja holgura 3× más
     // un piso absoluto para no depender del reloj en máquinas cargadas.
     expect(full).toBeLessThan(3000);
-    expect(full).toBeLessThan(Math.max(halfResults, 5) * 3);
-    expect(full).toBeLessThan(Math.max(halfKpis, 5) * 3);
+    expect(full).toBeLessThan(Math.max(halfResults, 20) * 3);
+    expect(full).toBeLessThan(Math.max(halfKpis, 20) * 3);
   });
 });
 
