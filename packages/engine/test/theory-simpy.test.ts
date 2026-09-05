@@ -13,10 +13,10 @@ import type { SimScenario } from '../src/core/sim.js';
  *
  * Compara el motor de Lila contra una implementación independiente del mismo modelo (5 tareas
  * secuenciales, recursos de capacidad 1-3, llegadas exponenciales, duraciones triangulares) en
- * `tools/oracles/des_simpy.py`. Es una comparación estadística, no bit a bit: el valor de SimPy
- * debe caer dentro del IC95 que produce `simulate()` con 30 replicaciones
- * (docs/RESULTS_FORMAT.md §8), tal como pide la aceptación (b) de M2 en
- * `LILA_MODELER_ESTRUCTURA.md` §7.
+ * `tools/oracles/des_simpy.py`. Es una comparación estadística, no bit a bit: los IC95 de
+ * `simulate()` y del oráculo, calculados con la misma fórmula sobre 30 replicaciones cada uno
+ * (docs/RESULTS_FORMAT.md §8), se solapan — ver la nota de método más abajo. Es la aceptación
+ * (b) de M2 en `LILA_MODELER_ESTRUCTURA.md` §7.
  *
  * Se salta sin `ORACLES=1` porque invoca un proceso Python vía `uv run --with simpy` (sin
  * `simpy` instalado en el repo, regla del ticket): `npm test` normal no cambia de duración.
@@ -112,25 +112,32 @@ interface OracleOutput {
 function runOracle(): OracleOutput {
   const here = dirname(fileURLToPath(import.meta.url));
   const scriptPath = resolve(here, '../../../tools/oracles/des_simpy.py');
-  const stdout = execFileSync(
-    'uv',
-    [
-      'run',
-      '--with',
-      'simpy',
-      'python',
-      scriptPath,
-      '--n',
-      String(N_CASES),
-      '--seed',
-      String(SEED),
-      '--replications',
-      String(REPLICATIONS),
-      '--arrival-mean',
-      String(ARRIVAL_MEAN),
-    ],
-    { encoding: 'utf8', timeout: 60_000 },
-  );
+  const args = [
+    'run',
+    '--with',
+    'simpy',
+    'python',
+    scriptPath,
+    '--n',
+    String(N_CASES),
+    '--seed',
+    String(SEED),
+    '--replications',
+    String(REPLICATIONS),
+    '--arrival-mean',
+    String(ARRIVAL_MEAN),
+  ];
+  let stdout: string;
+  try {
+    stdout = execFileSync('uv', args, { encoding: 'utf8', timeout: 60_000 });
+  } catch (cause) {
+    // Sin `uv` el fallo nativo es un escueto `spawnSync uv ENOENT`: se traduce a la causa real.
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+    throw new Error(
+      'ORACLES=1 necesita `uv` en el PATH (https://astral.sh/uv) para correr tools/oracles/des_simpy.py',
+      { cause },
+    );
+  }
   return JSON.parse(stdout) as OracleOutput;
 }
 
