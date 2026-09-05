@@ -188,7 +188,8 @@ function scenarioColumn(index: number, name: string, unit: BaseTimeUnit): Column
   };
 }
 
-function scopeColumns(
+/** Exportada para que el test de QA ordene la tabla sin simular clics (no hay jsdom aquí). */
+export function compareColumns(
   scope: CompareScope,
   ir: ProcessIR,
   resourceNames: Readonly<Record<string, string>>,
@@ -212,7 +213,10 @@ function scopeColumns(
     display: (row) => compareMetricLabel(row.scope, row.metric),
     header: 'Metric',
     key: 'metric',
-    sortValue: (row) => row.metric,
+    // Por la etiqueta mostrada y no por el path interno: ordenar por "Metric" tiene que dar el
+    // orden alfabético que el usuario ve ("Average time" está bajo `processing.mean`), igual que
+    // las columnas Id y Name, que ya ordenan por su texto.
+    sortValue: (row) => compareMetricLabel(row.scope, row.metric),
   };
   const scenarioColumns = scenarioNames
     .map((name, index) => (isVisible(index) ? scenarioColumn(index, name, unit) : null))
@@ -306,7 +310,7 @@ export function CompareView({
         return (
           <DataTable
             key={scope}
-            columns={scopeColumns(scope, ir, resourceNames, scenarioNames, isVisible, baseTimeUnit)}
+            columns={compareColumns(scope, ir, resourceNames, scenarioNames, isVisible, baseTimeUnit)}
             rowKey={(row) => row.kpi}
             rows={rows}
             title={TAB_LABELS[scope]}
