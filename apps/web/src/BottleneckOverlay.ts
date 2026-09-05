@@ -1,0 +1,272 @@
+/**
+ * Overlay de cuellos de botella (LILA-064): `BaseRenderer` de bpmn-js con prioridad 1500 que
+ * delega en el renderer por defecto y tiñe `fill`/`stroke` de las tareas según su
+ * `resourceWait.mean`, en tres pasos (cuánto pesa esa espera frente al propio tiempo de proceso
+ * de la tarea, ver `nivelDeRatio` más abajo), más el servicio `overlays` para una etiqueta con la
+ * espera media y la utilización del pool principal (docs/RESULTS_FORMAT.md §2, §4), y un marcador
+ * CSS para `bottlenecks[0]` (§6).
+ *
+ * `overlayModel` es la parte pura y testeable: clasifica y etiqueta sin tocar bpmn-js, así que se
+ * prueba sin navegador (jsdom no dibuja bpmn-js, ver Modeler.tsx). `applyOverlay`/`clearOverlay`
+ * son el único punto que toca el modelador: el shell los llama tras `runInWorker` y al cambiar de
+ * escenario. `BaseRenderer` se auto-registra en el `eventBus` al construirse (así funciona en
+ * diagram-js, sin pasar por el contenedor de inyección de dependencias) — por eso puede crearse
+ * sobre un modelador ya montado, sin tener que pasar por `additionalModules` al construirlo.
+ */
+import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer';
+import type Modeler from 'bpmn-js/lib/Modeler';
+import type BpmnRenderer from 'bpmn-js/lib/draw/BpmnRenderer';
+import type Canvas from 'diagram-js/lib/core/Canvas';
+import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type EventBus from 'diagram-js/lib/core/EventBus';
+import type GraphicsFactory from 'diagram-js/lib/core/GraphicsFactory';
+import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
+import type { ElementLike } from 'diagram-js/lib/model/Types';
+import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
+import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
+import type { ResolvedScenario } from '@lila/engine/schema';
+import type { RunResult } from '@lila/engine';
+
+const PRIORITY = 1500;
+const OVERLAY_TYPE = 'lila-bottleneck';
+const MARKER_PRINCIPAL = 'lila-bottleneck-principal';
+const STYLE_ID = 'lila-bottleneck-overlay-styles';
+
+export type NivelEspera = 'low' | 'mid' | 'high';
+
+export interface OverlayEntry {
+  nivel: NivelEspera;
+  etiqueta: string;
+  principal: boolean;
+}
+
+export type OverlayModel = Readonly<Record<string, OverlayEntry>>;
+
+/**
+ * Recurso "principal" de un elemento: el de `scenario.elements[id].resources` con mayor
+ * `utilization` — mismo desempate que `bottlenecks` (docs/RESULTS_FORMAT.md §6, "si el elemento
+ * usa varios pools, el mayor utilización entre ellos"). `null` si el elemento no declara recursos
+ * (Timer_Reposo, por ejemplo) o si ninguno de sus `ref` aparece en `result.resources`.
+ */
+function utilizacionPrincipal(
+  elementId: string,
+  result: RunResult,
+  scenario: ResolvedScenario,
+): number | null {
+  const refs = scenario.elements?.[elementId]?.resources ?? [];
+  let mejor: number | null = null;
+  for (const { ref } of refs) {
+    const utilizacion = result.resources[ref]?.utilization;
+    if (utilizacion !== undefined && (mejor === null || utilizacion > mejor)) mejor = utilizacion;
+  }
+  return mejor;
+}
+
+/**
+ * Umbrales del nivel, como fracción de `resourceWait.mean / processing.mean`: cuántas veces más
+ * tarda una tarea esperando un recurso que trabajando de verdad. `RATIO_LOW` = la espera es menos
+ * del 5 % del tiempo de proceso, apenas se nota; entre `RATIO_LOW` y `RATIO_HIGH`, la espera es
+ * comparable al tiempo de proceso; desde `RATIO_HIGH` = 1, la tarea espera **más** de lo que tarda
+ * en procesarse — el caso de libro de un cuello de botella.
+ *
+ * El ticket permite terciles "o documenta otra regla simple"; terciles entre las tareas con
+ * espera **del propio resultado** se probaron primero y se descartaron: con solo dos o tres
+ * tareas compitiendo por recursos (el caso típico, `examples/pedido` incluido) el nivel de una
+ * tarea depende de su **orden** frente a las demás, no de cuánto cambió su propia espera — así,
+ * `Task_TomarPedido` nunca cambiaba de nivel entre AS-IS y TO-BE 3 cajeros aunque su espera media
+ * bajara de 14,9 s a 2,2 s, porque siempre seguía siendo la segunda de dos. Este ratio es propio
+ * de cada tarea, no depende de las demás, así que sí refleja ese cambio (ver
+ * `BottleneckOverlay.test.ts`).
+ */
+const RATIO_LOW = 0.05;
+const RATIO_HIGH = 1;
+
+function nivelDeRatio(ratio: number): NivelEspera {
+  if (ratio < RATIO_LOW) return 'low';
+  if (ratio < RATIO_HIGH) return 'mid';
+  return 'high';
+}
+
+/**
+ * Función pura: clasifica cada tarea con `resourceWait.mean > 0` y arma su etiqueta. Sin recursos
+ * en el escenario (`result.resources` vacío, R-DEG-1) o sin ninguna tarea con espera, el mapa
+ * queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada — es la
+ * aceptación literal del ticket para ese caso.
+ */
+export function overlayModel(result: RunResult, scenario: ResolvedScenario): OverlayModel {
+  if (Object.keys(result.resources).length === 0) return {};
+
+  const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
+  const principalId = result.bottlenecks[0]?.elementId;
+
+  const model: Record<string, OverlayEntry> = {};
+  for (const [id, metrics] of Object.entries(result.elements)) {
+    if (metrics.resourceWait.mean <= 0) continue;
+    // `processing.mean` de una tarea con espera > 0 no debería ser 0 (tuvo que completar al
+    // menos una vez para tener processing.mean, ver docs/RESULTS_FORMAT.md §2); si igual lo es,
+    // la espera es infinitamente mayor que el proceso — el caso más alto, no un error.
+    const ratio = metrics.processing.mean > 0 ? metrics.resourceWait.mean / metrics.processing.mean : Infinity;
+    const utilizacion = utilizacionPrincipal(id, result, scenario);
+    const espera = `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}`;
+    model[id] = {
+      etiqueta:
+        utilizacion === null ? espera : `${espera} · utilización ${formatNumber(utilizacion * 100)}%`,
+      nivel: nivelDeRatio(ratio),
+      principal: id === principalId,
+    };
+  }
+  return model;
+}
+
+/* ------------------------------------------------------------------ *
+ * Renderer de bpmn-js: delega el dibujo por defecto y solo cambia el color.
+ * ------------------------------------------------------------------ */
+
+class BottleneckRenderer extends BaseRenderer {
+  constructor(
+    eventBus: EventBus,
+    private readonly bpmnRenderer: BpmnRenderer,
+    private readonly niveles: ReadonlyMap<string, NivelEspera>,
+  ) {
+    super(eventBus, PRIORITY);
+  }
+
+  override canRender(element: ElementLike): boolean {
+    return this.niveles.has(element.id);
+  }
+
+  override drawShape(parentGfx: SVGElement, element: ElementLike): SVGElement {
+    // `BaseRenderer.canRender` solo la deja pasar a `BpmnShape` reales (tareas con espera); el
+    // tipo genérico de `ElementLike` que exige la firma base no trae los campos de bpmn-js.
+    const shape = this.bpmnRenderer.drawShape(parentGfx, element as unknown as BpmnShape);
+    const nivel = this.niveles.get(element.id);
+    if (nivel !== undefined) {
+      shape.style.fill = `var(--sim-bottleneck-${nivel})`;
+      shape.style.stroke = `var(--sim-bottleneck-${nivel})`;
+    }
+    return shape;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * applyOverlay / clearOverlay: el único punto que toca el modelador.
+ * ------------------------------------------------------------------ */
+
+interface EstadoOverlay {
+  /** Mutado in situ: lo lee `BottleneckRenderer.canRender`/`drawShape` en cada repintado. */
+  niveles: Map<string, NivelEspera>;
+  /** Elementos con `canvas.addMarker(id, MARKER_PRINCIPAL)`, para poder quitarlo en `clearOverlay`. */
+  marcados: Set<string>;
+}
+
+/** Un estado por modelador: dos `<Lienzo>` (dos pestañas de diagrama) no se pisan el overlay. */
+const estados = new WeakMap<Modeler, EstadoOverlay>();
+
+/** CSS del marcador y de la etiqueta, inyectado una sola vez (ids: `document.getElementById`). */
+function inyectarEstilos(): void {
+  if (document.getElementById(STYLE_ID) !== null) return;
+  const style = document.createElement('style');
+  style.id = STYLE_ID;
+  // `filter` en vez de `stroke`/`fill`: no compite con el color que ya puso `BottleneckRenderer`
+  // ni con el que pone el renderer por defecto, así que no hace falta `!important`.
+  style.textContent = `
+.djs-element.${MARKER_PRINCIPAL} .djs-visual > :first-child {
+  filter: drop-shadow(0 0 4px var(--accent-secondary));
+}
+.lila-bottleneck-label {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: 11px var(--font-ui, system-ui);
+  padding: 1px 4px;
+  white-space: nowrap;
+}`;
+  document.head.appendChild(style);
+}
+
+function etiquetaHtml(entry: OverlayEntry): HTMLElement {
+  const div = document.createElement('div');
+  div.className = 'lila-bottleneck-label';
+  div.textContent = entry.etiqueta;
+  return div;
+}
+
+function estadoDe(modeler: Modeler): EstadoOverlay {
+  let estado = estados.get(modeler);
+  if (estado === undefined) {
+    const eventBus = modeler.get<EventBus>('eventBus');
+    const bpmnRenderer = modeler.get<BpmnRenderer>('bpmnRenderer');
+    const niveles = new Map<string, NivelEspera>();
+    // `BaseRenderer` se registra en el `eventBus` desde su propio constructor (ver el comentario
+    // de cabecera): no hace falta guardar la instancia, solo dejar que se construya.
+    new BottleneckRenderer(eventBus, bpmnRenderer, niveles);
+    estado = { marcados: new Set(), niveles };
+    estados.set(modeler, estado);
+  }
+  return estado;
+}
+
+/** Repinta `ids` con el renderer por defecto (sin nivel) o con el tinte (con nivel puesto). */
+function redibujar(modeler: Modeler, ids: Iterable<string>): void {
+  const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
+  const graphicsFactory = modeler.get<GraphicsFactory>('graphicsFactory');
+  for (const id of ids) {
+    const element = elementRegistry.get(id);
+    if (element === undefined) continue;
+    graphicsFactory.update('shape', element, elementRegistry.getGraphics(element));
+  }
+}
+
+/**
+ * Quita todo rastro del overlay anterior sobre `modeler`: etiquetas (`overlays.remove` por
+ * `type`), el marcador del cuello de botella principal y el tinte de las tareas (repintadas con
+ * el renderer por defecto, al vaciar `niveles` antes de repintar). Llamarla dos veces seguidas, o
+ * antes de un `applyOverlay` con otro resultado, no acumula nada — no hay fuga de overlays.
+ */
+export function clearOverlay(modeler: Modeler): void {
+  const estado = estados.get(modeler);
+  if (estado === undefined) return;
+
+  modeler.get<Overlays>('overlays').remove({ type: OVERLAY_TYPE });
+  const canvas = modeler.get<Canvas>('canvas');
+  for (const id of estado.marcados) canvas.removeMarker(id, MARKER_PRINCIPAL);
+  estado.marcados.clear();
+
+  const previos = [...estado.niveles.keys()];
+  estado.niveles.clear();
+  redibujar(modeler, previos);
+}
+
+/**
+ * Aplica el overlay de `result`/`scenario` sobre `modeler`: tiñe las tareas con espera, marca
+ * `bottlenecks[0]` y añade la etiqueta de cada una. Reemplaza cualquier overlay anterior del mismo
+ * modelador (empieza con `clearOverlay`), así que llamarla de nuevo tras cambiar de escenario dejas
+ * el lienzo exactamente con el overlay del resultado nuevo, nada del anterior.
+ */
+export function applyOverlay(modeler: Modeler, result: RunResult, scenario: ResolvedScenario): void {
+  inyectarEstilos();
+  const estado = estadoDe(modeler);
+  clearOverlay(modeler);
+
+  const modelo = overlayModel(result, scenario);
+  const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
+  const canvas = modeler.get<Canvas>('canvas');
+  const overlays = modeler.get<Overlays>('overlays');
+  const presentes: string[] = [];
+
+  for (const [id, entry] of Object.entries(modelo)) {
+    // Un `result` de otro modelo (u otro `.bpmn` abierto mientras tanto) no revienta: los ids que
+    // ya no existen en el lienzo se ignoran.
+    if (elementRegistry.get(id) === undefined) continue;
+    presentes.push(id);
+    estado.niveles.set(id, entry.nivel);
+    if (entry.principal) {
+      canvas.addMarker(id, MARKER_PRINCIPAL);
+      estado.marcados.add(id);
+    }
+    overlays.add(id, OVERLAY_TYPE, { html: etiquetaHtml(entry), position: { bottom: -4, right: -4 } });
+  }
+
+  redibujar(modeler, presentes);
+}
