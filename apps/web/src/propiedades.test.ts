@@ -4,8 +4,8 @@
  *
  * El panel escribe sobre el moddle vivo de bpmn-js con `modeling.updateProperties` y
  * `modeling.updateModdleProperties`, y el XML sale después de `saveXML`. Montar bpmn-js de
- * verdad exige un DOM con SVG (`getBBox`, `getComputedTextLength`) que jsdom no implementa, y
- * jsdom sería una dependencia nueva; así que aquí se ejercitan las funciones que
+ * verdad no se puede aquí ni con el jsdom que trajo LILA-058: le falta el SVG que bpmn-js
+ * necesita (`getBBox`, `getComputedTextLength`). Así que se ejercitan las funciones que
  * `PropertiesPanel.tsx` usa para escribir —las mismas, no una copia— contra bpmn-moddle, que
  * es exactamente lo que bpmn-js tiene debajo. Lo que `modeling` añade sobre eso es el
  * `commandStack` (Cmd+Z) y el repintado del lienzo, y eso está verificado a mano en el
