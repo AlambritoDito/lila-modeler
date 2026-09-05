@@ -31,6 +31,43 @@ function fuentesDeLaUi(dir: URL, prefijo = ''): string[] {
   return resultado;
 }
 
+/**
+ * Quita los comentarios antes de buscar imports: un import comentado no importa nada, y hacer
+ * fallar el test por una línea muerta es ruido. Solo se quitan los comentarios de bloque y los
+ * de línea que ocupan la línea entera; uno al final de una línea con código se queda, para no
+ * cortar por el `//` de una URL (`'https://…'`), que es el caso frecuente de verdad.
+ */
+function sinComentarios(codigo: string): string {
+  return codigo.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
+
+/**
+ * `true` si `codigo` trae una implementación concreta del store. Cubre las tres formas de
+ * traerla: `import … from`, `export … from` y `import()` dinámico —esta última se colaba, y es
+ * justo la que usaría alguien para «cargar el store bajo demanda» sin darse cuenta de que
+ * rompe la costura de ADR-023—.
+ */
+export function importaImplementacion(codigo: string): boolean {
+  return /(?:\bfrom|\bimport\s*\()\s*['"][^'"]*\/store\/(?!ProjectStore['"])[^'"]+['"]/.test(
+    sinComentarios(codigo),
+  );
+}
+
+describe('qué cuenta como importar la implementación concreta', () => {
+  it.each([
+    ["import { BrowserStore } from './store/BrowserStore';", true],
+    ["export { BrowserStore } from '../store/BrowserStore';", true],
+    ["const s = await import('./store/BrowserStore');", true],
+    ["import('../store/DesktopStore').then((m) => m);", true],
+    ["import type { ProjectStore } from './store/ProjectStore';", false],
+    ["// import { BrowserStore } from './store/BrowserStore';", false],
+    ["/* import { BrowserStore } from './store/BrowserStore'; */", false],
+    ["const ns = 'https://lila-modeler.org/store/BrowserStore';", false],
+  ])('%s', (codigo, esperado) => {
+    expect(importaImplementacion(codigo)).toBe(esperado);
+  });
+});
+
 describe('límite de módulo: solo main.tsx conoce la implementación concreta del store', () => {
   const archivos = fuentesDeLaUi(SRC).filter(
     (ruta) => ruta !== ENTRADA && !ruta.endsWith(`store/${INTERFAZ}`),
@@ -41,11 +78,6 @@ describe('límite de módulo: solo main.tsx conoce la implementación concreta d
   });
 
   it.each(archivos)('%s no importa una implementación concreta de ProjectStore', (ruta) => {
-    const codigo = readFileSync(new URL(ruta, SRC), 'utf8');
-    // Cualquier import cuyo especificador termine en "store/<Algo>" que no sea la interfaz.
-    const importaImplementacion = /from\s+['"][^'"]*\/store\/(?!ProjectStore['"])[^'"]+['"]/.test(
-      codigo,
-    );
-    expect(importaImplementacion).toBe(false);
+    expect(importaImplementacion(readFileSync(new URL(ruta, SRC), 'utf8'))).toBe(false);
   });
 });
