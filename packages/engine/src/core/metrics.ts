@@ -113,6 +113,8 @@ function emptyElementMetrics(started: number, completed: number): ElementMetrics
   };
 }
 
+const NO_POOLS: readonly string[] = [];
+
 /** Un intervalo de espera observada `[from, to)`; `to <= from` no llega hasta aquí. */
 interface Interval {
   from: number;
@@ -210,6 +212,7 @@ export function aggregateReplication(
   // cada fila ocupó y el denominador de la utilización. Sin `calendars` el mapa queda vacío,
   // `undefined` es 24×7 y las dos expresiones son literalmente las de M2 (R-DEG-2).
   const calendars = compileCalendars(scenario);
+  const hasCalendars = calendars.size > 0;
 
   for (const row of includedRows) {
     const activityRows = rowsByActivity.get(row.activityInstanceId) ?? [];
@@ -235,7 +238,9 @@ export function aggregateReplication(
     // de hecho ocupó— para que sea exactamente el que usó `sim.ts` al calcular `resourceCost`,
     // y así se conserve la identidad de R-COST-4. Las filas de una actividad son contiguas en el
     // log, así que recorrerlas agrupadas suma los flotantes en el mismo orden que antes.
-    const usedPools = activityRows.flatMap((entry) => (entry.resourceId === null ? [] : [entry.resourceId]));
+    const usedPools = hasCalendars
+      ? activityRows.flatMap((entry) => (entry.resourceId === null ? [] : [entry.resourceId]))
+      : NO_POOLS;
     let calendar: Calendar | undefined;
     for (const entry of activityRows) {
       if (entry.resourceId === null) continue;
@@ -243,7 +248,9 @@ export function aggregateReplication(
       pools.add(entry.resourceId);
       poolsByElement.set(entry.elementId, pools);
       if (entry.startedAt === null) continue;
-      if (calendar === undefined) calendar = activityCalendar(scenario, calendars, entry.elementId, usedPools);
+      if (hasCalendars && calendar === undefined) {
+        calendar = activityCalendar(scenario, calendars, entry.elementId, usedPools);
+      }
       const quantity = entry.resourceQuantity ?? 1;
       const occupiedFrom = Math.max(entry.startedAt, windowStart);
       const occupiedTo = Math.min(entry.endedAt ?? entry.observedUntil, windowEnd);

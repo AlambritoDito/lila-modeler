@@ -352,6 +352,8 @@ interface CaseState {
 }
 
 const NO_MARKS: readonly number[] = [];
+/** Sin pools: el calendario de la actividad es solo el del elemento (R-CAL-4). */
+const NO_POOLS: readonly string[] = [];
 
 /* ------------------------------------------------------------------ *
  * Bucle
@@ -386,9 +388,11 @@ export function runReplication(
 
   // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
   // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.
+  // Sin calendarios ni siquiera se llama a `calendarFor`: el camino caliente de M2 no gana un
+  // solo `map` ni una sola llamada (R-DEG-2, y el benchmark de LILA-031 no se mueve).
+  const hasCalendars = calendars.size > 0;
   const calendarCache = new Map<string, Calendar | undefined>();
   const calendarFor = (nodeId: string, poolIds: readonly string[]): Calendar | undefined => {
-    if (calendars.size === 0) return undefined;
     const key = poolIds.length === 0 ? nodeId : `${nodeId}\u0000${poolIds.join('\u0000')}`;
     if (calendarCache.has(key)) return calendarCache.get(key);
     const calendar = activityCalendar(scenario, calendars, nodeId, poolIds);
@@ -443,7 +447,9 @@ export function runReplication(
       // R-CAL-4: el calendario de la tarea sale de los pools **efectivamente** concedidos, así
       // que una OR toma el del pool elegido. R-CAL-6: la unidad se reserva desde el instante de
       // concesión (`allocation.startedAt`) aunque el trabajo no empiece hasta la apertura.
-      const calendar = calendarFor(activity.nodeId, allocation.assignments.map((a) => a.poolId));
+      const calendar = hasCalendars
+        ? calendarFor(activity.nodeId, allocation.assignments.map((assignment) => assignment.poolId))
+        : undefined;
       activity.calendar = calendar;
       const startedAt = calendar === undefined ? allocation.startedAt : nextOpen(calendar, allocation.startedAt);
       activity.startedAt = startedAt;
@@ -633,7 +639,7 @@ export function runReplication(
     emitted.set(nodeId, 0);
     // R-ARR-1 / R-ARR-6: la primera llegada ocurre en t = 0, desplazada a la siguiente apertura
     // si el start declara calendario. El corte contra `tStop` se aplica al valor ya desplazado.
-    const calendar = calendarFor(nodeId, []);
+    const calendar = hasCalendars ? calendarFor(nodeId, NO_POOLS) : undefined;
     const first = calendar === undefined ? 0 : nextOpen(calendar, 0);
     if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
@@ -707,7 +713,7 @@ export function runReplication(
         // La cadencia se mide en tiempo de reloj y **después** se desplaza a la apertura
         // (R-ARR-6): el muestreo consume el mismo uniforme haya calendario o no (R-DET-3).
         const sampled = next.t + Math.max(0, sample(interTrigger, rngFor(next.startId)));
-        const calendar = calendarFor(next.startId, []);
+        const calendar = hasCalendars ? calendarFor(next.startId, NO_POOLS) : undefined;
         const at = calendar === undefined ? sampled : nextOpen(calendar, sampled);
         if (at < tStop) heap.push({ t: at, kind: 'arrive', startId: next.startId });
       }
@@ -776,10 +782,12 @@ export function runReplication(
         // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
         // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
         // AND y sin recursos la combinación ya es definitiva.
-        const calendar = calendarFor(
-          next.nodeId,
-          spec[next.nodeId]?.selection === 'or' ? [] : requirements.map((requirement) => requirement.poolId),
-        );
+        const calendar = hasCalendars
+          ? calendarFor(
+              next.nodeId,
+              spec[next.nodeId]?.selection === 'or' ? NO_POOLS : requirements.map((requirement) => requirement.poolId),
+            )
+          : undefined;
         // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
         const startedAt = requirements.length > 0
           ? null
