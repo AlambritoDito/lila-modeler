@@ -451,19 +451,24 @@ comportamiento real de L-Sim/Bizagi.
   offset UTC que `run.start`. No hay DST, no hay festivos, no hay zonas horarias por recurso en v1
   (`timezone` y `holidays` son campos reservados, §15). El patrón se repite indefinidamente.
   *(prueba: LILA-040)*
-- **R-CAL-2 — Intervalos.** `from` inclusivo, `to` exclusivo. `to` menor que `from` significa que el
-  intervalo cruza la medianoche hacia el día siguiente. Los intervalos de un mismo calendario se
-  normalizan uniendo solapes. Un calendario con `intervals: []` es error `E-CAL-VACIO` (nunca
-  abriría). *(prueba: LILA-040, LILA-042)*
+- **R-CAL-2 — Intervalos.** `from` inclusivo, `to` exclusivo. **`to > from` es obligatorio** (R13 de
+  `SCENARIO_FORMAT.md`): ningún intervalo cruza la medianoche, y una ventana nocturna se declara
+  como dos intervalos (p. ej. `22:00–23:59` del lunes y `00:00–06:00` del martes). Los intervalos de
+  un mismo calendario se normalizan uniendo solapes y adyacencias. Un calendario con
+  `intervals: []` es error `E-CAL-VACIO` (nunca abriría). *(prueba: LILA-040, LILA-042)*
 - **R-CAL-3 — Primitivas.** `isOpen(t)`, `nextOpen(t)` (el propio `t` si ya está abierto) y
-  `addWorkingTime(t, d)` (instante en que se han consumido `d` segundos abiertos desde `t`). Son las
-  únicas operaciones de calendario del motor: **no hay eventos de apertura/cierre en el heap**, la
-  disponibilidad se resuelve al planificar. *(prueba: LILA-040)*
+  `addWorkingTime(t, d)` (instante en que se han consumido `d` segundos abiertos desde `t`; con
+  `d ≤ 0` devuelve `t` tal cual, aunque esté cerrado, y si `d` termina justo al cerrar un intervalo
+  devuelve ese cierre). Derivadas: `openTime(a, b)` (segundos abiertos contenidos en `[a, b)`, base
+  de `offHoursWait` y de `availableTime`) e `intersect(cal1, cal2)` (calendario de intervalos
+  comunes, R-CAL-4). Son las únicas operaciones de calendario del motor: **no hay eventos de
+  apertura/cierre en el heap**, la disponibilidad se resuelve al planificar. *(prueba: LILA-040)*
 - **R-CAL-4 — Una tarea solo arranca en horario abierto.** `started = nextOpen(instante en que hay
   recursos)`. El calendario aplicable a una tarea es la **intersección** de los calendarios de los
   pools que ocupa (selección AND) o el del pool asignado (selección OR); si además el elemento
   declara `elements[id].calendar`, se intersecta también. Sin recursos, el del elemento; sin
-  ninguno, 24×7. *(prueba: LILA-041)*
+  ninguno, 24×7. Si la intersección queda **vacía** la tarea nunca podría arrancar: es error
+  `E-CAL-VACIO` citando la tarea. *(prueba: LILA-041)*
 - **R-CAL-5 — El processingTime se pausa y se reanuda.** La duración muestreada se consume **solo**
   en tiempo abierto: `ended = addWorkingTime(started, d)`. Al cerrar el turno la tarea se congela y
   reanuda en la siguiente apertura. Ejemplo normativo: tarea de 2 h que arranca a las 17:30 con
@@ -636,7 +641,7 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-REC-DUPLICADO` | el mismo pool dos veces en una tarea |
 | `E-REC-CANTIDAD` | `quantity` mayor que la `capacity` del pool |
 | `E-CAL-DESCONOCIDO` | `calendar` que no existe en `calendars` |
-| `E-CAL-VACIO` | calendario sin intervalos |
+| `E-CAL-VACIO` | calendario sin intervalos, o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
@@ -695,7 +700,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 | R-REC-8 | `resourceWait = started − enabled − offHoursWait` | LILA-036, LILA-041 |
 | R-REC-9, R-REC-10 | pool duplicado; qué elementos admiten recursos | LILA-013, LILA-021 |
 | R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
-| R-CAL-1 … R-CAL-3 | patrón semanal, intervalos, primitivas | LILA-040 |
+| R-CAL-1, R-CAL-2, R-CAL-3 | patrón semanal, intervalos (`to > from`), primitivas y derivadas | LILA-040 |
 | R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
 | R-CAL-9 | utilización sobre horas disponibles | LILA-041, LILA-036 |
 | R-CAL-10 | matriz recurso × calendario y calendario por defecto | LILA-041, LILA-042 |
