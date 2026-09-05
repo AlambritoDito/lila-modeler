@@ -1,7 +1,7 @@
-# MCP (LILA-053/054)
+# MCP (LILA-053/054/055)
 
 `packages/mcp` (`@lila/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila/engine`, sin lógica propia: cuatro tools por ahora.
+`@lila/engine`, sin lógica propia: cinco tools por ahora.
 
 - **`validate_bpmn({ path | xml })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
@@ -28,11 +28,33 @@
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno.
+- **`patch_scenario({ scenario, patch, saveTo?, extendsFrom?, name?, description? })`**
+  (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
+  el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
+  § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
+  `{ scenario, file, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita y los
+  avisos de lint (`W-…`) como `notes`. Dos modos:
+  - **Sin `saveTo`** (modo a) — parchea `scenario` en sitio: el patch se aplica sobre el escenario
+    ya resuelto (con `extends` fusionado) y se sobrescribe el mismo archivo con el resultado
+    completo, sin `extends` propio. Es un "aplanar y parchear": si `scenario` tenía su propio
+    `extends`, el archivo escrito ya no lo tiene.
+  - **Con `saveTo`** (modo b) — crea un archivo **nuevo** que declara `extends` hacia
+    `extendsFrom` (por defecto, el propio `scenario`) y contiene **solo las claves que tocó el
+    patch**, como `examples/pedido/to-be-3-cajeros.scenario.json`. La ruta de `extends` se escribe
+    relativa al archivo nuevo (`docs/SCENARIO_FORMAT.md` § 6), sin importar en qué directorio esté
+    `saveTo`.
 
-Las dos tools nuevas reutilizan `@lila/engine/cli-shared`, extraído de `cli.ts` en el mismo ticket
-sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el mismo
-pipeline. `patch_scenario` llega en LILA-055. El subcomando `lila mcp` llega en LILA-056 —
-mientras tanto se usa el bin `lila-mcp` de este paquete.
+  El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
+  (`/resources/cajero/capacity`); **no** soporta `move` ni `copy` — son las dos operaciones que
+  leen de una ubicación distinta a la que escriben, y ningún caso de uso de esta tool las necesita
+  (`packages/mcp/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
+  de `[0, 1]`, `capacity < 1`, una `ref` que no existe en `resources`, un `id` que no existe en el
+  modelo, … — es `isError: true` y **no escribe nada**, en ninguno de los dos modos.
+
+Las tres tools de LILA-054/055 reutilizan `@lila/engine/cli-shared`, extraído de `cli.ts` en
+LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
+mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`). El subcomando
+`lila mcp` llega en LILA-056 — mientras tanto se usa el bin `lila-mcp` de este paquete.
 
 ### Ejemplos
 
@@ -58,6 +80,32 @@ mientras tanto se usa el bin `lila-mcp` de este paquete.
 // -> { "comparison": { "count": 2, "rows": [...] }, "notes": [...] }
 ```
 
+```jsonc
+// patch_scenario, modo (b): crea un TO-BE con extends al AS-IS
+{
+  "scenario": "examples/pedido/as-is.scenario.json",
+  "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 3 }],
+  "saveTo": "examples/pedido/to-be-3-cajeros.scenario.json",
+  "name": "TO-BE 3 cajeros"
+}
+// -> escribe { "version": 1, "name": "TO-BE 3 cajeros",
+//              "extends": "as-is.scenario.json", "resources": { "cajero": { "capacity": 3 } } }
+//    y devuelve { "scenario": {...resuelto...}, "file": "/ruta/.../to-be-3-cajeros.scenario.json",
+//                 "notes": [...] }
+```
+
+### Flujo "qué pasa si agrego un cajero", en tres llamadas
+
+1. `run_simulation({ "scenario": "examples/pedido/as-is.scenario.json" })` — bottleneck actual:
+   `bottlenecks[0]` señala `Task_Preparar`/`Task_TomarPedido` con su `resourceWait`.
+2. `patch_scenario({ "scenario": "examples/pedido/as-is.scenario.json", "patch": [{ "op":
+   "replace", "path": "/resources/cajero/capacity", "value": 3 }], "saveTo":
+   "examples/pedido/to-be-3-cajeros.scenario.json" })` — crea el escenario nuevo (rechaza sin
+   escribir si el patch deja algo inválido).
+3. `compare_scenarios({ "scenarios": ["examples/pedido/as-is.scenario.json",
+   "examples/pedido/to-be-3-cajeros.scenario.json"] })` — tabla con
+   `elements.Task_TomarPedido.resourceWait.mean` marcado significativo, y en cuánto bajó.
+
 Un escenario inline (sin archivo en disco) es un objeto JS con el mismo `ResolvedScenario` que
 produciría `resolveExtends`: `{ "scenario": { "version": 1, "name": "...", "model": "...", "run":
 {...}, "elements": {...} } }`. Si declara `model` relativo, se resuelve contra el cwd del proceso
@@ -82,6 +130,13 @@ de la llamada, no un reporte válido. El mensaje lleva el nombre de la tool, el 
 se puede simular sin gastar una simulación, la tool es `validate_bpmn`, que devuelve el reporte
 completo con `isError: false`.
 
+`patch_scenario` sigue el mismo criterio que `run_simulation`/`compare_scenarios`: un patch que
+deja el escenario inválido (estructuralmente, por `docs/SCENARIO_FORMAT.md` § 5, o porque la
+propia operación de JSON Patch no se puede aplicar — un `path` inexistente en `replace`, una
+operación desconocida) es `isError: true`, sin escribir nada. No hay ambigüedad "resultado
+correcto pero el modelo tiene errores" aquí: si el escenario resultante no valida, no hay nada que
+devolver.
+
 ## `saveTo`
 
 `saveTo` escribe en el sistema de archivos del **proceso servidor**, con sus permisos, la ruta que
@@ -89,7 +144,9 @@ se le pase (relativa al cwd, como todo lo demás). Sobrescribe un archivo existe
 igual que `lila run --json <ruta>`, y publica con `rename` desde un temporal en el mismo
 directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es un error de la
 tool, no un borrado. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
-bytes que `lila compare --json <ruta>`.
+bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el modo de la tool
+(§ arriba): sin `saveTo` se sobrescribe `scenario`; con `saveTo` se crea un archivo nuevo con
+`extends` y solo el delta del patch.
 
 ## Rutas
 
