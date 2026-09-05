@@ -83,14 +83,19 @@ export type Distribution = z.output<typeof DistributionSchema>;
 
 /** ISO 8601 con offset explícito (R8). `Z` cuenta como offset. */
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-/** Solo para extraer año/mes/día de un `start` que ya pasó `ISO_WITH_OFFSET`. */
-const ISO_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})T/;
+/** Descompone un `start` que ya pasó `ISO_WITH_OFFSET` en fecha, hora y offset. */
+const ISO_PARTS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
 /**
- * `run.start` con fecha civil inexistente (`2026-02-31`, `2026-13-01`) pasaba el regex de arriba
- * y `new Date()` la normalizaba en silencio (hallazgo de QA de LILA-037/LILA-040). Aritmética
- * civil pura, sin `Date` (R-DET-5): meses de 1 a 12 y bisiesto = múltiplo de 4, salvo de 100
- * que no sea también de 400.
+ * `run.start` con fecha u hora civil inexistente (`2026-02-31`, `2026-13-01`, `23:60`, `+24:00`)
+ * pasaba el regex de arriba y seguía adelante en silencio (hallazgo de QA de LILA-037/LILA-040 y
+ * de LILA-042): `Date.parse` devuelve `NaN` y las tres columnas ISO del `log.csv` salen **vacías**
+ * en todas las filas, o peor, `2026-02-31` se normaliza sola a `2026-03-03`.
+ *
+ * Aritmética civil pura, sin `Date` (R-DET-5): meses de 1 a 12 y bisiesto = múltiplo de 4, salvo
+ * de 100 que no sea también de 400. La hora `24:00` se rechaza aunque ISO 8601 la admita como fin
+ * de día: es ambigua como instante de arranque y `24:00:01` ya no la entiende nadie; se escribe
+ * como las `00:00` del día siguiente (R8 de `docs/SCENARIO_FORMAT.md`).
  */
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -104,20 +109,31 @@ function isValidCivilDate(year: number, month: number, day: number): boolean {
   return day >= 1 && day <= maxDay;
 }
 
+/** Mensaje del primer defecto civil de `start`, o `null` si el instante existe. */
+function civilStartError(start: string): string | null {
+  const match = ISO_PARTS.exec(start);
+  if (match === null) return null; // ya lo rechazó `ISO_WITH_OFFSET`.
+  const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match;
+  if (!isValidCivilDate(Number(year), Number(month), Number(day))) {
+    return `run.start: ${start} no es una fecha válida; ${month}-${day} no existe en el calendario civil.`;
+  }
+  if (Number(hour) > 23 || Number(minute) > 59 || (second !== undefined && Number(second) > 59)) {
+    const clock = second === undefined ? `${hour}:${minute}` : `${hour}:${minute}:${second}`;
+    return `run.start: ${start} no es una hora válida; ${clock} no existe en el reloj civil.`;
+  }
+  if (offsetHour !== undefined && (Number(offsetHour) > 23 || Number(offsetMinute) > 59)) {
+    return `run.start: ${start} no tiene un offset válido; ${offsetHour}:${offsetMinute} no es un desplazamiento horario.`;
+  }
+  return null;
+}
+
 export const RunSchema = z.strictObject({
   start: z
     .string()
     .regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset')
     .superRefine((value, ctx) => {
-      const match = ISO_DATE_PREFIX.exec(value);
-      if (match === null) return; // ya lo rechazó el regex de arriba
-      const [, year, month, day] = match;
-      if (!isValidCivilDate(Number(year), Number(month), Number(day))) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `run.start: ${value} no es una fecha válida; ${month}-${day} no existe en el calendario civil.`,
-        });
-      }
+      const message = civilStartError(value);
+      if (message !== null) ctx.addIssue({ code: 'custom', message });
     }),
   duration: positive.optional(),
   warmup: nonNegative.default(0),
@@ -298,6 +314,16 @@ const GENERATORS = new Set(['start', 'timer']);
  * R10 — probabilidades de un XOR divergente (§ 6 de `docs/SEMANTICS.md`, R-XOR-1…5). Duplica a
  * propósito el cálculo de `core/sim.ts::xorWeights`: `core/` no se toca y esta versión corre
  * **sin simular**, así un gateway que ningún token visita también queda linteado.
+ *
+ * El `message` es **byte a byte** el que emite `core/sim.ts` para el mismo gateway (`Gateway_X: …`,
+ * sin el prefijo `elements.` que llevan los demás problemas de este archivo). No es cosmético: la
+ * CLI mezcla los avisos del lint y los del motor en un `Set<string>` de `${code}: ${message}`
+ * (`cli.ts::resultWithBoundaryWarnings`), así que un texto distinto salía **dos veces** en consola
+ * y en `RunResult.warnings[]`. El `path` sí conserva `elements.${gatewayId}` para el panel y el
+ * JSON. Si alguna vez cambia el texto del motor, hay que cambiar este a la vez (lo fija un test).
+ *
+ * `E-XOR-SUMA-CERO` no entra en el trato: es error, aborta antes de simular y el motor nunca lo
+ * emite, así que conserva el prefijo `elements.` de los demás errores de este archivo.
  */
 function checkXorGateway(
   problems: ScenarioProblem[],
@@ -318,7 +344,7 @@ function checkXorGateway(
       code: 'W-XOR-RESIDUO-COMPARTIDO',
       path: `elements.${gatewayId}`,
       severity: 'warning',
-      message: `elements.${gatewayId}: el residuo se reparte entre ${missingIds.join(', ')}.`,
+      message: `${gatewayId}: el residuo se reparte entre ${missingIds.join(', ')}.`,
     });
   }
 
@@ -337,7 +363,7 @@ function checkXorGateway(
       code: 'W-XOR-NORMALIZADA',
       path: `elements.${gatewayId}`,
       severity: 'warning',
-      message: `elements.${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`,
+      message: `${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`,
     });
   }
 }
