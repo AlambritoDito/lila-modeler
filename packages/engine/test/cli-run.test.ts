@@ -311,7 +311,8 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
 
       const parsed = JSON.parse(readFileSync(firstJson, 'utf8')) as {
         resources: Record<string, { utilization: number; busyTime: number }>;
-        bottlenecks: unknown[];
+        bottlenecks: Array<{ elementId: string; resourceWaitTotal: number; utilization: number }>;
+        process: { costPerCase: number };
       };
       expect(runResultSchema.safeParse(parsed).success).toBe(true);
       expect(Object.keys(parsed.resources)).toContain('cajero');
@@ -328,8 +329,35 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
         formatNumber(cajero.utilization * 100),
         formatDuration(cajero.busyTime, 'min'),
       ]);
+
+      // LILA-188: run.currency en la cabecera de la corrida (docs/RESULTS_FORMAT.md §8, mismo
+      // criterio que ResultsView en apps/web/src/ResultsView.tsx).
+      expect(firstText).toContain('Semilla 42 · Replicaciones 3 · Unidad de tiempo min · Moneda MXN');
+
+      // LILA-188: tabla "Cuellos de botella" con el ranking de RunResult.bottlenecks
+      // (docs/RESULTS_FORMAT.md §6), tras las tablas Bizagi.
+      expect(firstText).toContain('Cuellos de botella');
+      const bottleneckHeaderIndex = lines.indexOf('Cuellos de botella') + 1;
+      expect(lines[bottleneckHeaderIndex]).toMatch(
+        /^Id +Name +Total time \(waiting for resource\) \(min\) +Utilization \(%\)$/,
+      );
+      const firstBottleneck = parsed.bottlenecks[0]!;
+      const bottleneckRow = lines
+        .slice(bottleneckHeaderIndex + 2)
+        .find((line) => line.startsWith(firstBottleneck.elementId))!
+        .split(/ {2,}/);
+      expect(bottleneckRow[0]).toBe(firstBottleneck.elementId);
+      expect(bottleneckRow[2]).toBe(formatDuration(firstBottleneck.resourceWaitTotal, 'min'));
+      expect(bottleneckRow[3]).toBe(formatNumber(firstBottleneck.utilization * 100));
+
+      // LILA-188: costPerCase en la tabla de proceso (docs/RESULTS_FORMAT.md §5).
+      const processHeaderIndex = lines.indexOf('Process summary (extras)') + 1;
+      expect(lines[processHeaderIndex]!.split(/ {2,}/).at(-1)).toBe('Cost per case');
+      expect(lines[processHeaderIndex + 2]!.split(/ {2,}/).at(-1)).toBe(
+        formatNumber(parsed.process.costPerCase),
+      );
     },
-    30_000,
+    60_000,
   );
 
   test(

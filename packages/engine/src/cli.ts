@@ -165,10 +165,12 @@ function modelHasErrors(validation: ValidationResult): boolean {
 
 function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunResult): void {
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
+  const currency = scenario.run.currency;
   console.log(`Escenario ${scenario.name}`);
   console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
   console.log(
-    `Semilla ${scenario.run.seed} · Replicaciones ${scenario.run.replications} · Unidad de tiempo ${unit}`,
+    `Semilla ${scenario.run.seed} · Replicaciones ${scenario.run.replications} · Unidad de tiempo ${unit}` +
+      (currency === undefined ? '' : ` · Moneda ${currency}`),
   );
 
   console.log('');
@@ -236,6 +238,24 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
     );
   }
 
+  console.log('');
+  console.log('Cuellos de botella');
+  if (result.bottlenecks.length === 0) {
+    console.log('Sin espera por recurso detectada.');
+  } else {
+    console.log(
+      formatTable(
+        ['Id', 'Name', `Total time (waiting for resource) (${unit})`, 'Utilization (%)'],
+        result.bottlenecks.map((entry) => [
+          entry.elementId,
+          ir.nodes[entry.elementId]?.name ?? '',
+          formatDuration(entry.resourceWaitTotal, unit),
+          formatNumber(entry.utilization * 100),
+        ]),
+      ),
+    );
+  }
+
   const process = result.process;
   console.log('');
   console.log('Process summary (extras)');
@@ -250,6 +270,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
         `p90 (${unit})`,
         `p95 (${unit})`,
         'Throughput/hour',
+        'Cost per case',
       ],
       [[
         formatNumber(process.started),
@@ -260,6 +281,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
         formatDuration(process.cycleTime.p90, unit),
         formatDuration(process.cycleTime.p95, unit),
         formatNumber(process.throughputPerHour),
+        formatNumber(process.costPerCase),
       ]],
     ),
   );
