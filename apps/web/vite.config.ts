@@ -10,10 +10,10 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   publicDir: 'src/theme/themes',
-  // `results.html` (demo de LILA-062) NO se declara como entrada de `build`: en dev Vite sirve
-  // cualquier `.html` de la raíz del proyecto, así que `npm run dev` la abre igual, y así el
-  // bundle de producción —el que publica LILA-067 en GitHub Pages— no incluye una página de
-  // demostración que nadie debería encontrarse en la app.
+  // Ni `results.html` (demo de LILA-062) ni `compare.html` (demo de LILA-063) se declaran como
+  // entrada de `build`: en dev Vite sirve cualquier `.html` de la raíz del proyecto, así que
+  // `npm run dev` las abre igual, y así el bundle de producción —el que publica LILA-067 en
+  // GitHub Pages— no incluye páginas de demostración que nadie debería encontrarse en la app.
   //
   // `server.fs.allow` **acota**, no amplía: por defecto Vite deja servir toda la raíz del
   // monorepo (la detecta por `package-lock.json`), incluidos `BACKLOG.md` e
