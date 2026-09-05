@@ -38,7 +38,11 @@
   - **Sin `saveTo`** (modo a) — parchea `scenario` en sitio: el patch se aplica sobre el escenario
     ya resuelto (con `extends` fusionado) y se sobrescribe el mismo archivo con el resultado
     completo, sin `extends` propio. Es un "aplanar y parchear": si `scenario` tenía su propio
-    `extends`, el archivo escrito ya no lo tiene.
+    `extends`, el archivo escrito ya no lo tiene. `model` se escribe **relativo al propio
+    escenario**, no como la ruta absoluta que tenía ya resuelta: un escenario con
+    `/Users/quien-corrió-la-tool/…` dentro deja de resolver en cualquier otro checkout. Y un patch
+    que borra `model` o `run` se rechaza: el esquema los deja opcionales porque un archivo con
+    `extends` los hereda, pero un escenario aplanado sin ellos no se puede simular.
   - **Con `saveTo`** (modo b) — crea un archivo **nuevo** que declara `extends` hacia
     `extendsFrom` (por defecto, el propio `scenario`) y contiene **solo las claves que tocó el
     patch**, como `examples/pedido/to-be-3-cajeros.scenario.json`. La ruta de `extends` se escribe
