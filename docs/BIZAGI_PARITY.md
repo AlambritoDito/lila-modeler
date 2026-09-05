@@ -26,9 +26,9 @@ escenario publicado.
 | Distribuciones: las 13 de BPSim 2.0 + constante + empírica | ✓ (subconjunto no documentado) | ✓ todas | M1 | Implementado (LILA-025) |
 | Escenario: nombre, descripción, autor, versión, inicio, duración, unidad de tiempo, moneda, replicaciones, semilla | ✓ | ✓ (+ `warmup`, `extends`) | M1 | Implementado (LILA-013, LILA-014) |
 | Parada: duración o max arrival count, lo primero | ✓ | ✓ | M1 | Implementado (LILA-026); paridad verificada (la corrida oficial drena sus 2017 casos, ver D4) |
-| Recursos: tipo rol/equipo, disponibilidad, costo fijo por token, costo por hora | ✓ | ✓ | M2 | Implementado (LILA-033); paridad verificada en el nivel 3 (utilización y costos de los seis recursos) |
+| Recursos: tipo rol/equipo, disponibilidad, costo fijo por token, costo por hora | ✓ | ✓ | M2 | Implementado (LILA-033); paridad verificada en el nivel 3 ([test](../packages/engine/test/bizagi-parity.test.ts)): utilización de los seis recursos y costo de cuatro de ellos; los dos vehículos no cuadran por D8 |
 | Asignación a tarea: uno o varios recursos, cantidad, AND / OR | ✓ | ✓ | M2 | Implementado (LILA-034, LILA-035) |
-| Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 |
+| Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (8057,6 contra 8063 publicados, −0,07 %) |
 | Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 salvo el caso saturado, ver D6 |
 | Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (nurse 69,65 % contra 69,75 % publicado) |
 | Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041) **con salvedad**: falta capacidad por turno dentro de un mismo pool (LILA-164), sin la cual el nivel 4 no cuadra; ver D7 |
@@ -90,6 +90,13 @@ el test se pone rojo y hay que actualizar el test y esta sección a la vez.
 | 4 | ciclo medio 25 min 26 s | 455 min (+1691 %) | 85,0 min (+234 %) | D7 |
 | 4 | Arrive BA espera máx 15 min | 76 min (+407 %) | 18,0 min (+19,8 %) | D7 |
 | 4 | Arrive BA espera media 0,74 min | 8,2 min (+1013 %) | 1,0 min (+34,8 %) | D7 |
+| 3 | costo fijo de actividades 8063 | — | 8057,6 (−0,07 %) | — |
+| 3 | costo `Call center agent` 6051 | — | 6051,0 (0 %) | — |
+| 3 | costo `Nurse` 15 115 | — | 15 101,5 (−0,09 %) | — |
+| 3 | costo `Ambulance` 30 314,13 | — | 30 232,8 (−0,27 %) | — |
+| 3 | costo `Receptionist` 3018 | — | 3009,9 (−0,27 %) | — |
+| 3 | costo del pool de la tarea QAV 11 139,86 | — | 15 149,5 (+36,0 %) | D8 |
+| 3 | costo del pool de la tarea BA 9844,65 | — | 7369,2 (−25,1 %) | D8 |
 | 4 | ciclo medio 25 min 26 s, con **un pool por rol** | — | 25 min 4 s (−1,45 %) | prueba de D7 |
 
 ### Causas
@@ -98,7 +105,9 @@ el test se pone rojo y hay que actualizar el test y esta sección a la vez.
 casos «cada `start` **con** `interTriggerTimer`», y R-ARR-3 no considera error que falte el timer
 mientras haya `triggerCount`. El nivel 1 de Bizagi es exactamente esa configuración (max arrival
 count 1000, sin intervalo, porque el nivel 1 no habilita campos de tiempo): la corrida sale con
-cero llegadas, en silencio. No es un desajuste con Bizagi sino un hueco del contrato de Lila —
+cero llegadas. **No es silenciosa**: `simulate()` devuelve el aviso `W-START-SIN-LLEGADAS` en
+`warnings` y `lila run` lo imprime, tal como documenta SEMANTICS §10; el test lo comprueba. Lo que
+falta es la decisión de contrato — no es un desajuste con Bizagi sino un hueco del contrato de Lila —
 o el motor trata `triggerCount` a solas como «emitir todos los tokens sin consumir reloj», o la
 validación lo rechaza. Está fuera del alcance de LILA-044 (toca `core/` y `scenario.ts`) y va como
 ticket aparte. Con un `interTriggerTimer` constante de 0 s dentro del test, el nivel 1 cuadra.
@@ -107,9 +116,13 @@ ticket aparte. Con un `interTriggerTimer` constante de 0 s dentro del test, el n
 (483 + 315 + 202) son una sola corrida de 1000 tokens; el 315 se desvía por sí mismo un +5 % de su
 propia probabilidad configurada (30 %). Contra `1000 × p`, que es lo que de verdad valida el nivel
 1, las tres ramas cuadran (−0,23 %, −0,63 %, +1,52 %). Anotado además: `level-1/expected.json`
-etiqueta los tres conteos como `green`/`yellow`/`red`, pero la página solo publica la **suma**
-«(483+315+202)» sin decir de qué rama es cada uno; con Green 20 %, Yellow 30 % y Red 50 %, el 483
-solo puede ser la rama del 50 %. La etiqueta de `expected.json` está invertida.
+etiqueta los tres conteos como `green`/`yellow`/`red` **al revés**. La prosa de la página solo da la
+suma «(483+315+202)», pero la tabla de resultados que la acompaña
+([processvalidation42.png](https://help.bizagi.com/platform/en/processvalidation42.png)) los publica
+fila por fila: «Red Triage end 483 · Yellow Triage end 315 · Green Triage end 202». La corrida rota
+([processvalidation43.png](https://help.bizagi.com/platform/en/processvalidation43.png)) confirma la
+lectura: «Red Triage end 1006 · Yellow Triage end 311 · Green Triage end 186», y el 1006 solo puede
+ser la rama del Parallel Gateway sin convergencia. Corregir `expected.json` es LILA-187.
 
 **D3 — la topología reconstruida de los niveles 2–4 no es la del diagrama oficial.**
 `examples/bizagi-levels/level-{2,3,4}/model.bpmn` reconstruye el «Emergency attendance process»
@@ -132,8 +145,11 @@ utilización de los seis recursos del nivel 3 cuadra dentro del 4 %. Es una erra
 al escenario publicado las probabilidades del gateway, y LILA-044 tiene prohibido cambiar el
 escenario publicado.
 
-**D4 — llegadas constantes y drenado.** La corrida publicada trae exactamente **2017** instancias
-iniciadas y 2017 completadas (10080 / 5 + 1): imposible con un Poisson de media 5 min, y prueba de
+**D4 — llegadas constantes y drenado.** La corrida publicada
+([processvalidation47.png](https://help.bizagi.com/platform/en/processvalidation47.png)) trae
+exactamente **2017** instancias iniciadas y 2017 completadas (10080 / 5 + 1), con `Duration`
+`030,00:00:00` en la cabecera del informe: 30 días de reloj para una semana de llegadas, o sea que
+Bizagi dejó drenar la corrida: imposible con un Poisson de media 5 min, y prueba de
 que el ejemplo usó el control de intervalo **constante** de 5 min, no la distribución exponencial
 que declara el escenario publicado. Además Bizagi drena la corrida (0 casos en vuelo) mientras el
 escenario publicado corta a la semana y deja casos en vuelo que, por LILA-036, no entran en las
@@ -170,7 +186,10 @@ patient place BA` nunca hace cola (espera media 0 contra los 0,74 min publicados
 capacidades 2 / 1 / 2 por turno **dentro del mismo pool** para reproducirla. Además, Bizagi publica
 **una** utilización por rol calculada sobre la capacidad media ponderada por turno —
 `Call center agent` 11,21 % = 8068 min / ((2+2+1)/3 × 43200 min), exacto en los seis recursos —
-mientras Lila publica una por turno; también eso lo arregla LILA-164.
+mientras Lila publica una por turno; también eso lo arregla LILA-164. La fórmula se ha comprobado
+contra [calendaranalysis2.png](https://help.bizagi.com/platform/en/calendaranalysis2.png) en los seis
+recursos, con el trabajo ocupado que la propia tabla de proceso publica: 11,21 · 16,21 · 11,49 ·
+7,55 · 5,60 · 6,90 %, todos exactos al segundo decimal.
 
 **Nota de mapeo.** `expected.json` llama `waitTimeSeconds` a lo que la tabla de Bizagi titula
 «Min./Max./Avg. time» del proceso. Esa columna es **tiempo de ciclo** (procesamiento + espera), y
@@ -178,13 +197,22 @@ su equivalente en Lila es `process.cycleTime`, no `process.waitTime` (que es sol
 `resourceWait + offHoursWait`). El nivel 2, sin recursos, tiene `process.waitTime.mean = 0` por
 R-DEG-1; el test deja esa fila anclada para que el mapeo quede escrito.
 
-**Nota sobre la tabla de recursos del nivel 3.** La página asigna en prosa «Arrive at patient place
-QAV → Basic ambulance» y «Arrive at patient place BA → Quick attention vehicle», y la réplica lo
-reproduce verbatim. Los carriles del diagrama y las utilizaciones publicadas dicen lo contrario
-(21,40 % de *Quick Attention Vehicle* = 618 × 7 min, que es la tarea QAV). Como los dos pools tienen
-la misma capacidad en el nivel 3, la única consecuencia es que las dos utilizaciones salen
-intercambiadas respecto a las etiquetas de Bizagi; en el nivel 4, donde las capacidades por turno
-difieren, sí cambia el número. No se ha tocado: la prosa es la fuente citable.
+**D8 — los dos vehículos están cruzados en la tabla de requerimientos de la página.** La tabla
+«Activity | Resource | Quantity» del nivel 3 asigna «Arrive at patient place QAV → Basic ambulance»
+y «Arrive at patient place BA → Quick attention vehicle», y la réplica lo reproduce verbatim. Los
+carriles del diagrama y los resultados publicados dicen lo contrario: en
+[resourcesanalysis3.png](https://help.bizagi.com/platform/en/resourcesanalysis3.png) *Quick
+Attention Vehicle* sale al 21,40 %, que es 618 × 7 min / (2 × 10 108 min) — la tarea QAV — y *Basic
+Ambulance* al 19,44 % = 393 × 10 min / (2 × 10 108 min) — la tarea BA. Con esa lectura los **seis**
+denominadores dan el mismo instante de fin de corrida (10 108 min con 3 enfermeras, 10 591 con 2),
+lo que confirma a la vez la fórmula `busy / (capacidad × t_fin)` y el cruce.
+
+Para la **utilización** el cruce solo intercambia dos etiquetas, porque los dos pools tienen
+capacidad 2. Para el **costo** no: los precios difieren (25 y 0,3 /h contra 18 y 0,22 /h), así que la
+réplica cobra la tarea QAV a 25/token en vez de 18 y la tarea BA a 18 en vez de 25. Medido: 15 149,5
+contra 11 139,86 publicados (+36,0 %) y 7369,2 contra 9844,65 (−25,1 %); los otros cuatro recursos
+cuadran entre 0 % y −0,27 %, y el costo fijo de actividades al −0,07 %. Es la corrección que falta
+en LILA-187 y el único número del nivel 3 que no se explica por la topología.
 
 ---
 

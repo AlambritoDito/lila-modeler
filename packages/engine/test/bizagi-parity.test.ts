@@ -36,7 +36,9 @@ import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario
 //   (3) Bizagi drena la corrida (2017 iniciadas = 2017 completadas); el escenario publicado corta
 //       a la semana y deja casos en vuelo, que por LILA-036 no entran en las medias.
 //   (4) el nivel 1 no genera un solo token: el escenario declara `triggerCount` sin
-//       `interTriggerTimer` y R-ARR-1 solo genera casos en un start **con** timer.
+//       `interTriggerTimer` y R-ARR-1 solo genera casos en un start **con** timer. La corrida no
+//       sale en silencio: el motor avisa `W-START-SIN-LLEGADAS` (SEMANTICS §10). Lo que falta es
+//       la decisión de contrato, que es LILA-186.
 //   (5) el nivel 4 modela la capacidad por turno como 3 pools con `selection: "or"`; el calendario
 //       efectivo de la tarea pasa a ser el del turno concedido, así que el trabajo se pausa al
 //       cerrar el turno. Bizagi no tiene tiempo cerrado ahí (los 3 turnos cubren las 24 h): es
@@ -140,9 +142,13 @@ describe('examples/bizagi-levels tal cual: qué cuadra hoy contra expected.json'
     const esperado = expectedDe(1).values.correctedRun!.instancesCompleted;
 
     // Causa (4): `triggerCount` sin `interTriggerTimer`; R-ARR-1 solo genera casos en un start con
-    // timer, y R-ARR-3 no lo considera error porque hay triggerCount. La corrida sale vacía en
-    // silencio. Es el hueco de contrato que el informe de LILA-044 propone como ticket aparte.
+    // timer, y R-ARR-3 no lo considera error porque hay triggerCount. La corrida sale vacía, pero
+    // no en silencio: `simulate()` emite el aviso `W-START-SIN-LLEGADAS` y `lila run` lo imprime.
+    // Es la decisión de contrato que LILA-186 tiene que tomar.
     expect(r.process.started, 'el nivel 1 hoy sale con cero llegadas').toBe(0);
+    expect(r.warnings, 'la corrida vacía sí avisa').toContain(
+      'W-START-SIN-LLEGADAS: StartEvent_Llegada: el start no declara interTriggerTimer y no genera casos.',
+    );
 
     comprobar([
       { metrica: 'nivel 1 tokens creados', esperado: 1000, obtenido: r.process.started, cuadra: false },
@@ -228,10 +234,11 @@ describe('reconciliación: topología del diagrama oficial + llegadas de la corr
     expect(r.process.started).toBe(1000);
     expect(r.process.completed).toBe(1000);
 
-    // expected.json etiqueta los tres conteos publicados como green/yellow/red, pero la página solo
-    // publica la suma "(483+315+202)" sin decir de qué rama es cada uno. Con Green 20 %, Yellow
-    // 30 % y Red 50 % el 483 solo puede ser la rama del 50 %: la etiqueta de expected.json está
-    // invertida y así queda anotado en docs/BIZAGI_PARITY.md.
+    // expected.json etiqueta los tres conteos publicados como green/yellow/red al revés. La página
+    // no da la asignación en prosa —solo la suma "(483+315+202)"— pero sí publica la tabla de
+    // resultados fila por fila en https://help.bizagi.com/platform/en/processvalidation42.png:
+    // "Red Triage end 483 · Yellow Triage end 315 · Green Triage end 202". Corregir expected.json
+    // es LILA-187; aquí se compara contra el conteo correcto usando la etiqueta equivocada.
     comprobar([
       { metrica: 'nivel 1 rama 50 % (Red) vs 483 publicado', esperado: c.green, obtenido: r.elements.EndEvent_Red!.completed, cuadra: true },
       { metrica: 'nivel 1 rama 30 % (Yellow) vs 315 publicado', esperado: c.yellow, obtenido: r.elements.EndEvent_Yellow!.completed, cuadra: false },
@@ -291,6 +298,24 @@ describe('reconciliación: topología del diagrama oficial + llegadas de la corr
       // del transitorio. Bizagi acumula cola sublinealmente (media/máx = 0,40) y Lila linealmente
       // (0,49), así que el máximo cuadra al 1,3 % y la media se va al +24 %.
       { metrica: 'nivel 3 (2 enf.) cycleTime.mean', esperado: v.twoNurses.waitTimeSeconds.avg, obtenido: dos.process.cycleTime.mean, cuadra: false },
+    ]);
+
+    // Costos publicados de la corrida de 3 enfermeras, tabla de recursos
+    // https://help.bizagi.com/platform/en/resourcesanalysis3.png y total de costo fijo por
+    // actividad del proceso en resourcesanalysis2.png. No están en expected.json porque la página
+    // solo los publica como imagen; se citan aquí con su URL.
+    const costoActividades = Object.values(tres.elements).reduce((suma, e) => suma + e.fixedCostTotal, 0);
+    comprobar([
+      { metrica: 'nivel 3 costo fijo de actividades', esperado: 8063, obtenido: costoActividades, cuadra: true },
+      { metrica: 'nivel 3 costo callCenterAgent', esperado: 6051, obtenido: tres.resources.callCenterAgent!.totalCost, cuadra: true },
+      { metrica: 'nivel 3 costo nurse', esperado: 15115, obtenido: tres.resources.nurse!.totalCost, cuadra: true },
+      { metrica: 'nivel 3 costo ambulance', esperado: 30314.13, obtenido: tres.resources.ambulance!.totalCost, cuadra: true },
+      { metrica: 'nivel 3 costo receptionist', esperado: 3018, obtenido: tres.resources.receptionist!.totalCost, cuadra: true },
+      // D8: la réplica reproduce verbatim la tabla de requerimientos de la página, que cruza los dos
+      // vehículos. Para la utilización da igual (los dos pools tienen capacidad 2) pero para el costo
+      // no: la tarea QAV cuesta 25/token en vez de 18 y la tarea BA 18 en vez de 25.
+      { metrica: 'nivel 3 costo del pool que sirve la tarea QAV (Bizagi: Quick attention vehicle)', esperado: 11139.86, obtenido: tres.resources.basicAmbulance!.totalCost, cuadra: false },
+      { metrica: 'nivel 3 costo del pool que sirve la tarea BA (Bizagi: Basic ambulance)', esperado: 9844.65, obtenido: tres.resources.quickAttentionVehicle!.totalCost, cuadra: false },
     ]);
   }, 60_000);
 
