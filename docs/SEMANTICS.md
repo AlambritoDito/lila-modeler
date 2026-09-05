@@ -618,9 +618,17 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
 - **R-DET-5 — Nunca `Math.random` ni `Date`.** Ni en `core/`, ni en la CLI, ni en el Worker. El
   `RunResult` no contiene marcas de tiempo de reloj real. *(prueba: LILA-032, LILA-030)*
 - **R-DET-6 — Garantía de bytes.** Con la misma semilla y la misma entrada, `lila run --json`
-  produce **bytes idénticos** dentro de un mismo runtime, en Node 22 y 24. Entre navegadores la
-  igualdad es solo estadística (`Math.log`/`Math.exp` pueden diferir en el último bit).
-  *(prueba: LILA-030)*
+  produce **bytes idénticos** dentro de una misma plataforma y arquitectura, en Node 22 y 24. La
+  igualdad de bytes **no cruza arquitecturas**: `Math.log`, `Math.exp`, `Math.cos` y `Math.pow` no
+  están correctamente redondeadas y difieren en el último bit entre, por ejemplo, `linux/x64` y
+  `darwin/arm64` (solo `Math.sqrt` lo está, por el ISA). En nivel 1 y 2 esa deriva se cancela
+  —`processing` es una diferencia de dos instantes desplazados por igual— y los goldens de M1
+  coinciden byte a byte en las dos; en nivel 3 no, porque `resourceWait` resta el instante de un
+  caso al de otro: un ULP en el reloj de llegadas sobrevive hasta `resourceWait.total`. Por eso el
+  golden de nivel 3 (`test/golden/pedido-nivel3.seed-42.json`) lleva los bytes de la plataforma del
+  CI, `linux/x64`, se compara byte a byte cuando `process.env.CI` está definido, y con tolerancia
+  relativa `1e-9` fuera de él. Entre navegadores la igualdad también es solo estadística.
+  *(prueba: LILA-030, LILA-043)*
 - **R-DET-7 — Distribuciones.** Las 14 con parámetros nombrados y en segundos: `constant{value}`,
   `uniform{min,max}`, `triangular{min,mode,max}`, `exponential{mean}`, `normal{mean,sd}` (truncada a
   `≥ 0`; aviso `W-NORMAL-NEGATIVA` si `P(x<0) > 1 %`), `truncatedNormal{mean,sd,min,max}`,

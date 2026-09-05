@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { describe, expect, test } from 'vitest';
@@ -9,7 +8,9 @@ import type { ResolvedScenario } from '../src/scenario.js';
 import {
   loadPedidoScenario,
   PEDIDO_GOLDEN_PATH,
+  PEDIDO_NIVEL3_GOLDEN_PATH,
   renderPedidoScenario,
+  withoutCalendars,
   withoutResourcesAndCalendars,
 } from './golden/pedido.js';
 
@@ -109,46 +110,56 @@ describe('degradación semántica (LILA-039)', () => {
 });
 
 /**
- * Retira **solo** la capa de calendarios: `calendars`, `resources[*].calendar` y
- * `elements[*].calendar`. Los pools de M2 se quedan intactos, que es justo la entrada que
- * entendía el motor de M2. Vive aquí, y no en `golden/pedido.ts`, porque es el único consumidor.
+ * Compara dos `RunResult` canónicos con tolerancia **relativa** en los números y estricta en todo
+ * lo demás (claves, orden de claves, strings, longitudes). Es lo que se usa fuera del CI: entre
+ * arquitecturas `Math.log`/`Math.exp`/`Math.cos` difieren en el último bit, y con colas de por
+ * medio esa diferencia deja de cancelarse (R-DET-6). Devuelve las rutas que se salen de `tol`.
  */
-function withoutCalendars(scenario: ResolvedScenario): ResolvedScenario {
-  const degraded: ResolvedScenario = {
-    ...scenario,
-    resources: Object.fromEntries(
-      Object.entries(scenario.resources ?? {}).map(([poolId, pool]) => {
-        const copy = { ...pool };
-        delete copy.calendar;
-        return [poolId, copy];
-      }),
-    ),
-    elements: Object.fromEntries(
-      Object.entries(scenario.elements ?? {}).map(([elementId, element]) => {
-        const copy = { ...element };
-        delete copy.calendar;
-        return [elementId, copy];
-      }),
-    ),
-  };
-  delete degraded.calendars;
-  return degraded;
+function numericDiffs(actual: unknown, expected: unknown, tol: number, path = ''): string[] {
+  if (typeof expected === 'number' && typeof actual === 'number') {
+    if (Object.is(actual, expected)) return [];
+    const scale = Math.max(Math.abs(expected), Math.abs(actual), 1);
+    return Math.abs(actual - expected) <= tol * scale ? [] : [`${path}: ${actual} ≠ ${expected}`];
+  }
+  if (Array.isArray(expected) || Array.isArray(actual)) {
+    if (!Array.isArray(expected) || !Array.isArray(actual) || actual.length !== expected.length) {
+      return [`${path}: arrays distintos`];
+    }
+    return expected.flatMap((item, index) => numericDiffs(actual[index], item, tol, `${path}[${index}]`));
+  }
+  if (expected !== null && actual !== null && typeof expected === 'object' && typeof actual === 'object') {
+    const expectedKeys = Object.keys(expected);
+    const actualKeys = Object.keys(actual);
+    // El orden de claves es parte del contrato del golden, no solo el conjunto.
+    if (expectedKeys.join('\u0000') !== actualKeys.join('\u0000')) return [`${path}: claves distintas`];
+    return expectedKeys.flatMap((key) =>
+      numericDiffs(
+        (actual as Record<string, unknown>)[key],
+        (expected as Record<string, unknown>)[key],
+        tol,
+        path === '' ? key : `${path}.${key}`,
+      ),
+    );
+  }
+  return Object.is(actual, expected) ? [] : [`${path}: ${String(actual)} ≠ ${String(expected)}`];
+}
+
+/**
+ * Compara contra un golden versionado. En el CI (Linux x64, la plataforma que generó el archivo)
+ * la igualdad es **byte a byte**; fuera del CI se admite deriva de último bit con tolerancia
+ * relativa 1e-9, que sigue siendo siete órdenes de magnitud más estricta que cualquier cambio
+ * semántico real del motor (R-DET-6).
+ */
+function expectGolden(actual: string, goldenPath: string): void {
+  const expected = readFileSync(goldenPath, 'utf8');
+  if (process.env.CI !== undefined && process.env.CI !== '' && process.env.CI !== 'false') {
+    expect(actual).toBe(expected);
+    return;
+  }
+  expect(numericDiffs(JSON.parse(actual), JSON.parse(expected), 1e-9)).toEqual([]);
 }
 
 describe('degradación de calendarios (LILA-043)', () => {
-  /**
-   * SHA-256 del `RunResult` canónico de `examples/pedido` con seed 42, recursos completos y
-   * **sin** calendarios, tal y como lo producía el motor de M2 (`origin/main` en 82940e0, antes
-   * de que LILA-041 cablease `core/calendar.ts`). Es el oráculo de R-DEG-2, y va como huella y no
-   * como archivo porque el único golden versionado del repo es el de M1 (LILA-030/039) y este
-   * ticket no puede moverlo. Se regenera desde un worktree en ese commit con:
-   *
-   *   renderPedidoScenario(withoutCalendars(loadPedidoScenario(42)))  →  sha256 del string
-   *
-   * Un cambio aquí solo es legítimo acompañando un cambio semántico deliberado del motor.
-   */
-  const M2_SHA256 = 'fd8dc8ec262e4b6afc20801c59b06ab9ea40f667b0ab95795d3a727308babea6';
-
   test('sin `calendars` el resultado es bit a bit el del motor de M2 (R-DEG-2)', async () => {
     const source = loadPedidoScenario(42);
 
@@ -170,17 +181,19 @@ describe('degradación de calendarios (LILA-043)', () => {
     expect(Object.keys(degraded.resources ?? {})).toHaveLength(3);
     expect(degraded.elements?.Task_Preparar?.selection).toBe('and');
 
-    const actual = await renderPedidoScenario(degraded);
-    expect(createHash('sha256').update(actual).digest('hex')).toBe(M2_SHA256);
+    expectGolden(await renderPedidoScenario(degraded), PEDIDO_NIVEL3_GOLDEN_PATH);
   }, 60_000);
 
-  // Control positivo: sin él, la huella anterior también cuadraría si el motor ignorase
-  // `calendars` por completo, que es exactamente lo que R-DEG-2 tiene que distinguir.
+  // Control positivo: sin él, el golden anterior también cuadraría si el motor ignorase
+  // `calendars` por completo, que es exactamente lo que R-DEG-2 tiene que distinguir. Aquí la
+  // comparación es de bytes en cualquier plataforma: la diferencia que busca es enorme, no de ULP.
   test('reintroducir el calendario `oficina` sí mueve el resultado', async () => {
     const source = loadPedidoScenario(42);
     const actual = await renderPedidoScenario(source);
 
-    expect(createHash('sha256').update(actual).digest('hex')).not.toBe(M2_SHA256);
+    expect(actual).not.toBe(readFileSync(PEDIDO_NIVEL3_GOLDEN_PATH, 'utf8'));
+    expect(numericDiffs(JSON.parse(actual), JSON.parse(readFileSync(PEDIDO_NIVEL3_GOLDEN_PATH, 'utf8')), 1e-9))
+      .not.toEqual([]);
   }, 60_000);
 
   test('el golden de M1 tampoco se mueve al añadir calendarios al motor (R-DEG-1)', async () => {

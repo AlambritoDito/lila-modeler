@@ -18,6 +18,14 @@ const EXAMPLE_DIR = resolve(REPOSITORY_ROOT, 'examples/pedido');
 export const PEDIDO_GOLDEN_PATH = resolve(GOLDEN_DIR, 'pedido.seed-42.json');
 
 /**
+ * Golden de nivel 3 (recursos, sin calendarios): el oráculo de R-DEG-2. A diferencia del de M1,
+ * sus bytes son los de **Linux x64**, la plataforma del CI: `Math.log`/`Math.exp`/`Math.cos`
+ * difieren en el último bit entre arquitecturas y aquí, con colas de por medio, esa diferencia ya
+ * no se cancela (R-DET-6). Regenerarlo fuera de Linux x64 rompe el CI.
+ */
+export const PEDIDO_NIVEL3_GOLDEN_PATH = resolve(GOLDEN_DIR, 'pedido-nivel3.seed-42.json');
+
+/**
  * Elimina por copia toda la capa de recursos y calendarios del escenario de pedido. El resultado
  * representa exactamente la entrada que entendía M1: tiempos, llegadas y probabilidades, sin que
  * los campos añadidos en M2 puedan activar colas, costos de pool o calendarios.
@@ -36,6 +44,33 @@ export function withoutResourcesAndCalendars(scenario: ResolvedScenario): Resolv
     ),
   };
   delete degraded.resources;
+  delete degraded.calendars;
+  return degraded;
+}
+
+/**
+ * Retira **solo** la capa de calendarios: `calendars`, `resources[*].calendar` y
+ * `elements[*].calendar`. Los pools de M2 se quedan intactos, que es justo la entrada que
+ * entendía el motor de M2 (R-DEG-2).
+ */
+export function withoutCalendars(scenario: ResolvedScenario): ResolvedScenario {
+  const degraded: ResolvedScenario = {
+    ...scenario,
+    resources: Object.fromEntries(
+      Object.entries(scenario.resources ?? {}).map(([poolId, pool]) => {
+        const copy = { ...pool };
+        delete copy.calendar;
+        return [poolId, copy];
+      }),
+    ),
+    elements: Object.fromEntries(
+      Object.entries(scenario.elements ?? {}).map(([elementId, element]) => {
+        const copy = { ...element };
+        delete copy.calendar;
+        return [elementId, copy];
+      }),
+    ),
+  };
   delete degraded.calendars;
   return degraded;
 }
@@ -88,4 +123,9 @@ export async function renderPedidoScenario(scenario: ResolvedScenario): Promise<
  */
 export async function renderPedidoGolden(seed: number): Promise<string> {
   return renderPedidoScenario(withoutResourcesAndCalendars(loadPedidoScenario(seed)));
+}
+
+/** Golden de nivel 3: el ejemplo real con recursos y sin la capa de calendarios. */
+export async function renderPedidoNivel3Golden(seed: number): Promise<string> {
+  return renderPedidoScenario(withoutCalendars(loadPedidoScenario(seed)));
 }

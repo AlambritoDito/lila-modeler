@@ -1,0 +1,2488 @@
+{
+  "elements": {
+    "StartEvent_Pedido": {
+      "started": 9983.533333333333,
+      "completed": 9983.533333333333,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Task_TomarPedido": {
+      "started": 9983.533333333333,
+      "completed": 9983.533333333333,
+      "processing": {
+        "min": 61.01323523483928,
+        "max": 297.94671494706364,
+        "mean": 160.1054655418292,
+        "total": 1598418.3957564177
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 429.02889657517807,
+        "mean": 14.944790712743833,
+        "sd": 38.295266434692,
+        "total": 149201.91833728153
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0.05764252756037765,
+        "max": 5.5
+      },
+      "fixedCostTotal": 24958.833333333332
+    },
+    "Gateway_ANDFork": {
+      "started": 9983.533333333333,
+      "completed": 9983.533333333333,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Task_Preparar": {
+      "started": 9983.533333333333,
+      "completed": 5383.9,
+      "processing": {
+        "min": 155.5573284323782,
+        "max": 813.8307719227917,
+        "mean": 479.8762231193565,
+        "total": 2583592.2437073174
+      },
+      "resourceWait": {
+        "min": 4193.015729366457,
+        "max": 1298153.4843081518,
+        "mean": 650176.3181507244,
+        "sd": 372975.7929882851,
+        "total": 3500453107.581574
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 2682.1439842559676,
+        "max": 5011.866666666667
+      },
+      "fixedCostTotal": 0
+    },
+    "Task_Empacar": {
+      "started": 9983.533333333333,
+      "completed": 9983.533333333333,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Gateway_ANDJoin": {
+      "started": 15367.433333333332,
+      "completed": 5383.9,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Task_Revisar": {
+      "started": 5383.9,
+      "completed": 5383.633333333333,
+      "processing": {
+        "min": 89.99999999998876,
+        "max": 90.00000000001286,
+        "mean": 90,
+        "total": 484527
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Gateway_Aprobacion": {
+      "started": 5383.633333333333,
+      "completed": 5383.633333333333,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "Timer_Reposo": {
+      "started": 4195.7,
+      "completed": 4194.566666666667,
+      "processing": {
+        "min": 599.9999999999325,
+        "max": 600.000000000075,
+        "mean": 600,
+        "total": 2516740
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "EndEvent_Entregado": {
+      "started": 4194.566666666667,
+      "completed": 4194.566666666667,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    },
+    "EndEvent_Rechazado": {
+      "started": 1187.9333333333334,
+      "completed": 1187.9333333333334,
+      "processing": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "total": 0
+      },
+      "resourceWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "offHoursWait": {
+        "min": 0,
+        "max": 0,
+        "mean": 0,
+        "sd": 0,
+        "total": 0
+      },
+      "queueLength": {
+        "mean": 0,
+        "max": 0
+      },
+      "fixedCostTotal": 0
+    }
+  },
+  "flows": {
+    "Flow_Start_TomarPedido": {
+      "count": 9983.533333333333
+    },
+    "Flow_TomarPedido_ANDFork": {
+      "count": 9983.533333333333
+    },
+    "Flow_ANDFork_Preparar": {
+      "count": 9983.533333333333
+    },
+    "Flow_ANDFork_Empacar": {
+      "count": 9983.533333333333
+    },
+    "Flow_Preparar_ANDJoin": {
+      "count": 5383.9
+    },
+    "Flow_Empacar_ANDJoin": {
+      "count": 9983.533333333333
+    },
+    "Flow_ANDJoin_Revisar": {
+      "count": 5383.9
+    },
+    "Flow_Revisar_Aprobacion": {
+      "count": 5383.633333333333
+    },
+    "Flow_Aprobado": {
+      "count": 4195.7
+    },
+    "Flow_Rechazado": {
+      "count": 1187.9333333333334
+    },
+    "Flow_Timer_EndEntregado": {
+      "count": 4194.566666666667
+    }
+  },
+  "resources": {
+    "cajero": {
+      "utilization": 0.3881855250602729,
+      "busyTime": 2009558.8261320202,
+      "fixedCost": 0,
+      "unitCost": 122806.37270806794,
+      "totalCost": 122806.37270806794
+    },
+    "cocinero": {
+      "utilization": 0.3421985024027857,
+      "busyTime": 2657239.8108581114,
+      "fixedCost": 0,
+      "unitCost": 132861.9905429056,
+      "totalCost": 132861.9905429056
+    },
+    "horno": {
+      "utilization": 0.9982378345148011,
+      "busyTime": 2583838.8108581123,
+      "fixedCost": 0,
+      "unitCost": 0,
+      "totalCost": 0
+    }
+  },
+  "process": {
+    "started": 9983.533333333333,
+    "completed": 5382.5,
+    "inFlight": 4601.033333333334,
+    "cycleTime": {
+      "min": 5327.896870774639,
+      "max": 1299054.439808007,
+      "mean": 651220.4064009328,
+      "sd": 372878.8731923893,
+      "p50": 650043.9909103173,
+      "p90": 1168096.0087677443,
+      "p95": 1233311.2559554176
+    },
+    "waitTime": {
+      "min": 4196.392641135893,
+      "max": 1297813.6575492572,
+      "mean": 650022.8917361022,
+      "sd": 372878.0372736718,
+      "p50": 648857.4063936375,
+      "p90": 1166963.1066789082,
+      "p95": 1232164.1854795164
+    },
+    "throughputPerHour": 7.486091794158554,
+    "costPerCase": 41.62371740793715,
+    "totalCost": 280627.196584307
+  },
+  "bottlenecks": [
+    {
+      "elementId": "Task_Preparar",
+      "resourceWaitTotal": 3500453107.581574,
+      "utilization": 0.9982378345148011
+    },
+    {
+      "elementId": "Task_TomarPedido",
+      "resourceWaitTotal": 149201.91833728153,
+      "utilization": 0.3881855250602729
+    }
+  ],
+  "warnings": [
+    "W-TAREA-SIN-TIEMPO: Task_Empacar: sin processingTime; dura 0 segundos. (10000 veces)",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4596 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4583 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4607 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4591 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4608 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4609 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4627 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4598 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4584 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4578 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4595 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4589 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4603 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4580 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4593 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4621 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4602 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4615 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4625 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4599 casos quedaron con tokens esperando en el join.",
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4604 casos quedaron con tokens esperando en el join."
+  ],
+  "replications": {
+    "count": 30,
+    "kpis": {
+      "elements.StartEvent_Pedido.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.StartEvent_Pedido.completed": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.StartEvent_Pedido.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.StartEvent_Pedido.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Task_TomarPedido.completed": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Task_TomarPedido.processing.min": {
+        "mean": 61.01323523483928,
+        "sd": 0.556262728053069,
+        "ci95": [
+          60.80552331853473,
+          61.220947151143825
+        ]
+      },
+      "elements.Task_TomarPedido.processing.max": {
+        "mean": 297.94671494706364,
+        "sd": 1.0536437480799603,
+        "ci95": [
+          297.5532779055743,
+          298.340151988553
+        ]
+      },
+      "elements.Task_TomarPedido.processing.mean": {
+        "mean": 160.1054655418292,
+        "sd": 0.5174211188899489,
+        "ci95": [
+          159.9122573207477,
+          160.2986737629107
+        ]
+      },
+      "elements.Task_TomarPedido.processing.total": {
+        "mean": 1598418.3957564177,
+        "sd": 5251.762078747587,
+        "ci95": [
+          1596457.3555674225,
+          1600379.4359454128
+        ]
+      },
+      "elements.Task_TomarPedido.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.resourceWait.max": {
+        "mean": 429.02889657517807,
+        "sd": 70.7808248324843,
+        "ci95": [
+          402.59890221796326,
+          455.4588909323929
+        ]
+      },
+      "elements.Task_TomarPedido.resourceWait.mean": {
+        "mean": 14.944790712743833,
+        "sd": 0.6538316325406374,
+        "ci95": [
+          14.700645968746915,
+          15.18893545674075
+        ]
+      },
+      "elements.Task_TomarPedido.resourceWait.sd": {
+        "mean": 38.295266434692,
+        "sd": 1.7873367395910404,
+        "ci95": [
+          37.62786392767638,
+          38.962668941707626
+        ]
+      },
+      "elements.Task_TomarPedido.resourceWait.total": {
+        "mean": 149201.91833728153,
+        "sd": 6529.960382381173,
+        "ci95": [
+          146763.59105771634,
+          151640.24561684672
+        ]
+      },
+      "elements.Task_TomarPedido.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_TomarPedido.queueLength.mean": {
+        "mean": 0.05764252756037765,
+        "sd": 0.0025227786981846592,
+        "ci95": [
+          0.05670050651279414,
+          0.05858454860796117
+        ]
+      },
+      "elements.Task_TomarPedido.queueLength.max": {
+        "mean": 5.5,
+        "sd": 0.9737945687202026,
+        "ci95": [
+          5.13637913209865,
+          5.86362086790135
+        ]
+      },
+      "elements.Task_TomarPedido.fixedCostTotal": {
+        "mean": 24958.833333333332,
+        "sd": 10.14407703295745,
+        "ci95": [
+          24955.045472717484,
+          24962.62119394918
+        ]
+      },
+      "elements.Gateway_ANDFork.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Gateway_ANDFork.completed": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Gateway_ANDFork.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDFork.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Task_Preparar.completed": {
+        "mean": 5383.9,
+        "sd": 12.28497821142441,
+        "ci95": [
+          5379.3127137459205,
+          5388.487286254079
+        ]
+      },
+      "elements.Task_Preparar.processing.min": {
+        "mean": 155.5573284323782,
+        "sd": 27.87818581586304,
+        "ci95": [
+          145.14744276706608,
+          165.96721409769032
+        ]
+      },
+      "elements.Task_Preparar.processing.max": {
+        "mean": 813.8307719227917,
+        "sd": 25.699774945359646,
+        "ci95": [
+          804.234318244905,
+          823.4272256006783
+        ]
+      },
+      "elements.Task_Preparar.processing.mean": {
+        "mean": 479.8762231193565,
+        "sd": 1.1811575922577502,
+        "ci95": [
+          479.4351716259296,
+          480.31727461278336
+        ]
+      },
+      "elements.Task_Preparar.processing.total": {
+        "mean": 2583592.2437073174,
+        "sd": 1949.197239724764,
+        "ci95": [
+          2582864.401496253,
+          2584320.085918382
+        ]
+      },
+      "elements.Task_Preparar.resourceWait.min": {
+        "mean": 4193.015729366457,
+        "sd": 1916.4536073440754,
+        "ci95": [
+          3477.4001915729273,
+          4908.631267159987
+        ]
+      },
+      "elements.Task_Preparar.resourceWait.max": {
+        "mean": 1298153.4843081518,
+        "sd": 20721.128122721886,
+        "ci95": [
+          1290416.0879065867,
+          1305890.8807097168
+        ]
+      },
+      "elements.Task_Preparar.resourceWait.mean": {
+        "mean": 650176.3181507244,
+        "sd": 9790.93279849708,
+        "ci95": [
+          646520.3237591842,
+          653832.3125422646
+        ]
+      },
+      "elements.Task_Preparar.resourceWait.sd": {
+        "mean": 372975.7929882851,
+        "sd": 6098.706807429976,
+        "ci95": [
+          370698.49844010535,
+          375253.0875364648
+        ]
+      },
+      "elements.Task_Preparar.resourceWait.total": {
+        "mean": 3500453107.581574,
+        "sd": 51154436.286885574,
+        "ci95": [
+          3481351727.149675,
+          3519554488.013473
+        ]
+      },
+      "elements.Task_Preparar.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Preparar.queueLength.mean": {
+        "mean": 2682.1439842559676,
+        "sd": 55.71430137210457,
+        "ci95": [
+          2661.339922218461,
+          2702.948046293474
+        ]
+      },
+      "elements.Task_Preparar.queueLength.max": {
+        "mean": 5011.866666666667,
+        "sd": 52.90312117337744,
+        "ci95": [
+          4992.112316566896,
+          5031.621016766438
+        ]
+      },
+      "elements.Task_Preparar.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Task_Empacar.completed": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "elements.Task_Empacar.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Empacar.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.started": {
+        "mean": 15367.433333333332,
+        "sd": 12.8269203263087,
+        "ci95": [
+          15362.643682567788,
+          15372.222984098877
+        ]
+      },
+      "elements.Gateway_ANDJoin.completed": {
+        "mean": 5383.9,
+        "sd": 12.28497821142441,
+        "ci95": [
+          5379.3127137459205,
+          5388.487286254079
+        ]
+      },
+      "elements.Gateway_ANDJoin.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_ANDJoin.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.started": {
+        "mean": 5383.9,
+        "sd": 12.28497821142441,
+        "ci95": [
+          5379.3127137459205,
+          5388.487286254079
+        ]
+      },
+      "elements.Task_Revisar.completed": {
+        "mean": 5383.633333333333,
+        "sd": 12.341361164891774,
+        "ci95": [
+          5379.02499333842,
+          5388.241673328246
+        ]
+      },
+      "elements.Task_Revisar.processing.min": {
+        "mean": 89.99999999998876,
+        "sd": 4.3328146511330255e-11,
+        "ci95": [
+          89.99999999997259,
+          90.00000000000493
+        ]
+      },
+      "elements.Task_Revisar.processing.max": {
+        "mean": 90.00000000001286,
+        "sd": 4.429640323810481e-11,
+        "ci95": [
+          89.99999999999632,
+          90.0000000000294
+        ]
+      },
+      "elements.Task_Revisar.processing.mean": {
+        "mean": 90,
+        "sd": 1.0220374978019838e-14,
+        "ci95": [
+          90,
+          90
+        ]
+      },
+      "elements.Task_Revisar.processing.total": {
+        "mean": 484527,
+        "sd": 1110.7225048402759,
+        "ci95": [
+          484112.24940045783,
+          484941.75059954217
+        ]
+      },
+      "elements.Task_Revisar.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Task_Revisar.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.started": {
+        "mean": 5383.633333333333,
+        "sd": 12.341361164891774,
+        "ci95": [
+          5379.02499333842,
+          5388.241673328246
+        ]
+      },
+      "elements.Gateway_Aprobacion.completed": {
+        "mean": 5383.633333333333,
+        "sd": 12.341361164891774,
+        "ci95": [
+          5379.02499333842,
+          5388.241673328246
+        ]
+      },
+      "elements.Gateway_Aprobacion.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Gateway_Aprobacion.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.started": {
+        "mean": 4195.7,
+        "sd": 38.55059371607743,
+        "ci95": [
+          4181.304971730768,
+          4210.095028269232
+        ]
+      },
+      "elements.Timer_Reposo.completed": {
+        "mean": 4194.566666666667,
+        "sd": 38.50453026040848,
+        "ci95": [
+          4180.188838774461,
+          4208.944494558872
+        ]
+      },
+      "elements.Timer_Reposo.processing.min": {
+        "mean": 599.9999999999325,
+        "sd": 7.991335634072117e-11,
+        "ci95": [
+          599.9999999999027,
+          599.9999999999623
+        ]
+      },
+      "elements.Timer_Reposo.processing.max": {
+        "mean": 600.000000000075,
+        "sd": 8.85531362813763e-11,
+        "ci95": [
+          600.000000000042,
+          600.0000000001081
+        ]
+      },
+      "elements.Timer_Reposo.processing.mean": {
+        "mean": 600,
+        "sd": 0,
+        "ci95": [
+          600,
+          600
+        ]
+      },
+      "elements.Timer_Reposo.processing.total": {
+        "mean": 2516740,
+        "sd": 23102.71815624509,
+        "ci95": [
+          2508113.3032646766,
+          2525366.6967353234
+        ]
+      },
+      "elements.Timer_Reposo.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.Timer_Reposo.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.started": {
+        "mean": 4194.566666666667,
+        "sd": 38.50453026040848,
+        "ci95": [
+          4180.188838774461,
+          4208.944494558872
+        ]
+      },
+      "elements.EndEvent_Entregado.completed": {
+        "mean": 4194.566666666667,
+        "sd": 38.50453026040848,
+        "ci95": [
+          4180.188838774461,
+          4208.944494558872
+        ]
+      },
+      "elements.EndEvent_Entregado.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Entregado.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.started": {
+        "mean": 1187.9333333333334,
+        "sd": 36.95191034521651,
+        "ci95": [
+          1174.1352632455128,
+          1201.731403421154
+        ]
+      },
+      "elements.EndEvent_Rechazado.completed": {
+        "mean": 1187.9333333333334,
+        "sd": 36.95191034521651,
+        "ci95": [
+          1174.1352632455128,
+          1201.731403421154
+        ]
+      },
+      "elements.EndEvent_Rechazado.processing.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.processing.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.processing.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.processing.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.resourceWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.resourceWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.resourceWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.resourceWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.resourceWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.offHoursWait.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.offHoursWait.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.offHoursWait.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.offHoursWait.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.offHoursWait.total": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.queueLength.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.queueLength.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "elements.EndEvent_Rechazado.fixedCostTotal": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "flows.Flow_Start_TomarPedido.count": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "flows.Flow_TomarPedido_ANDFork.count": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "flows.Flow_ANDFork_Preparar.count": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "flows.Flow_ANDFork_Empacar.count": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "flows.Flow_Preparar_ANDJoin.count": {
+        "mean": 5383.9,
+        "sd": 12.28497821142441,
+        "ci95": [
+          5379.3127137459205,
+          5388.487286254079
+        ]
+      },
+      "flows.Flow_Empacar_ANDJoin.count": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "flows.Flow_ANDJoin_Revisar.count": {
+        "mean": 5383.9,
+        "sd": 12.28497821142441,
+        "ci95": [
+          5379.3127137459205,
+          5388.487286254079
+        ]
+      },
+      "flows.Flow_Revisar_Aprobacion.count": {
+        "mean": 5383.633333333333,
+        "sd": 12.341361164891774,
+        "ci95": [
+          5379.02499333842,
+          5388.241673328246
+        ]
+      },
+      "flows.Flow_Aprobado.count": {
+        "mean": 4195.7,
+        "sd": 38.55059371607743,
+        "ci95": [
+          4181.304971730768,
+          4210.095028269232
+        ]
+      },
+      "flows.Flow_Rechazado.count": {
+        "mean": 1187.9333333333334,
+        "sd": 36.95191034521651,
+        "ci95": [
+          1174.1352632455128,
+          1201.731403421154
+        ]
+      },
+      "flows.Flow_Timer_EndEntregado.count": {
+        "mean": 4194.566666666667,
+        "sd": 38.50453026040848,
+        "ci95": [
+          4180.188838774461,
+          4208.944494558872
+        ]
+      },
+      "resources.cajero.utilization": {
+        "mean": 0.3881855250602729,
+        "sd": 0.0010287578897974993,
+        "ci95": [
+          0.3878013805509847,
+          0.38856966956956107
+        ]
+      },
+      "resources.cajero.busyTime": {
+        "mean": 2009558.8261320202,
+        "sd": 5325.6738439036935,
+        "ci95": [
+          2007570.1868363372,
+          2011547.4654277032
+        ]
+      },
+      "resources.cajero.fixedCost": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "resources.cajero.unitCost": {
+        "mean": 122806.37270806794,
+        "sd": 325.45784601633727,
+        "ci95": [
+          122684.84475110953,
+          122927.90066502635
+        ]
+      },
+      "resources.cajero.totalCost": {
+        "mean": 122806.37270806794,
+        "sd": 325.45784601633727,
+        "ci95": [
+          122684.84475110953,
+          122927.90066502635
+        ]
+      },
+      "resources.cocinero.utilization": {
+        "mean": 0.3421985024027857,
+        "sd": 0.00044812870089264655,
+        "ci95": [
+          0.34203116839581515,
+          0.34236583640975626
+        ]
+      },
+      "resources.cocinero.busyTime": {
+        "mean": 2657239.8108581114,
+        "sd": 3479.8089881716014,
+        "ci95": [
+          2655940.428827184,
+          2658539.192889039
+        ]
+      },
+      "resources.cocinero.fixedCost": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "resources.cocinero.unitCost": {
+        "mean": 132861.9905429056,
+        "sd": 173.99044940857735,
+        "ci95": [
+          132797.02144135922,
+          132926.959644452
+        ]
+      },
+      "resources.cocinero.totalCost": {
+        "mean": 132861.9905429056,
+        "sd": 173.99044940857735,
+        "ci95": [
+          132797.02144135922,
+          132926.959644452
+        ]
+      },
+      "resources.horno.utilization": {
+        "mean": 0.9982378345148011,
+        "sd": 0.000742683831294381,
+        "ci95": [
+          0.997960511814525,
+          0.9985151572150771
+        ]
+      },
+      "resources.horno.busyTime": {
+        "mean": 2583838.8108581123,
+        "sd": 1922.3628289223793,
+        "ci95": [
+          2583120.988780718,
+          2584556.6329355068
+        ]
+      },
+      "resources.horno.fixedCost": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "resources.horno.unitCost": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "resources.horno.totalCost": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.started": {
+        "mean": 9983.533333333333,
+        "sd": 4.057630813182977,
+        "ci95": [
+          9982.018189086994,
+          9985.048477579672
+        ]
+      },
+      "process.completed": {
+        "mean": 5382.5,
+        "sd": 12.325331358768748,
+        "ci95": [
+          5377.897645633065,
+          5387.102354366935
+        ]
+      },
+      "process.inFlight": {
+        "mean": 4601.033333333334,
+        "sd": 13.095098670701274,
+        "ci95": [
+          4596.143543128247,
+          4605.92312353842
+        ]
+      },
+      "process.cycleTime.min": {
+        "mean": 5327.896870774639,
+        "sd": 1989.0543101473265,
+        "ci95": [
+          4585.17178502146,
+          6070.621956527818
+        ]
+      },
+      "process.cycleTime.max": {
+        "mean": 1299054.439808007,
+        "sd": 20662.91646877486,
+        "ci95": [
+          1291338.7799952568,
+          1306770.0996207574
+        ]
+      },
+      "process.cycleTime.mean": {
+        "mean": 651220.4064009328,
+        "sd": 9794.169984956703,
+        "ci95": [
+          647563.2032241029,
+          654877.6095777628
+        ]
+      },
+      "process.cycleTime.sd": {
+        "mean": 372878.8731923893,
+        "sd": 6107.966755039487,
+        "ci95": [
+          370598.12092294614,
+          375159.6254618325
+        ]
+      },
+      "process.cycleTime.p50": {
+        "mean": 650043.9909103173,
+        "sd": 12568.879648196753,
+        "ci95": [
+          645350.6941175128,
+          654737.2877031218
+        ]
+      },
+      "process.cycleTime.p90": {
+        "mean": 1168096.0087677443,
+        "sd": 17952.377863178255,
+        "ci95": [
+          1161392.4807042421,
+          1174799.5368312465
+        ]
+      },
+      "process.cycleTime.p95": {
+        "mean": 1233311.2559554176,
+        "sd": 19155.46680095137,
+        "ci95": [
+          1226158.4870994857,
+          1240464.0248113496
+        ]
+      },
+      "process.waitTime.min": {
+        "mean": 4196.392641135893,
+        "sd": 1915.9443699207638,
+        "ci95": [
+          3480.967255721295,
+          4911.8180265504925
+        ]
+      },
+      "process.waitTime.max": {
+        "mean": 1297813.6575492572,
+        "sd": 20717.61005657338,
+        "ci95": [
+          1290077.5748151815,
+          1305549.7402833328
+        ]
+      },
+      "process.waitTime.mean": {
+        "mean": 650022.8917361022,
+        "sd": 9793.873572098715,
+        "ci95": [
+          646365.7992416524,
+          653679.984230552
+        ]
+      },
+      "process.waitTime.sd": {
+        "mean": 372878.0372736718,
+        "sd": 6107.462151399874,
+        "ci95": [
+          370597.4734263243,
+          375158.60112101934
+        ]
+      },
+      "process.waitTime.p50": {
+        "mean": 648857.4063936375,
+        "sd": 12616.44778996405,
+        "ci95": [
+          644146.347364783,
+          653568.465422492
+        ]
+      },
+      "process.waitTime.p90": {
+        "mean": 1166963.1066789082,
+        "sd": 17908.810911723354,
+        "ci95": [
+          1160275.8467824392,
+          1173650.3665753773
+        ]
+      },
+      "process.waitTime.p95": {
+        "mean": 1232164.1854795164,
+        "sd": 19166.8243058868,
+        "ci95": [
+          1225007.1756615434,
+          1239321.1952974894
+        ]
+      },
+      "process.throughputPerHour": {
+        "mean": 7.486091794158554,
+        "sd": 0.017142324560179084,
+        "ci95": [
+          7.479690744969493,
+          7.492492843347615
+        ]
+      },
+      "process.costPerCase": {
+        "mean": 41.62371740793715,
+        "sd": 0.06770611989868643,
+        "ci95": [
+          41.59843552727094,
+          41.64899928860336
+        ]
+      },
+      "process.totalCost": {
+        "mean": 280627.196584307,
+        "sd": 347.5657775504079,
+        "ci95": [
+          280497.4133900428,
+          280756.9797785712
+        ]
+      }
+    }
+  }
+}
