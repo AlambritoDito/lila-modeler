@@ -29,7 +29,7 @@ escenario publicado.
 | Recursos: tipo rol/equipo, disponibilidad, costo fijo por token, costo por hora | ✓ | ✓ | M2 | Implementado (LILA-033); paridad verificada en el nivel 3 ([test](../packages/engine/test/bizagi-parity.test.ts)): utilización de los seis recursos y costo de cuatro de ellos; los dos vehículos no cuadran por D8 |
 | Asignación a tarea: uno o varios recursos, cantidad, AND / OR | ✓ | ✓ | M2 | Implementado (LILA-034, LILA-035) |
 | Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (8057,6 contra 8063 publicados, −0,07 %) |
-| Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 salvo el caso saturado, ver D6 |
+| Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Implementado (LILA-036); nombres de columna revisados contra `RESULTS_FORMAT.md`. La paridad numérica que hay probada es la del **proceso** y la de los recursos del nivel 3 (ver D6 para el caso saturado); las columnas por elemento no están ancladas fila por fila |
 | Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (nurse 69,65 % contra 69,75 % publicado) |
 | Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041) **con salvedad**: falta capacidad por turno dentro de un mismo pool (LILA-164), sin la cual el nivel 4 no cuadra; ver D7 |
 | What-if: varios escenarios, lado a lado, diferencias resaltadas | ✓ | ✓ (`lila compare`) | M3 | Implementado (LILA-038, LILA-047) |
@@ -190,6 +190,13 @@ mientras Lila publica una por turno; también eso lo arregla LILA-164. La fórmu
 contra [calendaranalysis2.png](https://help.bizagi.com/platform/en/calendaranalysis2.png) en los seis
 recursos, con el trabajo ocupado que la propia tabla de proceso publica: 11,21 · 16,21 · 11,49 ·
 7,55 · 5,60 · 6,90 %, todos exactos al segundo decimal.
+
+Con un detalle que la aceptación de LILA-164 tiene que tener en cuenta: en el nivel 4 el
+denominador de Bizagi es la **duración declarada del escenario** (43 200 min = los 30 días del campo
+`Duration` del informe), no el instante de fin de corrida (≈ 10 100 min) que sí usa en el nivel 3 y
+que es lo que fija R-CAL-9. Son 4,27× de diferencia: aunque LILA-164 dé capacidad por turno dentro
+de un mismo pool, las utilizaciones del nivel 4 no coincidirán con las publicadas mientras el
+denominador se calcule sobre `[warmup, t_stop]`. Es una decisión de contrato aparte, no un bug.
 
 **Nota de mapeo.** `expected.json` llama `waitTimeSeconds` a lo que la tabla de Bizagi titula
 «Min./Max./Avg. time» del proceso. Esa columna es **tiempo de ciclo** (procesamiento + espera), y
