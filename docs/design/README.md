@@ -73,6 +73,17 @@ blanco solo alcanza 4,2:1, por debajo de AA, así que `fg.onAccent` de Papel es
 un casi-negro cálido (`#0B0603`, 4,8:1) en vez de blanco. Se ajustó Papel, no el
 umbral del test.
 
+**`fg.onAccent` solo se garantiza sobre `accent.primary`.** Es un único token
+para tres acentos y no da AA sobre los tres: medido, `fg.onAccent` sobre
+`accent.tertiary` es 3,9:1 en Eva-01 y 3,0:1 en Papel, y sobre
+`accent.secondary` es 4,0:1 en Papel. Los valores de Eva-01 vienen del brief, así
+que no se tocan. Consecuencia para LILA-113/114: el texto sobre
+`accent.secondary` o `accent.tertiary` **no** usa `fg.onAccent`; usa el color que
+sí contrasta (en Papel, blanco: 5,0:1 sobre el ámbar y 6,7:1 sobre el azul). Si
+más adelante hace falta texto sobre esos dos acentos en cualquier tema, el
+arreglo limpio es partir el token en `fg.onAccent.primary` /
+`.secondary` / `.tertiary`, y eso es un cambio del brief, no de este ticket.
+
 **Valores de Papel derivados, pendientes de reconciliar.** Salvo
 `accent.primary`, el resto de Papel (grises cálidos claros, texto casi negro,
 acentos ámbar y azul tinta) lo derivó la implementación como tema claro neutro
