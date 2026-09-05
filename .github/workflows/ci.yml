@@ -19,8 +19,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm test
+      # El build va antes de los tests: packages/mcp y apps/web consumen
+      # @lila/engine por sus subpaths publicados (dist/), no por las fuentes.
       - run: npm run build
+      - run: npm test
       # `tsc --build` solo cubre packages/engine: apps/web es `noEmit` y queda
       # fuera del build por proyectos. Sin este paso, un error de tipos en la
       # app web pasa el CI sin que nadie lo vea.
