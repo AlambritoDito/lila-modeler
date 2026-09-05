@@ -348,12 +348,20 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
             type="button"
             className="boton"
             onClick={() => {
-              void navigator.clipboard.writeText(elemento.id).then(() => {
-                setCopiado(true);
-                setTimeout(() => {
-                  setCopiado(false);
-                }, 1200);
-              });
+              // Sin contexto seguro (la demo servida por http desde otra máquina) el navegador
+              // no expone `navigator.clipboard`, y con el permiso denegado `writeText` rechaza:
+              // ni una cosa ni la otra pueden tumbar el panel. El id se queda a la vista y se
+              // copia a mano, que es lo que se puede hacer ahí.
+              const portapapeles = navigator.clipboard as Clipboard | undefined;
+              void portapapeles
+                ?.writeText(elemento.id)
+                .then(() => {
+                  setCopiado(true);
+                  setTimeout(() => {
+                    setCopiado(false);
+                  }, 1200);
+                })
+                .catch(() => undefined);
             }}
           >
             {copiado ? 'Copiado' : 'Copiar'}
@@ -384,47 +392,62 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
 
       <section className="grupo">
         <h3>Responsabilidades</h3>
-        {responsabilidades.map((responsabilidad, i) => (
+        {responsabilidades.map((responsabilidad, i) => {
+          // `type` es cadena libre en el esquema y no se valida al importar
+          // (`docs/BPMN_EXTENSION.md` § 2): un archivo ajeno puede traer una responsabilidad sin
+          // `type` o con uno que no es RACI. Enseñarla como «R» sería mentir sobre lo que dice el
+          // archivo —y el XML seguiría diciendo otra cosa—, así que el valor real se añade como
+          // opción propia, deshabilitada para que solo se pueda salir de ahí hacia un RACI.
+          const tipo = responsabilidad.type ?? '';
+          const esRaci = RACI.some(([valor]) => valor === tipo);
+
           // El moddle no da una clave estable y el orden de la lista sí lo es: el índice vale.
-          <div className="fila" key={i}>
-            <select
-              aria-label="Tipo de responsabilidad"
-              value={responsabilidad.type ?? 'R'}
-              onChange={(e) => {
-                editarExtension(escritor, elemento, responsabilidad, { type: e.target.value });
-                refrescar();
-              }}
-            >
-              {RACI.map(([valor, etiqueta]) => (
-                <option key={valor} value={valor}>
-                  {etiqueta}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              aria-label="Rol"
-              placeholder="id del rol"
-              value={responsabilidad.roleRef ?? ''}
-              onChange={(e) => {
-                editarExtension(escritor, elemento, responsabilidad, { roleRef: e.target.value });
-                refrescar();
-              }}
-            />
-            <button
-              type="button"
-              className="quitar"
-              title="Quitar responsabilidad"
-              aria-label="Quitar responsabilidad"
-              onClick={() => {
-                quitarExtension(escritor, elemento, responsabilidad);
-                refrescar();
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+          return (
+            <div className="fila" key={i}>
+              <select
+                aria-label="Tipo de responsabilidad"
+                value={tipo}
+                onChange={(e) => {
+                  editarExtension(escritor, elemento, responsabilidad, { type: e.target.value });
+                  refrescar();
+                }}
+              >
+                {!esRaci && (
+                  <option value={tipo} disabled>
+                    {tipo === '' ? 'Sin tipo' : `${tipo} · no es RACI`}
+                  </option>
+                )}
+                {RACI.map(([valor, etiqueta]) => (
+                  <option key={valor} value={valor}>
+                    {etiqueta}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                aria-label="Rol"
+                placeholder="id del rol"
+                value={responsabilidad.roleRef ?? ''}
+                onChange={(e) => {
+                  editarExtension(escritor, elemento, responsabilidad, { roleRef: e.target.value });
+                  refrescar();
+                }}
+              />
+              <button
+                type="button"
+                className="quitar"
+                title="Quitar responsabilidad"
+                aria-label="Quitar responsabilidad"
+                onClick={() => {
+                  quitarExtension(escritor, elemento, responsabilidad);
+                  refrescar();
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
         <button
           type="button"
           className="anadir"
