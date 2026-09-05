@@ -10,6 +10,10 @@
 # Requiere `uv` (https://astral.sh/uv) en el PATH.
 set -euo pipefail
 
+# Que el intérprete del venv no deje `tools/oracles/__pycache__` dentro del repo: el único
+# archivo que este script escribe en el árbol de trabajo es el fixture.
+export PYTHONDONTWRITEBYTECODE=1
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 venv="${LILA_PROSIMOS_VENV:-${TMPDIR:-/tmp}/lila-prosimos}"
