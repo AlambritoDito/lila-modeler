@@ -21,7 +21,7 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
-    "@lila/engine": "0.0.0",
+    "@lila/engine": "^0.1.0",
     "bpmn-js": "^18.28.0",
     "bpmn-js-token-simulation": "^0.40.0",
     "diagram-js-minimap": "^5.4.1"

@@ -1,0 +1,29 @@
+name: Release
+
+# El secreto NPM_TOKEN lo crea Brito en la configuración del repositorio (Settings → Secrets
+# and variables → Actions). Sin él el job llega hasta `npm publish` y falla ahí, nunca antes:
+# build y test corren igual y sirven para detectar un tag roto aunque falte el secreto.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm publish --workspace @lila/engine --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
