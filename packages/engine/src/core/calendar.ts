@@ -95,12 +95,18 @@ function hhmmSeconds(value: string): number {
   return Number.parseInt(value.slice(0, 2), 10) * 3600 + Number.parseInt(value.slice(3, 5), 10) * 60;
 }
 
-/** Ordena, une solapes y adyacencias (R-CAL-2) y construye el calendario. Vacío ⇒ E-CAL-VACIO. */
+/**
+ * Ordena, descarta degenerados, une solapes y adyacencias (R-CAL-2) y construye el calendario.
+ * Sin ningún intervalo abierto ⇒ `E-CAL-VACIO`.
+ */
 function build(raw: readonly Interval[], offset: number): Calendar {
   const sorted = [...raw].sort((left, right) => left[0] - right[0] || left[1] - right[1]);
   const intervals: Interval[] = [];
 
   for (const [start, end] of sorted) {
+    // Un intervalo degenerado (`to <= from`) no abre nada. El esquema ya lo rechaza (R13), pero
+    // colarlo dejaría `openPerWeek = 0` y `addWorkingTime` dividiría por cero: se descarta aquí.
+    if (end <= start) continue;
     const last = intervals[intervals.length - 1];
     // `<=` une también los adyacentes: 09–12 + 12–18 es un solo intervalo.
     if (last !== undefined && start <= last[1]) {
