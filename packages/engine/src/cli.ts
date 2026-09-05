@@ -48,11 +48,13 @@ const USAGE = `Uso: lila validate <archivo.bpmn> [--json]
               [--json resultado.json] [--csv directorio]
      lila compare <modelo.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
                   [--json resultado.json] [--all]
+     lila mcp
 
 Comandos:
   validate   Parsea el BPMN, imprime su IR y valida el modelo.
   run        Valida modelo y escenario, simula y muestra tablas de resultados.
   compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
+  mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Opciones de validate:
   --json     Imprime el IR y los problemas por stdout.
@@ -70,6 +72,10 @@ Opciones de compare:
   --json archivo    Escribe el CompareResult determinista como JSON.
   --all             Imprime todos los KPI de compare(), no solo el subconjunto curado.
                     El primer escenario listado es la base: los demás se comparan contra él.
+
+Opciones de mcp:
+  Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
+  directorio desde el que se lanzó. No se ejecuta a mano: lo lanza el cliente MCP.
 
 Opciones generales:
   -h, --help Muestra esta ayuda.`;
@@ -760,6 +766,50 @@ async function dispatchCompare(argv: readonly string[]): Promise<number> {
   });
 }
 
+/**
+ * `@lila/mcp` depende de `@lila/engine`, así que importarlo estáticamente desde aquí sería un ciclo
+ * entre paquetes. Se carga con `import()` y el especificador en una constante: así el especificador
+ * no es literal para TypeScript, `tsc --build` de este paquete no pasa a depender del `dist/` de
+ * `@lila/mcp` (que se compila después) y el paquete solo se resuelve cuando alguien corre `lila mcp`.
+ */
+const MCP_PACKAGE = '@lila/mcp';
+
+async function dispatchMcp(argv: readonly string[]): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: { help: { type: 'boolean', short: 'h' } },
+    allowPositionals: true,
+  });
+  if (values.help === true) {
+    console.log(USAGE);
+    return 0;
+  }
+  if (positionals.length > 0) {
+    console.error('lila mcp: no acepta argumentos.');
+    return 1;
+  }
+
+  let start: () => Promise<void>;
+  try {
+    ({ startStdioServer: start } = (await import(MCP_PACKAGE)) as {
+      startStdioServer: () => Promise<void>;
+    });
+  } catch (error) {
+    // stdout es el transporte MCP: todo diagnóstico va por stderr, que es lo único que ve
+    // quien registró el servidor en Claude Code.
+    console.error(
+      (error as { code?: string } | null)?.code === 'ERR_MODULE_NOT_FOUND'
+        ? `lila mcp: falta el paquete ${MCP_PACKAGE}. En el repo, \`npm ci && npm run build\` desde la raíz.`
+        : `lila mcp: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return 1;
+  }
+
+  // Devuelve en cuanto el transporte queda conectado; el proceso sigue vivo mientras stdin lo esté.
+  await start();
+  return 0;
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   const [command, ...args] = argv;
   if (command === undefined) {
@@ -775,6 +825,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'validate') return await dispatchValidate(args);
     if (command === 'run') return await dispatchRun(args);
     if (command === 'compare') return await dispatchCompare(args);
+    if (command === 'mcp') return await dispatchMcp(args);
     console.error(`lila: comando desconocido "${command}".`);
     console.error(USAGE);
     return 1;
