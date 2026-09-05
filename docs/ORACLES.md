@@ -53,7 +53,8 @@ adaptar ni redistribuir su código. **Sí** se puede instalar el paquete publica
 es lo único que hacemos. Por eso:
 
 - ni código ni jars de Prosimos entran al repo;
-- el venv se crea **fuera** del árbol de trabajo y se borra al terminar;
+- el venv se crea **fuera** del árbol de trabajo (en `${TMPDIR}`) y se borra a mano al terminar
+  (`rm -rf ${TMPDIR}/lila-prosimos`); el script no lo deja dentro del repo;
 - lo versionado es la conversión propia (`tools/oracles/to_prosimos.py`), el driver que lee su
   salida (`tools/oracles/run_prosimos.py`) y las **cifras** resultantes
   (`packages/engine/test/fixtures/oracles/prosimos-chain5.json`);
