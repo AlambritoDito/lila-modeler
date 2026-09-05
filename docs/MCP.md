@@ -42,6 +42,9 @@
     `extendsFrom` (por defecto, el propio `scenario`) y contiene **solo las claves que tocó el
     patch**, como `examples/pedido/to-be-3-cajeros.scenario.json`. La ruta de `extends` se escribe
     relativa al archivo nuevo (`docs/SCENARIO_FORMAT.md` § 6), sin importar en qué directorio esté
+    `saveTo`. Un `remove` se escribe como `null`, que es como `extends` borra una clave heredada
+    (§ 6). Si `saveTo` apunta al propio `scenario` (o a `extendsFrom`), el archivo heredaría de sí
+    mismo: es un ciclo de `extends` y la tool falla sin escribir — para parchear en sitio, se omite
     `saveTo`.
 
   El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
