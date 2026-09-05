@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 
+import { checkDistribution } from './core/distributions.js';
 import type { ProcessIR } from './core/ir.js';
 
 /* ------------------------------------------------------------------ *
@@ -82,9 +83,42 @@ export type Distribution = z.output<typeof DistributionSchema>;
 
 /** ISO 8601 con offset explícito (R8). `Z` cuenta como offset. */
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+/** Solo para extraer año/mes/día de un `start` que ya pasó `ISO_WITH_OFFSET`. */
+const ISO_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})T/;
+
+/**
+ * `run.start` con fecha civil inexistente (`2026-02-31`, `2026-13-01`) pasaba el regex de arriba
+ * y `new Date()` la normalizaba en silencio (hallazgo de QA de LILA-037/LILA-040). Aritmética
+ * civil pura, sin `Date` (R-DET-5): meses de 1 a 12 y bisiesto = múltiplo de 4, salvo de 100
+ * que no sea también de 400.
+ */
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+function isValidCivilDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12) return false;
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1]!;
+  return day >= 1 && day <= maxDay;
+}
 
 export const RunSchema = z.strictObject({
-  start: z.string().regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset'),
+  start: z
+    .string()
+    .regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset')
+    .superRefine((value, ctx) => {
+      const match = ISO_DATE_PREFIX.exec(value);
+      if (match === null) return; // ya lo rechazó el regex de arriba
+      const [, year, month, day] = match;
+      if (!isValidCivilDate(Number(year), Number(month), Number(day))) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `run.start: ${value} no es una fecha válida; ${month}-${day} no existe en el calendario civil.`,
+        });
+      }
+    }),
   duration: positive.optional(),
   warmup: nonNegative.default(0),
   replications: z.int().min(1).default(1),
@@ -123,7 +157,8 @@ export const CalendarSchema = z.strictObject({
           message: 'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',
         }),
     )
-    .min(1),
+    // R-CAL-2: sin intervalos el calendario nunca abriría (E-CAL-VACIO, § 17 de SEMANTICS.md).
+    .min(1, 'E-CAL-VACIO: el calendario no tiene intervalos abiertos.'),
   // § 4 — reservados.
   holidays: z.unknown().optional(),
   timezone: z.unknown().optional(),
@@ -168,6 +203,8 @@ export const ElementSchema = z.strictObject({
   conditions: z.unknown().optional(),
 });
 
+export type ElementSpec = z.output<typeof ElementSchema>;
+
 /* ------------------------------------------------------------------ *
  * § 2.1 — raíz
  * ------------------------------------------------------------------ */
@@ -208,7 +245,12 @@ export type ScenarioProblemCode =
   | 'E-REC-CANTIDAD'
   | 'E-CAMPO-NO-APLICA'
   | 'E-SIN-PARADA'
-  | 'W-ELEMENTO-SIN-PARAMETROS';
+  | 'E-XOR-SUMA-CERO'
+  | 'W-ELEMENTO-SIN-PARAMETROS'
+  | 'W-XOR-NORMALIZADA'
+  | 'W-XOR-RESIDUO-COMPARTIDO'
+  | 'W-NORMAL-NEGATIVA'
+  | 'W-USER-NORMALIZADA';
 
 export interface ScenarioProblem {
   code: ScenarioProblemCode;
@@ -253,13 +295,82 @@ function reserved(
 const GENERATORS = new Set(['start', 'timer']);
 
 /**
+ * R10 — probabilidades de un XOR divergente (§ 6 de `docs/SEMANTICS.md`, R-XOR-1…5). Duplica a
+ * propósito el cálculo de `core/sim.ts::xorWeights`: `core/` no se toca y esta versión corre
+ * **sin simular**, así un gateway que ningún token visita también queda linteado.
+ */
+function checkXorGateway(
+  problems: ScenarioProblem[],
+  gatewayId: string,
+  outs: readonly string[],
+  elements: Record<string, ElementSpec>,
+): void {
+  if (outs.length === 0) return; // sin salidas: lo caza el validador del IR (E-GATEWAY-SIN-ARISTAS).
+  const declared = outs.map((flowId) => elements[flowId]?.probability);
+  const missingIds = outs.filter((_, i) => declared[i] === undefined);
+  const declaredSum = declared.reduce<number>((acc, p) => acc + (p ?? 0), 0);
+  const share =
+    missingIds.length === outs.length ? 1 / outs.length : Math.max(0, 1 - declaredSum) / missingIds.length;
+
+  // R-XOR-3: dos o más flujos sin probability se reparten el residuo por igual, con aviso.
+  if (missingIds.length >= 2 && missingIds.length < outs.length) {
+    problems.push({
+      code: 'W-XOR-RESIDUO-COMPARTIDO',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: `elements.${gatewayId}: el residuo se reparte entre ${missingIds.join(', ')}.`,
+    });
+  }
+
+  const total = declared.reduce<number>((acc, p) => acc + (p ?? share), 0);
+  if (total === 0) {
+    // R-XOR-5: suma cero, ninguna ruta posible.
+    problems.push({
+      code: 'E-XOR-SUMA-CERO',
+      path: `elements.${gatewayId}`,
+      severity: 'error',
+      message: `elements.${gatewayId}: las probabilidades del XOR suman 0; no hay ruta posible.`,
+    });
+  } else if (Math.abs(total - 1) > 1e-9) {
+    // R-XOR-4: no suman 1, se normalizan con aviso.
+    problems.push({
+      code: 'W-XOR-NORMALIZADA',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: `elements.${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`,
+    });
+  }
+}
+
+/**
+ * R11 — avisos de una distribución (`core/distributions.ts::checkDistribution`, § 16 R-DET-7):
+ * `normal` con `P(x < 0) > 1 %` y `user` cuyas probabilidades no suman 1. Se reutiliza la función
+ * de `core/` tal cual para no duplicar la matemática (erf); aquí solo se le añade el id.
+ */
+function checkElementDistributions(
+  problems: ScenarioProblem[],
+  id: string,
+  element: ElementSpec,
+): void {
+  for (const field of ['processingTime', 'interTriggerTimer'] as const) {
+    const dist = element[field];
+    if (dist === undefined) continue;
+    for (const warning of checkDistribution(dist)) {
+      problems.push({
+        code: warning.code,
+        path: `elements.${id}.${field}`,
+        severity: 'warning',
+        message: `elements.${id}.${field}: ${warning.message}`,
+      });
+    }
+  }
+}
+
+/**
  * Aplica al escenario **resuelto** las reglas de `docs/SCENARIO_FORMAT.md` § 5 que necesitan el
- * IR o el escenario completo: R3, R4, R5, R6, R9, R12 y R14.
+ * IR o el escenario completo: R3, R4, R5, R6, R9, R10, R11, R12 y R14.
  *
  * Devuelve la lista completa en una pasada; `severity: 'error'` impide simular.
- *
- * ponytail: las reglas puramente numéricas (R10 normalización de probabilidades, R11 aviso de
- * `normal` con P(x<0) > 1 %) se comprueban donde se usan, en el motor, no aquí.
  */
 export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioProblem[] {
   const problems: ScenarioProblem[] = [];
@@ -301,6 +412,8 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
       });
       continue;
     }
+
+    checkElementDistributions(problems, id, element);
 
     // R4 — `probability` solo en sequence flows.
     if (element.probability !== undefined && flow === undefined) {
@@ -383,6 +496,11 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         message: `elements.${id}.selection: solo tiene sentido con resources.`,
       });
     }
+  }
+
+  // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
+  for (const [gatewayId, node] of Object.entries(ir.nodes)) {
+    if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements);
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.
