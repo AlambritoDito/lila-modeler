@@ -75,8 +75,12 @@ def run_once(n: int, seed: int, arrival_mean: float):
         cycle_times.append(env.now - t0)
 
     def generator():
-        for _ in range(n):
-            yield env.timeout(rnd.expovariate(1 / arrival_mean))
+        # R-ARR-1: la primera llegada es en `t = 0` y las siguientes en `t + muestra`, igual que
+        # el generador de `sim.ts`. Muestrear antes de la primera alargaría la corrida una media
+        # de llegadas entera y sesgaría a la baja el denominador de la utilización.
+        for index in range(n):
+            if index > 0:
+                yield env.timeout(rnd.expovariate(1 / arrival_mean))
             env.process(case(env.now))
 
     env.process(generator())

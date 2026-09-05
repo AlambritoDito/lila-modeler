@@ -16,7 +16,7 @@ normal.
 lanza un proceso Python con SimPy, que no es dependencia del repo. Con la variable puesta:
 
 ```bash
-ORACLES=1 npm test -w @lila/engine -- theory-simpy
+ORACLES=1 npm test -- theory-simpy
 ```
 
 corre el mismo modelo (5 tareas, capacidades 1-3, llegadas exponenciales, duraciones
