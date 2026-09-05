@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture LILA-044. NO es una réplica publicada: es la topología del diagrama oficial de Bizagi
+     para el "Emergency attendance process", reconstruida a partir de la captura del propio
+     ejemplo (simulationexample2.png en https://help.bizagi.com/platform/en/level_1_example.htm,
+     el mismo proceso que reutilizan los niveles 2, 3 y 4).
+
+     Existe solo para reconciliar: examples/bizagi-levels/level-{2,3,4}/model.bpmn reconstruyó el
+     proceso como una secuencia de 7 tareas con un XOR de vehículo al final, y con esa topología
+     ningún número publicado cuadra (ciclo 51-54 min contra 16/33/25 min). Con ESTA topología los
+     números publicados salen dentro del 5 % sin tocar un solo parámetro del escenario; ver
+     packages/engine/test/bizagi-parity.test.ts y docs/BIZAGI_PARITY.md.
+
+     Ids idénticos a los de examples/bizagi-levels/level-2/model.bpmn para que el escenario
+     publicado (que solo referencia tareas y el start event) siga siendo válido sin cambios:
+       Task_Recibir    = Recieve Emergency Report  (carril Call Center)
+       Task_Clasificar = Classify Triage           (carril Nurse)
+       Task_Gestionar  = Manage patient entry      (carril Nurse)
+       Task_Recoger    = Pick up patient           (carril Fully equipped ambulance)
+       Task_LlegarQAV  = Arrive at patient place QAV (carril Quick attention Vehicle)
+       Task_LlegarBA   = Arrive at patient place BA  (carril Basic Ambulance)
+       Task_Autorizar  = Authorize Entry           (carril Hospital receptionist)
+     Los ids de flujo Flow_Red/Flow_Yellow/Flow_Green son los del gateway "Triage type" que el
+     nivel 1 documenta en prosa (Green 20 %, Yellow 30 %, Red 50 %). -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_BizagiEmergencyOficial"
+                  targetNamespace="https://lila-modeler.org/bpmn/test"
+                  exporter="Lila Modeler tests"
+                  exporterVersion="0.0.0">
+  <bpmn:process id="Process_PatientAssistance" name="Patient Assistance" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_Llegada" name="NoneStart" />
+    <bpmn:sequenceFlow id="Flow_Start_Recibir" sourceRef="StartEvent_Llegada" targetRef="Task_Recibir" />
+
+    <bpmn:task id="Task_Recibir" name="Recieve Emergency Report" />
+    <bpmn:sequenceFlow id="Flow_Recibir_Clasificar" sourceRef="Task_Recibir" targetRef="Task_Clasificar" />
+
+    <bpmn:task id="Task_Clasificar" name="Classify Triage" />
+    <bpmn:sequenceFlow id="Flow_Clasificar_Triage" sourceRef="Task_Clasificar" targetRef="Gateway_Triage" />
+
+    <bpmn:exclusiveGateway id="Gateway_Triage" name="Triage type" />
+    <bpmn:sequenceFlow id="Flow_Red"    name="Red"    sourceRef="Gateway_Triage" targetRef="Gateway_ForkRed" />
+    <bpmn:sequenceFlow id="Flow_Yellow" name="Yellow" sourceRef="Gateway_Triage" targetRef="Task_LlegarQAV" />
+    <bpmn:sequenceFlow id="Flow_Green"  name="Green"  sourceRef="Gateway_Triage" targetRef="Task_LlegarBA" />
+
+    <!-- Rama Red: fork paralelo (Manage patient entry || Pick up patient), join y Authorize Entry. -->
+    <bpmn:parallelGateway id="Gateway_ForkRed" name="ParallelGateway" />
+    <bpmn:sequenceFlow id="Flow_ForkRed_Gestionar" sourceRef="Gateway_ForkRed" targetRef="Task_Gestionar" />
+    <bpmn:sequenceFlow id="Flow_ForkRed_Recoger"   sourceRef="Gateway_ForkRed" targetRef="Task_Recoger" />
+
+    <bpmn:task id="Task_Gestionar" name="Manage patient entry" />
+    <bpmn:task id="Task_Recoger" name="Pick up patient" />
+    <bpmn:sequenceFlow id="Flow_Gestionar_JoinRed" sourceRef="Task_Gestionar" targetRef="Gateway_JoinRed" />
+    <bpmn:sequenceFlow id="Flow_Recoger_JoinRed"   sourceRef="Task_Recoger"   targetRef="Gateway_JoinRed" />
+
+    <bpmn:parallelGateway id="Gateway_JoinRed" name="ParallelGateway" />
+    <bpmn:sequenceFlow id="Flow_JoinRed_Autorizar" sourceRef="Gateway_JoinRed" targetRef="Task_Autorizar" />
+
+    <bpmn:task id="Task_Autorizar" name="Authorize Entry" />
+    <bpmn:sequenceFlow id="Flow_Autorizar_FinRed" sourceRef="Task_Autorizar" targetRef="EndEvent_Red" />
+    <bpmn:endEvent id="EndEvent_Red" name="Red Triage end" />
+
+    <!-- Rama Yellow: Arrive at patient place QAV. -->
+    <bpmn:task id="Task_LlegarQAV" name="Arrive at patient place QAV" />
+    <bpmn:sequenceFlow id="Flow_QAV_FinYellow" sourceRef="Task_LlegarQAV" targetRef="EndEvent_Yellow" />
+    <bpmn:endEvent id="EndEvent_Yellow" name="Yellow Triage end" />
+
+    <!-- Rama Green: Arrive at patient place BA. -->
+    <bpmn:task id="Task_LlegarBA" name="Arrive at patient place BA" />
+    <bpmn:sequenceFlow id="Flow_BA_FinGreen" sourceRef="Task_LlegarBA" targetRef="EndEvent_Green" />
+    <bpmn:endEvent id="EndEvent_Green" name="Green Triage end" />
+  </bpmn:process>
+</bpmn:definitions>
