@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs_1" targetNamespace="http://example.com">
+  <bpmn:process id="Process_Lanes" name="Con carriles" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Cajero" name="Cajero">
+        <bpmn:flowNodeRef>StartEvent_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_A</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Cocina" name="Cocina">
+        <bpmn:flowNodeRef>Task_B</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_1</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="StartEvent_1" name="Inicio"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="Task_A" name="Tomar"><bpmn:incoming>F1</bpmn:incoming><bpmn:outgoing>F2</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Task_B" name="Cocinar"><bpmn:incoming>F2</bpmn:incoming><bpmn:outgoing>F3</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="EndEvent_1" name="Fin"><bpmn:incoming>F3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="F1" sourceRef="StartEvent_1" targetRef="Task_A"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_A" targetRef="Task_B"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_B" targetRef="EndEvent_1"/>
+  </bpmn:process>
+</bpmn:definitions>

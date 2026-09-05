@@ -3,5 +3,5 @@
   // `noEmit`, incompatible con los proyectos `composite` que usa `tsc --build`.
   // Se comprueba con `npm run typecheck` (llama a `typecheck` de @lila/web).
   "files": [],
-  "references": [{ "path": "packages/engine" }]
+  "references": [{ "path": "packages/engine" }, { "path": "packages/mcp" }]
 }
