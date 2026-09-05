@@ -195,6 +195,10 @@ export function nextOpen(cal: Calendar, t: number): number {
  */
 export function addWorkingTime(cal: Calendar, t: number, d: number): number {
   if (d <= 0) return t;
+  // Una semana entera abierta es el elemento neutro y su respuesta exacta es `t + d`. Sin este
+  // atajo el rodeo por `weeks × WEEK` redondea, y un 24×7 escrito a mano dejaba de dar los
+  // mismos bytes que no declarar ningún calendario (R-DEG-2).
+  if (cal.openPerWeek === WEEK) return t + d;
 
   // Cada semana natural aporta exactamente `openPerWeek` segundos abiertos, empiece donde
   // empiece: saltarlas de golpe evita iterar años de intervalos.
@@ -227,6 +231,9 @@ export function addWorkingTime(cal: Calendar, t: number, d: number): number {
 /** Segundos abiertos contenidos en `[a, b)`. `b ≤ a` ⇒ 0. Lo necesita LILA-041 (R-CAL-7/9). */
 export function openTime(cal: Calendar, a: number, b: number): number {
   if (b <= a) return 0;
+  // Igual que en `addWorkingTime`: con la semana entera abierta la respuesta exacta es `b − a`.
+  // Es el atajo que deja `offHoursWait` clavado en 0 y no en 4 × 10⁻⁹ (R-DEG-2).
+  if (cal.openPerWeek === WEEK) return b - a;
 
   const weeks = Math.floor((b - a) / WEEK);
   const from = pos(cal, a + weeks * WEEK);

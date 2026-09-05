@@ -407,10 +407,12 @@ describe('QA LILA-038 · ataque 8: escala', () => {
     expect(compare(many).rows).toHaveLength(105 * 19 + 20);
     expect(compare(many).count).toBe(50);
     // Cuadrático en el número de resultados o de KPI daría factores ~4; se deja holgura 3× más
-    // un piso absoluto para no depender del reloj en máquinas cargadas.
+    // un piso absoluto para no depender del reloj en máquinas cargadas. El piso es 60 ms y no 20:
+    // con la suite entera en paralelo (LILA-041 le añadió varias corridas de examples/pedido) la
+    // mitad se midió en 36 ms y el total en 109 ms, y el ratio saltaba sin que nada fuera lento.
     expect(full).toBeLessThan(3000);
-    expect(full).toBeLessThan(Math.max(halfResults, 20) * 3);
-    expect(full).toBeLessThan(Math.max(halfKpis, 20) * 3);
+    expect(full).toBeLessThan(Math.max(halfResults, 60) * 3);
+    expect(full).toBeLessThan(Math.max(halfKpis, 60) * 3);
   });
 });
 

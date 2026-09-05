@@ -55,16 +55,16 @@ No se aceptan claves desconocidas en la raíz (`strict`): un campo mal escrito e
 
 ### 2.3 `calendars`
 
-Mapa `clave → { intervals: [...] }`. La clave es el identificador que citan `resources[*].calendar` y los starts.
+Mapa `clave → { intervals: [...] }`. La clave es el identificador que citan `resources[*].calendar` y `elements[*].calendar`. La clave `default` es el calendario que toma **todo pool** que no declare el suyo (R-CAL-10); los elementos no la heredan.
 
 | Campo | Tipo | Oblig. | Descripción |
 |---|---|---|---|
 | `intervals` | array (≥ 1) | **sí** | Ventanas abiertas del patrón semanal. |
 | `intervals[].days` | array de `"MON"`\|`"TUE"`\|`"WED"`\|`"THU"`\|`"FRI"`\|`"SAT"`\|`"SUN"` | **sí** | Días a los que aplica la ventana. |
 | `intervals[].from` | string `"HH:MM"` (24 h) | **sí** | Apertura, hora local del offset de `run.start`. |
-| `intervals[].to` | string `"HH:MM"` (24 h) | **sí** | Cierre. Debe ser `> from`; una ventana nocturna se parte en dos intervalos. |
+| `intervals[].to` | string `"HH:MM"` (24 h) o `"24:00"` | **sí** | Cierre, **exclusivo**. Debe ser `> from`; una ventana nocturna se parte en dos intervalos. `"24:00"` es la medianoche del día siguiente y solo se admite aquí, nunca en `from`: sin ella el formato no sabe decir "hasta el final del día" y un 24×7 escrito a mano perdería 60 s cada noche. |
 
-Semántica (ADR-016): patrón **semanal relativo a `run.start`**; una tarea solo arranca dentro del calendario de su recurso y su `processingTime` consume solo tiempo de calendario (se pausa al cerrar el turno, reanuda al abrir); el tiempo cerrado se reporta como `offHoursWait`, separado de `resourceWait`; la utilización se calcula sobre el tiempo **disponible** según calendario. Intervalos solapados dentro del mismo calendario se unen (unión, no suma). Sin DST, sin festivos, sin zona horaria propia en v1 (§ 4).
+Semántica (ADR-016): patrón **semanal relativo a `run.start`**; una tarea solo arranca dentro de su calendario efectivo —la intersección de los de sus pools con el suyo propio, R-CAL-4— y su `processingTime` consume solo tiempo de calendario (se pausa al cerrar el turno, reanuda al abrir); el tiempo cerrado se reporta como `offHoursWait`, separado de `resourceWait`; la utilización se calcula sobre el tiempo **disponible** según calendario. Intervalos solapados dentro del mismo calendario se unen (unión, no suma). Sin DST, sin festivos, sin zona horaria propia en v1 (§ 4).
 
 ### 2.4 `resources`
 
@@ -77,7 +77,7 @@ Mapa `clave → pool`. La clave es la que citan `elements[*].resources[].ref`.
 | `capacity` | integer ≥ 1 | **sí** | — | Unidades simultáneas del pool. |
 | `costPerHour` | number ≥ 0 | no | `0` | Costo por hora **ocupada** (no por hora disponible). |
 | `fixedCost` | number ≥ 0 | no | `0` | Costo fijo por token atendido. |
-| `calendar` | string (clave de `calendars`) | no | — | Sin calendario ⇒ el pool está disponible 24×7. |
+| `calendar` | string (clave de `calendars`) | no | `default` si existe | Sin `calendar` el pool usa el calendario llamado `default`; si tampoco existe, está disponible 24×7 (R-CAL-10). |
 
 Cola: FIFO por pool, ordenada por instante de habilitación, empate por `seq`.
 
@@ -93,7 +93,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |
 | `interTriggerTimer` | distribución (§ 3) | starts y timers generadores | — | Tiempo entre llegadas, en segundos. |
 | `triggerCount` | integer ≥ 1 | starts y timers generadores | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
-| `calendar` | string (clave de `calendars`) | starts y timers generadores | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea el calendario viene de su recurso (ADR-016), no de aquí. |
+| `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3). |
 | `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. |
 
 Nota sobre elementos ausentes: un elemento del diagrama que no aparece en `elements` es válido y toma sus defaults (tarea sin tiempo ni recursos, flujo con reparto equitativo). `elements` es un mapa de excepciones, no un espejo obligatorio del modelo.
@@ -160,7 +160,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | R10 | Las probabilidades de las salidas de un mismo gateway XOR: si faltan, reparto equitativo; si no suman 1, se **normalizan con warning**; el flujo `isDefault` recibe el residuo. En OR cada salida es independiente y no se normaliza. |
 | R11 | Los parámetros de cada distribución deben cumplir sus restricciones (§ 3). `normal` con `P(x < 0) > 1 %` produce **warning**, no error. |
 | R12 | Los campos reservados (§ 4) producen error explícito. |
-| R13 | `intervals[].to > intervals[].from`; una ventana que cruza medianoche se declara como dos intervalos. |
+| R13 | `intervals[].to > intervals[].from`; una ventana que cruza medianoche se declara como dos intervalos. `to` admite además `"24:00"` (medianoche del día siguiente); `from` no. |
 | R14 | `selection` solo tiene sentido con `resources`; declararlo sin recursos es error. |
 | R15 | `extends`: la ruta debe resolver a un archivo existente y la cadena no puede tener ciclos (§ 6). |
 

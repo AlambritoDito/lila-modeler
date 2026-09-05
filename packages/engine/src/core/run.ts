@@ -10,6 +10,7 @@ import { aggregateReplication } from './metrics.js';
 import { summarizeRunResults } from './replications.js';
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
 import {
+  assertSupportedCalendarScenario,
   assertSupportedResourceScenario,
   runReplication,
   type AbortSignalLike,
@@ -113,6 +114,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   // El preflight precede incluso al progreso inicial: un input no soportado no puede dejar
   // callbacks observables antes de lanzar el error estable.
   assertSupportedResourceScenario(scenario);
+  assertSupportedCalendarScenario(scenario);
   // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
   // nadie más se hizo cargo de las filas. Con `onEvent` el consumidor ya las recibe una a una —la
   // CLI las escribe directas a `log.csv`— y retenerlas otra vez duplicaría hasta 6 M de objetos.

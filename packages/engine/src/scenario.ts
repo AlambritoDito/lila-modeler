@@ -100,6 +100,13 @@ export const RunSchema = z.strictObject({
  * ------------------------------------------------------------------ */
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+/**
+ * `to` admite además `"24:00"`, la medianoche del día siguiente (LILA-041). Sin ella el formato
+ * no sabe decir "hasta el final del día": `to` es exclusivo y el tope de `HHMM` es `23:59`, así
+ * que un 24×7 escrito a mano o una ventana nocturna perdían 60 s cada noche en silencio. El
+ * orden lexicográfico sigue valiendo para `to > from` y `compileCalendar` lo mapea a 86400.
+ */
+const HHMM_TO = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 
 export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
@@ -110,7 +117,7 @@ export const CalendarSchema = z.strictObject({
         .strictObject({
           days: z.array(z.enum(WEEKDAYS)).min(1),
           from: z.string().regex(HHMM, 'from debe ser "HH:MM"'),
-          to: z.string().regex(HHMM, 'to debe ser "HH:MM"'),
+          to: z.string().regex(HHMM_TO, 'to debe ser "HH:MM" (se admite "24:00")'),
         })
         .refine((i) => i.to > i.from, {
           message: 'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',

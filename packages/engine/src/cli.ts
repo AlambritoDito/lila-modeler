@@ -204,28 +204,6 @@ function withRunOverrides(
   };
 }
 
-/** ¿El escenario declara calendarios, en `calendars` o en la referencia de un pool/elemento? */
-function declaresCalendars(scenario: ResolvedScenario): boolean {
-  if (Object.keys(scenario.calendars ?? {}).length > 0) return true;
-  if (Object.values(scenario.resources ?? {}).some((resource) => resource.calendar !== undefined)) return true;
-  return Object.values(scenario.elements ?? {}).some((element) => element.calendar !== undefined);
-}
-
-/**
- * Aviso de que un escenario declara calendarios que el motor todavía no simula (M3, LILA-041):
- * sus números salen 24×7. Compartido por `lila run` y `lila compare` (LILA-184) para que ambos
- * avisen exactamente igual; antes `run` rechazaba estos escenarios con `E-NIVEL-M3` y `compare`
- * no aplicaba ningún gate.
- */
-function calendarsWarning(scenarioName: string): string {
-  return `"${scenarioName}" declara calendarios; el motor todavía no los simula (M3, LILA-041) y sus números salen 24×7.`;
-}
-
-/** Avisos de nivel 3 (M3) pendientes de un escenario: hoy solo calendarios. Usado por `lila run`. */
-function pendingM3Warnings(scenario: ResolvedScenario): string[] {
-  return declaresCalendars(scenario) ? [calendarsWarning(scenario.name)] : [];
-}
-
 function printScenarioProblems(problems: readonly ScenarioProblem[]): void {
   for (const problem of problems) {
     console.log(`${problem.severity === 'error' ? 'error' : 'aviso'}  ${problem.code}  ${problem.message}`);
@@ -236,7 +214,6 @@ function resultWithBoundaryWarnings(
   result: RunResult,
   modelValidation: ValidationResult,
   scenarioProblems: readonly ScenarioProblem[],
-  extraWarnings: readonly string[] = [],
 ): RunResult {
   const warnings = new Set<string>();
   for (const warning of modelValidation.warnings) warnings.add(`${warning.code}: ${warning.message}`);
@@ -244,7 +221,6 @@ function resultWithBoundaryWarnings(
     if (warning.severity === 'warning') warnings.add(`${warning.code}: ${warning.message}`);
   }
   for (const warning of result.warnings) warnings.add(warning);
-  for (const warning of extraWarnings) warnings.add(warning);
   return { ...result, warnings: [...warnings] };
 }
 
@@ -593,12 +569,7 @@ async function runCommand(
       ...(logSink === undefined ? {} : { onEvent: (row: EventLogRow) => logSink.onEvent(row) }),
     });
     logSink?.close();
-    const result = resultWithBoundaryWarnings(
-      simulated,
-      modelValidation,
-      scenarioProblems,
-      pendingM3Warnings(scenario),
-    );
+    const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
 
     printRunResult(ir, scenario, result);
     if (options.json !== undefined) writeJson(options.json, result);
@@ -737,10 +708,9 @@ function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>,
  * Avisos de la corrida completa, en un solo bloque al pie de la tabla.
  *
  * Incluye los avisos de modelo y escenario que `lila run` ya imprime (`resultWithBoundaryWarnings`)
- * y tres que solo tienen sentido comparando: unidad de tiempo distinta entre escenarios —la tabla
- * usa siempre la del base—, semillas distintas —se pierden los números aleatorios comunes de
- * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)— y
- * calendarios declarados, que el motor todavía no simula (M3, LILA-041).
+ * y dos que solo tienen sentido comparando: unidad de tiempo distinta entre escenarios —la tabla
+ * usa siempre la del base— y semillas distintas —se pierden los números aleatorios comunes de
+ * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)—.
  */
 function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTimeUnit): string[] {
   const lines: string[] = [];
@@ -761,10 +731,6 @@ function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTime
         'aleatorios comunes (R-DET-3) y los deltas mezclan el efecto del cambio con el del muestreo. ' +
         'Usa --seed para forzar la misma semilla en todos.',
     );
-  }
-
-  for (const entry of loaded.filter((entry) => declaresCalendars(entry.scenario))) {
-    lines.push(calendarsWarning(entry.scenario.name));
   }
 
   for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
@@ -892,10 +858,9 @@ async function compareCommand(
   const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
   if (modelHasErrors(modelValidation)) return 1;
 
-  // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources`, que el
-  // motor simula desde LILA-033…036 (LILA-038 ya los agrega a `compare()`). Los `calendars` de M3
-  // sí siguen sin simularse —el motor los ignora, sus números salen 24×7— pero tampoco se rechazan:
-  // ambos comandos avisan igual al pie (`pendingM3Warnings`/`compareWarnings`, `calendarsWarning`).
+  // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources` ni
+  // `calendars`, que el motor simula desde LILA-033…036 y LILA-041. Ya no queda ningún aviso de
+  // nivel pendiente que dar al pie de la tabla.
   const validated: Array<{
     file: string;
     scenario: ResolvedScenario;
