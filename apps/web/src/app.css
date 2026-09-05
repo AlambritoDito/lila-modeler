@@ -1,0 +1,257 @@
+/*
+ * Shell y lienzo (LILA-057). Ni un color literal: todo sale de los tokens de `tokens.css`.
+ *
+ * bpmn-js expone su propia paleta de variables CSS (`--palette-*`, `--popup-*`,
+ * `--element-selected-outline-stroke-color`, …) definida en `.djs-parent` y `.bjs-container`.
+ * Redefinirlas apuntando a nuestros tokens es todo lo que hace falta para vestir el editor:
+ * no se reescribe ni una regla de bpmn-js ni se usa `!important` en ningún sitio.
+ */
+
+/* ---------- disposición ---------- */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+}
+
+.app {
+  display: grid;
+  grid-template-areas:
+    'barra     barra'
+    'lienzo    panel'
+    'diagramas panel'
+    'estado    estado';
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100vh;
+}
+
+/* ---------- barra superior ---------- */
+
+.barra {
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  grid-area: barra;
+  padding: 6px 12px;
+}
+
+.proyecto {
+  font-weight: 700;
+}
+
+.archivo {
+  color: var(--fg-muted);
+}
+
+.modos {
+  display: flex;
+  gap: 4px;
+  margin: 0 auto;
+}
+
+.modo {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 14px;
+}
+
+.modo.activo {
+  border-bottom-color: var(--accent-tertiary);
+  color: var(--fg-primary);
+}
+
+.modo:disabled {
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+.boton {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: inherit;
+  padding: 5px 12px;
+}
+
+.boton:hover {
+  background: var(--bg-hover);
+}
+
+.boton.primario {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font-weight: 600;
+}
+
+/* ---------- panel derecho y pestañas ---------- */
+
+.panel {
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  grid-area: panel;
+  overflow: auto;
+}
+
+.pestanas,
+.diagramas {
+  display: flex;
+  gap: 2px;
+}
+
+.pestana {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.pestana.activa {
+  border-bottom-color: var(--accent-tertiary);
+  color: var(--fg-primary);
+}
+
+.vacio {
+  color: var(--fg-muted);
+  margin: 0;
+  padding: 16px 12px;
+}
+
+.diagramas {
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  grid-area: diagramas;
+}
+
+/* ---------- barra de estado ---------- */
+
+.estado {
+  align-items: center;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  display: flex;
+  gap: 16px;
+  grid-area: estado;
+  padding: 4px 12px;
+}
+
+.enlace {
+  background: none;
+  border: none;
+  color: var(--accent-tertiary);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.error {
+  color: var(--status-error);
+}
+
+/* ---------- lienzo ---------- */
+
+.lienzo {
+  background:
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px) 0 0 / 20px 20px,
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px) 0 0 / 20px 20px,
+    var(--canvas-bg);
+  grid-area: lienzo;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  /* La marca de agua «Powered by bpmn.io» es un `<a>` absoluto a 15 px de este borde
+     inferior derecho. No se le pone nada encima ni se le cambia la posición: es
+     obligatoria por la licencia de bpmn.io. */
+  position: relative;
+}
+
+/* El SVG del lienzo es el que recibe el foco del teclado (bpmn-js 18 lo engancha ahí, no al
+   documento), así que su anillo de foco es la única señal de que los atajos van a responder.
+   Se queda, con el color del tema en vez del azul por defecto del navegador. */
+.lienzo .djs-container svg:focus {
+  outline: 2px solid var(--accent-tertiary);
+  outline-offset: -2px;
+}
+
+/* La rejilla de arriba tiene que verse: el SVG del lienzo no puede pintar su propio fondo. */
+.lienzo .djs-container svg {
+  background: transparent;
+}
+
+/* Marca de agua: el logo usa `fill: currentColor`, así que basta darle un color legible
+   sobre el lienzo oscuro. No se oculta, no se mueve, no se reescala. */
+.lienzo .bjs-powered-by {
+  color: var(--fg-muted);
+}
+
+.lienzo .bjs-powered-by:hover {
+  color: var(--fg-primary);
+}
+
+/* Los tokens de Lila mandan sobre las variables propias de bpmn-js. */
+.lienzo .djs-parent,
+.lienzo .bjs-container {
+  --color-white: var(--bg-elevated);
+  --color-black: var(--fg-primary);
+  --color-grey-225-10-15: var(--fg-primary);
+  --color-grey-225-10-35: var(--fg-muted);
+  --color-grey-225-10-55: var(--fg-muted);
+  --color-grey-225-10-75: var(--border-strong);
+  --color-grey-225-10-80: var(--border-strong);
+  --color-grey-225-10-85: var(--border);
+  --color-grey-225-10-90: var(--border);
+  --color-grey-225-10-95: var(--bg-hover);
+  --color-grey-225-10-97: var(--bg-surface);
+
+  --accent-color: var(--diagram-selected);
+  --canvas-fill-color: var(--canvas-bg);
+  --element-hover-outline-fill-color: var(--diagram-hover);
+  --element-selected-outline-stroke-color: var(--diagram-selected);
+  --element-selected-outline-secondary-stroke-color: var(--diagram-hover);
+  --lasso-stroke-color: var(--diagram-selected);
+  --bendpoint-fill-color: var(--diagram-selected);
+  --bendpoint-stroke-color: var(--bg-base);
+  --resizer-stroke-color: var(--bg-base);
+
+  --palette-background-color: var(--bg-surface);
+  --palette-border-color: var(--border);
+  --palette-entry-color: var(--fg-primary);
+  --palette-entry-hover-color: var(--accent-primary);
+  --palette-entry-selected-color: var(--accent-primary);
+  --palette-separator-color: var(--border-strong);
+  --palette-toggle-hover-background-color: var(--bg-hover);
+
+  --context-pad-entry-background-color: var(--bg-elevated);
+  --context-pad-entry-hover-background-color: var(--bg-hover);
+
+  --popup-background-color: var(--bg-elevated);
+  --popup-border-color: var(--border-strong);
+  --popup-font-family: var(--font-ui);
+  --popup-shadow-color: var(--shadow);
+
+  --bjs-font-family: var(--font-diagram);
+}
