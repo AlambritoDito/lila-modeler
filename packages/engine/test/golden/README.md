@@ -3,12 +3,23 @@
 `pedido.seed-42.json` es el `RunResult` completo y legible del escenario AS-IS con seed 42. No es
 un snapshot interno de Vitest: se revisa como JSON normal y el test compara sus bytes exactos.
 
-Para regenerarlo deliberadamente desde la raíz del repositorio:
+`pedido-nivel3.seed-42.json` es el mismo escenario **con** recursos y **sin** la capa de
+calendarios: el oráculo de R-DEG-2 (LILA-043). A diferencia del anterior, sus bytes son los de
+`linux/x64`, la plataforma del CI, porque en nivel 3 `resourceWait` resta instantes de casos
+distintos y la deriva de último bit de `Math.log`/`Math.exp` entre arquitecturas ya no se cancela
+(R-DET-6). Por eso el test lo compara byte a byte cuando `process.env.CI` está definido y con
+tolerancia relativa `1e-9` fuera del CI.
+
+Para regenerarlos deliberadamente desde la raíz del repositorio:
 
 ```sh
 npm run golden:update
-git diff -- packages/engine/test/golden/pedido.seed-42.json
+git diff -- packages/engine/test/golden/
 ```
+
+`golden:update` regenera el de M1 en cualquier máquina, pero **se niega** a tocar el de nivel 3
+fuera de `linux/x64` y termina en error: regenerado en otra arquitectura rompería el CI sin cambio
+semántico ninguno.
 
 El script parsea el BPMN y el escenario reales y retira explícitamente `resources`, `calendars`,
 `elements[*].resources`, `selection` y las referencias `elements[*].calendar` antes de validar y
