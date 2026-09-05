@@ -3,15 +3,25 @@
  * delega en el renderer por defecto y tiñe `fill`/`stroke` de las tareas según su
  * `resourceWait.mean`, en tres pasos (cuánto pesa esa espera frente al propio tiempo de proceso
  * de la tarea, ver `nivelDeRatio` más abajo), más el servicio `overlays` para una etiqueta con la
- * espera media y la utilización del pool principal (docs/RESULTS_FORMAT.md §2, §4), y un marcador
- * CSS para `bottlenecks[0]` (§6).
+ * espera media y la utilización del recurso principal, y un marcador CSS para `bottlenecks[0]`.
+ * Aspecto de referencia: `docs/design/bottleneck-overlay.png`.
+ *
+ * El ranking **no se recalcula aquí**: se recorre `result.bottlenecks` tal cual, que ya viene
+ * ordenado por `resourceWait.total` con desempate por utilización (docs/RESULTS_FORMAT.md §6) y
+ * ya trae la `utilization` del recurso principal de cada elemento. Así el overlay, la tarjeta de
+ * `ResultsView` (LILA-062) y `lila run` coinciden siempre, y el escenario solo se usa para saber
+ * en qué unidad presentar los tiempos.
  *
  * `overlayModel` es la parte pura y testeable: clasifica y etiqueta sin tocar bpmn-js, así que se
- * prueba sin navegador (jsdom no dibuja bpmn-js, ver Modeler.tsx). `applyOverlay`/`clearOverlay`
- * son el único punto que toca el modelador: el shell los llama tras `runInWorker` y al cambiar de
- * escenario. `BaseRenderer` se auto-registra en el `eventBus` al construirse (así funciona en
- * diagram-js, sin pasar por el contenedor de inyección de dependencias) — por eso puede crearse
- * sobre un modelador ya montado, sin tener que pasar por `additionalModules` al construirlo.
+ * prueba sin navegador (jsdom no llega a dibujar bpmn-js: le faltan `getBBox` y
+ * `SVGElement.transform`, ver `BottleneckOverlay.test.ts`). `sincronizarOverlay` es el único punto
+ * que toca el modelador — `Modeler.tsx` lo expone como `Modelador.cuellos(corrida, visible)` y
+ * `main.tsx` lo llama desde un solo efecto, así que "hay resultado nuevo", "cambió el escenario",
+ * "se recargó el modelo" y "se apagó el interruptor" son todos el mismo camino.
+ *
+ * `BaseRenderer` se auto-registra en el `eventBus` al construirse (así funciona en diagram-js, sin
+ * pasar por el contenedor de inyección de dependencias) — por eso puede crearse sobre un modelador
+ * ya montado, sin tener que pasar por `additionalModules` al construirlo.
  */
 import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer';
 import type Modeler from 'bpmn-js/lib/Modeler';
@@ -37,29 +47,28 @@ export type NivelEspera = 'low' | 'mid' | 'high';
 export interface OverlayEntry {
   nivel: NivelEspera;
   etiqueta: string;
+  /** `true` solo para `bottlenecks[0]`: la tarea donde más tiempo total se perdió esperando. */
   principal: boolean;
+  /** Posición en `result.bottlenecks` (0 = principal). */
+  rango: number;
 }
 
+/**
+ * Mapa `id de elemento -> entrada`. El orden de inserción **es** el de `result.bottlenecks`, así
+ * que `Object.keys(modelo)` devuelve el ranking del motor sin volver a ordenar nada.
+ */
 export type OverlayModel = Readonly<Record<string, OverlayEntry>>;
 
-/**
- * Recurso "principal" de un elemento: el de `scenario.elements[id].resources` con mayor
- * `utilization` — mismo desempate que `bottlenecks` (docs/RESULTS_FORMAT.md §6, "si el elemento
- * usa varios pools, el mayor utilización entre ellos"). `null` si el elemento no declara recursos
- * (Timer_Reposo, por ejemplo) o si ninguno de sus `ref` aparece en `result.resources`.
- */
-function utilizacionPrincipal(
-  elementId: string,
-  result: RunResult,
-  scenario: ResolvedScenario,
-): number | null {
-  const refs = scenario.elements?.[elementId]?.resources ?? [];
-  let mejor: number | null = null;
-  for (const { ref } of refs) {
-    const utilizacion = result.resources[ref]?.utilization;
-    if (utilizacion !== undefined && (mejor === null || utilizacion > mejor)) mejor = utilizacion;
-  }
-  return mejor;
+/** Lo que el shell guarda de la última corrida para poder repintar el overlay cuando haga falta. */
+export interface Corrida {
+  result: RunResult;
+  scenario: ResolvedScenario;
+  /**
+   * `ir.source.originalIds`: `id del IR -> id que traía el archivo`. El IR sanitiza los ids que no
+   * son NCName válido (docs/BPMN_EXTENSION.md), pero bpmn-js importó el XML original, así que las
+   * claves de `RunResult` pueden no ser las que conoce el lienzo — ver `idEnLienzo`.
+   */
+  originalIds: Readonly<Record<string, string>>;
 }
 
 /**
@@ -88,31 +97,31 @@ function nivelDeRatio(ratio: number): NivelEspera {
 }
 
 /**
- * Función pura: clasifica cada tarea con `resourceWait.mean > 0` y arma su etiqueta. Sin recursos
- * en el escenario (`result.resources` vacío, R-DEG-1) o sin ninguna tarea con espera, el mapa
- * queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada — es la
- * aceptación literal del ticket para ese caso.
+ * Función pura: recorre `result.bottlenecks` en su orden y arma la entrada de cada elemento. Sin
+ * recursos en el escenario (R-DEG-1) o sin ninguna tarea con espera, `bottlenecks` viene vacío y
+ * el mapa queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada.
  */
 export function overlayModel(result: RunResult, scenario: ResolvedScenario): OverlayModel {
-  if (Object.keys(result.resources).length === 0) return {};
-
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
-  const principalId = result.bottlenecks[0]?.elementId;
 
   const model: Record<string, OverlayEntry> = {};
-  for (const [id, metrics] of Object.entries(result.elements)) {
-    if (metrics.resourceWait.mean <= 0) continue;
+  for (const [rango, entrada] of result.bottlenecks.entries()) {
+    const metrics = result.elements[entrada.elementId];
+    // Un `bottlenecks` sin su elemento en `elements` no lo produce el motor; si llegara de un
+    // JSON editado a mano, se ignora esa entrada en vez de reventar el lienzo entero.
+    if (metrics === undefined) continue;
     // `processing.mean` de una tarea con espera > 0 no debería ser 0 (tuvo que completar al
     // menos una vez para tener processing.mean, ver docs/RESULTS_FORMAT.md §2); si igual lo es,
     // la espera es infinitamente mayor que el proceso — el caso más alto, no un error.
-    const ratio = metrics.processing.mean > 0 ? metrics.resourceWait.mean / metrics.processing.mean : Infinity;
-    const utilizacion = utilizacionPrincipal(id, result, scenario);
-    const espera = `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}`;
-    model[id] = {
+    const ratio =
+      metrics.processing.mean > 0 ? metrics.resourceWait.mean / metrics.processing.mean : Infinity;
+    model[entrada.elementId] = {
       etiqueta:
-        utilizacion === null ? espera : `${espera} · utilización ${formatNumber(utilizacion * 100)}%`,
+        `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}` +
+        ` · utilización ${formatNumber(entrada.utilization * 100)}%`,
       nivel: nivelDeRatio(ratio),
-      principal: id === principalId,
+      principal: rango === 0,
+      rango,
     };
   }
   return model;
@@ -239,26 +248,47 @@ export function clearOverlay(modeler: Modeler): void {
 }
 
 /**
- * Aplica el overlay de `result`/`scenario` sobre `modeler`: tiñe las tareas con espera, marca
+ * Id con el que el lienzo conoce al elemento `id` del `RunResult`, o `null` si no lo conoce.
+ *
+ * El caso normal es que coincidan. No coinciden cuando el archivo traía ids que no son NCName
+ * válido (Bizagi los exporta así de vez en cuando): el motor los sanitiza al construir el IR y
+ * `RunResult` queda keyed por el id sanitizado, mientras que bpmn-js importó el XML original. Se
+ * prueba el id del resultado primero y el original después, así que un `originalIds` de otro
+ * modelo —o vacío— nunca puede desviar el overlay a un elemento equivocado.
+ */
+function idEnLienzo(
+  id: string,
+  originalIds: Readonly<Record<string, string>>,
+  elementRegistry: ElementRegistry,
+): string | null {
+  if (elementRegistry.get(id) !== undefined) return id;
+  const original = originalIds[id];
+  if (original !== undefined && elementRegistry.get(original) !== undefined) return original;
+  return null;
+}
+
+/**
+ * Aplica el overlay de una corrida sobre `modeler`: tiñe las tareas del ranking, marca
  * `bottlenecks[0]` y añade la etiqueta de cada una. Reemplaza cualquier overlay anterior del mismo
- * modelador (empieza con `clearOverlay`), así que llamarla de nuevo tras cambiar de escenario dejas
+ * modelador (empieza con `clearOverlay`), así que llamarla de nuevo tras cambiar de escenario deja
  * el lienzo exactamente con el overlay del resultado nuevo, nada del anterior.
  */
-export function applyOverlay(modeler: Modeler, result: RunResult, scenario: ResolvedScenario): void {
+export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
   inyectarEstilos();
   const estado = estadoDe(modeler);
   clearOverlay(modeler);
 
-  const modelo = overlayModel(result, scenario);
+  const modelo = overlayModel(corrida.result, corrida.scenario);
   const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
   const canvas = modeler.get<Canvas>('canvas');
   const overlays = modeler.get<Overlays>('overlays');
   const presentes: string[] = [];
 
-  for (const [id, entry] of Object.entries(modelo)) {
+  for (const [idResultado, entry] of Object.entries(modelo)) {
     // Un `result` de otro modelo (u otro `.bpmn` abierto mientras tanto) no revienta: los ids que
-    // ya no existen en el lienzo se ignoran.
-    if (elementRegistry.get(id) === undefined) continue;
+    // no existen en el lienzo se ignoran.
+    const id = idEnLienzo(idResultado, corrida.originalIds, elementRegistry);
+    if (id === null) continue;
     presentes.push(id);
     estado.niveles.set(id, entry.nivel);
     if (entry.principal) {
@@ -269,4 +299,15 @@ export function applyOverlay(modeler: Modeler, result: RunResult, scenario: Reso
   }
 
   redibujar(modeler, presentes);
+}
+
+/**
+ * Único punto que el shell llama (`Modelador.cuellos`, ver `Modeler.tsx`): pinta la corrida si hay
+ * una y el interruptor «Cuellos de botella» está encendido; limpia en cualquier otro caso. Que
+ * «no hay corrida» y «el interruptor está apagado» compartan camino es lo que hace que cambiar de
+ * escenario, recargar el modelo y apagar el overlay se resuelvan con un solo efecto en `main.tsx`.
+ */
+export function sincronizarOverlay(modeler: Modeler, corrida: Corrida | null, visible: boolean): void {
+  if (corrida === null || !visible) clearOverlay(modeler);
+  else applyOverlay(modeler, corrida);
 }

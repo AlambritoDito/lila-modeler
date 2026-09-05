@@ -9,7 +9,12 @@
  */
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { parseBpmn } from '@lila/engine/bpmn';
+import { ScenarioSchema, resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
+import type { SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
+import type { Corrida } from './BottleneckOverlay';
+import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -19,6 +24,11 @@ import type { ProjectStore } from './store/ProjectStore';
 // El benchmark se compila dentro del bundle: es el único archivo que la app trae de serie, y
 // así no hay que copiarlo a `public/` ni abrir `examples/` con `server.fs.allow`.
 import pedido from '../../../examples/pedido/model.bpmn?raw';
+// Los dos escenarios del benchmark viajan en el bundle por la misma razón que el modelo: son lo
+// único que la app trae de serie, y con ellos «cambiar de escenario» ya es una acción real de la
+// UI (aceptación de LILA-064). Abrir escenarios propios es LILA-061.
+import asIsJson from '../../../examples/pedido/as-is.scenario.json';
+import toBeJson from '../../../examples/pedido/to-be-3-cajeros.scenario.json';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
@@ -39,6 +49,32 @@ const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
   Documentación: 'Los campos lila: llegan en LILA-060.',
   Simulación: 'Los parámetros del escenario llegan en LILA-061.',
 };
+
+/** Escenarios del benchmark, por nombre de archivo (el que resuelve `extends`). */
+const ESCENARIOS: Readonly<Record<string, { etiqueta: string; json: unknown }>> = {
+  'as-is.scenario.json': { etiqueta: 'AS-IS', json: asIsJson },
+  'to-be-3-cajeros.scenario.json': { etiqueta: 'TO-BE 3 cajeros', json: toBeJson },
+};
+
+/** Resuelve la cadena `extends` (el TO-BE hereda del AS-IS) contra el mapa de arriba, sin disco. */
+function cargarEscenario(archivo: string): ResolvedScenario {
+  const combinado = resolveExtends(archivo, (ruta) => {
+    const crudo = ESCENARIOS[ruta]?.json;
+    if (crudo === undefined) throw new Error(`escenario desconocido: ${ruta}`);
+    return crudo;
+  });
+  const parsed = ScenarioSchema.parse(combinado);
+  if (parsed.model === undefined || parsed.run === undefined) {
+    throw new Error(`${archivo} no resuelve a un escenario completo (falta model o run).`);
+  }
+  return parsed as ResolvedScenario;
+}
+
+/** Fase de la simulación, para lo que enseña el panel derecho. */
+type EstadoSim =
+  | { tipo: 'inactivo' }
+  | { tipo: 'simulando'; progreso: SimulationProgress | null }
+  | { tipo: 'error'; mensaje: string };
 
 function App(): React.JSX.Element {
   // El store se crea una sola vez, con el benchmark ya cargado: así `listProcesses()` lo
@@ -61,6 +97,20 @@ function App(): React.JSX.Element {
   // sabe"; `null`, "no se pudo cargar, seguimos con los valores por defecto de tokens.css".
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
+  const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
+  // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
+  // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
+  // una segunda ruta de limpieza que se pueda olvidar de correr.
+  const [corrida, setCorrida] = useState<Corrida | null>(null);
+  const [verCuellos, setVerCuellos] = useState(true);
+  const [sim, setSim] = useState<EstadoSim>({ tipo: 'inactivo' });
+
+  // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
+  // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
+  // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada.
+  useEffect(() => {
+    modelador?.cuellos(corrida, verCuellos);
+  }, [modelador, corrida, verCuellos]);
 
   useEffect(() => {
     void fetch(TEMA_URL)
@@ -95,6 +145,34 @@ function App(): React.JSX.Element {
     if (await modelador.abrir(datos.xml)) {
       setProcesoId(id);
       setArchivo(datos.name);
+      // El resultado anterior es de otro proceso: dejarlo puesto pintaría cuellos de botella que
+      // el diagrama nuevo no tiene (o, peor, sobre ids que coinciden por casualidad).
+      setCorrida(null);
+      setSim({ tipo: 'inactivo' });
+    }
+  }
+
+  /**
+   * Corre el escenario elegido sobre lo que hay en el lienzo **ahora**: se exporta el XML y se
+   * vuelve a parsear, así una tarea recién añadida entra en la simulación sin recargar nada. El
+   * `ir.source.originalIds` que sale de ahí es el que deja al overlay pintar sobre los ids que
+   * bpmn-js conoce cuando el archivo traía ids no-NCName (ver `BottleneckOverlay.ts`).
+   */
+  async function simular(): Promise<void> {
+    if (modelador === null) return;
+    setSim({ progreso: null, tipo: 'simulando' });
+    try {
+      const scenario = cargarEscenario(escenarioId);
+      const { ir } = await parseBpmn(await modelador.exportar());
+      const { result } = await runInWorker(ir, scenario, {
+        onProgress: (progreso) => {
+          setSim({ progreso, tipo: 'simulando' });
+        },
+      });
+      setCorrida({ originalIds: ir.source.originalIds, result, scenario });
+      setSim({ tipo: 'inactivo' });
+    } catch (e: unknown) {
+      setSim({ mensaje: e instanceof Error ? e.message : String(e), tipo: 'error' });
     }
   }
 
@@ -153,7 +231,68 @@ function App(): React.JSX.Element {
             </button>
           ))}
         </nav>
-        <p className="vacio">{PLACEHOLDER[pestana]}</p>
+        {pestana === 'Simulación' ? (
+          <div className="simulacion">
+            <label className="campo">
+              Escenario
+              <select
+                value={escenarioId}
+                onChange={(e) => {
+                  setEscenarioId(e.target.value);
+                  // Cambiar de escenario invalida el resultado anterior: el overlay se limpia
+                  // aquí y se vuelve a pintar cuando termine la corrida nueva.
+                  setCorrida(null);
+                  setSim({ tipo: 'inactivo' });
+                }}
+              >
+                {Object.entries(ESCENARIOS).map(([id, { etiqueta }]) => (
+                  <option key={id} value={id}>
+                    {etiqueta}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="boton primario"
+              disabled={modelador === null || sim.tipo === 'simulando'}
+              onClick={() => void simular()}
+            >
+              {sim.tipo === 'simulando' ? 'Simulando…' : 'Simular'}
+            </button>
+            {sim.tipo === 'simulando' && (
+              <p className="vacio">
+                {sim.progreso === null
+                  ? 'Preparando…'
+                  : `${Math.round(sim.progreso.fraction * 100)} % · replicación ${sim.progreso.replication}`}
+              </p>
+            )}
+            {sim.tipo === 'error' && (
+              <p role="alert" className="error">
+                No se pudo simular: {sim.mensaje}
+              </p>
+            )}
+            <label className="campo interruptor">
+              <input
+                type="checkbox"
+                checked={verCuellos}
+                onChange={(e) => {
+                  setVerCuellos(e.target.checked);
+                }}
+              />
+              Cuellos de botella
+            </label>
+            <p className="vacio">
+              {corrida === null
+                ? 'Simula para ver los cuellos de botella sobre el diagrama.'
+                : (corrida.result.bottlenecks[0]?.elementId ??
+                  'Ningún elemento esperó por un recurso en esta corrida.')}
+            </p>
+            <p className="vacio">{PLACEHOLDER.Simulación}</p>
+          </div>
+        ) : (
+          <p className="vacio">{PLACEHOLDER[pestana]}</p>
+        )}
       </aside>
 
       <nav className="diagramas">

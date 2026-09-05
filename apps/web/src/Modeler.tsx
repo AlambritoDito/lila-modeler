@@ -14,6 +14,10 @@ import { useEffect, useRef } from 'react';
 // única definición del namespace (ADR-012). Se importa del paquete compilado, así que
 // `npm run build` de la raíz tiene que haber corrido antes de `vite` (ver package.json).
 import lila from '@lila/engine/bpmn/lila.moddle.json';
+// El overlay de cuellos de botella (LILA-064) es el único módulo fuera de este archivo que
+// necesita el `Modeler` de bpmn-js en crudo; en vez de exponerlo, `Modelador.cuellos` le pasa
+// el modelador desde aquí y el resto del shell sigue sin ver bpmn-js.
+import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOverlay';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -37,6 +41,12 @@ export interface Modelador {
   abrir(xml: string): Promise<boolean>;
   exportar(): Promise<string>;
   ajustar(): void;
+  /**
+   * Overlay de cuellos de botella (LILA-064). `corrida = null` o `visible = false` lo quitan; una
+   * corrida nueva reemplaza a la anterior sin acumular nada. Idempotente: el shell puede llamarlo
+   * en cada render sin comprobar si algo cambió.
+   */
+  cuellos(corrida: Corrida | null, visible: boolean): void;
 }
 
 interface Props {
@@ -109,6 +119,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
     });
 
     const abrir = async (xml: string): Promise<boolean> => {
+      // Antes de importar, no después: `clearOverlay` repinta por id, y tras `importXML` los ids
+      // del overlay anterior o no existen o son de otro diagrama. Sin esto, abrir un `.bpmn`
+      // distinto que reutilice ids (`Task_1`, lo más común) heredaría el tinte del modelo viejo.
+      clearOverlay(modeler);
       try {
         const { warnings } = await modeler.importXML(xml);
         if (!vivo) return false;
@@ -134,6 +148,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       exportar: async () => (await modeler.saveXML({ format: true })).xml ?? '',
       ajustar: () => {
         if (conTamano()) canvas.zoom('fit-viewport');
+      },
+      cuellos: (corrida, visible) => {
+        sincronizarOverlay(modeler, corrida, visible);
       },
     });
     void abrir(xmlInicial);
