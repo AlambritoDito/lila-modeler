@@ -13,7 +13,7 @@
     "morning": { "intervals": [ { "days": ["MON","TUE","WED","THU","FRI","SAT","SUN"], "from": "06:00", "to": "14:00" } ] },
     "day":     { "intervals": [ { "days": ["MON","TUE","WED","THU","FRI","SAT","SUN"], "from": "14:00", "to": "22:00" } ] },
     "night":   { "intervals": [
-                   { "days": ["MON","TUE","WED","THU","FRI","SAT","SUN"], "from": "22:00", "to": "23:59" },
+                   { "days": ["MON","TUE","WED","THU","FRI","SAT","SUN"], "from": "22:00", "to": "24:00" },
                    { "days": ["MON","TUE","WED","THU","FRI","SAT","SUN"], "from": "00:00", "to": "06:00" }
                  ] }
   },
