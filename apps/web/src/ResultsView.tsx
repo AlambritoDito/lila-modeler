@@ -70,6 +70,9 @@ export function sortRows<Row>(
   return [...rows].sort((a, b) => {
     const av = column.sortValue(a);
     const bv = column.sortValue(b);
+    // Los números se comparan como números (10 > 9, no "10" < "9") y los textos con
+    // `localeCompare` en español, para que "Ánimo" quede junto a "Animo" y no detrás de "Zorro".
+    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv, 'es') * sign;
     if (av < bv) return -1 * sign;
     if (av > bv) return 1 * sign;
     return 0;
@@ -140,6 +143,12 @@ function sortIndicator(sort: SortState | null, key: string): string {
   return sort.dir === 'asc' ? ' ▲' : ' ▼';
 }
 
+/** `aria-sort` del encabezado: lo que anuncia un lector de pantalla al llegar a la columna. */
+function ariaSort(sort: SortState | null, key: string): 'ascending' | 'descending' | 'none' {
+  if (sort === null || sort.key !== key) return 'none';
+  return sort.dir === 'asc' ? 'ascending' : 'descending';
+}
+
 /** Descarga `contents` como si el navegador hubiera guardado el archivo del enlace. */
 function downloadCsv(filename: string, contents: string): void {
   const blob = new Blob([contents], { type: 'text/csv;charset=utf-8' });
@@ -192,7 +201,19 @@ function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents
           <thead>
             <tr>
               {columns.map((column) => (
-                <th key={column.key} style={thStyle} onClick={() => toggle(column.key)}>
+                <th
+                  key={column.key}
+                  scope="col"
+                  style={thStyle}
+                  tabIndex={0}
+                  aria-sort={ariaSort(sort, column.key)}
+                  onClick={() => toggle(column.key)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    toggle(column.key);
+                  }}
+                >
                   {column.header}
                   {sortIndicator(sort, column.key)}
                 </th>
@@ -305,7 +326,7 @@ function durationColumn<Row>(
 }
 
 /** docs/RESULTS_FORMAT.md §10, tabla "Process elements": mismas columnas y orden que `elementsCsv`. */
-function elementColumns(unit: BaseTimeUnit, costLabel: string): ColumnDef<ElementRow>[] {
+function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
   return [
     ...idNameColumns<ElementRow>(),
     { display: (row) => row.type, header: 'Type', key: 'type', sortValue: (row) => row.type },
@@ -345,7 +366,7 @@ function elementColumns(unit: BaseTimeUnit, costLabel: string): ColumnDef<Elemen
       unit,
       (row) => row.metrics.resourceWait.total,
     ),
-    numberColumn('fixedCostTotal', `Total fixed cost${costLabel}`, (row) => row.metrics.fixedCostTotal),
+    numberColumn('fixedCostTotal', 'Total fixed cost', (row) => row.metrics.fixedCostTotal),
   ];
 }
 
@@ -360,14 +381,14 @@ function flowColumns(): ColumnDef<FlowRow>[] {
 }
 
 /** docs/RESULTS_FORMAT.md §10, tabla "Resources": mismas columnas que `resourcesCsv`. */
-function resourceColumns(unit: BaseTimeUnit, costLabel: string): ColumnDef<ResourceRow>[] {
+function resourceColumns(unit: BaseTimeUnit): ColumnDef<ResourceRow>[] {
   return [
     ...idNameColumns<ResourceRow>(),
     numberColumn('utilization', 'Utilization (%)', (row) => row.metrics.utilization * 100),
     durationColumn('busyTime', 'Busy time', unit, (row) => row.metrics.busyTime),
-    numberColumn('fixedCost', `Fixed cost${costLabel}`, (row) => row.metrics.fixedCost),
-    numberColumn('unitCost', `Unit cost${costLabel}`, (row) => row.metrics.unitCost),
-    numberColumn('totalCost', `Total cost${costLabel}`, (row) => row.metrics.totalCost),
+    numberColumn('fixedCost', 'Fixed cost', (row) => row.metrics.fixedCost),
+    numberColumn('unitCost', 'Unit cost', (row) => row.metrics.unitCost),
+    numberColumn('totalCost', 'Total cost', (row) => row.metrics.totalCost),
   ];
 }
 
@@ -376,29 +397,28 @@ function resourceColumns(unit: BaseTimeUnit, costLabel: string): ColumnDef<Resou
  * `processCsv` — incluidos los extras que Bizagi no ofrece (percentiles, throughput, costo por
  * caso, ver §10).
  */
-function processColumns(unit: BaseTimeUnit, costLabel: string): ColumnDef<RunResult>[] {
-  const p = (get: (r: RunResult) => number) => get;
+function processColumns(unit: BaseTimeUnit): ColumnDef<RunResult>[] {
   return [
     numberColumn('started', 'Instances started', (r) => r.process.started),
     numberColumn('completed', 'Instances completed', (r) => r.process.completed),
     numberColumn('inFlight', 'In flight', (r) => r.process.inFlight),
-    durationColumn('cycleTime.min', 'Cycle time minimum', unit, p((r) => r.process.cycleTime.min)),
-    durationColumn('cycleTime.max', 'Cycle time maximum', unit, p((r) => r.process.cycleTime.max)),
-    durationColumn('cycleTime.mean', 'Cycle time average', unit, p((r) => r.process.cycleTime.mean)),
-    durationColumn('cycleTime.sd', 'Cycle time standard deviation', unit, p((r) => r.process.cycleTime.sd)),
-    durationColumn('cycleTime.p50', 'Cycle time p50', unit, p((r) => r.process.cycleTime.p50)),
-    durationColumn('cycleTime.p90', 'Cycle time p90', unit, p((r) => r.process.cycleTime.p90)),
-    durationColumn('cycleTime.p95', 'Cycle time p95', unit, p((r) => r.process.cycleTime.p95)),
-    durationColumn('waitTime.min', 'Wait time minimum', unit, p((r) => r.process.waitTime.min)),
-    durationColumn('waitTime.max', 'Wait time maximum', unit, p((r) => r.process.waitTime.max)),
-    durationColumn('waitTime.mean', 'Wait time average', unit, p((r) => r.process.waitTime.mean)),
-    durationColumn('waitTime.sd', 'Wait time standard deviation', unit, p((r) => r.process.waitTime.sd)),
-    durationColumn('waitTime.p50', 'Wait time p50', unit, p((r) => r.process.waitTime.p50)),
-    durationColumn('waitTime.p90', 'Wait time p90', unit, p((r) => r.process.waitTime.p90)),
-    durationColumn('waitTime.p95', 'Wait time p95', unit, p((r) => r.process.waitTime.p95)),
+    durationColumn('cycleTime.min', 'Cycle time minimum', unit, (r) => r.process.cycleTime.min),
+    durationColumn('cycleTime.max', 'Cycle time maximum', unit, (r) => r.process.cycleTime.max),
+    durationColumn('cycleTime.mean', 'Cycle time average', unit, (r) => r.process.cycleTime.mean),
+    durationColumn('cycleTime.sd', 'Cycle time standard deviation', unit, (r) => r.process.cycleTime.sd),
+    durationColumn('cycleTime.p50', 'Cycle time p50', unit, (r) => r.process.cycleTime.p50),
+    durationColumn('cycleTime.p90', 'Cycle time p90', unit, (r) => r.process.cycleTime.p90),
+    durationColumn('cycleTime.p95', 'Cycle time p95', unit, (r) => r.process.cycleTime.p95),
+    durationColumn('waitTime.min', 'Wait time minimum', unit, (r) => r.process.waitTime.min),
+    durationColumn('waitTime.max', 'Wait time maximum', unit, (r) => r.process.waitTime.max),
+    durationColumn('waitTime.mean', 'Wait time average', unit, (r) => r.process.waitTime.mean),
+    durationColumn('waitTime.sd', 'Wait time standard deviation', unit, (r) => r.process.waitTime.sd),
+    durationColumn('waitTime.p50', 'Wait time p50', unit, (r) => r.process.waitTime.p50),
+    durationColumn('waitTime.p90', 'Wait time p90', unit, (r) => r.process.waitTime.p90),
+    durationColumn('waitTime.p95', 'Wait time p95', unit, (r) => r.process.waitTime.p95),
     numberColumn('throughputPerHour', 'Throughput per hour', (r) => r.process.throughputPerHour),
-    numberColumn('costPerCase', `Cost per case${costLabel}`, (r) => r.process.costPerCase),
-    numberColumn('totalCost', `Total cost${costLabel}`, (r) => r.process.totalCost),
+    numberColumn('costPerCase', 'Cost per case', (r) => r.process.costPerCase),
+    numberColumn('totalCost', 'Total cost', (r) => r.process.totalCost),
   ];
 }
 
@@ -467,11 +487,6 @@ function tabButtonStyle(active: boolean): CSSProperties {
   };
 }
 
-/** `run.currency` es opcional (docs/RESULTS_FORMAT.md §1): sin él, las columnas de costo no llevan sufijo. */
-function costLabel(currency: string | undefined): string {
-  return currency === undefined ? '' : ` (${currency})`;
-}
-
 /**
  * Los cuatro CSV que exporta cada tabla, byte a byte iguales a los que escribe `lila run --csv`
  * (`writeCsvDirectory` en `packages/engine/src/cli.ts`): misma función de `csv.ts`, mismos
@@ -494,7 +509,6 @@ export function buildResultCsvExports(
 export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNode {
   const [tab, setTab] = useState<Tab>('elements');
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
-  const currencyLabel = costLabel(scenario.run.currency);
   const names = resourceNames(scenario);
   const csv = buildResultCsvExports(ir, scenario, result);
 
@@ -503,6 +517,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 12px' }}>
         Escenario {scenario.name} · semilla {scenario.run.seed} · replicaciones{' '}
         {scenario.run.replications} · unidad de tiempo {unit}
+        {scenario.run.currency === undefined ? '' : ` · moneda ${scenario.run.currency}`}
       </p>
 
       <BottleneckCard bottlenecks={result.bottlenecks} ir={ir} unit={unit} />
@@ -523,7 +538,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       {tab === 'elements' && (
         <DataTable
           title={TAB_LABELS.elements}
-          columns={elementColumns(unit, currencyLabel)}
+          columns={elementColumns(unit)}
           rows={elementRows(ir, result)}
           rowKey={(row) => row.id}
           csvFilename="elements.csv"
@@ -543,7 +558,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       {tab === 'resources' && (
         <DataTable
           title={TAB_LABELS.resources}
-          columns={resourceColumns(unit, currencyLabel)}
+          columns={resourceColumns(unit)}
           rows={resourceRows(result, names)}
           rowKey={(row) => row.id}
           csvFilename="resources.csv"
@@ -553,7 +568,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       {tab === 'process' && (
         <DataTable
           title={TAB_LABELS.process}
-          columns={processColumns(unit, currencyLabel)}
+          columns={processColumns(unit)}
           rows={[result]}
           rowKey={() => 'process'}
           csvFilename="process.csv"
