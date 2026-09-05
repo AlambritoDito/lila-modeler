@@ -1,24 +1,27 @@
 #!/usr/bin/env node
 /** CLI `lila`: validación y simulación reproducible desde archivos. */
 
-import {
-  closeSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { parseBpmn } from './bpmn/parse.js';
-import { validate, type ValidationResult } from './bpmn/validate.js';
+import type { ValidationResult } from './bpmn/validate.js';
 import { validateBpmnXml } from './bpmn/validate-report.js';
+import {
+  absolutePath,
+  assertReplaceableFile,
+  comparablePath,
+  compareWarnings,
+  loadResolvedScenario,
+  loadValidatedModel,
+  resultWithBoundaryWarnings,
+  stageFile,
+  withRunOverrides,
+  writeJsonAtomic,
+  type LoadedScenarioResult,
+  type ParsedIr,
+  type StagedFile,
+} from './cli-shared.js';
 import {
   elementsCsv,
   eventLogCsvHeader,
@@ -38,14 +41,7 @@ import {
   formatTable,
   type BaseTimeUnit,
 } from './format.js';
-import {
-  resolveExtends,
-  ScenarioSchema,
-  scenarioErrors,
-  validateScenario,
-  type ResolvedScenario,
-  type ScenarioProblem,
-} from './scenario.js';
+import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
 
 const USAGE = `Uso: lila validate <archivo.bpmn> [--json]
      lila run <modelo.bpmn> <escenario.json> [--seed n] [--replications n]
@@ -142,42 +138,6 @@ async function validateCommand(file: string, json: boolean): Promise<number> {
   return validation.errors.length > 0 ? 1 : 0;
 }
 
-function absolutePath(file: string): string {
-  // `resolveExtends` usa `/` también en el FS virtual. Node acepta esa forma en Windows.
-  return resolve(file).replaceAll('\\', '/');
-}
-
-function comparablePath(file: string): string {
-  // Dos rutas distintas pueden nombrar el mismo archivo mediante un symlink. El contrato compara
-  // el modelo real, no la ortografía usada para llegar a él.
-  const normalized = existsSync(file) ? realpathSync(file) : resolve(file);
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
-
-function readJson(file: string): unknown {
-  try {
-    return JSON.parse(readFileSync(file, 'utf8')) as unknown;
-  } catch (error) {
-    if (error instanceof SyntaxError) throw new Error(`${file}: JSON inválido: ${error.message}`);
-    throw error;
-  }
-}
-
-function loadResolvedScenario(file: string): ResolvedScenario {
-  const raw = resolveExtends(file, readJson);
-  const parsed = ScenarioSchema.safeParse(raw);
-  if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => {
-      const path = issue.path.length === 0 ? '$' : issue.path.map(String).join('.');
-      return `${path}: ${issue.message}`;
-    });
-    throw new Error(`${file}: escenario inválido:\n${issues.join('\n')}`);
-  }
-  if (parsed.data.model === undefined) throw new Error(`${file}: el escenario resuelto no declara model.`);
-  if (parsed.data.run === undefined) throw new Error(`${file}: el escenario resuelto no declara run.`);
-  return parsed.data as ResolvedScenario;
-}
-
 function integerOption(name: string, raw: string | undefined, minimum?: number): number | undefined {
   if (raw === undefined) return undefined;
   if (!/^-?\d+$/.test(raw)) throw new Error(`--${name} requiere un entero; se recibió "${raw}".`);
@@ -189,55 +149,10 @@ function integerOption(name: string, raw: string | undefined, minimum?: number):
   return value;
 }
 
-/** Overrides comunes de `--seed`/`--replications`; `run` y `compare` los aplican igual. */
-function withRunOverrides(
-  scenario: ResolvedScenario,
-  options: { seed?: number | undefined; replications?: number | undefined },
-): ResolvedScenario {
-  return {
-    ...scenario,
-    run: {
-      ...scenario.run,
-      ...(options.seed === undefined ? {} : { seed: options.seed }),
-      ...(options.replications === undefined ? {} : { replications: options.replications }),
-    },
-  };
-}
-
 function printScenarioProblems(problems: readonly ScenarioProblem[]): void {
   for (const problem of problems) {
     console.log(`${problem.severity === 'error' ? 'error' : 'aviso'}  ${problem.code}  ${problem.message}`);
   }
-}
-
-function resultWithBoundaryWarnings(
-  result: RunResult,
-  modelValidation: ValidationResult,
-  scenarioProblems: readonly ScenarioProblem[],
-): RunResult {
-  const warnings = new Set<string>();
-  for (const warning of modelValidation.warnings) warnings.add(`${warning.code}: ${warning.message}`);
-  for (const warning of scenarioProblems) {
-    if (warning.severity === 'warning') warnings.add(`${warning.code}: ${warning.message}`);
-  }
-  for (const warning of result.warnings) warnings.add(warning);
-  return { ...result, warnings: [...warnings] };
-}
-
-type ParsedIr = Awaited<ReturnType<typeof parseBpmn>>['ir'];
-
-/** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
-async function loadValidatedModel(
-  modelFile: string,
-): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
-  const path = absolutePath(modelFile);
-  const parsed = await parseBpmn(readFileSync(path, 'utf8'));
-  const validation = validate(parsed.ir, {
-    unsupported: parsed.unsupported,
-    messageFlowCount: parsed.messageFlowCount,
-    conditionFlowIds: parsed.conditionFlowIds,
-  });
-  return { path, ir: parsed.ir, validation };
 }
 
 /** Imprime los problemas del modelo y responde si hay errores que aborten el comando. */
@@ -356,84 +271,9 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   }
 }
 
-interface StagedFile {
-  readonly target: string;
-  write(contents: string): void;
-  close(): void;
-  commit(): void;
-  abort(): void;
-}
-
-let temporarySequence = 0;
-
-/** Crea un temporal exclusivo en el mismo directorio: `rename` publica cada archivo atómicamente. */
-function stageFile(target: string): StagedFile {
-  let temporary = '';
-  let descriptor: number | undefined;
-  for (;;) {
-    temporary = `${target}.tmp-${process.pid}-${temporarySequence++}`;
-    try {
-      descriptor = openSync(temporary, 'wx');
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-  }
-
-  const close = (): void => {
-    if (descriptor === undefined) return;
-    const openDescriptor = descriptor;
-    descriptor = undefined;
-    closeSync(openDescriptor);
-  };
-
-  return {
-    target,
-    write(contents) {
-      if (descriptor === undefined) throw new Error(`archivo temporal ya cerrado: ${temporary}`);
-      // `writeFileSync(fd, ...)` completa todo el buffer; un único `writeSync` puede ser parcial.
-      writeFileSync(descriptor, contents, 'utf8');
-    },
-    close,
-    commit() {
-      close();
-      renameSync(temporary, target);
-    },
-    abort() {
-      try {
-        close();
-      } catch {
-        // El error original de escritura/publicación es el que debe llegar al usuario.
-      }
-      try {
-        unlinkSync(temporary);
-      } catch {
-        // Si ya se publicó o nunca llegó a crearse, no queda temporal que limpiar.
-      }
-    },
-  };
-}
-
-function assertReplaceableFile(target: string): void {
-  if (existsSync(target) && lstatSync(target).isDirectory()) {
-    throw new Error(`no se puede escribir ${target}: existe un directorio con ese nombre.`);
-  }
-}
-
 /** Publica cualquier valor serializable como JSON determinista; usado por `run` y `compare`. */
 function writeJson(file: string, data: unknown): void {
-  const target = absolutePath(file);
-  mkdirSync(dirname(target), { recursive: true });
-  assertReplaceableFile(target);
-  const staged = stageFile(target);
-  try {
-    staged.write(`${JSON.stringify(data, null, 2)}\n`);
-    staged.commit();
-  } catch (error) {
-    staged.abort();
-    throw error;
-  }
-  console.log(`JSON: ${target}`);
+  console.log(`JSON: ${writeJsonAtomic(file, data)}`);
 }
 
 function writeCsvDirectory(
@@ -596,12 +436,6 @@ interface CompareCommandOptions {
   all: boolean;
 }
 
-interface LoadedScenarioResult {
-  file: string;
-  scenario: ResolvedScenario;
-  result: RunResult;
-}
-
 /**
  * ponytail: subconjunto curado de KPIs para la tabla por defecto, no las decenas de percentiles
  * y variantes min/max/sd que produce `compare()` para cada elemento y recurso — un vistazo a
@@ -702,62 +536,6 @@ function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>,
   if (scope === 'flows') return ir.flows[id]?.name ?? '';
   if (scope === 'resources') return resourceNames[id] ?? '';
   return '';
-}
-
-/**
- * Avisos de la corrida completa, en un solo bloque al pie de la tabla.
- *
- * Incluye los avisos de modelo y escenario que `lila run` ya imprime (`resultWithBoundaryWarnings`)
- * y dos que solo tienen sentido comparando: unidad de tiempo distinta entre escenarios —la tabla
- * usa siempre la del base— y semillas distintas —se pierden los números aleatorios comunes de
- * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)—.
- */
-function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTimeUnit): string[] {
-  const lines: string[] = [];
-  const label = (entry: LoadedScenarioResult): string => `"${entry.scenario.name}"`;
-
-  const otherUnits = loaded.filter((entry) => entry.scenario.run.baseTimeUnit !== unit);
-  if (otherUnits.length > 0) {
-    lines.push(
-      `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
-        `Declaran otra: ${otherUnits.map((entry) => `${label(entry)} (${entry.scenario.run.baseTimeUnit})`).join(', ')}.`,
-    );
-  }
-
-  const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed));
-  if (seeds.size > 1) {
-    lines.push(
-      `los escenarios corren con semillas distintas (${[...seeds].join(', ')}): se pierden los números ` +
-        'aleatorios comunes (R-DET-3) y los deltas mezclan el efecto del cambio con el del muestreo. ' +
-        'Usa --seed para forzar la misma semilla en todos.',
-    );
-  }
-
-  for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
-    lines.push(
-      `${label(entry)} corrió sin al menos dos replicaciones completas; sin IC95 no hay marca de ` +
-        'significancia posible para ese escenario.',
-    );
-  }
-
-  // Los avisos del motor llegan uno por replicación (W-JOIN-BLOQUEADO cita un conteo distinto en
-  // cada una): 30 réplicas × N escenarios enterrarían la tabla. `compare` es una vista de resumen,
-  // así que se queda con el primero de cada código y dice cuántos más hubo; el detalle completo
-  // está en `lila run` y en su `--json`.
-  for (const entry of loaded) {
-    const byCode = new Map<string, { first: string; count: number }>();
-    for (const warning of entry.result.warnings) {
-      const code = warning.split(':')[0] ?? warning;
-      const group = byCode.get(code);
-      if (group === undefined) byCode.set(code, { first: warning, count: 1 });
-      else group.count++;
-    }
-    for (const { first, count } of byCode.values()) {
-      const more = count > 1 ? ` (+${count - 1} aviso${count === 2 ? '' : 's'} más con el mismo código)` : '';
-      lines.push(`${label(entry)} ${first}${more}`);
-    }
-  }
-  return lines;
 }
 
 function printCompareResult(
