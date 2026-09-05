@@ -65,6 +65,17 @@ deja los tokens y los temas, no construye ninguno.
 
 ## Decisiones de diseño
 
+**El panel de escenario se genera desde el JSON Schema.** Los campos de `run`,
+`calendars`, `resources` y `elements[id]` no están escritos a mano en
+`apps/web/src/ScenarioPanel.tsx` (LILA-061): se recorren desde `toJsonSchema()`
+de `@lila/engine/schema`, y las uniones (`oneOf`/`anyOf`) se dibujan con un
+selector de variante más el cuerpo de la elegida. Consecuencia para el diseño: un
+campo nuevo del formato aparece en la UI sin que nadie dibuje nada, pero el panel
+tiene el aspecto que da el esquema, no el del artboard 3. En particular, los
+calendarios se editan como la lista de `intervals` que dice el formato; el
+**editor semanal por franjas** del inventario de componentes sigue pendiente y es
+un ticket propio.
+
 **Tipografía: Archivo.** `font.ui` es `Archivo, Inter, system-ui, sans-serif`
 (el brief decía Inter; la sesión de Claude Design eligió Archivo y esa elección
 manda). `font.diagram` usa la misma pila; `font.mono` sigue siendo JetBrains
