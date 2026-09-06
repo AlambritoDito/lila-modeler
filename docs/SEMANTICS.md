@@ -386,12 +386,17 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 `scenario.resources[pool] = { name, type: "role"|"equipment", capacity, costPerHour, fixedCost,
 calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" | "or"`.
 
-- **R-REC-1 — Pool con capacidad entera.** `capacity` es obligatorio y es un entero `≥ 1`. Un pool
-  es un contador de unidades idénticas: no hay identidad individual de recurso en v1 (el event log
-  registra el **pool**, no la unidad). *(prueba: LILA-033)*
+- **R-REC-1 — Pool con capacidad entera.** `capacity` es obligatorio y es un entero `≥ 1`, **o** la
+  lista de tramos `[{ calendar, capacity }]` de R-CAL-11, en la que cada `capacity_i` es a su vez un
+  entero `≥ 1` y la capacidad del pool varía con el reloj. Un pool es un contador de unidades
+  idénticas: no hay identidad individual de recurso en v1 (el event log registra el **pool**, no la
+  unidad), y eso no cambia con la capacidad variable —lo que varía es cuántas unidades hay, no
+  cuáles—. Fuera de R-CAL-11 el resto de esta sección lee `capacity` por un único camino y no
+  distingue las dos formas. *(prueba: LILA-033, LILA-164)*
 - **R-REC-2 — Defaults de la asignación.** `quantity` ausente vale 1. `selection` ausente vale
   `"and"`. Con un solo pool, `and` y `or` son equivalentes. `quantity > capacity` del pool es error
-  `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre). Una `ref` a un pool inexistente es
+  `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre); con capacidad por intervalos el
+  tope es el **máximo de la semana**, no la suma de los tramos (R-CAL-11). Una `ref` a un pool inexistente es
   error `E-REC-DESCONOCIDO`, un pool repetido en la misma tarea es `E-REC-DUPLICADO` y una
   `capacity` que no sea entero ≥ 1 es `E-REC-CAPACIDAD`. Los cuatro se comprueban en un preflight
   **antes de cualquier callback público**: una corrida no puede emitir filas ni progreso y fallar
@@ -503,10 +508,18 @@ comportamiento real de L-Sim/Bizagi.
   `ended − enabled = resourceWait + offHoursWait + processing`, donde `processing` es la duración
   muestreada (tiempo abierto efectivamente trabajado). *(prueba: LILA-036, LILA-041)*
 - **R-CAL-9 — Utilización sobre horas disponibles.** Para un pool,
-  `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el tiempo
-  **abierto** de su calendario dentro de `[warmup, t_stop]` (o el tiempo total si no tiene
-  calendario). Es la única definición que hace comparables los niveles 3 y 4 de Bizagi.
-  *(prueba: LILA-041, LILA-036)*
+  `utilization = busyTime / Σᵢ (capacityᵢ × openTimeᵢ)`, donde el sumatorio recorre los tramos de
+  capacidad del pool (R-CAL-11) y `openTimeᵢ` es el tiempo **abierto** del calendario del tramo `i`
+  dentro de la ventana de medida `[warmup, t_stop]`. Con la forma numérica hay un solo tramo y la
+  fórmula colapsa en `busyTime / (capacity × availableTime)`, con `availableTime` el tiempo abierto
+  del calendario del pool dentro de esa misma ventana (o el tiempo total de la ventana si no tiene
+  calendario). La ventana es siempre `[warmup, t_stop]`, **no** la duración declarada del escenario:
+  con una corrida que para al agotarse las llegadas (R-ARR-3) las dos difieren y las utilizaciones
+  no son las mismas. Bizagi usa la duración declarada en su nivel 4 —y `[warmup, t_stop]` en el
+  nivel 3—; la conversión es exacta y está en `docs/BIZAGI_PARITY.md` § D7:
+  `util_bizagi = util_lila × ventana_lila / duración_declarada`. Lila **no** cambia de denominador
+  por eso. Es la única definición que hace comparables los niveles 3 y 4 de Bizagi.
+  *(prueba: LILA-041, LILA-036, LILA-164)*
 - **R-CAL-10 — Matriz recurso × calendario con calendario por defecto.** Cada pool puede declarar
   `calendar`; si no lo hace, usa el calendario llamado `default` si existe, y si no existe, 24×7.
   Una `calendar` que no existe en `calendars` es error citando el pool: `E-REF-DESCONOCIDA` si lo
@@ -514,6 +527,46 @@ comportamiento real de L-Sim/Bizagi.
   `E-CAL-DESCONOCIDO` si lo caza el guardia de `core/sim.ts`, que no puede importar el validador
   y se defiende solo. Unificar los dos códigos en uno toca `core/`.
   *(prueba: LILA-041, LILA-042)*
+- **R-CAL-11 — Capacidad por turno dentro de un mismo pool.** `resources[pool].capacity` admite,
+  además del entero, la lista de tramos `[{ calendar, capacity }]` (§ 2.4 y R16 de
+  `SCENARIO_FORMAT.md`): 3 enfermeras de día y 1 de noche son **un** pool, no tres. Es el
+  «Resources → Calendars → quantity» de Bizagi, el que hace falta para el nivel 4. El contrato
+  completo:
+  - **Apertura por unión.** El pool está **abierto** cuando lo está **cualquiera** de los
+    calendarios de sus tramos. Si los turnos cubren las 24 h el pool es un 24×7 y ninguna tarea que
+    lo use tiene `offHoursWait`. Ese calendario-unión es el que entra en la intersección de
+    R-CAL-4.
+  - **Capacidad en `t` por suma.** La capacidad en el instante `t` es la **suma** de los
+    `capacity_i` cuyos `calendar_i` están abiertos en `t`. Dos calendarios que se **solapan suman**
+    —a diferencia de los intervalos de un mismo calendario, que se unen (R-CAL-2)—, porque cada
+    tramo declara un grupo distinto de unidades del mismo rol: `[{dia, 2}, {24x7, 1}]` son 3
+    unidades de día y 1 de noche.
+  - **Durante el cierre del pool entero vale la capacidad del primer instante abierto posterior.**
+    En un `t` cerrado para todos los tramos la capacidad no es 0 sino la del siguiente
+    `nextOpen(t)`. Es lo que conserva R-CAL-6 —la unidad concedida en tiempo cerrado sigue
+    reservada, no desaparece bajo los pies del token que espera la apertura— y lo que deja el caso
+    de un solo tramo bit a bit igual al de M3, es decir R-DEG-2 intacta.
+  - **Cerrar un tramo no interrumpe nada.** Al bajar la capacidad, las tareas en curso **siguen**:
+    no hay apropiación (R-REC-7), así que `used` puede quedar temporalmente **por encima** de la
+    capacidad del instante hasta que terminen. Lo que la bajada sí impide es **conceder** nuevas
+    unidades: hasta que `used` vuelva a caer por debajo de la capacidad del instante no arranca
+    nadie más.
+  - **Un solo evento de calendario en el heap.** La **subida** de capacidad de un pool variable es
+    el único evento de calendario que existe (despierta la cola); una bajada no planifica nada,
+    porque no habilita a nadie. El resto de la disponibilidad se sigue resolviendo al planificar
+    (R-CAL-3).
+  - **Validación.** `capacity` por intervalos y `calendar` del pool son **excluyentes**
+    (`E-CAPACIDAD-Y-CALENDARIO`, R16): el calendario ya va en cada tramo. Cada `calendar_i` debe
+    existir (R9, `E-REF-DESCONOCIDA` en el lint y `E-CAL-DESCONOCIDO` en el guardia de `core/`,
+    igual que R-CAL-10). Cada `capacity_i` es entero `≥ 1` y la lista no puede estar vacía
+    (`E-REC-CAPACIDAD`). `quantity` de una tarea se valida contra el **máximo de la semana**, no
+    contra la suma declarada: 3 + 1 unidades en turnos disjuntos nunca son 4 simultáneas.
+  - **Equivalencia con la forma numérica.** `{ capacity: 3, calendar: "dia" }` y
+    `{ capacity: [{ calendar: "dia", capacity: 3 }] }` producen exactamente el mismo resultado; el
+    entero es el caso de un solo tramo y no sube `version` (§ 9 de `SCENARIO_FORMAT.md`).
+  - **Utilización y costo.** Se reportan **por rol**, no por turno, y el denominador es el de
+    R-CAL-9: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` sobre `[warmup, t_stop]`.
+  *(prueba: LILA-164)*
 
 ---
 
@@ -668,13 +721,32 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-TIMER-RECURSO` | `resources` en un `timer` |
 | `E-REC-DESCONOCIDO` | `ref` a un pool inexistente |
 | `E-REC-DUPLICADO` | el mismo pool dos veces en una tarea |
-| `E-REC-CANTIDAD` | `quantity` mayor que la `capacity` del pool |
-| `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`) |
-| `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10) |
+| `E-REC-CANTIDAD` | `quantity` mayor que la `capacity` del pool (con capacidad por intervalos, mayor que el máximo de la semana, R-CAL-11) |
+| `E-REC-CAPACIDAD` | `capacity` que no es entero ≥ 1, o lista de tramos vacía (R-REC-1, R-CAL-11) |
+| `E-CAPACIDAD-Y-CALENDARIO` | `capacity` por intervalos y `calendar` del pool declarados a la vez (R-CAL-11, R16 de `SCENARIO_FORMAT.md`) |
+| `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
+| `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
 | `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
 | `E-CAL-VACIO` | calendario sin intervalos, o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
+
+Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts` para el lint,
+`packages/engine/src/core/sim.ts` para el guardia de `core/`, que no puede importar el validador):
+
+```
+resources.<pool>.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
+E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
+E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.
+E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.
+```
+
+La primera línea es el `message` del problema que devuelve `validateScenario` (el `code` viaja
+aparte, en su propio campo, como en el resto del lint); las tres siguientes son las excepciones de
+`core/`, que sí llevan el código dentro del mensaje. El lint estático no emite `E-REC-CAPACIDAD`:
+un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esquema zod con su
+mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
+mano. Es el mismo desajuste que ya documenta el párrafo final de esta sección.
 
 Avisos (no abortan; viajan en `RunResult.warnings[]`, siempre con el id del elemento implicado y,
 cuando se repiten por caso, con un contador agregado en vez de una línea por ocurrencia):
@@ -742,8 +814,9 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
 | R-CAL-1, R-CAL-2, R-CAL-3 | patrón semanal, intervalos (`to > from`, `to` admite `24:00`), primitivas y derivadas | LILA-040 (`24:00`: LILA-041) |
 | R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
-| R-CAL-9 | utilización sobre horas disponibles | LILA-041, LILA-036 |
+| R-CAL-9 | utilización sobre horas disponibles (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036 (denominador por tramos: LILA-164) |
 | R-CAL-10 | matriz recurso × calendario y calendario por defecto | LILA-041, LILA-042 |
+| R-CAL-11 | capacidad por turno dentro de un mismo pool (unión, suma, cierre y validación) | LILA-164 |
 | R-COST-1 … R-COST-4 | costos por elemento, recurso, fila y caso | LILA-036 (fila del log: LILA-037) |
 | R-COST-5, R-COST-6 | costos ausentes = 0; esperar no cuesta | LILA-013, LILA-036 |
 | R-DEG-1 | sin recursos ⇒ capacidad infinita, bit a bit igual a M1 | LILA-039 |
