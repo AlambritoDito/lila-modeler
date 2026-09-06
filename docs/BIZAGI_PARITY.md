@@ -31,7 +31,7 @@ escenario publicado.
 | Costo fijo por actividad | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3 (8057,6 contra 8063, −0,07 %). El 8063 no lo publica ninguna tabla: se **deriva** de los `fixedCost` por tarea del enunciado y de los conteos de instancias publicados (2·2017 + 1·2017 + 1·1006 + 1·1006), y el test lo declara así |
 | Salidas por elemento: started, completed, tiempo min/max/avg/total, espera min/max/avg/std/total, costo fijo | ✓ | ✓ mismos nombres de columna | M2 | Implementado (LILA-036); nombres de columna revisados contra `RESULTS_FORMAT.md`. La paridad numérica que hay probada es la del **proceso** y la de los recursos del nivel 3 (ver D6 para el caso saturado); las columnas por elemento no están ancladas fila por fila |
 | Salidas por recurso: utilización %, costo fijo, costo unitario, costo total | ✓ | ✓ | M2 | Implementado (LILA-036); paridad verificada en el nivel 3, las seis filas de la tabla publicada (p. ej. nurse 69,65 % contra 69,75 %) |
-| Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041) **con salvedad**: falta capacidad por turno dentro de un mismo pool (LILA-164), sin la cual el nivel 4 no cuadra; ver D7 |
+| Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041, LILA-164). LILA-164 añadió la capacidad por turno dentro de un mismo pool (`capacity: [{calendar, capacity}]`, R-CAL-11): con ella el nivel 4 cuadra —ciclo medio, utilización y costo de los seis recursos— salvo el denominador de la utilización, que sigue vivo como D7 y tiene conversión exacta |
 | What-if: varios escenarios, lado a lado, diferencias resaltadas | ✓ | ✓ (`lila compare`) | M3 | Implementado (LILA-038, LILA-047) |
 | Replicaciones (recomiendan 30) | ✓ solo en what-if | ✓ siempre, con IC 95 % | M2 | Implementado (LILA-027) |
 | Export de resultados | Excel | CSV (Excel lo abre; XLSX después si lo piden) | M2 | Implementado (LILA-037, LILA-046) |
@@ -42,7 +42,7 @@ escenario publicado.
 | Throughput por hora, costo por caso | ✗ | ✓ | M2 | Implementado (LILA-028) |
 | Ranking de cuellos de botella | ✗ | ✓ | M2 | Implementado (LILA-036) |
 | Event log por caso (CSV; XES después) | ✗ | ✓ | M2 | Implementado (LILA-037) |
-| Espera fuera de horario separada de espera por recurso | ✗ (queja: "poca granularidad") | ✓ | M3 | Implementado (LILA-041); es justo la métrica que delata la diferencia D7 del nivel 4 |
+| Espera fuera de horario separada de espera por recurso | ✗ (queja: "poca granularidad") | ✓ | M3 | Implementado (LILA-041); fue justo la métrica que delató la mitad de D7 que cerró LILA-164 (el workaround de pools por turno creaba una `offHoursWait` que Bizagi no tiene; hoy vale 0 en las cuatro tareas del nivel 4) |
 | Determinismo por semilla, byte a byte | parcial | ✓ | M1 | Implementado (LILA-030, LILA-039, LILA-043) |
 | macOS / Linux / navegador | ✗ (4.3 sigue Windows-only, sin editor web) | ✓ | M5 | Pendiente (shell web en LILA-057 y worker en LILA-059; empaquetado en M5) |
 | **Después** | | | | |
@@ -110,16 +110,35 @@ replicaciones son una técnica de medición del test, no un parámetro de los ej
 | 3 | costo `Quick attention vehicle` 11 139,86 | 10 907,9 (−2,08 %) | — |
 | 3 | costo `Basic ambulance` 9844,65 | 10 234,6 (+3,96 %) | — |
 | 3 | los seis costos, corrida de 2 enfermeras | los mismos valores y los mismos desvíos (el costo no depende de la capacidad) | — |
-| 4 | ciclo medio 25 min 26 s, con pools por turno | 84,4 min (+232 %) | D7 |
-| 4 | Arrive BA espera máx 15 min, con pools por turno | 13,3 min (−11,1 %) | D7 |
-| 4 | Arrive BA espera media 0,74 min, con pools por turno | 0,30 min (−59,1 %) | D7 |
-| 4 | ciclo medio 25 min 26 s, con **un pool por rol** | 25 min 4 s (−1,45 %) | prueba de D7 |
-| 4 | Arrive BA espera media 0,74 min, con **un pool por rol** | 0 (−100 %) | D7 (pide LILA-164) |
+| 4 | 2017 instancias iniciadas y completadas | 2017 (0 %) | — |
+| 4 | ciclo medio 25 min 26 s (1526 s) | 1521,5 s (−0,30 %) | — |
+| 4 | `offHoursWait` de las 4 tareas con recurso por turno | 0 en las cuatro | — |
+| 4 | utilización `Call center agent` 11,21 % | 11,21 % (−0,04 %) | D7 (denominador convertido) |
+| 4 | utilización `Nurse` 16,21 % | 16,30 % (+0,54 %) | D7 (denominador convertido) |
+| 4 | utilización `Ambulance` 11,49 % | 11,61 % (+1,06 %) | D7 (denominador convertido) |
+| 4 | utilización `Quick Attention Vehicle` 7,55 % | 7,35 % (−2,60 %) | D7 (denominador convertido) |
+| 4 | utilización `Basic Ambulance` 5,60 % | 5,67 % (+1,33 %) | D7 (denominador convertido) |
+| 4 | utilización `Receptionist` 6,90 % | 6,97 % (+0,98 %) | D7 (denominador convertido) |
+| 4 | costo `Call center agent` 6051 | 6051,0 (0 %) | — |
+| 4 | costo `Nurse` 15 050 | 15 101,5 (+0,34 %) | — |
+| 4 | costo `Ambulance` 29 922,4 | 30 232,8 (+1,04 %) | — |
+| 4 | costo `Quick Attention Vehicle` 11 193,94 | 10 907,9 (−2,56 %) | — |
+| 4 | costo `Basic Ambulance` 10 095,15 | 10 234,6 (+1,38 %) | — |
+| 4 | costo `Receptionist` 2979 | 3009,9 (+1,04 %) | — |
+| 4 | Arrive BA espera máx 15 min (900 s) | 970 s (+7,78 %) | D7 (residuo) |
+| 4 | Arrive BA espera media 0,74 min (44,4 s) | 33,5 s (−24,5 %) | D7 (residuo) |
 
 Los niveles 1, 2 y 3 cuadran dentro del ±5 % salvo **tres** residuos documentados: D2 (nivel 1,
-rama Yellow contra la corrida única de Bizagi) y D5 y D6 (nivel 3). El nivel 4 entero está
-pendiente de LILA-164. Las diferencias vivas hoy son, por tanto, **D2, D5, D6 y D7**; D1, D3, D4 y
-D8 quedaron resueltas en LILA-186/187.
+rama Yellow contra la corrida única de Bizagi) y D5 y D6 (nivel 3). El nivel 4 cuadra desde
+LILA-164 en ciclo, utilización y costo de los seis recursos; le quedan dos residuos: las dos
+esperas de `Arrive at patient place BA` y —para las utilizaciones— la conversión de denominador,
+las dos mitades de lo que hoy es D7. Las diferencias vivas hoy son, por tanto, **D2, D5, D6 y D7**;
+D1, D3, D4 y D8 quedaron resueltas en LILA-186/187.
+
+Las utilizaciones del nivel 4 son las **convertidas** al denominador de Bizagi. Sin convertir, Lila
+publica sobre su ventana de medida `[warmup, t_stop]` = 10 862 min: 44,75 % · 64,82 % · 46,18 % ·
+29,79 % · 22,24 % · 27,36 %, en el mismo orden. Son los mismos segundos ocupados divididos por otro
+denominador; la fórmula está en D7.
 
 ### Causas
 
@@ -191,32 +210,59 @@ espera vale 0,40 y en Lila 0,49 — es decir, la cola de Bizagi crece sublinealm
 linealmente, que es lo que produce una acumulación de trabajo constante desde t = 0. Sin la corrida
 original de Bizagi no se puede ir más allá; queda como el único residuo del nivel 3.
 
-**D7 — el nivel 4 necesita LILA-164 (capacidad por turno dentro de un mismo pool).** Bizagi hace
-variar la **plantilla** por turno (2 / 2 / 1 agentes de call center, etc.) sin que el recurso deje
-de existir: los tres turnos cubren las 24 h y no hay tiempo cerrado. `SCENARIO_FORMAT.md` v1 no
-admite eso, así que la réplica lo modela con tres pools —uno por turno, cada uno con su
-`calendar`— seleccionados con `selection: "or"`. El efecto colateral está medido: el calendario
-efectivo de la tarea pasa a ser el del turno concedido (R-CAL-4), así que el trabajo se **pausa**
-al cerrar el turno y aparece una `offHoursWait` que bajo la semántica de Bizagi tiene que ser 0.
-Media por caso: 59,7 min, que es exactamente el desvío del ciclo (el test lo comprueba: el desvío y
-la espera fuera de horario coinciden dentro del 5 %). Quitando el reparto por turno —un solo pool
-por rol, sin calendario— el ciclo medio del nivel 4 pasa de +234 % a **−1,45 %**. Lo que queda sin
-cubrir es justamente lo que pide LILA-164: con un pool de capacidad fija 2 la tarea `Arrive at
-patient place BA` nunca hace cola (espera media 0 contra los 0,74 min publicados), y hacen falta las
-capacidades 2 / 1 / 2 por turno **dentro del mismo pool** para reproducirla. Además, Bizagi publica
-**una** utilización por rol calculada sobre la capacidad media ponderada por turno —
-`Call center agent` 11,21 % = 8068 min / ((2+2+1)/3 × 43200 min), exacto en los seis recursos —
-mientras Lila publica una por turno; también eso lo arregla LILA-164. La fórmula se ha comprobado
-contra [calendaranalysis2.png](https://help.bizagi.com/platform/en/calendaranalysis2.png) en los seis
-recursos, con el trabajo ocupado que la propia tabla de proceso publica: 11,21 · 16,21 · 11,49 ·
-7,55 · 5,60 · 6,90 %, todos exactos al segundo decimal.
+**D7 — el nivel 4: resuelta la capacidad por turno (LILA-164), vivo el denominador de la
+utilización.** Bizagi hace variar la **plantilla** por turno (2 / 2 / 1 agentes de call center,
+etc.) sin que el recurso deje de existir: los tres turnos cubren las 24 h y no hay tiempo cerrado.
 
-Con un detalle que la aceptación de LILA-164 tiene que tener en cuenta: en el nivel 4 el
-denominador de Bizagi es la **duración declarada del escenario** (43 200 min = los 30 días del campo
-`Duration` del informe), no el instante de fin de corrida (≈ 10 100 min) que sí usa en el nivel 3 y
-que es lo que fija R-CAL-9. Son 4,27× de diferencia: aunque LILA-164 dé capacidad por turno dentro
-de un mismo pool, las utilizaciones del nivel 4 no coincidirán con las publicadas mientras el
-denominador se calcule sobre `[warmup, t_stop]`. Es una decisión de contrato aparte, no un bug.
+*Lo que cerró LILA-164.* Hasta entonces `SCENARIO_FORMAT.md` v1 no admitía eso y la réplica lo
+modelaba con tres pools —uno por turno, cada uno con su `calendar`— seleccionados con
+`selection: "or"`. El efecto colateral estaba medido: el calendario efectivo de la tarea pasaba a
+ser el del turno concedido (R-CAL-4), el trabajo se **pausaba** al cerrar el turno y aparecía una
+`offHoursWait` de 59,7 min por caso que bajo la semántica de Bizagi tiene que ser 0; el ciclo medio
+salía a 84,4 min (+232 %), y la utilización y el costo se publicaban por turno en vez de por rol.
+R-CAL-11 (`resources[pool].capacity: [{ calendar, capacity }]`, `docs/SEMANTICS.md` § 12) es un
+**solo** pool por rol con la tabla «Resource | Morning shift | Day shift | Night shift» de la página
+tramo a tramo, y con ella:
+
+- `offHoursWait` = **0** en las cuatro tareas con recurso por turno (la unión de los tres turnos es
+  un 24×7): era el desvío entero;
+- ciclo medio **1521,5 s** contra los 1526 s publicados (−0,30 %);
+- utilización y costo se reportan por **rol**, seis filas, las de Bizagi, y los doce números caen
+  dentro del ±5 % (peor caso −2,60 %, `Quick Attention Vehicle`);
+- `Arrive at patient place BA` vuelve a hacer cola (máx 970 s) **porque** la capacidad baja a 1 en
+  el turno de tarde; con la capacidad fija del nivel 3 era exactamente 0.
+
+*Lo que sigue vivo: el denominador.* En el nivel 4 Bizagi divide por la **duración declarada** del
+escenario (43 200 min = los 30 días del campo `Duration` del informe), no por el instante de fin de
+corrida (≈ 10 862 min) que sí usa en el nivel 3 y que es lo que fija R-CAL-9. Son 4,0× de
+diferencia. Es una decisión de contrato, no un bug, y Lila **no** cambia de denominador: mantiene
+`[warmup, t_stop]`, que es la ventana en la que de verdad midió. La conversión es exacta sobre
+`busyTime`:
+
+```
+util_bizagi = busyTime / Σᵢ (capacityᵢ × openTimeᵢ sobre la duración declarada)
+            = util_lila × ventana_lila / duración_declarada
+```
+
+y con los tres turnos de 8 h ese sumatorio vale `(Σᵢ capacityᵢ / 3) × 43 200 min`, que es
+literalmente la cuenta publicada: `Call center agent` 8068 min / ((2+2+1)/3 × 43 200 min) = 11,21 %,
+exacta al segundo decimal en los seis recursos contra
+[calendaranalysis2.png](https://help.bizagi.com/platform/en/calendaranalysis2.png).
+
+Aplicada, las seis filas cuadran holgadamente (la tabla de arriba): −0,04 % · +0,54 % · +1,06 % ·
+−2,60 % · +1,33 % · +0,98 %. La segunda forma —la regla de tres `util_lila × ventana / duración
+declarada`— es la versión de bolsillo y solo coincide del todo cuando la ventana cubre un número
+entero de periodos del patrón de turnos; aquí no lo cubre (la corrida se agota a los 10 862 min,
+7,54 días) y el sesgo del corte a media franja llega al 1,8 % en `quickAttentionVehicle`, el rol
+cuyo turno de tarde vale el doble que los otros dos. El test comprueba las dos y acota esa
+diferencia al 3 %: es el error de la regla de tres, no del motor.
+
+*Residuo: las dos esperas de `Arrive at patient place BA`.* Máximo 970 s contra 900 s publicados
+(+7,8 %) y media 33,5 s contra 44,4 s (−24,5 %). Son de una corrida única de Bizagi sobre un pool
+al 5,6 % de utilización, donde solo hay cola cuando dos casos coinciden en el turno de tarde (una
+sola ambulancia básica); el reparto por rama de esa corrida tampoco es el nuestro (Bizagi 403
+instancias BA, Lila 409). Es ruido de la corrida de referencia, del mismo tipo que D2, y no se
+relaja la tolerancia por él.
 
 **Nota de mapeo (corregida en LILA-187).** `expected.json` llamaba `waitTimeSeconds` a lo que la
 tabla de Bizagi titula «Min./Max./Avg. time» del proceso. Esa columna es **tiempo de ciclo**
