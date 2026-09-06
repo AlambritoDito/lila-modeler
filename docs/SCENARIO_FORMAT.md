@@ -74,12 +74,46 @@ Mapa `clave → pool`. La clave es la que citan `elements[*].resources[].ref`.
 |---|---|---|---|---|
 | `name` | string | no | la clave | Nombre para reportes. |
 | `type` | `"role"` \| `"equipment"` | no | `"role"` | Solo clasifica; no cambia la semántica. |
-| `capacity` | integer ≥ 1 | **sí** | — | Unidades simultáneas del pool. |
+| `capacity` | integer ≥ 1, **o** array de `{ calendar, capacity }` (≥ 1 elemento) | **sí** | — | Unidades simultáneas del pool. En la forma por intervalos, `capacity_i` unidades mientras el calendario `calendar_i` esté abierto (R-CAL-11). Excluyente con `calendar` (R16). |
 | `costPerHour` | number ≥ 0 | no | `0` | Costo por hora **ocupada** (no por hora disponible). |
 | `fixedCost` | number ≥ 0 | no | `0` | Costo fijo por token atendido. |
 | `calendar` | string (clave de `calendars`) | no | `default` si existe | Sin `calendar` el pool usa el calendario llamado `default`; si tampoco existe, está disponible 24×7 (R-CAL-10). |
 
 Cola: FIFO por pool, ordenada por instante de habilitación, empate por `seq`.
+
+**Capacidad por turno** (LILA-164). Un mismo rol puede tener distinta cantidad según el turno —el
+caso del nivel 4 de Bizagi: 3 enfermeras de día y 1 de noche—. Eso es **un** pool con `capacity`
+por intervalos, no un pool por turno:
+
+```json
+"resources": {
+  "enfermera": {
+    "name": "Nurse", "type": "role", "fixedCost": 5,
+    "capacity": [
+      { "calendar": "dia",   "capacity": 3 },
+      { "calendar": "noche", "capacity": 1 }
+    ]
+  }
+}
+```
+
+Semántica (R-CAL-11 de `SEMANTICS.md`, §12):
+
+- el pool está **abierto** cuando lo está **cualquiera** de sus calendarios (unión); si los turnos
+  cubren las 24 h, el pool es un 24×7 y ninguna tarea tiene `offHoursWait`;
+- la **capacidad en `t`** es la **suma** de los `capacity_i` cuyos `calendar_i` están abiertos en
+  `t`. Dos calendarios que se solapan **suman** (a diferencia de los intervalos de un mismo
+  calendario, que se unen): `[{ "dia": 2 }, { "24x7": 1 }]` da 3 unidades de día y 1 de noche,
+  porque son dos grupos distintos de unidades del mismo rol;
+- al **cerrar** un tramo, las tareas en curso **no se interrumpen**: el pool puede quedar
+  temporalmente por encima de su capacidad hasta que terminen (misma regla que R-REC-7);
+- `quantity` de una tarea se valida contra el **máximo de la semana**, no contra la suma declarada:
+  3 + 1 unidades en turnos disjuntos nunca son 4 simultáneas;
+- la utilización se integra tramo a tramo: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` sobre la ventana
+  de medida (R-CAL-9).
+
+La forma numérica es el caso de un solo tramo: `{ "capacity": 3, "calendar": "dia" }` y
+`{ "capacity": [{ "calendar": "dia", "capacity": 3 }] }` producen exactamente el mismo resultado.
 
 ### 2.5 `elements`
 
@@ -156,13 +190,14 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | **R6** | Al menos uno de `run.duration` o un `triggerCount` **en un start** (el de un elemento que no genera no cuenta como parada). Con `triggerCount` a solas la corrida termina al vaciarse el heap. |
 | R7 | `version` debe ser `1`; la raíz y todos los objetos son estrictos (clave desconocida ⇒ error). |
 | R8 | `model` y `run` deben existir **en el escenario resuelto**; `run.start` debe ser ISO 8601 **con offset** y designar un instante que **existe**: fecha civil real (`2026-02-31`, `2026-13-01` y `2026-02-29` son error, `2024-02-29` no), hora `00:00:00`–`23:59:59` y offset `±00:00`–`±23:59`. `24:00` no se admite aquí (sí en `intervals[].to`, R13): como instante de arranque se escribe `00:00` del día siguiente. |
-| R9 | Toda `ref` de `elements[*].resources[]` debe existir en `resources`; toda clave de `calendar` debe existir en `calendars`. Error citando el `id` y la clave. |
+| R9 | Toda `ref` de `elements[*].resources[]` debe existir en `resources`; toda clave de `calendar` debe existir en `calendars`, **incluida la de cada tramo** de `resources[*].capacity` cuando es una lista (`E-REF-DESCONOCIDA` citando `resources.<pool>.capacity[i].calendar`). Error citando el `id` y la clave. |
 | R10 | Las probabilidades de las salidas de un mismo gateway XOR: si faltan, reparto equitativo; si no suman 1, se **normalizan con warning**; el flujo `isDefault` recibe el residuo. En OR cada salida es independiente y no se normaliza. |
 | R11 | Los parámetros de cada distribución deben cumplir sus restricciones (§ 3). `normal` con `P(x < 0) > 1 %` produce **warning**, no error. |
 | R12 | Los campos reservados (§ 4) producen error explícito. |
 | R13 | `intervals[].to > intervals[].from`; una ventana que cruza medianoche se declara como dos intervalos. `to` admite además `"24:00"` (medianoche del día siguiente); `from` no. |
 | R14 | `selection` solo tiene sentido con `resources`; declararlo sin recursos es error. |
 | R15 | `extends`: la ruta debe resolver a un archivo existente y la cadena no puede tener ciclos (§ 6). |
+| R16 | `resources[*].capacity` por intervalos y `resources[*].calendar` son **excluyentes**: el calendario ya va en cada tramo y declarar los dos deja sin definir cuál manda. Error `E-CAPACIDAD-Y-CALENDARIO` citando el pool. Cada `capacity[i].capacity` es entero ≥ 1 y la lista no puede estar vacía (`E-REC-CAPACIDAD`). |
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
@@ -289,7 +324,8 @@ Para qué sirve: los adaptadores viven **en los bordes** y solo se escriben cuan
 | `calendars[k].intervals[]` | reglas iCal dentro de `bpsim:Calendar` † | `qbp:rule/@fromWeekDay,@toWeekDay,@fromTime,@toTime` | Recurrencia + hora de inicio + duración |
 | `resources[k]` | `bpmn:Resource` referenciado por `bpsim:ResourceParameters` | `qbp:resources/qbp:resource` | Resource |
 | `resources[k].name` | `bpmn:Resource/@name` | `qbp:resource/@name` | Name |
-| **`resources[k].capacity`** | **`bpsim:Quantity`** | **`qbp:resource/@totalAmount`** | **Availability** |
+| **`resources[k].capacity`** (entero) | **`bpsim:Quantity`** | **`qbp:resource/@totalAmount`** | **Availability** |
+| `resources[k].capacity[]` (por intervalos) | varios `bpsim:Quantity`, uno por `bpsim:Calendar` † | — (un `timetableId` por recurso) | **Resources → Calendars → quantity** (la tabla «Resource \| Morning shift \| Day shift \| Night shift» del análisis de calendarios) |
 | `resources[k].costPerHour` | `bpsim:CostParameters/bpsim:UnitCost` | `qbp:resource/@costPerHour` | Cost per hour |
 | `resources[k].fixedCost` | `bpsim:CostParameters/bpsim:FixedCost` † | — | Fixed cost |
 | `resources[k].type` | — | — | Type (rol / equipo) |
@@ -324,3 +360,11 @@ Limitaciones conocidas de los formatos ajenos, que hacen que ninguno sirva como 
 ## 9. Cambios de versión
 
 `version` es un entero. v1 crece **de forma aditiva**: campos nuevos opcionales y campos reservados que pasan a implementarse no suben la versión. Se sube a `2` solo si cambia el significado de un campo existente o desaparece uno. El motor rechaza una `version` que no conoce; nunca adivina.
+
+Cambios ya aplicados dentro de v1:
+
+- **`resources[*].capacity` por intervalos** (LILA-164, § 2.4). `version` **sigue en 1**: es un
+  ensanchamiento del tipo, no un cambio de significado. Todo escenario v1 anterior sigue siendo
+  válido y da el mismo resultado byte a byte, porque el entero es el caso de un solo tramo. Un
+  escenario que use la forma nueva **no** lo entiende un motor anterior: el esquema estricto lo
+  rechaza con un error de tipo, que es la degradación correcta (no adivinar).
