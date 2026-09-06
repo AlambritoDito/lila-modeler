@@ -849,6 +849,14 @@ export function runReplication(
       break;
     }
     heap.pop();
+    // R-ARR-3 / R-CAL-11: una subida de capacidad a la que ya no espera nadie —porque la cola se
+    // drenó antes con una liberación— no es un evento del modelo. Consumirla sin adelantar el
+    // reloj evita que una corrida sin `run.duration` se alargue hasta esa subida y que
+    // `stoppedAt` —y con él la ventana de todas las métricas— dependa del horario del pool.
+    if (next.kind === 'capacity' && !waitsOnPool(next.poolId)) {
+      pendingCapacity.delete(next.poolId);
+      continue;
+    }
     clock = next.t;
     options.onStep?.(clock);
     if (isAborted()) {
