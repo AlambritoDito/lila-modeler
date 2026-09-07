@@ -40,3 +40,9 @@ El primer artefacto de Claude 89f82bd tenía un P0 descubierto en QA nativo: cer
 - El rollback maneja fallos de escritura; no se promete una transacción multiarchivo resistente a corte de energía.
 
 Integración local únicamente. Checkout original limpio en 71e653e (solo plan); sin push/main/release/npm/producción. B/E y C/D sin trabajo activo, worktrees conservados. Saldo final observado 4%; 3 restablecimientos intactos, ninguno consumido.
+
+## Seguimiento posterior a la entrega — 2026-09-07
+
+El usuario pospuso el diseño de un proyecto más fácil de compartir y la importación/exportación directa de `.bpmn` hasta después de probar la app. Alcance y criterios propuestos registrados en [BACKLOG.md](../../BACKLOG.md#seguimiento-de-la-beta-mac--2026-09-07). No se implementan en este seguimiento.
+
+Después del cierre local descrito arriba, el usuario autorizó guardar estos pendientes en documentación y publicar los commits en `origin`. La rama de integración es `codex/operativo-20260906`; esta autorización no cambia el artefacto probado ni publica una release.

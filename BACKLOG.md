@@ -14,6 +14,26 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 
 ---
 
+## Seguimiento de la beta Mac — 2026-09-07
+
+**Estado: pendiente y pospuesto por el usuario hasta después de probar la app.** Esta sección registra el alcance futuro; no implica que esté implementado ni cierra tickets existentes.
+
+### Proyecto más fácil de compartir
+
+Diseñar un archivo o paquete de proyecto que simplifique guardar, abrir y compartir el modelo junto con sus escenarios de simulación. La beta actual guarda una carpeta con BPMN, escenarios JSON y metadatos del proyecto. Quedan por decidir el contenedor, la extensión, el versionado, la compatibilidad con esas carpetas y si se incluyen resultados de simulaciones.
+
+Aceptación propuesta: compartir un solo archivo o paquete, abrirlo en otra instalación y recuperar el diagrama y sus escenarios sin reconstruir rutas ni perder referencias por ID BPMN. Definir y verificar la migración de proyectos existentes antes de cambiar el formato.
+
+### Importar y exportar `.bpmn` directamente en escritorio
+
+Añadir acciones explícitas con selectores nativos para importar un archivo `.bpmn` y exportar el diagrama actual como `.bpmn`, sin exigir que el usuario manipule la carpeta del proyecto. Conservar IDs, disposición visual y metadatos compatibles; informar cualquier pérdida o incompatibilidad. Definir cómo se crean o conservan los escenarios al importar otro modelo, dado que sus parámetros se vinculan por ID BPMN.
+
+Aceptación propuesta: importar un BPMN externo, editarlo, exportarlo y reabrirlo conservando el contenido compatible. Distinguir en la interfaz el BPMN del proyecto completo: exportar el diagrama no debe dar a entender que incluye los escenarios JSON propios de Lila.
+
+Retomar ambos puntos con los comentarios de las pruebas del usuario; no iniciar su implementación durante esta pausa.
+
+---
+
 ## v1 — Simulador con paridad Bizagi (M0 → M5)
 
 ### E0 — Fundaciones del repositorio (M0)
