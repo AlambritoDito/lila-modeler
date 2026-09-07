@@ -1,4 +1,4 @@
-import { resolveScenarioPath } from '@lila/engine/schema';
+import { ScenarioSchema, resolveScenarioPath } from '@lila/engine/schema';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
@@ -21,6 +21,8 @@ export function readProject(value: unknown): ProjectDocument {
     if (!object(run) || typeof run.id !== 'string' || typeof run.scenarioName !== 'string' || !object(run.inputs)
       || !revision(run.inputs.modelRevision) || !revision(run.inputs.scenarioRevision) || typeof run.inputs.xml !== 'string' || !object(run.inputs.scenario)
       || !runResultSchema.safeParse(run.result).success) throw new Error('Corrida guardada inválida.');
+    const scenario = ScenarioSchema.safeParse(run.inputs.scenario);
+    if (!scenario.success || scenario.data.model === undefined || scenario.data.run === undefined) throw new Error('Las entradas de la corrida guardada son inválidas.');
   }
   return value as unknown as ProjectDocument;
 }

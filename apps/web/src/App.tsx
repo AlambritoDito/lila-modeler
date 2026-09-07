@@ -283,7 +283,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       const modelRevision = revisionRef.current;
       const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
       const xml = await modelador.exportar();
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios);
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo);
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult } = await runInWorker(ir, scenario, {
         signal: control.signal,

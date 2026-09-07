@@ -14,6 +14,9 @@ it('modelo propio → dos escenarios → simular → snapshot JSON → reabrir �
   const doc: ProjectDocument = { version: 1, id: 'own', name: 'Proyecto con tildes á', model: { id: ir.id, name: 'model.bpmn', xml, revision: 0 }, scenarios, scenarioRevisions: {}, runs };
   const reopened = readProject(JSON.parse(JSON.stringify(doc)) as unknown);
   expect(reopened).toEqual(doc);
+  const corrupt = structuredClone(doc);
+  (corrupt.runs[0]!.inputs as { scenario: Record<string, unknown> }).scenario = {};
+  expect(() => readProject(corrupt)).toThrow('entradas');
   expect(compare(reopened.runs.map((r) => r.result)).rows.length).toBeGreaterThan(0);
   const again = await prepareSimulation(reopened.model.xml, 'as-is.scenario.json', reopened.scenarios);
   expect(simulate(again.ir, again.scenario)).toEqual(runs[0]!.result);
