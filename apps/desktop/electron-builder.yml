@@ -1,0 +1,32 @@
+appId: net.perfer.lila-modeler
+productName: Lila Modeler
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+asar: true
+# Sin icono propio (pendiente #76): electron-builder usa el icono por defecto de Electron.
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: dir
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  identity: null
+fileAssociations:
+  - ext: bpmn
+    name: BPMN Diagram
+    role: Editor
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+win:
+  target: nsis
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+publish: null
