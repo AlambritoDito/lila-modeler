@@ -185,7 +185,7 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
     puente: typeof window.lila === 'object' && window.lila !== null && window.lila.platform === 'desktop',
   }))()`)) as SmokeChecks;
 
-  const smokeDir = path.join(app.getAppPath(), 'smoke');
+  const smokeDir = process.env.LILA_SMOKE_DIR ?? path.join(app.getPath('temp'), 'lila-smoke');
   await mkdir(smokeDir, { recursive: true });
   const image = await win.webContents.capturePage();
   await writeFile(path.join(smokeDir, 'captura.png'), image.toPNG());

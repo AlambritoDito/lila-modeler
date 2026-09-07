@@ -9,9 +9,12 @@
     "start": "electron .",
     "dev": "LILA_DEV_URL=http://localhost:5174 electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "smoke": "LILA_SMOKE=1 electron ."
+    "smoke": "LILA_SMOKE=1 electron .",
+    "pack:mac": "npm run build && electron-builder --mac --arm64 --dir",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 && node scripts/origen.mjs"
   },
   "devDependencies": {
-    "electron": "44.2.0"
+    "electron": "44.2.0",
+    "electron-builder": "26.15.3"
   }
 }
