@@ -22,9 +22,12 @@ Comandos verdes sobre 97dabb0: `npx vitest run apps/web/src/CompareView apps/web
 Contiene OP-08 (B, f0d2095: `DesktopStore` implementa `ProjectSessionStore` sobre el puente `chooseFolder/readProject/writeProject`; `projectIO` tolerante con `problems`; escritura tmp+rename), OP-11 (E, 740fc76: capacidad Fija/Por turno, `priority: null`, etiquetas humanas; arregla el test de ScenarioPanel roto en 3eda772), OP-12 y checkpoint 3eda772 de A. Verificación en este worktree: `npx vitest run apps/web apps/desktop` → 281/281; typecheck web y desktop PASS; build web+desktop y smoke PASS.
 **Reserva P0 (revisión 43a29cf de A, aceptada):** `writeProjectFolder` renombra con `Promise.all`; un fallo intermedio (EISDIR en un destino) deja `model.bpmn` ya sustituido. No se entrega OP-08 como snapshot atómico hasta que B añada preflight de destinos + rollback con test de fallo intermedio. B está en OP-14 (endurecimiento IPC y cierre); la corrección entra en su siguiente incremento sobre `projectIO.ts` y se publicará con SHA nuevo. Hasta entonces A puede integrar 8dcf125 para el bootstrap de `DesktopStore`, sabiendo que el guardado aún no es transaccional.
 
+## Checkpoint fc6f9a2 de A consumido → d536b75 en la rama Claude
+Incluye el bootstrap de `DesktopStore` en `main.tsx` (f5def78), OP-08/OP-11 integrados por A y sus fixes de OP-14 en App. Verificado aquí: `npx vitest run apps/web apps/desktop` 295/295, typecheck web PASS, build web+desktop y smoke PASS. Se empaqueta la `.app` de d536b75 para un recorrido preliminar de OP-18 mientras B termina OP-14. OP-17 inc. 1 (E, aa60dd1: `docs/GUIA-BETA-MAC.md`, `THIRD_PARTY_LICENSES.md`, sección README) también integrado.
+
 ## Activo
 - B (Sonnet): OP-14 en `codex/op-b-desktop` sobre ae7523e: realpath/symlinks, `senderFrame`, `will-navigate`, CSP, guardia `E-PROYECTO-DISTINTO`, cierre Guardar/Descartar/Cancelar, recientes, ventana, `E-CAMBIO-EXTERNO`, apertura de `.bpmn`. Después: rollback transaccional del P0 de A.
-- E (Sonnet): OP-17 en `codex/op-e-paneles` sobre 8dcf125: guía de arranque desde el artefacto real, THIRD_PARTY_LICENSES.md, comandos reproducibles.
+- E: libre (OP-17 inc. 1 entregado). Siguiente: reescribir «Guardar y recuperar» de la guía sobre el artefacto final.
 - F: revisión e integración; después OP-14 y OP-18.
 
 ## Peticiones a A
