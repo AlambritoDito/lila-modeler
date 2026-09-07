@@ -187,9 +187,22 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         const elegidos = evento.newSelection;
         onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
       });
+      // El minimapa reescribe el `title` de su cabecera en inglés («Close minimap») cada vez que
+      // se pliega o se abre. El texto visible ya sale de `app.css`; el tooltip es la única cadena
+      // suya que queda a la vista, así que se traduce aquí en vez de montar un `translate` propio.
+      // Se busca dentro del contenedor de ESTE modelador, no del de React: al abrir un archivo
+      // el anterior sigue montado hasta que se destruye, y su minimapa saldría antes.
+      const suyo = modeler.get<Canvas>('canvas').getContainer();
+      const rotularMinimapa = ({ open }: { open: boolean }): void => {
+        suyo
+          .querySelector('.djs-minimap .toggle')
+          ?.setAttribute('title', open ? 'Plegar minimapa' : 'Desplegar minimapa');
+      };
+      modeler.on('minimap.toggle', rotularMinimapa);
       for (const suscripcion of suscripciones) {
         modeler.on(suscripcion.eventos, suscripcion.escuchar);
       }
+      rotularMinimapa({ open: suyo.querySelector('.djs-minimap')?.classList.contains('open') === true });
     };
 
     const crearCandidato = (): { modeler: Modeler; staging: HTMLDivElement } => {

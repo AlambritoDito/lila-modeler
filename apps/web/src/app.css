@@ -553,7 +553,11 @@ body {
   z-index: 1;
 }
 
-.zoom .boton {
+/* Con `.zoom .boton` el `padding` empataba en especificidad con `.boton.icono`, que está más
+   abajo en este archivo y ganaba: el `padding: 0` no llegaba a aplicarse y el icono de 14 px
+   desbordaba su caja de contenido. Repitiendo la clase gana esta regla.
+   El `border-radius: 0` pisa los 4 px de `.boton`; cuando #238 deje `.boton` sin radio, sobra. */
+.zoom .boton.icono {
   border-radius: 0;
   display: grid;
   height: 30px;
@@ -634,8 +638,11 @@ body {
 
 /* ---------- pestañas de diagrama (LILA-208) ---------- */
 
+/* La pestaña ya no es un botón: con un diagrama por proyecto no hay nada a lo que cambiar, así
+   que no debe heredar el cursor de mano de `.pestana`. Lo clicable es el ✕. */
 .diagramas .pestana {
   align-items: center;
+  cursor: default;
   display: flex;
   gap: 8px;
 }
