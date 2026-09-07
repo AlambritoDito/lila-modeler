@@ -57,11 +57,28 @@ describe('el XML que exporta la app web', () => {
   // Los fixtures de Bizagi son archivos reales, no procesos simulables: algunos traen
   // construcciones fuera de perfil y nodos inalcanzables, y `lila validate` los reporta con
   // razón. Lo que este ticket promete de ellos es que abrir y exportar no los empeora.
+  //
+  // Los `W-PARSE` (LILA-185) se comparan aparte: hablan del *archivo*, no del modelo. El
+  // original trae referencias rotas a mensajes, data stores y categorías, y tipos que moddle
+  // no conoce; al exportar, bpmn-moddle escribe el árbol que sí pudo leer y esas referencias
+  // rotas ya no están, así que el archivo exportado tiene menos avisos de lectura, nunca más.
+  // Lo que no puede pasar es que exportar haga aparecer pérdida de grafo donde no la había.
   it.each(['examples/pedido/model.bpmn', ...BIZAGI])(
     'exportar %s no cambia lo que dice `lila validate`',
     async (ruta) => {
       const original = leer(ruta);
-      expect(await lilaValidate(await exportar(original))).toEqual(await lilaValidate(original));
+      const antes = await lilaValidate(original);
+      const despues = await lilaValidate(await exportar(original));
+
+      const sinParse = (r: ValidationResult): ValidationResult => ({
+        errors: r.errors,
+        warnings: r.warnings.filter((w) => w.code !== 'W-PARSE'),
+      });
+
+      expect(sinParse(despues)).toEqual(sinParse(antes));
+      expect(despues.warnings.filter((w) => w.code === 'W-PARSE').length).toBeLessThanOrEqual(
+        antes.warnings.filter((w) => w.code === 'W-PARSE').length,
+      );
     },
   );
 

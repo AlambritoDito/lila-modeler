@@ -49,3 +49,34 @@ export interface ProjectStore {
   /** Guarda el resultado de correr `scenarioName` sobre `processId`. */
   putRun(processId: string, scenarioName: string, result: RunResult): Promise<void>;
 }
+
+/** Documento editable; su contenido puede ser un borrador aún inválido. */
+export type ScenarioDocument = Record<string, unknown>;
+export interface StoredRun {
+  readonly id: string;
+  readonly scenarioName: string;
+  readonly result: RunResult;
+  readonly inputs: {
+    readonly modelRevision: number;
+    readonly scenarioRevision: number;
+    readonly xml: string;
+    readonly scenario: ScenarioDocument;
+  };
+}
+export interface ProjectDocument {
+  readonly version: 1;
+  readonly id: string;
+  readonly name: string;
+  readonly model: { readonly id: string; readonly name: string; readonly xml: string; readonly revision: number };
+  readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
+  readonly scenarioRevisions: Readonly<Record<string, number>>;
+  readonly runs: readonly StoredRun[];
+}
+/** Snapshot coherente; null es cancelación, error rechaza la promesa. */
+export interface ProjectSessionStore extends ProjectStore {
+  createProject(document: ProjectDocument): Promise<ProjectDocument | null>;
+  openProject(): Promise<ProjectDocument | null>;
+  saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
+  setDirty?(dirty: boolean): void;
+  onSaveRequested?(save: () => Promise<boolean>): () => void;
+}

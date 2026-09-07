@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Export estilo Bizagi que PIERDE elementos al leerse (LILA-185 / #198): `Task_Revisar` aparece
+  dos veces, así que moddle-xml descarta la segunda tarea entera ("unparsable content ... nested
+  error: duplicate ID <Task_Revisar>") y el modelo cargado tiene un nodo menos que el archivo.
+  El `<bpmn:LoopCounter>` es el ruido inofensivo que traen los exports reales de Bizagi
+  (B.2.0-roundtrip): moddle no conoce el tipo, avisa, y no se pierde ningún nodo ni flujo.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  id="Definitions_Incompleto" targetNamespace="urn:lila:qa"
+  exporter="Bizagi Modeler" exporterVersion="4.2.0.0">
+  <bpmn:process id="Process_Incompleto" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Llega el pedido">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_Revisar" name="Revisar pedido">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+      <bpmn:LoopCounter>0</bpmn:LoopCounter>
+    </bpmn:task>
+    <bpmn:task id="Task_Revisar" name="Aprobar pedido">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_1" name="Pedido resuelto">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Revisar" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Revisar" targetRef="Task_Revisar" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_Revisar" targetRef="End_1" />
+  </bpmn:process>
+</bpmn:definitions>

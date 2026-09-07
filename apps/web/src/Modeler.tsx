@@ -7,13 +7,20 @@
  * pueden crecer sin repartir bpmn-js por toda la aplicación.
  */
 import Modeler from 'bpmn-js/lib/Modeler';
+import type BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
+import type Modeling from 'bpmn-js/lib/features/modeling/Modeling';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type Selection from 'diagram-js/lib/features/selection/Selection';
 import { useEffect, useRef } from 'react';
 // El descriptor de la extensión `lila:` es el de `packages/engine/src/bpmn/lila.moddle.json`,
 // única definición del namespace (ADR-012). Se importa del paquete compilado, así que
 // `npm run build` de la raíz tiene que haber corrido antes de `vite` (ver package.json).
 import lila from '@lila/engine/bpmn/lila.moddle.json';
+// El overlay de cuellos de botella (LILA-064) es el único módulo fuera de este archivo que
+// necesita el `Modeler` de bpmn-js en crudo; en vez de exponerlo, `Modelador.cuellos` le pasa
+// el modelador desde aquí y el resto del shell sigue sin ver bpmn-js.
+import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOverlay';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -31,12 +38,32 @@ export interface EstadoLienzo {
   error: string | null;
 }
 
+/**
+ * Los servicios de bpmn-js que el panel de propiedades (LILA-060) necesita para leer y escribir
+ * el moddle vivo. Se exponen aquí y no por `modeler.get()` suelto para que el resto de la app
+ * siga sin importar bpmn-js: `PropertiesPanel.tsx` solo conoce esta interfaz.
+ */
+export interface Servicios {
+  modeling: Modeling;
+  bpmnFactory: BpmnFactory;
+  selection: Selection;
+}
+
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
   abrir(xml: string): Promise<boolean>;
   exportar(): Promise<string>;
   ajustar(): void;
+  servicios: Servicios;
+  /** Escucha eventos del `eventBus`; devuelve la función que se desuscribe. */
+  suscribir(eventos: string[], escuchar: () => void): () => void;
+  /**
+   * Overlay de cuellos de botella (LILA-064). `corrida = null` o `visible = false` lo quitan; una
+   * corrida nueva reemplaza a la anterior sin acumular nada. Idempotente: el shell puede llamarlo
+   * en cada render sin comprobar si algo cambió.
+   */
+  cuellos(corrida: Corrida | null, visible: boolean): void;
 }
 
 interface Props {
@@ -46,6 +73,12 @@ interface Props {
   onListo: (modelador: Modelador) => void;
   /** Se llama cada vez que cambia el zoom o el número de elementos. */
   onEstado: (estado: EstadoLienzo) => void;
+  /**
+   * Id del elemento seleccionado, o `null` si no hay ninguno o hay varios (LILA-061: el panel
+   * de escenario edita `elements[id]`, y con dos seleccionados no hay un `id` que editar).
+   * Debe ser estable entre renders: entra en las dependencias del efecto que monta bpmn-js.
+   */
+  onSeleccion: (id: string | null) => void;
 }
 
 /** Valor de un token de diseño, ya resuelto a color por el navegador. */
@@ -53,7 +86,7 @@ function token(nombre: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
 }
 
-export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Element {
+export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): React.JSX.Element {
   const contenedor = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,7 +141,18 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       publicar(null);
     });
 
+    // Única fuente de la selección para el resto de la app (LILA-061). `selection.changed` es
+    // el evento de diagram-js; el shell nunca ve el `elementRegistry`.
+    modeler.on('selection.changed', (evento: { newSelection: Array<{ id: string }> }) => {
+      const elegidos = evento.newSelection;
+      onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
+    });
+
     const abrir = async (xml: string): Promise<boolean> => {
+      // Antes de importar, no después: `clearOverlay` repinta por id, y tras `importXML` los ids
+      // del overlay anterior o no existen o son de otro diagrama. Sin esto, abrir un `.bpmn`
+      // distinto que reutilice ids (`Task_1`, lo más común) heredaría el tinte del modelo viejo.
+      clearOverlay(modeler);
       try {
         const { warnings } = await modeler.importXML(xml);
         if (!vivo) return false;
@@ -135,6 +179,20 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       ajustar: () => {
         if (conTamano()) canvas.zoom('fit-viewport');
       },
+      servicios: {
+        modeling: modeler.get<Modeling>('modeling'),
+        bpmnFactory: modeler.get<BpmnFactory>('bpmnFactory'),
+        selection: modeler.get<Selection>('selection'),
+      },
+      suscribir: (eventos, escuchar) => {
+        modeler.on(eventos, escuchar);
+        return () => {
+          modeler.off(eventos, escuchar);
+        };
+      },
+      cuellos: (corrida, visible) => {
+        sincronizarOverlay(modeler, corrida, visible);
+      },
     });
     void abrir(xmlInicial);
 
@@ -142,7 +200,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       vivo = false;
       modeler.destroy();
     };
-  }, [xmlInicial, onListo, onEstado]);
+  }, [xmlInicial, onListo, onEstado, onSeleccion]);
 
   return <div className="lienzo" ref={contenedor} />;
 }

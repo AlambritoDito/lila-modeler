@@ -34,6 +34,9 @@ const boundaryBpmn = fileURLToPath(
 const subprocesoBpmn = fileURLToPath(
   new URL('../../engine/test/fixtures/subproceso-and.bpmn', import.meta.url),
 );
+const incompletoBpmn = fileURLToPath(
+  new URL('../../engine/test/fixtures/parse-incompleto.bpmn', import.meta.url),
+);
 const lanesBpmn = fileURLToPath(new URL('./fixtures/lanes.bpmn', import.meta.url));
 
 let client: Client;
@@ -95,6 +98,29 @@ test('validate_bpmn sobre un modelo con boundary event: errores estructurados, i
   const parsed = JSON.parse(text) as { errors: { code: string; message: string }[] };
   expect(parsed.errors.length).toBeGreaterThan(0);
   expect(parsed.errors.some((error) => error.code === 'E-NOSOP')).toBe(true);
+});
+
+// Aceptación LILA-185: los avisos de bpmn-moddle llegan al JSON de la tool, clasificados.
+test('validate_bpmn sobre un export que pierde elementos: E-PARSE-INCOMPLETO y W-PARSE', async () => {
+  const result = await client.callTool({
+    name: 'validate_bpmn',
+    arguments: { path: incompletoBpmn },
+  });
+  expect(result.isError).toBe(false);
+
+  const parsed = JSON.parse(textOf(result)) as {
+    ir: { source: { warnings: { message: string }[] } };
+    errors: { code: string; id: string; message: string }[];
+    warnings: { code: string; id: string }[];
+  };
+
+  expect(parsed.ir.source.warnings).toHaveLength(2);
+  expect(parsed.errors.filter((error) => error.code === 'E-PARSE-INCOMPLETO')).toMatchObject([
+    { id: 'Task_Revisar' },
+  ]);
+  expect(parsed.warnings.filter((warning) => warning.code === 'W-PARSE')).toMatchObject([
+    { id: 'Process_Incompleto' },
+  ]);
 });
 
 test('validate_bpmn sin path ni xml: isError true, no lanza', async () => {

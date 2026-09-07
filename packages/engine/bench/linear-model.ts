@@ -59,7 +59,7 @@ export const LINEAR_IR: ProcessIR = {
     Flow_Task4_Task5: { from: 'Task_4', to: 'Task_5', name: '', isDefault: false },
     Flow_Task5_End: { from: 'Task_5', to: 'End', name: '', isDefault: false },
   },
-  source: { exporter: 'Lila benchmark', exporterVersion: '1', originalIds: {} },
+  source: { exporter: 'Lila benchmark', exporterVersion: '1', originalIds: {}, warnings: [] },
 };
 
 function linearScenario(caseCount: number): SimScenario {
