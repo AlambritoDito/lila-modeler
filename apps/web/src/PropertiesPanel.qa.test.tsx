@@ -81,7 +81,13 @@ async function banco(xml: string): Promise<Banco> {
   const { rootElement: definitions } = await moddle.fromXML(xml);
   const eventBus = new EventBus();
   // `Selection` filtra por raíz: con una sola, todo lo del archivo es seleccionable.
-  const raiz = { id: '__raiz', type: 'bpmn:Process', businessObject: {} };
+  const procesos = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
+  const raizBo = procesos.length === 1 ? procesos[0] : definitions;
+  const raiz = {
+    id: raizBo?.id ?? '__raiz',
+    type: raizBo?.$type ?? 'bpmn:Definitions',
+    businessObject: raizBo as unknown as ElementoModdle,
+  };
   const selection = new Selection(eventBus, {
     getRootElement: () => raiz,
     findRoot: () => raiz,
@@ -121,7 +127,7 @@ async function banco(xml: string): Promise<Banco> {
     abrir: () => Promise.resolve(true),
     exportar: async () => (await moddle.toXML(definitions, { format: true })).xml,
     ajustar: () => undefined,
-    servicios: { ...escritor, selection },
+    servicios: { ...escritor, selection, rootElement: () => raiz },
     suscribir: (eventos: string[], escuchar: () => void) => {
       eventBus.on(eventos, escuchar);
       return () => {
@@ -213,6 +219,32 @@ function pedidoConRaciAjeno(): string {
 }
 
 describe('QA adversarial del panel de propiedades', () => {
+  it('edita proceso simple desde el fondo y TextAnnotation desde su control propio', async () => {
+    const xml = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+      xmlns:lila="https://lila-modeler.org/schema/bpmn/1" id="D" targetNamespace="urn:test">
+      <bpmn:process id="Process_1" name="Antes"><bpmn:textAnnotation id="Text_1">
+        <bpmn:text>Nota anterior</bpmn:text>
+      </bpmn:textAnnotation></bpmn:process></bpmn:definitions>`;
+    const bancoSimple = await banco(xml);
+    const propiedades = montar(bancoSimple.modelador, 'Propiedades');
+    const documentacion = montar(bancoSimple.modelador, 'Documentación');
+
+    teclear(propiedades.querySelector('input') as HTMLInputElement, 'Proceso nuevo');
+    teclear(documentacion.querySelector('textarea') as HTMLTextAreaElement, 'Documentado');
+    teclear(campoPorEtiqueta(documentacion, 'Versión del proceso'), ' 2.0 ');
+    bancoSimple.clic('Text_1');
+    teclear(
+      propiedades.querySelector('[aria-label="Texto de la anotación"]') as HTMLTextAreaElement,
+      'Nota nueva',
+    );
+
+    const salida = await bancoSimple.exportar();
+    expect(salida).toContain('id="Process_1" name="Proceso nuevo"');
+    expect(salida).toContain('<bpmn:documentation>Documentado</bpmn:documentation>');
+    expect(salida).toContain('<lila:versionTag value="2.0" />');
+    expect(salida).toContain('<bpmn:text>Nota nueva</bpmn:text>');
+  });
+
   it('lo que escribe el panel sobrevive a exportar y volver a abrir, con `<`, `&` y acentos', async () => {
     const raro = 'ñ & <b> "comillas"';
     const { modelador, figura, exportar } = await banco(leer(PEDIDO));

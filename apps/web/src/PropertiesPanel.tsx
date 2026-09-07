@@ -40,6 +40,10 @@ export interface ElementoModdle {
   roleRef?: string;
   /** `lila:systemRef` y compañía. */
   ref?: string;
+  /** `lila:versionTag`. */
+  value?: string;
+  /** Proceso ejecutado por un `bpmn:Participant`. */
+  processRef?: ElementoModdle;
   documentation?: ElementoModdle[];
   extensionElements?: ElementoModdle;
   values?: ElementoModdle[];
@@ -79,15 +83,15 @@ export interface Escritor {
  * Devuelve el `bpmn:extensionElements` del elemento, creándolo si no lo tenía. Nunca sustituye
  * uno existente: lo que ya hubiera dentro (incluidas las extensiones ajenas) se queda.
  */
-function extensiones(escritor: Escritor, elemento: ElementoLienzo): ElementoModdle {
-  const bo = elemento.businessObject;
-  const existente = bo.extensionElements;
-  if (existente !== undefined) return existente;
-
-  const nuevo = escritor.bpmnFactory.create('bpmn:ExtensionElements', { values: [] });
-  nuevo.$parent = bo;
-  escritor.modeling.updateModdleProperties(elemento, bo, { extensionElements: nuevo });
-  return nuevo;
+function normalizarReferencias(atributos: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(atributos).map(([nombre, valor]) => [
+      nombre,
+      (nombre === 'ref' || nombre === 'roleRef') && typeof valor === 'string'
+        ? valor.trim()
+        : valor,
+    ]),
+  );
 }
 
 /** Los hijos de `extensionElements` de ese tipo, en el orden del archivo. */
@@ -103,8 +107,20 @@ export function anadirExtension(
   tipo: string,
   atributos: Record<string, unknown>,
 ): ElementoModdle {
-  const ext = extensiones(escritor, elemento);
-  const hijo = escritor.bpmnFactory.create(tipo, atributos);
+  const bo = elemento.businessObject;
+  const hijo = escritor.bpmnFactory.create(tipo, normalizarReferencias(atributos));
+  const existente = bo.extensionElements;
+  if (existente === undefined) {
+    // Crear contenedor e hijo antes del único comando evita que un undo deje un
+    // `extensionElements` vacío al deshacer la primera extensión.
+    const nuevo = escritor.bpmnFactory.create('bpmn:ExtensionElements', { values: [hijo] });
+    nuevo.$parent = bo;
+    hijo.$parent = nuevo;
+    escritor.modeling.updateModdleProperties(elemento, bo, { extensionElements: nuevo });
+    return hijo;
+  }
+
+  const ext = existente;
   hijo.$parent = ext;
   escritor.modeling.updateModdleProperties(elemento, ext, {
     values: [...(ext.values ?? []), hijo],
@@ -132,7 +148,11 @@ export function editarExtension(
   hijo: ElementoModdle,
   atributos: Record<string, unknown>,
 ): void {
-  escritor.modeling.updateModdleProperties(elemento, hijo, atributos);
+  escritor.modeling.updateModdleProperties(
+    elemento,
+    hijo,
+    normalizarReferencias(atributos),
+  );
 }
 
 /**
@@ -180,6 +200,47 @@ export function escribirNombre(
   nombre: string,
 ): void {
   escritor.modeling.updateProperties(elemento, { name: nombre });
+}
+
+/** `bpmn:TextAnnotation` usa `text`, no la propiedad `name` de los flow nodes. */
+export function escribirTextoAnotacion(
+  escritor: Escritor,
+  elemento: ElementoLienzo,
+  texto: string,
+): void {
+  escritor.modeling.updateProperties(elemento, { text: texto });
+}
+
+/** Proceso seleccionado directamente o asociado al pool seleccionado. */
+export function procesoRelacionado(elemento: ElementoLienzo): ElementoLienzo | undefined {
+  if (elemento.businessObject.$type === 'bpmn:Process') return elemento;
+  const processRef = elemento.businessObject.processRef;
+  if (elemento.businessObject.$type !== 'bpmn:Participant' || processRef?.id === undefined) {
+    return undefined;
+  }
+  return { id: processRef.id, type: processRef.$type, businessObject: processRef };
+}
+
+export function leerVersionTag(elemento: ElementoLienzo): string {
+  return leerExtensiones(elemento, 'lila:VersionTag')[0]?.value ?? '';
+}
+
+export function escribirVersionTag(
+  escritor: Escritor,
+  proceso: ElementoLienzo,
+  value: string,
+): void {
+  const [existente] = leerExtensiones(proceso, 'lila:VersionTag');
+  const limpio = value.trim();
+  if (limpio === '') {
+    if (existente !== undefined) quitarExtension(escritor, proceso, existente);
+    return;
+  }
+  if (existente === undefined) {
+    anadirExtension(escritor, proceso, 'lila:VersionTag', { value: limpio });
+  } else {
+    editarExtension(escritor, proceso, existente, { value: limpio });
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -265,9 +326,14 @@ export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Eleme
 
   useEffect(() => {
     if (modelador === null) return;
-    const { selection } = modelador.servicios;
     const leerSeleccion = (): void => {
-      setSeleccion(selection.get() as ElementoLienzo[]);
+      const elegidos = modelador.servicios.selection.get() as ElementoLienzo[];
+      const raiz = modelador.servicios.rootElement?.() as ElementoLienzo | undefined;
+      setSeleccion(
+        elegidos.length === 0 && raiz?.businessObject.$type === 'bpmn:Process'
+          ? [raiz]
+          : elegidos,
+      );
     };
 
     // Al montar puede haber ya algo seleccionado: `selection.changed` solo avisa de los cambios.
@@ -315,25 +381,57 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
   // `bpmn:association` y algún artefacto más no tienen atributo `name`: escribírselo produciría
   // un XML que no valida contra el esquema BPMN.
   const admiteNombre = bo.$descriptor?.propertiesByName?.name !== undefined;
+  const esAnotacion = bo.$type === 'bpmn:TextAnnotation';
+  const proceso = procesoRelacionado(elemento);
 
   return (
     <div className="campos">
-      <label className="campo">
-        <span>Nombre</span>
-        <input
-          type="text"
-          value={bo.name ?? ''}
-          disabled={!admiteNombre}
-          placeholder={admiteNombre ? 'Sin nombre' : 'Este tipo no tiene nombre'}
-          onChange={(e) => {
-            // ponytail: una entrada del `commandStack` por pulsación, así que Cmd+Z deshace
-            // letra a letra. Es lo que hace el panel de bpmn-js. Agrupar las pulsaciones
-            // seguidas en un solo comando es un ticket propio si llega a molestar.
-            escribirNombre(escritor, elemento, e.target.value);
-            refrescar();
-          }}
-        />
-      </label>
+      {esAnotacion ? (
+        <label className="campo">
+          <span>Texto de la anotación</span>
+          <textarea
+            aria-label="Texto de la anotación"
+            rows={4}
+            value={bo.text ?? ''}
+            onChange={(e) => {
+              escribirTextoAnotacion(escritor, elemento, e.target.value);
+              refrescar();
+            }}
+          />
+        </label>
+      ) : (
+        <label className="campo">
+          <span>Nombre</span>
+          <input
+            type="text"
+            value={bo.name ?? ''}
+            disabled={!admiteNombre}
+            placeholder={admiteNombre ? 'Sin nombre' : 'Este tipo no tiene nombre'}
+            onChange={(e) => {
+              // ponytail: una entrada del `commandStack` por pulsación, así que Cmd+Z deshace
+              // letra a letra. Es lo que hace el panel de bpmn-js. Agrupar las pulsaciones
+              // seguidas en un solo comando es un ticket propio si llega a molestar.
+              escribirNombre(escritor, elemento, e.target.value);
+              refrescar();
+            }}
+          />
+        </label>
+      )}
+
+      {proceso !== undefined && proceso !== elemento && (
+        <label className="campo">
+          <span>Nombre del proceso</span>
+          <input
+            type="text"
+            aria-label="Nombre del proceso"
+            value={proceso.businessObject.name ?? ''}
+            onChange={(e) => {
+              escribirNombre(escritor, proceso, e.target.value);
+              refrescar();
+            }}
+          />
+        </label>
+      )}
 
       <div className="campo">
         <span>Tipo</span>
@@ -373,22 +471,40 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
 }
 
 function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+  const proceso = procesoRelacionado(elemento);
+  const documentado = proceso ?? elemento;
   const responsabilidades = leerExtensiones(elemento, 'lila:Responsibility');
 
   return (
     <div className="campos">
       <label className="campo">
-        <span>Descripción</span>
+        <span>{proceso === undefined ? 'Descripción' : 'Descripción del proceso'}</span>
         <textarea
           rows={5}
-          value={leerDocumentacion(elemento)}
+          value={leerDocumentacion(documentado)}
           placeholder="Para qué sirve este elemento"
           onChange={(e) => {
-            escribirDocumentacion(escritor, elemento, e.target.value);
+            escribirDocumentacion(escritor, documentado, e.target.value);
             refrescar();
           }}
         />
       </label>
+
+      {proceso !== undefined && (
+        <label className="campo">
+          <span>Versión del proceso</span>
+          <input
+            type="text"
+            aria-label="Versión del proceso"
+            value={leerVersionTag(proceso)}
+            placeholder="1.0.0"
+            onChange={(e) => {
+              escribirVersionTag(escritor, proceso, e.target.value);
+              refrescar();
+            }}
+          />
+        </label>
+      )}
 
       <section className="grupo">
         <h3>Responsabilidades</h3>

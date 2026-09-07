@@ -22,8 +22,11 @@ import {
   editarExtension,
   escribirDocumentacion,
   escribirNombre,
+  escribirTextoAnotacion,
+  escribirVersionTag,
   leerDocumentacion,
   leerExtensiones,
+  leerVersionTag,
   quitarExtension,
   type ElementoLienzo,
   type ElementoModdle,
@@ -52,19 +55,23 @@ function* recorrer(el: ModdleElement): Generator<ModdleElement> {
  */
 async function lienzo(xml: string): Promise<{
   escritor: Escritor;
+  operaciones: { cantidad: number };
   seleccionar(id: string): ElementoLienzo;
   exportar(): Promise<string>;
 }> {
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions } = await moddle.fromXML(xml);
+  const operaciones = { cantidad: 0 };
 
   return {
     escritor: {
       modeling: {
         updateProperties: (elemento, propiedades) => {
+          operaciones.cantidad += 1;
           Object.assign(elemento.businessObject, propiedades);
         },
         updateModdleProperties: (_elemento, objeto, propiedades) => {
+          operaciones.cantidad += 1;
           Object.assign(objeto, propiedades);
         },
       },
@@ -72,6 +79,7 @@ async function lienzo(xml: string): Promise<{
         create: (tipo, atributos) => moddle.create(tipo, atributos) as ElementoModdle,
       },
     },
+    operaciones,
     seleccionar: (id) => {
       for (const el of recorrer(definitions)) {
         if (el.id === id) return { id, type: el.$type as string, businessObject: el };
@@ -87,14 +95,18 @@ const BIZAGI = 'examples/bizagi-exports/bizagi-miwg-A.2.0-roundtrip.bpmn';
 
 describe('el panel de propiedades escribiendo sobre el moddle', () => {
   it('añadir una responsabilidad desde el panel aparece en el XML exportado', async () => {
-    const { escritor, seleccionar, exportar } = await lienzo(leer(PEDIDO));
+    const { escritor, operaciones, seleccionar, exportar } = await lienzo(leer(PEDIDO));
     const tarea = seleccionar('Task_TomarPedido');
     // La tarea no tiene `extensionElements`: el panel tiene que crearlo.
     expect(tarea.businessObject.extensionElements).toBeUndefined();
 
-    anadirExtension(escritor, tarea, 'lila:Responsibility', { type: 'R', roleRef: 'rol-1' });
+    anadirExtension(escritor, tarea, 'lila:Responsibility', {
+      type: 'R',
+      roleRef: '  rol-1  ',
+    });
     const xml = await exportar();
 
+    expect(operaciones.cantidad).toBe(1);
     expect(xml).toMatch(/<lila:responsibility type="R" roleRef="rol-1" ?\/>/);
     // Dentro de `extensionElements` y no colgando de la tarea: eso lo prueba el motor, que solo
     // mira ahí dentro.
@@ -165,6 +177,43 @@ describe('el panel de propiedades escribiendo sobre el moddle', () => {
     expect(await exportar()).toContain(
       '<bpmn:task id="Task_TomarPedido" name="Tomar el pedido en caja">',
     );
+  });
+
+  it('edita nombre, documentación y versión del proceso con roundtrip', async () => {
+    const { escritor, seleccionar, exportar } = await lienzo(leer(PEDIDO));
+    const proceso = seleccionar('Process_Restaurante');
+
+    escribirNombre(escritor, proceso, 'Restaurante documentado');
+    escribirDocumentacion(escritor, proceso, 'Proceso principal del restaurante');
+    escribirVersionTag(escritor, proceso, '  1.2.0  ');
+
+    expect(leerVersionTag(proceso)).toBe('1.2.0');
+    const xml = await exportar();
+    expect(xml).toContain('id="Process_Restaurante" name="Restaurante documentado"');
+    expect(xml).toContain('<bpmn:documentation>Proceso principal del restaurante</bpmn:documentation>');
+    expect(xml).toContain('<lila:versionTag value="1.2.0" />');
+
+    const reabierto = await lienzo(xml);
+    const procesoReabierto = reabierto.seleccionar('Process_Restaurante');
+    expect(leerDocumentacion(procesoReabierto)).toBe('Proceso principal del restaurante');
+    expect(leerVersionTag(procesoReabierto)).toBe('1.2.0');
+  });
+
+  it('edita el texto BPMN de una TextAnnotation y conserva su id', async () => {
+    const xml = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+      id="Definitions_1" targetNamespace="urn:lila:test">
+      <bpmn:process id="Process_1"><bpmn:textAnnotation id="TextAnnotation_1">
+        <bpmn:text>Antes</bpmn:text>
+      </bpmn:textAnnotation></bpmn:process>
+    </bpmn:definitions>`;
+    const { escritor, seleccionar, exportar } = await lienzo(xml);
+    const anotacion = seleccionar('TextAnnotation_1');
+
+    escribirTextoAnotacion(escritor, anotacion, 'Después & revisado');
+
+    const salida = await exportar();
+    expect(salida).toContain('id="TextAnnotation_1"');
+    expect(salida).toContain('<bpmn:text>Después &amp; revisado</bpmn:text>');
   });
 
   it('la documentación se escribe una sola vez, por muchas veces que se teclee', async () => {

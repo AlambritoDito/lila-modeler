@@ -24,6 +24,11 @@ export interface ImportacionPreparada<T> {
   perdidas: string[];
 }
 
+export interface OpcionesExportacion {
+  /** Solo una acción explícita del usuario puede pedir la decisión visible. */
+  interactivo?: boolean;
+}
+
 function warningMessage(warning: unknown): string {
   if (typeof warning === 'string') return warning;
   if (warning instanceof Error) return warning.message;
@@ -72,6 +77,14 @@ export async function prepararImportacionTransaccional<T extends ImportableBpmn>
   }
 }
 
+function preservarEntidadesYEscapar(value: string, quote?: '"' | "'"): string {
+  return value
+    .replace(/&(?!(?:#\d+|#x[\da-f]+|[A-Za-z_:][A-Za-z0-9_.:-]*);)/gi, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(quote === '"' ? /"/g : /'/g, quote === '"' ? '&quot;' : '&apos;');
+}
+
 /** Restaura ids y referencias exactas, incluidas las referencias BPMNDI y las textuales. */
 export function restaurarXmlIds(xml: string, originalIds: ReadonlyMap<string, string>): string {
   if (originalIds.size === 0) return xml;
@@ -81,13 +94,34 @@ export function restaurarXmlIds(xml: string, originalIds: ReadonlyMap<string, st
       const value = (doubleQuoted ?? singleQuoted) as string;
       const original = originalIds.get(value);
       if (original === undefined) return attribute;
-      const quote = doubleQuoted === undefined ? "'" : '"';
-      return `${prefix}${quote}${original}${quote}`;
+      const quote: '"' | "'" = doubleQuoted === undefined ? "'" : '"';
+      return `${prefix}${quote}${preservarEntidadesYEscapar(original, quote)}${quote}`;
     })
     .replace(XML_TEXT, (text, value) => {
       const original = originalIds.get(value as string);
-      return original === undefined ? text : `>${original}<`;
+      return original === undefined ? text : `>${preservarEntidadesYEscapar(original)}<`;
     });
+}
+
+/**
+ * Bloquea snapshots y simulaciones silenciosamente ante pérdida. Solo una exportación explícita
+ * puede abrir la decisión visible y continuar después de aceptarla.
+ */
+export function autorizarExportacion(
+  perdidas: readonly string[],
+  opciones: OpcionesExportacion = {},
+  confirmar: (mensaje: string) => boolean = (mensaje) => window.confirm(mensaje),
+): void {
+  if (perdidas.length === 0) return;
+  const detalle = perdidas.map((warning) => `• ${warning}`).join('\n');
+  if (opciones.interactivo !== true) {
+    throw new Error(`Exportación bloqueada por contenido perdido:\n${detalle}`);
+  }
+  const continuar = confirmar(
+    `El archivo original contenía referencias o elementos que no se pudieron importar. ` +
+      `Si exportas ahora, ese contenido se perderá:\n\n${detalle}\n\n¿Exportar de todos modos?`,
+  );
+  if (!continuar) throw new Error(`Exportación cancelada por contenido perdido:\n${detalle}`);
 }
 
 function escribirAtributo(tag: string, name: string, value: string): string {
