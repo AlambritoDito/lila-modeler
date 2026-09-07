@@ -95,9 +95,9 @@ Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en p
 
 ## Propuesta de orden (tickets)
 
-1. **Barra superior y barra de estado como en el artefacto** (nuevo, S): logo, proyecto+archivo, modos 3 px, acciones a iconos, «Ejecutar simulación» primario en la barra, tema por icono; estado con errores/avisos, escenario, semilla, densidad, zoom. Es lo que más acerca la sensación al diseño con poco código, y deja «Simular» donde el brief lo pide.
-2. **Radio 0 y mono para cifras** (nuevo, XS): `border-radius: 0` en tokens/CSS, `font.mono` en tablas, ids y barra de estado; cargar JetBrains Mono con `@fontsource/jetbrains-mono`.
-3. **Paleta izquierda propia** (nuevo, M): lista con nombres, grupos, filtro y modo compacto sobre `create`/`palette` de bpmn-js.
-4. **Minimapa y zoom en el lienzo** (nuevo, S): `diagram-js-minimap` + tres botones.
-5. **Marcadores de validación** (LILA-057 pendiente, S): disco 16 px + tooltip con `overlays.add`.
+1. **#237 LILA-205 · Barra superior y barra de estado como en el artefacto** (S): logo, proyecto+archivo, modos 3 px, acciones a iconos, «Ejecutar simulación» primario en la barra, tema por icono; estado con errores/avisos, escenario, semilla, densidad, zoom. Es lo que más acerca la sensación al diseño con poco código, y deja «Simular» donde el brief lo pide.
+2. **#238 LILA-206 · Radio 0, JetBrains Mono y escala de densidad** (S): `border-radius: 0` en tokens/CSS, `font.mono` en tablas, ids y barra de estado; cargar JetBrains Mono con `@fontsource/jetbrains-mono`.
+3. **#239 LILA-207 · Paleta izquierda propia** (M, tras #237): lista con nombres, grupos, filtro y modo compacto sobre `create`/`palette` de bpmn-js.
+4. **#240 LILA-208 · Minimapa, zoom y pestañas de diagrama con cierre** (S): `diagram-js-minimap` + tres botones.
+5. **#241 LILA-209 · Marcadores de validación y chips** (S): disco 16 px + tooltip con `overlays.add`.
 6. #144 Apariencia completa (L) · #66 paleta de comandos (M) · #74 bienvenida (M) · #65 validar rutas (L) · #226 etiquetas del overlay (S) · #233 editor semanal (M).
