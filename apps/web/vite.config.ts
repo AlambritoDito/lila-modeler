@@ -10,6 +10,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   publicDir: 'src/theme/themes',
+  // Ningún asset incrustado como `data:`: Vite inlinea por defecto lo que pesa menos de 4 KB y
+  // los subconjuntos griego/cirílico de JetBrains Mono (#238) caen ahí, y el CSP de Electron
+  // (`font-src 'self'`, `apps/desktop/src/main.ts`) los bloquea. Con archivos sueltos la CSP
+  // se queda como está; el smoke (`LILA_SMOKE=1`) es quien lo vigila.
+  build: { assetsInlineLimit: 0 },
   // Ni `results.html` (demo de LILA-062) ni `compare.html` (demo de LILA-063) se declaran como
   // entrada de `build`: en dev Vite sirve cualquier `.html` de la raíz del proyecto, así que
   // `npm run dev` las abre igual, y así el bundle de producción —el que publica LILA-067 en

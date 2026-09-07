@@ -1,9 +1,14 @@
 # Demo vs artboards de Claude Design — 2026-09-07
 
-Comparación de la app (rama `codex/op-g-ajustes`, captura `app-2026-09-07-modelar-eva01.png`)
-contra los diez artboards del artefacto (`Lila Modeler.dc.html`, capturas `01…10-*.png`). El
-artefacto se leyó completo por `DesignSync` tras `/design-login`; las capturas se renderizaron
-con Chrome headless a partir del HTML de cada artboard, sin retocar.
+Comparación de la app contra los diez artboards del artefacto (`Lila Modeler.dc.html`, capturas
+`01…10-*.png`). El artefacto se leyó completo por `DesignSync` tras `/design-login`; las capturas
+se renderizaron con Chrome headless a partir del HTML de cada artboard, sin retocar.
+
+**Actualizado en la sesión 8 (2026-09-07 tarde)** con #237–#241 mezclados en `codex/ui-artefacto`
+(4dda203): la app de esa rama está capturada en `app-01-modelar-1440.png` (Eva-01) y
+`app-10-modelar-papel.png` (Papel), al lado de los artboards 01 y 10. Las capturas `app-01b/c/d-*`
+y `app-05/12-*` son las de aceptación de cada ticket. La primera comparación (mañana, rama
+`codex/op-g-ajustes`) partía de `app-2026-09-07-modelar-eva01.png`.
 
 Leyenda: **✓** ya está · **≈** existe pero distinto · **✗** falta.
 
@@ -78,7 +83,7 @@ App (hoy): diálogo con tema y densidad. **≈**: es el hueco donde entra #144; 
 
 ### 10 · Modelar con Papel
 
-Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en primario/selección/pestaña activa, texto `#201E1D`. App: Papel ya se aplica en caliente y, con los tokens reconciliados, coincide en color. **✓** (colores) · las diferencias son las del artboard 01.
+Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en primario/selección/pestaña activa, texto `#201E1D`. App: Papel ya se aplica en caliente y, con los tokens reconciliados, coincide en color. **✓** (`app-10-modelar-papel.png`, sesión 8: misma barra, paleta, minimapa, marcadores y pie que el artboard 01 en Papel; el rojo `#EC3013` manda en primario, pestaña activa y viewport del minimapa).
 
 ## Inventario de componentes del artefacto (reconcilia el de `README.md`)
 
@@ -97,6 +102,8 @@ Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en p
 - «Deshacer/rehacer se extiende con comandos propios para los cambios de escenario» — no existe; hoy el panel de escenario no entra en la pila.
 
 ## Propuesta de orden (tickets)
+
+Los cinco primeros están **hechos** (sesión 8, PR #242–#246 en `codex/ui-artefacto`); quedan los del punto 6.
 
 1. **#237 LILA-205 · Barra superior y barra de estado como en el artefacto** (S): logo, proyecto+archivo, modos 3 px, acciones a iconos, «Ejecutar simulación» primario en la barra, tema por icono; estado con errores/avisos, escenario, semilla, densidad, zoom. Es lo que más acerca la sensación al diseño con poco código, y deja «Simular» donde el brief lo pide.
 2. **#238 LILA-206 · Radio 0, JetBrains Mono y escala de densidad** (S): `border-radius: 0` en tokens/CSS, `font.mono` en tablas, ids y barra de estado; cargar JetBrains Mono con `@fontsource/jetbrains-mono`.

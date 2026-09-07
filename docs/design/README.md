@@ -52,7 +52,8 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-01c-minimapa.png` | Modelar con el minimapa abierto abajo a la izquierda, zoom +/−/ajustar abajo a la derecha y pestaña con ✕ y «+» | #240 |
 | `app-01d-marcadores.png` | Modelar con el chip «6 avisos» y el disco de validación sobre cada figura sin parámetros en el escenario AS-IS | #241 |
 | `app-01b-paleta.png` | Modelar con la paleta propia a la izquierda: filtro «Filtrar figuras», botón de modo compacto, los seis grupos con nombre por figura y el pie «Arrastra al lienzo o pulsa Enter para insertar» | #239 |
-| `app-01-modelar-1440.png` | Modelar con la barra superior del artboard 01 (logo, proyecto + archivo en mono, modos, buscador, deshacer/rehacer, EJECUTAR SIMULACIÓN, ⚙) y el pie con errores/avisos, escenario, semilla, densidad y zoom | #237 |
+| `app-01-modelar-1440.png` | Modelar con los cinco tickets de la sesión 8 (#237–#241) en Eva-01: barra del artboard 01, paleta propia, chips y marcadores, minimapa y zoom, pestaña con ✕, pie en mono | sesión 8 |
+| `app-10-modelar-papel.png` | La misma pantalla con el tema Papel, al lado del artboard 10 | sesión 8 |
 
 ## Inventario de componentes React
 
