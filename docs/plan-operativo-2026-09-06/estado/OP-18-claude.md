@@ -21,3 +21,21 @@ Artefacto: `apps/desktop/release/mac-arm64/Lila Modeler.app` (worktree Claude), 
 - Cancelar durante la corrida: el botón existe y responde.
 - **No probado (diálogos nativos)**: Nuevo/Abrir/Guardar como con carpeta real, cerrar con cambios, reabrir. Requiere seam de prueba en main (`LILA_E2E_FOLDER`, `LILA_E2E_CLOSE`) que se pide a B en su siguiente incremento, o control de la app por Brito.
 - Observación menor: en Comparar no hay «Exportar CSV» (solo en Resultados). No bloqueante.
+
+## Recorrido con seam E2E sobre la `.app` de 1e136e3 (2026-09-07 00:10–00:15, Vite detenido)
+Artefacto `pack:mac` de 1e136e3. App lanzada con `LILA_E2E_FOLDER`, `LILA_E2E_LOG`, `LILA_E2E_CLOSE` y `--remote-debugging-port`; recorrido por `scratchpad/op18.mjs` (CDP). Carpetas con espacio y tilde.
+| Paso | Resultado |
+|---|---|
+| Nuevo proyecto → carpeta `OP-18 canción` | PASS: `model.bpmn`, `as-is.scenario.json`, `to-be.scenario.json`, `lila-project.json`; barra «Mi proyecto · Guardado» |
+| Editar `replications` 30→7 en AS-IS, Guardar | PASS: JSON en disco con 7 |
+| Cerrar y reabrir (Abrir proyecto) | PASS: dos escenarios, réplicas 7 conservadas |
+| Simular AS-IS y TO-BE, Comparar, Exportar CSV presente | PASS (proyecto nuevo mínimo: cycleTime 1, costo 0) |
+| Cambios sin guardar + Salir con «Guardar» | PASS: `writeProject ok`, `closeRequested saved:true`, app cerrada, `seed` 99 en disco |
+| Cambios sin guardar + Salir con «Descartar» | PASS: app cerrada, disco intacto |
+| Cambios sin guardar + Salir con «Cancelar» | PASS: app sigue abierta, disco intacto |
+| `roto.scenario.json` con JSON inválido | PASS parcial: el proyecto abre y los demás escenarios cargan; **la UI no muestra el problema** (`problems` no propagado hasta el incremento 4 de B; A debe mostrarlo) |
+| Carpeta `chmod 500` + Guardar | PASS: alerta `E-DESTINO-INVALIDO`, barra sigue «Sin guardar», archivo previo intacto, sin `.tmp-*`. Cosmético: la alerta muestra «Error invoking remote method…» (A) |
+| Escenario con id ajeno (`Task_NoExiste`) sobre `examples/pedido` | PASS: «Validación (1 error)» y al simular «No se pudo simular» sin corrida. Cosmético: el mensaje es el JSON crudo de zod (A/D) |
+| Editar BPMN desde la app empaquetada | NO AUTOMATIZADO: la selección en el lienzo no se pudo accionar por DOM; queda cubierto por el QA de A en navegador (65560c7) y pendiente de prueba manual |
+| Abrir `.bpmn` por doble clic (asociación) | NO PROBADO en esta sesión (B lo verificó por argv con `LILA_DEBUG=1`) |
+Nota: `window.close()` desde la página no pasa por el diálogo de cierre (Chromium lo ignora para la ventana principal); el cierre real (Salir/Cmd+Q, botón rojo) sí. Se probó con `osascript … quit`.
