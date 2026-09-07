@@ -3,7 +3,8 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
-import type { ProjectStore } from './store/ProjectStore';
+import { newModelXml } from './project';
+import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App } from './App';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
@@ -18,13 +19,14 @@ vi.mock('./ScenarioPanel', () => ({ ScenarioPanel: ({ onCambio }: { onCambio: (f
 } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
   useEffect(() => { onListo({
-    exportar: async () => '<xml/>', abrir: async () => true, cuellos: vi.fn(), ajustar: vi.fn(),
+    exportar: async () => newModelXml(), abrir: async () => true, cuellos: vi.fn(), ajustar: vi.fn(),
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
   } as unknown as Modelador); }, [onListo]);
   return <div>Modelo montado</div>;
 } }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
+let session: ProjectSessionStore;
 let container: HTMLDivElement;
 const ir = { id: 'Process_1', source: { originalIds: {} } };
 const scenario = { model: 'model.bpmn', run: { seed: 42 } };
@@ -41,8 +43,9 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.worker.mockResolvedValue(done);
+  session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
-  await act(async () => root.render(<App store={{} as ProjectStore} />));
+  await act(async () => root.render(<App store={session} />));
   await click('Simular');
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
@@ -80,4 +83,35 @@ it('desmontar termina la corrida activa', async () => {
   mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click('Simular');
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
+});
+
+it('guardar cancelado mantiene cambios pendientes', async () => {
+  await act(async () => mocks.changed());
+  vi.mocked(session.saveProject).mockResolvedValueOnce(null);
+  await click('Guardar proyecto');
+  expect(container.textContent).toContain('Sin guardar');
+});
+it('editar mientras se guarda conserva dirty y no confirma cierre limpio', async () => {
+  await act(async () => mocks.changed());
+  const pending = deferred<ProjectDocument | null>();
+  vi.mocked(session.saveProject).mockReturnValueOnce(pending.promise);
+  await click('Guardar proyecto');
+  const snapshot = vi.mocked(session.saveProject).mock.calls[0]![0];
+  await act(async () => mocks.scenarioChange());
+  await act(async () => pending.resolve(snapshot));
+  expect(container.textContent).toContain('Sin guardar');
+  expect(session.setDirty).toHaveBeenLastCalledWith(true);
+});
+it('abrir cancelado conserva proyecto y escenarios', async () => {
+  await click('Abrir proyecto');
+  expect(container.textContent).toContain('Pedido de ejemplo');
+});
+it('nuevo proyecto reemplaza escenarios del ejemplo por ids propios', async () => {
+  await click('Nuevo proyecto');
+  expect(session.createProject).toHaveBeenCalledOnce();
+  const doc = vi.mocked(session.createProject).mock.calls[0]![0];
+  expect(doc.model.id).toMatch(/^Process_/);
+  expect(JSON.stringify(doc.scenarios)).not.toContain('cajero');
+  expect(Object.keys(doc.scenarios)).toHaveLength(2);
+  expect(container.textContent).toContain('Mi proyecto');
 });
