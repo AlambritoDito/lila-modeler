@@ -55,6 +55,8 @@ export interface Servicios {
   modeling: Modeling;
   bpmnFactory: BpmnFactory;
   selection: Selection;
+  /** Raíz visible actual; permite editar un proceso simple al seleccionar el fondo. */
+  rootElement?(): unknown;
 }
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
@@ -268,6 +270,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           modeling: activo.get<Modeling>('modeling'),
           bpmnFactory: activo.get<BpmnFactory>('bpmnFactory'),
           selection: activo.get<Selection>('selection'),
+          rootElement: () => activo?.get<Canvas>('canvas').getRootElement(),
         };
       },
       suscribir: (eventos, escuchar) => {
