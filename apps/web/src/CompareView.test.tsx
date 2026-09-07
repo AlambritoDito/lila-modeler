@@ -23,13 +23,14 @@ import {
   type CompareResult,
   type CompareRow,
   type ElementMetrics,
+  type KpiSummary,
   type ProcessIR,
   type ResourceMetrics,
   type RunResult,
   type SimScenario,
 } from '@lila/engine';
 
-import { CompareView, compareMetricLabel, visibleCompareRows } from './CompareView.js';
+import { CompareView, compareMetricLabel, visibleCompareRows, type CompareRunMeta } from './CompareView.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLE_DIR = resolve(HERE, '../../../examples/pedido');
@@ -198,9 +199,15 @@ function resourceMetrics(utilization: number): ResourceMetrics {
   return { busyTime: 0, fixedCost: 0, totalCost: 0, unitCost: 0, utilization };
 }
 
+/**
+ * `overrides` cubre lo que necesitan los tests de OP-05 (issue #210) sin tocar la forma que ya
+ * usaban los tests de LILA-063: costo total del proceso (para las filas de moneda),
+ * `replications` (para forzar `significant` sin simular de verdad) y `warnings` propios.
+ */
 function syntheticResult(
   resourceWaitMean: number,
   resources: Record<string, ResourceMetrics> = {},
+  overrides: Partial<Pick<RunResult, 'replications' | 'warnings'>> & { totalCost?: number } = {},
 ): RunResult {
   return {
     bottlenecks: [],
@@ -213,11 +220,12 @@ function syntheticResult(
       inFlight: 0,
       started: 0,
       throughputPerHour: 0,
-      totalCost: 0,
+      totalCost: overrides.totalCost ?? 0,
       waitTime: { max: 0, mean: 0, min: 0, p50: 0, p90: 0, p95: 0, sd: 0 },
     },
     resources,
-    warnings: [],
+    warnings: overrides.warnings ?? [],
+    ...(overrides.replications === undefined ? {} : { replications: overrides.replications }),
   };
 }
 
@@ -299,5 +307,105 @@ describe('CompareView: tres escenarios y toggle de KPIs', () => {
     );
     // 3 escenarios + el toggle "Mostrar todos los KPI".
     expect((igualHtml.match(/type="checkbox"/g) ?? []).length).toBe(4);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * OP-05 (issue #210): metadatos por corrida (`runs`) — moneda, unidades, semilla,
+ * réplicas y avisos. Reutiliza `syntheticResult`/`fakeIr` de la fixture 2, sin simular nada.
+ * ------------------------------------------------------------------ */
+
+function findTr(html: string, needle: string): string {
+  const blocks = html.match(/<tr[^]*?<\/tr>/g) ?? [];
+  const matches = blocks.filter((block) => block.includes(needle));
+  expect(matches, `fila no encontrada para "${needle}"`).toHaveLength(1);
+  return matches[0]!;
+}
+
+describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
+  test('(a) monedas distintas: process.totalCost no muestra delta ni resaltado, y aparece el aviso', () => {
+    const comparison = compare([
+      syntheticResult(10, {}, { totalCost: 100 }),
+      syntheticResult(10, {}, { totalCost: 500 }),
+    ]);
+    const runs: CompareRunMeta[] = [{ currency: 'USD', name: 'AS-IS' }, { currency: 'MXN', name: 'TO-BE' }];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    const tr = findTr(html, '>totalCost<');
+    const cells = cellsOf(tr).map(textOf);
+    // [Metric, AS-IS, TO-BE]: el valor de TO-BE se ve, pero sin delta y con "no comparable".
+    expect(cells[2]).toContain('no comparable');
+    expect(cells[2]).not.toMatch(/[-+]?\d+%/); // ningún porcentaje de mejora/ahorro inventado.
+    expect(cellsOf(tr)[2]).not.toContain(HIGHLIGHT);
+    expect(html).toContain('Costos en monedas distintas (USD vs MXN): no se comparan sin conversión.');
+  });
+
+  test('(b) réplicas = 1 en una corrida: sin marcador de significancia aunque `significant` sea true', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, sd: 1 };
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    // El fixture está bien montado: compare() sí marca significancia con estos IC disjuntos.
+    const row = comparison.rows.find((r) => r.kpi === 'elements.A.resourceWait.mean')!;
+    expect(row.significant[1]).toBe(true);
+
+    // Pero los metadatos de la corrida declaran solo 1 réplica: la vista no puede fabricar un IC
+    // que la corrida real no respalda, así que el asterisco no debe aparecer.
+    const runs: CompareRunMeta[] = [
+      { name: 'AS-IS', replications: 1 },
+      { name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).not.toContain('Diferencia significativa');
+    expect(html).toContain('Sin intervalos de confianza');
+    expect(html).toContain('Sin intervalos de confianza: hacen falta ≥ 2 réplicas para hablar de significancia.');
+  });
+
+  test('(c) los avisos de ambas corridas son visibles, ninguno se pierde', () => {
+    const comparison = compare([syntheticResult(10), syntheticResult(30)]);
+    const runs: CompareRunMeta[] = [
+      { name: 'AS-IS', warnings: ['Aviso propio de AS-IS'] },
+      { name: 'TO-BE', warnings: ['Aviso propio de TO-BE'] },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain('Aviso propio de AS-IS');
+    expect(html).toContain('Aviso propio de TO-BE');
+  });
+
+  test('(d) unidades de tiempo distintas: aviso y formato por corrida', () => {
+    // Mismo id/metrica en las dos corridas, valores en segundos elegidos para que la conversión
+    // a la unidad de cada corrida dé un número redondo: 600 s en "min" = 10; 7200 s en "h" = 2.
+    const comparison = compare([syntheticResult(600), syntheticResult(7200)]);
+    const runs: CompareRunMeta[] = [
+      { baseTimeUnit: 'min', name: 'AS-IS' },
+      { baseTimeUnit: 'h', name: 'TO-BE' },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    const tr = findTr(html, '>Average time (waiting for resource)<');
+    const cells = cellsOf(tr).map(textOf);
+    // [Id, Name, Metric, AS-IS, TO-BE].
+    expect(cells[3]).toBe('10'); // AS-IS, en minutos.
+    expect(cells[4]).toContain('2'); // TO-BE, en horas.
+    expect(html).toContain(
+      'Unidades de tiempo distintas entre corridas (min vs h): cada valor se muestra con la unidad de su propia corrida.',
+    );
+  });
+
+  test('sin `runs` la vista es idéntica a antes de OP-05: sin panel de avisos ni metadatos extra', () => {
+    expect(tresHtml).not.toContain('Avisos');
+    expect(tresHtml).not.toContain('no comparable');
   });
 });
