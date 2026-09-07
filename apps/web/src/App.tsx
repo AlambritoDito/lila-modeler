@@ -42,6 +42,8 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 
+type ProjectAction = 'new' | 'open' | 'bpmn';
+
 const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
 const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 
@@ -72,7 +74,7 @@ type EstadoSim =
   | { tipo: 'simulando'; progreso: SimulationProgress | null }
   | { tipo: 'error'; mensaje: string };
 
-export function App({ store }: { store: ProjectStore }): React.JSX.Element {
+export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const [modelador, setModelador] = useState<Modelador | null>(null);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -84,9 +86,15 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   const [projectId, setProjectId] = useState('demo-pedido');
   const [projectName, setProjectName] = useState('Pedido de ejemplo');
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
+  const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
+  const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
+  const replaceDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
+  }, [pendingAction]);
   const [baseId, setBaseId] = useState('as-is.scenario.json');
   const adapter = projectStore(store);
   const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
@@ -154,11 +162,12 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   async function snapshot(): Promise<ProjectDocument> {
     if (modelador === null) throw new Error('El modelador todavía no está listo.');
     const atRevision = revisionRef.current;
-    const xml = await modelador.exportar();
+    const xml = await modelador.exportar({ interactivo: true });
+    if (atRevision !== revisionRef.current) throw new Error('El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.');
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
-      scenarios: escenarios, scenarioRevisions, runs };
+      scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
   }
   async function guardar(saveAs = false): Promise<boolean> {
     if (adapter === null || ioLock.current) return false;
@@ -176,13 +185,16 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return false; }
     finally { ioLock.current = false; setIoBusy(false); }
   }
-  async function activate(raw: ProjectDocument, saved: boolean): Promise<boolean> {
+  async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
     if (modelador === null) return false;
     const doc = readProject(raw);
     const parsed = await parseBpmn(doc.model.xml);
+    if (expectedToken !== tokenRef.current) throw new Error('El proyecto cambió mientras se abría el archivo. Conservamos tus cambios; vuelve a abrirlo.');
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
+    setProjectProblems(doc.problems ?? []);
+    if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     setEscenarios(doc.scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(doc.scenarios)[0] ?? 'as-is.scenario.json';
@@ -190,20 +202,22 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
-  async function projectAction(kind: 'new' | 'open' | 'bpmn'): Promise<void> {
+  async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
     if (adapter === null || modelador === null || ioLock.current) return;
-    if (dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    if (dirty && !confirmed) { setPendingAction(kind); return; }
+    const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
-      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true); return; }
+      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
       const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
       if (data === null) return;
       const parsed = await parseBpmn(data.xml);
+      await modelador.comprobar?.(data.xml);
       const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? 'Mi proyecto' : data.name.replace(/\.(bpmn|xml)$/i, ''),
         model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
       const created = await adapter.createProject(doc);
-      if (created) await activate(created, true);
+      if (created) await activate(created, true, beforeToken);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally { ioLock.current = false; setIoBusy(false); }
   }
@@ -280,7 +294,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       const modelRevision = revisionRef.current;
       const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
       const xml = await modelador.exportar();
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios);
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo);
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult } = await runInWorker(ir, scenario, {
         signal: control.signal,
@@ -311,12 +325,25 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
-    try { await store.putProcess(procesoId, await modelador.exportar()); }
+    try { await store.putProcess(procesoId, await modelador.exportar({ interactivo: true })); }
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
   return (
     <div className="app">
+      {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
+        <h2 id="reemplazo-titulo">Cambios sin guardar</h2>
+        <p>Guarda los cambios de {projectName} antes de continuar, o descártalos.</p>
+        {ioError && <p role="alert">{ioError}</p>}
+        <div className="acciones">
+          <button className="boton primario" disabled={ioBusy} onClick={() => void (async () => {
+            const next = pendingAction;
+            if (await guardar()) { setPendingAction(null); await projectAction(next, true); }
+          })()}>Guardar y continuar</button>
+          <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>Descartar</button>
+          <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>Cancelar</button>
+        </div>
+      </dialog>}
       <header className="barra">
         <span className="proyecto">Lila Modeler</span>
         <span className="archivo">{projectName} · {dirty ? 'Sin guardar' : 'Guardado'}</span>
@@ -337,18 +364,18 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir proyecto</button>
         <button className="boton primario" disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar proyecto</button>
         <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
-        <button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
+        {bpmnFilesEnabled && <><button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
           Abrir .bpmn
         </button>
         <button type="button" className="boton primario" onClick={() => void exportar()}>
           Exportar .bpmn
-        </button>
+        </button></>}
       </header>
 
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
           izquierda; la esquina inferior derecha queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
-      <div className="zona-modelo" style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
+      <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -380,7 +407,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
           : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
         {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
       </section>}
-      <aside className="panel">
+      <aside className="panel" inert={ioBusy}>
         <nav className="pestanas">
           {PESTANAS.map((p) => (
             <button
@@ -484,13 +511,13 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
             />
           </div>
         ) : (
-          <PanelPropiedades modelador={modelador} pestana={pestana} />
+          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
         )}
       </aside>
 
       <nav className="diagramas">
-        <button className="boton" disabled={!modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
-        <button className="boton" disabled={!modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
+        <button className="boton" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
+        <button className="boton" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
         <button type="button" className="pestana activa">
           {archivo}
         </button>
@@ -511,7 +538,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <span>Tema: {tema?.name ?? 'Eva-01'}</span>
         {estado.avisos > 0 && (
           <span role="alert" className="aviso">
-            {estado.avisos} avisos al importar: hay elementos que no se dibujaron
+            {estado.avisos} avisos al importar; revisa el diagnóstico antes de simular o exportar
           </span>
         )}
         {estado.error !== null && (

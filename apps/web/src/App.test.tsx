@@ -3,11 +3,12 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
+import { parseBpmn } from '@lila/engine/bpmn';
 import { newModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App } from './App';
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
@@ -19,7 +20,7 @@ vi.mock('./ScenarioPanel', () => ({ ScenarioPanel: ({ onCambio }: { onCambio: (f
 } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
   useEffect(() => { onListo({
-    exportar: async () => newModelXml(), abrir: async () => true, cuellos: vi.fn(), ajustar: vi.fn(),
+    exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: vi.fn(),
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
   } as unknown as Modelador); }, [onListo]);
   return <div>Modelo montado</div>;
@@ -40,9 +41,11 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.worker.mockResolvedValue(done);
+  mocks.exportXml.mockResolvedValue(newModelXml());
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
@@ -114,4 +117,66 @@ it('nuevo proyecto reemplaza escenarios del ejemplo por ids propios', async () =
   expect(JSON.stringify(doc.scenarios)).not.toContain('cajero');
   expect(Object.keys(doc.scenarios)).toHaveLength(2);
   expect(container.textContent).toContain('Mi proyecto');
+});
+
+it('editar durante la exportación impide guardar un XML con revisión incorrecta', async () => {
+  const pending = deferred<string>(); mocks.exportXml.mockReturnValueOnce(pending.promise);
+  await click('Guardar proyecto');
+  await act(async () => mocks.changed());
+  await act(async () => pending.resolve(newModelXml()));
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('El modelo cambió durante el guardado');
+  expect(container.textContent).toContain('Sin guardar');
+});
+it('editar durante apertura conserva el proyecto activo y sus cambios', async () => {
+  const xml = newModelXml(); const parsed = await parseBpmn(xml);
+  const doc: ProjectDocument = { version: 1, id: 'new', name: 'Otra carpeta', model: { id: parsed.ir.id, name: 'model.bpmn', xml, revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
+  await click('Abrir proyecto');
+  await act(async () => mocks.changed());
+  await act(async () => pending.resolve(doc));
+  expect(container.textContent).toContain('Pedido de ejemplo');
+  expect(container.textContent).toContain('Conservamos tus cambios');
+});
+
+it('cancelar reemplazo conserva dirty y no abre otro proyecto', async () => {
+  await act(async () => mocks.changed());
+  await click('Abrir proyecto');
+  expect(container.querySelector('dialog')?.open).toBe(true);
+  await click('Cancelar');
+  expect(session.openProject).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('Sin guardar');
+});
+it.each(['cancelado', 'fallido'])('guardar %s detiene reemplazo y conserva modelo', async (kind) => {
+  await act(async () => mocks.changed());
+  if (kind === 'cancelado') vi.mocked(session.saveProject).mockResolvedValueOnce(null);
+  else vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-PERMISO'));
+  await click('Nuevo proyecto'); await click('Guardar y continuar');
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(container.querySelector('dialog')?.open).toBe(true);
+  expect(container.textContent).toContain('Sin guardar');
+});
+it('guarda el proyecto actual antes de reemplazarlo', async () => {
+  await act(async () => mocks.changed());
+  await click('Nuevo proyecto'); await click('Guardar y continuar');
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(session.createProject).toHaveBeenCalledOnce();
+  expect(vi.mocked(session.saveProject).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(session.createProject).mock.invocationCallOrder[0]!);
+  expect(container.textContent).toContain('Mi proyecto');
+});
+it('descartar permite reemplazar sin guardar', async () => {
+  await act(async () => mocks.changed());
+  await click('Nuevo proyecto'); await click('Descartar');
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(session.createProject).toHaveBeenCalledOnce();
+});
+
+it('bloquea interacción con edición durante apertura y la restaura al cancelar', async () => {
+  const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
+  await click('Abrir proyecto');
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(true);
+  expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(true);
+  await act(async () => pending.resolve(null));
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(false);
+  expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(false);
 });

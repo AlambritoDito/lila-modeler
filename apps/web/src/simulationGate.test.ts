@@ -14,3 +14,7 @@ it('bloquea elementos BPMN fuera del perfil antes de simular', async () => {
   const bad = xml.replace(/bpmn:task/g, 'bpmn:adHocSubProcess');
   await expect(prepareSimulation(bad, 'base', { base: raw })).rejects.toThrow();
 });
+
+it('un escenario que apunta a otro modelo no simula el modelo activo por accidente', async () => {
+  await expect(prepareSimulation(xml, 'base', { base: { ...raw, model: 'otro.bpmn' } })).rejects.toThrow('modelo activo');
+});

@@ -552,7 +552,20 @@ comportamiento real de L-Sim/Bizagi.
   nivel 3—; la conversión es exacta y está en `docs/BIZAGI_PARITY.md` § D7:
   `util_bizagi = util_lila × ventana_lila / duración_declarada`. Lila **no** cambia de denominador
   por eso. Es la única definición que hace comparables los niveles 3 y 4 de Bizagi.
-  *(prueba: LILA-041, LILA-036, LILA-164)*
+
+  La métrica es **atribuible a la cohorte medida**, no un sensor del estado físico del pool:
+  `busyTime` excluye por R-ARR-7 los casos nacidos antes del `warmup`, mientras el denominador
+  conserva toda la capacidad disponible de `[warmup, t_stop]`. Por ello puede valer 0 aunque un
+  caso de calentamiento mantenga ocupado el pool durante toda la ventana; descontar esa ocupación
+  del denominador mezclaría cohortes y haría que ya no representase capacidad disponible.
+
+  Tampoco está acotada artificialmente a 1. Con capacidad por turnos, una tarea iniciada antes de
+  una bajada sigue ejecutándose por R-CAL-11: el `busyTime` observado puede superar
+  `Σᵢ capacityᵢ × openTimeᵢ` y la utilización será `> 1`. Ese exceso es evidencia de trabajo no
+  interrumpido sobre la plantilla posterior; el resultado conserva el valor y emite
+  `W-UTILIZACION-MAYOR-UNO` por pool. Solo se tolera el ruido de coma flotante de unas pocas ULP
+  alrededor de 1 al decidir si emitir el aviso.
+  *(prueba: LILA-041, LILA-036, LILA-164, LILA-204)*
 - **R-CAL-10 — Matriz recurso × calendario con calendario por defecto.** Cada pool puede declarar
   `calendar`; si no lo hace, usa el calendario llamado `default` si existe, y si no existe, 24×7.
   Una `calendar` que no existe en `calendars` es error citando el pool: `E-REF-DESCONOCIDA` si lo
@@ -788,7 +801,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-PARSE`.
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`.
 
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
@@ -849,7 +862,7 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
 | R-CAL-1, R-CAL-2, R-CAL-3 | patrón semanal, intervalos (`to > from`, `to` admite `24:00`), primitivas y derivadas | LILA-040 (`24:00`: LILA-041) |
 | R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
-| R-CAL-9 | utilización sobre horas disponibles (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036 (denominador por tramos: LILA-164) |
+| R-CAL-9 | utilización atribuible a la cohorte sobre horas disponibles; puede superar 1 sin apropiación (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (denominador por tramos: LILA-164) |
 | R-CAL-10 | matriz recurso × calendario y calendario por defecto | LILA-041, LILA-042 |
 | R-CAL-11 | capacidad por turno dentro de un mismo pool (unión, suma, cierre y validación) | LILA-164 |
 | R-COST-1 … R-COST-4 | costos por elemento, recurso, fila y caso | LILA-036 (fila del log: LILA-037) |
