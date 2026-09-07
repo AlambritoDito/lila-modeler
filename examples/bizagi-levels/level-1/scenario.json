@@ -2,15 +2,15 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "Bizagi nivel 1 - validacion de rutas",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_1_example.htm: solo rutas (sin tiempos, sin recursos, sin costos).",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_1_example.htm: solo rutas (sin tiempos, sin recursos, sin costos). El nivel 1 de Bizagi no habilita campos de tiempo, asi que los 1000 tokens entran sin consumir reloj: un triggerCount sin interTriggerTimer son N llegadas en t = 0 (SEMANTICS R-ARR-1).",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T08:00:00+00:00"
   },
   "elements": {
     "StartEvent_Llegada": { "triggerCount": 1000 },
-    "Flow_Green":  { "probability": 0.2 },
+    "Flow_Red":    { "probability": 0.5 },
     "Flow_Yellow": { "probability": 0.3 },
-    "Flow_Red":    { "probability": 0.5 }
+    "Flow_Green":  { "probability": 0.2 }
   }
 }

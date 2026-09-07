@@ -21,7 +21,7 @@ import type {
   Stat,
   StatSd,
 } from './result.js';
-import { activityCalendar, compileCalendars, poolCalendar } from './sim.js';
+import { activityCalendar, capacitySlices, compileCalendars } from './sim.js';
 import type { ReplicationRun, SimScenario } from './sim.js';
 
 const EMPTY_STAT: Readonly<Stat> = { min: 0, max: 0, mean: 0, total: 0 };
@@ -314,10 +314,15 @@ export function aggregateReplication(
   for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
     const busyTime = busyByPool.get(poolId) ?? 0;
     // R-CAL-9: el denominador son las horas **abiertas** del calendario del pool dentro de la
-    // ventana `[warmup, t_stop]`; sin calendario, la ventana entera.
-    const calendar = poolCalendar(calendars, pool);
-    const available = pool.capacity
-      * (calendar === undefined ? windowDuration : openTime(calendar, windowStart, windowEnd));
+    // ventana `[warmup, t_stop]`; sin calendario, la ventana entera. R-CAL-11: con capacidad por
+    // intervalos se integra tramo a tramo, `Σ capacity_i × openTime_i`; con `capacity` numérica
+    // el sumatorio tiene un solo término y es literalmente la expresión de M3.
+    let available = 0;
+    for (const slice of capacitySlices(pool)) {
+      const calendar = calendars.size === 0 ? undefined : calendars.get(slice.calendar ?? 'default');
+      available += slice.capacity
+        * (calendar === undefined ? windowDuration : openTime(calendar, windowStart, windowEnd));
+    }
     const fixedCost = (pool.fixedCost ?? 0) * (usesByPool.get(poolId) ?? 0);
     const unitCost = ((pool.costPerHour ?? 0) * busyTime) / 3600;
     resources[poolId] = {

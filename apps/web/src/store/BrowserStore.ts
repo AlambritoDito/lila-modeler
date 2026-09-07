@@ -6,7 +6,8 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import type { ProcessData, ProcessSummary, ProjectStore } from './ProjectStore';
+import { readProject } from '../project';
+import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
 /**
  * Crea, dispara y limpia un `<input type=file>` invisible; resuelve con el archivo elegido, o
@@ -16,11 +17,11 @@ import type { ProcessData, ProcessSummary, ProjectStore } from './ProjectStore';
  * promesa no se resolvía nunca y el `<input>` se quedaba en el `<body>` para siempre — un
  * huérfano por cada vez que alguien pulsa «Abrir .bpmn» y se arrepiente.
  */
-function elegirArchivo(): Promise<File | null> {
+function elegirArchivo(accept = '.bpmn,.xml'): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.bpmn,.xml';
+    input.accept = accept;
     input.hidden = true;
     const terminar = (file: File | null): void => {
       input.remove();
@@ -44,13 +45,29 @@ function descargar(datos: BlobPart, nombre: string, tipo: string): void {
   URL.revokeObjectURL(url);
 }
 
-export class BrowserStore implements ProjectStore {
+export class BrowserStore implements ProjectSessionStore {
   private readonly procesos: Map<string, ProcessData>;
   private readonly escenarios = new Map<string, Map<string, Scenario>>();
 
   /** `semilla`: procesos ya cargados al arrancar (en `main.tsx`, `examples/pedido`). */
   constructor(semilla: ReadonlyMap<string, ProcessData> = new Map()) {
     this.procesos = new Map(semilla);
+  }
+
+  async createProject(document: ProjectDocument): Promise<ProjectDocument> {
+    return this.saveProject(document);
+  }
+
+  async openProject(): Promise<ProjectDocument | null> {
+    const file = await elegirArchivo('.lila.json,.json');
+    if (file === null) return null;
+    return readProject(JSON.parse(await file.text()) as unknown);
+  }
+
+  async saveProject(document: ProjectDocument): Promise<ProjectDocument> {
+    const snapshot = structuredClone(readProject(document));
+    descargar(JSON.stringify(snapshot, null, 2), `${snapshot.name}.lila.json`, 'application/json');
+    return snapshot;
   }
 
   async listProcesses(): Promise<readonly ProcessSummary[]> {

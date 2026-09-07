@@ -3,7 +3,15 @@
 import { Heap } from './heap.js';
 
 export interface ResourcePoolDefinition {
+  /** Tope de la semana: es contra este valor —no contra el del instante— que se valida `quantity`. */
   readonly capacity: number;
+  /**
+   * Capacidad efectiva en `t` (R-CAL-11). Ausente ⇒ constante e igual a `capacity`, que es el
+   * caso de todo pool con `capacity` numérica. Con `capacity` por intervalos la capacidad baja
+   * al cerrar un tramo y **no** interrumpe lo ya concedido: `used` puede superarla hasta que las
+   * tareas en curso terminen (R-CAL-11).
+   */
+  readonly capacityAt?: ((t: number) => number) | undefined;
 }
 
 export interface ResourceRequirement {
@@ -45,6 +53,7 @@ interface RequestClass {
 
 interface PoolState {
   readonly capacity: number;
+  readonly capacityAt: ((t: number) => number) | undefined;
   used: number;
   readonly classes: Set<string>;
 }
@@ -132,7 +141,12 @@ export class ResourceManager {
   constructor(definitions: Readonly<Record<string, ResourcePoolDefinition>>) {
     for (const [poolId, definition] of Object.entries(definitions)) {
       assertPositiveInteger(definition.capacity, `E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
-      this.#pools.set(poolId, { capacity: definition.capacity, used: 0, classes: new Set() });
+      this.#pools.set(poolId, {
+        capacity: definition.capacity,
+        capacityAt: definition.capacityAt,
+        used: 0,
+        classes: new Set(),
+      });
     }
   }
 
@@ -188,6 +202,20 @@ export class ResourceManager {
         for (const classKey of state.classKeys) dirty.add(classKey);
       }
       this.#requests.delete(id);
+    }
+    return this.#drain(dirty, at);
+  }
+
+  /**
+   * R-CAL-11: la capacidad de estos pools acaba de subir; se reevalúan sus colas en `at`. Es el
+   * único camino por el que una concesión ocurre sin que nadie encole ni libere nada.
+   */
+  refresh(poolIds: readonly string[], at: number): ResourceAllocation[] {
+    const dirty = new Set<string>();
+    for (const poolId of poolIds) {
+      const pool = this.#pools.get(poolId);
+      if (pool === undefined) throw new Error(`E-REC-DESCONOCIDO: el pool ${poolId} no existe.`);
+      for (const classKey of pool.classes) dirty.add(classKey);
     }
     return this.#drain(dirty, at);
   }
@@ -293,10 +321,15 @@ export class ResourceManager {
     }
   }
 
-  #satisfiable(requirements: readonly ResourceRequirement[]): boolean {
+  /**
+   * R-CAL-11: la capacidad disponible se lee **en el instante de la concesión**. Con capacidad
+   * constante es exactamente la expresión de M2 (`capacity - used`), sin llamar a nada.
+   */
+  #satisfiable(requirements: readonly ResourceRequirement[], at: number): boolean {
     for (const requirement of requirements) {
       const pool = this.#pools.get(requirement.poolId)!;
-      if (pool.capacity - pool.used < requirement.quantity) return false;
+      const capacity = pool.capacityAt === undefined ? pool.capacity : pool.capacityAt(at);
+      if (capacity - pool.used < requirement.quantity) return false;
     }
     return true;
   }
@@ -306,7 +339,7 @@ export class ResourceManager {
     if (requestClass === undefined) return;
     const version = ++requestClass.version;
     const head = this.#head(requestClass);
-    if (head === undefined || head.t > at || !this.#satisfiable(head.requirements)) return;
+    if (head === undefined || head.t > at || !this.#satisfiable(head.requirements, at)) return;
     this.#ready.push({ enabledAt: head.t, seq: head.seq, altIndex: head.altIndex, classKey, requestId: head.request.id, version });
   }
 
@@ -318,7 +351,7 @@ export class ResourceManager {
       const requestClass = this.#classes.get(ready.classKey);
       if (requestClass === undefined || requestClass.version !== ready.version) continue;
       const head = this.#head(requestClass);
-      if (head === undefined || head.request.id !== ready.requestId || head.t > at || !this.#satisfiable(head.requirements)) continue;
+      if (head === undefined || head.request.id !== ready.requestId || head.t > at || !this.#satisfiable(head.requirements, at)) continue;
 
       requestClass.waiters.pop();
       for (const requirement of head.requirements) this.#pools.get(requirement.poolId)!.used += requirement.quantity;

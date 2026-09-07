@@ -2,11 +2,10 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "Bizagi nivel 4 - analisis de calendarios (3 enfermeras + turnos)",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_4_example.htm sobre la configuracion de recursos del nivel 3 (3 enfermeras). SCENARIO_FORMAT.md v1 no permite que un mismo pool de recursos tenga capacidad distinta segun el calendario (Bizagi si lo permite); los 4 recursos cuya disponibilidad varia por turno (Call center agent, Basic ambulance, Quick attention vehicle, Receptionist) se modelan como 3 pools -- uno por turno, cada uno con su propio 'calendar' y su capacidad de esa franja -- y la tarea los selecciona con selection:'or' (encola en los 3, arranca con el que este abierto; como los calendarios no se solapan, en la practica solo uno esta disponible a la vez). Nurse y Ambulance no varian por turno (3 y 4 en las tres franjas) y se dejan como un solo pool sin calendario (24x7). Ver examples/bizagi-levels/level-4/README y expected.json.",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_4_example.htm sobre la configuracion de recursos del nivel 3 (3 enfermeras). Llegadas y probabilidades: ver la nota de examples/bizagi-levels/level-2/scenario.json (mismo control constante de 5 min, 2017 tokens, Green/Yellow/Red 20/30/50%). LILA-164: los 4 recursos cuya cantidad varia por turno (Call center agent, Basic ambulance, Quick attention vehicle, Receptionist) son UN pool por rol con 'capacity' por intervalos -- un tramo {calendar, capacity} por turno, exactamente la tabla 'Resource | Morning shift | Day shift | Night shift' de la pagina --, que es el 'Resources > Calendars > quantity' de Bizagi. Hasta LILA-164 se modelaban como 3 pools por rol con selection:'or', lo que repartia utilizacion y costo por turno e introducia una espera fuera de horario que Bizagi no tiene (los 3 turnos cubren las 24 h): ver docs/BIZAGI_PARITY.md D7. Nurse y Ambulance no varian por turno (3 y 4 en las tres franjas) y siguen como un pool sin calendario (24x7). Asignacion QAV/BA: igual que en level-3/scenario.json (ver su nota) -- QAV con quickAttentionVehicle, BA con basicAmbulance, la lectura que cuadra con las tablas de costo/utilizacion publicadas y no con la prosa cruzada de requerimientos. El calendario 'night' (22:00-06:00) cruza medianoche y se declara como dos intervalos por R13 de SCENARIO_FORMAT.md. Ver examples/bizagi-levels/level-4/expected.json.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T00:00:00+00:00",
-    "duration": 604800,
     "currency": "USD"
   },
   "calendars": {
@@ -21,49 +20,36 @@
     "nurse":     { "name": "Nurse",     "type": "role",      "capacity": 3, "fixedCost": 5, "costPerHour": 0 },
     "ambulance": { "name": "Ambulance", "type": "equipment", "capacity": 4, "fixedCost": 30, "costPerHour": 0.4 },
 
-    "callCenterAgent_morning": { "name": "Call center agent (morning)", "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0, "calendar": "morning" },
-    "callCenterAgent_day":     { "name": "Call center agent (day)",     "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0, "calendar": "day" },
-    "callCenterAgent_night":   { "name": "Call center agent (night)",   "type": "role", "capacity": 1, "fixedCost": 3, "costPerHour": 0, "calendar": "night" },
+    "callCenterAgent": { "name": "Call center agent", "type": "role", "fixedCost": 3, "costPerHour": 0,
+      "capacity": [ { "calendar": "morning", "capacity": 2 }, { "calendar": "day", "capacity": 2 }, { "calendar": "night", "capacity": 1 } ] },
 
-    "basicAmbulance_morning": { "name": "Basic ambulance (morning)", "type": "equipment", "capacity": 2, "fixedCost": 25, "costPerHour": 0.3, "calendar": "morning" },
-    "basicAmbulance_day":     { "name": "Basic ambulance (day)",     "type": "equipment", "capacity": 1, "fixedCost": 25, "costPerHour": 0.3, "calendar": "day" },
-    "basicAmbulance_night":   { "name": "Basic ambulance (night)",   "type": "equipment", "capacity": 2, "fixedCost": 25, "costPerHour": 0.3, "calendar": "night" },
+    "basicAmbulance": { "name": "Basic ambulance", "type": "equipment", "fixedCost": 25, "costPerHour": 0.3,
+      "capacity": [ { "calendar": "morning", "capacity": 2 }, { "calendar": "day", "capacity": 1 }, { "calendar": "night", "capacity": 2 } ] },
 
-    "quickAttentionVehicle_morning": { "name": "Quick attention vehicle (morning)", "type": "equipment", "capacity": 1, "fixedCost": 18, "costPerHour": 0.22, "calendar": "morning" },
-    "quickAttentionVehicle_day":     { "name": "Quick attention vehicle (day)",     "type": "equipment", "capacity": 2, "fixedCost": 18, "costPerHour": 0.22, "calendar": "day" },
-    "quickAttentionVehicle_night":   { "name": "Quick attention vehicle (night)",   "type": "equipment", "capacity": 1, "fixedCost": 18, "costPerHour": 0.22, "calendar": "night" },
+    "quickAttentionVehicle": { "name": "Quick attention vehicle", "type": "equipment", "fixedCost": 18, "costPerHour": 0.22,
+      "capacity": [ { "calendar": "morning", "capacity": 1 }, { "calendar": "day", "capacity": 2 }, { "calendar": "night", "capacity": 1 } ] },
 
-    "receptionist_morning": { "name": "Receptionist (morning)", "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0, "calendar": "morning" },
-    "receptionist_day":     { "name": "Receptionist (day)",     "type": "role", "capacity": 1, "fixedCost": 3, "costPerHour": 0, "calendar": "day" },
-    "receptionist_night":   { "name": "Receptionist (night)",   "type": "role", "capacity": 1, "fixedCost": 3, "costPerHour": 0, "calendar": "night" }
+    "receptionist": { "name": "Receptionist", "type": "role", "fixedCost": 3, "costPerHour": 0,
+      "capacity": [ { "calendar": "morning", "capacity": 2 }, { "calendar": "day", "capacity": 1 }, { "calendar": "night", "capacity": 1 } ] }
   },
   "elements": {
-    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
-    "Task_Recibir": {
-      "processingTime": { "type": "constant", "value": 240 }, "fixedCost": 2,
-      "resources": [ { "ref": "callCenterAgent_morning" }, { "ref": "callCenterAgent_day" }, { "ref": "callCenterAgent_night" } ],
-      "selection": "or"
-    },
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "constant", "value": 300 }, "triggerCount": 2017 },
+    "Flow_Red":    { "probability": 0.5 },
+    "Flow_Yellow": { "probability": 0.3 },
+    "Flow_Green":  { "probability": 0.2 },
+    "Task_Recibir":    { "processingTime": { "type": "constant", "value": 240 }, "fixedCost": 2,
+                         "resources": [ { "ref": "callCenterAgent", "quantity": 1 } ] },
     "Task_Clasificar": { "processingTime": { "type": "constant", "value": 300 }, "fixedCost": 1,
                          "resources": [ { "ref": "nurse", "quantity": 1 } ] },
     "Task_Gestionar":  { "processingTime": { "type": "constant", "value": 660 }, "fixedCost": 1,
                          "resources": [ { "ref": "nurse", "quantity": 1 } ] },
     "Task_Recoger":    { "processingTime": { "type": "constant", "value": 1200 }, "fixedCost": 0,
                          "resources": [ { "ref": "ambulance", "quantity": 1 } ] },
-    "Task_LlegarQAV": {
-      "processingTime": { "type": "constant", "value": 420 }, "fixedCost": 0,
-      "resources": [ { "ref": "basicAmbulance_morning" }, { "ref": "basicAmbulance_day" }, { "ref": "basicAmbulance_night" } ],
-      "selection": "or"
-    },
-    "Task_LlegarBA": {
-      "processingTime": { "type": "constant", "value": 600 }, "fixedCost": 0,
-      "resources": [ { "ref": "quickAttentionVehicle_morning" }, { "ref": "quickAttentionVehicle_day" }, { "ref": "quickAttentionVehicle_night" } ],
-      "selection": "or"
-    },
-    "Task_Autorizar": {
-      "processingTime": { "type": "constant", "value": 240 }, "fixedCost": 1,
-      "resources": [ { "ref": "receptionist_morning" }, { "ref": "receptionist_day" }, { "ref": "receptionist_night" } ],
-      "selection": "or"
-    }
+    "Task_LlegarQAV":  { "processingTime": { "type": "constant", "value": 420 }, "fixedCost": 0,
+                         "resources": [ { "ref": "quickAttentionVehicle", "quantity": 1 } ] },
+    "Task_LlegarBA":   { "processingTime": { "type": "constant", "value": 600 }, "fixedCost": 0,
+                         "resources": [ { "ref": "basicAmbulance", "quantity": 1 } ] },
+    "Task_Autorizar":  { "processingTime": { "type": "constant", "value": 240 }, "fixedCost": 1,
+                         "resources": [ { "ref": "receptionist", "quantity": 1 } ] }
   }
 }

@@ -2,11 +2,10 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "Bizagi nivel 3 - analisis de recursos (3 enfermeras)",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_3_example.htm, configuracion final con 3 enfermeras (la que la pagina recomienda y de la que parte el nivel 4).",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_3_example.htm, configuracion final con 3 enfermeras (la que la pagina recomienda y de la que parte el nivel 4). Llegadas y probabilidades: ver la nota de examples/bizagi-levels/level-2/scenario.json (mismo control constante de 5 min, 2017 tokens, Green/Yellow/Red 20/30/50%). Asignacion QAV/BA: la tabla de requerimientos en prosa de esta pagina dice literalmente 'Arrive at patient place QAV -> Basic ambulance' y 'Arrive at patient place BA -> Quick attention vehicle' (cruzada respecto al nombre de la tarea), pero la tabla de COSTOS (resourcesanalysis3.png) solo cuadra con la lectura contraria: Quick Attention Vehicle 11.124 = 618 x 18 (tarea QAV, 618 instancias) y Basic Ambulance 9.825 = 393 x 25 (tarea BA, 393 instancias) -- ver docs/BIZAGI_PARITY.md D8. Este escenario usa la asignacion que cuadra con los costos publicados (QAV con quickAttentionVehicle, BA con basicAmbulance); para la utilizacion da igual, los dos pools tienen capacidad 2.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T00:00:00+00:00",
-    "duration": 604800,
     "currency": "USD"
   },
   "resources": {
@@ -18,7 +17,10 @@
     "receptionist":    { "name": "Receptionist",        "type": "role", "capacity": 2, "fixedCost": 3, "costPerHour": 0 }
   },
   "elements": {
-    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "constant", "value": 300 }, "triggerCount": 2017 },
+    "Flow_Red":    { "probability": 0.5 },
+    "Flow_Yellow": { "probability": 0.3 },
+    "Flow_Green":  { "probability": 0.2 },
     "Task_Recibir":    { "processingTime": { "type": "constant", "value": 240 },
                          "resources": [ { "ref": "callCenterAgent", "quantity": 1 } ], "fixedCost": 2 },
     "Task_Clasificar": { "processingTime": { "type": "constant", "value": 300 },
@@ -28,9 +30,9 @@
     "Task_Recoger":    { "processingTime": { "type": "constant", "value": 1200 },
                          "resources": [ { "ref": "ambulance", "quantity": 1 } ], "fixedCost": 0 },
     "Task_LlegarQAV":  { "processingTime": { "type": "constant", "value": 420 },
-                         "resources": [ { "ref": "basicAmbulance", "quantity": 1 } ], "fixedCost": 0 },
-    "Task_LlegarBA":   { "processingTime": { "type": "constant", "value": 600 },
                          "resources": [ { "ref": "quickAttentionVehicle", "quantity": 1 } ], "fixedCost": 0 },
+    "Task_LlegarBA":   { "processingTime": { "type": "constant", "value": 600 },
+                         "resources": [ { "ref": "basicAmbulance", "quantity": 1 } ], "fixedCost": 0 },
     "Task_Autorizar":  { "processingTime": { "type": "constant", "value": 240 },
                          "resources": [ { "ref": "receptionist", "quantity": 1 } ], "fixedCost": 1 }
   }

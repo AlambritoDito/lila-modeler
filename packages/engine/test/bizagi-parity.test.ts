@@ -7,69 +7,59 @@ import { parseBpmn, validate } from '../src/bpmn/index.js';
 import { simulate, type RunResult } from '../src/index.js';
 import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario } from '../src/scenario.js';
 
-// LILA-044 (M3, LILA_MODELER_ESTRUCTURA.md §3 y §7 aceptación M3(d)): corre los cuatro ejemplos de
-// examples/bizagi-levels con el motor completo y compara cada número que expected.json cita de la
-// página oficial, tolerancia ±5 %.
+// LILA-187 (M3): corre los cuatro ejemplos de examples/bizagi-levels TAL CUAL están committeados
+// —ya con la topología, las probabilidades y las llegadas oficiales, corregidas por este mismo
+// ticket— y compara cada número que expected.json cita de la página oficial, tolerancia ±5 %.
 //
-// Regla del ticket: reconciliar, no calibrar. Ni un parámetro de examples/bizagi-levels se ha
-// tocado; lo que se investiga es la semántica. Este archivo tiene dos mitades:
+// Hasta LILA-187 este archivo tenía dos mitades: "A" simulaba las réplicas publicadas (con la
+// topología equivocada de LILA-010, secuencia de 7 tareas) y "B" repetía la comparación sobre un
+// fixture aparte (fixtures/bizagi-emergency-oficial.bpmn) con la topología del diagrama oficial.
+// LILA-187 llevó esa topología —y las probabilidades del gateway y las llegadas constantes— a los
+// propios `examples/bizagi-levels/level-*/model.bpmn` y `scenario.json`: el fixture quedó
+// redundante y se borró. Cada fila sigue llevando su booleano documentado: el día que una fila
+// cambie de lado el test se pone rojo y hay que actualizar la fila y `docs/BIZAGI_PARITY.md` a la
+// vez. La aserción es sobre ese booleano, no sobre el valor.
 //
-//   A. `réplicas publicadas, tal cual` — simula lo que hay committeado. La mayoría de los números
-//      NO cuadra, y cada fila lleva escrito si cuadra o no. La aserción es sobre ese booleano, no
-//      sobre el valor: el día que una fila cambie de lado el test se pone rojo y hay que actualizar
-//      la fila y `docs/BIZAGI_PARITY.md` a la vez.
-//   B. `reconciliación` — la misma comparación sobre la topología del diagrama oficial de Bizagi
-//      (fixtures/bizagi-emergency-oficial.bpmn) y con las llegadas que la corrida publicada
-//      realmente usó. Es la prueba de la causa: casi todo cuadra dentro del 5 %, y lo que no
-//      cuadra queda aislado en dos sitios concretos (nivel 3 con 2 enfermeras, y el nivel 4
-//      entero, que necesita LILA-164). Las variantes viven aquí, nunca en examples/.
+// Diferencias que siguen sin cuadrar, con causa (docs/BIZAGI_PARITY.md § Diferencias documentadas):
+//   D2 — nivel 1, rama Yellow (30 %): comparada contra el conteo de una única corrida de Bizagi
+//        (315), que ya se desvía un +5 % de su propia probabilidad nominal. Contra 1000×p las tres
+//        ramas cuadran. NO se relaja la tolerancia (LILA-187 lo investigó de nuevo: con las
+//        llegadas/duración exactas de la página el número no cambia, porque el desajuste está en
+//        el ruido de la corrida de referencia, no en la nuestra).
+//   D5 — nivel 3 (3 enf.), cycleTime.max: el máximo publicado (35 min) es el camino Red (33 min)
+//        más 2 min de espera de enfermera que en la corrida de Bizagi cayeron en el camino
+//        crítico; en la nuestra el máximo se queda en los 33 min del camino puro.
+//   D6 — nivel 3 (2 enf.), cycleTime.mean: con el pool saturado (rho = 1,05) la media depende de
+//        la forma del transitorio; la cola de Bizagi crece sublinealmente (media/máx = 0,40) y la
+//        de Lila linealmente (0,49). Residuo sin cerrar sin la traza original de Bizagi.
+//   D7 — nivel 4, denominador de la utilización (más el residuo de las esperas de Arrive BA):
+//        Bizagi divide por la duración declarada del escenario (43 200 min) y Lila por la ventana
+//        de medida `[warmup, t_stop]` (~10 900 min, R-CAL-9 sobre R-ARR-7). No se cambia el motor
+//        por eso: el test aplica la conversión exacta, documentada aquí y en
+//        docs/BIZAGI_PARITY.md. LILA-164 cerró la otra mitad de D7: los 3 pools por turno con
+//        selection:'or' —que introducían un `offHoursWait` que Bizagi no tiene, porque los 3
+//        turnos cubren las 24 h— son ya un solo pool por rol con `capacity` por intervalos.
 //
-// Causas encontradas, en `docs/BIZAGI_PARITY.md` §Diferencias documentadas:
-//   (1) el `model.bpmn` de los niveles 2-4 reconstruye el proceso como 7 tareas en secuencia; el
-//       diagrama oficial es Recibir → Clasificar → XOR "Triage type" con Red 50 % (AND de Manage
-//       patient entry ‖ Pick up patient, luego Authorize Entry), Yellow 30 % (Arrive QAV) y
-//       Green 20 % (Arrive BA). Con la secuencia el ciclo son 51-54 min contra los 16/33/25 min
-//       publicados, y la enfermera pide 16 min por caso en vez de 10,5, o sea 3,2 enfermeras de
-//       carga contra 2,1: por eso satura con 3.
-//   (2) las llegadas publicadas son **constantes** cada 5 min, no exponenciales de media 5 min:
-//       la corrida oficial trae exactamente 2017 instancias (10080/5 + 1), imposible con Poisson.
-//   (3) Bizagi drena la corrida (2017 iniciadas = 2017 completadas); el escenario publicado corta
-//       a la semana y deja casos en vuelo, que por LILA-036 no entran en las medias.
-//   (4) el nivel 1 no genera un solo token: el escenario declara `triggerCount` sin
-//       `interTriggerTimer` y R-ARR-1 solo genera casos en un start **con** timer. La corrida no
-//       sale en silencio: el motor avisa `W-START-SIN-LLEGADAS` (SEMANTICS §10). Lo que falta es
-//       la decisión de contrato, que es LILA-186.
-//   (5) el nivel 4 modela la capacidad por turno como 3 pools con `selection: "or"`; el calendario
-//       efectivo de la tarea pasa a ser el del turno concedido, así que el trabajo se pausa al
-//       cerrar el turno. Bizagi no tiene tiempo cerrado ahí (los 3 turnos cubren las 24 h): es
-//       plantilla por turno, no horario. Es exactamente lo que pide LILA-164.
+// Mapeo de nombres (D-mapeo): `expected.json` ya no llama `waitTimeSeconds` a lo que la tabla de
+// Bizagi titula "Min./Max./Avg. time" del proceso (tiempo de ciclo, procesamiento + espera): el
+// campo se renombró a `cycleTimeSeconds` y se compara contra `process.cycleTime`, no
+// `process.waitTime`.
 //
-// `expected.json` llama `waitTimeSeconds` a lo que la tabla de Bizagi titula "Min./Max./Avg. time"
-// del proceso, que es tiempo de ciclo (procesamiento + espera), no espera: se compara contra
-// `process.cycleTime`. Se deja también la fila contra `process.waitTime` para dejar el mapeo
-// escrito y anclado.
+// D8 — nivel 3 y 4, costos/utilización de los dos vehículos: la tabla de requerimientos en prosa
+// de la página dice "Arrive at patient place QAV -> Basic ambulance" (cruzada respecto al nombre),
+// pero la tabla de costos (resourcesanalysis3.png) solo cuadra con la lectura natural: Quick
+// Attention Vehicle 11.124 = 618 (QAV) × 18, Basic Ambulance 9.825 = 393 (BA) × 25. `scenario.json`
+// de los niveles 3 y 4 usa esa asignación.
 
 const here = dirname(fileURLToPath(import.meta.url));
 const levelsDir = resolve(here, '../../../examples/bizagi-levels');
-const OFICIAL_BPMN = resolve(here, 'fixtures/bizagi-emergency-oficial.bpmn');
 
 const TOLERANCIA = 0.05; // ±5 %, LILA-044
-const REPLICACIONES_RECONCILIACION = 30;
-
-/** Probabilidades del gateway "Triage type", publicadas en prosa en level_1_example.htm. */
-const TRIAGE = {
-  Flow_Green: { probability: 0.2 },
-  Flow_Yellow: { probability: 0.3 },
-  Flow_Red: { probability: 0.5 },
-} as const;
-
-/**
- * Llegadas y parada de la corrida oficial: constante de 5 min y 2017 tokens, sin `duration`, así
- * que la corrida termina cuando el heap se vacía (R-ARR-3) igual que hace Bizagi.
- */
-const LLEGADAS_OFICIALES = {
-  StartEvent_Llegada: { interTriggerTimer: { type: 'constant', value: 300 }, triggerCount: 2017 },
-} as const;
+// Solo para las filas que comparan una MEDIA contra la corrida (estocástica) de Bizagi: no cambia
+// ningún parámetro de examples/bizagi-levels (que sigue en replications=1 por defecto), es una
+// técnica de medición del test para no comparar una sola semilla de Lila contra la única corrida
+// que Bizagi publicó.
+const REPLICACIONES = 30;
 
 interface Fila {
   metrica: string;
@@ -111,15 +101,54 @@ function escenarioDe(level: number): ResolvedScenario {
 }
 
 /** Forma de los `expected.json` publicados, en lo que este test consume. */
+interface FilaRecurso {
+  utilization: number;
+  totalFixedCost: number;
+  totalUnitCost: number;
+  totalCost: number;
+}
+
+interface CorridaNivel3 {
+  cycleTimeSeconds: { min: number; max: number; avg: number };
+  resourceUtilization: { nurse: number };
+  resourceTable: { rows: Record<string, FilaRecurso> };
+}
+
+interface Turnos {
+  morning: number;
+  day: number;
+  night: number;
+}
+
 interface Publicado {
   values: {
-    correctedRun?: { instancesCompleted: { green: number; yellow: number; red: number; total: number } };
-    waitTimeSeconds?: { min: number; max: number; avg: number };
-    threeNurses?: { waitTimeSeconds: { min: number; max: number; avg: number }; resourceUtilization: { nurse: number } };
-    twoNurses?: { waitTimeSeconds: { min: number; max: number; avg: number }; resourceUtilization: { nurse: number } };
+    correctedRun?: { instancesCompleted: { red: number; yellow: number; green: number; total: number } };
+    cycleTimeSeconds?: { min: number; max: number; avg: number };
+    threeNurses?: CorridaNivel3;
+    twoNurses?: CorridaNivel3;
     arriveAtPatientPlaceBA?: { maxWaitSeconds: number; avgWaitSeconds: number };
+    shifts?: Record<string, Turnos>;
+    resourceTable?: { rows: Record<string, FilaRecurso> };
   };
 }
+
+/** Duración declarada del escenario del nivel 4 en Bizagi: 43 200 min (30 días). Es su denominador. */
+const DURACION_DECLARADA_NIVEL_4 = 43200 * 60;
+
+/**
+ * Nombre de la tabla de recursos de Bizagi → clave del pool en `level-3/scenario.json`. Las seis
+ * filas publicadas se comparan, no solo la de la enfermera: la tabla las trae todas y una
+ * utilización que se mueva sin que nadie mire es exactamente lo que este test tiene que cazar
+ * (LILA-186/187 QA).
+ */
+const RECURSOS_NIVEL_3 = {
+  'Call center agent': 'callCenterAgent',
+  Nurse: 'nurse',
+  Ambulance: 'ambulance',
+  'Quick Attention Vehicle': 'quickAttentionVehicle',
+  'Basic Ambulance': 'basicAmbulance',
+  Receptionist: 'receptionist',
+} as const;
 
 function expectedDe(level: number): Publicado {
   return JSON.parse(readFileSync(resolve(levelsDir, `level-${level}`, 'expected.json'), 'utf8')) as Publicado;
@@ -131,135 +160,36 @@ function correr(ir: Awaited<ReturnType<typeof irDe>>, scenario: ResolvedScenario
   return simulate(ir, scenario, { log: false });
 }
 
-// ---------------------------------------------------------------------------------------------
-// A. Las réplicas publicadas, tal cual están committeadas.
-// ---------------------------------------------------------------------------------------------
-
-describe('examples/bizagi-levels tal cual: qué cuadra hoy contra expected.json', () => {
-  test('nivel 1 — validación de rutas: el escenario publicado no genera ningún token', async () => {
+describe('examples/bizagi-levels: paridad contra expected.json (LILA-187)', () => {
+  test('nivel 1 — 1000 tokens instantáneos, XOR 50/30/20 y tres end events', async () => {
     const ir = await irDe(resolve(levelsDir, 'level-1/model.bpmn'));
-    const r = correr(ir, escenarioDe(1));
-    const esperado = expectedDe(1).values.correctedRun!.instancesCompleted;
-
-    // Causa (4): `triggerCount` sin `interTriggerTimer`; R-ARR-1 solo genera casos en un start con
-    // timer, y R-ARR-3 no lo considera error porque hay triggerCount. La corrida sale vacía, pero
-    // no en silencio: `simulate()` emite el aviso `W-START-SIN-LLEGADAS` y `lila run` lo imprime.
-    // Es la decisión de contrato que LILA-186 tiene que tomar.
-    expect(r.process.started, 'el nivel 1 hoy sale con cero llegadas').toBe(0);
-    expect(r.warnings, 'la corrida vacía sí avisa').toContain(
-      'W-START-SIN-LLEGADAS: StartEvent_Llegada: el start no declara interTriggerTimer y no genera casos.',
-    );
-
-    comprobar([
-      { metrica: 'nivel 1 tokens creados', esperado: 1000, obtenido: r.process.started, cuadra: false },
-      { metrica: 'nivel 1 total completado en end events', esperado: esperado.total, obtenido: r.process.completed, cuadra: false },
-    ]);
-  }, 60_000);
-
-  test('nivel 2 — tiempos de proceso: la topología en secuencia da 51-54 min, no 16/33/25', async () => {
-    const ir = await irDe(resolve(levelsDir, 'level-2/model.bpmn'));
-    const r = correr(ir, escenarioDe(2));
-    const w = expectedDe(2).values.waitTimeSeconds!;
-
-    comprobar([
-      { metrica: 'nivel 2 cycleTime.min', esperado: w.min, obtenido: r.process.cycleTime.min, cuadra: false },
-      { metrica: 'nivel 2 cycleTime.max', esperado: w.max, obtenido: r.process.cycleTime.max, cuadra: false },
-      { metrica: 'nivel 2 cycleTime.mean', esperado: w.avg, obtenido: r.process.cycleTime.mean, cuadra: false },
-      // Mapeo: `process.waitTime` es espera pura y con recursos infinitos vale 0 (R-DEG-1).
-      { metrica: 'nivel 2 waitTime.mean (mapeo equivocado, queda anclado)', esperado: w.avg, obtenido: r.process.waitTime.mean, cuadra: false },
-    ]);
-  }, 60_000);
-
-  test('nivel 3 — recursos: con 16 min de enfermera por caso el pool satura con 3', async () => {
-    const ir = await irDe(resolve(levelsDir, 'level-3/model.bpmn'));
-    const publicado = escenarioDe(3);
-    const tres = correr(ir, publicado);
-    const dos = correr(ir, {
-      ...publicado,
-      resources: { ...publicado.resources, nurse: { ...publicado.resources!.nurse!, capacity: 2 } },
-    });
-    const v = expectedDe(3).values as Required<Publicado['values']>;
-
-    comprobar([
-      { metrica: 'nivel 3 (3 enf.) cycleTime.min', esperado: v.threeNurses.waitTimeSeconds.min, obtenido: tres.process.cycleTime.min, cuadra: false },
-      { metrica: 'nivel 3 (3 enf.) cycleTime.max', esperado: v.threeNurses.waitTimeSeconds.max, obtenido: tres.process.cycleTime.max, cuadra: false },
-      { metrica: 'nivel 3 (3 enf.) cycleTime.mean', esperado: v.threeNurses.waitTimeSeconds.avg, obtenido: tres.process.cycleTime.mean, cuadra: false },
-      { metrica: 'nivel 3 (3 enf.) utilización nurse', esperado: v.threeNurses.resourceUtilization.nurse, obtenido: tres.resources.nurse!.utilization, cuadra: false },
-      { metrica: 'nivel 3 (2 enf.) cycleTime.mean', esperado: v.twoNurses.waitTimeSeconds.avg, obtenido: dos.process.cycleTime.mean, cuadra: false },
-      // La utilización con 2 enfermeras sí cuadra, pero por la razón equivocada: el pool satura
-      // igual (99,9 %) con 16 min de trabajo por caso que con 10,5.
-      { metrica: 'nivel 3 (2 enf.) utilización nurse', esperado: v.twoNurses.resourceUtilization.nurse, obtenido: dos.resources.nurse!.utilization, cuadra: true },
-    ]);
-  }, 60_000);
-
-  test('nivel 4 — calendarios: los pools por turno añaden espera fuera de horario que Bizagi no tiene', async () => {
-    const ir = await irDe(resolve(levelsDir, 'level-4/model.bpmn'));
-    const r = correr(ir, escenarioDe(4));
-    const v = expectedDe(4).values as Required<Publicado['values']>;
-    const ba = r.elements.Task_LlegarBA!;
-
-    // Causa (5): los tres turnos cubren las 24 h, así que bajo la semántica de Bizagi ninguna
-    // tarea puede tener espera fuera de horario. En Lila sí la tiene, y es la mayor parte del
-    // desvío del ciclo.
-    expect(ba.offHoursWait.mean, 'el workaround de turnos crea espera fuera de horario').toBeGreaterThan(0);
-
-    comprobar([
-      { metrica: 'nivel 4 cycleTime.mean', esperado: v.waitTimeSeconds.avg, obtenido: r.process.cycleTime.mean, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.max', esperado: v.arriveAtPatientPlaceBA.maxWaitSeconds, obtenido: ba.resourceWait.max, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.mean', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: ba.resourceWait.mean, cuadra: false },
-    ]);
-  }, 60_000);
-});
-
-// ---------------------------------------------------------------------------------------------
-// B. Reconciliación: la misma comparación sobre la topología del diagrama oficial.
-// ---------------------------------------------------------------------------------------------
-
-describe('reconciliación: topología del diagrama oficial + llegadas de la corrida publicada', () => {
-  test('nivel 1 — el XOR reparte 50/30/20 y los 1000 tokens terminan en los tres end events', async () => {
-    const ir = await irDe(OFICIAL_BPMN);
     const publicado = escenarioDe(1);
-    // Única variante: dar al start un `interTriggerTimer` para que `triggerCount` emita (causa 4).
-    // Bizagi nivel 1 no define tiempos, así que los 1000 tokens entran sin consumir reloj.
-    const r = correr(ir, {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES_RECONCILIACION },
-      elements: {
-        ...publicado.elements,
-        StartEvent_Llegada: { ...publicado.elements!.StartEvent_Llegada, interTriggerTimer: { type: 'constant', value: 0 } },
-      },
-    });
+    const r = correr(ir, { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } });
     const c = expectedDe(1).values.correctedRun!.instancesCompleted;
 
+    // D1, cerrada por LILA-186: el escenario declara `triggerCount` a solas, que por R-ARR-1 son
+    // 1000 llegadas en `t = 0`. Es la configuración literal del nivel 1 de Bizagi, que no habilita
+    // ningún campo de tiempo con el que espaciarlas.
     expect(r.process.started).toBe(1000);
     expect(r.process.completed).toBe(1000);
 
-    // expected.json etiqueta los tres conteos publicados como green/yellow/red al revés. La página
-    // no da la asignación en prosa —solo la suma "(483+315+202)"— pero sí publica la tabla de
-    // resultados fila por fila en https://help.bizagi.com/platform/en/processvalidation42.png:
-    // "Red Triage end 483 · Yellow Triage end 315 · Green Triage end 202". Corregir expected.json
-    // es LILA-187; aquí se compara contra el conteo correcto usando la etiqueta equivocada.
     comprobar([
-      { metrica: 'nivel 1 rama 50 % (Red) vs 483 publicado', esperado: c.green, obtenido: r.elements.EndEvent_Red!.completed, cuadra: true },
-      { metrica: 'nivel 1 rama 30 % (Yellow) vs 315 publicado', esperado: c.yellow, obtenido: r.elements.EndEvent_Yellow!.completed, cuadra: false },
-      { metrica: 'nivel 1 rama 20 % (Green) vs 202 publicado', esperado: c.red, obtenido: r.elements.EndEvent_Green!.completed, cuadra: true },
+      { metrica: 'nivel 1 rama Red (50 %) vs 483 publicado', esperado: c.red, obtenido: r.elements.EndEvent_Red!.completed, cuadra: true },
+      { metrica: 'nivel 1 rama Yellow (30 %) vs 315 publicado', esperado: c.yellow, obtenido: r.elements.EndEvent_Yellow!.completed, cuadra: false },
+      { metrica: 'nivel 1 rama Green (20 %) vs 202 publicado', esperado: c.green, obtenido: r.elements.EndEvent_Green!.completed, cuadra: true },
       // Contra la probabilidad configurada, que es lo que de verdad valida el nivel 1, las tres
-      // ramas cuadran: el 315 de Bizagi es ruido de su propia corrida única (+5 % sobre su 30 %).
-      { metrica: 'nivel 1 rama 50 % vs 1000×p', esperado: 500, obtenido: r.flows.Flow_Red!.count, cuadra: true },
-      { metrica: 'nivel 1 rama 30 % vs 1000×p', esperado: 300, obtenido: r.flows.Flow_Yellow!.count, cuadra: true },
-      { metrica: 'nivel 1 rama 20 % vs 1000×p', esperado: 200, obtenido: r.flows.Flow_Green!.count, cuadra: true },
+      // ramas cuadran: el 315 de Bizagi es ruido de su propia corrida única (D2).
+      { metrica: 'nivel 1 rama Red vs 1000×p', esperado: 500, obtenido: r.flows.Flow_Red!.count, cuadra: true },
+      { metrica: 'nivel 1 rama Yellow vs 1000×p', esperado: 300, obtenido: r.flows.Flow_Yellow!.count, cuadra: true },
+      { metrica: 'nivel 1 rama Green vs 1000×p', esperado: 200, obtenido: r.flows.Flow_Green!.count, cuadra: true },
     ]);
   }, 60_000);
 
   test('nivel 2 — 16 / 33 / 25 min: los tres números publicados, dentro del 5 %', async () => {
-    const ir = await irDe(OFICIAL_BPMN);
+    const ir = await irDe(resolve(levelsDir, 'level-2/model.bpmn'));
     const publicado = escenarioDe(2);
-    const r = correr(ir, {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES_RECONCILIACION, duration: undefined },
-      elements: { ...publicado.elements, ...TRIAGE, ...LLEGADAS_OFICIALES },
-    });
-    const w = expectedDe(2).values.waitTimeSeconds!;
+    const r = correr(ir, { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } });
+    const w = expectedDe(2).values.cycleTimeSeconds!;
 
     expect(r.process.started, 'la corrida oficial trae 2017 instancias').toBe(2017);
     expect(r.process.completed).toBe(2017);
@@ -271,92 +201,142 @@ describe('reconciliación: topología del diagrama oficial + llegadas de la corr
     ]);
   }, 60_000);
 
-  test('nivel 3 — utilización de los seis recursos y ciclo con 3 y con 2 enfermeras', async () => {
-    const ir = await irDe(OFICIAL_BPMN);
+  test('nivel 3 — utilización de los seis recursos, costos y ciclo con 3 y con 2 enfermeras', async () => {
+    const ir = await irDe(resolve(levelsDir, 'level-3/model.bpmn'));
     const publicado = escenarioDe(3);
-    const base: ResolvedScenario = {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES_RECONCILIACION, duration: undefined },
-      elements: { ...publicado.elements, ...TRIAGE, ...LLEGADAS_OFICIALES },
-    };
+    const base: ResolvedScenario = { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } };
     const tres = correr(ir, base);
     const dos = correr(ir, { ...base, resources: { ...base.resources, nurse: { ...base.resources!.nurse!, capacity: 2 } } });
     const v = expectedDe(3).values as Required<Publicado['values']>;
 
     comprobar([
-      { metrica: 'nivel 3 (3 enf.) cycleTime.min', esperado: v.threeNurses.waitTimeSeconds.min, obtenido: tres.process.cycleTime.min, cuadra: true },
-      { metrica: 'nivel 3 (3 enf.) cycleTime.mean', esperado: v.threeNurses.waitTimeSeconds.avg, obtenido: tres.process.cycleTime.mean, cuadra: true },
-      // El máximo publicado (35 min) es el camino Red de 33 min más 2 min de espera de enfermera
-      // que en la corrida de Bizagi cayeron en el camino crítico; en la nuestra la espera máxima
-      // de Classify Triage es de segundos y el máximo se queda en los 33 min del camino puro.
-      { metrica: 'nivel 3 (3 enf.) cycleTime.max', esperado: v.threeNurses.waitTimeSeconds.max, obtenido: tres.process.cycleTime.max, cuadra: false },
-      { metrica: 'nivel 3 (3 enf.) utilización nurse', esperado: v.threeNurses.resourceUtilization.nurse, obtenido: tres.resources.nurse!.utilization, cuadra: true },
-      { metrica: 'nivel 3 (2 enf.) utilización nurse', esperado: v.twoNurses.resourceUtilization.nurse, obtenido: dos.resources.nurse!.utilization, cuadra: true },
-      { metrica: 'nivel 3 (2 enf.) cycleTime.min', esperado: v.twoNurses.waitTimeSeconds.min, obtenido: dos.process.cycleTime.min, cuadra: true },
-      { metrica: 'nivel 3 (2 enf.) cycleTime.max', esperado: v.twoNurses.waitTimeSeconds.max, obtenido: dos.process.cycleTime.max, cuadra: true },
-      // Único residuo del nivel 3: con el pool saturado (rho = 1,05) la media depende de la forma
-      // del transitorio. Bizagi acumula cola sublinealmente (media/máx = 0,40) y Lila linealmente
-      // (0,49), así que el máximo cuadra al 1,3 % y la media se va al +24 %.
-      { metrica: 'nivel 3 (2 enf.) cycleTime.mean', esperado: v.twoNurses.waitTimeSeconds.avg, obtenido: dos.process.cycleTime.mean, cuadra: false },
+      { metrica: 'nivel 3 (3 enf.) cycleTime.min', esperado: v.threeNurses.cycleTimeSeconds.min, obtenido: tres.process.cycleTime.min, cuadra: true },
+      { metrica: 'nivel 3 (3 enf.) cycleTime.mean', esperado: v.threeNurses.cycleTimeSeconds.avg, obtenido: tres.process.cycleTime.mean, cuadra: true },
+      // D5: el máximo publicado (35 min) es el camino Red de 33 min más 2 min de espera de
+      // enfermera que en la corrida de Bizagi cayeron en el camino crítico.
+      { metrica: 'nivel 3 (3 enf.) cycleTime.max', esperado: v.threeNurses.cycleTimeSeconds.max, obtenido: tres.process.cycleTime.max, cuadra: false },
+      { metrica: 'nivel 3 (2 enf.) cycleTime.min', esperado: v.twoNurses.cycleTimeSeconds.min, obtenido: dos.process.cycleTime.min, cuadra: true },
+      { metrica: 'nivel 3 (2 enf.) cycleTime.max', esperado: v.twoNurses.cycleTimeSeconds.max, obtenido: dos.process.cycleTime.max, cuadra: true },
+      // D6: único residuo del nivel 3, ver cabecera del archivo.
+      { metrica: 'nivel 3 (2 enf.) cycleTime.mean', esperado: v.twoNurses.cycleTimeSeconds.avg, obtenido: dos.process.cycleTime.mean, cuadra: false },
     ]);
 
-    // Costos publicados de la corrida de 3 enfermeras, tabla de recursos
-    // https://help.bizagi.com/platform/en/resourcesanalysis3.png y total de costo fijo por
-    // actividad del proceso en resourcesanalysis2.png. No están en expected.json porque la página
-    // solo los publica como imagen; se citan aquí con su URL.
+    // Las SEIS filas de la tabla de recursos publicada, en las dos corridas, leídas de
+    // `expected.json` (transcripción de resourcesanalysis3.png y resourcesanalysis1.png) en vez
+    // de repetidas a mano aquí: utilización y costo total de cada pool. Antes solo se comparaba
+    // la enfermera y cuatro de los seis costos (LILA-186/187 QA).
+    //
+    // D8: `scenario.json` ya usa la asignación que cuadra con los costos publicados (QAV con
+    // quickAttentionVehicle, BA con basicAmbulance), no la lectura literal (y cruzada) de la
+    // tabla de requerimientos en prosa; con ella los seis costos entran en el ±5 %.
+    for (const [corrida, publicado, resultado] of [
+      ['3 enf.', v.threeNurses, tres],
+      ['2 enf.', v.twoNurses, dos],
+    ] as const) {
+      comprobar(
+        Object.entries(RECURSOS_NIVEL_3).flatMap(([fila, ref]) => {
+          const esperado = publicado.resourceTable.rows[fila]!;
+          const obtenido = resultado.resources[ref]!;
+          return [
+            { metrica: `nivel 3 (${corrida}) utilización ${ref}`, esperado: esperado.utilization, obtenido: obtenido.utilization, cuadra: true },
+            { metrica: `nivel 3 (${corrida}) costo ${ref}`, esperado: esperado.totalCost, obtenido: obtenido.totalCost, cuadra: true },
+          ];
+        }),
+      );
+      // La utilización que la página cita en prosa es la misma que la fila `Nurse` de la tabla.
+      expect(publicado.resourceUtilization.nurse).toBe(publicado.resourceTable.rows.Nurse!.utilization);
+    }
+
+    // Costo fijo por actividad. **No** es un número publicado: la tabla de recursos solo trae los
+    // costos de los pools (su `Total` 75 313 son justo esos seis), así que 8063 se DERIVA de datos
+    // que sí lo están —los `fixedCost` por tarea del enunciado (2/1/1/1) y los conteos de
+    // instancias de resourcesanalysis4.png (2017, 2017, 1006, 1006)—: 2·2017 + 1·2017 + 1·1006 +
+    // 1·1006 = 8063. Se compara como derivado, no como cita.
     const costoActividades = Object.values(tres.elements).reduce((suma, e) => suma + e.fixedCostTotal, 0);
-    comprobar([
-      { metrica: 'nivel 3 costo fijo de actividades', esperado: 8063, obtenido: costoActividades, cuadra: true },
-      { metrica: 'nivel 3 costo callCenterAgent', esperado: 6051, obtenido: tres.resources.callCenterAgent!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo nurse', esperado: 15115, obtenido: tres.resources.nurse!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo ambulance', esperado: 30314.13, obtenido: tres.resources.ambulance!.totalCost, cuadra: true },
-      { metrica: 'nivel 3 costo receptionist', esperado: 3018, obtenido: tres.resources.receptionist!.totalCost, cuadra: true },
-      // D8: la réplica reproduce verbatim la tabla de requerimientos de la página, que cruza los dos
-      // vehículos. Para la utilización da igual (los dos pools tienen capacidad 2) pero para el costo
-      // no: la tarea QAV cuesta 25/token en vez de 18 y la tarea BA 18 en vez de 25.
-      { metrica: 'nivel 3 costo del pool que sirve la tarea QAV (Bizagi: Quick attention vehicle)', esperado: 11139.86, obtenido: tres.resources.basicAmbulance!.totalCost, cuadra: false },
-      { metrica: 'nivel 3 costo del pool que sirve la tarea BA (Bizagi: Basic ambulance)', esperado: 9844.65, obtenido: tres.resources.quickAttentionVehicle!.totalCost, cuadra: false },
-    ]);
+    const derivado8063 = 2 * 2017 + 1 * 2017 + 1 * 1006 + 1 * 1006;
+    expect(derivado8063, 'la derivación del costo fijo de actividades').toBe(8063);
+    comprobar([{ metrica: 'nivel 3 costo fijo de actividades (derivado)', esperado: derivado8063, obtenido: costoActividades, cuadra: true }]);
   }, 60_000);
 
-  test('nivel 4 — el desvío entero es la espera fuera de horario del workaround de turnos (LILA-164)', async () => {
-    const ir = await irDe(OFICIAL_BPMN);
+  test('nivel 4 — un pool por rol con capacidad por turno: ciclo, utilización y costo de los seis recursos', async () => {
+    const ir = await irDe(resolve(levelsDir, 'level-4/model.bpmn'));
     const publicado = escenarioDe(4);
-    const nivel3 = escenarioDe(3);
-    const conTurnos = correr(ir, {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES_RECONCILIACION, duration: undefined },
-      elements: { ...publicado.elements, ...TRIAGE, ...LLEGADAS_OFICIALES },
-    });
-    // Hipótesis LILA-164: un solo pool por rol (sin partirlo por turno) y sin calendario. No es el
-    // modelo de Bizagi —le falta la capacidad por turno— pero aísla el efecto del workaround.
-    const unPoolPorRol = correr(ir, {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES_RECONCILIACION, duration: undefined },
-      calendars: undefined,
-      resources: nivel3.resources,
-      elements: { ...nivel3.elements, ...TRIAGE, ...LLEGADAS_OFICIALES },
-    });
+    const r = correr(ir, { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } });
     const v = expectedDe(4).values as Required<Publicado['values']>;
-    const ba = conTurnos.elements.Task_LlegarBA!;
 
+    expect(r.process.started, 'la corrida oficial trae 2017 instancias').toBe(2017);
+    expect(r.process.completed).toBe(2017);
+
+    // LILA-164: los tres turnos cubren las 24 h, así que la unión de los calendarios del pool es
+    // un 24×7 y **ninguna** tarea tiene espera fuera de horario. Era el desvío entero del
+    // workaround de pools por turno (la mitad de D7 que este ticket cierra).
+    for (const id of ['Task_Recibir', 'Task_LlegarQAV', 'Task_LlegarBA', 'Task_Autorizar']) {
+      expect(r.elements[id]!.offHoursWait.total, `${id} no puede tener espera fuera de horario`).toBe(0);
+    }
+    // La utilización y el costo se reportan por ROL, no por turno: seis filas, las de Bizagi.
+    expect(Object.keys(r.resources).sort()).toEqual(Object.values(RECURSOS_NIVEL_3).slice().sort());
+
+    // D7 (viva) — el denominador. Bizagi divide por la duración **declarada** del escenario
+    // (43 200 min) y Lila por la ventana de medida `[warmup, t_stop]` (R-CAL-9 sobre R-ARR-7), que
+    // aquí es ~10 900 min porque la corrida para al agotarse las 2017 llegadas. La conversión es
+    // exacta sobre `busyTime`:
+    //
+    //     utilización_Bizagi = busyTime / Σ_i (capacity_i × openTime_i sobre la duración declarada)
+    //                        = utilización_Lila × (t_stop − warmup) / duración declarada
+    //
+    // y con los tres turnos de 8 h ese sumatorio vale (Σ_i capacity_i / 3) × 43 200 min, que es
+    // literalmente la cuenta publicada para Call center agent: 8068 / ((2+2+1)/3 × 43 200) = 11,21 %.
+    // No se cambia el motor por esto: la ventana de medida sigue siendo `[warmup, t_stop]`.
+    const ventana = (r.process.completed / r.process.throughputPerHour) * 3600;
+    const disponibleBizagi = (ref: string): number => {
+      const turnos = v.shifts[ref]!;
+      return ((turnos.morning + turnos.day + turnos.night) / 3) * DURACION_DECLARADA_NIVEL_4;
+    };
+
+    comprobar(
+      Object.entries(RECURSOS_NIVEL_3).flatMap(([fila, ref]) => {
+        const esperado = v.resourceTable.rows[fila]!;
+        const obtenido = r.resources[ref]!;
+        return [
+          {
+            metrica: `nivel 4 utilización ${ref} (denominador Bizagi)`,
+            esperado: esperado.utilization,
+            obtenido: obtenido.busyTime / disponibleBizagi(ref),
+            cuadra: true,
+          },
+          { metrica: `nivel 4 costo ${ref}`, esperado: esperado.totalCost, obtenido: obtenido.totalCost, cuadra: true },
+        ];
+      }),
+    );
+
+    // La conversión, ejecutada. La forma exacta es la de arriba —`busyTime` sobre el denominador
+    // de Bizagi—; la regla de tres `utilización_Lila × ventana / duración declarada` es su versión
+    // de bolsillo y solo coincide del todo cuando la ventana cubre un número entero de periodos
+    // del patrón de turnos. Aquí no lo cubre (la corrida se agota a los 10 862 min, 7,54 días), y
+    // el sesgo del corte a media franja llega al 1,8 % en `quickAttentionVehicle`, el rol cuyo
+    // turno de tarde vale el doble que los otros dos. De ahí el 3 %: es el error de la regla de
+    // tres, no del motor.
+    for (const ref of Object.values(RECURSOS_NIVEL_3)) {
+      const bizagi = r.resources[ref]!.busyTime / disponibleBizagi(ref);
+      const reescalada = (r.resources[ref]!.utilization * ventana) / DURACION_DECLARADA_NIVEL_4;
+      expect(Math.abs(reescalada - bizagi) / bizagi, `la conversión de denominador de ${ref}`).toBeLessThan(0.03);
+    }
+
+    const ba = r.elements.Task_LlegarBA!;
     comprobar([
-      { metrica: 'nivel 4 cycleTime.mean con pools por turno', esperado: v.waitTimeSeconds.avg, obtenido: conTurnos.process.cycleTime.mean, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.max con pools por turno', esperado: v.arriveAtPatientPlaceBA.maxWaitSeconds, obtenido: ba.resourceWait.max, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.mean con pools por turno', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: ba.resourceWait.mean, cuadra: false },
-      // Quitando el workaround, el ciclo medio del nivel 4 cuadra: el +230 % era entero de los
-      // turnos. La espera de Arrive BA sigue sin cuadrar porque con un pool de capacidad fija 2
-      // nunca hay cola; hace falta capacidad por turno dentro del mismo pool, que es LILA-164.
-      { metrica: 'nivel 4 cycleTime.mean con un pool por rol', esperado: v.waitTimeSeconds.avg, obtenido: unPoolPorRol.process.cycleTime.mean, cuadra: true },
-      { metrica: 'nivel 4 Arrive BA resourceWait.mean con un pool por rol', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: unPoolPorRol.elements.Task_LlegarBA!.resourceWait.mean, cuadra: false },
+      { metrica: 'nivel 4 cycleTime.mean', esperado: v.cycleTimeSeconds!.avg, obtenido: r.process.cycleTime.mean, cuadra: true },
+      // D7 (residuo): las dos esperas de Arrive at patient place BA son de una corrida única de
+      // Bizagi sobre un pool al 5,6 % de utilización, donde solo hay cola cuando dos casos
+      // coinciden en el turno de tarde (1 sola ambulancia básica). El reparto por rama de esa
+      // corrida tampoco es el nuestro (Bizagi 403 instancias BA, Lila 409): el residuo es ruido
+      // de la corrida de referencia, igual que D2.
+      { metrica: 'nivel 4 Arrive BA resourceWait.max', esperado: v.arriveAtPatientPlaceBA.maxWaitSeconds, obtenido: ba.resourceWait.max, cuadra: false },
+      { metrica: 'nivel 4 Arrive BA resourceWait.mean', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: ba.resourceWait.mean, cuadra: false },
     ]);
 
-    // El desvío del ciclo es, dentro del ruido, la espera fuera de horario media por caso.
-    const offHoursPorCaso = ['Task_Recibir', 'Task_LlegarQAV', 'Task_LlegarBA', 'Task_Autorizar'].reduce((suma, id) => {
-      const e = conTurnos.elements[id]!;
-      return suma + (e.offHoursWait.total / conTurnos.process.completed);
-    }, 0);
-    const desvio = conTurnos.process.cycleTime.mean - unPoolPorRol.process.cycleTime.mean;
-    expect(Math.abs(desvio - offHoursPorCaso) / desvio, 'la espera fuera de horario explica el desvío del nivel 4').toBeLessThan(0.05);
+    // Esa cola existe **porque** la capacidad baja a 1 en el turno de tarde: con la capacidad fija
+    // del nivel 3 la espera de Arrive BA es exactamente 0 (era la fila «con un pool por rol» de la
+    // tabla de BIZAGI_PARITY). Es lo que la capacidad por intervalos hace y la fija no puede.
+    expect(ba.resourceWait.max, 'la capacidad por turno sí produce cola en Arrive BA').toBeGreaterThan(0);
   }, 60_000);
 });

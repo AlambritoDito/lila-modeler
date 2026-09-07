@@ -175,7 +175,7 @@ describe('validateScenario contra el IR', () => {
     expect(scenarioErrors(validateScenario(scenario, pedidoIr()))).toEqual([]);
   });
 
-  test('probability fuera de un sequence flow y selection sin resources son error', () => {
+  test('probability, selection e interTriggerTimer en un timer intermedio son error (R4, R5, R14)', () => {
     const raw = clone(AS_IS) as Record<string, never>;
     (raw['elements'] as Record<string, Record<string, unknown>>)['Timer_Reposo'] = {
       probability: 0.5,
@@ -184,8 +184,16 @@ describe('validateScenario contra el IR', () => {
     };
     const scenario = ScenarioSchema.parse(raw);
 
+    // R5 (LILA-186 QA): `interTriggerTimer` solo va en un `start`. El «timer generador» de R5 es
+    // el `bpmn:startEvent` con `timerEventDefinition`, que SEMANTICS § 2 ya mapea a `start`; un
+    // `timer` en el IR es el `intermediateCatchEvent` de retardo, sobre el que `core/sim.ts`
+    // nunca monta generador de llegadas.
     const codes = scenarioErrors(validateScenario(scenario, pedidoIr())).map((e) => e.path);
-    expect(codes).toEqual(['elements.Timer_Reposo.probability', 'elements.Timer_Reposo.selection']);
+    expect(codes).toEqual([
+      'elements.Timer_Reposo.probability',
+      'elements.Timer_Reposo.interTriggerTimer',
+      'elements.Timer_Reposo.selection',
+    ]);
   });
 
   test('una ref de recurso o de calendario inexistente es error (R9)', () => {
@@ -228,6 +236,52 @@ describe('validateScenario contra el IR', () => {
     expect(scenarioErrors(validateScenario(scenario, pedidoIr())).map((e) => e.code)).toContain(
       'E-SIN-PARADA',
     );
+  });
+});
+
+describe('§ 2.4 — capacity por intervalos (LILA-164)', () => {
+  const pool = (capacity: unknown, extra: Record<string, unknown> = {}) =>
+    ScenarioSchema.safeParse({
+      version: 1,
+      name: 'turnos',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', duration: 3600 },
+      calendars: { dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] } },
+      resources: { enfermera: { capacity, ...extra } },
+    });
+
+  test('acepta el entero y la lista de tramos', () => {
+    expect(pool(3).success).toBe(true);
+    expect(pool([{ calendar: 'dia', capacity: 3 }]).success).toBe(true);
+    const parsed = pool([{ calendar: 'dia', capacity: 3 }]);
+    expect(parsed.success && parsed.data.resources!.enfermera!.capacity).toEqual([
+      { calendar: 'dia', capacity: 3 },
+    ]);
+  });
+
+  test('rechaza la lista vacía, el tramo sin calendario, la capacidad no entera y las claves de más', () => {
+    expect(pool([]).success).toBe(false);
+    expect(pool([{ capacity: 3 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 0 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 1.5 }]).success).toBe(false);
+    expect(pool([{ calendar: 'dia', capacity: 3, priority: 1 }]).success).toBe(false);
+  });
+
+  test('el JSON Schema generado acepta y rechaza lo mismo que zod', () => {
+    const committed: unknown = JSON.parse(
+      readFileSync(fileURLToPath(new URL('docs/scenario.schema.json', repoRoot)), 'utf8'),
+    );
+    const escenario = (capacity: unknown) => ({
+      version: 1,
+      name: 'turnos',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', duration: 3600 },
+      calendars: { dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] } },
+      resources: { enfermera: { capacity } },
+    });
+    expect(validateJsonSchema(committed, escenario([{ calendar: 'dia', capacity: 3 }]))).toEqual([]);
+    expect(validateJsonSchema(committed, escenario(3))).toEqual([]);
+    expect(validateJsonSchema(committed, escenario([{ capacity: 3 }])).length).toBeGreaterThan(0);
   });
 });
 

@@ -61,7 +61,9 @@ describe('QA adversarial de simulate (LILA-029)', () => {
 
   test('el progreso empieza en cero incluso si la replica no tiene eventos', () => {
     const input = scenario();
+    // Sin ninguno de los dos campos de llegada el start no genera nada (R-ARR-1, LILA-186).
     delete input.elements?.Start?.interTriggerTimer;
+    delete input.elements?.Start?.triggerCount;
     const fractions: number[] = [];
 
     simulate(IR, input, { onProgress: ({ fraction }) => fractions.push(fraction) });
