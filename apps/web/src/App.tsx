@@ -108,18 +108,18 @@ function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
 /**
  * El escenario activo con `extends` ya aplicado, que es lo que valida el lint (§ 6 de
  * `docs/SCENARIO_FORMAT.md`) y lo mismo que resuelve el panel de escenario. Con la cadena rota
- * se lintea el delta tal cual: el panel ya enseña el fallo de la herencia, y dejar los chips en
- * blanco escondería el resto de los problemas.
+ * se lintea el delta tal cual y el fallo de la herencia cuenta como un error más, igual que en el panel;
+ * dejar los chips en blanco escondería el resto de los problemas.
  */
-function escenarioResuelto(archivo: string, escenarios: Escenarios): unknown {
+function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto: unknown; error: string | null } {
   try {
-    return resolveExtends(archivo, (ruta) => {
+    return { error: null, resuelto: resolveExtends(archivo, (ruta) => {
       const encontrado = escenarios[ruta];
       if (encontrado === undefined) throw new Error(`escenario desconocido: ${ruta}`);
       return encontrado;
-    });
-  } catch {
-    return escenarios[archivo] ?? {};
+    }) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e), resuelto: escenarios[archivo] ?? {} };
   }
 }
 
@@ -311,10 +311,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * de bpmn-js al importar.
    */
   const validacion = useMemo(
-    () => problemasPorElemento(problemasEscenario(escenarioResuelto(escenarioId, escenarios), ir), {
-      avisos: estado.avisos,
-      errores: projectProblems.length,
-    }),
+    () => {
+      // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
+      // delante de los problemas del delta sin resolver.
+      const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
+      const problemas = problemasEscenario(resuelto, ir);
+      if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
+      return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length });
+    },
     [escenarioId, escenarios, ir, estado.avisos, projectProblems],
   );
 
@@ -565,13 +569,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (
-            <button type="button" className="chip error" title="Ir al primer elemento con problemas"
+            <button type="button" className="chip error" title="Ir al primer elemento con problemas" disabled={validacion.primero === null}
               onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
               <span className="punto" />{validacion.errores} {validacion.errores === 1 ? 'error' : 'errores'}
             </button>
           )}
           {validacion.avisos > 0 && (
-            <button type="button" className="chip" title="Ir al primer elemento con problemas"
+            <button type="button" className="chip" title="Ir al primer elemento con problemas" disabled={validacion.primero === null}
               onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
               <span className="punto" />{validacion.avisos} {validacion.avisos === 1 ? 'aviso' : 'avisos'}
             </button>
