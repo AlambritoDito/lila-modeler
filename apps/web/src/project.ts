@@ -16,6 +16,7 @@ export function readProject(value: unknown): ProjectDocument {
     || typeof value.model.id !== 'string' || typeof value.model.name !== 'string' || typeof value.model.xml !== 'string' || !revision(value.model.revision)
     || !object(value.scenarios) || !Object.values(value.scenarios).every(object) || !object(value.scenarioRevisions)
     || !Object.values(value.scenarioRevisions).every(revision) || !Array.isArray(value.runs)) throw new Error('Documento de proyecto inválido o versión no soportada.');
+  if (value.problems !== undefined && (!Array.isArray(value.problems) || !value.problems.every((p) => object(p) && typeof p.file === 'string' && typeof p.message === 'string'))) throw new Error('Diagnóstico de proyecto inválido.');
   for (const run of value.runs) {
     if (!object(run) || typeof run.id !== 'string' || typeof run.scenarioName !== 'string' || !object(run.inputs)
       || !revision(run.inputs.modelRevision) || !revision(run.inputs.scenarioRevision) || typeof run.inputs.xml !== 'string' || !object(run.inputs.scenario)

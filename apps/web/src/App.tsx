@@ -84,6 +84,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   const [projectId, setProjectId] = useState('demo-pedido');
   const [projectName, setProjectName] = useState('Pedido de ejemplo');
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
+  const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
@@ -158,7 +159,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
-      scenarios: escenarios, scenarioRevisions, runs };
+      scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
   }
   async function guardar(saveAs = false): Promise<boolean> {
     if (adapter === null || ioLock.current) return false;
@@ -183,6 +184,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
+    setProjectProblems(doc.problems ?? []);
     if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     setEscenarios(doc.scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
@@ -512,7 +514,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <span>Tema: {tema?.name ?? 'Eva-01'}</span>
         {estado.avisos > 0 && (
           <span role="alert" className="aviso">
-            {estado.avisos} avisos al importar: hay elementos que no se dibujaron
+            {estado.avisos} avisos al importar; revisa el diagnóstico antes de simular o exportar
           </span>
         )}
         {estado.error !== null && (
