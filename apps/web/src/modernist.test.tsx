@@ -28,7 +28,8 @@ describe('Modernist (LILA-206)', () => {
   it('no deja ningún radio distinto de 0 en el CSS ni en los estilos en línea', () => {
     for (const nombre of ['app.css', 'theme/tokens.css', 'BottleneckOverlay.ts']) {
       const radios = [...leer(nombre).matchAll(/border-radius:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
-      expect(radios.filter((valor) => !/^0\w*$/.test(valor)), nombre).toEqual([]);
+      // `50%` es el disco de validación (LILA-209): en el artboard el marcador es un círculo.
+      expect(radios.filter((valor) => !/^(0\w*|50%)$/.test(valor)), nombre).toEqual([]);
     }
     for (const nombre of ['ResultsView.tsx', 'CompareView.tsx']) {
       const radios = [...leer(nombre).matchAll(/borderRadius:\s*([^,\n]+)/g)].map((m) => m[1]!.trim());

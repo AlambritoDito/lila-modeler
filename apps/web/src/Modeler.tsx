@@ -27,6 +27,9 @@ import lila from '@lila/engine/bpmn/lila.moddle.json';
 // necesita el `Modeler` de bpmn-js en crudo; en vez de exponerlo, `Modelador.cuellos` le pasa
 // el modelador desde aquí y el resto del shell sigue sin ver bpmn-js.
 import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOverlay';
+// Misma frontera que el overlay de cuellos: los marcadores de validación (LILA-209) reciben el
+// `Modeler` desde aquí y el shell solo llama a `Modelador.validacion`.
+import { sincronizarMarcadores, type Validacion } from './ValidationMarkers';
 import {
   autorizarExportacion,
   finalizarExportacion,
@@ -87,6 +90,11 @@ export interface Modelador {
    * en cada render sin comprobar si algo cambió.
    */
   cuellos(corrida: Corrida | null, visible: boolean): void;
+  /**
+   * Marcadores de validación (LILA-209). `null` o un mapa vacío los quitan; repetir la llamada
+   * no acumula nada, así que el shell puede llamarla en cada render.
+   */
+  validacion(validacion: Validacion | null): void;
   /** Superficie opcional para que el shell añada controles básicos sin importar diagram-js. */
   deshacer?(): void;
   rehacer?(): void;
@@ -314,6 +322,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       cuellos: (corrida, visible) => {
         if (activo !== null) sincronizarOverlay(activo, corrida, visible);
+      },
+      validacion: (validacion) => {
+        if (activo !== null) sincronizarMarcadores(activo, validacion);
       },
       deshacer: () => {
         const commands = activo?.get<CommandStack>('commandStack');

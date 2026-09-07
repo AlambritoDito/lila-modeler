@@ -50,6 +50,7 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-12-modernist.png` | Modelar sin ningún radio y con la barra de estado en JetBrains Mono | #238 |
 | `app-05-resultados.png` | Resultados con una corrida de `examples/pedido`: cifras en mono alineadas a la derecha | #238 |
 | `app-01c-minimapa.png` | Modelar con el minimapa abierto abajo a la izquierda, zoom +/−/ajustar abajo a la derecha y pestaña con ✕ y «+» | #240 |
+| `app-01d-marcadores.png` | Modelar con el chip «6 avisos» y el disco de validación sobre cada figura sin parámetros en el escenario AS-IS | #241 |
 
 ## Inventario de componentes React
 

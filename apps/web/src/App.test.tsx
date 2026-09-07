@@ -9,19 +9,24 @@ import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore'
 import { App } from './App';
 import { applyTheme } from './theme/applyTheme';
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
+  // LILA-209: el shell lintea el escenario activo con la misma función que el panel; aquí se
+  // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
+  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn() }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
-vi.mock('./ScenarioPanel', () => ({ ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
-  mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
-  return null;
-} }));
+vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
+  ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
+    mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
+    return null;
+  } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
   useEffect(() => { onListo({
     exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
+    validacion: mocks.validacion, seleccionar: mocks.seleccionar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
   } as unknown as Modelador); }, [onListo]);
   return <div>Modelo montado</div>;
@@ -48,6 +53,7 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  mocks.problemas = [];
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
@@ -257,3 +263,24 @@ it('cerrar la pestaña con cambios sin guardar pasa por la guardia', async () =>
   expect(session.createProject).not.toHaveBeenCalled();
 });
 
+it('los chips cuentan errores y avisos y llevan al primer elemento con problemas', async () => {
+  await act(async () => {
+    mocks.problemas = [
+      { ruta: 'elements.Task_1', mensaje: 'sin parámetros', severidad: 'warning' },
+      { ruta: 'run.duration', mensaje: 'falta parada', severidad: 'error' },
+    ];
+    mocks.scenarioChange();
+  });
+  const chips = [...container.querySelectorAll('.chips-validacion .chip')].map((c) => c.textContent);
+  expect(chips).toEqual(['1 error', '1 aviso']);
+  // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
+  const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
+  expect([...validacion.marcadores.keys()]).toEqual(['Task_1']);
+
+  await click('1 aviso');
+  expect(mocks.seleccionar).toHaveBeenCalledWith('Task_1');
+});
+
+it('sin problemas no hay chips', () => {
+  expect(container.querySelector('.chips-validacion')).toBeNull();
+});
