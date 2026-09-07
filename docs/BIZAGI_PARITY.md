@@ -21,7 +21,7 @@ escenario publicado.
 | Parallel gateway fork/join | ✓ | ✓ | M1 | Implementado (LILA-026); paridad verificada en la rama Red de los niveles 2–4 |
 | Subproceso embebido (aplanado); reusable = tarea con tiempo global | ✓ | ✓ | M1 | Implementado (LILA-019) |
 | Timer intermedio como retardo | ✓ | ✓ | M1 | Implementado (LILA-026) |
-| Llegadas: max arrival count + intervalo (constante o distribución) | ✓ | ✓ | M1 | Implementado (LILA-026) **con salvedad**: `triggerCount` sin `interTriggerTimer` no genera ningún caso (R-ARR-1) y Bizagi sí; ver diferencia D1 |
+| Llegadas: max arrival count + intervalo (constante o distribución) | ✓ | ✓ | M1 | Implementado (LILA-026). `triggerCount` sin `interTriggerTimer` = N llegadas en `t = 0`, como el nivel 1 de Bizagi (R-ARR-1, LILA-186); ver diferencia D1 |
 | Processing time por tarea/evento, constante o distribución | ✓ | ✓ | M1 | Implementado (LILA-026); paridad verificada en el nivel 2 |
 | Distribuciones: las 13 de BPSim 2.0 + constante + empírica | ✓ (subconjunto no documentado) | ✓ todas | M1 | Implementado (LILA-025) |
 | Escenario: nombre, descripción, autor, versión, inicio, duración, unidad de tiempo, moneda, replicaciones, semilla | ✓ | ✓ (+ `warmup`, `extends`) | M1 | Implementado (LILA-013, LILA-014) |
@@ -72,7 +72,7 @@ el test se pone rojo y hay que actualizar el test y esta sección a la vez.
 
 | Nivel | Número publicado | A · réplica tal cual | B · topología oficial | Causa |
 |---|---|---|---|---|
-| 1 | 1000 tokens creados | 0 (−100 %) | 1000 (0 %) | D1 |
+| 1 | 1000 tokens creados | 1000 (0 %) | 1000 (0 %) | D1 (resuelta) |
 | 1 | rama 50 % = 483 | — | 498,9 (+3,3 %) | — |
 | 1 | rama 30 % = 315 | — | 298,1 (−5,4 %) | D2 |
 | 1 | rama 20 % = 202 | — | 203,0 (+0,5 %) | — |
@@ -101,16 +101,13 @@ el test se pone rojo y hay que actualizar el test y esta sección a la vez.
 
 ### Causas
 
-**D1 — `triggerCount` sin `interTriggerTimer` no genera ningún caso.** R-ARR-1 dice que genera
-casos «cada `start` **con** `interTriggerTimer`», y R-ARR-3 no considera error que falte el timer
-mientras haya `triggerCount`. El nivel 1 de Bizagi es exactamente esa configuración (max arrival
-count 1000, sin intervalo, porque el nivel 1 no habilita campos de tiempo): la corrida sale con
-cero llegadas. **No es silenciosa**: `simulate()` devuelve el aviso `W-START-SIN-LLEGADAS` en
-`warnings` y `lila run` lo imprime, tal como documenta SEMANTICS §10; el test lo comprueba. Lo que
-falta es la decisión de contrato — no es un desajuste con Bizagi sino un hueco del contrato de Lila —
-o el motor trata `triggerCount` a solas como «emitir todos los tokens sin consumir reloj», o la
-validación lo rechaza. Está fuera del alcance de LILA-044 (toca `core/` y `scenario.ts`) y va como
-ticket aparte. Con un `interTriggerTimer` constante de 0 s dentro del test, el nivel 1 cuadra.
+**D1 — `triggerCount` sin `interTriggerTimer` (resuelta en LILA-186).** Era un hueco del contrato
+de Lila, no un desajuste con Bizagi: R-ARR-1 solo generaba casos en un `start` **con**
+`interTriggerTimer`, así que el nivel 1 (max arrival count 1000 y ningún campo de tiempo, porque el
+nivel 1 no los habilita) salía con cero llegadas y el aviso `W-START-SIN-LLEGADAS`. R-ARR-1 dice
+ahora que `triggerCount` sin `interTriggerTimer` equivale al default `constant 0`, es decir N
+llegadas en `t = 0`, que es lo que hace Bizagi. El aviso queda para el `start` que no declara
+ninguno de los dos campos.
 
 **D2 — la rama del 30 % contra una corrida única de Bizagi.** Los tres conteos publicados
 (483 + 315 + 202) son una sola corrida de 1000 tokens; el 315 se desvía por sí mismo un +5 % de su

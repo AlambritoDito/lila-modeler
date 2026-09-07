@@ -81,10 +81,10 @@ definida; todo lo demás cae en la sección 3 de este documento.
   evalúan en v1 (`conditions` es campo reservado, §15): el ramaje es probabilístico. Un flujo con
   `conditionExpression` produce aviso `W-COND` citando el id del flujo. *(prueba: LILA-021,
   LILA-163)*
-- **R-PERF-5 — Varios start events son válidos.** Cada `start` con `interTriggerTimer` genera su
-  propio flujo de llegadas, con su propio `triggerCount` y su propio stream de números aleatorios.
-  Un `start` sin `interTriggerTimer` no genera nada y produce aviso `W-START-SIN-LLEGADAS`.
-  *(prueba: LILA-026)*
+- **R-PERF-5 — Varios start events son válidos.** Cada `start` con `interTriggerTimer` o
+  `triggerCount` genera su propio flujo de llegadas, con su propio `triggerCount` y su propio
+  stream de números aleatorios. Un `start` sin ninguno de los dos no genera nada y produce aviso
+  `W-START-SIN-LLEGADAS`. *(prueba: LILA-026, LILA-186)*
 
 ---
 
@@ -332,7 +332,13 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 
 - **R-ARR-1 — Un generador por start.** Cada `start` con `interTriggerTimer` genera casos. La
   primera llegada ocurre en `t = 0`; la siguiente en `t + muestra` con una muestra nueva de
-  `interTriggerTimer` tomada del stream de ese `start`. *(prueba: LILA-026)*
+  `interTriggerTimer` tomada del stream de ese `start`. Un `start` con `triggerCount` y **sin**
+  `interTriggerTimer` equivale al default `interTriggerTimer: {"type":"constant","value":0}`, es
+  decir `triggerCount` llegadas en `t = 0`: es lo que hace el nivel 1 de Bizagi, cuya configuración
+  son solo «porcentajes de activación en cada flujo saliente de gateways exclusivos/inclusivos y
+  "Max. arrival count" en el Start Event», sin ningún campo de tiempo con el que espaciarlas
+  (`help.bizagi.com/platform/en/level_1_example.htm`). Solo el `start` sin ninguno de los dos campos
+  no genera nada y avisa `W-START-SIN-LLEGADAS`. *(prueba: LILA-026, LILA-186)*
 - **R-ARR-2 — Fin de la generación.** Un generador deja de emitir cuando ocurre lo primero de:
   (a) ha emitido `triggerCount` casos; (b) el instante de la siguiente llegada es `≥ t_stop`.
   *(prueba: LILA-026)*
@@ -677,6 +683,9 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`.
 
+`W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
+`triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
+
 Los códigos de este catálogo son los que emite el código de hoy. `E-PROB-EN-NODO`,
 `E-PROB-RANGO`, `E-CLAVE-DESCONOCIDA`, `E-SUBPROC-PARAMETRO`, `E-TIMER-RECURSO` y `W-SIN-SEED`
 siguen listados como contrato pero todavía no se emiten con ese nombre: los tres primeros los
@@ -718,7 +727,7 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-EVT-3 | timer 24×7 salvo calendario propio | LILA-041 |
 | R-EVT-4 | end consume token; caso termina con 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
-| R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 |
+| R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |
 | R-ARR-8 | replicaciones e IC 95 % | LILA-027 |

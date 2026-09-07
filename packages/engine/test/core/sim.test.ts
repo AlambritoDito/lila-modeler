@@ -286,3 +286,43 @@ describe('terminate mata todos los tokens del caso', () => {
     ]);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * triggerCount sin interTriggerTimer (LILA-186)
+ * ------------------------------------------------------------------ */
+
+describe('triggerCount sin interTriggerTimer = N llegadas en t = 0 (R-ARR-1)', () => {
+  const ir = makeIr({ Start: 'start', A: 'task', End: 'end' }, { Flow_SA: ['Start', 'A'], Flow_AE: ['A', 'End'] });
+  const elements = {
+    Start: { triggerCount: 10 },
+    A: { processingTime: { type: 'constant', value: 60 } },
+  } as const;
+
+  test('sin run.duration: 10 casos iniciados en t = 0 y los 10 completados', () => {
+    const run = runReplication(ir, { run: { seed: SEED }, elements });
+    expect(run.cases).toHaveLength(10);
+    expect(run.cases.map((c) => c.startedAt)).toEqual(Array<number>(10).fill(0));
+    expect(run.elements.A).toEqual({ started: 10, completed: 10 });
+    expect(cycles(run)).toEqual(Array<number>(10).fill(60));
+    expect(run.warnings).toEqual([]);
+  });
+
+  test('con run.duration también: manda el triggerCount y no cambia nada', () => {
+    const run = runReplication(ir, { run: { seed: SEED, duration: 3600 }, elements });
+    expect(run.cases).toHaveLength(10);
+    expect(run.cases.map((c) => c.startedAt)).toEqual(Array<number>(10).fill(0));
+    expect(run.elements.End).toEqual({ started: 10, completed: 10 });
+    expect(run.warnings).toEqual([]);
+  });
+
+  test('un start sin ninguno de los dos campos sigue sin generar y avisa', () => {
+    const run = runReplication(ir, {
+      run: { seed: SEED, duration: 3600 },
+      elements: { A: { processingTime: { type: 'constant', value: 60 } } },
+    });
+    expect(run.cases).toHaveLength(0);
+    expect(run.warnings).toContain(
+      'W-START-SIN-LLEGADAS: Start: el start no declara interTriggerTimer ni triggerCount y no genera casos.',
+    );
+  });
+});

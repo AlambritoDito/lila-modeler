@@ -634,12 +634,30 @@ export function runReplication(
   /* --- generadores de llegadas (R-PERF-5) --------------------------- */
 
   const emitted = new Map<string, number>();
+
+  /** R-ARR-1: `triggerCount` sin `interTriggerTimer` = N llegadas en `t = 0`. */
+  const ARRIVALS_AT_ZERO: Distribution = { type: 'constant', value: 0 };
+
+  /**
+   * Cadencia efectiva del start (R-ARR-1). Un `triggerCount` sin `interTriggerTimer` significa
+   * N llegadas instantáneas en `t = 0`: es el nivel 1 de Bizagi, que solo pide "Max. arrival
+   * count" y los porcentajes de los gateways, sin ningún campo de tiempo con el que espaciarlas
+   * (help.bizagi.com/platform/en/level_1_example.htm). `undefined` = el start no genera nada.
+   */
+  const arrivalTimer = (nodeId: string): Distribution | undefined => {
+    const element = spec[nodeId];
+    if (element?.interTriggerTimer !== undefined) return element.interTriggerTimer;
+    return element?.triggerCount === undefined ? undefined : ARRIVALS_AT_ZERO;
+  };
+
   // Se recorre `ir.nodes` en orden de documento; solo fija el `seq` de las llegadas de t = 0
   // cuando hay varios starts, nunca una decisión (R-DET-1).
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
     if (node.type !== 'start') continue;
-    if (spec[nodeId]?.interTriggerTimer === undefined) {
-      warn(`W-START-SIN-LLEGADAS: ${nodeId}: el start no declara interTriggerTimer y no genera casos.`);
+    if (arrivalTimer(nodeId) === undefined) {
+      warn(
+        `W-START-SIN-LLEGADAS: ${nodeId}: el start no declara interTriggerTimer ni triggerCount y no genera casos.`,
+      );
       continue;
     }
     emitted.set(nodeId, 0);
@@ -714,7 +732,7 @@ export function runReplication(
       const count = (emitted.get(next.startId) ?? 0) + 1;
       emitted.set(next.startId, count);
       const element = spec[next.startId];
-      const interTrigger = element?.interTriggerTimer;
+      const interTrigger = arrivalTimer(next.startId);
       if (interTrigger !== undefined && count < (element?.triggerCount ?? Infinity)) {
         // La cadencia se mide en tiempo de reloj y **después** se desplaza a la apertura
         // (R-ARR-6): el muestreo consume el mismo uniforme haya calendario o no (R-DET-3).
