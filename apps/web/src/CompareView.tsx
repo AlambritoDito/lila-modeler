@@ -24,6 +24,9 @@ import {
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
+import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
+
+export type { CompareRunMeta } from './compareWarnings.js';
 
 export interface CompareViewProps {
   ir: ProcessIR;
@@ -37,6 +40,13 @@ export interface CompareViewProps {
    * existe igual con la base en guion.
    */
   resourceNames?: Readonly<Record<string, string>>;
+  /**
+   * Metadatos de cada corrida, en el mismo orden que `scenarioNames` (OP-05 / issue #210): moneda,
+   * semilla, réplicas, unidad de tiempo propia y los `warnings[]` que ya mostraba `ResultsView`.
+   * Opcional y hacia atrás compatible: sin este prop la vista se comporta exactamente como antes
+   * (sin panel de avisos, sin metadatos en la cabecera, `baseTimeUnit` para todas las columnas).
+   */
+  runs?: readonly CompareRunMeta[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -93,24 +103,64 @@ function isDurationMetric(metric: string): boolean {
   return DURATION_METRIC_PREFIXES.has(metric.split('.')[0] ?? '');
 }
 
+/**
+ * Los únicos campos monetarios de `RunResult` (`run.currency`, docs/RESULTS_FORMAT.md §§2,4,5):
+ * `elements[id].fixedCostTotal`, `resources[id].{fixedCost,unitCost,totalCost}` y
+ * `process.{costPerCase,totalCost}`. Todos son escalares sin punto en su `metric` (a diferencia de
+ * `processing.mean`), así que comparar el nombre completo basta y no hace falta mirar `scope`.
+ */
+const COST_METRICS: ReadonlySet<string> = new Set(['fixedCostTotal', 'fixedCost', 'unitCost', 'totalCost', 'costPerCase']);
+
+function isCostMetric(metric: string): boolean {
+  return COST_METRICS.has(metric);
+}
+
 /** Exportada para que el test ubique la fila de un KPI por su etiqueta sin adivinar el HTML. */
 export function compareMetricLabel(scope: CompareScope, metric: string): string {
   return BIZAGI_COMPARE_LABELS[`${scope}:${metric}`] ?? metric;
 }
 
+/**
+ * `Intl.NumberFormat` solo cuando hay un código ISO 4217 de verdad; si no, número plano (igual que
+ * el resto de la tabla). `RunSchema.currency` valida `/^[A-Z]{3}$/`, más laxo que la lista real de
+ * códigos ISO — un código de tres letras mayúsculas que `Intl` no reconozca (p. ej. inventado a
+ * mano en un escenario de prueba) cae al mismo número plano en vez de lanzar.
+ */
+function formatMoney(value: number, currency: string | undefined): string {
+  if (currency === undefined) return formatNumber(value);
+  try {
+    return new Intl.NumberFormat(undefined, { currency, style: 'currency' }).format(value);
+  } catch {
+    return formatNumber(value);
+  }
+}
+
 /** Igual que `formatCompareValue` de `lila compare`: guion para `null`, % para utilización. */
-function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit): string {
+function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit, currency?: string): string {
   if (value === null) return '-';
+  if (isCostMetric(metric)) return formatMoney(value, currency);
   if (isDurationMetric(metric)) return formatDuration(value, unit);
   if (metric === 'utilization') return `${formatNumber(value * 100)}%`;
   return formatNumber(value);
 }
 
+/** Unidad y moneda con las que se formatea una columna: la de su propia corrida si se conoce. */
+interface ColumnContext {
+  unit: BaseTimeUnit;
+  currency?: string;
+}
+
+const NOT_COMPARABLE = 'no comparable';
+
 /** Texto completo de una celda no base: valor y delta relativo, como `lila compare` en la CLI. */
-function cellText(row: CompareRow, index: number, unit: BaseTimeUnit): string {
+function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsComparable: boolean): string {
   const value = row.values[index] ?? null;
-  const valueText = formatCellValue(row.metric, value, unit);
+  const valueText = formatCellValue(row.metric, value, ctx.unit, ctx.currency);
   if (index === 0 || value === null) return valueText;
+  // Costos en monedas distintas (o una corrida sin moneda): `deltaAbs`/`deltaRel` restan números
+  // crudos sin saber que representan divisas distintas (compare() no conoce `run.currency`), así
+  // que ese delta no se imprime como si fuera dinero real (OP-05, issue #210).
+  if (isCostMetric(row.metric) && !costsComparable) return `${valueText} (${NOT_COMPARABLE})`;
   const deltaRel = row.deltaRel[index] ?? null;
   return `${valueText} (${deltaRel === null ? '-' : formatSignedPercent(deltaRel)})`;
 }
@@ -122,11 +172,16 @@ function cellText(row: CompareRow, index: number, unit: BaseTimeUnit): string {
  * lado. Comparar los textos ya formateados no necesita ningún umbral y también cubre el caso
  * contrario: una fila que solo existe en el TO-BE tiene `deltaAbs === null` (base ausente) y sí
  * cambia, porque la base muestra un guion.
+ *
+ * Costo no comparable (OP-05): nunca se resalta ni se marca como mejora/ahorro, aunque el número
+ * crudo difiera de la base — es la garantía de aceptación "no se presenta una diferencia de costo
+ * entre monedas distintas como ahorro válido".
  */
-function cellChanged(row: CompareRow, index: number, unit: BaseTimeUnit): boolean {
+function cellChanged(row: CompareRow, index: number, ctx: ColumnContext, baseCtx: ColumnContext, costsComparable: boolean): boolean {
   if (index === 0) return false;
-  const value = formatCellValue(row.metric, row.values[index] ?? null, unit);
-  if (value !== formatCellValue(row.metric, row.values[0] ?? null, unit)) return true;
+  if (isCostMetric(row.metric) && !costsComparable) return false;
+  const value = formatCellValue(row.metric, row.values[index] ?? null, ctx.unit, ctx.currency);
+  if (value !== formatCellValue(row.metric, row.values[0] ?? null, baseCtx.unit, baseCtx.currency)) return true;
   const deltaRel = row.deltaRel[index] ?? null;
   return deltaRel !== null && formatSignedPercent(deltaRel) !== '0%';
 }
@@ -163,11 +218,41 @@ const highlightStyle: CSSProperties = { background: 'var(--bg-hover)' };
 
 const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', fontWeight: 700 };
 
-function scenarioColumn(index: number, name: string, unit: BaseTimeUnit): ColumnDef<CompareRow> {
+/**
+ * Cabecera de columna: nombre y, entre paréntesis, "base" y los metadatos que existan (OP-05:
+ * "la cabecera de cada columna muestra moneda, semilla, réplicas y unidad cuando existen"). Sin
+ * `meta` (no se pasó `runs`) se comporta exactamente como antes: solo "(base)" en la columna 0.
+ */
+function columnHeader(name: string, index: number, meta: CompareRunMeta | undefined): string {
+  const tags = [
+    index === 0 ? 'base' : null,
+    meta?.currency ?? null,
+    meta?.seed === undefined ? null : `semilla ${meta.seed}`,
+    meta?.replications === undefined ? null : `${meta.replications} réplicas`,
+    meta?.baseTimeUnit === undefined ? null : `unidad ${meta.baseTimeUnit}`,
+  ].filter((tag): tag is string => tag !== null);
+  return tags.length === 0 ? name : `${name} (${tags.join(' · ')})`;
+}
+
+function scenarioColumn(
+  index: number,
+  name: string,
+  ctx: ColumnContext,
+  baseCtx: ColumnContext,
+  meta: CompareRunMeta | undefined,
+  costsComparable: boolean,
+  significanceAvailable: boolean,
+): ColumnDef<CompareRow> {
   return {
     display: (row): ReactNode => {
-      const text = cellText(row, index, unit);
-      if (row.significant[index] !== true) return text;
+      const text = cellText(row, index, ctx, costsComparable);
+      // Sin réplicas suficientes no hay IC95 (compareWarnings.significanceAvailable), y un costo
+      // no comparable entre monedas tampoco tiene una diferencia real que marcar: en ninguno de
+      // los dos casos se pinta el asterisco, aunque `row.significant[index]` venga en `true`
+      // (OP-05: "la vista no fabrica significancia").
+      const showsSignificance =
+        significanceAvailable && row.significant[index] === true && !(isCostMetric(row.metric) && !costsComparable);
+      if (!showsSignificance) return text;
       return (
         <>
           {text}
@@ -180,15 +265,21 @@ function scenarioColumn(index: number, name: string, unit: BaseTimeUnit): Column
         </>
       );
     },
-    cellStyle: (row): CSSProperties => (cellChanged(row, index, unit) ? highlightStyle : {}),
-    header: index === 0 ? `${name} (base)` : name,
+    cellStyle: (row): CSSProperties => (cellChanged(row, index, ctx, baseCtx, costsComparable) ? highlightStyle : {}),
+    header: columnHeader(name, index, meta),
     key: `scenario-${index}`,
     numeric: true,
     sortValue: (row) => row.values[index] ?? Number.NEGATIVE_INFINITY,
   };
 }
 
-/** Exportada para que el test de QA ordene la tabla sin simular clics (no hay jsdom aquí). */
+/**
+ * Exportada para que el test de QA ordene la tabla sin simular clics (no hay jsdom aquí).
+ *
+ * `runs`, `costsComparable` y `significanceAvailable` son opcionales y hacia atrás compatibles:
+ * las llamadas existentes (sin esos tres argumentos) siguen formateando todas las columnas con
+ * `unit` y mostrando cualquier significancia, exactamente como antes de OP-05.
+ */
 export function compareColumns(
   scope: CompareScope,
   ir: ProcessIR,
@@ -196,6 +287,9 @@ export function compareColumns(
   scenarioNames: readonly string[],
   isVisible: (index: number) => boolean,
   unit: BaseTimeUnit,
+  runs?: readonly CompareRunMeta[],
+  costsComparable = true,
+  significanceAvailable = true,
 ): ColumnDef<CompareRow>[] {
   const idColumns: ColumnDef<CompareRow>[] =
     scope === 'process'
@@ -218,8 +312,19 @@ export function compareColumns(
     // las columnas Id y Name, que ya ordenan por su texto.
     sortValue: (row) => compareMetricLabel(row.scope, row.metric),
   };
+  // Unidad y moneda por columna: la de su propia corrida si `runs` la declara, si no la global
+  // `unit` (y sin moneda) — así una corrida sin metadatos se comporta como antes de OP-05.
+  const columnContext = (index: number): ColumnContext => ({
+    currency: runs?.[index]?.currency,
+    unit: runs?.[index]?.baseTimeUnit ?? unit,
+  });
+  const baseCtx = columnContext(0);
   const scenarioColumns = scenarioNames
-    .map((name, index) => (isVisible(index) ? scenarioColumn(index, name, unit) : null))
+    .map((name, index) =>
+      isVisible(index)
+        ? scenarioColumn(index, name, columnContext(index), baseCtx, runs?.[index], costsComparable, significanceAvailable)
+        : null,
+    )
     .filter((column): column is ColumnDef<CompareRow> => column !== null);
 
   return [...idColumns, metricColumn, ...scenarioColumns];
@@ -257,12 +362,16 @@ const toggleAllStyle: CSSProperties = {
 
 const SCOPES: readonly CompareScope[] = ['elements', 'resources', 'process', 'flows'];
 
+/** Estilo de aviso, igual que la sección "Avisos" de `ResultsView` (LILA-062): mismo token. */
+const warningListStyle: CSSProperties = { color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 };
+
 export function CompareView({
   ir,
   comparison,
   scenarioNames,
   baseTimeUnit,
   resourceNames = {},
+  runs,
 }: CompareViewProps): ReactNode {
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
   // shell puede recomparar con uno más sin remontar la vista) nace visible en vez de quedar
@@ -277,6 +386,15 @@ export function CompareView({
       current.includes(index) ? current.filter((value) => value !== index) : [...current, index],
     );
   }
+
+  // Sin `runs` (compatibilidad hacia atrás, y mientras A no conecte OP-13) `compareWarnings([])`
+  // da `costsComparable`/`significanceAvailable` en `true` y ningún aviso: no hay metadatos que
+  // bloquear nada, exactamente el comportamiento previo a OP-05.
+  const globalWarnings = compareWarnings(runs ?? []);
+  const costsComparable = globalWarnings.costsComparable;
+  const significanceAvailable = globalWarnings.significanceAvailable;
+  const perRunWarnings = (runs ?? []).some((run) => (run.warnings?.length ?? 0) > 0);
+  const showWarningsPanel = runs !== undefined && (globalWarnings.warnings.length > 0 || perRunWarnings);
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
@@ -304,13 +422,57 @@ export function CompareView({
         Mostrar todos los KPI
       </label>
 
+      {/*
+       * Panel de avisos (OP-05, issue #210): los de `compareWarnings` (moneda/unidad/significancia/
+       * semilla/réplicas) primero, y debajo los `warnings[]` propios de cada corrida —los mismos
+       * que `ResultsView` ya mostraba por separado— para no perder ninguno al comparar.
+       */}
+      {showWarningsPanel && (
+        <section style={sectionStyle}>
+          <h2 style={h2Style}>Avisos</h2>
+          {globalWarnings.warnings.length > 0 && (
+            <ul style={warningListStyle}>
+              {globalWarnings.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
+          {(runs ?? []).map((run, index) => {
+            const warnings = run.warnings ?? [];
+            if (warnings.length === 0) return null;
+            return (
+              <div key={index}>
+                <h3 style={{ ...h2Style, fontSize: 13, margin: '12px 0 0' }}>
+                  {index === 0 ? `${run.name} (base)` : run.name}
+                </h3>
+                <ul style={warningListStyle}>
+                  {warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {SCOPES.filter((scope) => scope !== 'flows' || showAll).map((scope) => {
         const rows = visibleCompareRows(comparison.rows, scope, showAll);
         if (rows.length === 0) return null;
         return (
           <DataTable
             key={scope}
-            columns={compareColumns(scope, ir, resourceNames, scenarioNames, isVisible, baseTimeUnit)}
+            columns={compareColumns(
+              scope,
+              ir,
+              resourceNames,
+              scenarioNames,
+              isVisible,
+              baseTimeUnit,
+              runs,
+              costsComparable,
+              significanceAvailable,
+            )}
             rowKey={(row) => row.kpi}
             rows={rows}
             title={TAB_LABELS[scope]}
@@ -320,6 +482,12 @@ export function CompareView({
 
       <section style={sectionStyle}>
         <h2 style={h2Style}>Significancia</h2>
+        {!significanceAvailable && (
+          <p style={{ color: 'var(--status-warning)', margin: '8px 0 0' }}>
+            Sin intervalos de confianza en esta comparación: hacen falta al menos 2 réplicas en
+            cada corrida, así que ningún marcador de significancia se muestra abajo.
+          </p>
+        )}
         <p style={{ color: 'var(--fg-muted)', margin: '8px 0 0' }}>
           <span style={significantMarkStyle}>*</span> diferencia significativa (IC95 sin
           solapamiento). Las celdas resaltadas son las que cambiaron contra la base.
