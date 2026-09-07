@@ -193,7 +193,7 @@ describe('aceptación de LILA-061', () => {
       />,
     );
 
-    teclear('campo-resources.cajero.capacity-valor', '3');
+    teclear('campo-resources.cajero.capacity', '3');
     pulsar('Guardar');
 
     expect(guardados).toHaveLength(1);
