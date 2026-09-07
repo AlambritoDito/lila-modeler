@@ -18,10 +18,11 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { OpenPathRequest, Recent } from './bridge.js';
 import { decideClose, type CloseChoice } from './closeGuard.js';
+import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { findBpmnArg, isBpmnPath } from './openPath.js';
 import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
@@ -62,6 +63,22 @@ const authorizedFolders = new Set<string>();
  */
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'self'";
+
+// -- Seam de pruebas E2E por variables de entorno (OP-14, issue #74) ----------------------------
+// SOLO PARA PRUEBAS, no es una API pública: F no puede accionar diálogos nativos (selector de
+// carpeta, Guardar/Descartar/Cancelar del cierre) desde una sesión automatizada. Leído de
+// `process.env` UNA ÚNICA VEZ aquí, al cargar el módulo — nunca se vuelve a consultar
+// `process.env` más abajo, así ninguna de las tres variables puede cambiar el comportamiento a
+// mitad de una ejecución ya en marcha. Sin ninguna de las tres, `e2e` es `{}` y el comportamiento
+// es idéntico al que había antes de este seam (ver `e2e.ts` para el detalle de cada variable).
+const e2e: E2EOverrides = e2eOverrides(process.env);
+
+/** Añade una línea JSON a `LILA_E2E_LOG` (si está definida); no-op en cualquier otro caso. */
+async function e2eLog(event: string, data: object = {}): Promise<void> {
+  if (e2e.logPath === undefined) return;
+  const line = `${JSON.stringify({ ts: new Date().toISOString(), event, ...data })}\n`;
+  await appendFile(e2e.logPath, line, 'utf8').catch(() => {});
+}
 
 /**
  * Valida `dir` contra `authorizedFolders` (que guarda siempre `realpath`, ver `chooseFolder`/
@@ -277,6 +294,19 @@ function scheduleSaveBounds(win: BrowserWindow): void {
 
 function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:chooseFolder', async (): Promise<string | null> => {
+    if (e2e.folder !== undefined) {
+      // Seam E2E (`LILA_E2E_FOLDER`, ver `e2e.ts`): sin diálogo nativo.
+      if (e2e.folder === null) {
+        await e2eLog('chooseFolder', { result: null });
+        return null;
+      }
+      await mkdir(e2e.folder, { recursive: true });
+      const dir = await realpath(e2e.folder);
+      authorizedFolders.add(dir);
+      await e2eLog('chooseFolder', { result: dir });
+      return dir;
+    }
+
     const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
     });
@@ -312,8 +342,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
       try {
         await writeProjectFolder(dir, document, options);
         await recordRecent(dir, document.name);
+        await e2eLog('writeProject', { dir, ok: true });
       } catch (error) {
-        if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+        if (error instanceof ProjectIOError) {
+          await e2eLog('writeProject', { dir, ok: false, code: error.code });
+          throw new Error(`${error.code}: ${error.message}`);
+        }
+        await e2eLog('writeProject', { dir, ok: false, code: null });
         throw error;
       }
     },
@@ -416,6 +451,7 @@ async function acceptOpenPath(filePath: string): Promise<void> {
   if (process.env.LILA_DEBUG === '1') {
     console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
   }
+  await e2eLog('openPath', request);
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('lila:open-path', request);
   } else {
@@ -493,15 +529,21 @@ function requestRendererSave(win: BrowserWindow): Promise<boolean> {
  * Devuelve `true` si la ventana debe cerrar (`decideClose`, `closeGuard.ts`).
  */
 async function confirmClose(win: BrowserWindow): Promise<boolean> {
-  const result = await dialog.showMessageBox(win, {
-    type: 'question',
-    buttons: ['Guardar', 'Descartar', 'Cancelar'],
-    defaultId: 0,
-    cancelId: 2,
-    message: 'Hay cambios sin guardar.',
-    detail: '¿Quieres guardar los cambios antes de cerrar?',
-  });
-  const choice: CloseChoice = result.response === 0 ? 'save' : result.response === 1 ? 'discard' : 'cancel';
+  let choice: CloseChoice;
+  if (e2e.close !== undefined) {
+    // Seam E2E (`LILA_E2E_CLOSE`, ver `e2e.ts`): sin diálogo nativo.
+    choice = e2e.close;
+  } else {
+    const result = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['Guardar', 'Descartar', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      message: 'Hay cambios sin guardar.',
+      detail: '¿Quieres guardar los cambios antes de cerrar?',
+    });
+    choice = result.response === 0 ? 'save' : result.response === 1 ? 'discard' : 'cancel';
+  }
 
   let saved: boolean | null = null;
   if (choice === 'save') {
@@ -509,16 +551,21 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
   }
 
   const decision = decideClose(true, choice, saved);
+  await e2eLog('closeRequested', { choice, saved, decision });
   if (decision === 'close') {
     dirty = false;
     return true;
   }
   if (choice === 'save' && saved !== true) {
-    await dialog.showMessageBox(win, {
-      type: 'error',
-      message: 'No se pudo guardar.',
-      detail: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
-    });
+    // El diálogo de error tampoco puede mostrarse en una sesión E2E sin interacción: se omite bajo
+    // la misma condición que el diálogo Guardar/Descartar/Cancelar de arriba.
+    if (e2e.close === undefined) {
+      await dialog.showMessageBox(win, {
+        type: 'error',
+        message: 'No se pudo guardar.',
+        detail: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
+      });
+    }
   }
   return false;
 }
