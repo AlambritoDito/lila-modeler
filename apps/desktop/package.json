@@ -1,0 +1,17 @@
+{
+  "name": "@lila/desktop",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc --build && node scripts/copy-web.mjs",
+    "start": "electron .",
+    "dev": "LILA_DEV_URL=http://localhost:5174 electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "smoke": "LILA_SMOKE=1 electron ."
+  },
+  "devDependencies": {
+    "electron": "44.2.0"
+  }
+}
