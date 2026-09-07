@@ -12,8 +12,8 @@
  * - `lila-project.json`: `{ version: 1, id, name, model: { id, name, revision }, scenarioRevisions }`.
  * - `runs/<runId>.result.json`: el `StoredRun` completo.
  */
-import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { isSymlink } from './safePaths.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
 
@@ -22,6 +22,11 @@ const MANIFEST_FILE = 'lila-project.json';
 const RUNS_DIR = 'runs';
 const SCENARIO_SUFFIX = '.scenario.json';
 const RUN_SUFFIX = '.result.json';
+/** Dejado en la carpeta del proyecto solo cuando el rollback de un guardado fallido también falla
+ *  a mitad de camino (`E-RECUPERACION-PENDIENTE`, ver `commitWithRollback`) — lista los `.prev-*`
+ *  que quedaron pendientes de restaurar a mano. En el resto de casos (éxito, o fallo con rollback
+ *  completo) este archivo ni se toca ni se crea. */
+const RECOVERY_FILE = 'lila-recovery.json';
 
 /** Error con código estable para que la UI/tests distingan el motivo sin parsear el mensaje. */
 export class ProjectIOError extends Error {
@@ -338,12 +343,84 @@ async function assertFolderNotOccupied(dir: string, documentId: string): Promise
   );
 }
 
-/** Rechaza (`E-SYMLINK`) si `dest` ya existe como symlink: no se escribe para no reemplazar ni seguir un enlace hacia fuera de la carpeta autorizada. */
-async function assertNotSymlinkDestination(dest: string): Promise<void> {
+/** `true` si `target` existe (como lo que sea — archivo, carpeta, symlink); `false` si no. */
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await lstat(target);
+    return true;
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * Rechaza (`E-SYMLINK`) si `runsDir` ya existe como symlink, o (`E-DESTINO-INVALIDO`) si existe
+ * pero no es una carpeta — en ambos casos sin seguir el enlace ni tocar lo que apunte fuera de la
+ * carpeta autorizada. Ausente es válido: `writeProjectFolder` la crea con `mkdir(…, {recursive})`.
+ */
+async function assertRunsDirUsable(runsDir: string): Promise<void> {
+  if (await isSymlink(runsDir)) {
+    throw new ProjectIOError(
+      'E-SYMLINK',
+      `"${runsDir}" es un symlink; no se escribe para no seguirlo fuera de la carpeta autorizada.`,
+    );
+  }
+  let info;
+  try {
+    info = await stat(runsDir);
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+  if (!info.isDirectory()) {
+    throw new ProjectIOError(
+      'E-DESTINO-INVALIDO',
+      `"${runsDir}" existe y no es una carpeta; no se pueden guardar corridas ahí.`,
+    );
+  }
+}
+
+/**
+ * Preflight de un destino de escritura (OP-08, revisión de A: reproducción del P0 — un
+ * `*.scenario.json` que en disco resulta ser un directorio hacía fallar el `rename` a mitad de un
+ * `Promise.all`, con `model.bpmn` ya cambiado). Se llama para TODOS los destinos antes de escribir
+ * un solo byte (ni siquiera los `.tmp-*`): rechaza (`E-SYMLINK`) si `dest` ya es un symlink;
+ * (`E-DESTINO-INVALIDO`) si existe pero no es un archivo regular (p. ej. un directorio), o si su
+ * carpeta padre no existe o no admite escritura — salvo que el padre sea `runsDir` y aún no exista
+ * (`writeProjectFolder` la crea sola). Ausente y con padre válido: destino aceptado.
+ */
+async function assertValidDestination(dest: string, runsDir: string): Promise<void> {
+  const parent = dirname(dest);
+  const parentEsRunsDirAusente = parent === runsDir && !(await pathExists(parent));
+  if (!parentEsRunsDirAusente) {
+    try {
+      await access(parent, constants.W_OK);
+    } catch {
+      throw new ProjectIOError(
+        'E-DESTINO-INVALIDO',
+        `La carpeta de "${dest}" no existe o no admite escritura.`,
+      );
+    }
+  }
+
   if (await isSymlink(dest)) {
     throw new ProjectIOError(
       'E-SYMLINK',
       `"${dest}" es un symlink; no se escribe para no seguirlo fuera de la carpeta autorizada.`,
+    );
+  }
+  let info;
+  try {
+    info = await stat(dest);
+  } catch (error) {
+    if (isNotFound(error)) return; // no existe: destino válido para crear.
+    throw error;
+  }
+  if (!info.isFile()) {
+    throw new ProjectIOError(
+      'E-DESTINO-INVALIDO',
+      `"${dest}" existe y no es un archivo regular (por ejemplo, un directorio); no se puede guardar ahí.`,
     );
   }
 }
@@ -374,6 +451,127 @@ async function assertNoExternalChanges(trackedWrites: readonly PendingWrite[], o
 }
 
 /**
+ * Seam de prueba (OP-08, revisión de A: P0 de guardado no transaccional, issue #71): permite a los
+ * tests reemplazar `rename` para inyectar un fallo a mitad de la fase de commit sin depender de
+ * permisos del sistema de archivos, que varían por plataforma/usuario (root los ignora). Sin este
+ * parámetro, `writeProjectFolder` usa el `rename` real de `node:fs/promises`; no es una API para
+ * producción.
+ */
+export interface WriteProjectFsImpl {
+  readonly rename?: (oldPath: string, newPath: string) => Promise<void>;
+}
+
+/** Estado de un destino durante la fase de commit — lo que hace falta para deshacerlo si algo después falla. */
+interface CommitStep {
+  readonly dest: string;
+  /** Ruta `.prev-*` a la que se movió el contenido anterior de `dest`, o `null` si `dest` no existía. */
+  readonly prevPath: string | null;
+  /** `true` una vez `rename(dest, prevPath)` completó con éxito (solo relevante si `prevPath` no es `null`). */
+  movedToPrev: boolean;
+  /** `true` una vez `rename(tmp, dest)` completó con éxito: el contenido nuevo ya está en `dest`. */
+  tmpMoved: boolean;
+}
+
+/** Deshace un único `CommitStep` en el estado en el que haya quedado. `true` si el deshacer funcionó. */
+async function undoCommitStep(step: CommitStep, doRename: NonNullable<WriteProjectFsImpl['rename']>): Promise<boolean> {
+  try {
+    if (step.tmpMoved) {
+      await unlink(step.dest); // quita el contenido nuevo que se acaba de mover ahí.
+    }
+    if (step.movedToPrev) {
+      await doRename(step.prevPath!, step.dest); // restaura el contenido anterior.
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deshace todos los `steps` ya intentados, en orden inverso (LIFO: el último destino tocado se
+ * deshace primero). Devuelve las rutas `.prev-*` (o, a falta de una, el propio destino) que
+ * quedaron sin poder restaurar — vacío si el rollback fue completo.
+ */
+async function rollbackCommit(
+  steps: readonly CommitStep[],
+  doRename: NonNullable<WriteProjectFsImpl['rename']>,
+): Promise<readonly string[]> {
+  const pending: string[] = [];
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]!;
+    const ok = await undoCommitStep(step, doRename);
+    if (!ok) pending.push(step.prevPath ?? step.dest);
+  }
+  return pending;
+}
+
+/** Escribe `lila-recovery.json` con los `.prev-*` que un rollback fallido dejó pendientes de restaurar a mano. */
+async function writeRecoveryFile(dir: string, pending: readonly string[]): Promise<void> {
+  const payload = { version: 1, createdAt: new Date().toISOString(), pending };
+  await writeFile(join(dir, RECOVERY_FILE), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * Fase de commit (OP-08, revisión de A: P0 de guardado no transaccional). A diferencia de la
+ * versión anterior (todos los `rename` en un `Promise.all`, donde un fallo a mitad de camino podía
+ * dejar, p. ej., `model.bpmn` ya cambiado mientras un escenario fallaba), esto renombra
+ * secuencialmente y lleva un journal en memoria (`steps`): por archivo, primero aparta el destino
+ * existente (si lo había) a `<destino>.prev-<token>`, luego mueve el temporal al destino. Si
+ * cualquier paso falla, deshace TODO lo ya hecho en orden inverso (`rollbackCommit`) y rechaza con
+ * el error original. Si el propio rollback no logra restaurar algún `.prev-*`, en vez de perderlo
+ * en silencio se escribe `lila-recovery.json` y se rechaza con `E-RECUPERACION-PENDIENTE`. Al
+ * terminar con éxito, borra los `.prev-*` (ya no hacen falta).
+ */
+async function commitWithRollback(
+  dir: string,
+  writes: readonly PendingWrite[],
+  tmpPaths: readonly string[],
+  fsImpl: WriteProjectFsImpl,
+): Promise<void> {
+  const doRename = fsImpl.rename ?? rename;
+  const steps: CommitStep[] = [];
+
+  try {
+    for (let i = 0; i < writes.length; i++) {
+      const dest = writes[i]!.dest;
+      const tmp = tmpPaths[i]!;
+      const existedBefore = await pathExists(dest);
+      const prevPath = existedBefore ? `${dest}.prev-${randomSuffix()}` : null;
+      const step: CommitStep = { dest, prevPath, movedToPrev: false, tmpMoved: false };
+      steps.push(step); // ya en el journal ANTES de intentar nada: si algo de abajo lanza, el rollback lo ve.
+
+      if (prevPath !== null) {
+        await doRename(dest, prevPath);
+        step.movedToPrev = true;
+      }
+      await doRename(tmp, dest);
+      step.tmpMoved = true;
+    }
+  } catch (error) {
+    const pending = await rollbackCommit(steps, doRename);
+    // Limpia cualquier `.tmp-*` que no llegó a moverse (los ya movidos ya no existen en su ruta
+    // temporal: `unlink` sobre ellos es un ENOENT silencioso).
+    await Promise.all(tmpPaths.map((tmp) => unlink(tmp).catch(() => {})));
+    if (pending.length > 0) {
+      await writeRecoveryFile(dir, pending).catch(() => {});
+      throw new ProjectIOError(
+        'E-RECUPERACION-PENDIENTE',
+        `El guardado falló y el deshacer no pudo restaurar por completo: ${pending.join(', ')}. Revisa ` +
+          `"${RECOVERY_FILE}" en la carpeta del proyecto. Causa original: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+    throw error;
+  }
+
+  // Éxito: los `.prev-*` ya no hacen falta.
+  await Promise.all(
+    steps.filter((step) => step.movedToPrev).map((step) => unlink(step.prevPath!).catch(() => {})),
+  );
+}
+
+/**
  * Escribe el documento completo. Antes de tocar el disco: (a) si `options.saveAs`, verifica que la
  * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) salvo
  * `options.overwrite`, rechaza si el modelo/manifiesto/algún escenario cambió en disco desde la
@@ -381,14 +579,18 @@ async function assertNoExternalChanges(trackedWrites: readonly PendingWrite[], o
  * resuelve todas las corridas — una que ya existe con **otro** contenido es `E-RUN-DUPLICADO` y
  * aborta sin escribir nada (ni el modelo, ni los escenarios, ni el manifiesto) — "no reemplazar
  * archivos válidos parcialmente" del contrato; una corrida con el mismo contenido es no-op; (d)
- * rechaza si algún destino (incluida la propia carpeta `runs`) ya es un symlink, sin tocar el
- * enlace ni lo que apunte fuera (OP-14, revisión de A, issue #71). El resto de archivos (modelo,
- * escenarios, manifiesto) siempre se reescriben.
+ * preflight de TODOS los destinos (`assertValidDestination`/`assertRunsDirUsable`): symlink
+ * (`E-SYMLINK`), directorio u otro no-archivo, o carpeta padre inexistente/sin permiso de escritura
+ * (`E-DESTINO-INVALIDO`) — nada de esto toca el disco (OP-08, revisión de A, issue #71: reproducción
+ * del P0 con un destino de escenario que resultaba ser un directorio). Solo tras pasar todo eso se
+ * escribe: primero los temporales (fase 1), luego el commit con rollback (`commitWithRollback`,
+ * fase 2) que dejaría los destinos anteriores intactos si cualquier `rename` de la fase 2 falla.
  */
 export async function writeProjectFolder(
   dir: string,
   document: ProjectDocument,
   options: WriteProjectOptions = {},
+  fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
   if (options.saveAs === true) {
     await assertFolderNotOccupied(dir, document.id);
@@ -398,13 +600,14 @@ export async function writeProjectFolder(
   const runWrites: PendingWrite[] = [];
 
   if (document.runs.length > 0) {
-    // La carpeta `runs` en sí como symlink hacia fuera: `readFile`/`mkdir` de abajo la seguirían.
-    await assertNotSymlinkDestination(runsDir);
+    // La carpeta `runs` en sí como symlink hacia fuera, o algo que no sea una carpeta: `readFile`/
+    // `mkdir` de abajo la seguirían o fallarían de forma confusa.
+    await assertRunsDirUsable(runsDir);
   }
 
   for (const run of document.runs) {
     const dest = join(runsDir, `${run.id}${RUN_SUFFIX}`);
-    await assertNotSymlinkDestination(dest);
+    await assertValidDestination(dest, runsDir);
     const content = `${JSON.stringify(run, null, 2)}\n`;
     let existing: string | null = null;
     try {
@@ -443,11 +646,11 @@ export async function writeProjectFolder(
 
   const writes: PendingWrite[] = [...trackedWrites, ...runWrites];
 
-  // Defensa en profundidad además del chequeo puntual de `runsDir`/cada corrida de arriba: vuelve
-  // a comprobar TODOS los destinos (modelo, manifiesto, escenarios incluidos) justo antes de tocar
-  // disco, para que ningún camino nuevo que se añada aquí pueda olvidarse de la comprobación.
+  // Preflight final: vuelve a validar TODOS los destinos (modelo, manifiesto, escenarios y
+  // corridas incluidos) justo antes de tocar disco, para que ningún camino nuevo que se añada aquí
+  // pueda olvidarse de la comprobación. Nada se ha escrito todavía en este punto.
   for (const { dest } of writes) {
-    await assertNotSymlinkDestination(dest);
+    await assertValidDestination(dest, runsDir);
   }
 
   if (runWrites.length > 0) {
@@ -468,9 +671,10 @@ export async function writeProjectFolder(
     throw error;
   }
 
-  // Fase 2: todos los renames. Cada uno es atómico por sí solo (mismo volumen); no hay una
-  // garantía transaccional multi-archivo más allá de eso (ver comentario del ticket).
-  await Promise.all(writes.map(({ dest }, i) => rename(tmpPaths[i]!, dest)));
+  // Fase 2: commit secuencial con rollback (ver `commitWithRollback`) — ya no es un `Promise.all`
+  // de renames independientes: un fallo a mitad de camino deshace lo ya hecho en vez de dejar el
+  // guardado a medias.
+  await commitWithRollback(dir, writes, tmpPaths, fsImpl);
 
   // Snapshot posterior a la escritura: para el próximo `writeProjectFolder` de este proceso, "lo
   // que acabamos de escribir" ya cuenta como "lo último que vimos" (solo para los archivos
