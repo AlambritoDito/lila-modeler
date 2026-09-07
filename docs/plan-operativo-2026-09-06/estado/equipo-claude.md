@@ -25,8 +25,13 @@ Contiene OP-08 (B, f0d2095: `DesktopStore` implementa `ProjectSessionStore` sobr
 ## Checkpoint fc6f9a2 de A consumido → d536b75 en la rama Claude
 Incluye el bootstrap de `DesktopStore` en `main.tsx` (f5def78), OP-08/OP-11 integrados por A y sus fixes de OP-14 en App. Verificado aquí: `npx vitest run apps/web apps/desktop` 295/295, typecheck web PASS, build web+desktop y smoke PASS. Se empaqueta la `.app` de d536b75 para un recorrido preliminar de OP-18 mientras B termina OP-14. OP-17 inc. 1 (E, aa60dd1: `docs/GUIA-BETA-MAC.md`, `THIRD_PARTY_LICENSES.md`, sección README) también integrado.
 
+## SHA listo para consumo por A: 49c9d1b (OP-14 integrado)
+OP-14 (B, 633ffa7): symlinks por `realpath`/`lstat`, `isTrustedSender` por origen en todo IPC, `will-navigate` bloqueado, CSP estricta (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'self'`), `E-PROYECTO-DISTINTO`/`E-CARPETA-OCUPADA`, cierre Guardar/Descartar/Cancelar con `setDirty`/`onSaveRequested` reales, `estado.json` (ventana + recientes), `E-CAMBIO-EXTERNO` (+`overwrite`), apertura de `.bpmn` por `open-file`/argv/segunda instancia. Verificado aquí sobre 49c9d1b: `npx vitest run apps/web apps/desktop` 357/357; typecheck web y desktop PASS; build + smoke PASS.
+Pendiente en B (en curso, SHA nuevo al terminar): rollback transaccional del P0 43a29cf (preflight + journal/undo) y seam E2E por variables de entorno para que F pruebe carpeta/guardar/cerrar/reabrir sin diálogos.
+Peticiones a A de OP-14: conectar `listRecents`/`openRecent` y `pendingOpenPath`/`onOpenPath` en la UI; UX ante `E-CAMBIO-EXTERNO` (Sobrescribir vs Guardar como). Ninguna bloquea la beta Mac.
+
 ## Activo
-- B (Sonnet): OP-14 en `codex/op-b-desktop` sobre ae7523e: realpath/symlinks, `senderFrame`, `will-navigate`, CSP, guardia `E-PROYECTO-DISTINTO`, cierre Guardar/Descartar/Cancelar, recientes, ventana, `E-CAMBIO-EXTERNO`, apertura de `.bpmn`. Después: rollback transaccional del P0 de A.
+- B (Sonnet): incremento final sobre 49c9d1b: guardado transaccional (P0 de A) + seam E2E (`LILA_E2E_FOLDER`, `LILA_E2E_CLOSE`, `LILA_E2E_LOG`).
 - E: libre (OP-17 inc. 1 entregado). Siguiente: reescribir «Guardar y recuperar» de la guía sobre el artefacto final.
 - F: revisión e integración; después OP-14 y OP-18.
 
