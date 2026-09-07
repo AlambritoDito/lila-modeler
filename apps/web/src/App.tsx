@@ -156,6 +156,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     if (modelador === null) throw new Error('El modelador todavía no está listo.');
     const atRevision = revisionRef.current;
     const xml = await modelador.exportar();
+    if (atRevision !== revisionRef.current) throw new Error('El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.');
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
@@ -177,10 +178,11 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return false; }
     finally { ioLock.current = false; setIoBusy(false); }
   }
-  async function activate(raw: ProjectDocument, saved: boolean): Promise<boolean> {
+  async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
     if (modelador === null) return false;
     const doc = readProject(raw);
     const parsed = await parseBpmn(doc.model.xml);
+    if (expectedToken !== tokenRef.current) throw new Error('El proyecto cambió mientras se abría el archivo. Conservamos tus cambios; vuelve a abrirlo.');
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
@@ -196,9 +198,10 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   async function projectAction(kind: 'new' | 'open' | 'bpmn'): Promise<void> {
     if (adapter === null || modelador === null || ioLock.current) return;
     if (dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
-      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true); return; }
+      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
       const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
       if (data === null) return;
       const parsed = await parseBpmn(data.xml);
@@ -206,7 +209,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
       const created = await adapter.createProject(doc);
-      if (created) await activate(created, true);
+      if (created) await activate(created, true, beforeToken);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally { ioLock.current = false; setIoBusy(false); }
   }
