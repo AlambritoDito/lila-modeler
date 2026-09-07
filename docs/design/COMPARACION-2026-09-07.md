@@ -17,7 +17,7 @@ Leyenda: **✓** ya está · **≈** existe pero distinto · **✗** falta.
 | `fg.onAccent` Papel | `#FFFFFF` | `#0B0603` | **se mantiene `#0B0603`**: blanco sobre `#EC3013` da 4,2:1 y el test exige AA 4,5:1. El artefacto pone versalitas de 11 px en negrita, donde 3:1 bastaría; la app usa 13 px regular. |
 | `shadow` | sombra completa (`0 6px 18px rgba(32,30,29,.14)`) | color con alfa | color con alfa `#201E1D24`; la sombra se compone en CSS (decisión ya documentada) |
 | Tipografía | Archivo 400–800, JetBrains Mono para cifras/ids/atajos | Archivo sin cargar; mono declarada | ✓ Archivo y JetBrains Mono cargadas con `@fontsource` (#238); la mono va en cifras de tablas, ids y barra de estado |
-| Radio | 0 en todo (Modernist: sin esquinas) | `border-radius: 4px` en botones y 8 px en diálogos | ✓ sin radios (#238): ninguno en `app.css` ni en los estilos en línea de Resultados/Comparar. Los del context pad y el popup menu de bpmn-js se quedan: son suyos |
+| Radio | 0 en todo (Modernist: sin esquinas) | `border-radius: 4px` en botones y 8 px en diálogos | ✓ sin radios (#238): ninguno en `app.css`, en los estilos en línea de Resultados/Comparar ni en la etiqueta de cuello de botella que inyecta `BottleneckOverlay.ts`. Los del context pad y el popup menu de bpmn-js se quedan: son suyos |
 
 ## Pantalla por pantalla
 

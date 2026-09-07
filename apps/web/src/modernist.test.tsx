@@ -26,7 +26,7 @@ describe('Modernist (LILA-206)', () => {
   });
 
   it('no deja ningún radio distinto de 0 en el CSS ni en los estilos en línea', () => {
-    for (const nombre of ['app.css', 'theme/tokens.css']) {
+    for (const nombre of ['app.css', 'theme/tokens.css', 'BottleneckOverlay.ts']) {
       const radios = [...leer(nombre).matchAll(/border-radius:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
       expect(radios.filter((valor) => !/^0\w*$/.test(valor)), nombre).toEqual([]);
     }
