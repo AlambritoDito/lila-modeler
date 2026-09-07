@@ -8,3 +8,5 @@ VERIFICADO: 17 tests de App y tipos web PASS. Nuevos casos: cancelar reemplazo; 
 P0 breve adicional, antes de editar: impedir interacción con lienzo/panel/undo mientras IO está en curso. La importación transaccional de Modeler es asíncrona: una edición después de la última comprobación de App y antes del intercambio de modeladores podría perderse. inert en zonas de edición y botones undo/redo deshabilitados cierran esa ventana; se conservan además los guards de revisión existentes. Próximo: prueba de estado de controles en apertura pendiente y tipos.
 
 VERIFICADO: 18 tests App y tipos web PASS. Interacción bloqueada durante IO y restaurada al cancelar.
+
+Revisión ab2578f B: cierre nativo/IPC en incremento 1 verificados por B, aún no consumidos por A esperando cierre P0 de IO. Repro Nuevo sin saveAs sobrescribe carpeta; readProjectFolder sigue symlink de model.bpmn. Detalle y rutas en equipo-codex. No se editan módulos de B.

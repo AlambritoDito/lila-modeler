@@ -1,6 +1,6 @@
 # Disponibilidad Codex — vigente
 
-A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C/D terminaron; ningún trabajador activo. Sin cesión. Último saldo observado 13% restante; solo P0/cierre. Tres resets conservados, no consumir.
+A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C/D terminaron; ningún trabajador activo. Sin cesión. Último saldo observado 12% restante; solo P0/cierre. Tres resets conservados, no consumir.
 
 ## Listo para F: f061c32 + siguiente commit de guardia IO
 - **f061c32 checkpoint completo 5 VERIFICADO**: 1182 tests PASS / 1 skipped, tipos raíz/web y builds web/desktop PASS. Logs `/tmp/lila-a-checkpoint5-*.log`. Smoke Electron real sin Vite: lienzo/tema/fuente/puente ok, consoleErrors vacío, loadFailure null (`/tmp/lila-a-desktop-bootstrap-smoke.log`).
@@ -22,3 +22,10 @@ Vite propio PID45442 DETENIDO a 23:30, no servidor requerido por Electron. Fixtu
 F: consumir último commit integrable de esta rama, integrar OP14 listo y devolver SHA a A. A hará checkpoint combinado final; F construye y prueba app empaquetada del MISMO SHA con Vite detenido y registra artefacto/recorrido. DMG de OP12 anterior es infraestructura, no la beta aceptada. OP16/extras pospuestos. Sin main/push/releases/npm/producción.
 
 A preparó estado/OP-18-codex.md con recorrido vigente de proyecto NUEVO por carpeta y dos escenarios propios para F; evita el paso de importar BPMN suelto que no existe en la modalidad desktop actual. Sin nuevas modificaciones funcionales desde fc6f9a2.
+
+## Revisión OP14 ab2578f — P0 concretos para B/F antes del incremento final
+- **Nuevo proyecto sobre carpeta ocupada aún sobrescribe**: DesktopStore.createProject llama writeProject(dir,document) sin {saveAs:true}; primer saveProject sin activeDir también pasa saveAs:false aunque acaba de elegir carpeta. assertFolderNotOccupied solo corre con saveAs:true. Repro con documento original→nuevo sin opciones deja model.bpmn=NUEVO. Pasar modo de destino nuevo a createProject y primer guardado, además de Guardar como; test de carpeta ajena intacta.
+- **Lectura model.bpmn (y manifest) sigue symlinks**: readProjectFolder lee modelo directo y readManifest también; la protección de B cubrió escenarios/runs. Repro model.bpmn symlink a archivo temporal externo devuelve MARCADOR_EXTERNO. Rechazar con E-SYMLINK antes de leer modelo/manifiesto; verificar carpeta raíz real/autorizada si cambia durante sesión.
+- Reproducciones aisladas: /var/folders/wg/5yq4g1gj52s21z2rh5szn9gm0000gn/T/lila-review-op14-gccPcx; sin modificar worktree de B. Métodos importados de B solo para estos datos temporales.
+- problems sigue eliminado en toProjectDocument ab2578f: pendiente propagar campo ya admitido por contrato A.
+- Guardado con rollback y conflictos externos aún pendientes incremento 2; no repetir QA final antes de resolverlos. Recientes/ventana extras detrás de estos P0.
