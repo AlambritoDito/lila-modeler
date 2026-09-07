@@ -17,3 +17,9 @@ Vite de A detenido; no modificar código funcional después del SHA con el que s
 
 ## Cierre de integración A (2026-09-07 07:06)
 F entregó e2adccd, funcional89f82bd, DMG arm64 con1265 tests/1omitido y QA E2E por seam. B corrigió los P0 reportados. A consume entrega completa y comprueba equivalencia funcional con SHA del artefacto. Próximo: suite/tipos/build combinados, después recorrido nativo real por CUA incluyendo edición BPMN y diálogos, ya accesibles. No sustituir pruebas nativas por el seam ni declarar edición empaquetada probada antes de ejecutarla.
+
+## P0 nativo reproducido: cerrar botón rojo impide reabrir
+App89f82bd: Nuevo mediante diálogo nativo, proceso=Proyecto QA nativo, tarea=Revisar solicitud, undo/redo y Guardar PASS (XML verificado en /tmp/Lila QA nativa canción 20260907). Cerrar botón rojo deja proceso Mac sin ventanas; reabrir desde Finder no crea una ventana. main.ts omite quit en darwin y no tiene listener activate. No es fallo de selector ni del modelo.
+B/E terminaron sin tareas activas según entrega e2adccd. A corrige este defecto nuevo de integración en su worktree (no toma trabajo inacabado ni archivos de B activos): beta de una sola ventana termina app cuando se cierra la última ventana, en todas las plataformas. Guardias de cierre existentes siguen ejecutándose antes de que ocurra window-all-closed. Decisión reversible, evita añadir ciclo de recreación y listeners IPC duplicados en este cierre P0. Próximo: closeGuard/tipos, commit, rebuild DMG del SHA nuevo y QA nativo final.
+
+Corrección de cierre: 34 tests closeGuard/projectIO y tipos desktop PASS. Se construye nuevo artefacto; aceptación aún pendiente del nuevo SHA.

@@ -728,6 +728,9 @@ app.whenReady().then(async () => {
   await loadPromise;
 });
 
+// Esta beta tiene una sola ventana: cerrar termina la sesión también en macOS.
+// Las guardias de dirty ya se resolvieron antes de window-all-closed; al volver a
+// abrir desde Finder se crea una sesión nueva con sus handlers IPC propios.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
