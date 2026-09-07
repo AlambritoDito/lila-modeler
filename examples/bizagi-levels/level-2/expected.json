@@ -3,7 +3,8 @@
   "level": 2,
   "title": "Level 2 - Throughput time analysis: Performing a time analysis for the Emergency attendance process",
   "values": {
-    "waitTimeSeconds": {
+    "cycleTimeSeconds": {
+      "nota": "LILA-187: esta fila se llamaba 'waitTimeSeconds', pero la tabla de Bizagi titula la columna 'Min./Max./Avg. time' del PROCESO completo (procesamiento + espera) -- eso es process.cycleTime en Lila, no process.waitTime (que es espera pura y aqui vale 0 por R-DEG-1, recursos infinitos). La pagina lo confirma en otra parte: 'the minimum amount of time that any of the simulated tokens lasted inside the process ... this time is 3 hours and corresponds to a token that is processed first by Task 1 (1 hour), and then by Task 2 (2 hours)' -- procesamiento mas espera.",
       "min": 960,
       "max": 1980,
       "avg": 1503,
@@ -12,7 +13,24 @@
         "A patient waits no more than 33 minutes for medical attention.",
         "The expected time a patient waits to receive medical attention is 25 minutes and 3 seconds."
       ]
+    },
+    "processTable": {
+      "source": "https://help.bizagi.com/platform/en/processvalidation47.png",
+      "nota": "Tabla completa 'Simulation Results > Patient Assistance', columnas Instances completed/started, Min./Max./Avg./Total time. Transcrita integra de la captura (legible, ver LILA-044 QA); no citada en prosa por la pagina.",
+      "rows": {
+        "Patient Assistance (process)":  { "instancesCompleted": 2017, "instancesStarted": 2017, "minMin": 16, "maxMin": 33, "avg": "25m 3s" },
+        "Receive Emergency Report":      { "instancesCompleted": 2017, "instancesStarted": 2017, "minMin": 4,  "maxMin": 4,  "avg": "4m" },
+        "Classify Triage":               { "instancesCompleted": 2017, "instancesStarted": 2017, "minMin": 5,  "maxMin": 5,  "avg": "5m" },
+        "Pick up patient":               { "instancesCompleted": 1006, "instancesStarted": 1006, "minMin": 20, "maxMin": 20, "avg": "20m" },
+        "Manage patient entry":          { "instancesCompleted": 1006, "instancesStarted": 1006, "minMin": 11, "maxMin": 11, "avg": "11m" },
+        "Arrive at patient place QAV":   { "instancesCompleted": 618,  "instancesStarted": 618,  "minMin": 7,  "maxMin": 7,  "avg": "7m" },
+        "Authorize Entry":               { "instancesCompleted": 1006, "instancesStarted": 1006, "minMin": 4,  "maxMin": 4,  "avg": "4m" },
+        "Red Triage end":                { "instancesCompleted": 1006 },
+        "Yellow Triage end":             { "instancesCompleted": 618 },
+        "Arrive at patient place BA":    { "instancesCompleted": 393,  "instancesStarted": 393,  "minMin": 10, "maxMin": 10, "avg": "10m" },
+        "Green Triage end":              { "instancesCompleted": 393 }
+      }
     }
   },
-  "nota": "Bizagi asume aqui capacidad infinita de recursos (sin resources en el escenario). La tabla completa de resultados por actividad (ProcessValidation47/48.png) es una imagen, no texto: no se transcribe para no inventar cifras. El intervalo entre llegadas (media 5 min) y el periodo de simulacion (1 semana) sí estan publicados en texto y se usan en scenario.json; la probabilidad del gateway QAV/BA no se publica en texto (ver documentation del .bpmn)."
+  "nota": "Bizagi asume aqui capacidad infinita de recursos (sin resources en el escenario). LILA-187 corrigio la topologia (era 7 tareas en secuencia, ahora es la del diagrama oficial, ver model.bpmn) y las llegadas (constante de 5 min con triggerCount 2017, no exponencial -- ver scenario.json). El reparto de esta corrida (1006/618/393) es una unica corrida de Bizagi con ruido propio sobre el 50/30/20% declarado; no coincide token a token con el de level-1 (483/315/202), que es otra corrida distinta de la misma pagina."
 }

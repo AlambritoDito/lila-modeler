@@ -3,6 +3,14 @@ import { describe, expect, test } from 'vitest';
 import type { Flow, Node, NodeType, ProcessIR } from '../../src/core/ir.js';
 import { aggregateReplication } from '../../src/core/metrics.js';
 import type { EventLogRow } from '../../src/core/result.js';
+import {
+  capacityAt,
+  compileCalendar,
+  compileCapacity,
+  nextCapacityRise,
+  openTime,
+  weekOffsetSeconds,
+} from '../../src/core/calendar.js';
 import { runReplication, type ReplicationRun, type SimScenario } from '../../src/core/sim.js';
 
 /**
@@ -574,5 +582,167 @@ describe('(h) invariantes con calendarios', () => {
     const comunes = Object.keys(antes).filter((id) => id in despues);
     expect(comunes.length).toBeGreaterThan(50);
     for (const id of comunes) expect(despues[id]).toBe(antes[id]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * R-CAL-11 — capacidad por intervalos dentro de un mismo pool (LILA-164)
+ * ------------------------------------------------------------------ */
+
+const TODOS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+/** 08:00–20:00 todos los días. */
+const DIA = { intervals: [{ days: TODOS, from: '08:00', to: '20:00' }] };
+/** 20:00–08:00 todos los días, partido en dos por R13; junto con `DIA` cubre las 24 h. */
+const NOCHE = {
+  intervals: [
+    { days: TODOS, from: '20:00', to: '24:00' },
+    { days: TODOS, from: '00:00', to: '08:00' },
+  ],
+};
+/** Lunes 00:00: `t = 0` cae al principio del turno de noche. */
+const LUNES_0000 = '2026-09-07T00:00:00-06:00';
+
+describe('capacidad por intervalos (LILA-164, R-CAL-11)', () => {
+  const ir = makeIr(
+    { Start: 'start', Tarea: 'task', End: 'end' },
+    { F1: ['Start', 'Tarea'], F2: ['Tarea', 'End'] },
+  );
+
+  /** 3 enfermeras de día y 1 de noche: un solo pool, dos tramos. */
+  const scenario: SimScenario = {
+    run: { start: LUNES_0000, seed: 7 },
+    calendars: { dia: DIA, noche: NOCHE },
+    elements: {
+      // Llegada cada 700 s y servicio de 1700 s: 2,4 servidores de carga, así que de día (3) el
+      // pool va lleno y de noche (1) se acumula cola. Los 1700 s son a propósito **no** divisor
+      // de las 12 h del turno de día: con el pool saturado los arranques se alinean al servicio y
+      // un divisor exacto haría que el cierre coincidiera siempre con tres finales de tarea.
+      Start: { interTriggerTimer: { type: 'constant', value: 700 }, triggerCount: 200 },
+      Tarea: { processingTime: { type: 'constant', value: 1700 }, resources: [{ ref: 'enfermera' }] },
+    },
+    resources: {
+      enfermera: {
+        capacity: [
+          { calendar: 'dia', capacity: 3 },
+          { calendar: 'noche', capacity: 1 },
+        ],
+      },
+    },
+  };
+
+  const run = runReplication(ir, scenario);
+  const filas = instances(run, 'Tarea').filter((row) => row.startedAt !== null);
+  const offset = weekOffsetSeconds(LUNES_0000);
+  const horario = compileCapacity(
+    [
+      { calendar: compileCalendar(DIA, offset), capacity: 3 },
+      { calendar: compileCalendar(NOCHE, offset), capacity: 1 },
+    ],
+    offset,
+  );
+
+  test('la unión de los dos turnos es un 24×7: ninguna tarea espera fuera de horario', () => {
+    expect(filas.length).toBeGreaterThan(100);
+    for (const row of filas) expect(row.offHoursWait).toBe(0);
+  });
+
+  test('ninguna tarea arranca con el pool lleno: la capacidad se lee en el instante de la concesión', () => {
+    for (const row of filas) {
+      const t = row.startedAt!;
+      const simultaneas = filas.filter((otra) => otra.startedAt! <= t && (otra.endedAt ?? Infinity) > t).length;
+      expect(simultaneas, `${simultaneas} simultáneas en t=${t}`).toBeLessThanOrEqual(capacityAt(horario, t));
+    }
+  });
+
+  test('al cerrar el turno de día las tareas en curso NO se interrumpen: el pool queda sobreocupado', () => {
+    // A las 20:00 la capacidad baja de 3 a 1 con dos tareas en marcha (llegada cada 15 min,
+    // servicio de 30 min ⇒ dos en servicio en régimen); ninguna se corta y el pool queda con
+    // `used = 2 > 1` hasta que terminan.
+    const cierre = 20 * HOUR + 1; // justo después de la bajada de 3 a 1
+    const enCurso = filas.filter((row) => row.startedAt! < cierre && (row.endedAt ?? Infinity) > cierre);
+    expect(capacityAt(horario, cierre)).toBe(1);
+    expect(enCurso.length, 'el pool queda sobreocupado tras la bajada').toBeGreaterThan(1);
+    for (const row of enCurso) expect(row.endedAt! - row.startedAt!).toBe(1700);
+  });
+
+  test('al subir la capacidad a las 08:00 arranca la cola acumulada de noche', () => {
+    const apertura = DAY + 8 * HOUR; // martes 08:00
+    expect(nextCapacityRise(horario, DAY)).toBe(apertura);
+    const arrancan = filas.filter((row) => row.startedAt === apertura);
+    expect(arrancan.length, 'la subida de capacidad despierta la cola').toBeGreaterThan(0);
+    for (const row of arrancan) expect(row.enabledAt).toBeLessThan(apertura);
+  });
+
+  test('R-CAL-9: el denominador de la utilización es Σ capacity_i × openTime_i', () => {
+    const metrics = aggregateReplication(ir, run, scenario);
+    const disponible =
+      3 * openTime(compileCalendar(DIA, offset), 0, run.stoppedAt)
+      + 1 * openTime(compileCalendar(NOCHE, offset), 0, run.stoppedAt);
+    expect(metrics.resources.enfermera!.utilization).toBeCloseTo(
+      metrics.resources.enfermera!.busyTime / disponible,
+      12,
+    );
+    // Y no es lo mismo que medir contra el máximo del pool: el turno de noche pesa menos.
+    expect(disponible).toBeLessThan(3 * run.stoppedAt);
+  });
+
+  test('un solo tramo es byte a byte el pool con `capacity` numérica y `calendar`', () => {
+    const porTramo: SimScenario = {
+      ...scenario,
+      resources: { enfermera: { capacity: [{ calendar: 'dia', capacity: 3 }] } },
+    };
+    const numerico: SimScenario = {
+      ...scenario,
+      resources: { enfermera: { capacity: 3, calendar: 'dia' } },
+    };
+    expect(runReplication(ir, porTramo)).toEqual(runReplication(ir, numerico));
+  });
+
+  test('dos calendarios que se solapan SUMAN su capacidad', () => {
+    const siempre = compileCalendar({ intervals: [{ days: TODOS, from: '00:00', to: '24:00' }] }, 0);
+    const solapado = compileCapacity(
+      [
+        { calendar: compileCalendar(DIA, 0), capacity: 2 },
+        { calendar: siempre, capacity: 1 },
+      ],
+      0,
+    );
+    expect(capacityAt(solapado, 9 * HOUR)).toBe(3); // 2 del turno de día + 1 del 24×7
+    expect(capacityAt(solapado, 22 * HOUR)).toBe(1);
+    expect(solapado.max).toBe(3);
+  });
+
+  test('durante el cierre del pool entero vale la capacidad de la siguiente apertura (R-CAL-6)', () => {
+    const soloDia = compileCapacity([{ calendar: compileCalendar(DIA, 0), capacity: 3 }], 0);
+    // Cerrado a las 22:00 y aun así 3: la concesión ocurre y el trabajo espera a la apertura, que
+    // es exactamente lo que hacía el pool con `capacity` numérica y `calendar` desde M3.
+    expect(capacityAt(soloDia, 22 * HOUR)).toBe(3);
+    expect(soloDia.constant).toBe(3);
+  });
+
+  test('`capacity` por intervalos y `calendar` del pool son excluyentes', () => {
+    expect(() =>
+      runReplication(ir, {
+        ...scenario,
+        resources: { enfermera: { capacity: [{ calendar: 'dia', capacity: 3 }], calendar: 'noche' } },
+      }),
+    ).toThrow(/E-CAPACIDAD-Y-CALENDARIO/);
+  });
+
+  test('el calendario de cada tramo tiene que existir y `quantity` se valida contra el máximo de la semana', () => {
+    expect(() =>
+      runReplication(ir, {
+        ...scenario,
+        resources: { enfermera: { capacity: [{ calendar: 'inexistente', capacity: 3 }] } },
+      }),
+    ).toThrow(/E-CAL-DESCONOCIDO/);
+
+    // 3 cabe (es el máximo, en el turno de día); 4 no cabe en ningún turno.
+    const conCantidad = (quantity: number): SimScenario => ({
+      ...scenario,
+      elements: { ...scenario.elements, Tarea: { ...scenario.elements!.Tarea, resources: [{ ref: 'enfermera', quantity }] } },
+    });
+    expect(() => runReplication(ir, conCantidad(3))).not.toThrow();
+    expect(() => runReplication(ir, conCantidad(4))).toThrow(/E-REC-CANTIDAD.*excede capacity 3/);
   });
 });

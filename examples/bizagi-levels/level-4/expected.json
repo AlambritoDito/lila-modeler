@@ -3,7 +3,8 @@
   "level": 4,
   "title": "Level 4 - Calendar analysis: Performing a calendar analysis for the Emergency attendance process",
   "values": {
-    "waitTimeSeconds": {
+    "cycleTimeSeconds": {
+      "nota": "LILA-187: 'waitTimeSeconds' renombrado a 'cycleTimeSeconds' (ver la nota del nivel 2: la columna de Bizagi es tiempo de ciclo del proceso, no espera pura).",
       "avg": 1526,
       "quote": "The average time a patient waits for assistance suffered a little increase from 25 minutes and 15 seconds to 25 minutes and 26 seconds. This is not significant.",
       "baselineAvgSeconds": 1515,
@@ -22,7 +23,32 @@
       "basicAmbulance": { "morning": 2, "day": 1, "night": 2 },
       "quickAttentionVehicle": { "morning": 1, "day": 2, "night": 1 },
       "receptionist": { "morning": 2, "day": 1, "night": 1 }
+    },
+    "resourceTable": {
+      "source": "https://help.bizagi.com/platform/en/calendaranalysis2.png",
+      "nota": "Tabla completa 'Resources > Patient Assistance' del nivel 4. Utilizacion sobre capacidad media ponderada por turno (denominador = duracion declarada del escenario, no el fin de corrida; ver docs/BIZAGI_PARITY.md y LILA-164). Call center agent: 8068 min / ((2+2+1)/3 x 43200 min) = 11,21 % exacto.",
+      "rows": {
+        "Call center agent":      { "utilization": 0.1121, "totalFixedCost": 6051,  "totalUnitCost": 0,      "totalCost": 6051 },
+        "Nurse":                  { "utilization": 0.1621, "totalFixedCost": 15050, "totalUnitCost": 0,      "totalCost": 15050 },
+        "Ambulance":              { "utilization": 0.1149, "totalFixedCost": 29790, "totalUnitCost": 132.4,  "totalCost": 29922.4 },
+        "Quick Attention Vehicle":{ "utilization": 0.0755, "totalFixedCost": 11178, "totalUnitCost": 15.94,  "totalCost": 11193.94 },
+        "Basic Ambulance":        { "utilization": 0.0560, "totalFixedCost": 10075, "totalUnitCost": 20.15,  "totalCost": 10095.15 },
+        "Receptionist":           { "utilization": 0.0690, "totalFixedCost": 2979,  "totalUnitCost": 0,      "totalCost": 2979 },
+        "Total":                  { "totalFixedCost": 75123, "totalUnitCost": 168.49, "totalCost": 75291.49 }
+      }
+    },
+    "processTable": {
+      "source": "https://help.bizagi.com/platform/en/calendaranalysis1.png",
+      "nota": "Tabla completa del proceso del nivel 4 (avg 25m26s, max 35m). El reparto de esta corrida por turno (993/621/403 en vez de 1006/618/393) es ruido propio de esta corrida de Bizagi sobre el 50/30/20% declarado.",
+      "rows": {
+        "Patient Assistance": { "instancesCompleted": 2017, "minMin": 16, "maxMin": 35, "avg": "25m 26s" },
+        "Classify Triage":    { "instancesCompleted": 2017, "minMin": 5, "maxMin": 7, "avg": "5m 11s" },
+        "Pick up patient":    { "instancesCompleted": 993, "minMin": 20, "maxMin": 21, "avg": "20m" },
+        "Manage patient entry": { "instancesCompleted": 993, "minMin": 11, "maxMin": 14, "avg": "11m 4s" },
+        "Arrive at patient place QAV": { "instancesCompleted": 621, "minMin": 7, "maxMin": 14, "avg": "7m 33s", "maxWaitingResourceMin": 7 },
+        "Arrive at patient place BA":  { "instancesCompleted": 403, "minMin": 10, "maxMin": 25, "avg": "10m 35s", "maxWaitingResourceMin": 15 }
+      }
     }
   },
-  "nota": "La tabla completa de resultados (CalendarAnalysis1/2.png) es una imagen, no texto; solo se citan los numeros que la pagina da en prosa (arriba). SCENARIO_FORMAT.md v1 no soporta que un mismo pool de recursos tenga capacidad distinta por calendario (a diferencia de Bizagi); scenario.json modela esto con 3 pools por recurso variable (uno por turno) seleccionados con selection:'or', ver documentation del .bpmn y la nota de scenario.json. El calendario 'night' (22:00-06:00) cruza medianoche y se declara como dos intervalos (22:00-24:00 y 00:00-06:00) por R13 de SCENARIO_FORMAT.md; '24:00' solo se admite en 'to' (LILA-041) y los dos intervalos quedan adyacentes, sin hueco."
+  "nota": "LILA-187: transcritas las tablas completas del nivel 4 (legibles, ver LILA-044 QA), citando su URL. LILA-164: SCENARIO_FORMAT.md v1 ya soporta que un mismo pool tenga capacidad distinta por calendario ('capacity': [{calendar, capacity}], seccion 2.4 y R-CAL-11 de SEMANTICS.md), asi que scenario.json modela cada rol variable como UN pool con los tres turnos de la tabla 'shifts' de aqui arriba; antes eran 3 pools por rol con selection:'or'. El calendario 'night' (22:00-06:00) cruza medianoche y se declara como dos intervalos (22:00-24:00 y 00:00-06:00) por R13 de SCENARIO_FORMAT.md; '24:00' solo se admite en 'to' (LILA-041) y los dos intervalos quedan adyacentes, sin hueco; la union de los tres turnos es un 24x7, asi que ninguna tarea tiene offHoursWait. Asignacion QAV/BA: igual que en level-3 (ver su expected.json#nota) -- QAV con quickAttentionVehicle, BA con basicAmbulance. Procedencia de los numeros: 'resourceTable' y 'processTable' citan sus PNG oficiales; 'shifts' es la tabla de turnos de la propia pagina; 'cycleTimeSeconds' y 'arriveAtPatientPlaceBA', su prosa. Denominador de la utilizacion: ver la nota de 'resourceTable' y docs/BIZAGI_PARITY.md D7 (Lila mide sobre [warmup, t_stop], Bizagi sobre la duracion declarada; la conversion es exacta y esta en el test)."
 }

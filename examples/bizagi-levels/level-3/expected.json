@@ -4,23 +4,73 @@
   "title": "Level 3 - Resource analysis: Performing a resource analysis for the Emergency attendance process",
   "values": {
     "threeNurses": {
-      "nota": "Configuracion final publicada (3 enfermeras), la que reproduce scenario.json de esta carpeta y de la que parte el nivel 4.",
-      "waitTimeSeconds": { "min": 960, "max": 2100, "avg": 1515 },
+      "nota": "Configuracion final publicada (3 enfermeras), la que reproduce scenario.json de esta carpeta y de la que parte el nivel 4. LILA-187: 'waitTimeSeconds' renombrado a 'cycleTimeSeconds' -- la columna de Bizagi es Min./Max./Avg. time del proceso (procesamiento + espera), que en Lila es process.cycleTime, no process.waitTime (ver la nota del nivel 2).",
+      "cycleTimeSeconds": { "min": 960, "max": 2100, "avg": 1515 },
       "quotes": [
         "the minimum time remains at 16 minutes, the maximum now becomes 35 minutes and the average 25 minutes and 15 seconds.",
         "Usages are acceptable. Nurses now have a utilization of 69,75%."
       ],
-      "resourceUtilization": { "nurse": 0.6975 }
+      "resourceUtilization": { "nurse": 0.6975 },
+      "resourceTable": {
+        "source": "https://help.bizagi.com/platform/en/resourcesanalysis3.png",
+        "nota": "Tabla completa 'Resources > Patient Assistance': Resource, Utilization, Total fixed cost, Total unit cost, Total cost.",
+        "rows": {
+          "Call center agent":      { "utilization": 0.3991, "totalFixedCost": 6051,    "totalUnitCost": 0,     "totalCost": 6051 },
+          "Nurse":                  { "utilization": 0.6975, "totalFixedCost": 15115,   "totalUnitCost": 0,     "totalCost": 15115 },
+          "Ambulance":              { "utilization": 0.4976, "totalFixedCost": 30180,   "totalUnitCost": 134.13,"totalCost": 30314.13 },
+          "Quick Attention Vehicle":{ "utilization": 0.2140, "totalFixedCost": 11124,   "totalUnitCost": 15.86, "totalCost": 11139.86 },
+          "Basic Ambulance":        { "utilization": 0.1944, "totalFixedCost": 9825,    "totalUnitCost": 19.65, "totalCost": 9844.65 },
+          "Receptionist":           { "utilization": 0.1991, "totalFixedCost": 3018,    "totalUnitCost": 0,     "totalCost": 3018 },
+          "Total":                  { "totalFixedCost": 75313, "totalUnitCost": 169.65, "totalCost": 75482.65 }
+        }
+      },
+      "processTable": {
+        "source": "https://help.bizagi.com/platform/en/resourcesanalysis4.png",
+        "nota": "Tabla completa 'Resources > Patient Assistance' (proceso y actividades), con 3 enfermeras.",
+        "rows": {
+          "Patient Assistance": { "instancesCompleted": 2017, "minMin": 16, "maxMin": 35, "avg": "25m 15s" },
+          "Classify Triage":    { "instancesCompleted": 2017, "minMin": 5,  "maxMin": 7,  "avg": "5m 11s" },
+          "Pick up patient":    { "instancesCompleted": 1006, "minMin": 20, "maxMin": 20, "avg": "20m" },
+          "Manage patient entry": { "instancesCompleted": 1006, "minMin": 11, "maxMin": 15, "avg": "11m 3s" },
+          "Arrive at patient place QAV": { "instancesCompleted": 618, "minMin": 7, "maxMin": 7, "avg": "7m" },
+          "Arrive at patient place BA":  { "instancesCompleted": 393, "minMin": 10, "maxMin": 11, "avg": "10m" }
+        }
+      }
     },
     "twoNurses": {
-      "nota": "Corrida ANTERIOR (2 enfermeras), publicada como diagnostico del cuello de botella antes de agregar la tercera. No corresponde al scenario.json de esta carpeta (que ya usa 3); se deja para trazabilidad del ejemplo original.",
-      "waitTimeSeconds": { "min": 960, "max": 39420, "avg": 13178 },
+      "nota": "Corrida ANTERIOR (2 enfermeras), publicada como diagnostico del cuello de botella antes de agregar la tercera. No corresponde al scenario.json de esta carpeta (que ya usa 3); se deja para trazabilidad del ejemplo original. 'waitTimeSeconds' renombrado a 'cycleTimeSeconds' (ver nota de threeNurses).",
+      "cycleTimeSeconds": { "min": 960, "max": 39420, "avg": 13178 },
       "quotes": [
         "The minimum time remains at 16 minutes but the maximum increased to 10 hours and 57 minutes and now the average is 3 hours, 39 minutes and 38 seconds.",
         "The nurse who performs the Classify triage and Manage patient reception has a usage of 99,85%."
       ],
-      "resourceUtilization": { "nurse": 0.9985 }
+      "resourceUtilization": { "nurse": 0.9985 },
+      "resourceTable": {
+        "source": "https://help.bizagi.com/platform/en/resourcesanalysis1.png",
+        "nota": "Misma tabla que threeNurses.resourceTable pero con 2 enfermeras (corrida previa).",
+        "rows": {
+          "Call center agent":      { "utilization": 0.3809, "totalFixedCost": 6051,  "totalUnitCost": 0,      "totalCost": 6051 },
+          "Nurse":                  { "utilization": 0.9985, "totalFixedCost": 15115, "totalUnitCost": 0,      "totalCost": 15115 },
+          "Ambulance":              { "utilization": 0.4749, "totalFixedCost": 30180, "totalUnitCost": 134.13, "totalCost": 30314.13 },
+          "Quick Attention Vehicle":{ "utilization": 0.2042, "totalFixedCost": 11124, "totalUnitCost": 15.86,  "totalCost": 11139.86 },
+          "Basic Ambulance":        { "utilization": 0.1855, "totalFixedCost": 9825,  "totalUnitCost": 19.65,  "totalCost": 9844.65 },
+          "Receptionist":           { "utilization": 0.19,   "totalFixedCost": 3018,  "totalUnitCost": 0,      "totalCost": 3018 },
+          "Total":                  { "totalFixedCost": 75313, "totalUnitCost": 169.65, "totalCost": 75482.65 }
+        }
+      },
+      "processTable": {
+        "source": "https://help.bizagi.com/platform/en/resourcesanalysis2.png",
+        "nota": "Tabla completa del proceso con 2 enfermeras: Instances completed/started, Min./Max./Avg./Total time, Min./Max./Avg./Std.dev./Total time waiting resource, Total fixed cost.",
+        "rows": {
+          "Patient Assistance": { "instancesCompleted": 2017, "minMin": 16, "maxHour": "10h 57m", "avg": "3h 39m 38s" },
+          "Classify Triage":    { "instancesCompleted": 2017, "minMin": 5,  "maxHour": "5h 33m",  "avg": "2h 16m 19s", "avgWaitingResource": "2h 11m 19s" },
+          "Pick up patient":    { "instancesCompleted": 1006, "minMin": 20, "maxMin": 30, "avg": "20m 14s", "avgWaitingResource": "14s" },
+          "Manage patient entry": { "instancesCompleted": 1006, "minMin": 11, "maxHour": "5h 37m", "avg": "2h 26m 42s", "avgWaitingResource": "2h 15m 42s" },
+          "Arrive at patient place QAV": { "instancesCompleted": 618, "minMin": 7, "maxMin": 11, "avg": "7m 3s", "avgWaitingResource": "3s" },
+          "Arrive at patient place BA":  { "instancesCompleted": 393, "minMin": 10, "maxMin": 15, "avg": "10m 3s", "avgWaitingResource": "3s" }
+        }
+      }
     }
   },
-  "nota": "Las tablas completas de resultados por actividad/recurso (ResourcesAnalysis1-4.png) son imagenes, no texto: no se transcriben para no inventar cifras. Los parametros de entrada (recursos, cantidades, costos, requerimientos por actividad, tiempos de proceso) SI estan publicados en texto integro y se usan tal cual en scenario.json; incluye la asignacion literal 'Arrive at patient place QAV -> Basic ambulance' / 'Arrive at patient place BA -> Quick attention vehicle' tal como aparece en la pagina (aunque los nombres parecen intercambiados, se reproduce verbatim)."
+  "nota": "LILA-187: transcritas las tablas completas de recursos y proceso desde las capturas (legibles, ver LILA-044 QA), citando su URL. Los parametros de entrada (recursos, cantidades, tiempos de proceso) SI estan publicados en texto integro y se usan tal cual en scenario.json. Asignacion QAV/BA: la pagina dice en prosa 'Arrive at patient place QAV -> Basic ambulance' / 'Arrive at patient place BA -> Quick attention vehicle' (cruzada respecto al nombre), pero la tabla de costos de resourcesanalysis3.png SOLO cuadra con la lectura natural -- Quick Attention Vehicle 11.124 = 618 (QAV) x 18, Basic Ambulance 9.825 = 393 (BA) x 25 -- asi que scenario.json usa esa asignacion (ver docs/BIZAGI_PARITY.md D8). Para la utilizacion es indiferente: los dos pools tienen capacidad 2."
 }
