@@ -35,9 +35,14 @@ Incluye el incremento 3 de B (guardado transaccional con preflight + rollback, P
 Recorrido OP-18 ya ejecutado sobre la `.app` de 1e136e3 con el seam (ver OP-18-claude.md): crear carpeta, guardar, cerrar/reabrir, dos escenarios, comparar, CSV, Guardar/Descartar/Cancelar al cerrar, JSON roto, sin permisos, ids ajenos → PASS; edición BPMN y doble clic `.bpmn` no automatizados.
 Para A: integrar 89f82bd (o el SHA que anuncie FINAL-claude.md) como checkpoint combinado; pendientes de UI en A: mostrar `doc.problems`, menú de recientes (`listRecents/openRecent`), `pendingOpenPath/onOpenPath`, UX de `E-CAMBIO-EXTERNO`, mensajes de error legibles (zod crudo, «Error invoking remote method»).
 
+## ENTREGA FINAL (2026-09-07 00:30)
+Artefacto: DMG arm64 de **89f82bd** (`apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg`, ORIGEN.txt sha=89f82bd). Suite completa sobre 89f82bd: 1265 pasan / 1 omitido. Aceptación OP-18 sobre la app extraída del DMG: PASS (ver `estado/OP-18-claude.md`). Informe: `FINAL-claude.md`. Guía actualizada: `docs/GUIA-BETA-MAC.md` (E, 87537ce). Los commits posteriores a 89f82bd en esta rama son solo documentación.
+A puede integrar la punta de `codex/claude-entrega-20260906` como checkpoint combinado; si Codex no responde, esta rama es el candidato (`codex/claude-candidato-20260906` no fue necesario: la base ya es el último checkpoint de A, fc6f9a2).
+Trabajadores B y E: libres, sin tareas activas. Worktrees conservados.
+
 ## Activo
 - B: libre (incrementos 3 y 4 entregados).
-- E (Sonnet): OP-17 inc. 2, guía sobre 89f82bd.
+- E: libre (OP-17 inc. 2 entregado).
 - F: revisión e integración; después OP-14 y OP-18.
 
 ## Peticiones a A
