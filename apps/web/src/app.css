@@ -658,6 +658,66 @@ body {
 .diagramas .cerrar:hover:not(:disabled) {
   color: var(--fg-primary);
 }
+/* ---------- validación (LILA-209) ---------- */
+
+/* La paleta de bpmn-js se pinta dentro del lienzo, en la esquina superior izquierda
+   (`left: 20px; top: 20px`), que es justo donde van los chips. Se baja lo que miden los chips
+   más su margen; el selector es más específico que el de bpmn-js, así que no hace falta
+   `!important`. En el artboard la paleta es un raíl propio fuera del lienzo (LILA-207) y
+   entonces esta regla sobra. Su ancho no sirve para esquivarla: cambia sola a dos columnas
+   cuando el lienzo no es lo bastante alto. */
+.lienzo .djs-palette { top: 56px; }
+
+/* Chips «n errores · n avisos» arriba a la izquierda del lienzo, como en
+   `docs/design/01-modelar-1440.png`. La separación de 1 px entre los dos chips es el fondo del
+   contenedor, igual que en el artboard. */
+.chips-validacion {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 1;
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+}
+
+.chips-validacion .chip {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font: 600 10px/1 var(--font-ui);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.chips-validacion .chip:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
+.chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
+
+/* Disco de 16 px en la esquina superior derecha de la figura (`ValidationMarkers.ts`). Redondo
+   a propósito pese al radio 0 del resto de la UI: en el artboard el marcador es un círculo, y
+   sobre una figura BPMN es lo que lo distingue de un adorno del diagrama. */
+.lienzo .lila-validacion {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--diagram-marker-warning);
+  color: var(--fg-onAccent);
+  font: 700 11px/1 var(--font-ui);
+  cursor: default;
+}
+
+.lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
 .barra { flex-wrap: wrap; }
 

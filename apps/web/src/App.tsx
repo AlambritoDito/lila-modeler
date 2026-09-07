@@ -7,9 +7,9 @@
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066 y sacarlos ahora solo
  * movería el problema de sitio.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseBpmn } from '@lila/engine/bpmn';
-import { type ResolvedScenario } from '@lila/engine/schema';
+import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
@@ -17,12 +17,13 @@ import { changeToken, defaultScenarios, newModelXml, nextScenarioRevisions, proj
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { PanelPropiedades } from './PropertiesPanel';
-import { ScenarioPanel } from './ScenarioPanel';
+import { problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { ResultsView } from './ResultsView';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { MenuAction } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
+import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
@@ -102,6 +103,24 @@ const ESCENARIOS_INICIALES: Escenarios = {
 function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
   const nombre = escenarios[archivo]?.['name'];
   return typeof nombre === 'string' ? nombre : archivo;
+}
+
+/**
+ * El escenario activo con `extends` ya aplicado, que es lo que valida el lint (§ 6 de
+ * `docs/SCENARIO_FORMAT.md`) y lo mismo que resuelve el panel de escenario. Con la cadena rota
+ * se lintea el delta tal cual: el panel ya enseña el fallo de la herencia, y dejar los chips en
+ * blanco escondería el resto de los problemas.
+ */
+function escenarioResuelto(archivo: string, escenarios: Escenarios): unknown {
+  try {
+    return resolveExtends(archivo, (ruta) => {
+      const encontrado = escenarios[ruta];
+      if (encontrado === undefined) throw new Error(`escenario desconocido: ${ruta}`);
+      return encontrado;
+    });
+  } catch {
+    return escenarios[archivo] ?? {};
+  }
 }
 
 /** Fase de la simulación, para lo que enseña el panel derecho. */
@@ -284,6 +303,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => {
     modelador?.cuellos(corrida, verCuellos);
   }, [modelador, corrida, verCuellos]);
+
+  /**
+   * Errores y avisos de ahora mismo (LILA-209): el lint del escenario activo —la misma lista
+   * que cuenta la cabecera del panel de escenario, así que los dos números coinciden siempre—
+   * más los que no cuelgan de ninguna figura: el diagnóstico del proyecto abierto y los avisos
+   * de bpmn-js al importar.
+   */
+  const validacion = useMemo(
+    () => problemasPorElemento(problemasEscenario(escenarioResuelto(escenarioId, escenarios), ir), {
+      avisos: estado.avisos,
+      errores: projectProblems.length,
+    }),
+    [escenarioId, escenarios, ir, estado.avisos, projectProblems],
+  );
+
+  // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
+  // problemas —editar el escenario en el panel, editar el diagrama (revision -> `ir` nuevo),
+  // abrir otro proyecto, cambiar de tema (lienzo remontado)— pasa por aquí, y
+  // `Modelador.validacion` es idempotente.
+  useEffect(() => {
+    modelador?.validacion(validacion);
+  }, [modelador, validacion]);
 
   useEffect(() => {
     if (modelador === null) return;
@@ -521,6 +562,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
         </div>
+      {(validacion.errores > 0 || validacion.avisos > 0) && (
+        <div className="chips-validacion">
+          {validacion.errores > 0 && (
+            <button type="button" className="chip error" title="Ir al primer elemento con problemas"
+              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+              <span className="punto" />{validacion.errores} {validacion.errores === 1 ? 'error' : 'errores'}
+            </button>
+          )}
+          {validacion.avisos > 0 && (
+            <button type="button" className="chip" title="Ir al primer elemento con problemas"
+              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+              <span className="punto" />{validacion.avisos} {validacion.avisos === 1 ? 'aviso' : 'avisos'}
+            </button>
+          )}
+        </div>
+      )}
       </div>
       {modo === 'Resultados' && (
         <section className="zona-resultados">
