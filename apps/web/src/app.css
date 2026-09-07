@@ -660,7 +660,9 @@ body {
 }
 /* ---------- validación (LILA-209) ---------- */
 
-/* La paleta de bpmn-js se pinta dentro del lienzo, en la esquina superior izquierda
+/* ponytail: 56 px = alto del chip + su margen, a mano. Techo: si los chips cambian de alto hay
+   que tocar este número; camino, la regla entera sobra con LILA-207 (paleta en un raíl propio).
+   La paleta de bpmn-js se pinta dentro del lienzo, en la esquina superior izquierda
    (`left: 20px; top: 20px`), que es justo donde van los chips. Se baja lo que miden los chips
    más su margen; el selector es más específico que el de bpmn-js, así que no hace falta
    `!important`. En el artboard la paleta es un raíl propio fuera del lienzo (LILA-207) y

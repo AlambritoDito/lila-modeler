@@ -101,7 +101,14 @@ export function problemasPorElemento(
   return { avisos, errores, marcadores, primero };
 }
 
-/** Disco de 16 px con el `title` nativo: mensajes del elemento y las acciones del artboard. */
+/**
+ * Disco de 16 px con el `title` nativo: mensajes del elemento y las acciones del artboard.
+ *
+ * ponytail: el tooltip es el `title` del navegador, no el del artboard (caja sobre `bg.elevated`
+ * con sombra y los atajos en mono, `docs/design/COMPARACION-2026-09-07.md` § tooltips). Techo:
+ * no se puede estilar ni abrir con el teclado, y tarda ~1 s en aparecer. Camino: cuando haya un
+ * tooltip propio en la UI (ticket aparte), este `title` se cambia por él sin tocar nada más.
+ */
 function disco(marcador: MarcadorValidacion): HTMLElement {
   const div = document.createElement('div');
   div.className = `lila-validacion lila-validacion-${marcador.nivel}`;
