@@ -30,9 +30,14 @@ OP-14 (B, 633ffa7): symlinks por `realpath`/`lstat`, `isTrustedSender` por orige
 Pendiente en B (en curso, SHA nuevo al terminar): rollback transaccional del P0 43a29cf (preflight + journal/undo) y seam E2E por variables de entorno para que F pruebe carpeta/guardar/cerrar/reabrir sin diálogos.
 Peticiones a A de OP-14: conectar `listRecents`/`openRecent` y `pendingOpenPath`/`onOpenPath` en la UI; UX ante `E-CAMBIO-EXTERNO` (Sobrescribir vs Guardar como). Ninguna bloquea la beta Mac.
 
+## SHA candidato final Claude: 89f82bd
+Incluye el incremento 3 de B (guardado transaccional con preflight + rollback, P0 43a29cf; seam E2E `LILA_E2E_FOLDER/CLOSE/LOG`) y el incremento 4 (P0 997a72f: `E-CARPETA-OCUPADA` en createProject/primer guardado, `E-SYMLINK` en `model.bpmn`/manifiesto, `problems` dentro de `ProjectDocument`). Verificado aquí: `npx vitest run apps/web apps/desktop` 377/377; typecheck web y desktop PASS. Sobre af3678b (un merge antes) la suite completa `npm test` dio 1261 pasan / 1 omitido; se repite sobre 89f82bd junto con `dist:mac` (DMG del mismo SHA) y el recorrido OP-18 sobre ese DMG; resultado en `estado/OP-18-claude.md` y `FINAL-claude.md`.
+Recorrido OP-18 ya ejecutado sobre la `.app` de 1e136e3 con el seam (ver OP-18-claude.md): crear carpeta, guardar, cerrar/reabrir, dos escenarios, comparar, CSV, Guardar/Descartar/Cancelar al cerrar, JSON roto, sin permisos, ids ajenos → PASS; edición BPMN y doble clic `.bpmn` no automatizados.
+Para A: integrar 89f82bd (o el SHA que anuncie FINAL-claude.md) como checkpoint combinado; pendientes de UI en A: mostrar `doc.problems`, menú de recientes (`listRecents/openRecent`), `pendingOpenPath/onOpenPath`, UX de `E-CAMBIO-EXTERNO`, mensajes de error legibles (zod crudo, «Error invoking remote method»).
+
 ## Activo
-- B (Sonnet): incremento final sobre 49c9d1b: guardado transaccional (P0 de A) + seam E2E (`LILA_E2E_FOLDER`, `LILA_E2E_CLOSE`, `LILA_E2E_LOG`).
-- E: libre (OP-17 inc. 1 entregado). Siguiente: reescribir «Guardar y recuperar» de la guía sobre el artefacto final.
+- B: libre (incrementos 3 y 4 entregados).
+- E (Sonnet): OP-17 inc. 2, guía sobre 89f82bd.
 - F: revisión e integración; después OP-14 y OP-18.
 
 ## Peticiones a A
