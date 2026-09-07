@@ -39,3 +39,14 @@ Artefacto `pack:mac` de 1e136e3. App lanzada con `LILA_E2E_FOLDER`, `LILA_E2E_LO
 | Editar BPMN desde la app empaquetada | NO AUTOMATIZADO: la selección en el lienzo no se pudo accionar por DOM; queda cubierto por el QA de A en navegador (65560c7) y pendiente de prueba manual |
 | Abrir `.bpmn` por doble clic (asociación) | NO PROBADO en esta sesión (B lo verificó por argv con `LILA_DEBUG=1`) |
 Nota: `window.close()` desde la página no pasa por el diálogo de cierre (Chromium lo ignora para la ventana principal); el cierre real (Salir/Cmd+Q, botón rojo) sí. Se probó con `osascript … quit`.
+
+## Aceptación final sobre el DMG de 89f82bd (2026-09-07 00:21–00:24, Vite detenido)
+Artefacto: `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg` (128 247 437 bytes, `ORIGEN.txt`: sha=89f82bd65eb1f0151cc2d3fe1080322a4be31f65, arch=arm64), montado con `hdiutil`, app copiada a `$TMPDIR/Beta OP-18 canción/` (ruta con espacio y tilde) y ejecutada desde ahí.
+| Paso | Resultado |
+|---|---|
+| Smoke desde la app del DMG | PASS (`lienzo/tema/fuente/puente` true, sin errores de consola) |
+| Nuevo proyecto → carpeta `DMG OP-18 canción` → Guardar | PASS: 4 archivos |
+| Cambios sin guardar + Salir (Guardar) | PASS: `closeRequested saved:true`, app cerrada, `seed` 123 en disco |
+| Reabrir con `roto.scenario.json` inválido | PASS: proyecto abre, alerta «roto.scenario.json: Expected property name…» visible (A ya pinta `doc.problems`), AS-IS/TO-BE cargan con seed 123 |
+| Simular AS-IS y TO-BE, Comparar, Exportar CSV | PASS |
+Suite completa sobre 89f82bd: `npm test` 92 archivos, 1265 tests pasan, 1 omitido. Typecheck web y desktop PASS.
