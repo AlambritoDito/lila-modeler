@@ -16,8 +16,8 @@ Leyenda: **✓** ya está · **≈** existe pero distinto · **✗** falta.
 | `sim.utilization.*` Papel | `#1668A8 / #A66A00 / #C42121` (variables del artboard 10) | inventado | **reconciliado** |
 | `fg.onAccent` Papel | `#FFFFFF` | `#0B0603` | **se mantiene `#0B0603`**: blanco sobre `#EC3013` da 4,2:1 y el test exige AA 4,5:1. El artefacto pone versalitas de 11 px en negrita, donde 3:1 bastaría; la app usa 13 px regular. |
 | `shadow` | sombra completa (`0 6px 18px rgba(32,30,29,.14)`) | color con alfa | color con alfa `#201E1D24`; la sombra se compone en CSS (decisión ya documentada) |
-| Tipografía | Archivo 400–800, JetBrains Mono para cifras/ids/atajos | Archivo sin cargar; mono declarada | Archivo cargada (`@fontsource`); **JetBrains Mono sigue sin cargarse** |
-| Radio | 0 en todo (Modernist: sin esquinas) | `border-radius: 4px` en botones y 8 px en diálogos | ≈ pendiente decidir (ver §Propuesta) |
+| Tipografía | Archivo 400–800, JetBrains Mono para cifras/ids/atajos | Archivo sin cargar; mono declarada | ✓ Archivo y JetBrains Mono cargadas con `@fontsource` (#238); la mono va en cifras de tablas, ids y barra de estado |
+| Radio | 0 en todo (Modernist: sin esquinas) | `border-radius: 4px` en botones y 8 px en diálogos | ✓ sin radios (#238): ninguno en `app.css` ni en los estilos en línea de Resultados/Comparar. Los del context pad y el popup menu de bpmn-js se quedan: son suyos |
 
 ## Pantalla por pantalla
 
@@ -49,7 +49,10 @@ App: overlay LILA-064 tiñe las tareas y hay interruptor «Cuellos de botella».
 
 Artefacto: sub-pestañas Elementos / Recursos / Proceso / Flujos, tabla densa con cifras en mono alineadas a la derecha, fila de totales fija, celdas semáforo, columna derecha con KPIs (ciclo p50/p90/p95, throughput, costo por caso) y ranking de cuellos; barra superior con selector de escenario y EXPORTAR CSV.
 
-App: LILA-062 tiene las cuatro tablas con nombres de Bizagi, ordenación y CSV. **≈**: las cifras no van en mono ni alineadas a la derecha, no hay fila de totales, ni KPIs en tarjetas, ni semáforo; el selector de escenario y el CSV no están en la barra superior.
+App: LILA-062 tiene las cuatro tablas con nombres de Bizagi, ordenación y CSV. Las cifras ya van en
+JetBrains Mono alineadas a la derecha, con el encabezado de columna numérica también a la derecha
+(#238, `app-05-resultados.png`). **≈**: siguen fuera la fila de totales, los KPIs en tarjetas y el
+semáforo de celdas —ninguno tiene ticket todavía—, y el selector de escenario y el CSV no están en la barra superior.
 
 ### 06 · Comparar
 

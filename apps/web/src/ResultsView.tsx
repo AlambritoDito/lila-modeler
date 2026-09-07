@@ -86,7 +86,6 @@ export function sortRows<Row>(
 export const sectionStyle: CSSProperties = {
   background: 'var(--bg-surface)',
   border: '1px solid var(--border)',
-  borderRadius: 8,
   marginBottom: 16,
   padding: 12,
 };
@@ -103,7 +102,6 @@ export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14
 const exportButtonStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-strong)',
-  borderRadius: 4,
   color: 'var(--fg-primary)',
   cursor: 'pointer',
   font: 'inherit',
@@ -112,7 +110,6 @@ const exportButtonStyle: CSSProperties = {
 
 export const tableWrapStyle: CSSProperties = {
   border: '1px solid var(--border)',
-  borderRadius: 6,
   maxHeight: 420,
   overflow: 'auto',
 };
@@ -127,7 +124,7 @@ export const thStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   color: 'var(--fg-muted)',
   cursor: 'pointer',
-  padding: '4px 8px',
+  padding: 'calc(4px * var(--espacio, 1)) 8px',
   position: 'sticky',
   textAlign: 'left',
   top: 0,
@@ -138,7 +135,7 @@ export const thStyle: CSSProperties = {
 export const tdStyle: CSSProperties = {
   borderTop: '1px solid var(--border)',
   color: 'var(--fg-primary)',
-  padding: '3px 8px',
+  padding: 'calc(3px * var(--espacio, 1)) 8px',
   whiteSpace: 'nowrap',
 };
 
@@ -212,7 +209,7 @@ export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvC
                 <th
                   key={column.key}
                   scope="col"
-                  style={thStyle}
+                  style={column.numeric === true ? { ...thStyle, textAlign: 'right' } : thStyle}
                   tabIndex={0}
                   aria-sort={ariaSort(sort, column.key)}
                   onClick={() => toggle(column.key)}
@@ -236,7 +233,9 @@ export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvC
                     key={column.key}
                     style={{
                       ...tdStyle,
-                      textAlign: column.numeric === true ? 'right' : 'left',
+                      ...(column.numeric === true
+                        ? { fontFamily: 'var(--font-mono)', textAlign: 'right' as const }
+                        : { textAlign: 'left' as const }),
                       ...column.cellStyle?.(row),
                     }}
                   >
@@ -491,7 +490,6 @@ function tabButtonStyle(active: boolean): CSSProperties {
   return {
     background: active ? 'var(--accent-tertiary)' : 'var(--bg-elevated)',
     border: '1px solid var(--border-strong)',
-    borderRadius: 4,
     color: active ? 'var(--fg-onAccent)' : 'var(--fg-primary)',
     cursor: 'pointer',
     font: 'inherit',
