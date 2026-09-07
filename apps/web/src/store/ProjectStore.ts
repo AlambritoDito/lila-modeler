@@ -71,6 +71,8 @@ export interface ProjectDocument {
   readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
   readonly scenarioRevisions: Readonly<Record<string, number>>;
   readonly runs: readonly StoredRun[];
+  /** Archivos inválidos preservados por el adaptador; visibles al abrir. */
+  readonly problems?: readonly { readonly file: string; readonly message: string }[];
 }
 /** Snapshot coherente; null es cancelación, error rechaza la promesa. */
 export interface ProjectSessionStore extends ProjectStore {
