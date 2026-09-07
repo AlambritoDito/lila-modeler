@@ -51,6 +51,7 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-05-resultados.png` | Resultados con una corrida de `examples/pedido`: cifras en mono alineadas a la derecha | #238 |
 | `app-01c-minimapa.png` | Modelar con el minimapa abierto abajo a la izquierda, zoom +/−/ajustar abajo a la derecha y pestaña con ✕ y «+» | #240 |
 | `app-01d-marcadores.png` | Modelar con el chip «6 avisos» y el disco de validación sobre cada figura sin parámetros en el escenario AS-IS | #241 |
+| `app-01-modelar-1440.png` | Modelar con la barra superior del artboard 01 (logo, proyecto + archivo en mono, modos, buscador, deshacer/rehacer, EJECUTAR SIMULACIÓN, ⚙) y el pie con errores/avisos, escenario, semilla, densidad y zoom | #237 |
 
 ## Inventario de componentes React
 

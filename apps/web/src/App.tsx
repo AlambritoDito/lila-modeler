@@ -123,6 +123,24 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
   }
 }
 
+/**
+ * Semilla que se usaría al simular, para la barra de estado (`docs/design/01-modelar-1440.png`).
+ * Sale del escenario **resuelto**: `to-be-3-cajeros` no declara `run`, lo hereda por `extends`,
+ * y `resolveExtends` es la misma función con la que `prepareSimulation` arma la corrida. Si el
+ * escenario está a medio editar y no resuelve, la barra enseña «—» en vez de romperse.
+ */
+function semillaEscenario(archivo: string, escenarios: Escenarios): string {
+  try {
+    const run = resolveExtends(archivo, (p) => escenarios[p] ?? {})['run'] as { seed?: unknown } | undefined;
+    return run?.seed === undefined ? '—' : String(run.seed);
+  } catch { return '—'; }
+}
+
+/** «1 error» / «2 errores»: el artefacto escribe el singular, no «1 errores». */
+function plural(n: number, singular: string, plural_: string): string {
+  return `${n} ${n === 1 ? singular : plural_}`;
+}
+
 /** Fase de la simulación, para lo que enseña el panel derecho. */
 type EstadoSim =
   | { tipo: 'inactivo' }
@@ -317,9 +335,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
       const problemas = problemasEscenario(resuelto, ir);
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
-      return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length });
+      // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
+      return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
     },
-    [escenarioId, escenarios, ir, estado.avisos, projectProblems],
+    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -490,8 +509,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       </dialog>}
       <header className="barra">
-        <span className="proyecto">Lila Modeler</span>
-        <span className="archivo">{projectName} · {dirty ? 'Sin guardar' : 'Guardado'}</span>
+        <div className="identidad">
+          {/* Logo del artefacto: pentágono macizo en `accent.primary`. */}
+          <svg className="logo" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,0 24,9.1 19.7,24 4.3,24 0,9.1" /></svg>
+          <div>
+            <div className="proyecto">{projectName}</div>
+            <div className="archivo">{archivo} · {dirty ? 'Sin guardar' : 'Guardado'}</div>
+          </div>
+        </div>
         <nav className="modos">
           {MODOS.map((m) => (
             <button
@@ -505,16 +530,61 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </button>
           ))}
         </nav>
-        <button className="boton" title={`Nuevo proyecto${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo</button>
-        <button className="boton" title={`Abrir proyecto${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir</button>
-        <button className="boton primario" title={`Guardar proyecto${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar</button>
-        <button className="boton" title={`Guardar como${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
-        {bpmnFilesEnabled && <><button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
-          Abrir .bpmn
-        </button>
-        <button type="button" className="boton primario" onClick={() => void exportar()}>
-          Exportar .bpmn
-        </button></>}
+        {/* En Electron estas acciones son el menú nativo (`apps/desktop/src/menu.ts`) con sus
+            aceleradores, así que aquí no se pintan. En el navegador el desplegable es un
+            `<details>`: sin librería, sin estado en React y con teclado de serie. `Esc` sí hay
+            que cerrarlo a mano —`<details>` no lo trae, eso es de `<dialog>`/popover—, y basta
+            un `onKeyDown` porque el foco está dentro mientras está abierto.
+            ponytail: no se cierra al hacer clic fuera; techo: si molesta, un `onBlur` en el
+            summary (o `popover` cuando Electron suba de Chromium). */}
+        {!DESKTOP && <details className="menu-archivo" onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
+          <summary>Archivo</summary>
+          <div onClick={(e) => { (e.currentTarget.parentElement as HTMLDetailsElement).open = false; }}>
+            <button type="button" title={`Nuevo proyecto${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo</button>
+            <button type="button" title={`Abrir proyecto${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir</button>
+            <button type="button" title={`Guardar proyecto${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar</button>
+            <button type="button" title={`Guardar como${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
+            {bpmnFilesEnabled && <>
+              <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>Abrir .bpmn</button>
+              <button type="button" onClick={() => void exportar()}>Exportar .bpmn</button>
+            </>}
+          </div>
+        </details>}
+        <span className="hueco" />
+        {/* Campo inerte: buscar de verdad es la paleta de comandos (LILA-066, #66). Está aquí
+            porque el artefacto fija su sitio y su ancho, no para que funcione todavía. */}
+        <div className="buscador">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
+          <input type="search" readOnly aria-label="Buscar actividad" placeholder="Buscar actividad…" title="La búsqueda y la paleta de comandos llegan en LILA-066" />
+          <kbd>⌘K</kbd>
+        </div>
+        <div className="iconos">
+          <button type="button" className="boton icono" aria-label="Deshacer" title="Deshacer" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15.5-6.4L3 13" /></svg>
+          </button>
+          <button type="button" className="boton icono" aria-label="Rehacer" title="Rehacer" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 15.5-6.4L21 13" /></svg>
+          </button>
+        </div>
+        {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
+            el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo. */}
+        {sim.tipo === 'simulando' ? (
+          <>
+            <div className="progreso">
+              <div className="progreso-cifras">
+                <span>{sim.progreso === null ? 'Preparando…' : `Replicación ${sim.progreso.replication + 1} de ${sim.progreso.totalReplications}`}</span>
+                {sim.progreso !== null && <span className="por-ciento">{Math.round(sim.progreso.fraction * 100)} %</span>}
+              </div>
+              <div className="progreso-pista"><div style={{ width: `${Math.round((sim.progreso?.fraction ?? 0) * 100)}%` }} /></div>
+            </div>
+            <button type="button" className="boton cancelar" onClick={cancelarCorrida}>Cancelar</button>
+          </>
+        ) : (
+          <button type="button" className="boton primario ejecutar" disabled={modelador === null} onClick={() => void simular()}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
+            Ejecutar simulación
+          </button>
+        )}
         <button type="button" className="boton icono" title={`Ajustes${atajo(',', true)}`} aria-label="Ajustes" onClick={() => ejecutar('ajustes')}>⚙</button>
       </header>
 
@@ -642,22 +712,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              className="boton primario"
-              disabled={modelador === null || sim.tipo === 'simulando'}
-              onClick={() => void simular()}
-            >
-              {sim.tipo === 'simulando' ? 'Simulando…' : 'Simular'}
-            </button>
-            {sim.tipo === 'simulando' && <button type="button" className="boton" onClick={cancelarCorrida}>Cancelar</button>}
-            {sim.tipo === 'simulando' && (
-              <p className="vacio">
-                {sim.progreso === null
-                  ? 'Preparando…'
-                  : `${Math.round(sim.progreso.fraction * 100)} % · replicación ${sim.progreso.replication}`}
-              </p>
-            )}
+            {/* Correr, el progreso y cancelar viven en la barra superior (#237): la acción
+                primaria de la app es una sola y está siempre a la vista. */}
             {sim.tipo === 'error' && (
               <p role="alert" className="error">
                 No se pudo simular: {sim.mensaje}
@@ -711,8 +767,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </aside>
 
       <nav className="diagramas">
-        <button className="boton" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
-        <button className="boton" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
         {/* Un proyecto = un diagrama por ahora (LILA-208): la pestaña no cambia de nada, así que
             no es un botón; el ✕ cierra el proyecto y el «+» abre uno nuevo, los dos por
             `projectAction('new')`, que ya trae la guardia de cambios sin guardar. */}
@@ -723,9 +777,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <button type="button" className="boton icono" aria-label="Nuevo diagrama" title="Nuevo diagrama" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>+</button>
       </nav>
 
+      {/* Barra de estado del artefacto: validación, escenario y semilla a la izquierda; densidad
+          y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
+          descolocar esa retícula. Los conteos son los mismos que los chips del lienzo (#241). */}
       <footer className="estado">
-        {ioError !== null && <span role="alert" className="error">{ioError}</span>}
-        <span>{estado.elementos} elementos</span>
+        <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{plural(validacion.errores, 'error', 'errores')}</span>
+        <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{plural(validacion.avisos, 'aviso', 'avisos')}</span>
+        <span className="separador" />
+        <span>Escenario <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
+        <span>Semilla {semillaEscenario(escenarioId, escenarios)}</span>
+        <span className="hueco" />
+        <span>Densidad {densidad === 'comoda' ? 'cómoda' : densidad}</span>
         <button
           type="button"
           className="enlace"
@@ -735,7 +797,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         >
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
-        <button type="button" className="enlace" title={`Ajustes${atajo(',', true)}`} onClick={() => ejecutar('ajustes')}>Tema: {tema?.name ?? 'Eva-01'}</button>
+        {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {estado.avisos > 0 && (
           <span role="alert" className="aviso">
             {estado.avisos} avisos al importar; revisa el diagnóstico antes de simular o exportar
