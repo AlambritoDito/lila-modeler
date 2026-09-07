@@ -40,8 +40,15 @@ reconciliación de tokens y la propuesta de tickets, está en `COMPARACION-2026-
 | — | Inventario de componentes | `12-inventario-componentes.png` |
 | — | Notas de implementación (React) | `13-notas-react.png` |
 
-Captura de la app del mismo día, para poner al lado del artboard 1:
-`app-2026-09-07-modelar-eva01.png` (build de escritorio, smoke).
+## Capturas de la app real
+
+Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` cargado.
+
+| Captura | Qué muestra | Ticket |
+|---|---|---|
+| `app-2026-09-07-modelar-eva01.png` | Modelar, build de escritorio (smoke del mismo día) | #143 |
+| `app-12-modernist.png` | Modelar sin ningún radio y con la barra de estado en JetBrains Mono | #238 |
+| `app-05-resultados.png` | Resultados con una corrida de `examples/pedido`: cifras en mono alineadas a la derecha | #238 |
 
 ## Inventario de componentes React
 

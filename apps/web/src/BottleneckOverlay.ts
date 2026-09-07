@@ -185,7 +185,6 @@ function inyectarEstilos(): void {
 .lila-bottleneck-label {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
   color: var(--fg-primary);
   font: 11px var(--font-ui, system-ui);
   padding: 1px 4px;

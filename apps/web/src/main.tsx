@@ -10,6 +10,11 @@ import '@fontsource/archivo/400.css';
 import '@fontsource/archivo/500.css';
 import '@fontsource/archivo/600.css';
 import '@fontsource/archivo/700.css';
+// JetBrains Mono es la `font.mono` del artefacto (`docs/design/11-tabla-tokens.png`): cifras de
+// tablas y KPIs, ids, atajos y barra de estado. Mismos tres pesos que usa la UI.
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
 
 // Único punto de elección BrowserStore/DesktopStore (OP-01).
 const desktop = typeof window.lila !== 'undefined';

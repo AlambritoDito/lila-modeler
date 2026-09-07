@@ -43,7 +43,7 @@ body {
   display: flex;
   gap: 12px;
   grid-area: barra;
-  padding: 6px 12px;
+  padding: calc(6px * var(--espacio, 1)) 12px;
 }
 
 .proyecto {
@@ -67,7 +67,7 @@ body {
   color: var(--fg-muted);
   cursor: pointer;
   font: inherit;
-  padding: 6px 14px;
+  padding: calc(6px * var(--espacio, 1)) 14px;
 }
 
 .modo.activo {
@@ -83,11 +83,10 @@ body {
 .boton {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
   color: var(--fg-primary);
   cursor: pointer;
   font: inherit;
-  padding: 5px 12px;
+  padding: calc(5px * var(--espacio, 1)) 12px;
 }
 
 .boton:hover {
@@ -125,7 +124,7 @@ body {
   color: var(--fg-muted);
   cursor: pointer;
   font: inherit;
-  padding: 8px 10px;
+  padding: calc(8px * var(--espacio, 1)) 10px;
   white-space: nowrap;
 }
 
@@ -165,10 +164,9 @@ body {
 .campo select {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
   color: var(--fg-primary);
   font: inherit;
-  padding: 4px 8px;
+  padding: calc(4px * var(--espacio, 1)) 8px;
 }
 
 .interruptor {
@@ -184,15 +182,18 @@ body {
 
 /* ---------- barra de estado ---------- */
 
+/* La barra de estado va entera en mono (`docs/design/05-resultados.png`, `11-tabla-tokens.png`):
+   son cifras —elementos, zoom, avisos— y nombres cortos, no prosa. */
 .estado {
   align-items: center;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   color: var(--fg-muted);
   display: flex;
+  font-family: var(--font-mono);
   gap: 16px;
   grid-area: estado;
-  padding: 4px 12px;
+  padding: calc(4px * var(--espacio, 1)) 12px;
 }
 
 .enlace {
@@ -344,11 +345,10 @@ body {
 .campos textarea {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 4px;
   color: var(--fg-primary);
   font: inherit;
   min-width: 0;
-  padding: 5px 8px;
+  padding: calc(5px * var(--espacio, 1)) 8px;
   width: 100%;
 }
 
@@ -402,13 +402,12 @@ body {
 .quitar {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 4px;
   color: var(--fg-muted);
   cursor: pointer;
   flex: none;
   font: inherit;
   line-height: 1;
-  padding: 6px 8px;
+  padding: calc(6px * var(--espacio, 1)) 8px;
 }
 
 .quitar:hover {
@@ -478,10 +477,9 @@ body {
 .campo-schema select {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
   color: var(--fg-primary);
   font: inherit;
-  padding: 3px 6px;
+  padding: calc(3px * var(--espacio, 1)) 6px;
   width: 100%;
 }
 
@@ -497,7 +495,6 @@ body {
 
 .escenario .entrada {
   border: 1px solid var(--border);
-  border-radius: 4px;
   margin: 4px 0;
   padding: 4px 8px 8px;
 }
@@ -517,11 +514,10 @@ body {
 .escenario .anadir input {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
   color: var(--fg-primary);
   font: inherit;
   min-width: 0;
-  padding: 3px 6px;
+  padding: calc(3px * var(--espacio, 1)) 6px;
 }
 
 .escenario .ids {
@@ -542,7 +538,7 @@ body {
 
 .barra { flex-wrap: wrap; }
 
-.confirmar-reemplazo, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 6px 20px var(--shadow); }
+.confirmar-reemplazo, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
 .confirmar-reemplazo::backdrop, .ajustes::backdrop { background: rgb(0 0 0 / 50%); }
 .confirmar-reemplazo .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -552,15 +548,18 @@ body {
 .ajustes h2 { margin: 0 0 12px; }
 .ajustes h3 { color: var(--fg-muted); font-size: inherit; font-weight: 600; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
 .ajustes .campo { margin-bottom: 10px; }
-.ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg-primary); font: inherit; padding: 5px 8px; }
+.ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
 .ajustes .acciones { justify-content: flex-end; margin-top: 16px; }
-.boton.icono { padding: 5px 8px; line-height: 1; }
+.boton.icono { padding: calc(5px * var(--espacio, 1)) 8px; line-height: 1; }
 
-/* `density` es un token del brief (compacta / normal / cómoda); el shell lo aplica como atributo
-   para no depender de `@container style()`, que Firefox aún no entiende. */
-.app[data-densidad='compacta'] :is(.boton, .pestana, .modo) { padding-block: 2px; }
-.app[data-densidad='compacta'] :is(.campos input, .campos select, .campos textarea) { padding-block: 2px; }
-.app[data-densidad='compacta'] .barra { padding-block: 3px; }
-.app[data-densidad='comoda'] :is(.boton, .pestana, .modo) { padding-block: 9px; }
-.app[data-densidad='comoda'] :is(.campos input, .campos select, .campos textarea) { padding-block: 8px; }
-.app[data-densidad='comoda'] .barra { padding-block: 10px; }
+/* `density` es un token del brief (compacta / normal / cómoda) y el artefacto lo define como un
+   multiplicador único de alturas de fila y paddings (`docs/design/11-tabla-tokens.png`): 0,85 ·
+   1 · 1,2. Aquí es un solo número, `--espacio`, y cada padding vertical de arriba lo
+   multiplica con `calc()`; así no hay una regla por selector y un
+   control nuevo entra en la escala con solo escribir su padding en `calc()`. El 1 del
+   `var(--espacio, 1)` es la densidad normal, así que no hace falta declararla en ninguna parte
+   (y `results.html`/`compare.html`, que solo cargan los tokens, siguen con el espaciado bueno).
+   El shell lo aplica como atributo para no depender de `@container style()`, que Firefox aún no
+   entiende. */
+.app[data-densidad='compacta'] { --espacio: 0.85; }
+.app[data-densidad='comoda'] { --espacio: 1.2; }

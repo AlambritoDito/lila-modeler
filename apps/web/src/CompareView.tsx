@@ -346,7 +346,6 @@ function chipStyle(disabled: boolean): CSSProperties {
     alignItems: 'center',
     background: 'var(--bg-elevated)',
     border: '1px solid var(--border-strong)',
-    borderRadius: 999,
     color: disabled ? 'var(--fg-muted)' : 'var(--fg-primary)',
     cursor: disabled ? 'default' : 'pointer',
     display: 'flex',
