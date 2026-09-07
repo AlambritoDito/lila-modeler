@@ -491,7 +491,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
             />
           </div>
         ) : (
-          <PanelPropiedades modelador={modelador} pestana={pestana} />
+          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
         )}
       </aside>
 
