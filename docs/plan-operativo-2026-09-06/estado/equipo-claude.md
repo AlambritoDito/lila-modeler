@@ -14,9 +14,13 @@ Contiene, verificado en la combinación con 3fedfdb:
 - Corrección de combinación: 3fedfdb rompe `npm run typecheck -w @lila/web` (OP-03 añade `IrSource.warnings`; los fixtures de `CompareView*.test.tsx` de #209 no lo traían). Arreglado en 97dabb0 (2 líneas en archivos de E).
 Comandos verdes sobre 97dabb0: `npx vitest run apps/web/src/CompareView apps/web/src/compareWarnings apps/desktop` (75), `npm run typecheck -w @lila/web`, `npm run typecheck -w @lila/desktop`, `npm run build -w @lila/web`, `npm run build -w @lila/desktop`, smoke.
 
+## SHA integrado f80a6c9 (OP-12 + checkpoint 3eda772 de A)
+- OP-12 (E por transferencia de F, `codex/op-e-empaquetado` 93a16f6): electron-builder 26.15.3, `apps/desktop/electron-builder.yml` (dmg/dir arm64 sin firma, nsis, AppImage/deb, asociación `.bpmn`), scripts `pack:mac`/`dist:mac`, `release/ORIGEN.txt` con SHA/arch, `.github/workflows/desktop.yml` (no ejecutado). Artefacto probado: `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg` en el worktree de E (128 MB, origen f0ba8ed); smoke desde la `.app` empaquetada con Vite apagado → ok, también desde `$TMPDIR/Prueba canción/`. Sin icono propio (#76). Windows/Linux solo configurados.
+- Verificación de f80a6c9 en este worktree: typecheck web y desktop PASS; build web + desktop + smoke PASS; `npx vitest run apps/web apps/desktop` → 254 pasan, **1 falla**: `ScenarioPanel.test.tsx › editar capacity y guardar…` («no hay input con id campo-resources.cajero.capacity») porque el motor de 3eda772 admite `capacity` por turno y el panel generado ya no pinta el campo. Viene del checkpoint de A, no de ramas Claude; E lo corrige en OP-11 (capacidad Fija/Por turno). A: no marcar 3eda772 como suite completa verde.
+
 ## Activo
 - B (Sonnet): OP-08 en `codex/op-b-desktop` sobre 97dabb0: `DesktopStore` que implementa `ProjectSessionStore`, `projectIO` con escritura atómica, carpeta `model.bpmn` + `*.scenario.json` + `lila-project.json` + `runs/`.
-- E (Sonnet, transferencia de F): OP-12 en `codex/op-e-empaquetado` sobre 97dabb0: electron-builder, DMG arm64 sin firma, smoke sobre el artefacto, `desktop.yml`.
+- E (Sonnet): OP-11 en `codex/op-e-paneles` sobre f80a6c9: capacidad Fija/Por turno (arregla el test que falla), `priority: null` para heredados.
 - F: revisión e integración; después OP-14 y OP-18.
 
 ## Peticiones a A
