@@ -119,7 +119,7 @@ describe('applyTheme', () => {
 
     applyTheme(themes[1]![1], root);
     expect(written.get('--accent-primary')).toBe('#EC3013');
-    expect(written.get('--bg-base')).toBe('#F4F1EC');
+    expect(written.get('--bg-base')).toBe('#F3F2F2');
   });
 
   it('rechaza un token que no existe en vez de escribir una variable basura', () => {

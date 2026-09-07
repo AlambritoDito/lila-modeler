@@ -16,25 +16,32 @@ El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
 `apps/web`, con `examples/pedido/model.bpmn` cargado (LILA-057). Sirve para comparar lo
 construido contra los artboards de abajo cuando estos existan.
 
-## Capturas de los artboards — PENDIENTES
+## Capturas de los artboards
 
-Descargar el `.dc.html` requiere iniciar sesión en Claude Design, cosa que la
-sesión que implementó LILA-112 no podía hacer. Hasta que se descargue, estas
-capturas **no existen**; los nombres de archivo ya están decididos para que
-quien las suba no tenga que inventar convención:
+Descargadas el 2026-09-07 con `DesignSync` tras `/design-login`. El artefacto entero está en
+`Lila Modeler.dc.html` (solo el documento; el runtime `support.js` y el bundle del design system
+no se copian: los artboards son HTML con estilos en línea y se renderizan solos). Las capturas se
+generaron con Chrome headless a partir de cada artboard. La comparación contra la app, con la
+reconciliación de tokens y la propuesta de tickets, está en `COMPARACION-2026-09-07.md`.
 
-| # | Artboard | Archivo | Estado |
-|---|---|---|---|
-| 1 | Modelar 1440×900 | `docs/design/01-modelar-1440.png` | PENDIENTE |
-| 2 | Modelar 1920×1080 | `docs/design/02-modelar-1920.png` | PENDIENTE |
-| 3 | Simular con panel de escenario | `docs/design/03-simular-escenario.png` | PENDIENTE |
-| 4 | Lienzo con overlay de cuellos de botella | `docs/design/04-overlay-cuellos.png` | PENDIENTE |
-| 5 | Resultados | `docs/design/05-resultados.png` | PENDIENTE |
-| 6 | Comparar | `docs/design/06-comparar.png` | PENDIENTE |
-| 7 | Validar rutas | `docs/design/07-validar-rutas.png` | PENDIENTE |
-| 8 | Bienvenida | `docs/design/08-bienvenida.png` | PENDIENTE |
-| 9 | Ajustes → Apariencia (Eva-01) | `docs/design/09-apariencia.png` | PENDIENTE |
-| 10 | Modelar con el tema Papel | `docs/design/10-modelar-papel.png` | PENDIENTE |
+| # | Artboard | Archivo |
+|---|---|---|
+| 1 | Modelar 1440×900 | `01-modelar-1440.png` |
+| 2 | Modelar 1920×1080 (paleta de comandos, Documentación) | `02-modelar-1920.png` |
+| 3 | Simular con panel de escenario | `03-simular-escenario.png` |
+| 4 | Lienzo con overlay de cuellos de botella | `04-overlay-cuellos.png` |
+| 5 | Resultados | `05-resultados.png` |
+| 6 | Comparar | `06-comparar.png` |
+| 7 | Validar rutas | `07-validar-rutas.png` |
+| 8 | Bienvenida | `08-bienvenida.png` |
+| 9 | Ajustes → Apariencia (Eva-01) | `09-apariencia.png` |
+| 10 | Modelar con el tema Papel | `10-modelar-papel.png` |
+| — | Tabla de tokens (ambos temas) | `11-tabla-tokens.png` |
+| — | Inventario de componentes | `12-inventario-componentes.png` |
+| — | Notas de implementación (React) | `13-notas-react.png` |
+
+Captura de la app del mismo día, para poner al lado del artboard 1:
+`app-2026-09-07-modelar-eva01.png` (build de escritorio, smoke).
 
 ## Inventario de componentes React
 
@@ -102,18 +109,16 @@ más adelante hace falta texto sobre esos dos acentos en cualquier tema, el
 arreglo limpio es partir el token en `fg.onAccent.primary` /
 `.secondary` / `.tertiary`, y eso es un cambio del brief, no de este ticket.
 
-**Valores de Papel derivados, pendientes de reconciliar.** Salvo
-`accent.primary`, el resto de Papel (grises cálidos claros, texto casi negro,
-acentos ámbar y azul tinta) lo derivó la implementación como tema claro neutro
-con contraste AA. Cuando se descargue el `.dc.html` hay que **reconciliar la
-tabla de tokens y el inventario de componentes** con los del artefacto y
-corregir aquí lo que difiera.
+**Valores de Papel reconciliados con el artefacto (2026-09-07).** Los 40 tokens de
+Papel son ahora los de la tabla del artefacto (30 valores cambiaron respecto a los
+derivados), con una excepción deliberada: `fg.onAccent` sigue en `#0B0603` porque el
+blanco del artefacto da 4,2:1 sobre `#EC3013` y el test exige AA. Detalle en
+`COMPARACION-2026-09-07.md`.
 
-**`sim.utilization.*` inventado.** El brief no da valores para la escala de
-utilización de recursos. Se eligieron tres pasos que no se confundan con la
-escala de cuellos de botella (ámbar → naranja → rojo): infrautilizado en el azul
-de `status.info`, sano en el verde de `status.success` y saturado en el naranja
-de `accent.secondary`. Si el artefacto trae otros, ganan los del artefacto.
+**`sim.utilization.*` reconciliado.** El brief no daba valores; el artefacto sí (en
+las variables de sus artboards): en Eva-01 `status.info` → `status.warning` →
+`status.error` (`#4FC3F7 / #FFB020 / #FF4D4D`) y en Papel `#1668A8 / #A66A00 /
+#C42121`. Se tomaron los del artefacto.
 
 **`shadow` es un color, no una sombra completa.** El token guarda un hex con
 alfa (`#00000099` en Eva-01) y la sombra se compone en CSS
