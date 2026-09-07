@@ -144,10 +144,15 @@ function formatCellValue(metric: string, value: number | null, unit: BaseTimeUni
   return formatNumber(value);
 }
 
-/** Unidad y moneda con las que se formatea una columna: la de su propia corrida si se conoce. */
+/**
+ * Unidad y moneda con las que se formatea una columna: la de su propia corrida si se conoce.
+ * `currency` no es opcional (a diferencia de `CompareRunMeta.currency`): con
+ * `exactOptionalPropertyTypes` un campo opcional no admite `undefined` explícito, y este tipo
+ * interno sí necesita poder decir "no hay moneda para esta columna".
+ */
 interface ColumnContext {
   unit: BaseTimeUnit;
-  currency?: string;
+  currency: string | undefined;
 }
 
 const NOT_COMPARABLE = 'no comparable';

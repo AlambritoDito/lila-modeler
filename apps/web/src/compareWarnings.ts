@@ -112,10 +112,13 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
 export function runMetaFrom(name: string, scenario: ResolvedScenario, result: RunResult): CompareRunMeta {
   return {
     baseTimeUnit: scenario.run.baseTimeUnit as BaseTimeUnit,
-    currency: scenario.run.currency,
     name,
     replications: scenario.run.replications,
     seed: scenario.run.seed,
     warnings: result.warnings,
+    // `run.currency` no tiene default en `RunSchema` (a diferencia de seed/replications/
+    // baseTimeUnit): con `exactOptionalPropertyTypes` un campo opcional no admite `undefined`
+    // explícito, así que se omite del todo en vez de escribir `currency: undefined`.
+    ...(scenario.run.currency === undefined ? {} : { currency: scenario.run.currency }),
   };
 }
