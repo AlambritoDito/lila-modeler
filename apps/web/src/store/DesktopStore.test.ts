@@ -170,7 +170,10 @@ describe('DesktopStore.openProject', () => {
     await expect(store.openProject()).resolves.toBeNull();
   });
 
-  it('ida y vuelta: separa "problems" y castea runs[].result a RunResult', async () => {
+  it('ida y vuelta: propaga "problems" en el documento devuelto (y en lastProblems) y castea runs[].result a RunResult', async () => {
+    // OP-14, revisión de A, issue #71: "problems sigue eliminado en toProjectDocument" — A ya
+    // admite `problems?` opcional en `ProjectDocument`, así que `App.tsx#activate` lee
+    // `doc.problems` directamente del documento devuelto por `openProject`, no de un canal aparte.
     const bridge = new FakeBridge();
     bridge.queueChooseFolder('/carpeta/pedido');
     const run = {
@@ -191,6 +194,7 @@ describe('DesktopStore.openProject', () => {
 
     expect(document?.runs).toEqual([run]);
     expect(document?.scenarios).toEqual(raw.scenarios);
+    expect(document?.problems).toEqual([{ file: 'roto.scenario.json', message: 'JSON inválido' }]);
     expect(store.lastProblems).toEqual([{ file: 'roto.scenario.json', message: 'JSON inválido' }]);
   });
 

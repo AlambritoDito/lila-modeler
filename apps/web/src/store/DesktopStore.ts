@@ -31,18 +31,23 @@ function requireWindowLila(): LilaBridge {
 }
 
 /**
- * Separa `problems` (extensión de B, no forma parte de `ProjectDocument`) y castea
+ * Propaga `problems` DENTRO del `ProjectDocument` devuelto (OP-14, revisión de A, issue #71:
+ * "problems sigue eliminado en toProjectDocument" — A ya declara `problems?` opcional en
+ * `ProjectDocument`, así que ya no hace falta extraerlo a un canal aparte para que sobreviva:
+ * `App.tsx#activate` lee `doc.problems` directamente del documento que devuelven
+ * `createProject`/`openProject`/`saveProject`/`openRecent`). También se expone en
+ * `this.problems`/`lastProblems` por compatibilidad con el resto de esta clase, y se castea
  * `runs[].result` de `unknown` (lo que tipa el puente, que no depende de `@lila/engine`) a
- * `RunResult`. Es el único cast de esta clase: no oculta una invalidez de dominio, solo repara
- * una frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine` — el valor en
- * tiempo de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
+ * `RunResult` — el único cast de esta clase: no oculta una invalidez de dominio, solo repara una
+ * frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine`, el valor en tiempo
+ * de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
  */
 function toProjectDocument(
   raw: LilaProjectDocument,
 ): { document: ProjectDocument; problems: readonly ProjectProblem[] } {
   const { problems, ...rest } = raw;
   const runs: StoredRun[] = rest.runs.map((run) => ({ ...run, result: run.result as RunResult }));
-  return { document: { ...rest, runs }, problems };
+  return { document: { ...rest, runs, problems }, problems };
 }
 
 export class DesktopStore implements ProjectSessionStore {
