@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { isNCName, newId, sanitizeIds, sanitizeXmlIds } from '../../src/bpmn/ids.js';
+import { isNCName, newId, sanitizeIds, sanitizeXmlIds } from '../../src/bpmn/index.js';
 
 test('10 000 ids generados son NCName únicos', () => {
   const ids = new Set<string>();
@@ -90,6 +90,27 @@ test('sanitizeXmlIds reescribe un id no-NCName en su definición y en su referen
   expect(out).toContain('targetRef="Task_1"');
   expect(out).not.toContain('id="1-inicio"');
   expect(out).not.toContain('sourceRef="1-inicio"');
+});
+
+test('sanitizeXmlIds admite comillas mixtas y conserva la comilla de cada atributo', () => {
+  const xml =
+    "<bpmn:startEvent id='1-inicio' />" +
+    '<bpmn:sequenceFlow id="2-flujo" sourceRef="1-inicio" targetRef=\'3-fin\' />' +
+    '<bpmn:endEvent id="3-fin" />';
+
+  const { xml: out, sanitizedToOriginal } = sanitizeXmlIds(xml);
+  const originalToSanitized = new Map(
+    [...sanitizedToOriginal].map(([sanitized, original]) => [original, sanitized]),
+  );
+
+  expect(sanitizedToOriginal.size).toBe(3);
+  expect(out).toContain(`id='${originalToSanitized.get('1-inicio')}'`);
+  expect(out).toContain(`sourceRef="${originalToSanitized.get('1-inicio')}"`);
+  expect(out).toContain(`targetRef='${originalToSanitized.get('3-fin')}'`);
+  expect(out).toContain(`id="${originalToSanitized.get('3-fin')}"`);
+  for (const [sanitized, original] of sanitizedToOriginal) {
+    expect(originalToSanitized.get(original)).toBe(sanitized);
+  }
 });
 
 test('sanitizeXmlIds reescribe un id no-NCName en el contenido de texto de un elemento (flowNodeRef)', () => {
