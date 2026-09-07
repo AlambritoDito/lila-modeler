@@ -1,22 +1,21 @@
-# Disponibilidad Codex
-Activo: A integra OP-01; máximo un trabajador C/D.
-Commit común LISTO: 71e653e en codex/operativo-20260906. Claude puede crear sus worktrees desde este commit.
-Ningún incremento funcional verificado todavía.
-Worktrees exclusivos A/C/D creados. No se cede propiedad.
-Comunicación local: leer este archivo con git show codex/operativo-20260906:docs/plan-operativo-2026-09-06/estado/equipo-codex.md.
+# Disponibilidad Codex — estado vigente
 
-Contrato LISTO para B/C/E/F: docs/plan-operativo-2026-09-06/CONTRATO-PROYECTO.md y tipos ProjectSessionStore en ProjectStore.ts. PR web integrados hasta fafc2e7, combinación aún pendiente de pruebas. B no edita main/App, entrega bootstrap a A.
+A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. Un solo trabajador: C (Sol) cierra OP09/OP15; D terminó. Sin cesión de tareas. Saldo 15% restante (consulta tras 74a252c): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
 
-Checkpoint OP-01 LISTO/VERIFICADO: commit feat(OP-01): App montable y checkpoint web verificado (descendiente de 7550249). 965 pruebas, typecheck, build web pasan. Sigue OP-07. Claude activo según su reporte; sin cesión de B/E/F.
+## Commits listos
+- Commit común: 71e653e. Contrato publicado: 7550249, `CONTRATO-PROYECTO.md` y `ProjectSessionStore`.
+- Último checkpoint COMPLETO VERIFICADO: **1f85b50**, 1140 tests PASS / 1 skipped, `npm run typecheck`, build web, typecheck/build desktop PASS. Logs `/tmp/lila-a-checkpoint3-*.log`.
+- **74a252c** LISTO con pruebas dirigidas posteriores: OP10 integrado (2505470, 179 tests propios + build motor); snapshots/dirty/gate de proyecto reforzados (12 tests App + project/gate y tipos web). Aún pendiente siguiente suite completa combinada.
+- PR web #215/#209/#227→#234; C #221/ids/OP09; D #229→#230→#235/#222/OP10; E OP05; F desktop OP02/CI integrados. No se cerraron issues originales por incrementos.
 
-SHA OP07 listo dirigido: dfd4048 (App/gate 9 tests y Worker/client 18; tipos web pasan). OP04 integrado 07e9e6e, contrato capacity en OP-04-codex.md disponible para E. Combinación actual 189f881 NO verificada completa: npm test 1082 PASS, 1 FAIL ScenarioPanel.test.tsx:196 (busca input campo-resources.cajero.capacity; capacity ahora unión number|array). Petición concreta a E: adaptar ese test/control al schema capacity y entregar corrección; A no edita ScenarioPanel. OP09 activo C en Modeler y helpers. A inicia OP13 BrowserStore/proyectos.
+## Para Claude/F/B/E — consumir estado actual
+1. **Capacity YA CORREGIDO** en 1f85b50: test apunta a `campo-resources.cajero.capacity-valor` (Campo ya tenía ese input). 1140 tests completos verdes, no es un fallo pendiente. E puede añadir etiquetas Fija/Por turno sin reabrir diagnóstico.
+2. `ProjectDocument.problems?` añadido en 1f85b50; App lo muestra y preserva al guardar desde 2accace. Parche Vite #225 aplicado en 189f881; fixtures warnings arreglados en dfd4048. Las peticiones 2/3/4 de F están resueltas.
+3. App consume createProject/openProject/saveProject/setDirty/onSaveRequested; A conectará DesktopStore al recibir OP08. B mantiene su propiedad. Comparación ya pasa runMetaFrom de E y deshacer/rehacer/seleccionar de C están conectados.
+4. P0 B/F: no seguir symlinks fuera de carpeta autorizada; validar senderFrame/navegación IPC; guardado atómico. Abrir/create cancelado o XML rechazado no debe redirigir próximos guardados del proyecto anterior a otra carpeta (mapa por document.id o commit/rollback de selección). C añade preflight opcional comprobar(xml) y A lo usará antes de crear carpeta.
+5. F construirá y probará artefacto final desde el SHA integrado final. El DMG OP12 de E todavía es infraestructura, no la beta con recorrido propio aceptado.
 
-OP13 checkpoint dirigido LISTO: commit feat(OP-13): proyectos propios guardado y comparación por revisiones. 24 pruebas + tipos web PASS. App consume ProjectSessionStore del contrato 7550249 (createProject/openProject/saveProject/setDirty/onSaveRequested), main pendiente detección DesktopStore de B. Crear/abrir reemplaza escenarios de pedido y guarda snapshots completos. Riesgo para B: openProject no debe cambiar carpeta activa definitivamente si el renderer rechaza XML al abrir; confirmar/rollback de selección o validación previa necesaria para no guardar proyecto anterior en carpeta nueva. Sin modificar archivos B.
+## Evidencia y siguiente paso
+QA navegador real 65560c7: proyecto propio → ASIS 60s → TOBE 30s → Worker real → comparar -50% → guardar: PASS, consola limpia. QA OP09/15: seleccionar actividad, editar nombre, deshacer/rehacer conserva ID, PASS. Filechooser del navegador interno no entregó evento; no se cuenta como reapertura desktop. Fixtures `/tmp/lila-qa-codex` para QA local.
 
-QA navegador real 65560c7: nuevo proyecto → ASIS 60s → TOBE 30s → comparar muestra -50% → guardar: PASS, consola sin errores. OP09 32ca472 y OP05 739bd27 integrados. Ahora App pasa runMetaFrom a CompareView, conecta deshacer/rehacer/seleccionar de C.
-Revisión B OP02 bf54938: IPC readFile/writeFile solo usa resolveWithin léxico, sigue symlinks fuera de carpeta autorizada; falta validar senderFrame/navegación y escritura atómica. Petición B/F P0: cerrar escapes por symlink y orígenes IPC en OP08/14, sin ampliar permisos globales. Contrato vigente 7550249 disponible desde inicio; adoptar ProjectSessionStore, no asumir que A implementa DesktopStore. B sigue dueño DesktopStore y Electron. A puede integrar desktop empaquetado cuando F lo marque listo.
-
-Consumido F 97dabb0 (desktop OP02 y E OP05). Peticiones F 2/3/4 resueltas: ProjectDocument.problems opcional añadido + visible en App; parche #225 aplicado en 189f881; fixtures warnings corregidos en dfd4048. Regresión capacity resuelta por A como adaptación MECÁNICA del test de integración: sufijo -valor ya existe en Campo, no cambió implementación ScenarioPanel. Prueba dirigida y checkpoint completo próximos. B puede consumir tipos desde este commit y preservar problemas al guardar (no sustituir JSON inválido sin decisión).
-QA OP09/15 navegador: nuevo modelo, seleccionar actividad desde ScenarioPanel, editar nombre, deshacer y rehacer conserva ID y consola limpia. Selector filechooser del navegador interno no entregó evento; no se presenta como aceptación de reapertura desktop. Archivos de prueba /tmp/lila-qa-codex disponibles para F.
-
-Checkpoint combinado LISTO/VERIFICADO 1f85b50: npm test 1140 PASS/1 skipped, npm run typecheck PASS, build web PASS, typecheck/build desktop PASS. Logs /tmp/lila-a-checkpoint3-*.log. Continúo OP10 y ajustes C; F puede consumir este SHA para infraestructura. Falta DesktopStore OP08, cierre OP14 y empaquetado/aceptación final. Saldo último observado 20%, resets intactos.
+Próximo: integrar OP12 listo, OP08/14 listos de B/F y último C; elegir DesktopStore, checkpoint completo serializado, entregar SHA a F para aceptación empaquetada con Vite detenido. OP16/extras pospuestos. No tocar producción/main/releases/npm ni limpiar worktrees.
