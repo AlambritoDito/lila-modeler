@@ -375,7 +375,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
           izquierda; la esquina inferior derecha queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
-      <div className="zona-modelo" style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
+      <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -407,7 +407,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
         {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
       </section>}
-      <aside className="panel">
+      <aside className="panel" inert={ioBusy}>
         <nav className="pestanas">
           {PESTANAS.map((p) => (
             <button
@@ -516,8 +516,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </aside>
 
       <nav className="diagramas">
-        <button className="boton" disabled={!modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
-        <button className="boton" disabled={!modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
+        <button className="boton" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
+        <button className="boton" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
         <button type="button" className="pestana activa">
           {archivo}
         </button>

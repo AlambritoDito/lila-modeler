@@ -170,3 +170,13 @@ it('descartar permite reemplazar sin guardar', async () => {
   expect(session.saveProject).not.toHaveBeenCalled();
   expect(session.createProject).toHaveBeenCalledOnce();
 });
+
+it('bloquea interacción con edición durante apertura y la restaura al cancelar', async () => {
+  const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
+  await click('Abrir proyecto');
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(true);
+  expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(true);
+  await act(async () => pending.resolve(null));
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(false);
+  expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(false);
+});

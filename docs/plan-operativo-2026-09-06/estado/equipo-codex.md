@@ -1,39 +1,22 @@
-# Disponibilidad Codex — estado vigente
+# Disponibilidad Codex — vigente
 
-A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C y D terminaron sus incrementos; ningún trabajador activo. A integra y prueba. Sin cesión de tareas. Saldo 13% restante (consulta tras 2e8990d): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
+A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C/D terminaron; ningún trabajador activo. Sin cesión. Último saldo observado 13% restante; solo P0/cierre. Tres resets conservados, no consumir.
 
-## Commits listos
-- Commit común: 71e653e. Contrato publicado: 7550249, `CONTRATO-PROYECTO.md` y `ProjectSessionStore`.
-- Checkpoint previo COMPLETO VERIFICADO: **1f85b50**, 1140 tests PASS / 1 skipped, `npm run typecheck`, build web, typecheck/build desktop PASS. Logs `/tmp/lila-a-checkpoint3-*.log`.
-- **74a252c** LISTO con pruebas dirigidas posteriores: OP10 integrado (2505470, 179 tests propios + build motor); snapshots/dirty/gate de proyecto reforzados (12 tests App + project/gate y tipos web). Aún pendiente siguiente suite completa combinada.
-- PR web #215/#209/#227→#234; C #221/ids/OP09; D #229→#230→#235/#222/OP10; E OP05; F desktop OP02/CI integrados. No se cerraron issues originales por incrementos.
+## Listo para F: f061c32 + siguiente commit de guardia IO
+- **f061c32 checkpoint completo 5 VERIFICADO**: 1182 tests PASS / 1 skipped, tipos raíz/web y builds web/desktop PASS. Logs `/tmp/lila-a-checkpoint5-*.log`. Smoke Electron real sin Vite: lienzo/tema/fuente/puente ok, consoleErrors vacío, loadFailure null (`/tmp/lila-a-desktop-bootstrap-smoke.log`).
+- Siguiente commit (este reporte): guardia IO de App con inert en lienzo/panel y undo/redo deshabilitados durante apertura/guardado para impedir edición entre validación e importación asíncrona. **18 tests App + tipos web PASS** (`/tmp/lila-a-io-controls-*.log`).
+- Incluye OP01 PRs web; C #221/OP03/09/15 último17ec08f; D #229→230→235/#222/OP10 2505470; E OP05/11/12; B OP02/08 f0d2095; F CI. No se cerraron issues originales por incrementos.
+- Bootstrap main.tsx YA selecciona DesktopStore con window.lila. Proyectos propios por carpeta. App oculta Abrir/Exportar BPMN suelto en desktop porque los métodos históricos de B no tienen esa semántica; no usar getProcess/putProcess para ese flujo hasta implementar import/export reales.
+- OP14 shell: Nuevo/Abrir ofrece Guardar/Descartar/Cancelar; si guardar falla/cancela no reemplaza. QA navegador real conserva versión tras Cancelar y guarda antes de crear. Cierre nativo permanece propiedad B.
+- Comparación usa snapshots/revisiones y runMetaFrom E; problemas opcionales visibles/preservados; export default de C no interactivo, guardar/export explícitos interactivo:true, preflight antes de createProject. Todo integrado.
 
-## Entrega vigente: 2e8990d VERIFICADO
-Checkpoint completo 4: 1151 pruebas PASS / 1 skipped; tipos raíz/web/desktop y build web PASS. Logs /tmp/lila-a-checkpoint4-*.log. Incluye OP12 empaquetado E y último C OP09/15 17ec08f. A conectará bootstrap de B sobre f0d2095. F: consumir esta base para QA final; ya incluye revisión de snapshots y propiedades por proyecto.
+## P0 B/F antes de beta
+1. writeProjectFolder e16ef9a: repro EISDIR con destino escenario como directorio modifica model.bpmn aunque el guardado falla. F aceptó diagnóstico y B corrige rollback/preflight en OP14. No declarar snapshot seguro todavía.
+2. openProject cambia activeDir antes de que App acepte XML; rechazar B y guardar A jamás debe escribir A dentro de B. Mapa por id o error explícito protege; guard E-PROYECTO-DISTINTO anunciada por B.
+3. toProjectDocument elimina problems de documento en 2cba842. El contrato YA admite problems? desde1f85b50; devolverlo dentro del documento para que App muestre advertencia, no solo lastProblems.
+4. onSaveRequested no-op de OP08 elimina fallback beforeunload del shell: OP14 nativo debe quedar conectado antes de aceptación. App ya publica dirty síncrono tras save y devuelve false ante cambio concurrente.
+5. Symlinks/senderFrame/navegación y conflictos externos: corrección anunciada B OP14, pendiente SHA listo.
 
-P0 adicionales concretos en DesktopStore 2cba842 para B/F:
-- toProjectDocument elimina problems y solo lo publica por lastProblems: devolverlo dentro del documento; el contrato ya lo admite y App lo muestra.
-- onSaveRequested existe pero es no-op: App lo interpreta como cierre nativo y omite beforeunload. Implementar OP14 antes de aceptación; no dejar promesa de protección aparente.
-- App sí usa getProcess para «Abrir .bpmn» y putProcess para «Exportar .bpmn»: las implementaciones históricas de B abren otra carpeta/reescriben proyecto activo, respectivamente. Necesitan import/export BPMN real o capacidad explícita para ocultar esas acciones en escritorio hasta implementarlas; evitar guardar XML con revisiones/resultados del activeDocument viejo. A puede ocultar botones de BPMN de escritorio como mínimo mientras el flujo de carpeta queda disponible.
-- Reabrir: openProject cambia activeDir antes de que App acepte XML. Guardar proyecto A tras rechazar importación B debe seguir escribiendo A, nunca B. Ver petición de mapa por id más abajo.
-
-## Para Claude/F/B/E — consumir estado actual
-
-**P0 reproducido en OP08 parcial e16ef9a (no integrado):** writeProjectFolder hace renames con Promise.all; con destino `bad.scenario.json` que es un directorio falla EISDIR pero `model.bpmn` YA cambió de MODELO_ANTERIOR a MODELO_NUEVO. Reproducción aislada `/tmp/lila-atomic-review-uRTH8j`, importando la función de B sin editar su worktree. B/F: no entregar como snapshot atómico; añadir preflight de destinos y rollback ante fallo de rename (test de fallo intermedio), o protocolo de generación/journal recuperable. El contrato no permite confirmar/corromper parcialmente un guardado fallido.
-
-1. **Capacity YA CORREGIDO** en 1f85b50: test apunta a `campo-resources.cajero.capacity-valor` (Campo ya tenía ese input). 1140 tests completos verdes, no es un fallo pendiente. E puede añadir etiquetas Fija/Por turno sin reabrir diagnóstico.
-2. `ProjectDocument.problems?` añadido en 1f85b50; App lo muestra y preserva al guardar desde 2accace. Parche Vite #225 aplicado en 189f881; fixtures warnings arreglados en dfd4048. Las peticiones 2/3/4 de F están resueltas.
-3. App consume createProject/openProject/saveProject/setDirty/onSaveRequested; A conectará DesktopStore al recibir OP08. B mantiene su propiedad. Comparación ya pasa runMetaFrom de E y deshacer/rehacer/seleccionar de C están conectados.
-4. P0 B/F: no seguir symlinks fuera de carpeta autorizada; validar senderFrame/navegación IPC; guardado atómico. Abrir/create cancelado o XML rechazado no debe redirigir próximos guardados del proyecto anterior a otra carpeta (mapa por document.id o commit/rollback de selección). C añade preflight opcional comprobar(xml) y A lo usará antes de crear carpeta.
-5. F construirá y probará artefacto final desde el SHA integrado final. El DMG OP12 de E todavía es infraestructura, no la beta con recorrido propio aceptado.
-
-## Evidencia y siguiente paso
-QA navegador real 65560c7: proyecto propio → ASIS 60s → TOBE 30s → Worker real → comparar -50% → guardar: PASS, consola limpia. QA OP09/15: seleccionar actividad, editar nombre, deshacer/rehacer conserva ID, PASS. Filechooser del navegador interno no entregó evento; no se cuenta como reapertura desktop. Fixtures `/tmp/lila-qa-codex` para QA local.
-
-Próximo: integrar OP12 listo, OP08/14 listos de B/F y último C; elegir DesktopStore, checkpoint completo serializado, entregar SHA a F para aceptación empaquetada con Vite detenido. OP16/extras pospuestos. No tocar producción/main/releases/npm ni limpiar worktrees.
-
-Último C 17ec08f integrado: export default no interactivo bloquea pérdidas, guardar/export explícitos usan interactivo:true; preflight antes de createProject; edición de proceso/anotaciones y undo de primera extensión. 45 tests C dirigidos y tipos pasan. Sin nuevos frentes: solo cierre P0 e integración B/F.
-
-Bootstrap B integrado con 63 tests App/store + tipos web/desktop PASS; main elige DesktopStore. A oculta botones de BPMN suelto en escritorio mediante bpmnFilesEnabled=false para evitar el uso incorrecto de métodos históricos; no requiere trabajo de B para el recorrido por carpetas. Mantener así hasta import/export real. Siguiente consume OP11 listo de E.
-
-OP11 E integrado (740fc76), 21 tests panel y tipos PASS, ajuste selector input dedicado incluido. OP14 guardia del shell lista: Nuevo/Abrir con dirty ofrece Guardar/Descartar/Cancelar; guardado fallido/cancelado impide reemplazo. 17 tests App y tipos PASS; QA navegador real PASS. Próximo checkpoint completo serializado combina bootstrap+OP11+guardia. F: consumir último HEAD funcional después de este checkpoint; B conserva cierre nativo/IO.
+## QA y siguiente paso
+Vite propio PID45442 DETENIDO a 23:30, no servidor requerido por Electron. Fixtures temporales `/tmp/lila-qa-codex`. QA web propio: dos escenarios, Worker real, comparación -50%, guardado y edición/undo PASS; reapertura final debe probarse en desktop.
+F: consumir último commit integrable de esta rama, integrar OP14 listo y devolver SHA a A. A hará checkpoint combinado final; F construye y prueba app empaquetada del MISMO SHA con Vite detenido y registra artefacto/recorrido. DMG de OP12 anterior es infraestructura, no la beta aceptada. OP16/extras pospuestos. Sin main/push/releases/npm/producción.
