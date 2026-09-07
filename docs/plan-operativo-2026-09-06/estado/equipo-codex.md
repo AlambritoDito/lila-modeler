@@ -1,12 +1,21 @@
 # Disponibilidad Codex — estado vigente
 
-A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C y D terminaron sus incrementos; ningún trabajador activo. A integra y prueba. Sin cesión de tareas. Saldo 15% restante (consulta tras 74a252c): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
+A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C y D terminaron sus incrementos; ningún trabajador activo. A integra y prueba. Sin cesión de tareas. Saldo 13% restante (consulta tras 2e8990d): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
 
 ## Commits listos
 - Commit común: 71e653e. Contrato publicado: 7550249, `CONTRATO-PROYECTO.md` y `ProjectSessionStore`.
-- Último checkpoint COMPLETO VERIFICADO: **1f85b50**, 1140 tests PASS / 1 skipped, `npm run typecheck`, build web, typecheck/build desktop PASS. Logs `/tmp/lila-a-checkpoint3-*.log`.
+- Checkpoint previo COMPLETO VERIFICADO: **1f85b50**, 1140 tests PASS / 1 skipped, `npm run typecheck`, build web, typecheck/build desktop PASS. Logs `/tmp/lila-a-checkpoint3-*.log`.
 - **74a252c** LISTO con pruebas dirigidas posteriores: OP10 integrado (2505470, 179 tests propios + build motor); snapshots/dirty/gate de proyecto reforzados (12 tests App + project/gate y tipos web). Aún pendiente siguiente suite completa combinada.
 - PR web #215/#209/#227→#234; C #221/ids/OP09; D #229→#230→#235/#222/OP10; E OP05; F desktop OP02/CI integrados. No se cerraron issues originales por incrementos.
+
+## Entrega vigente: 2e8990d VERIFICADO
+Checkpoint completo 4: 1151 pruebas PASS / 1 skipped; tipos raíz/web/desktop y build web PASS. Logs /tmp/lila-a-checkpoint4-*.log. Incluye OP12 empaquetado E y último C OP09/15 17ec08f. A conectará bootstrap de B sobre f0d2095. F: consumir esta base para QA final; ya incluye revisión de snapshots y propiedades por proyecto.
+
+P0 adicionales concretos en DesktopStore 2cba842 para B/F:
+- toProjectDocument elimina problems y solo lo publica por lastProblems: devolverlo dentro del documento; el contrato ya lo admite y App lo muestra.
+- onSaveRequested existe pero es no-op: App lo interpreta como cierre nativo y omite beforeunload. Implementar OP14 antes de aceptación; no dejar promesa de protección aparente.
+- App sí usa getProcess para «Abrir .bpmn» y putProcess para «Exportar .bpmn»: las implementaciones históricas de B abren otra carpeta/reescriben proyecto activo, respectivamente. Necesitan import/export BPMN real o capacidad explícita para ocultar esas acciones en escritorio hasta implementarlas; evitar guardar XML con revisiones/resultados del activeDocument viejo. A puede ocultar botones de BPMN de escritorio como mínimo mientras el flujo de carpeta queda disponible.
+- Reabrir: openProject cambia activeDir antes de que App acepte XML. Guardar proyecto A tras rechazar importación B debe seguir escribiendo A, nunca B. Ver petición de mapa por id más abajo.
 
 ## Para Claude/F/B/E — consumir estado actual
 
