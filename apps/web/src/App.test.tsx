@@ -34,7 +34,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador
     servicios: {
       modeling: { createShape: mocks.crearFigura },
       elementFactory: { createShape: mocks.fabricar, createParticipantShape: vi.fn() },
-      canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz' },
+      canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten

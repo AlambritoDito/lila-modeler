@@ -1033,7 +1033,9 @@ body {
   display: flex;
   font: 400 12px/1 var(--font-ui);
   gap: 10px;
-  height: 30px;
+  /* 30 px es la fila del artboard a densidad normal; la densidad la mueve como a la barra y a
+     las pestañas (`--espacio`), que si no la paleta se queda fuera del ajuste. */
+  height: calc(30px * var(--espacio, 1));
   padding: 0 12px;
   text-align: left;
   width: 100%;

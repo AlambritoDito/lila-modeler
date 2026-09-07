@@ -78,7 +78,7 @@ export interface Servicios {
     createShape(atributos: { type: string; eventDefinitionType?: string | undefined; isExpanded?: boolean | undefined }): unknown;
     createParticipantShape(): unknown;
   };
-  canvas: { viewbox(): Rectangulo; getRootElement(): unknown };
+  canvas: { viewbox(): Rectangulo; getRootElement(): unknown; scrollToElement(figura: unknown): void };
   /** `activate` abre la edición del nombre de la figura recién creada. */
   directEditing: { activate(figura: unknown): void };
   /** Para saber sobre qué elemento cae el punto donde se inserta (`Paleta.tsx`). */

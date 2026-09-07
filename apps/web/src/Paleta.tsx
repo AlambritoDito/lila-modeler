@@ -165,7 +165,12 @@ export function insertar(servicios: Servicios, figura: Figura): void {
   const vista = servicios.canvas.viewbox();
   const forma = nueva(servicios, figura);
   const { target, punto } = sitio(servicios, forma, centroDe({ ...vista }));
-  servicios.directEditing.activate(servicios.modeling.createShape(forma, punto, target));
+  const creada = servicios.modeling.createShape(forma, punto, target);
+  // La tercera rama de `sitio()` deja la figura en el centro de un contenedor que puede estar
+  // fuera de la pantalla; sin esto el usuario pulsa, no ve nada aparecer y escribe el nombre a
+  // ciegas. `scrollToElement` no mueve nada si la figura ya se ve.
+  servicios.canvas.scrollToElement(creada);
+  servicios.directEditing.activate(creada);
 }
 
 interface Props {
@@ -225,7 +230,7 @@ export function Paleta({ servicios }: Props): React.JSX.Element {
               >
                 <span className={`bpmn-icon-${figura.icono}`} aria-hidden="true" />
                 <span className="nombre">{figura.nombre}</span>
-                <span className="pista">arrastrar</span>
+                <span className="pista" aria-hidden="true">arrastrar</span>
               </button>
             ))}
           </details>
