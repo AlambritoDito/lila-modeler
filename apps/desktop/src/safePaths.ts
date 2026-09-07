@@ -3,6 +3,7 @@
  * proceso de Electron detrás. Las usan tanto `protocol.handle('lila', …)` (servir la SPA
  * compilada) como los manejadores de `lila:readFile`/`lila:writeFile` (el puente de archivos).
  */
+import { lstat } from 'node:fs/promises';
 import { extname, isAbsolute, resolve, sep } from 'node:path';
 
 /** Se lanza cuando una ruta pedida resolvería fuera de la carpeta autorizada. */
@@ -68,4 +69,25 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
 export function mimeFor(path: string): string {
   const ext = extname(path).toLowerCase();
   return MIME_TYPES[ext] ?? 'application/octet-stream';
+}
+
+/**
+ * `true` si `target` existe y es un symlink (`lstat`, que a diferencia de `stat` no sigue el
+ * enlace). `false` si no existe — quien llama decide qué hacer con "no existe" por separado; esto
+ * solo distingue "existe y es un enlace" de todo lo demás (OP-14, revisión de A sobre OP-02:
+ * "sigue symlinks fuera de la carpeta autorizada", issue #71). Usado por `projectIO.ts` para
+ * excluir en lectura (con `problems`) y rechazar en escritura cualquier archivo/carpeta de
+ * proyecto que resulte ser un enlace hacia fuera de la carpeta autorizada, sin necesidad de
+ * resolver el enlace primero (evita tocar el destino externo).
+ */
+export async function isSymlink(target: string): Promise<boolean> {
+  try {
+    const info = await lstat(target);
+    return info.isSymbolicLink();
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
 }

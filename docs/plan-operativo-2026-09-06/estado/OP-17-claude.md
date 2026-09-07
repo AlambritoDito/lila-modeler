@@ -112,3 +112,86 @@ interactivamente.
   otros paquetes (p. ej. #76 icono propio es de F/empaquetado, no de este incremento).
 
 Sesión trabajadora: cerrada para este incremento. Cesión a otro equipo: no.
+
+---
+
+## Incremento 2 — guía actualizada al artefacto final (issues #55, #75)
+
+Nota de nombres: esto **no** es el "incremento 2 (MCP, #56/#48)" que anticipaba la sección
+anterior — ese trabajo de MCP sigue sin tocarse. Este es un segundo incremento de la parte de guía
+del mismo ticket OP-17, pedido para poner `docs/GUIA-BETA-MAC.md` al día con el SHA final de la
+beta (`DesktopStore` ya conectado por A, con guardado transaccional, cierre seguro, recientes y
+seam E2E de B).
+
+- Rama: `codex/op-e-paneles`. Worktree: `/Users/brito/development/lila-wt-e-paneles`.
+- `git merge --no-edit codex/claude-entrega-20260906` → **fast-forward**, sin conflicto.
+- SHA base (antes del merge): `aa60dd1`. SHA tras el merge: `89f82bd`.
+- Commit de este incremento: `87537ce` — `docs: OP-17 guía de la beta Mac sobre el artefacto
+  final (#55, #75)`.
+
+### Qué se verificó antes de escribir
+
+- `docs/plan-operativo-2026-09-06/estado/OP-18-claude.md`: tabla de PASS/limitaciones del
+  recorrido real sobre la `.app` empaquetada de `1e136e3` con el seam E2E (`LILA_E2E_FOLDER`,
+  `LILA_E2E_LOG`, `LILA_E2E_CLOSE`), y el recorrido preliminar sobre `d536b75`.
+- `docs/plan-operativo-2026-09-06/estado/OP-14-claude.md`: los cuatro incrementos de B — guardia
+  de symlinks/origen de mensajes/CSP/identidad/cierre (1), recientes/ventana/`E-CAMBIO-EXTERNO`/
+  apertura de `.bpmn` (2), guardado transaccional con rollback + seam E2E (3), y los tres P0 que
+  reprodujo A y B cerró (4), incluido que `problems` ahora sí viaja dentro de `ProjectDocument`.
+- `docs/plan-operativo-2026-09-06/estado/OP-08-claude.md`: disposición de la carpeta de proyecto
+  (`model.bpmn`, `*.scenario.json`, `lila-project.json`, `runs/`) y las decisiones de B sobre
+  `problems`/errores por IPC.
+- `apps/web/src/App.tsx` (ya fusionado): confirmado en el propio código, no de memoria —
+  - `doc.problems` **sí se pinta** en la UI: `App.tsx` líneas 196-197 hacen
+    `setProjectProblems(doc.problems ?? [])` y, si hay alguno,
+    `setIoError(doc.problems.map(...).join(' · '))`, que se muestra con `role="alert"`.
+  - No existe ningún botón "Sobrescribir": el único control tras un fallo de guardado (incluido
+    `E-CAMBIO-EXTERNO`) es "Guardar como" en la barra superior — confirmado por ausencia de
+    `overwrite`/"Sobrescribir" en todo `App.tsx`.
+  - `apps/web/src/main.tsx` ya construye `DesktopStore` cuando `window.lila` existe (`const
+    desktop = typeof window.lila !== 'undefined'`), reemplazando la elección fija de
+    `BrowserStore` que documentaba el incremento 1.
+  - `bpmnFilesEnabled={!desktop}`: el botón "Abrir .bpmn" de la barra superior **no aparece** en
+    la app de escritorio (solo en modo navegador) — corregido en la guía, que antes lo daba por
+    presente en ambos modos.
+  - "Comparar" no tiene botón "Exportar CSV" (solo "Resultados") — confirmado por ausencia de esa
+    cadena en la sección de Comparar.
+  - `apps/desktop/package.json`: versión `0.0.1`, usada para corregir la ruta del DMG en "Cómo
+    reconstruir" (antes sin ruta completa).
+
+### Qué se cambió en `docs/GUIA-BETA-MAC.md`
+
+- Cabecera: SHA/fecha actualizados a `89f82bd`/2026-09-07 y nota de que `DesktopStore` ya está
+  conectado.
+- «Modelar»: corregida la mención de "Abrir .bpmn" (ya no existe en el build de escritorio).
+- «Guardar y recuperar»: reescrita como funcionalidad real — Nuevo proyecto/Abrir proyecto/
+  Guardar/Guardar como, `E-CARPETA-OCUPADA`, indicador Guardado/Sin guardar, cierre con diálogo
+  nativo Guardar/Descartar/Cancelar (30 s de espera), archivos de la carpeta, escenario roto en
+  `problems` (con confirmación de que sí se muestra), `E-DESTINO-INVALIDO` al guardar sin
+  permisos, `E-CAMBIO-EXTERNO` sin botón "Sobrescribir" (salida: Guardar como).
+- Nueva sección «Recientes y ventana»: ruta de `estado.json`, recientes sin menú en la UI.
+- «Limitaciones de esta beta»: actualizada al SHA/fecha final; añadidas edición de BPMN no
+  automatizada en la app empaquetada, asociación `.bpmn` por doble clic no probada, mensajes de
+  error crudos (zod / "Error invoking remote method"), sin menú de recientes, `Exportar CSV` solo
+  en Resultados. Se quitó la limitación ya resuelta ("persistencia en carpeta pendiente del
+  bootstrap").
+- «Cómo reconstruir»: ruta completa del DMG y `ORIGEN.txt` bajo `apps/desktop/release/`, con la
+  versión real (`0.0.1`) leída de `apps/desktop/package.json`.
+- Nueva sección «Para agentes/QA: seam E2E»: `LILA_E2E_FOLDER`, `LILA_E2E_CLOSE`, `LILA_E2E_LOG`,
+  con la advertencia de que son solo para pruebas automatizadas.
+
+No se regeneró el DMG (el coordinador lo está generando en otro worktree, según la instrucción
+recibida); no se tocaron `THIRD_PARTY_LICENSES.md` ni `docs/MCP.md`; no se corrió ningún build ni
+test (cambio puramente de documentación, sin código tocado).
+
+### Pendientes
+
+- **MCP (issues #56/#48)**: sigue sin empezar, tal como ya anotaba el incremento 1 — `docs/MCP.md`
+  no se tocó.
+- El icono propio (#76) y la firma/notarización siguen fuera de este incremento (empaquetado,
+  no documentación).
+- Si el coordinador decide conectar `listRecents()`/`openRecent()` en la UI o añadir un botón
+  "Sobrescribir" para `E-CAMBIO-EXTERNO`, la sección «Guardar y recuperar»/«Recientes y ventana»
+  de la guía vuelve a quedar desactualizada por diseño y hay que revisarla otra vez.
+
+Sesión trabajadora: cerrada para este incremento. Cesión a otro equipo: no.

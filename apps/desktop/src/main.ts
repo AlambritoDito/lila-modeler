@@ -1,5 +1,6 @@
 /**
- * Proceso main de OP-02. Decisiones ya tomadas (ver ticket y checkpoint):
+ * Proceso main de OP-02, endurecido en OP-14 (revisión de A sobre OP-02: issues #74/#70/#71).
+ * Decisiones ya tomadas (ver ticket y checkpoint):
  *
  * - Producción sirve la SPA compilada por un protocolo propio (`lila://`), no `file://`: así
  *   `fetch('/eva-01.json')`, `/assets/*`, las fuentes bpmn y el Worker módulo funcionan con
@@ -7,16 +8,36 @@
  * - En dev, si `LILA_DEV_URL` está definida, la ventana carga esa URL (el dev server de Vite);
  *   si no, carga el protocolo — así este proceso nunca depende de que Vite esté corriendo.
  * - Ventana endurecida: `contextIsolation`, `sandbox`, sin `nodeIntegration`, sin `remote`;
- *   `window.open` se bloquea siempre, los enlaces http(s) se abren con `shell.openExternal`.
- * - El puente `window.lila` vive en `preload.ts`/`bridge.ts`; aquí solo se validan argumentos y
- *   se autorizan carpetas elegidas por diálogo antes de tocar el disco.
+ *   `window.open` se bloquea siempre, los enlaces http(s) se abren con `shell.openExternal`,
+ *   `will-navigate` bloquea cualquier destino que no sea la propia app, y las respuestas HTML del
+ *   protocolo `lila://` llevan una `Content-Security-Policy` (ver `CSP`, abajo).
+ * - El puente `window.lila` vive en `preload.ts`/`bridge.ts`; aquí solo se validan argumentos, se
+ *   autorizan carpetas elegidas por diálogo antes de tocar el disco, y cada `ipcMain.handle`/`.on`
+ *   verifica que el mensaje venga del frame principal de la propia app (`isTrustedSender`,
+ *   `ipcGuards.ts`) — un frame anidado o una URL de navegación ajena no puede invocar el puente.
  */
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } from 'electron';
+import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
+import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ProjectIOError, readProjectFolder, writeProjectFolder } from './projectIO.js';
+import type { OpenPathRequest, Recent } from './bridge.js';
+import { decideClose, type CloseChoice } from './closeGuard.js';
+import { e2eOverrides, type E2EOverrides } from './e2e.js';
+import { isTrustedSender } from './ipcGuards.js';
+import { findBpmnArg, isBpmnPath } from './openPath.js';
+import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
+import {
+  addRecent,
+  fitsAnyDisplay,
+  readSessionState,
+  removeRecent,
+  withWindowBounds,
+  writeSessionState,
+  type SessionState,
+  type WindowBounds,
+} from './sessionState.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -31,12 +52,55 @@ const webRoot = path.join(app.getAppPath(), 'dist', 'web');
 /** Carpetas que el usuario autorizó explícitamente vía `chooseFolder` (diálogo nativo). */
 const authorizedFolders = new Set<string>();
 
-function requireAuthorizedDir(dir: unknown): string {
+/**
+ * Política de seguridad de contenido para las respuestas del protocolo `lila://` (issue #71,
+ * punto 3 del ticket: "lo más estricta que el smoke permita"). Sin CDN ni red externa: el bundle
+ * de producción es autocontenido (Vite empaqueta fuentes/CSS/JS), así que todo cabe en `'self'`.
+ * `worker-src` incluye `blob:` porque algunos motores de Worker de módulos lo usan internamente
+ * incluso para un script `'self'` (documentado, no verificado necesario tras el smoke — se deja
+ * por si acaso, cuesta cero con `default-src 'self'` ya cerrado). Ninguna directiva tuvo que
+ * relajarse tras correr el smoke (`LILA_SMOKE=1`): la lista de abajo es la final.
+ */
+const CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'self'";
+
+// -- Seam de pruebas E2E por variables de entorno (OP-14, issue #74) ----------------------------
+// SOLO PARA PRUEBAS, no es una API pública: F no puede accionar diálogos nativos (selector de
+// carpeta, Guardar/Descartar/Cancelar del cierre) desde una sesión automatizada. Leído de
+// `process.env` UNA ÚNICA VEZ aquí, al cargar el módulo — nunca se vuelve a consultar
+// `process.env` más abajo, así ninguna de las tres variables puede cambiar el comportamiento a
+// mitad de una ejecución ya en marcha. Sin ninguna de las tres, `e2e` es `{}` y el comportamiento
+// es idéntico al que había antes de este seam (ver `e2e.ts` para el detalle de cada variable).
+const e2e: E2EOverrides = e2eOverrides(process.env);
+
+/** Añade una línea JSON a `LILA_E2E_LOG` (si está definida); no-op en cualquier otro caso. */
+async function e2eLog(event: string, data: object = {}): Promise<void> {
+  if (e2e.logPath === undefined) return;
+  const line = `${JSON.stringify({ ts: new Date().toISOString(), event, ...data })}\n`;
+  await appendFile(e2e.logPath, line, 'utf8').catch(() => {});
+}
+
+/**
+ * Valida `dir` contra `authorizedFolders` (que guarda siempre `realpath`, ver `chooseFolder`/
+ * `acceptOpenPath`) y, además, vuelve a resolver su `realpath` en este momento: si difiere de sí
+ * misma, la carpeta cambió de identidad (p. ej. la reemplazó un symlink) entre la autorización y
+ * este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71).
+ */
+async function requireAuthorizedDir(dir: unknown): Promise<string> {
   if (typeof dir !== 'string' || dir.length === 0) {
     throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
   }
   if (!authorizedFolders.has(dir)) {
     throw new Error('E-NO-AUTORIZADO: la carpeta no fue autorizada por un diálogo.');
+  }
+  let real: string;
+  try {
+    real = await realpath(dir);
+  } catch {
+    throw new Error('E-NO-AUTORIZADO: la carpeta autorizada ya no existe.');
+  }
+  if (real !== dir) {
+    throw new Error('E-NO-AUTORIZADO: la carpeta cambió de identidad desde que se autorizó (symlink).');
   }
   return dir;
 }
@@ -132,21 +196,134 @@ function requireSafeFileNames(dir: string, document: ProjectDocument): void {
   }
 }
 
-function registerIpcHandlers(): void {
-  ipcMain.handle('lila:chooseFolder', async (): Promise<string | null> => {
-    const result = await dialog.showOpenDialog({
+/** `{}` si `value` es `undefined`; valida forma mínima en cualquier otro caso. */
+function requireWriteOptions(value: unknown): WriteProjectOptions {
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('E-ARGUMENTO: "options" debe ser un objeto.');
+  }
+  const opts = value as Record<string, unknown>;
+  if (opts.saveAs !== undefined && typeof opts.saveAs !== 'boolean') {
+    throw new Error('E-ARGUMENTO: "options.saveAs" debe ser booleano.');
+  }
+  if (opts.overwrite !== undefined && typeof opts.overwrite !== 'boolean') {
+    throw new Error('E-ARGUMENTO: "options.overwrite" debe ser booleano.');
+  }
+  // `exactOptionalPropertyTypes`: no asignar `undefined` explícito a una propiedad opcional,
+  // solo omitirla.
+  const result: WriteProjectOptions = {};
+  if (typeof opts.saveAs === 'boolean') (result as { saveAs?: boolean }).saveAs = opts.saveAs;
+  if (typeof opts.overwrite === 'boolean') (result as { overwrite?: boolean }).overwrite = opts.overwrite;
+  return result;
+}
+
+/**
+ * `true` si `frame` es el frame principal de `win` (no un `<iframe>` anidado) y su URL es de
+ * confianza (`isTrustedSender`, `ipcGuards.ts`). La SPA no usa iframes, así que en la práctica
+ * esto solo rechaza un frame `null`/destruido o, en teoría, contenido inyectado en un sub-frame.
+ */
+function isMainFrameOf(win: BrowserWindow, frame: WebFrameMain | null): boolean {
+  if (frame === null) return false;
+  if (frame !== win.webContents.mainFrame) return false;
+  return isTrustedSender(frame.url, process.env.LILA_DEV_URL);
+}
+
+/**
+ * Envuelve `ipcMain.handle` para rechazar (`E-ORIGEN`) cualquier mensaje cuyo `event.senderFrame`
+ * no sea el frame principal de `win` con una URL de confianza (OP-14, issue #71). Todos los
+ * canales de este puente pasan por aquí — ninguno se registra con `ipcMain.handle` directamente.
+ */
+function guardedHandle(
+  win: BrowserWindow,
+  channel: string,
+  handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown,
+): void {
+  ipcMain.handle(channel, (event, ...args: unknown[]) => {
+    if (!isMainFrameOf(win, event.senderFrame)) {
+      throw new Error('E-ORIGEN: mensaje IPC de un origen no confiable.');
+    }
+    return handler(event, ...args);
+  });
+}
+
+/** Igual que `guardedHandle`, para canales `ipcMain.on` (sin respuesta) como `lila:setDirty`. */
+function guardedOn(
+  win: BrowserWindow,
+  channel: string,
+  handler: (event: IpcMainEvent, ...args: unknown[]) => void,
+): void {
+  ipcMain.on(channel, (event, ...args: unknown[]) => {
+    if (!isMainFrameOf(win, event.senderFrame)) return; // sin respuesta que dar: se ignora.
+    handler(event, ...args);
+  });
+}
+
+// -- Estado de sesión: ventana + recientes (OP-14, incremento 2) -------------------------------
+// Un único objeto en memoria, releído al arrancar y reescrito (entero, atómico) cada vez que
+// cambia algo — la app es de una sola ventana/proceso, así que no hace falta más que eso.
+let sessionState: SessionState = { version: 1, window: null, recents: [] };
+const sessionStatePath = path.join(app.getPath('userData'), 'estado.json');
+
+async function persistSessionState(): Promise<void> {
+  await writeSessionState(sessionStatePath, sessionState);
+}
+
+/** Añade/mueve `dir` al frente de recientes y persiste — llamar tras abrir/crear/guardar con éxito. */
+async function recordRecent(dir: string, name: string): Promise<void> {
+  sessionState = addRecent(sessionState, { dir, name, openedAt: new Date().toISOString() });
+  await persistSessionState();
+}
+
+/** Tamaño usado cuando no hay bounds recordados, o los recordados ya no caben en ninguna pantalla. */
+const DEFAULT_WINDOW_SIZE = { width: 1280, height: 800 };
+
+let boundsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function saveBounds(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) return;
+  const { x, y, width, height } = win.getBounds();
+  sessionState = withWindowBounds(sessionState, { x, y, width, height });
+  await persistSessionState();
+}
+
+/** Debounce simple: varios `move`/`resize` seguidos solo escriben disco una vez, 400 ms después del último. */
+function scheduleSaveBounds(win: BrowserWindow): void {
+  if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
+  boundsSaveTimer = setTimeout(() => void saveBounds(win), 400);
+}
+
+function registerIpcHandlers(win: BrowserWindow): void {
+  guardedHandle(win, 'lila:chooseFolder', async (): Promise<string | null> => {
+    if (e2e.folder !== undefined) {
+      // Seam E2E (`LILA_E2E_FOLDER`, ver `e2e.ts`): sin diálogo nativo.
+      if (e2e.folder === null) {
+        await e2eLog('chooseFolder', { result: null });
+        return null;
+      }
+      await mkdir(e2e.folder, { recursive: true });
+      const dir = await realpath(e2e.folder);
+      authorizedFolders.add(dir);
+      await e2eLog('chooseFolder', { result: dir });
+      return dir;
+    }
+
+    const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    const dir = result.filePaths[0]!;
+    // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
+    // identidad real desde el principio (issue #71, "la carpeta autorizada se guarda como
+    // fs.realpath"), y `requireAuthorizedDir` puede volver a comprobarla más tarde sin ambigüedad.
+    const dir = await realpath(result.filePaths[0]!);
     authorizedFolders.add(dir);
     return dir;
   });
 
-  ipcMain.handle('lila:readProject', async (_event, dirArg: unknown) => {
-    const dir = requireAuthorizedDir(dirArg);
+  guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
+    const dir = await requireAuthorizedDir(dirArg);
     try {
       const { document, problems } = await readProjectFolder(dir);
+      await recordRecent(dir, document.name);
       return { ...document, problems };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
@@ -154,20 +331,67 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle(
+  guardedHandle(
+    win,
     'lila:writeProject',
-    async (_event, dirArg: unknown, documentArg: unknown): Promise<void> => {
-      const dir = requireAuthorizedDir(dirArg);
+    async (_event, dirArg: unknown, documentArg: unknown, optionsArg: unknown): Promise<void> => {
+      const dir = await requireAuthorizedDir(dirArg);
       const document = requireProjectDocument(documentArg);
+      const options = requireWriteOptions(optionsArg);
       requireSafeFileNames(dir, document);
       try {
-        await writeProjectFolder(dir, document);
+        await writeProjectFolder(dir, document, options);
+        await recordRecent(dir, document.name);
+        await e2eLog('writeProject', { dir, ok: true });
       } catch (error) {
-        if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+        if (error instanceof ProjectIOError) {
+          await e2eLog('writeProject', { dir, ok: false, code: error.code });
+          throw new Error(`${error.code}: ${error.message}`);
+        }
+        await e2eLog('writeProject', { dir, ok: false, code: null });
         throw error;
       }
     },
   );
+
+  guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
+    if (typeof value === 'boolean') setDirty(value);
+  });
+
+  guardedHandle(win, 'lila:listRecents', async (): Promise<readonly Recent[]> => sessionState.recents);
+
+  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown) => {
+    if (typeof dirArg !== 'string' || dirArg.length === 0) {
+      throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
+    }
+    // A diferencia de `readProject`, `dir` viene de `recents` (persistido entre arranques), no de
+    // `authorizedFolders` (en memoria, vacío al arrancar) — por eso se re-autoriza aquí en vez de
+    // pasar por `requireAuthorizedDir`. Si ya no existe, se quita de recientes y se informa `null`
+    // (no es un error: la carpeta pudo borrarse o moverse fuera de la app).
+    let real: string;
+    try {
+      real = await realpath(dirArg);
+    } catch {
+      sessionState = removeRecent(sessionState, dirArg);
+      await persistSessionState();
+      return null;
+    }
+    authorizedFolders.add(real);
+    try {
+      const { document, problems } = await readProjectFolder(real);
+      await recordRecent(real, document.name);
+      return { ...document, problems };
+    } catch (error) {
+      if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+      throw error;
+    }
+  });
+
+  guardedHandle(win, 'lila:pendingOpenPath', async (): Promise<OpenPathRequest | null> => {
+    const result = pendingOpen;
+    pendingOpen = null; // se consume una vez.
+    return result;
+  });
 }
 
 function registerLilaProtocol(): void {
@@ -192,7 +416,7 @@ function registerLilaProtocol(): void {
     try {
       const data = await readFile(filePath);
       return new Response(new Uint8Array(data), {
-        headers: { 'Content-Type': mimeFor(filePath) },
+        headers: { 'Content-Type': mimeFor(filePath), 'Content-Security-Policy': CSP },
       });
     } catch {
       return new Response('No encontrado', { status: 404 });
@@ -200,10 +424,178 @@ function registerLilaProtocol(): void {
   });
 }
 
-function createWindow(show: boolean): BrowserWindow {
+// -- Apertura de .bpmn: arranque frío y segunda apertura (OP-14, incremento 2, aceptación de
+// OP-12 "arranque frío y segunda apertura") -----------------------------------------------------
+/** La ventana principal, para reenviar `lila:open-path` cuando ya está lista; `null` antes de crearla. */
+let mainWindow: BrowserWindow | null = null;
+/** Ruta `.bpmn` capturada antes de que `mainWindow` existiera; `pendingOpenPath()` la consume una vez. */
+let pendingOpen: OpenPathRequest | null = null;
+
+/**
+ * Acepta `filePath` como ".bpmn a abrir" si termina en `.bpmn` y existe: autoriza su carpeta
+ * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya está lista, se lo envía
+ * de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para `pendingOpenPath()`. Una
+ * ruta que no exista o no sea `.bpmn` se ignora en silencio (no es un error del usuario: puede ser
+ * cualquier argumento de línea de comandos que no nos interesa).
+ */
+async function acceptOpenPath(filePath: string): Promise<void> {
+  if (!isBpmnPath(filePath)) return;
+  try {
+    await stat(filePath);
+  } catch {
+    return;
+  }
+  const dir = await realpath(path.dirname(filePath));
+  authorizedFolders.add(dir);
+  const request: OpenPathRequest = { dir, file: path.basename(filePath) };
+  if (process.env.LILA_DEBUG === '1') {
+    console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
+  }
+  await e2eLog('openPath', request);
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('lila:open-path', request);
+  } else {
+    pendingOpen = request;
+  }
+}
+
+// `open-file` (macOS) puede llegar antes de `app.whenReady()` (doble clic en un `.bpmn` con la app
+// cerrada) — hay que registrar el listener ya, a nivel de módulo, no dentro de `whenReady().then`.
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  void acceptOpenPath(filePath);
+});
+
+// Segunda apertura con la app ya corriendo (Windows/Linux: doble clic en un `.bpmn` lanza una
+// segunda instancia; también cubre "abrir con..." en macOS tras el primer lanzamiento). Sin el
+// lock, cada doble clic abriría una ventana nueva en vez de reusar la existente.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const bpmnArg = findBpmnArg(argv, 1); // `argv` de `second-instance` no incluye el propio ejecutable... salvo que sí (varía por SO); 1 cubre el caso común sin falsos negativos graves si no hay match.
+    if (bpmnArg !== null) void acceptOpenPath(bpmnArg);
+    if (mainWindow !== null) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
+// -- Cierre con cambios sin guardar (OP-14, issue #74) -----------------------------------------
+// `dirty` es el único estado de sesión que main necesita para decidir si intercepta el cierre;
+// el resto (guardar de verdad) vive en el renderer, vía el callback que registra
+// `onSaveRequested`/`lila:close-requested`.
+let dirty = false;
+/** `true` tras decidir que la app debe cerrar de verdad: evita volver a interceptar el segundo intento. */
+let allowQuit = false;
+
+function setDirty(value: boolean): void {
+  dirty = value;
+}
+
+/** Cuánto se espera la respuesta del renderer a `lila:close-requested` antes de dar por fallido el guardado. */
+const CLOSE_SAVE_TIMEOUT_MS = 30_000;
+
+/**
+ * Pide al renderer que guarde (`lila:close-requested`) y espera su respuesta
+ * (`lila:close-response`, `{ saved: boolean }`) hasta `CLOSE_SAVE_TIMEOUT_MS`. Sin respuesta a
+ * tiempo se trata como fallo (`saved: false`), igual que pide el ticket.
+ */
+function requestRendererSave(win: BrowserWindow): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (saved: boolean): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ipcMain.removeListener('lila:close-response', onResponse);
+      resolve(saved);
+    };
+    const onResponse = (event: IpcMainEvent, payload: unknown): void => {
+      if (!isMainFrameOf(win, event.senderFrame)) return;
+      const saved = typeof payload === 'object' && payload !== null && (payload as { saved?: unknown }).saved === true;
+      finish(saved);
+    };
+    const timer = setTimeout(() => finish(false), CLOSE_SAVE_TIMEOUT_MS);
+    ipcMain.on('lila:close-response', onResponse);
+    win.webContents.send('lila:close-requested');
+  });
+}
+
+/**
+ * Diálogo nativo Guardar/Descartar/Cancelar y, según la elección, pide guardar al renderer.
+ * Devuelve `true` si la ventana debe cerrar (`decideClose`, `closeGuard.ts`).
+ */
+async function confirmClose(win: BrowserWindow): Promise<boolean> {
+  let choice: CloseChoice;
+  if (e2e.close !== undefined) {
+    // Seam E2E (`LILA_E2E_CLOSE`, ver `e2e.ts`): sin diálogo nativo.
+    choice = e2e.close;
+  } else {
+    const result = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: ['Guardar', 'Descartar', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      message: 'Hay cambios sin guardar.',
+      detail: '¿Quieres guardar los cambios antes de cerrar?',
+    });
+    choice = result.response === 0 ? 'save' : result.response === 1 ? 'discard' : 'cancel';
+  }
+
+  let saved: boolean | null = null;
+  if (choice === 'save') {
+    saved = await requestRendererSave(win);
+  }
+
+  const decision = decideClose(true, choice, saved);
+  await e2eLog('closeRequested', { choice, saved, decision });
+  if (decision === 'close') {
+    dirty = false;
+    return true;
+  }
+  if (choice === 'save' && saved !== true) {
+    // El diálogo de error tampoco puede mostrarse en una sesión E2E sin interacción: se omite bajo
+    // la misma condición que el diálogo Guardar/Descartar/Cancelar de arriba.
+    if (e2e.close === undefined) {
+      await dialog.showMessageBox(win, {
+        type: 'error',
+        message: 'No se pudo guardar.',
+        detail: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
+      });
+    }
+  }
+  return false;
+}
+
+function attachCloseGuard(win: BrowserWindow): void {
+  win.on('close', (event) => {
+    if (!dirty) return; // sin cambios: cierra normalmente.
+    event.preventDefault();
+    void confirmClose(win).then((shouldClose) => {
+      if (shouldClose) win.close(); // `dirty` ya es `false`: esta vez pasa de largo.
+    });
+  });
+
+  // Cmd+Q / "Salir" en macOS: `before-quit` se dispara antes de cerrar cualquier ventana, así que
+  // sin este handler el diálogo de `win.on('close')` de arriba nunca llegaría a mostrarse.
+  app.on('before-quit', (event) => {
+    if (allowQuit || !dirty) return;
+    event.preventDefault();
+    void confirmClose(win).then((shouldClose) => {
+      if (shouldClose) {
+        allowQuit = true;
+        app.quit();
+      }
+    });
+  });
+}
+
+function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
@@ -223,6 +615,25 @@ function createWindow(show: boolean): BrowserWindow {
       void shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+
+  // Cualquier navegación (barra de direcciones no existe, pero sí `<a href>`/redirects/JS) que no
+  // sea la propia app o el dev server declarado se bloquea (OP-14, issue #71, punto 3). Los
+  // enlaces http(s) legítimos ya se abren fuera vía `setWindowOpenHandler`; esto cierra el resto.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedSender(url, process.env.LILA_DEV_URL)) event.preventDefault();
+  });
+
+  // Guardar bounds al mover/redimensionar (debounce simple) y al cerrar (sin debounce: puede ser
+  // lo último que se ejecute antes de que el proceso termine).
+  win.on('move', () => scheduleSaveBounds(win));
+  win.on('resize', () => scheduleSaveBounds(win));
+  win.on('close', () => {
+    if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
+    void saveBounds(win);
+  });
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   return win;
@@ -283,10 +694,28 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
 
 app.whenReady().then(async () => {
   registerLilaProtocol();
-  registerIpcHandlers();
+
+  sessionState = await readSessionState(sessionStatePath);
+  // Restaurar bounds guardados solo si caben en alguna pantalla conectada ahora mismo — un
+  // portátil que se desconectó de un monitor externo, por ejemplo, no debe abrir la ventana fuera
+  // de la pantalla visible.
+  const savedBounds = sessionState.window;
+  const bounds =
+    savedBounds !== null && fitsAnyDisplay(savedBounds, screen.getAllDisplays().map((d) => d.bounds))
+      ? savedBounds
+      : null;
 
   const isSmoke = process.env.LILA_SMOKE === '1';
-  const win = createWindow(!isSmoke);
+  const win = createWindow(!isSmoke, bounds);
+  mainWindow = win;
+  registerIpcHandlers(win);
+  if (!isSmoke) attachCloseGuard(win);
+
+  // `.bpmn` como argumento de línea de comandos (Windows/Linux): sin empaquetar, `argv[0]` es el
+  // binario de Electron y `argv[1]` la carpeta de la app (`electron apps/desktop [...]`);
+  // empaquetada, `argv[0]` ya es el ejecutable de Lila Modeler.
+  const bpmnArg = findBpmnArg(process.argv, app.isPackaged ? 1 : 2);
+  if (bpmnArg !== null) await acceptOpenPath(bpmnArg);
 
   const devUrl = process.env.LILA_DEV_URL;
   const loadPromise = devUrl ? win.loadURL(devUrl) : win.loadURL('lila://app/index.html');
