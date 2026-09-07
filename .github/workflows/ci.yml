@@ -27,3 +27,6 @@ jobs:
       # fuera del build por proyectos. Sin este paso, un error de tipos en la
       # app web pasa el CI sin que nadie lo vea.
       - run: npm run typecheck
+      # `npm run build` (tsc --build) no produce la app web: solo Vite la compila.
+      # Sin este paso un import roto o un asset ausente en apps/web pasa el CI.
+      - run: npm run build -w @lila/web
