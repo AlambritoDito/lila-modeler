@@ -87,15 +87,31 @@ que `scenario.json` usa esa asignación y lo deja escrito en su `description`.
 Igual que el nivel 3 más tres calendarios de turno (mañana 06–14 h, tarde
 14–22 h, noche 22–06 h) con disponibilidad de recursos que varía por turno.
 
-**Pendiente de LILA-164 (#164)**: `SCENARIO_FORMAT.md` v1 no admite que un
-mismo pool tenga capacidad distinta según el calendario, y Bizagi sí. La
-réplica lo modela con tres pools —uno por turno, cada uno con su `calendar`—
-seleccionados con `selection: "or"`, y el efecto colateral está medido: el
-calendario efectivo de la tarea pasa a ser el del turno concedido (R-CAL-4), el
-trabajo se pausa al cerrar el turno y aparece una `offHoursWait` que en Bizagi
-es 0 (sus tres turnos cubren las 24 h). Es el único nivel que no cuadra **entero**
-dentro del ±5 % (los niveles 1 y 3 tienen además los residuos puntuales D2, D5 y
-D6); el detalle está en `docs/BIZAGI_PARITY.md` § D7.
+LILA-164 (#164) añadió al formato lo que hacía falta: un mismo pool puede tener
+capacidad distinta según el calendario
+(`"capacity": [{ "calendar": …, "capacity": … }]`, § 2.4 de
+`SCENARIO_FORMAT.md` y R-CAL-11 de `docs/SEMANTICS.md`), que es el
+«Resources → Calendars → quantity» de Bizagi. Así que `scenario.json` declara
+**un pool por rol** con los tres turnos de la tabla publicada, tramo a tramo;
+hasta entonces eran tres pools por rol con `selection: "or"`, y ese workaround
+introducía una `offHoursWait` que en Bizagi es 0 (sus tres turnos cubren las
+24 h) y repartía utilización y costo por turno en vez de por rol. `Nurse` y
+`Ambulance` no varían por turno (3 y 4 en las tres franjas) y siguen con la
+forma numérica, sin calendario.
+
+Medido con 30 replicaciones: `offHoursWait` = 0 en las cuatro tareas con recurso
+por turno, ciclo medio 1521,5 s contra los 1526 s publicados (−0,30 %), y la
+utilización y el costo de los **seis** recursos dentro del ±5 % (peor caso
+−2,60 %, `Quick Attention Vehicle`). `Arrive at patient place BA` vuelve a hacer
+cola —máx 970 s— porque la capacidad baja a 1 en el turno de tarde: con
+capacidad fija era exactamente 0.
+
+Queda **D7** por dos residuos, ninguno del motor: el denominador de la
+utilización (Bizagi divide por la duración declarada del escenario, 43 200 min;
+Lila por su ventana de medida `[warmup, t_stop]`, 10 862 min — la conversión es
+exacta y la aplica el test) y las dos esperas de `Arrive at patient place BA`
+(+7,8 % el máximo, −24,5 % la media) contra una corrida única de Bizagi sobre un
+pool al 5,6 % de utilización. El detalle está en `docs/BIZAGI_PARITY.md` § D7.
 
 ## Cómo se verifica
 
@@ -116,7 +132,8 @@ D6); el detalle está en `docs/BIZAGI_PARITY.md` § D7.
 
 Diferencias vivas hoy: **D2** (nivel 1, la rama Yellow contra la corrida única
 de Bizagi, −5,4 %), **D5** y **D6** (nivel 3: el máximo con 3 enfermeras y la
-media del caso saturado con 2) y **D7** (el nivel 4 entero, pendiente de
-LILA-164). Todo lo demás de los niveles 1–3 cuadra dentro del ±5 %. El detalle
-de cada una está en `docs/BIZAGI_PARITY.md` § Diferencias documentadas, que es
-la fuente de verdad de esta lista.
+media del caso saturado con 2) y **D7** (nivel 4: el denominador de la
+utilización, con conversión exacta, y las dos esperas de `Arrive at patient
+place BA`). Todo lo demás de los cuatro niveles cuadra dentro del ±5 %. El
+detalle de cada una está en `docs/BIZAGI_PARITY.md` § Diferencias documentadas,
+que es la fuente de verdad de esta lista.

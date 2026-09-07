@@ -32,8 +32,13 @@ import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario
 //   D6 — nivel 3 (2 enf.), cycleTime.mean: con el pool saturado (rho = 1,05) la media depende de
 //        la forma del transitorio; la cola de Bizagi crece sublinealmente (media/máx = 0,40) y la
 //        de Lila linealmente (0,49). Residuo sin cerrar sin la traza original de Bizagi.
-//   D7 — nivel 4 entero: los 3 pools por turno introducen `offHoursWait` que Bizagi no tiene
-//        (los 3 turnos cubren las 24 h, no hay tiempo cerrado). Pendiente de LILA-164.
+//   D7 — nivel 4, denominador de la utilización (más el residuo de las esperas de Arrive BA):
+//        Bizagi divide por la duración declarada del escenario (43 200 min) y Lila por la ventana
+//        de medida `[warmup, t_stop]` (~10 900 min, R-CAL-9 sobre R-ARR-7). No se cambia el motor
+//        por eso: el test aplica la conversión exacta, documentada aquí y en
+//        docs/BIZAGI_PARITY.md. LILA-164 cerró la otra mitad de D7: los 3 pools por turno con
+//        selection:'or' —que introducían un `offHoursWait` que Bizagi no tiene, porque los 3
+//        turnos cubren las 24 h— son ya un solo pool por rol con `capacity` por intervalos.
 //
 // Mapeo de nombres (D-mapeo): `expected.json` ya no llama `waitTimeSeconds` a lo que la tabla de
 // Bizagi titula "Min./Max./Avg. time" del proceso (tiempo de ciclo, procesamiento + espera): el
@@ -109,6 +114,12 @@ interface CorridaNivel3 {
   resourceTable: { rows: Record<string, FilaRecurso> };
 }
 
+interface Turnos {
+  morning: number;
+  day: number;
+  night: number;
+}
+
 interface Publicado {
   values: {
     correctedRun?: { instancesCompleted: { red: number; yellow: number; green: number; total: number } };
@@ -116,8 +127,13 @@ interface Publicado {
     threeNurses?: CorridaNivel3;
     twoNurses?: CorridaNivel3;
     arriveAtPatientPlaceBA?: { maxWaitSeconds: number; avgWaitSeconds: number };
+    shifts?: Record<string, Turnos>;
+    resourceTable?: { rows: Record<string, FilaRecurso> };
   };
 }
+
+/** Duración declarada del escenario del nivel 4 en Bizagi: 43 200 min (30 días). Es su denominador. */
+const DURACION_DECLARADA_NIVEL_4 = 43200 * 60;
 
 /**
  * Nombre de la tabla de recursos de Bizagi → clave del pool en `level-3/scenario.json`. Las seis
@@ -242,46 +258,85 @@ describe('examples/bizagi-levels: paridad contra expected.json (LILA-187)', () =
     comprobar([{ metrica: 'nivel 3 costo fijo de actividades (derivado)', esperado: derivado8063, obtenido: costoActividades, cuadra: true }]);
   }, 60_000);
 
-  test('nivel 4 — sin el workaround de turnos el ciclo cuadra; con turnos, pendiente de LILA-164', async () => {
+  test('nivel 4 — un pool por rol con capacidad por turno: ciclo, utilización y costo de los seis recursos', async () => {
     const ir = await irDe(resolve(levelsDir, 'level-4/model.bpmn'));
     const publicado = escenarioDe(4);
-    const nivel3 = escenarioDe(3);
-    const conTurnos = correr(ir, { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } });
-    // Hipótesis LILA-164: un solo pool por rol (sin partirlo por turno) y sin calendario. No es el
-    // modelo de Bizagi —le falta la capacidad por turno— pero aísla el efecto del workaround.
-    // Reutiliza directamente los recursos y elementos del nivel 3 (mismas llegadas, probabilidades
-    // y tiempos que el nivel 4, solo sin dividir los 4 recursos por turno).
-    const unPoolPorRol = correr(ir, {
-      ...publicado,
-      run: { ...publicado.run, replications: REPLICACIONES },
-      calendars: undefined,
-      resources: nivel3.resources,
-      elements: nivel3.elements,
-    });
+    const r = correr(ir, { ...publicado, run: { ...publicado.run, replications: REPLICACIONES } });
     const v = expectedDe(4).values as Required<Publicado['values']>;
-    const ba = conTurnos.elements.Task_LlegarBA!;
 
-    // D7: los tres turnos cubren las 24 h, así que bajo la semántica de Bizagi ninguna tarea puede
-    // tener espera fuera de horario. En Lila sí la tiene, y es la mayor parte del desvío del ciclo.
-    expect(ba.offHoursWait.mean, 'el workaround de turnos crea espera fuera de horario').toBeGreaterThan(0);
+    expect(r.process.started, 'la corrida oficial trae 2017 instancias').toBe(2017);
+    expect(r.process.completed).toBe(2017);
 
+    // LILA-164: los tres turnos cubren las 24 h, así que la unión de los calendarios del pool es
+    // un 24×7 y **ninguna** tarea tiene espera fuera de horario. Era el desvío entero del
+    // workaround de pools por turno (la mitad de D7 que este ticket cierra).
+    for (const id of ['Task_Recibir', 'Task_LlegarQAV', 'Task_LlegarBA', 'Task_Autorizar']) {
+      expect(r.elements[id]!.offHoursWait.total, `${id} no puede tener espera fuera de horario`).toBe(0);
+    }
+    // La utilización y el costo se reportan por ROL, no por turno: seis filas, las de Bizagi.
+    expect(Object.keys(r.resources).sort()).toEqual(Object.values(RECURSOS_NIVEL_3).slice().sort());
+
+    // D7 (viva) — el denominador. Bizagi divide por la duración **declarada** del escenario
+    // (43 200 min) y Lila por la ventana de medida `[warmup, t_stop]` (R-CAL-9 sobre R-ARR-7), que
+    // aquí es ~10 900 min porque la corrida para al agotarse las 2017 llegadas. La conversión es
+    // exacta sobre `busyTime`:
+    //
+    //     utilización_Bizagi = busyTime / Σ_i (capacity_i × openTime_i sobre la duración declarada)
+    //                        = utilización_Lila × (t_stop − warmup) / duración declarada
+    //
+    // y con los tres turnos de 8 h ese sumatorio vale (Σ_i capacity_i / 3) × 43 200 min, que es
+    // literalmente la cuenta publicada para Call center agent: 8068 / ((2+2+1)/3 × 43 200) = 11,21 %.
+    // No se cambia el motor por esto: la ventana de medida sigue siendo `[warmup, t_stop]`.
+    const ventana = (r.process.completed / r.process.throughputPerHour) * 3600;
+    const disponibleBizagi = (ref: string): number => {
+      const turnos = v.shifts[ref]!;
+      return ((turnos.morning + turnos.day + turnos.night) / 3) * DURACION_DECLARADA_NIVEL_4;
+    };
+
+    comprobar(
+      Object.entries(RECURSOS_NIVEL_3).flatMap(([fila, ref]) => {
+        const esperado = v.resourceTable.rows[fila]!;
+        const obtenido = r.resources[ref]!;
+        return [
+          {
+            metrica: `nivel 4 utilización ${ref} (denominador Bizagi)`,
+            esperado: esperado.utilization,
+            obtenido: obtenido.busyTime / disponibleBizagi(ref),
+            cuadra: true,
+          },
+          { metrica: `nivel 4 costo ${ref}`, esperado: esperado.totalCost, obtenido: obtenido.totalCost, cuadra: true },
+        ];
+      }),
+    );
+
+    // La conversión, ejecutada. La forma exacta es la de arriba —`busyTime` sobre el denominador
+    // de Bizagi—; la regla de tres `utilización_Lila × ventana / duración declarada` es su versión
+    // de bolsillo y solo coincide del todo cuando la ventana cubre un número entero de periodos
+    // del patrón de turnos. Aquí no lo cubre (la corrida se agota a los 10 862 min, 7,54 días), y
+    // el sesgo del corte a media franja llega al 1,8 % en `quickAttentionVehicle`, el rol cuyo
+    // turno de tarde vale el doble que los otros dos. De ahí el 3 %: es el error de la regla de
+    // tres, no del motor.
+    for (const ref of Object.values(RECURSOS_NIVEL_3)) {
+      const bizagi = r.resources[ref]!.busyTime / disponibleBizagi(ref);
+      const reescalada = (r.resources[ref]!.utilization * ventana) / DURACION_DECLARADA_NIVEL_4;
+      expect(Math.abs(reescalada - bizagi) / bizagi, `la conversión de denominador de ${ref}`).toBeLessThan(0.03);
+    }
+
+    const ba = r.elements.Task_LlegarBA!;
     comprobar([
-      { metrica: 'nivel 4 cycleTime.mean con pools por turno', esperado: v.cycleTimeSeconds!.avg, obtenido: conTurnos.process.cycleTime.mean, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.max con pools por turno', esperado: v.arriveAtPatientPlaceBA.maxWaitSeconds, obtenido: ba.resourceWait.max, cuadra: false },
-      { metrica: 'nivel 4 Arrive BA resourceWait.mean con pools por turno', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: ba.resourceWait.mean, cuadra: false },
-      // Quitando el workaround, el ciclo medio del nivel 4 cuadra: el desvío era entero de los
-      // turnos. La espera de Arrive BA sigue sin cuadrar porque con un pool de capacidad fija
-      // nunca hay cola; hace falta capacidad por turno dentro del mismo pool (LILA-164).
-      { metrica: 'nivel 4 cycleTime.mean con un pool por rol', esperado: v.cycleTimeSeconds!.avg, obtenido: unPoolPorRol.process.cycleTime.mean, cuadra: true },
-      { metrica: 'nivel 4 Arrive BA resourceWait.mean con un pool por rol', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: unPoolPorRol.elements.Task_LlegarBA!.resourceWait.mean, cuadra: false },
+      { metrica: 'nivel 4 cycleTime.mean', esperado: v.cycleTimeSeconds!.avg, obtenido: r.process.cycleTime.mean, cuadra: true },
+      // D7 (residuo): las dos esperas de Arrive at patient place BA son de una corrida única de
+      // Bizagi sobre un pool al 5,6 % de utilización, donde solo hay cola cuando dos casos
+      // coinciden en el turno de tarde (1 sola ambulancia básica). El reparto por rama de esa
+      // corrida tampoco es el nuestro (Bizagi 403 instancias BA, Lila 409): el residuo es ruido
+      // de la corrida de referencia, igual que D2.
+      { metrica: 'nivel 4 Arrive BA resourceWait.max', esperado: v.arriveAtPatientPlaceBA.maxWaitSeconds, obtenido: ba.resourceWait.max, cuadra: false },
+      { metrica: 'nivel 4 Arrive BA resourceWait.mean', esperado: v.arriveAtPatientPlaceBA.avgWaitSeconds, obtenido: ba.resourceWait.mean, cuadra: false },
     ]);
 
-    // El desvío del ciclo es, dentro del ruido, la espera fuera de horario media por caso.
-    const offHoursPorCaso = ['Task_Recibir', 'Task_LlegarQAV', 'Task_LlegarBA', 'Task_Autorizar'].reduce((suma, id) => {
-      const e = conTurnos.elements[id]!;
-      return suma + e.offHoursWait.total / conTurnos.process.completed;
-    }, 0);
-    const desvio = conTurnos.process.cycleTime.mean - unPoolPorRol.process.cycleTime.mean;
-    expect(Math.abs(desvio - offHoursPorCaso) / desvio, 'la espera fuera de horario explica el desvío del nivel 4').toBeLessThan(0.05);
+    // Esa cola existe **porque** la capacidad baja a 1 en el turno de tarde: con la capacidad fija
+    // del nivel 3 la espera de Arrive BA es exactamente 0 (era la fila «con un pool por rol» de la
+    // tabla de BIZAGI_PARITY). Es lo que la capacidad por intervalos hace y la fija no puede.
+    expect(ba.resourceWait.max, 'la capacidad por turno sí produce cola en Arrive BA').toBeGreaterThan(0);
   }, 60_000);
 });

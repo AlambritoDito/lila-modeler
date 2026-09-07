@@ -13,6 +13,7 @@
 import { z } from 'zod';
 
 import { checkDistribution } from './core/distributions.js';
+import { poolCapacityBound } from './core/sim.js';
 import type { ProcessIR } from './core/ir.js';
 
 /* ------------------------------------------------------------------ *
@@ -184,10 +185,20 @@ export const CalendarSchema = z.strictObject({
  * § 2.4 — resources
  * ------------------------------------------------------------------ */
 
+/**
+ * Un tramo de capacidad (§ 2.4, R-CAL-11, LILA-164): `capacity` unidades mientras `calendar` esté
+ * abierto. Bizagi lo llama "Resources → Calendars → quantity" (3 enfermeras de día, 1 de noche).
+ */
+export const CapacityIntervalSchema = z.strictObject({
+  calendar: z.string(),
+  capacity: z.int().min(1),
+});
+
 export const ResourceSchema = z.strictObject({
   name: z.string().optional(),
   type: z.enum(['role', 'equipment']).default('role'),
-  capacity: z.int().min(1),
+  /** Entero ≥ 1, o la lista de tramos por calendario. Excluyente con `calendar` (§ 5, R16). */
+  capacity: z.union([z.int().min(1), z.array(CapacityIntervalSchema).min(1)]),
   costPerHour: nonNegative.default(0),
   fixedCost: nonNegative.default(0),
   calendar: z.string().optional(),
@@ -259,6 +270,7 @@ export type ScenarioProblemCode =
   | 'E-REC-DESCONOCIDO'
   | 'E-REC-DUPLICADO'
   | 'E-REC-CANTIDAD'
+  | 'E-CAPACIDAD-Y-CALENDARIO'
   | 'E-CAMPO-NO-APLICA'
   | 'E-SIN-PARADA'
   | 'E-XOR-SUMA-CERO'
@@ -427,6 +439,29 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         message: `resources.${key}.calendar: el calendario ${resource.calendar} no existe en calendars.`,
       });
     }
+    // R16 — `capacity` por intervalos y `calendar` del pool son excluyentes (R-CAL-11): el
+    // calendario ya va en cada tramo y declarar los dos deja sin definir cuál manda.
+    if (typeof resource.capacity !== 'number' && resource.calendar !== undefined) {
+      problems.push({
+        code: 'E-CAPACIDAD-Y-CALENDARIO',
+        path: `resources.${key}.capacity`,
+        severity: 'error',
+        message: `resources.${key}.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.`,
+      });
+    }
+    // R9 — el calendario de cada tramo también tiene que existir.
+    if (typeof resource.capacity !== 'number') {
+      for (const [i, slice] of resource.capacity.entries()) {
+        if (calendars[slice.calendar] === undefined) {
+          problems.push({
+            code: 'E-REF-DESCONOCIDA',
+            path: `resources.${key}.capacity[${i}].calendar`,
+            severity: 'error',
+            message: `resources.${key}.capacity[${i}].calendar: el calendario ${slice.calendar} no existe en calendars.`,
+          });
+        }
+      }
+    }
   }
 
   let triggerCounts = 0;
@@ -505,7 +540,10 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         });
       }
       seenResources.add(use.ref);
-      const capacity = resources[use.ref]?.capacity;
+      // R-CAL-11: con capacidad por intervalos el tope es el máximo de la semana; una `quantity`
+      // mayor no cabe en ningún turno y la tarea esperaría para siempre.
+      const pool = resources[use.ref];
+      const capacity = pool === undefined ? undefined : poolCapacityBound(pool, calendars);
       if (capacity !== undefined && use.quantity > capacity) {
         problems.push({
           code: 'E-REC-CANTIDAD',

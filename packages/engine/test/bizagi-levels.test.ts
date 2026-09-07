@@ -69,8 +69,14 @@ describe.each(levels)('examples/bizagi-levels/level-%i', (level) => {
       if (el.calendar) expect(scenario.calendars).toHaveProperty(el.calendar);
     }
     for (const key of Object.keys(scenario.resources ?? {})) {
-      const cal = scenario.resources[key].calendar;
-      if (cal) expect(scenario.calendars).toHaveProperty(cal);
+      const pool = scenario.resources[key];
+      if (pool.calendar) expect(scenario.calendars).toHaveProperty(pool.calendar);
+      // LILA-164: `capacity` por intervalos; cada tramo cita un calendario que tiene que existir
+      // (R9) y es excluyente con `calendar` del pool.
+      if (Array.isArray(pool.capacity)) {
+        expect(pool.calendar).toBeUndefined();
+        for (const tramo of pool.capacity) expect(scenario.calendars).toHaveProperty(tramo.calendar);
+      }
     }
   });
 
@@ -127,4 +133,29 @@ test('nivel 4: los recursos que Bizagi reporta constantes por turno (nurse, ambu
   expect(scenario.resources.ambulance.calendar).toBeUndefined();
   expect(scenario.resources.nurse.capacity).toBe(3);
   expect(scenario.resources.ambulance.capacity).toBe(4);
+});
+
+test('nivel 4 (LILA-164): un solo pool por rol, con la tabla de turnos publicada como capacity por intervalos', () => {
+  const scenario = JSON.parse(readFileSync(resolve(levelsDir, 'level-4/scenario.json'), 'utf8'));
+  const shifts = JSON.parse(readFileSync(resolve(levelsDir, 'level-4/expected.json'), 'utf8')).values.shifts;
+
+  // El workaround de LILA-010 (un pool por turno + selection:'or') ya no existe: ni pools
+  // sufijados por turno, ni ninguna tarea con selección OR.
+  for (const key of Object.keys(scenario.resources)) expect(key).not.toMatch(/_(morning|day|night)$/);
+  for (const element of Object.values(scenario.elements) as any[]) expect(element.selection).toBeUndefined();
+
+  // Cada rol variable declara sus tres turnos, con la cantidad de la tabla
+  // "Resource | Morning shift | Day shift | Night shift" de la página.
+  for (const ref of ['callCenterAgent', 'basicAmbulance', 'quickAttentionVehicle', 'receptionist']) {
+    const capacity = scenario.resources[ref].capacity;
+    expect(Array.isArray(capacity), `${ref} declara capacity por intervalos`).toBe(true);
+    expect(capacity).toEqual([
+      { calendar: 'morning', capacity: shifts[ref].morning },
+      { calendar: 'day', capacity: shifts[ref].day },
+      { calendar: 'night', capacity: shifts[ref].night },
+    ]);
+  }
+  // Los dos constantes se quedan con el entero: la forma numérica sigue siendo la normal.
+  expect(new Set([shifts.nurse.morning, shifts.nurse.day, shifts.nurse.night])).toEqual(new Set([3]));
+  expect(new Set([shifts.ambulance.morning, shifts.ambulance.day, shifts.ambulance.night])).toEqual(new Set([4]));
 });
