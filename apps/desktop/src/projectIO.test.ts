@@ -3,11 +3,11 @@
  * permite que sea puro. Una de las carpetas lleva espacios y tilde a propósito (OP-08, "rutas con
  * espacios/tildes" del ticket).
  */
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ProjectIOError, readProjectFolder, writeProjectFolder } from './projectIO.js';
+import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
 import type { ProjectDocument, StoredRun } from './projectTypes.js';
 
 /** Ejecuta `fn`, espera que rechace, y devuelve el error capturado (o falla la prueba si no rechaza). */
@@ -385,5 +385,89 @@ describe('writeProjectFolder — cambios externos (E-CAMBIO-EXTERNO)', () => {
     // snapshot anterior con el que compararlo.
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
     await expect(writeProjectFolder(dir, documentoBase())).resolves.toBeUndefined();
+  });
+});
+
+describe('writeProjectFolder — transaccional (OP-08, revisión de A, issue #71)', () => {
+  it('reproducción exacta de A: destino de escenario que es un directorio → E-DESTINO-INVALIDO, model.bpmn intacto, sin residuos', async () => {
+    // Reproducción de A (43a29cf, worktree `/tmp/lila-atomic-review-uRTH8j`): con los `rename` en
+    // un `Promise.all`, un destino `bad.scenario.json` que resulta ser un directorio fallaba con
+    // EISDIR después de que `model.bpmn` YA hubiera cambiado. El preflight de abajo debe rechazar
+    // ANTES de escribir un solo byte.
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc); // MODELO_ANTERIOR en disco.
+    const modeloAnterior = await readFile(join(dir, 'model.bpmn'), 'utf8');
+
+    await mkdir(join(dir, 'bad.scenario.json')); // el destino ya existe, pero como carpeta.
+
+    const docNuevo = documentoBase({
+      model: { ...doc.model, xml: '<MODELO_NUEVO/>' },
+      scenarios: { ...doc.scenarios, 'bad.scenario.json': { version: 1, name: 'BAD' } },
+      scenarioRevisions: { ...doc.scenarioRevisions, 'bad.scenario.json': 1 },
+    });
+
+    const error = await captureError(() => writeProjectFolder(dir, docNuevo));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-DESTINO-INVALIDO');
+
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(modeloAnterior);
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre.includes('.prev-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre === 'lila-recovery.json')).toBe(false);
+  });
+
+  it('fallo inyectado a mitad de los renames (vía fsImpl): todos los archivos previos quedan restaurados', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc); // primera escritura real: model.bpmn, manifiesto y escenario en disco.
+
+    const modeloPrevio = await readFile(join(dir, 'model.bpmn'), 'utf8');
+    const manifiestoPrevio = await readFile(join(dir, 'lila-project.json'), 'utf8');
+    const escenarioPrevio = await readFile(join(dir, 'as-is.scenario.json'), 'utf8');
+
+    const destinoManifiesto = join(dir, 'lila-project.json');
+    // El orden de `trackedWrites` es [modelo, manifiesto, ...escenarios]: el modelo ya se habrá
+    // commiteado por completo cuando el manifiesto falle, así que esto SÍ ejercita "un archivo
+    // previo ya confirmado, deshacerlo cuando uno posterior falla a mitad de la transacción".
+    const fsImpl: WriteProjectFsImpl = {
+      rename: async (oldPath, newPath) => {
+        if (newPath === destinoManifiesto && oldPath.includes('.tmp-')) {
+          throw new Error('fallo inyectado a mitad de los renames (prueba)');
+        }
+        await rename(oldPath, newPath);
+      },
+    };
+
+    const docNuevo = documentoBase({
+      model: { ...doc.model, xml: '<cambiado/>' },
+      name: 'Pedido v2',
+    });
+
+    const error = await captureError(() => writeProjectFolder(dir, docNuevo, {}, fsImpl));
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('fallo inyectado a mitad de los renames (prueba)');
+
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(modeloPrevio);
+    expect(await readFile(join(dir, 'lila-project.json'), 'utf8')).toBe(manifiestoPrevio);
+    expect(await readFile(join(dir, 'as-is.scenario.json'), 'utf8')).toBe(escenarioPrevio);
+
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre.includes('.prev-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre === 'lila-recovery.json')).toBe(false);
+  });
+
+  it('éxito: sin residuos .tmp-*/.prev-* al terminar', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc);
+    await writeProjectFolder(dir, documentoBase({ name: 'Pedido v2' }));
+
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre.includes('.prev-'))).toBe(false);
+    expect(entradas.some((nombre) => nombre === 'lila-recovery.json')).toBe(false);
+
+    const { document } = await readProjectFolder(dir);
+    expect(document.name).toBe('Pedido v2');
   });
 });

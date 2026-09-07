@@ -225,3 +225,141 @@ LILA_DEBUG=1 LILA_SMOKE=1 npx electron apps/desktop "$(pwd)/examples/pedido/mode
   apertura de un `.bpmn`).
 - Decidir la UX ante `E-CAMBIO-EXTERNO` de `saveProject`: ofrecer "Sobrescribir"
   (`saveProject(doc, { overwrite: true })`) o "Guardar como" (`{ saveAs: true }`).
+
+## Incremento 3 — guardado transaccional (P0) y seam E2E para OP-18
+
+SHA base: `49c9d1b` (merge fast-forward de `codex/claude-entrega-20260906` sobre `633ffa7`, fin
+del incremento 2 — trae, entre otras cosas, el checkpoint de OP-17/OP-18 de A y el hallazgo de la
+revisión de abajo). SHA final: ver commits al pie.
+
+### 1. P0 — `writeProjectFolder` no era transaccional (issues #71/#74)
+
+Origen: revisión de A, commit `43a29cf` (cítase textual: "writeProjectFolder hace renames con
+Promise.all; con destino `bad.scenario.json` que es un directorio falla EISDIR pero `model.bpmn`
+YA cambió de MODELO_ANTERIOR a MODELO_NUEVO"). Reproducción aislada de A en
+`/tmp/lila-atomic-review-uRTH8j`, importando la función de este agente sin editar su worktree.
+
+**Decisión 1 — preflight antes de escribir nada.** `assertValidDestination(dest, runsDir)` (nueva,
+`projectIO.ts`) se corre para TODOS los destinos (modelo, manifiesto, cada escenario, cada corrida)
+antes de escribir un solo `.tmp-*`: rechaza `E-SYMLINK` si `dest` ya es un symlink (comportamiento
+ya existente, sin cambios de código para los tests que lo cubrían), o `E-DESTINO-INVALIDO: <ruta>`
+si `dest` existe pero no es un archivo regular (el caso exacto de A: un directorio), o si la
+carpeta padre de `dest` no existe o no admite escritura (`access(parent, W_OK)`) — salvo que el
+padre sea `runs/` y todavía no exista, porque `writeProjectFolder` la crea sola
+(`mkdir(runsDir, {recursive:true})`, después del preflight, antes de la fase 1). `assertRunsDirUsable`
+hace el mismo tipo de chequeo para la propia carpeta `runs/` (symlink → `E-SYMLINK`; existe pero no
+es carpeta → `E-DESTINO-INVALIDO`). Razón de mantener `E-SYMLINK` como código separado de
+`E-DESTINO-INVALIDO` en vez de fusionarlos: los tests de symlinks del incremento 1 ya distinguían
+ese código específico; separar "es un enlace" de "es un directorio/no admite escritura" también es
+más útil para quien consuma el error. Con esto, la reproducción exacta de A (destino de escenario
+que es un directorio) se rechaza en el preflight, **antes** de que `model.bpmn` se toque siquiera.
+
+**Decisión 2 — commit secuencial con rollback (para fallos que el preflight no puede prever:
+disco lleno, permisos que cambian a mitad de camino, etc.).** `commitWithRollback` (nueva)
+reemplaza el `Promise.all(writes.map(...rename...))` de antes por un bucle secuencial con un
+journal en memoria (`CommitStep[]`, sin librerías — un array y un `try/catch` bastan, ver ponytail
+del ticket): por archivo, si el destino ya existía se renombra primero a `<destino>.prev-<token>`
+(se anota `movedToPrev`), luego el temporal se renombra al destino (se anota `tmpMoved`); el paso
+se añade al journal ANTES de intentar los renames, así un fallo a mitad de ese mismo paso ya queda
+representado con el estado correcto (`movedToPrev`/`tmpMoved` en `false` si su rename no llegó a
+correr). Si cualquier rename de la fase de commit falla, `rollbackCommit` deshace TODO lo ya hecho
+en orden inverso (LIFO): por cada paso, si `tmpMoved` borra el contenido nuevo movido a `dest`, y si
+`movedToPrev` restaura el `.prev-*` a `dest`; se rechaza con el error original. Si el propio
+deshacer falla para algún paso (no pudo restaurar su `.prev-*`), en vez de perder ese archivo en
+silencio se escribe `lila-recovery.json` en la carpeta del proyecto (`{version, createdAt,
+pending: [...]}`) y se rechaza `E-RECUPERACION-PENDIENTE` mencionando esa ruta. Al terminar con
+éxito, se borran los `.prev-*` (ya no hacen falta) — best-effort, un fallo ahí no revierte el
+guardado (ya se completó).
+
+**Decisión 3 — seam de prueba `fsImpl` para inyectar un fallo determinista a mitad de los
+renames**, en vez de depender de `chmod` (frágil entre plataformas y sin efecto como root, como ya
+advertía un comentario existente de este mismo archivo de tests). `writeProjectFolder` gana un
+cuarto parámetro opcional `fsImpl: WriteProjectFsImpl = {}` (`{ rename?: (old, new) => Promise<void>
+}`); sin él, usa el `rename` real de `node:fs/promises`, así que ningún llamador de producción
+(`main.ts`) necesita tocarse. Es un parámetro extra al final, no parte de `WriteProjectOptions`
+(que sí viaja por IPC) — no es una API pública, solo para tests.
+
+Prueba (`projectIO.test.ts`, `describe('writeProjectFolder — transaccional')`, 3 casos):
+(a) reproducción exacta de A: destino de escenario que ya es una carpeta → `E-DESTINO-INVALIDO`,
+`model.bpmn` byte a byte igual al anterior, sin `.tmp-*`/`.prev-*`/`lila-recovery.json`; (b) fallo
+inyectado vía `fsImpl.rename` justo en el `rename(tmp, dest)` del manifiesto — con el modelo ya
+comprometido en el journal (el orden de `trackedWrites` es modelo → manifiesto → escenarios) —
+verifica que modelo, manifiesto y escenario terminan con su contenido PREVIO exacto, sin residuos;
+(c) éxito: dos escrituras seguidas, sin `.tmp-*`/`.prev-*`/`lila-recovery.json` al final.
+27 → 27 tests de este archivo antes del cambio siguieron pasando sin modificarlos (solo se
+reemplazó `assertNotSymlinkDestination` por `assertValidDestination`/`assertRunsDirUsable`, que
+cubren el mismo caso además de los nuevos).
+
+### 2. Seam de prueba E2E por variables de entorno (para OP-18, issue #74)
+
+F no puede accionar diálogos nativos (selector de carpeta, Guardar/Descartar/Cancelar del cierre)
+desde su sesión. Nuevo módulo puro `apps/desktop/src/e2e.ts` (`e2eOverrides(env)`, sin Electron ni
+`fs` — solo parsea `Record<string,string|undefined>`), consumido por `main.ts` una única vez al
+cargar el módulo (`const e2e = e2eOverrides(process.env)`, comentado ahí mismo como "SOLO PARA
+PRUEBAS, no es una API pública"):
+
+- `LILA_E2E_FOLDER=<ruta absoluta>`: `lila:chooseFolder` devuelve esa ruta sin abrir el diálogo
+  (la crea con `mkdir(..., {recursive:true})` si falta, y la autoriza por `realpath`, igual
+  criterio que el diálogo real). Literal `"cancel"` → `chooseFolder()` resuelve `null` (simula
+  cerrar el diálogo sin elegir nada).
+- `LILA_E2E_CLOSE=save|discard|cancel`: `confirmClose` usa ese valor como `choice` en vez de
+  `dialog.showMessageBox`; un valor que no sea exactamente uno de los tres se ignora (se sigue
+  mostrando el diálogo real). El diálogo de error posterior ("No se pudo guardar") también se
+  omite bajo la misma condición — decisión no pedida explícitamente pero necesaria: una sesión sin
+  interacción se quedaría colgada esperando un clic en ese diálogo también.
+- `LILA_E2E_LOG=<ruta de archivo>`: `e2eLog(event, data)` (nueva, `main.ts`) añade una línea JSON
+  (`{ts, event, ...data}`) por evento: `chooseFolder` (`{result}`), `writeProject` (`{dir, ok,
+  code}`, `code: null` si el error no fue un `ProjectIOError`), `closeRequested` (`{choice, saved,
+  decision}`), `openPath` (`{dir, file}`, en `acceptOpenPath`). No-op si la variable no está.
+
+Sin ninguna de las tres variables, `e2eOverrides` devuelve `{}` y el comportamiento de `main.ts` es
+exactamente el de antes (mismas ramas de código para diálogo real/sin override).
+
+Prueba: `apps/desktop/src/e2e.test.ts` (13 casos: cada variable ausente/con valor válido/con valor
+inválido/vacía, y las tres juntas) — función pura, sin mocks de Electron. `main.ts` no tiene test
+de integración propio (no cambia eso: ya era así en incrementos 1-2, `dialog.showMessageBox` nunca
+se automatizó); la cobertura de este seam es la función pura más la verificación manual de abajo.
+
+### Comandos y resultado
+
+```
+npx vitest run apps/desktop apps/web/src/store   # 10 archivos, 164 tests, todos verdes
+npx tsc -p apps/desktop/tsconfig.json --noEmit   # limpio
+npm run typecheck -w @lila/web                   # limpio
+npm run build -w @lila/web && npm run build -w @lila/desktop   # ok
+LILA_SMOKE=1 npx electron apps/desktop           # ok:true, consoleErrors:[]
+```
+Verificación manual del seam (pedida en el ticket):
+```
+LILA_E2E_FOLDER="$TMPDIR/lila-e2e-b" LILA_E2E_LOG="$TMPDIR/lila-e2e-b.log" LILA_SMOKE=1 npx electron apps/desktop
+# → {"lienzo":true,"tema":true,"fuente":true,"puente":true,"consoleErrors":[],"loadFailure":null,"ok":true}
+cat "$TMPDIR/lila-e2e-b.log"
+# → el archivo NI SIQUIERA SE CREA: el recorrido de `runSmoke` (arranque + captura de pantalla)
+#   nunca llama a `lila:chooseFolder` ni a ningún otro canal que loguee, así que `e2eLog` nunca se
+#   ejecuta. Documentado tal cual porque el ticket contemplaba justo este caso ("puede estar vacío
+#   si el smoke no llama a chooseFolder") — aquí ni siquiera llega a existir, que es el mismo hecho
+#   ("nada que loguear") en su forma más estricta. La carpeta `$TMPDIR/lila-e2e-b` tampoco se creó,
+#   por la misma razón (chooseFolder nunca se invocó).
+```
+
+### Limitaciones de este incremento
+
+- El seam E2E no se ejerció punta a punta contra un `chooseFolder`/cierre reales dentro de una
+  ventana de Electron interactiva (esta sesión no tiene UI accionable) — la verificación es: (a)
+  revisión de código de los tres puntos de integración en `main.ts`, (b) `e2eOverrides` cubierto al
+  100% por tests puros, (c) el smoke confirma que con las variables puestas la app arranca igual de
+  bien (no rompe nada), aunque su recorrido no toca `chooseFolder`. F, al accionar el recorrido real
+  de OP-18, es quien primero ejercita `LILA_E2E_FOLDER`/`LILA_E2E_CLOSE` de punta a punta.
+- `E-DESTINO-INVALIDO` no distingue "el padre no existe" de "el padre existe pero no admite
+  escritura" en el código (ambos casos, mismo mensaje) — no hacía falta más granularidad para lo
+  que pide el ticket (rechazar antes de escribir), y mantenerlo así evita otro código más.
+- El rollback restaura contenido byte a byte (renombra el `.prev-*` de vuelta), pero no restaura
+  metadatos de archivo más allá de eso (p. ej. `mtime` original) — no hacía falta: `lastSeen`
+  (detección de cambios externos) se actualiza recién al final de un guardado con éxito, nunca tras
+  un rollback.
+- `E-RECUPERACION-PENDIENTE` no se pudo ejercitar con un test automático realista (forzar que el
+  PROPIO rollback falle requiere que un `unlink`/`rename` de restauración falle justo después de
+  que el de commit ya falló — dos inyecciones encadenadas sobre el mismo `fsImpl.rename`); se
+  revisó el código a mano en vez de añadir una prueba frágil. `rollbackCommit`/`undoCommitStep`
+  están escritos para ser triviales de leer (un `try/catch` que devuelve `boolean`, sin estado
+  oculto) precisamente para que esa revisión manual sea suficientemente confiable.
