@@ -345,6 +345,15 @@ export interface Contexto {
   problemas: ReadonlyMap<string, readonly Problema[]>;
   editar(ruta: Ruta, valor: unknown): void;
   quitar(ruta: Ruta): void;
+  /**
+   * El delta crudo del archivo en edición y el padre resuelto (o `null` sin `extends` o con la
+   * cadena rota), para distinguir heredado/propio/eliminado en un campo reservado (§ 4, OP-11).
+   * Opcionales: las sondas de test que no tocan campos reservados no necesitan construirlos.
+   */
+  delta?: Record<string, unknown>;
+  padre?: Record<string, unknown> | null;
+  /** Deshace un `quitar()` sobre un reservado eliminado: borra el `null` propio, no lo escribe. */
+  restaurar?(ruta: Ruta): void;
 }
 
 function Problemas({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Element | null {
@@ -404,6 +413,201 @@ function EntradaNumero({
         setTexto(null);
       }}
     />
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Campos reservados (§ 4): priority, preempt, batch, conditions, holidays, timezone.
+ * ------------------------------------------------------------------ */
+
+type EstadoReservado = 'ausente' | 'heredado' | 'propio' | 'eliminado';
+
+/**
+ * `heredado`: el padre lo define y el hijo no lo toca. `propio`: el hijo trae su propio valor
+ * (incluida una `null` explícita heredada de más arriba en la cadena, que ya no se distingue del
+ * padre inmediato). `eliminado`: el hijo escribió `null` para borrar lo que el padre define.
+ * `ausente`: no hay valor en ningún lado, nada que enseñar.
+ */
+function estadoReservado(ctx: Contexto, ruta: Ruta): EstadoReservado {
+  const enDelta = ctx.delta === undefined ? undefined : leer(ctx.delta, ruta);
+  if (enDelta === null) return 'eliminado';
+  if (enDelta !== undefined) return 'propio';
+  const enPadre = ctx.padre == null ? undefined : leer(ctx.padre, ruta);
+  return enPadre === undefined ? 'ausente' : 'heredado';
+}
+
+/**
+ * El reservado (§ 4): sin editor —el motor lo rechaza con error en v1, así que el panel no ofrece
+ * forma de crearlo— pero con el estado heredado/propio/eliminado y el botón para borrarlo, que es
+ * lo único que LILA-061/§ 6 pide de un campo que solo puede venir del padre.
+ */
+function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string; ctx: Contexto }): React.JSX.Element | null {
+  const estado = estadoReservado(ctx, ruta);
+  if (estado === 'ausente') return null;
+  const definidoEnPadre = ctx.padre != null && leer(ctx.padre, ruta) !== undefined;
+  const valorMostrado =
+    estado === 'propio' ? leer(ctx.delta ?? {}, ruta) : leer(ctx.padre ?? {}, ruta);
+  return (
+    <div className="campo-schema campo-reservado">
+      <span className="etiqueta">{etiqueta}</span>
+      <span className={`estado estado-${estado}`}>
+        {estado === 'eliminado'
+          ? 'eliminado (null)'
+          : `${estado}: ${JSON.stringify(valorMostrado)}`}
+      </span>
+      {estado === 'eliminado' ? (
+        <button
+          type="button"
+          className="enlace"
+          onClick={() => {
+            ctx.restaurar?.(ruta);
+          }}
+        >
+          Restaurar heredado
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="enlace"
+          onClick={() => {
+            ctx.quitar(ruta);
+          }}
+        >
+          {definidoEnPadre ? 'Quitar heredado' : 'Quitar'}
+        </button>
+      )}
+      <Problemas ruta={ruta} ctx={ctx} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * `resources[pool].capacity` (LILA-164): Fija (número) o Por turno (lista de tramos).
+ * ------------------------------------------------------------------ */
+
+/** `['resources', <id>, 'capacity']` con una unión: la forma exacta que produce `ResourceSchema`. */
+function esCapacidadRecurso(ruta: Ruta, esquema: EsquemaJson): boolean {
+  return (
+    ruta.length === 3 &&
+    ruta[0] === 'resources' &&
+    ruta[2] === 'capacity' &&
+    variantes(esquema) !== null
+  );
+}
+
+/**
+ * Selector Fija/Por turno + el cuerpo de la variante activa. A diferencia del selector genérico
+ * de uniones (`vars !== null` en `Campo`), este conserva el id `campo-resources.<id>.capacity`
+ * para la variante numérica —es el id que cita el ticket y el que ya usaba el campo antes de que
+ * `capacity` admitiera tramos— y dibuja cada tramo como `{ calendar: <select>, capacity: <nº> }`
+ * en vez de un formulario genérico, porque `calendar` tiene que ofrecer los ids ya declarados en
+ * `calendars`, no una caja de texto libre.
+ */
+function CampoCapacidadRecurso({
+  esquema,
+  ruta,
+  ctx,
+}: {
+  esquema: EsquemaJson;
+  ruta: Ruta;
+  ctx: Contexto;
+}): React.JSX.Element {
+  const vars = variantes(esquema)!;
+  const indiceFija = vars.findIndex((v) => v.type !== 'array');
+  const indiceTurno = vars.findIndex((v) => v.type === 'array');
+  const valor = leer(ctx.resuelto, ruta);
+  const porTurno = Array.isArray(valor);
+  const idFija = `campo-${rutaTexto(ruta)}`;
+  const idVariante = `${idFija}-variante`;
+  const calendarios = esObjeto(ctx.resuelto['calendars'])
+    ? Object.keys(ctx.resuelto['calendars'] as Record<string, unknown>)
+    : [];
+
+  return (
+    <div className="campo-schema">
+      <label htmlFor={idVariante}>capacity</label>
+      <select
+        id={idVariante}
+        value={porTurno ? 'turno' : 'fija'}
+        onChange={(e) => {
+          if (e.target.value === 'fija' && indiceFija >= 0) ctx.editar(ruta, valorVacio(vars[indiceFija]!));
+          else if (indiceTurno >= 0) ctx.editar(ruta, valorVacio(vars[indiceTurno]!));
+        }}
+      >
+        <option value="fija">Fija</option>
+        <option value="turno">Por turno</option>
+      </select>
+      <Problemas ruta={ruta} ctx={ctx} />
+      {porTurno ? (
+        <div className="anidado">
+          {(valor as unknown[]).map((_, i) => {
+            const rutaTramo = [...ruta, i] as Ruta;
+            const rutaCalendar = [...rutaTramo, 'calendar'] as Ruta;
+            const rutaCapacidad = [...rutaTramo, 'capacity'] as Ruta;
+            const idCalendar = `campo-${rutaTexto(rutaCalendar)}`;
+            const idCapacidad = `campo-${rutaTexto(rutaCapacidad)}`;
+            const calendarElegido = leer(ctx.resuelto, rutaCalendar);
+            const opciones =
+              typeof calendarElegido === 'string' && !calendarios.includes(calendarElegido)
+                ? [calendarElegido, ...calendarios]
+                : calendarios;
+            return (
+              <fieldset key={i} className="entrada">
+                <legend>
+                  tramo {i + 1}
+                  <button
+                    type="button"
+                    className="enlace"
+                    aria-label={`quitar tramo ${i + 1}`}
+                    onClick={() => {
+                      ctx.quitar(rutaTramo);
+                    }}
+                  >
+                    quitar
+                  </button>
+                </legend>
+                <label htmlFor={idCalendar}>calendar</label>
+                <select
+                  id={idCalendar}
+                  value={typeof calendarElegido === 'string' ? calendarElegido : ''}
+                  onChange={(e) => {
+                    ctx.editar(rutaCalendar, e.target.value);
+                  }}
+                >
+                  <option value="">(sin definir)</option>
+                  {opciones.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor={idCapacidad}>capacity</label>
+                <EntradaNumero
+                  valor={leer(ctx.resuelto, rutaCapacidad)}
+                  ruta={rutaCapacidad}
+                  ctx={ctx}
+                  id={idCapacidad}
+                />
+                <Problemas ruta={rutaTramo} ctx={ctx} />
+              </fieldset>
+            );
+          })}
+          <button
+            type="button"
+            className="boton"
+            onClick={() => {
+              const esquemaItem = indiceTurno >= 0 ? (vars[indiceTurno]!.items ?? {}) : {};
+              ctx.editar([...ruta, (valor as unknown[]).length], valorVacio(esquemaItem));
+            }}
+          >
+            Añadir tramo
+          </button>
+          <Problemas ruta={ruta} ctx={ctx} />
+        </div>
+      ) : (
+        <EntradaNumero valor={valor} ruta={ruta} ctx={ctx} id={idFija} />
+      )}
+    </div>
   );
 }
 
@@ -510,6 +714,13 @@ export function Campo({
 }): React.JSX.Element | null {
   const valor = leer(ctx.resuelto, ruta);
   const id = `campo-${rutaTexto(ruta)}${sufijo}`;
+
+  // `resources[pool].capacity` (LILA-164): antes de caer al selector genérico de uniones, porque
+  // necesita conservar el id de la variante numérica y dibujar `calendar` como un select de los
+  // calendarios ya declarados, no como el formulario genérico de un `{calendar, capacity}` suelto.
+  if (esCapacidadRecurso(ruta, esquema)) {
+    return <CampoCapacidadRecurso esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
 
   // Unión: selector de variante + cuerpo de la elegida. Con esto las 14 distribuciones y la
   // `capacity` de LILA-164 salen del esquema sin una línea de código por caso.
@@ -720,8 +931,10 @@ export function Campo({
 
   // Esquema vacío (`{}`): los campos reservados de § 4 (`priority`, `preempt`, `batch`,
   // `conditions`, `holidays`, `timezone`). El motor los rechaza con error, así que el panel no
-  // ofrece forma de crearlos; si llegan heredados, el problema sale en la cabecera.
-  return null;
+  // ofrece forma de crearlos, pero si llegan heredados o propios hace falta poder borrarlos
+  // (OP-11): `CampoReservado` enseña el estado y el botón; el problema sigue saliendo también en
+  // la cabecera vía `Problemas`.
+  return <CampoReservado ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
 }
 
 /* ------------------------------------------------------------------ *
@@ -814,6 +1027,12 @@ export function ScenarioPanel({
   const ctx: Contexto = {
     resuelto,
     problemas: indice,
+    delta,
+    padre,
+    restaurar(ruta) {
+      // Deshace el `null` propio del reservado eliminado: se quita del hijo, no se reescribe.
+      onCambio(archivo, borrar(delta, ruta));
+    },
     editar(ruta, valor) {
       const corte = baseDeArray(ruta);
       if (corte === -1) {
@@ -859,6 +1078,21 @@ export function ScenarioPanel({
 
   const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
   const heredaDe = typeof delta['extends'] === 'string' ? delta['extends'] : null;
+
+  /**
+   * El nombre BPMN del id, si el IR lo trae y no está vacío: `ir.nodes`/`ir.flows` ya lo dan sin
+   * pedir nada nuevo a A (OP-13 conecta el `ir` vigente, este panel solo lo lee). `null` sin IR o
+   * con un id que no aparece en él (el diagrama no se ha parseado, o el elemento ya no existe).
+   *
+   * Se enseña **junto** al botón que selecciona el id, no dentro de su texto: los gestos de test
+   * seleccionan por el texto exacto del botón (`pulsar('Task_TomarPedido')`), y es también lo que
+   * hace bpmn-js al resaltar el elemento del lienzo — el nombre es contexto para la persona, el id
+   * sigue siendo la única clave que el resto del panel entiende.
+   */
+  function nombreElemento(id: string): string | null {
+    const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name;
+    return nombre !== undefined && nombre !== '' ? nombre : null;
+  }
 
   return (
     <div className="escenario">
@@ -933,12 +1167,16 @@ export function ScenarioPanel({
                 >
                   {id}
                 </button>
+                {nombreElemento(id) !== null && <span className="nombre"> {nombreElemento(id)}</span>}
               </li>
             ))}
           </ul>
         ) : (
           <>
-            <p className="vacio">{idSeleccionado}</p>
+            <p className="vacio">
+              {idSeleccionado}
+              {nombreElemento(idSeleccionado) !== null && ` (${nombreElemento(idSeleccionado)})`}
+            </p>
             <Propiedades
               esquema={esquemaEntrada(esquemaDe('elements'))}
               ruta={['elements', idSeleccionado]}
