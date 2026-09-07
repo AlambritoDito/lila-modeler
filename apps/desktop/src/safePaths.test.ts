@@ -1,6 +1,8 @@
-import { sep } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { PathEscapeError, mimeFor, resolveWithin } from './safePaths.js';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, sep } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PathEscapeError, isSymlink, mimeFor, resolveWithin } from './safePaths.js';
 
 const ROOT = sep === '\\' ? 'C:\\root' : '/root';
 
@@ -71,5 +73,46 @@ describe('mimeFor', () => {
   it('usa application/octet-stream para extensiones desconocidas o ausentes', () => {
     expect(mimeFor('archivo.raro')).toBe('application/octet-stream');
     expect(mimeFor('archivo-sin-extension')).toBe('application/octet-stream');
+  });
+});
+
+describe('isSymlink', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'lila-isSymlink-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('false para un archivo regular', async () => {
+    const archivo = join(dir, 'normal.txt');
+    await writeFile(archivo, 'contenido', 'utf8');
+    expect(await isSymlink(archivo)).toBe(false);
+  });
+
+  it('false para una ruta que no existe', async () => {
+    expect(await isSymlink(join(dir, 'no-existe.txt'))).toBe(false);
+  });
+
+  it('true para un symlink, incluso si apunta a algo que no existe', async () => {
+    const enlace = join(dir, 'enlace.txt');
+    await symlink(join(dir, 'objetivo-inexistente.txt'), enlace);
+    expect(await isSymlink(enlace)).toBe(true);
+  });
+
+  it('true para un symlink que apunta a un archivo real fuera de la carpeta', async () => {
+    const fuera = await mkdtemp(join(tmpdir(), 'lila-isSymlink-fuera-'));
+    try {
+      const externo = join(fuera, 'secreto.txt');
+      await writeFile(externo, 'secreto', 'utf8');
+      const enlace = join(dir, 'enlace-fuera.txt');
+      await symlink(externo, enlace);
+      expect(await isSymlink(enlace)).toBe(true);
+    } finally {
+      await rm(fuera, { recursive: true, force: true });
+    }
   });
 });

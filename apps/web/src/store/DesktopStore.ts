@@ -11,7 +11,7 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import type { LilaBridge, LilaProjectDocument } from '../../../desktop/src/bridge.js';
+import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import type {
   ProcessData,
   ProcessSummary,
@@ -83,35 +83,92 @@ export class DesktopStore implements ProjectSessionStore {
     return document;
   }
 
+  /**
+   * `options.overwrite`: extensión de B sobre el contrato de A (que solo declara `saveAs?`), para
+   * saltar la detección de cambios externos de `writeProject` (OP-14 incremento 2,
+   * `E-CAMBIO-EXTERNO`) cuando el usuario elige explícitamente "Sobrescribir" ante ese error. Es
+   * un parámetro adicional opcional, no un cambio de forma: `ProjectSessionStore.saveProject`
+   * (`ProjectStore.ts`, sin tocar) sigue aceptando solo `{ saveAs? }` y este método lo cumple.
+   */
   async saveProject(
     document: ProjectDocument,
-    options?: { saveAs?: boolean },
+    options?: { saveAs?: boolean; overwrite?: boolean },
   ): Promise<ProjectDocument | null> {
+    const saveAs = options?.saveAs === true;
+    // Guardia de identidad (OP-14, revisión de A: "openProject no debe permitir guardar el
+    // proyecto anterior en la carpeta nueva", issues #74/#70). Un guardado normal (sin "Guardar
+    // como") del documento activo debe seguir siendo el mismo proyecto que el que está abierto:
+    // si no lo es, el llamador tiene un documento obsoleto en memoria y hay que decírselo antes de
+    // tocar disco, no escribirlo silenciosamente encima de la carpeta abierta.
+    if (!saveAs && this.activeDocument !== null && document.id !== this.activeDocument.id) {
+      throw new Error(
+        'E-PROYECTO-DISTINTO: el documento a guardar no es el proyecto activo; usa "Guardar como" para escribirlo en una carpeta nueva.',
+      );
+    }
     let dir = this.activeDir;
-    if (dir === null || options?.saveAs === true) {
+    if (dir === null || saveAs) {
       const chosen = await this.bridge.chooseFolder();
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
       dir = chosen;
     }
-    // Si `writeProject` rechaza, la promesa de aquí rechaza también y ni `activeDir` ni
+    // Si `writeProject` rechaza (incluido `E-CARPETA-OCUPADA` en "Guardar como", o
+    // `E-CAMBIO-EXTERNO` sin `overwrite`), la promesa de aquí rechaza también y ni `activeDir` ni
     // `activeDocument` cambian: solo tras un `writeProject` exitoso se confirma la carpeta.
-    await this.bridge.writeProject(dir, document);
+    await this.bridge.writeProject(dir, document, { saveAs, overwrite: options?.overwrite === true });
     this.activeDir = dir;
     this.activeDocument = document;
     return document;
   }
 
-  setDirty(_dirty: boolean): void {
-    // No-op documentado: la confirmación nativa "guardar/descartar/cancelar" al cerrar es OP-14.
+  setDirty(dirty: boolean): void {
+    this.bridge.setDirty(dirty);
   }
 
-  onSaveRequested(_save: () => Promise<boolean>): () => void {
-    // No-op documentado (OP-14): todavía no hay un listener de cierre de ventana que registrar
-    // aquí; se devuelve una función de "cancelar suscripción" vacía en vez de lanzar, para que
-    // quien llame con la forma opcional del contrato no tenga que comprobar si existe.
-    return () => {};
+  /**
+   * Registra `save` como el callback que main invoca (vía `lila:close-requested`) cuando el
+   * usuario elige "Guardar" en el diálogo nativo de cierre; `bridge.onCloseRequested` es puro
+   * reenvío de IPC (ver `preload.cts`), así que toda la lógica de "qué es guardar" sigue siendo
+   * responsabilidad de quien llame (`App.tsx`, vía `saveRef.current`).
+   */
+  onSaveRequested(save: () => Promise<boolean>): () => void {
+    return this.bridge.onCloseRequested(save);
+  }
+
+  // -- Extensiones de B sobre el contrato (OP-14 incremento 2) ---------------------------------
+  // No forman parte de `ProjectSessionStore` (`ProjectStore.ts`, de A): son propias de esta
+  // modalidad (recientes/apertura de `.bpmn` no existen en `BrowserStore`). Petición a A: conectar
+  // `listRecents`/`openRecent`/`onOpenPath` en la UI (menú "Abrir reciente", manejar
+  // `lila:open-path` al arrancar) — ver `estado/OP-14-claude.md`.
+
+  /** Hasta 10 proyectos abiertos/guardados recientemente, más nuevo primero. */
+  async listRecents(): Promise<readonly Recent[]> {
+    return this.bridge.listRecents();
+  }
+
+  /**
+   * Reabre un proyecto de `listRecents()` sin selector de carpetas. `null` si la carpeta ya no
+   * existe (el bridge ya la quitó de recientes); no lanza por eso.
+   */
+  async openRecent(dir: string): Promise<ProjectDocument | null> {
+    const raw = await this.bridge.openRecent(dir);
+    if (raw === null) return null;
+    const { document, problems } = toProjectDocument(raw);
+    this.activeDir = dir;
+    this.activeDocument = document;
+    this.problems = problems;
+    return document;
+  }
+
+  /** `.bpmn` pendiente de abrir (doble clic, `open-file`, argumento de línea de comandos). Se consume una vez. */
+  async pendingOpenPath(): Promise<OpenPathRequest | null> {
+    return this.bridge.pendingOpenPath();
+  }
+
+  /** Nueva ruta `.bpmn` a abrir mientras la ventana ya está lista (segunda instancia/`open-file`). */
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void {
+    return this.bridge.onOpenPath(cb);
   }
 
   // -- Métodos históricos de `ProjectStore` (LILA-058) ----------------------------------------

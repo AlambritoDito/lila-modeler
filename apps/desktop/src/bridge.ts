@@ -42,9 +42,65 @@ export interface LilaBridge {
   readProject(dir: string): Promise<LilaProjectDocument>;
   /**
    * Escribe el proyecto completo en `dir` (ya autorizada). Rechaza sin tocar disco si alguna
-   * corrida ya existe con otro contenido (`E-RUN-DUPLICADO`).
+   * corrida ya existe con otro contenido (`E-RUN-DUPLICADO`), si algún destino es un symlink
+   * (`E-SYMLINK`), si `options.saveAs` y la carpeta ya tiene otro proyecto (`E-CARPETA-OCUPADA`,
+   * OP-14), o si algún archivo cambió en disco desde la última lectura/escritura y no se pidió
+   * `options.overwrite` (`E-CAMBIO-EXTERNO`, OP-14 incremento 2).
    */
-  writeProject(dir: string, document: ProjectDocument): Promise<void>;
+  writeProject(dir: string, document: ProjectDocument, options?: WriteProjectOptions): Promise<void>;
+
+  /**
+   * Informa a main si el documento activo tiene cambios sin guardar (OP-14, issue #74): decide si
+   * `win.on('close')`/`before-quit` deben interceptar el cierre para ofrecer guardar/descartar.
+   */
+  setDirty(dirty: boolean): void;
+  /**
+   * Registra `cb` para cuando main pide guardar antes de cerrar (el usuario eligió "Guardar" en el
+   * diálogo nativo de cierre). `cb` debe resolver `true` solo si guardó con éxito: main usa ese
+   * valor para decidir si cierra la ventana o mantiene el error visible. Devuelve una función para
+   * cancelar la suscripción. El preload solo reenvía el evento IPC — no hay lógica aquí más que la
+   * de mensajería (ver `preload.cts`).
+   */
+  onCloseRequested(cb: () => Promise<boolean>): () => void;
+
+  /** Hasta 10 proyectos abiertos/guardados recientemente en esta máquina, más nuevo primero (OP-14). */
+  listRecents(): Promise<readonly Recent[]>;
+  /**
+   * Reabre un proyecto de `listRecents()` sin volver a mostrar el selector nativo de carpetas.
+   * `null` si `dir` ya no existe (y se quita de recientes): no es un error, es "ya no disponible".
+   */
+  openRecent(dir: string): Promise<LilaProjectDocument | null>;
+
+  /**
+   * Ruta `.bpmn` pendiente de abrir: doble clic en el explorador de archivos, `open-file` de
+   * macOS, o argumento de línea de comandos, capturados antes de que la ventana estuviera lista.
+   * Se consume una vez — la segunda llamada devuelve `null` aunque la primera haya devuelto algo.
+   */
+  pendingOpenPath(): Promise<OpenPathRequest | null>;
+  /**
+   * Se dispara cuando llega una nueva ruta `.bpmn` a abrir con la ventana ya lista (segunda
+   * instancia, o `open-file` con la app ya corriendo). Devuelve una función para cancelar la
+   * suscripción.
+   */
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void;
+}
+
+export interface WriteProjectOptions {
+  readonly saveAs?: boolean;
+  readonly overwrite?: boolean;
+}
+
+/** Entrada de `listRecents()`: carpeta autorizable de nuevo sin diálogo, y cuándo se abrió. */
+export interface Recent {
+  readonly dir: string;
+  readonly name: string;
+  readonly openedAt: string;
+}
+
+/** `dir` (ya autorizada) y nombre de archivo de un `.bpmn` a abrir (`pendingOpenPath`/`onOpenPath`). */
+export interface OpenPathRequest {
+  readonly dir: string;
+  readonly file: string;
 }
 
 declare global {

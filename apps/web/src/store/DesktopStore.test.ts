@@ -4,7 +4,7 @@
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
 import { describe, expect, it } from 'vitest';
-import type { LilaBridge, LilaProjectDocument } from '../../../desktop/src/bridge.js';
+import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import type { ProjectDocument } from './ProjectStore';
 
@@ -28,9 +28,11 @@ class FakeBridge implements LilaBridge {
   readonly version = 'test';
 
   private readonly chooseFolderQueue: (string | null)[] = [];
-  readonly writes: { dir: string; document: ProjectDocument }[] = [];
+  readonly writes: { dir: string; document: ProjectDocument; options?: { saveAs?: boolean; overwrite?: boolean } }[] = [];
   writeShouldFail = false;
   readProjectImpl: ((dir: string) => Promise<LilaProjectDocument>) | null = null;
+  readonly dirtyHistory: boolean[] = [];
+  private closeRequestedCb: (() => Promise<boolean>) | null = null;
 
   /** Encola el próximo (o los próximos) resultado(s) de `chooseFolder`. */
   queueChooseFolder(...results: (string | null)[]): void {
@@ -51,9 +53,66 @@ class FakeBridge implements LilaBridge {
     return this.readProjectImpl(dir);
   }
 
-  async writeProject(dir: string, document: ProjectDocument): Promise<void> {
+  async writeProject(
+    dir: string,
+    document: ProjectDocument,
+    options?: { saveAs?: boolean; overwrite?: boolean },
+  ): Promise<void> {
     if (this.writeShouldFail) throw new Error('E-FALLO-SIMULADO: escritura rechazada por el test.');
-    this.writes.push({ dir, document });
+    this.writes.push(options === undefined ? { dir, document } : { dir, document, options });
+  }
+
+  setDirty(dirty: boolean): void {
+    this.dirtyHistory.push(dirty);
+  }
+
+  onCloseRequested(cb: () => Promise<boolean>): () => void {
+    this.closeRequestedCb = cb;
+    return () => {
+      this.closeRequestedCb = null;
+    };
+  }
+
+  /** Simula que main pidió guardar antes de cerrar (`lila:close-requested`). */
+  async triggerCloseRequested(): Promise<boolean> {
+    if (this.closeRequestedCb === null) {
+      throw new Error('FakeBridge.triggerCloseRequested: no hay callback registrado (onSaveRequested).');
+    }
+    return this.closeRequestedCb();
+  }
+
+  recents: Recent[] = [];
+  openRecentImpl: ((dir: string) => Promise<LilaProjectDocument | null>) | null = null;
+  private openPathCb: ((path: OpenPathRequest) => void) | null = null;
+  pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
+
+  async listRecents(): Promise<readonly Recent[]> {
+    return this.recents;
+  }
+
+  async openRecent(dir: string): Promise<LilaProjectDocument | null> {
+    if (this.openRecentImpl === null) {
+      throw new Error('FakeBridge.openRecent: no se configuró `openRecentImpl` en el test.');
+    }
+    return this.openRecentImpl(dir);
+  }
+
+  async pendingOpenPath(): Promise<OpenPathRequest | null> {
+    return this.pendingOpenPathQueue.shift() ?? null;
+  }
+
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void {
+    this.openPathCb = cb;
+    return () => {
+      this.openPathCb = null;
+    };
+  }
+
+  triggerOpenPath(path: OpenPathRequest): void {
+    if (this.openPathCb === null) {
+      throw new Error('FakeBridge.triggerOpenPath: no hay callback registrado (onOpenPath).');
+    }
+    this.openPathCb(path);
   }
 }
 
@@ -152,7 +211,7 @@ describe('DesktopStore.saveProject', () => {
     await expect(store.saveProject(doc2)).resolves.toEqual(doc2);
     expect(bridge.writes).toEqual([
       { dir: '/carpeta/pedido', document: documentoBase() },
-      { dir: '/carpeta/pedido', document: doc2 },
+      { dir: '/carpeta/pedido', document: doc2, options: { saveAs: false, overwrite: false } },
     ]);
   });
 
@@ -168,7 +227,11 @@ describe('DesktopStore.saveProject', () => {
     // La carpeta activa sigue siendo la original: el siguiente guardado normal escribe ahí.
     const doc2 = documentoBase({ name: 'tercero' });
     await store.saveProject(doc2);
-    expect(bridge.writes.at(-1)).toEqual({ dir: '/carpeta/original', document: doc2 });
+    expect(bridge.writes.at(-1)).toEqual({
+      dir: '/carpeta/original',
+      document: doc2,
+      options: { saveAs: false, overwrite: false },
+    });
   });
 
   it('el error de writeProject rechaza y no cambia la carpeta activa', async () => {
@@ -185,7 +248,88 @@ describe('DesktopStore.saveProject', () => {
     bridge.writeShouldFail = false;
     const docBueno = documentoBase({ name: 'bueno' });
     await store.saveProject(docBueno);
-    expect(bridge.writes.at(-1)).toEqual({ dir: '/carpeta/pedido', document: docBueno });
+    expect(bridge.writes.at(-1)).toEqual({
+      dir: '/carpeta/pedido',
+      document: docBueno,
+      options: { saveAs: false, overwrite: false },
+    });
+  });
+});
+
+describe('DesktopStore.saveProject — guardia de identidad (E-PROYECTO-DISTINTO)', () => {
+  it('rechaza guardar (sin saveAs) un documento con otro id que el proyecto activo', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/pedido');
+    const store = new DesktopStore(bridge);
+    await store.createProject(documentoBase({ id: 'proyecto-1' }));
+
+    const otro = documentoBase({ id: 'proyecto-2' });
+    await expect(store.saveProject(otro)).rejects.toThrow('E-PROYECTO-DISTINTO');
+    // No se tocó el bridge: ni siquiera se preguntó por una carpeta ni se escribió nada.
+    expect(bridge.writes).toEqual([{ dir: '/carpeta/pedido', document: documentoBase({ id: 'proyecto-1' }) }]);
+  });
+
+  it('así el shell nunca escribe el proyecto anterior en la carpeta recién abierta', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/anterior');
+    const store = new DesktopStore(bridge);
+    await store.createProject(documentoBase({ id: 'proyecto-anterior' }));
+
+    bridge.queueChooseFolder('/carpeta/nueva');
+    bridge.readProjectImpl = async () => ({ ...documentoBase({ id: 'proyecto-nuevo' }), problems: [] });
+    await store.openProject();
+
+    // Un guardado (normal) con el documento viejo en memoria debe rechazarse, no escribirse en
+    // "/carpeta/nueva" (la que acaba de quedar activa tras `openProject`).
+    await expect(store.saveProject(documentoBase({ id: 'proyecto-anterior' }))).rejects.toThrow(
+      'E-PROYECTO-DISTINTO',
+    );
+    expect(bridge.writes).toEqual([{ dir: '/carpeta/anterior', document: documentoBase({ id: 'proyecto-anterior' }) }]);
+  });
+
+  it('"Guardar como" (saveAs) sí permite escribir un documento con otro id', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/pedido');
+    const store = new DesktopStore(bridge);
+    await store.createProject(documentoBase({ id: 'proyecto-1' }));
+
+    bridge.queueChooseFolder('/carpeta/otra');
+    const otro = documentoBase({ id: 'proyecto-2' });
+    await expect(store.saveProject(otro, { saveAs: true })).resolves.toEqual(otro);
+    expect(bridge.writes.at(-1)).toEqual({
+      dir: '/carpeta/otra',
+      document: otro,
+      options: { saveAs: true, overwrite: false },
+    });
+  });
+
+  it('sin proyecto activo (primer guardado), cualquier id es válido', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/nueva');
+    const store = new DesktopStore(bridge);
+
+    const doc = documentoBase({ id: 'lo-que-sea' });
+    await expect(store.saveProject(doc)).resolves.toEqual(doc);
+  });
+});
+
+describe('DesktopStore.setDirty / onSaveRequested', () => {
+  it('setDirty reenvía al bridge', () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    store.setDirty(true);
+    store.setDirty(false);
+    expect(bridge.dirtyHistory).toEqual([true, false]);
+  });
+
+  it('onSaveRequested registra el callback en el bridge; su resultado vuelve tal cual', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    const unsubscribe = store.onSaveRequested(async () => true);
+
+    await expect(bridge.triggerCloseRequested()).resolves.toBe(true);
+    unsubscribe();
+    await expect(bridge.triggerCloseRequested()).rejects.toThrow('no hay callback registrado');
   });
 });
 
@@ -215,5 +359,51 @@ describe('DesktopStore — métodos históricos de ProjectStore (mínimo viable)
 
     const datos = await store.getProcess('Process_1');
     expect(datos).toEqual({ xml: XML_MINIMO, name: 'Pedido' });
+  });
+});
+
+describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertura pendiente)', () => {
+  it('listRecents reenvía al bridge', async () => {
+    const bridge = new FakeBridge();
+    bridge.recents = [{ dir: '/carpeta/pedido', name: 'Pedido', openedAt: '2026-01-01T00:00:00.000Z' }];
+    const store = new DesktopStore(bridge);
+
+    await expect(store.listRecents()).resolves.toEqual(bridge.recents);
+  });
+
+  it('openRecent: éxito, activa la carpeta/documento para guardados posteriores', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    const raw: LilaProjectDocument = { ...documentoBase(), problems: [] };
+    bridge.openRecentImpl = async () => raw;
+
+    const document = await store.openRecent('/carpeta/pedido');
+    expect(document?.id).toBe('proyecto-1');
+
+    // Queda activo: un guardado normal posterior escribe en la misma carpeta sin preguntar.
+    await store.saveProject(documentoBase({ name: 'v2' }));
+    expect(bridge.writes.at(-1)?.dir).toBe('/carpeta/pedido');
+  });
+
+  it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => null;
+
+    await expect(store.openRecent('/carpeta/borrada')).resolves.toBeNull();
+  });
+
+  it('pendingOpenPath/onOpenPath reenvían al bridge', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.pendingOpenPathQueue = [{ dir: '/carpeta/pedido', file: 'model.bpmn' }];
+
+    await expect(store.pendingOpenPath()).resolves.toEqual({ dir: '/carpeta/pedido', file: 'model.bpmn' });
+    await expect(store.pendingOpenPath()).resolves.toBeNull(); // se consume una vez.
+
+    const recibidos: OpenPathRequest[] = [];
+    store.onOpenPath((path) => recibidos.push(path));
+    bridge.triggerOpenPath({ dir: '/otra', file: 'model.bpmn' });
+    expect(recibidos).toEqual([{ dir: '/otra', file: 'model.bpmn' }]);
   });
 });

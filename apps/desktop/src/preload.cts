@@ -19,7 +19,7 @@
 // clásica de `require`, no con `import`/`export` de ES — ese es justamente el punto de este
 // archivo (ver comentario de arriba).
 import electron = require('electron');
-import type { LilaBridge } from './bridge.js';
+import type { LilaBridge, OpenPathRequest, Recent, WriteProjectOptions } from './bridge.js';
 
 const { contextBridge, ipcRenderer } = electron;
 
@@ -28,8 +28,30 @@ const lila = {
   version: process.versions.electron ?? '',
   chooseFolder: () => ipcRenderer.invoke('lila:chooseFolder') as Promise<string | null>,
   readProject: (dir: string) => ipcRenderer.invoke('lila:readProject', dir) as ReturnType<LilaBridge['readProject']>,
-  writeProject: (dir: string, document: unknown) =>
-    ipcRenderer.invoke('lila:writeProject', dir, document) as Promise<void>,
+  writeProject: (dir: string, document: unknown, options?: WriteProjectOptions) =>
+    ipcRenderer.invoke('lila:writeProject', dir, document, options) as Promise<void>,
+  setDirty: (dirty: boolean) => {
+    ipcRenderer.send('lila:setDirty', dirty);
+  },
+  // Sandboxeado: solo reenvía. `cb` (registrada por DesktopStore) corre en el renderer; el
+  // resultado vuelve a main por `lila:close-response` para que decida si cierra la ventana.
+  onCloseRequested: (cb: () => Promise<boolean>) => {
+    const listener = () => {
+      void cb()
+        .then((saved) => ipcRenderer.send('lila:close-response', { saved }))
+        .catch(() => ipcRenderer.send('lila:close-response', { saved: false }));
+    };
+    ipcRenderer.on('lila:close-requested', listener);
+    return () => ipcRenderer.removeListener('lila:close-requested', listener);
+  },
+  listRecents: () => ipcRenderer.invoke('lila:listRecents') as Promise<readonly Recent[]>,
+  openRecent: (dir: string) => ipcRenderer.invoke('lila:openRecent', dir) as ReturnType<LilaBridge['openRecent']>,
+  pendingOpenPath: () => ipcRenderer.invoke('lila:pendingOpenPath') as Promise<OpenPathRequest | null>,
+  onOpenPath: (cb: (path: OpenPathRequest) => void) => {
+    const listener = (_event: unknown, path: OpenPathRequest) => cb(path);
+    ipcRenderer.on('lila:open-path', listener);
+    return () => ipcRenderer.removeListener('lila:open-path', listener);
+  },
 } satisfies LilaBridge;
 
 contextBridge.exposeInMainWorld('lila', lila);

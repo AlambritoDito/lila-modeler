@@ -3,7 +3,7 @@
  * permite que sea puro. Una de las carpetas lleva espacios y tilde a propósito (OP-08, "rutas con
  * espacios/tildes" del ticket).
  */
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -199,5 +199,191 @@ describe('writeProjectFolder — fallo de escritura', () => {
 
     const entradas = await readdir(dir);
     expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+  });
+});
+
+describe('symlinks — lectura', () => {
+  let fuera: string;
+
+  beforeEach(async () => {
+    fuera = await mkdtemp(join(tmpdir(), 'lila-projectIO-fuera-'));
+  });
+
+  afterEach(async () => {
+    await rm(fuera, { recursive: true, force: true });
+  });
+
+  it('un *.scenario.json que es symlink a un archivo externo se excluye y queda en problems', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const secreto = join(fuera, 'secreto.scenario.json');
+    await writeFile(secreto, JSON.stringify({ version: 1, robado: true }), 'utf8');
+    await symlink(secreto, join(dir, 'enlazado.scenario.json'));
+
+    const { document, problems } = await readProjectFolder(dir);
+
+    expect(document.scenarios).toEqual({});
+    expect(problems).toEqual([
+      { file: 'enlazado.scenario.json', message: expect.stringContaining('symlink') },
+    ]);
+  });
+
+  it('la carpeta runs como symlink a fuera se excluye entera y queda en problems', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const runsFuera = join(fuera, 'runs-externas');
+    await mkdir(runsFuera, { recursive: true });
+    await writeFile(
+      join(runsFuera, 'ajeno.result.json'),
+      JSON.stringify({ id: 'ajeno', scenarioName: 'x', inputs: {} }),
+      'utf8',
+    );
+    await symlink(runsFuera, join(dir, 'runs'));
+
+    const { document, problems } = await readProjectFolder(dir);
+
+    expect(document.runs).toEqual([]);
+    expect(problems).toEqual([{ file: 'runs', message: expect.stringContaining('symlink') }]);
+  });
+});
+
+describe('symlinks — escritura', () => {
+  let fuera: string;
+
+  beforeEach(async () => {
+    fuera = await mkdtemp(join(tmpdir(), 'lila-projectIO-fuera-'));
+  });
+
+  afterEach(async () => {
+    await rm(fuera, { recursive: true, force: true });
+  });
+
+  it('un *.scenario.json que es symlink a un archivo externo: escritura rechazada, destino externo intacto', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const externo = join(fuera, 'ajeno.json');
+    await writeFile(externo, 'contenido original', 'utf8');
+    await symlink(externo, join(dir, 'as-is.scenario.json'));
+
+    const doc = documentoBase();
+    const error = await captureError(() => writeProjectFolder(dir, doc));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-SYMLINK');
+
+    expect(await readFile(externo, 'utf8')).toBe('contenido original');
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+  });
+
+  it('la carpeta runs como symlink a fuera: escritura rechazada, nada se toca', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const runsFuera = join(fuera, 'runs-externas');
+    await mkdir(runsFuera, { recursive: true });
+    await symlink(runsFuera, join(dir, 'runs'));
+
+    const run: StoredRun = {
+      id: 'run-1',
+      scenarioName: 'as-is.scenario.json',
+      result: { kpis: { total: 1 } },
+      inputs: { modelRevision: 1, scenarioRevision: 1, xml: XML_MINIMO, scenario: {} },
+    };
+    const doc = documentoBase({ runs: [run] });
+    const error = await captureError(() => writeProjectFolder(dir, doc));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-SYMLINK');
+
+    expect(await readdir(runsFuera)).toEqual([]);
+  });
+});
+
+describe('writeProjectFolder — "Guardar como" en carpeta ocupada (E-CARPETA-OCUPADA)', () => {
+  it('rechaza si la carpeta ya tiene lila-project.json de otro id', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await writeFile(
+      join(dir, 'lila-project.json'),
+      JSON.stringify({ version: 1, id: 'otro-proyecto', name: 'Ajeno', model: { id: 'm', name: 'm', revision: 0 }, scenarioRevisions: {} }),
+      'utf8',
+    );
+
+    const doc = documentoBase({ id: 'proyecto-1' });
+    const error = await captureError(() => writeProjectFolder(dir, doc, { saveAs: true }));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-CARPETA-OCUPADA');
+  });
+
+  it('rechaza si hay un model.bpmn ajeno sin manifiesto', async () => {
+    await writeFile(join(dir, 'model.bpmn'), '<otro-xml/>', 'utf8');
+
+    const doc = documentoBase();
+    const error = await captureError(() => writeProjectFolder(dir, doc, { saveAs: true }));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-CARPETA-OCUPADA');
+  });
+
+  it('acepta una carpeta vacía con saveAs', async () => {
+    const doc = documentoBase();
+    await expect(writeProjectFolder(dir, doc, { saveAs: true })).resolves.toBeUndefined();
+  });
+
+  it('acepta una carpeta con el manifiesto del mismo proyecto con saveAs', async () => {
+    const doc = documentoBase({ id: 'proyecto-1' });
+    await writeProjectFolder(dir, doc);
+    await expect(writeProjectFolder(dir, doc, { saveAs: true })).resolves.toBeUndefined();
+  });
+
+  it('sin saveAs, no bloquea guardar sobre una carpeta abierta con un model.bpmn puesto a mano', async () => {
+    // Caso legítimo: abrir una carpeta con solo `model.bpmn` (sin manifiesto) y guardar ahí
+    // normalmente no debe tratarse como "ocupada" — solo "Guardar como" hace esa comprobación.
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const doc = documentoBase();
+    await expect(writeProjectFolder(dir, doc)).resolves.toBeUndefined();
+  });
+});
+
+describe('writeProjectFolder — cambios externos (E-CAMBIO-EXTERNO)', () => {
+  it('un escenario modificado en disco desde la última lectura: rechaza sin escribir nada, el archivo externo queda intacto', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc); // primera escritura: registra el snapshot de cada archivo.
+
+    // Alguien más (otro proceso, otra sesión) edita el escenario directamente en disco.
+    const editadoExternamente = JSON.stringify({ version: 1, name: 'EDITADO EXTERNAMENTE, más largo que el original' });
+    await writeFile(join(dir, 'as-is.scenario.json'), editadoExternamente, 'utf8');
+
+    const docNuevo = documentoBase({ name: 'Pedido v2' });
+    const error = await captureError(() => writeProjectFolder(dir, docNuevo));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-CAMBIO-EXTERNO');
+    expect((error as ProjectIOError).message).toContain('as-is.scenario.json');
+
+    // Nada se tocó: ni el escenario editado externamente, ni el modelo (que sí iba a cambiar).
+    expect(await readFile(join(dir, 'as-is.scenario.json'), 'utf8')).toBe(editadoExternamente);
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(XML_MINIMO);
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+  });
+
+  it('con overwrite:true, escribe encima del cambio externo', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc);
+    await writeFile(join(dir, 'as-is.scenario.json'), JSON.stringify({ version: 1, name: 'EDITADO EXTERNAMENTE' }), 'utf8');
+
+    const docNuevo = documentoBase({ name: 'Pedido v2' });
+    await expect(writeProjectFolder(dir, docNuevo, { overwrite: true })).resolves.toBeUndefined();
+
+    const { document } = await readProjectFolder(dir);
+    expect(document.name).toBe('Pedido v2');
+    expect(document.scenarios).toEqual(doc.scenarios);
+  });
+
+  it('readProjectFolder también registra snapshot: escribir después sin cambios externos funciona', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc);
+    await readProjectFolder(dir); // p.ej. reabrir el proyecto más tarde.
+    await expect(writeProjectFolder(dir, documentoBase({ name: 'Pedido v2' }))).resolves.toBeUndefined();
+  });
+
+  it('sin snapshot previo (nunca leído ni escrito en este proceso), no bloquea: no hay base para decir "cambió"', async () => {
+    // Caso legítimo (igual que el test de "carpeta ocupada" de arriba): un model.bpmn puesto a
+    // mano, nunca visto por este proceso, no debe tratarse como "cambio externo" — no hay un
+    // snapshot anterior con el que compararlo.
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await expect(writeProjectFolder(dir, documentoBase())).resolves.toBeUndefined();
   });
 });
