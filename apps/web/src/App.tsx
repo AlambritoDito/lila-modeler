@@ -512,6 +512,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         />
       )}
 
+        {/* Controles de zoom (LILA-208). Van sobre la marca de agua, no encima: el `bottom` de
+            `.zoom` en `app.css` deja libres sus 15 px inferiores derechos. */}
+        <div className="zoom">
+          <button type="button" className="boton icono" aria-label="Acercar" title="Acercar" disabled={modelador === null} onClick={() => modelador?.zoom(1.2)}>+</button>
+          <button type="button" className="boton icono" aria-label="Alejar" title="Alejar" disabled={modelador === null} onClick={() => modelador?.zoom(1 / 1.2)}>−</button>
+          <button type="button" className="boton icono" aria-label="Ajustar a pantalla" title="Ajustar a pantalla" disabled={modelador === null} onClick={() => modelador?.ajustar()}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+        </div>
       </div>
       {modo === 'Resultados' && (
         <section className="zona-resultados">
@@ -643,9 +652,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       <nav className="diagramas">
         <button className="boton" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
         <button className="boton" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
-        <button type="button" className="pestana activa">
+        {/* Un proyecto = un diagrama por ahora (LILA-208): la pestaña no cambia de nada, así que
+            no es un botón; el ✕ cierra el proyecto y el «+» abre uno nuevo, los dos por
+            `projectAction('new')`, que ya trae la guardia de cambios sin guardar. */}
+        <span className="pestana activa">
           {archivo}
-        </button>
+          <button type="button" className="cerrar" aria-label={`Cerrar ${archivo}`} title="Cerrar diagrama" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>✕</button>
+        </span>
+        <button type="button" className="boton icono" aria-label="Nuevo diagrama" title="Nuevo diagrama" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>+</button>
       </nav>
 
       <footer className="estado">

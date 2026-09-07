@@ -175,6 +175,7 @@ body {
 }
 
 .diagramas {
+  align-items: center;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   grid-area: diagramas;
@@ -535,6 +536,123 @@ body {
 .zona-modelo { grid-area: lienzo; position: relative; min-width: 0; min-height: 0; }
 .zona-modelo > .lienzo { width: 100%; height: 100%; }
 .zona-resultados { grid-area: lienzo; overflow: auto; padding: 16px; min-width: 0; z-index: 1; }
+
+/* ---------- controles de zoom (LILA-208) ---------- */
+
+/* La marca de agua «Powered by bpmn.io» es un enlace absoluto a 15 px del borde inferior
+   derecho del lienzo y mide unos 14 px de alto. Esta pila arranca en `bottom: 46px`, así que
+   esos 15 px de esquina se quedan libres; `App.test.tsx` lo comprueba leyendo este archivo.
+   No la bajes por debajo de 40 px. */
+.zoom {
+  bottom: 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: absolute;
+  right: 15px;
+  z-index: 1;
+}
+
+.zoom .boton {
+  border-radius: 0;
+  display: grid;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  width: 30px;
+}
+
+/* ---------- minimapa (LILA-208) ---------- */
+
+/* El plugin `diagram-js-minimap` se pinta arriba a la derecha, en blanco y con esquinas
+   redondeadas. Aquí se le da la posición y los colores del artboard; ni una regla suya se
+   reescribe y no hace falta `!important` en ningún sitio. */
+.lienzo .djs-minimap {
+  background-color: var(--canvas-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  bottom: 14px;
+  left: 14px;
+  right: auto;
+  top: auto;
+}
+
+.lienzo .djs-minimap .map {
+  height: 91px;
+  width: 178px;
+}
+
+/* La cabecera «MINIMAPA ▾» es el propio botón de plegar del plugin. Abierto, el plugin lo
+   coloca en absoluto en una esquina; aquí vuelve al flujo y ocupa el ancho, como en el
+   artboard. Su texto sale de `content: attr(title)` y está en inglés: se pisa con el
+   `content` de abajo en vez de montar un servicio `translate` propio.
+   ponytail: la cabecera es CSS sobre el plugin · si algún día hace falta más (contador de
+   elementos, menú), entonces sí toca un componente React con su propio estado. */
+.lienzo .djs-minimap.open .toggle,
+.lienzo .djs-minimap:not(.open) .toggle {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-disabled);
+  display: flex;
+  font: 600 9px/1 var(--font-ui);
+  height: 20px;
+  justify-content: space-between;
+  letter-spacing: 0.12em;
+  padding: 0 7px;
+  position: static;
+  text-align: start;
+  text-transform: uppercase;
+}
+
+.lienzo .djs-minimap .toggle::before {
+  content: 'Minimapa';
+}
+
+.lienzo .djs-minimap.open .toggle::after {
+  content: '▾';
+}
+
+/* Plegado no hay mapa debajo, así que la cabecera se queda sin borde inferior. */
+.lienzo .djs-minimap:not(.open) .toggle {
+  border-bottom: 0;
+}
+
+.lienzo .djs-minimap:not(.open) .toggle::after {
+  content: '▸';
+}
+
+/* Recuadro del viewport: el acento del tema, sin radio, en vez del naranja del plugin. */
+.lienzo .djs-minimap .viewport-dom {
+  border: 1px solid var(--accent-primary);
+  border-radius: 0;
+}
+
+/* El velo blanco del plugin lava el lienzo oscuro; el artboard no lo tiene. */
+.lienzo .djs-minimap.open .overlay {
+  background: transparent;
+}
+
+/* ---------- pestañas de diagrama (LILA-208) ---------- */
+
+.diagramas .pestana {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.diagramas .cerrar {
+  background: none;
+  border: none;
+  color: var(--fg-disabled);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0;
+}
+
+.diagramas .cerrar:hover:not(:disabled) {
+  color: var(--fg-primary);
+}
 
 .barra { flex-wrap: wrap; }
 

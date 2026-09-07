@@ -9,7 +9,7 @@ import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore'
 import { App } from './App';
 import { applyTheme } from './theme/applyTheme';
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
@@ -21,7 +21,7 @@ vi.mock('./ScenarioPanel', () => ({ ScenarioPanel: ({ onCambio }: { onCambio: (f
 } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
   useEffect(() => { onListo({
-    exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: vi.fn(),
+    exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
   } as unknown as Modelador); }, [onListo]);
   return <div>Modelo montado</div>;
@@ -34,6 +34,12 @@ const ir = { id: 'Process_1', source: { originalIds: {} } };
 const scenario = { model: 'model.bpmn', run: { seed: 42 } };
 const done = { result: { warnings: ['W-MOTOR'], bottlenecks: [] }, logSample: [] };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; }
+/** Los controles del lienzo y de las pestañas son iconos: se buscan por su etiqueta accesible. */
+function porEtiqueta(etiqueta: string): HTMLButtonElement {
+  const boton = container.querySelector<HTMLButtonElement>(`button[aria-label="${etiqueta}"]`);
+  expect(boton, etiqueta).not.toBeNull();
+  return boton!;
+}
 async function click(label: string) {
   await act(async () => {
     const button = [...container.querySelectorAll('button')].filter((b) => b.textContent === label).at(-1);
@@ -226,3 +232,28 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
   await act(async () => { menu!('guardar'); });
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
+
+// ---------- lienzo: zoom, minimapa y pestañas de diagrama (LILA-208) ----------
+
+it('los botones del lienzo acercan, alejan y ajustan el zoom', async () => {
+  await act(async () => porEtiqueta('Acercar').click());
+  expect(mocks.zoom).toHaveBeenLastCalledWith(1.2);
+  await act(async () => porEtiqueta('Alejar').click());
+  expect(mocks.zoom).toHaveBeenLastCalledWith(1 / 1.2);
+  expect(mocks.ajustar).not.toHaveBeenCalled();
+  await act(async () => porEtiqueta('Ajustar a pantalla').click());
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
+});
+it('cerrar la pestaña del diagrama y «+» abren un proyecto nuevo', async () => {
+  await act(async () => porEtiqueta('Cerrar model.bpmn').click());
+  expect(session.createProject).toHaveBeenCalledOnce();
+  await act(async () => porEtiqueta('Nuevo diagrama').click());
+  expect(session.createProject).toHaveBeenCalledTimes(2);
+});
+it('cerrar la pestaña con cambios sin guardar pasa por la guardia', async () => {
+  await act(async () => mocks.changed());
+  await act(async () => porEtiqueta('Cerrar model.bpmn').click());
+  expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+  expect(session.createProject).not.toHaveBeenCalled();
+});
+
