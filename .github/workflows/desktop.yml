@@ -1,0 +1,40 @@
+name: Desktop
+
+# Empaqueta la SPA con electron-builder por commit, sin publicar (sin tag, sin
+# certificados, sin GitHub Release). Solo se dispara manualmente o en ramas
+# codex/** para no cargar cada PR de main con una compilación de instaladores.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/**']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            flag: --mac
+          - os: windows-latest
+            flag: --win
+          - os: ubuntu-latest
+            flag: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @lila/engine
+      - run: npm run build -w @lila/web
+      - run: npm run build -w @lila/desktop
+      - run: npx electron-builder ${{ matrix.flag }} --publish never
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lila-desktop-${{ matrix.os }}-${{ github.sha }}
+          path: apps/desktop/release/**
+          if-no-files-found: error
