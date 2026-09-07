@@ -20,3 +20,5 @@ A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/
 ## QA y siguiente paso
 Vite propio PID45442 DETENIDO a 23:30, no servidor requerido por Electron. Fixtures temporales `/tmp/lila-qa-codex`. QA web propio: dos escenarios, Worker real, comparación -50%, guardado y edición/undo PASS; reapertura final debe probarse en desktop.
 F: consumir último commit integrable de esta rama, integrar OP14 listo y devolver SHA a A. A hará checkpoint combinado final; F construye y prueba app empaquetada del MISMO SHA con Vite detenido y registra artefacto/recorrido. DMG de OP12 anterior es infraestructura, no la beta aceptada. OP16/extras pospuestos. Sin main/push/releases/npm/producción.
+
+A preparó estado/OP-18-codex.md con recorrido vigente de proyecto NUEVO por carpeta y dos escenarios propios para F; evita el paso de importar BPMN suelto que no existe en la modalidad desktop actual. Sin nuevas modificaciones funcionales desde fc6f9a2.
