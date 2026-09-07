@@ -17,17 +17,25 @@ import { fileURLToPath } from 'node:url';
 import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, it } from 'vitest';
 import { parseBpmn } from '../../../packages/engine/src/bpmn/parse.js';
+import { sanitizeXmlIds } from '../../../packages/engine/src/bpmn/ids.js';
 import { validate, type ValidationResult } from '../../../packages/engine/src/bpmn/validate.js';
 import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { type: 'json' };
+import {
+  advertenciasDePerdida,
+  finalizarExportacion,
+  prepararImportacionTransaccional,
+} from './modelerXml';
 
 const raiz = new URL('../../../', import.meta.url);
 const leer = (rel: string): string => readFileSync(new URL(rel, raiz), 'utf8');
 
 /** Lo mismo que hace `saveXML({ format: true })` de la app, sin el DOM. */
 async function exportar(xml: string): Promise<string> {
+  const preparado = sanitizeXmlIds(xml);
   const moddle = BpmnModdle({ lila });
-  const { rootElement } = await moddle.fromXML(xml);
-  return (await moddle.toXML(rootElement, { format: true })).xml;
+  const { rootElement } = await moddle.fromXML(preparado.xml);
+  const serializado = (await moddle.toXML(rootElement, { format: true })).xml;
+  return finalizarExportacion(serializado, preparado.sanitizedToOriginal);
 }
 
 /** Lo que imprimiría `lila validate` sobre ese XML. */
@@ -112,5 +120,107 @@ describe('el XML que exporta la app web', () => {
 
     expect(exportado).toContain('<lila:responsibility type="R" roleRef="rol-cajero" />');
     expect((await lilaValidate(exportado)).errors).toEqual([]);
+  });
+
+  it.each(['"', "'"])('restaura ids no-NCName, referencias y DI con comilla %s', async (quote) => {
+    const q = quote;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:lila="https://lila-modeler.org/schema/bpmn/1" id="Definitions_1" targetNamespace="urn:lila:test">
+  <bpmn:process id="Process_1" isExecutable="true">
+    <bpmn:startEvent id="Start_1" />
+    <bpmn:task id=${q}9Task bad.x${q} name="Revisar">
+      <bpmn:extensionElements><lila:responsibility type="R" roleRef="rol-1" /></bpmn:extensionElements>
+      <bpmn:documentation>Documento intacto</bpmn:documentation>
+    </bpmn:task>
+    <bpmn:endEvent id="End_1" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef='Start_1' targetRef=${q}9Task bad.x${q} />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef=${q}9Task bad.x${q} targetRef='End_1' />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1"><bpmndi:BPMNPlane id="Plane_1" bpmnElement="Process_1">
+    <bpmndi:BPMNShape id="Shape_Task" bpmnElement=${q}9Task bad.x${q}><dc:Bounds x="180" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="Edge_1" bpmnElement="Flow_1"><di:waypoint x="100" y="120" /><di:waypoint x="180" y="120" /></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+    const exportado = await exportar(xml);
+    expect(exportado).toContain('id="9Task bad.x"');
+    expect(exportado).toContain('targetRef="9Task bad.x"');
+    expect(exportado).toContain('sourceRef="9Task bad.x"');
+    expect(exportado).toContain('bpmnElement="9Task bad.x"');
+    expect(exportado).toContain('<bpmn:documentation>Documento intacto</bpmn:documentation>');
+    expect(exportado).toContain('<lila:responsibility type="R" roleRef="rol-1" />');
+    expect(exportado).toContain('exporter="Lila Modeler"');
+    expect(exportado).toContain('exporterVersion="0.0.0"');
+
+    const reabierto = await parseBpmn(exportado);
+    const taskId = Object.keys(reabierto.ir.nodes).find(
+      (id) => reabierto.ir.source.originalIds[id] === '9Task bad.x',
+    );
+    expect(taskId).toBeDefined();
+    expect(Object.keys(reabierto.ir.flows)).toHaveLength(2);
+    expect((await lilaValidate(exportado)).errors).toEqual([]);
+  });
+
+  it('prepara el reemplazo en una instancia candidata y destruye solo la fallida', async () => {
+    const previo = { xml: '<modelo-previo />', historial: ['mover tarea'] };
+    let destruido = false;
+    const candidato = {
+      importXML: async (): Promise<{ warnings: readonly unknown[] }> => {
+        throw new Error('XML truncado');
+      },
+      destroy: (): void => {
+        destruido = true;
+      },
+    };
+
+    await expect(
+      prepararImportacionTransaccional('<bpmn:definitions', () => candidato),
+    ).rejects.toThrow('XML truncado');
+    expect(destruido).toBe(true);
+    expect(previo).toEqual({ xml: '<modelo-previo />', historial: ['mover tarea'] });
+  });
+
+  it('entrega al candidato el XML saneado y conserva el mapa reversible de esa instancia', async () => {
+    let recibido = '';
+    const candidato = {
+      importXML: async (xml: string): Promise<{ warnings: readonly unknown[] }> => {
+        recibido = xml;
+        return { warnings: [] };
+      },
+      destroy: (): void => undefined,
+    };
+
+    const preparada = await prepararImportacionTransaccional(
+      "<bpmn:task id='9Task bad.x' />",
+      () => candidato,
+    );
+    const [saneado] = [...preparada.originalIds.keys()];
+    expect(saneado).toBeDefined();
+    expect(recibido).toContain(`id='${saneado}'`);
+    expect(recibido).not.toContain('9Task bad.x');
+    expect(preparada.originalIds.get(saneado as string)).toBe('9Task bad.x');
+  });
+
+  it('identifica una referencia default rota real con su id y no confunde metadatos', async () => {
+    const moddle = BpmnModdle({ lila });
+    const roto = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+      id="Definitions_1" targetNamespace="urn:lila:test">
+      <bpmn:process id="Process_1"><bpmn:exclusiveGateway id="Gateway_1"
+        default="Flow_inexistente" /></bpmn:process>
+    </bpmn:definitions>`;
+    const { warnings } = await moddle.fromXML(roto);
+
+    expect(advertenciasDePerdida(warnings)).toEqual([
+      'unresolved reference <Flow_inexistente>',
+    ]);
+    expect(
+      advertenciasDePerdida([
+        { message: 'unresolved reference <Message_1>', property: 'bpmn:messageRef' },
+      ]),
+    ).toEqual([]);
   });
 });
