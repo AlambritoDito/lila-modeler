@@ -18,6 +18,14 @@ const EXAMPLE_DIR = resolve(REPOSITORY_ROOT, 'examples/pedido');
 export const PEDIDO_GOLDEN_PATH = resolve(GOLDEN_DIR, 'pedido.seed-42.json');
 
 /**
+ * Golden de nivel 3 (recursos, sin calendarios): el oráculo de R-DEG-2. A diferencia del de M1,
+ * sus bytes son los de **Linux x64**, la plataforma del CI: `Math.log`/`Math.exp`/`Math.cos`
+ * difieren en el último bit entre arquitecturas y aquí, con colas de por medio, esa diferencia ya
+ * no se cancela (R-DET-6). Regenerarlo fuera de Linux x64 rompe el CI.
+ */
+export const PEDIDO_NIVEL3_GOLDEN_PATH = resolve(GOLDEN_DIR, 'pedido-nivel3.seed-42.json');
+
+/**
  * Elimina por copia toda la capa de recursos y calendarios del escenario de pedido. El resultado
  * representa exactamente la entrada que entendía M1: tiempos, llegadas y probabilidades, sin que
  * los campos añadidos en M2 puedan activar colas, costos de pool o calendarios.
@@ -36,6 +44,33 @@ export function withoutResourcesAndCalendars(scenario: ResolvedScenario): Resolv
     ),
   };
   delete degraded.resources;
+  delete degraded.calendars;
+  return degraded;
+}
+
+/**
+ * Retira **solo** la capa de calendarios: `calendars`, `resources[*].calendar` y
+ * `elements[*].calendar`. Los pools de M2 se quedan intactos, que es justo la entrada que
+ * entendía el motor de M2 (R-DEG-2).
+ */
+export function withoutCalendars(scenario: ResolvedScenario): ResolvedScenario {
+  const degraded: ResolvedScenario = {
+    ...scenario,
+    resources: Object.fromEntries(
+      Object.entries(scenario.resources ?? {}).map(([poolId, pool]) => {
+        const copy = { ...pool };
+        delete copy.calendar;
+        return [poolId, copy];
+      }),
+    ),
+    elements: Object.fromEntries(
+      Object.entries(scenario.elements ?? {}).map(([elementId, element]) => {
+        const copy = { ...element };
+        delete copy.calendar;
+        return [elementId, copy];
+      }),
+    ),
+  };
   delete degraded.calendars;
   return degraded;
 }
@@ -88,4 +123,50 @@ export async function renderPedidoScenario(scenario: ResolvedScenario): Promise<
  */
 export async function renderPedidoGolden(seed: number): Promise<string> {
   return renderPedidoScenario(withoutResourcesAndCalendars(loadPedidoScenario(seed)));
+}
+
+/** Golden de nivel 3: el ejemplo real con recursos y sin la capa de calendarios. */
+export async function renderPedidoNivel3Golden(seed: number): Promise<string> {
+  return renderPedidoScenario(withoutCalendars(loadPedidoScenario(seed)));
+}
+
+/**
+ * Compara dos `RunResult` ya parseados con tolerancia **relativa** en los números y estricta en
+ * todo lo demás (claves, orden de claves, strings, longitudes). Es lo que se usa fuera del CI:
+ * entre arquitecturas `Math.log`/`Math.exp`/`Math.cos` difieren en el último bit, y con colas de
+ * por medio esa diferencia deja de cancelarse (R-DET-6). Devuelve las rutas que se salen de `tol`.
+ *
+ * Vive aquí, y no dentro del test, para poder atacarlo sin re-ejecutar las 30 réplicas.
+ */
+export function numericDiffs(actual: unknown, expected: unknown, tol: number, path = ''): string[] {
+  if (typeof expected === 'number' && typeof actual === 'number') {
+    if (Object.is(actual, expected)) return [];
+    // Un `scale` infinito (±Infinity contra un finito) haría que `<= tol * scale` fuese siempre
+    // cierto y el par se daría por igual; el guardia de finitud lo convierte en diferencia.
+    const scale = Math.max(Math.abs(expected), Math.abs(actual), 1);
+    return Number.isFinite(scale) && Math.abs(actual - expected) <= tol * scale
+      ? []
+      : [`${path}: ${actual} != ${expected}`];
+  }
+  if (Array.isArray(expected) || Array.isArray(actual)) {
+    if (!Array.isArray(expected) || !Array.isArray(actual) || actual.length !== expected.length) {
+      return [`${path}: arrays distintos`];
+    }
+    return expected.flatMap((item, index) => numericDiffs(actual[index], item, tol, `${path}[${index}]`));
+  }
+  if (expected !== null && actual !== null && typeof expected === 'object' && typeof actual === 'object') {
+    const expectedKeys = Object.keys(expected);
+    const actualKeys = Object.keys(actual);
+    // El orden de claves es parte del contrato del golden, no solo el conjunto.
+    if (expectedKeys.join('\u0000') !== actualKeys.join('\u0000')) return [`${path}: claves distintas`];
+    return expectedKeys.flatMap((key) =>
+      numericDiffs(
+        (actual as Record<string, unknown>)[key],
+        (expected as Record<string, unknown>)[key],
+        tol,
+        path === '' ? key : `${path}.${key}`,
+      ),
+    );
+  }
+  return Object.is(actual, expected) ? [] : [`${path}: ${String(actual)} != ${String(expected)}`];
 }

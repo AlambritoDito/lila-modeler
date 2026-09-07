@@ -618,9 +618,17 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
 - **R-DET-5 — Nunca `Math.random` ni `Date`.** Ni en `core/`, ni en la CLI, ni en el Worker. El
   `RunResult` no contiene marcas de tiempo de reloj real. *(prueba: LILA-032, LILA-030)*
 - **R-DET-6 — Garantía de bytes.** Con la misma semilla y la misma entrada, `lila run --json`
-  produce **bytes idénticos** dentro de un mismo runtime, en Node 22 y 24. Entre navegadores la
-  igualdad es solo estadística (`Math.log`/`Math.exp` pueden diferir en el último bit).
-  *(prueba: LILA-030)*
+  produce **bytes idénticos** dentro de una misma plataforma y arquitectura, en Node 22 y 24. La
+  igualdad de bytes **no cruza arquitecturas**: `Math.log`, `Math.exp`, `Math.cos` y `Math.pow` no
+  están correctamente redondeadas y difieren en el último bit entre, por ejemplo, `linux/x64` y
+  `darwin/arm64` (solo `Math.sqrt` lo está, por el ISA). En nivel 1 y 2 esa deriva se cancela
+  —`processing` es una diferencia de dos instantes desplazados por igual— y los goldens de M1
+  coinciden byte a byte en las dos; en nivel 3 no, porque `resourceWait` resta el instante de un
+  caso al de otro: un ULP en el reloj de llegadas sobrevive hasta `resourceWait.total`. Por eso el
+  golden de nivel 3 (`test/golden/pedido-nivel3.seed-42.json`) lleva los bytes de la plataforma del
+  CI, `linux/x64`, se compara byte a byte cuando `process.env.CI` está definido, y con tolerancia
+  relativa `1e-9` fuera de él. Entre navegadores la igualdad también es solo estadística.
+  *(prueba: LILA-030, LILA-043)*
 - **R-DET-7 — Distribuciones.** Las 14 con parámetros nombrados y en segundos: `constant{value}`,
   `uniform{min,max}`, `triangular{min,mode,max}`, `exponential{mean}`, `normal{mean,sd}` (truncada a
   `≥ 0`; aviso `W-NORMAL-NEGATIVA` si `P(x<0) > 1 %`), `truncatedNormal{mean,sd,min,max}`,
@@ -729,13 +737,13 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-COST-1 … R-COST-4 | costos por elemento, recurso, fila y caso | LILA-036 (fila del log: LILA-037) |
 | R-COST-5, R-COST-6 | costos ausentes = 0; esperar no cuesta | LILA-013, LILA-036 |
 | R-DEG-1 | sin recursos ⇒ capacidad infinita, bit a bit igual a M1 | LILA-039 |
-| R-DEG-2 | sin calendarios ⇒ 24×7, bit a bit igual a M2 | LILA-043 (motor: LILA-041) |
+| R-DEG-2 | sin calendarios ⇒ 24×7, igual a M2 (bytes en linux/x64; ver R-DET-6) | LILA-043 (motor: LILA-041) |
 | R-DEG-3 … R-DEG-5 | defaults neutros | LILA-042, LILA-013 |
 | R-RES-1 … R-RES-4 | campos reservados y su texto de error | LILA-013 (`null` de `extends`: LILA-014) |
 | R-DET-1 | orden explícito en eventos y colas | LILA-030, LILA-023 |
 | R-DET-2, R-DET-3 | stream por elemento; common random numbers | LILA-024 (what-if: LILA-038) |
 | R-DET-4, R-DET-7 | consumo de uniformes y las 14 distribuciones | LILA-025 |
-| R-DET-5, R-DET-6 | sin `Math.random`/`Date`; bytes idénticos | LILA-032, LILA-030 |
+| R-DET-5, R-DET-6 | sin `Math.random`/`Date`; bytes idénticos por plataforma y arquitectura | LILA-032, LILA-030, LILA-043 |
 | §2 a §14 en conjunto | paridad con los ejemplos oficiales de Bizagi (niveles 1–4, ±5 %) | LILA-044 |
 | §11 + §12 | validación numérica contra M/M/1 y Erlang-C | LILA-050, LILA-011 |
 
