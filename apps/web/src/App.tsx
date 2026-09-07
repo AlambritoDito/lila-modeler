@@ -42,6 +42,8 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 
+type ProjectAction = 'new' | 'open' | 'bpmn';
+
 const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
 const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 
@@ -88,6 +90,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
+  const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
+  const replaceDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
+  }, [pendingAction]);
   const [baseId, setBaseId] = useState('as-is.scenario.json');
   const adapter = projectStore(store);
   const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
@@ -195,9 +202,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
-  async function projectAction(kind: 'new' | 'open' | 'bpmn'): Promise<void> {
+  async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
     if (adapter === null || modelador === null || ioLock.current) return;
-    if (dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    if (dirty && !confirmed) { setPendingAction(kind); return; }
     const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
@@ -324,6 +331,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   return (
     <div className="app">
+      {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
+        <h2 id="reemplazo-titulo">Cambios sin guardar</h2>
+        <p>Guarda los cambios de {projectName} antes de continuar, o descártalos.</p>
+        {ioError && <p role="alert">{ioError}</p>}
+        <div className="acciones">
+          <button className="boton primario" disabled={ioBusy} onClick={() => void (async () => {
+            const next = pendingAction;
+            if (await guardar()) { setPendingAction(null); await projectAction(next, true); }
+          })()}>Guardar y continuar</button>
+          <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>Descartar</button>
+          <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>Cancelar</button>
+        </div>
+      </dialog>}
       <header className="barra">
         <span className="proyecto">Lila Modeler</span>
         <span className="archivo">{projectName} · {dirty ? 'Sin guardar' : 'Guardado'}</span>

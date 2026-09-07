@@ -541,3 +541,7 @@ body {
 .zona-resultados { grid-area: lienzo; overflow: auto; padding: 16px; min-width: 0; z-index: 1; }
 
 .barra { flex-wrap: wrap; }
+
+.confirmar-reemplazo { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 8px; }
+.confirmar-reemplazo::backdrop { background: rgb(0 0 0 / 50%); }
+.confirmar-reemplazo .acciones { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -41,6 +41,7 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.worker.mockResolvedValue(done);
@@ -136,4 +137,36 @@ it('editar durante apertura conserva el proyecto activo y sus cambios', async ()
   await act(async () => pending.resolve(doc));
   expect(container.textContent).toContain('Pedido de ejemplo');
   expect(container.textContent).toContain('Conservamos tus cambios');
+});
+
+it('cancelar reemplazo conserva dirty y no abre otro proyecto', async () => {
+  await act(async () => mocks.changed());
+  await click('Abrir proyecto');
+  expect(container.querySelector('dialog')?.open).toBe(true);
+  await click('Cancelar');
+  expect(session.openProject).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('Sin guardar');
+});
+it.each(['cancelado', 'fallido'])('guardar %s detiene reemplazo y conserva modelo', async (kind) => {
+  await act(async () => mocks.changed());
+  if (kind === 'cancelado') vi.mocked(session.saveProject).mockResolvedValueOnce(null);
+  else vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-PERMISO'));
+  await click('Nuevo proyecto'); await click('Guardar y continuar');
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(container.querySelector('dialog')?.open).toBe(true);
+  expect(container.textContent).toContain('Sin guardar');
+});
+it('guarda el proyecto actual antes de reemplazarlo', async () => {
+  await act(async () => mocks.changed());
+  await click('Nuevo proyecto'); await click('Guardar y continuar');
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(session.createProject).toHaveBeenCalledOnce();
+  expect(vi.mocked(session.saveProject).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(session.createProject).mock.invocationCallOrder[0]!);
+  expect(container.textContent).toContain('Mi proyecto');
+});
+it('descartar permite reemplazar sin guardar', async () => {
+  await act(async () => mocks.changed());
+  await click('Nuevo proyecto'); await click('Descartar');
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(session.createProject).toHaveBeenCalledOnce();
 });
