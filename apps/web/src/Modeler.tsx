@@ -23,9 +23,11 @@ import lila from '@lila/engine/bpmn/lila.moddle.json';
 // el modelador desde aquí y el resto del shell sigue sin ver bpmn-js.
 import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOverlay';
 import {
+  autorizarExportacion,
   finalizarExportacion,
   prepararImportacionTransaccional,
   type ImportacionPreparada,
+  type OpcionesExportacion,
 } from './modelerXml';
 
 /** Lo que el shell pinta en la barra de estado. */
@@ -59,7 +61,9 @@ export interface Servicios {
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
   abrir(xml: string): Promise<boolean>;
-  exportar(): Promise<string>;
+  exportar(opciones?: OpcionesExportacion): Promise<string>;
+  /** Comprueba parseo y renderizado en una instancia aislada sin tocar el modelo activo. */
+  comprobar?(xml: string): Promise<void>;
   ajustar(): void;
   servicios: Servicios;
   /** Escucha eventos del `eventBus`; devuelve la función que se desuscribe. */
@@ -129,6 +133,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     let activo: Modeler | null = null;
     let originalIds = new Map<string, string>();
     let perdidas: string[] = [];
+    let ultimaApertura = 0;
     const suscripciones = new Set<{ eventos: string[]; escuchar: () => void }>();
 
     /** Un contenedor sin tamaño (pestaña en segundo plano) hace que el viewbox sea NaN. */
@@ -179,16 +184,19 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     };
 
     const abrir = async (xml: string): Promise<boolean> => {
+      const apertura = ++ultimaApertura;
       const { modeler: candidato, staging } = crearCandidato();
       let preparada: ImportacionPreparada<Modeler>;
       try {
         preparada = await prepararImportacionTransaccional(xml, () => candidato);
       } catch (e: unknown) {
         staging.remove();
-        if (vivo) publicar(e instanceof Error ? e.message : String(e));
+        if (vivo && apertura === ultimaApertura) {
+          publicar(e instanceof Error ? e.message : String(e));
+        }
         return false;
       }
-      if (!vivo) {
+      if (!vivo || apertura !== ultimaApertura) {
         candidato.destroy();
         staging.remove();
         return false;
@@ -232,18 +240,22 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
 
     const api: Modelador = {
       abrir,
-      exportar: async () => {
+      exportar: async (opciones) => {
         if (activo === null) throw new Error('El modelador todavía no tiene un BPMN abierto.');
-        if (perdidas.length > 0) {
-          const detalle = perdidas.map((warning) => `• ${warning}`).join('\n');
-          const continuar = window.confirm(
-            `El archivo original contenía referencias o elementos que no se pudieron importar. ` +
-              `Si exportas ahora, ese contenido se perderá:\n\n${detalle}\n\n¿Exportar de todos modos?`,
-          );
-          if (!continuar) throw new Error(`Exportación cancelada por contenido perdido:\n${detalle}`);
-        }
+        autorizarExportacion(perdidas, opciones);
         const xml = (await activo.saveXML({ format: true })).xml ?? '';
         return finalizarExportacion(xml, originalIds);
+      },
+      comprobar: async (xml) => {
+        const { modeler: candidato, staging } = crearCandidato();
+        let importado = false;
+        try {
+          await prepararImportacionTransaccional(xml, () => candidato);
+          importado = true;
+        } finally {
+          if (importado) candidato.destroy();
+          staging.remove();
+        }
       },
       ajustar: () => {
         if (activo === null) return;

@@ -22,6 +22,7 @@ import { validate, type ValidationResult } from '../../../packages/engine/src/bp
 import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { type: 'json' };
 import {
   advertenciasDePerdida,
+  autorizarExportacion,
   finalizarExportacion,
   prepararImportacionTransaccional,
 } from './modelerXml';
@@ -203,6 +204,37 @@ describe('el XML que exporta la app web', () => {
     expect(recibido).toContain(`id='${saneado}'`);
     expect(recibido).not.toContain('9Task bad.x');
     expect(preparada.originalIds.get(saneado as string)).toBe('9Task bad.x');
+  });
+
+  it('no abre confirmación para snapshots automáticos y solo pregunta en exportación explícita', () => {
+    let confirmaciones = 0;
+    const confirmar = (): boolean => {
+      confirmaciones += 1;
+      return true;
+    };
+    const perdidas = ['unresolved reference <Flow_inexistente>'];
+
+    expect(() => autorizarExportacion(perdidas, {}, confirmar)).toThrow(
+      /Exportación bloqueada.*Flow_inexistente/s,
+    );
+    expect(confirmaciones).toBe(0);
+    expect(() => autorizarExportacion(perdidas, { interactivo: true }, confirmar)).not.toThrow();
+    expect(confirmaciones).toBe(1);
+  });
+
+  it('escapa la comilla doble de un id definido originalmente con comillas simples', async () => {
+    const original = '9Task "bad"';
+    const preparado = sanitizeXmlIds(`<bpmn:task id='${original}' />`);
+    const [saneado] = [...preparado.sanitizedToOriginal.keys()];
+    expect(saneado).toBeDefined();
+
+    const restaurado = finalizarExportacion(
+      `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" ` +
+        `id="Definitions_1"><bpmn:task id="${saneado}" /></bpmn:definitions>`,
+      preparado.sanitizedToOriginal,
+    );
+    expect(restaurado).toContain('id="9Task &quot;bad&quot;"');
+    await expect(BpmnModdle({ lila }).fromXML(restaurado)).resolves.toBeDefined();
   });
 
   it('identifica una referencia default rota real con su id y no confunde metadatos', async () => {
