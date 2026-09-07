@@ -196,4 +196,32 @@ describe('simulate (LILA-029)', () => {
 
     expect(result.warnings).toEqual(['W-TAREA-SIN-TIEMPO: A: sin processingTime; dura 0 segundos. (3 veces)']);
   });
+
+  test('promedia la utilización del cuello solo en las réplicas donde aparece', () => {
+    const input: SimScenario = {
+      run: { replications: 2, seed: 1 },
+      elements: {
+        Start: { interTriggerTimer: { type: 'constant', value: 10 }, triggerCount: 2 },
+        A: {
+          processingTime: { type: 'uniform', min: 1, max: 20 },
+          resources: [{ ref: 'agente' }],
+        },
+      },
+      resources: { agente: { capacity: 1 } },
+    };
+    const perReplication = [0, 1].map((index) =>
+      aggregateReplication(IR, runReplication(IR, input, index), input),
+    );
+
+    expect(perReplication.map((result) => result.bottlenecks.length)).toEqual([1, 0]);
+    const result = publicSimulate(IR, input);
+
+    expect(result.bottlenecks).toHaveLength(1);
+    expect(result.bottlenecks[0]!.resourceWaitTotal).toBeCloseTo(
+      perReplication[0]!.bottlenecks[0]!.resourceWaitTotal / 2,
+      12,
+    );
+    expect(result.bottlenecks[0]!.utilization).toBe(perReplication[0]!.bottlenecks[0]!.utilization);
+    expect(result.bottlenecks[0]!.utilization).toBe(1);
+  });
 });
