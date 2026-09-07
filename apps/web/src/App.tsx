@@ -9,16 +9,18 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { parseBpmn } from '@lila/engine/bpmn';
-import {
-  type Scenario,
-} from '@lila/engine/schema';
+import { type ResolvedScenario } from '@lila/engine/schema';
+import { compare } from '@lila/engine';
+import { CompareView } from './CompareView';
+import { runMetaFrom } from './compareWarnings';
+import { changeToken, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { PanelPropiedades } from './PropertiesPanel';
 import { ScenarioPanel } from './ScenarioPanel';
 import { ResultsView } from './ResultsView';
 import { prepareSimulation } from './simulationGate';
-import type { StoredRun } from './store/ProjectStore';
+import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { Corrida } from './BottleneckOverlay';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
@@ -79,6 +81,14 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     error: null,
   });
   const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
+  const [projectId, setProjectId] = useState('demo-pedido');
+  const [projectName, setProjectName] = useState('Pedido de ejemplo');
+  const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
+  const [ioError, setIoError] = useState<string | null>(null);
+  const [ioBusy, setIoBusy] = useState(false);
+  const ioLock = useRef(false);
+  const [baseId, setBaseId] = useState('as-is.scenario.json');
+  const adapter = projectStore(store);
   const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
   const [revision, setRevision] = useState(0);
   const revisionRef = useRef(0);
@@ -111,6 +121,93 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   // resultado llega tarde y pinta el overlay del escenario **anterior** sobre el selector nuevo
   // — justo lo contrario de la aceptación de LILA-064, y verificado en navegador.
   const enVuelo = useRef<AbortController | null>(null);
+
+  const currentToken = changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
+  const dirty = currentToken !== savedToken;
+  const tokenRef = useRef(currentToken);
+  tokenRef.current = currentToken;
+  const latest = Object.keys(escenarios).flatMap((name) => {
+    const run = [...runs].reverse().find((r) => r.scenarioName === name && r.inputs.modelRevision === revision
+      && r.inputs.scenarioRevision === (scenarioRevisions[name] ?? 0));
+    return run ? [run] : [];
+  });
+  const ordered = [...latest].sort((a, b) => Number(b.scenarioName === baseId) - Number(a.scenarioName === baseId));
+  const comparable = ordered.length >= 2 && ordered.some((r) => r.scenarioName === baseId);
+
+  useEffect(() => {
+    const run = [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
+      && r.inputs.scenarioRevision === (scenarioRevisions[escenarioId] ?? 0));
+    setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
+  }, [runs, escenarioId, revision, scenarioRevisions, ir]);
+
+  useEffect(() => { adapter?.setDirty?.(dirty); }, [adapter, dirty]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
+    // Electron main coordina la confirmación nativa por el adaptador.
+    if (!adapter?.onSaveRequested) window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [adapter, dirty]);
+  const saveRef = useRef<() => Promise<boolean>>(async () => false);
+  saveRef.current = () => guardar();
+  useEffect(() => adapter?.onSaveRequested?.(() => saveRef.current()), [adapter]);
+
+  async function snapshot(): Promise<ProjectDocument> {
+    if (modelador === null) throw new Error('El modelador todavía no está listo.');
+    const atRevision = revisionRef.current;
+    const xml = await modelador.exportar();
+    const parsed = await parseBpmn(xml);
+    return { version: 1, id: projectId, name: projectName,
+      model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
+      scenarios: escenarios, scenarioRevisions, runs };
+  }
+  async function guardar(saveAs = false): Promise<boolean> {
+    if (adapter === null || ioLock.current) return false;
+    ioLock.current = true; setIoBusy(true); setIoError(null);
+    try {
+      const doc = await snapshot();
+      const token = changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
+      const saved = await adapter.saveProject(doc, { saveAs });
+      if (saved === null) return false;
+      setSavedToken(token);
+      // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
+      const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
+      adapter.setDirty?.(!unchanged);
+      return unchanged;
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return false; }
+    finally { ioLock.current = false; setIoBusy(false); }
+  }
+  async function activate(raw: ProjectDocument, saved: boolean): Promise<boolean> {
+    if (modelador === null) return false;
+    const doc = readProject(raw);
+    const parsed = await parseBpmn(doc.model.xml);
+    cancelarCorrida();
+    if (!await modelador.abrir(doc.model.xml)) return false;
+    revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
+    if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
+    setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
+    setEscenarios(doc.scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
+    const first = Object.keys(doc.scenarios)[0] ?? 'as-is.scenario.json';
+    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('Modelar');
+    setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
+    return true;
+  }
+  async function projectAction(kind: 'new' | 'open' | 'bpmn'): Promise<void> {
+    if (adapter === null || modelador === null || ioLock.current) return;
+    if (dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y continuar?')) return;
+    ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
+    try {
+      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true); return; }
+      const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
+      if (data === null) return;
+      const parsed = await parseBpmn(data.xml);
+      const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? 'Mi proyecto' : data.name.replace(/\.(bpmn|xml)$/i, ''),
+        model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
+        scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
+      const created = await adapter.createProject(doc);
+      if (created) await activate(created, true);
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    finally { ioLock.current = false; setIoBusy(false); }
+  }
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
@@ -168,36 +265,6 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       });
   }, []);
 
-  async function abrir(): Promise<void> {
-    if (modelador === null) return;
-    // Un id nuevo garantiza que `BrowserStore.getProcess` no tenga nada en memoria bajo esa
-    // clave y abra el selector de archivo; el id real es irrelevante en esta modalidad.
-    const id = crypto.randomUUID();
-    const datos = await store.getProcess(id);
-    // Cerrar el selector sin elegir nada no cambia nada y no se avisa de nada.
-    if (datos === null) return;
-    // El proceso activo y el nombre solo cambian si el archivo se pudo abrir. Si no, el lienzo
-    // se queda con el diagrama anterior, y renombrarlo haría que la barra dijera un archivo y
-    // el lienzo mostrara otro —y que «Exportar .bpmn» descargara el anterior con el nombre
-    // nuevo—.
-    if (await modelador.abrir(datos.xml)) {
-      // La corrida en vuelo es del proceso anterior: su resultado no puede pintarse sobre el
-      // diagrama nuevo (ni aunque los ids coincidan por casualidad).
-      cancelarCorrida();
-      revisionRef.current += 1;
-      setRevision(revisionRef.current);
-      setRuns([]);
-      setProcesoId(id);
-      setArchivo(datos.name);
-      // El resultado anterior es de otro proceso: dejarlo puesto pintaría cuellos de botella que
-      // el diagrama nuevo no tiene (o, peor, sobre ids que coinciden por casualidad).
-      setCorrida(null);
-      setSim({ tipo: 'inactivo' });
-      // La selección era del diagrama anterior: su id no tiene por qué existir en el nuevo.
-      setSeleccion(null);
-    }
-  }
-
   /**
    * Corre el escenario elegido sobre lo que hay en el lienzo **ahora**: se exporta el XML y se
    * vuelve a parsear, así una tarea recién añadida entra en la simulación sin recargar nada. El
@@ -245,28 +312,33 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
-    await store.putProcess(procesoId, await modelador.exportar());
+    try { await store.putProcess(procesoId, await modelador.exportar()); }
+    catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
   return (
     <div className="app">
       <header className="barra">
         <span className="proyecto">Lila Modeler</span>
-        <span className="archivo">{archivo}</span>
+        <span className="archivo">{projectName} · {dirty ? 'Sin guardar' : 'Guardado'}</span>
         <nav className="modos">
           {MODOS.map((m) => (
             <button
               key={m}
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
-              disabled={m === 'Comparar'}
+
               onClick={() => { setModo(m); if (m === 'Simular') setPestana('Simulación'); }}
             >
               {m}
             </button>
           ))}
         </nav>
-        <button type="button" className="boton" onClick={() => void abrir()}>
+        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo proyecto</button>
+        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir proyecto</button>
+        <button className="boton primario" disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar proyecto</button>
+        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
+        <button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
           Abrir .bpmn
         </button>
         <button type="button" className="boton primario" onClick={() => void exportar()}>
@@ -277,7 +349,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
           izquierda; la esquina inferior derecha queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
-      <div className="zona-modelo" style={{ visibility: modo === 'Resultados' ? 'hidden' : 'visible' }}>
+      <div className="zona-modelo" style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -294,9 +366,21 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <section className="zona-resultados">
           {corrida !== null && ir !== null
             ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
-            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'El historial anterior está desactualizado.'}</p>}
+            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'No hay corrida actual para el escenario seleccionado.'}</p>}
         </section>
       )}
+      {modo === 'Comparar' && <section className="zona-resultados">
+        <label>Escenario base <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
+          {Object.keys(escenarios).map((name) => <option key={name} value={name}>{etiquetaEscenario(name, escenarios)}</option>)}
+        </select></label>
+        {comparable && ir !== null
+          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result))}
+              runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
+              scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
+              baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
+          : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
+        {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
+      </section>}
       <aside className="panel">
         <nav className="pestanas">
           {PESTANAS.map((p) => (
@@ -325,7 +409,8 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
                   // vuelo es del escenario viejo, así que se mata: si no, terminaría después y
                   // pintaría sus cuellos de botella bajo el nombre del escenario nuevo.
                   cancelarCorrida();
-                  setCorrida(null);
+                  const run = latest.find((r) => r.scenarioName === e.target.value);
+                  setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
                   setSim({ tipo: 'inactivo' });
                 }}
               >
@@ -379,36 +464,24 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
               onCambio={(archivo, escenario) => {
                 setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
                 // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => Object.fromEntries(
-                  [...new Set([...Object.keys(escenarios), archivo])].map((key) => [key, (previous[key] ?? 0) + 1]),
-                ));
+                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
                 // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
                 // que al cambiar de escenario en el selector (LILA-064).
                 cancelarCorrida();
                 setCorrida(null);
               }}
-              onGuardar={() => {
-                void store.putScenario(
-                  procesoId,
-                  escenarioId.replace(/\.scenario\.json$/, ''),
-                  // El escenario puede ser inválido: se guarda igual y el panel lo marca. Es la
-                  // aceptación de LILA-061, y por eso el cast en vez de un `parse` que lo tire.
-                  (escenarios[escenarioId] ?? {}) as unknown as Scenario,
-                );
-              }}
+              onGuardar={() => { void guardar(); }}
               onDuplicar={(archivo, escenario) => {
                 setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
                 // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => Object.fromEntries(
-                  [...new Set([...Object.keys(escenarios), archivo])].map((key) => [key, (previous[key] ?? 0) + 1]),
-                ));
+                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
                 setEscenarioId(archivo);
                 cancelarCorrida();
                 setCorrida(null);
               }}
               ir={ir}
               seleccion={seleccion}
-              onSeleccionar={setSeleccion}
+              onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
             />
           </div>
         ) : (
@@ -417,12 +490,15 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       </aside>
 
       <nav className="diagramas">
+        <button className="boton" disabled={!modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
+        <button className="boton" disabled={!modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
         <button type="button" className="pestana activa">
           {archivo}
         </button>
       </nav>
 
       <footer className="estado">
+        {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         <span>{estado.elementos} elementos</span>
         <button
           type="button"

@@ -307,6 +307,7 @@ export function aggregateReplication(
   // de KPI de todas las replicaciones tengan el mismo conjunto de claves (LILA-027). Sin
   // `resources` en el escenario el mapa queda `{}`, igual que en M1 (R-DEG-1).
   const resources: Record<string, ResourceMetrics> = {};
+  const warnings = [...run.warnings];
   // ponytail: el mapa se construye solo desde los pools declarados; una `ref` a un pool
   // inexistente no llega hasta aquí porque `validateScenario` la rechaza con
   // `E-REC-DESCONOCIDO`. Techo: un pool que apareciese en el log sin estar declarado quedaría
@@ -325,13 +326,22 @@ export function aggregateReplication(
     }
     const fixedCost = (pool.fixedCost ?? 0) * (usesByPool.get(poolId) ?? 0);
     const unitCost = ((pool.costPerHour ?? 0) * busyTime) / 3600;
+    const utilization = available > 0 ? busyTime / available : 0;
     resources[poolId] = {
-      utilization: available > 0 ? busyTime / available : 0,
+      utilization,
       busyTime,
       fixedCost,
       unitCost,
       totalCost: fixedCost + unitCost,
     };
+    // R-CAL-9: una bajada de capacidad no interrumpe tareas ya iniciadas (R-CAL-11), por lo que
+    // su ocupación puede superar la capacidad integrada durante la ventana. El valor conserva
+    // esa evidencia; el aviso evita que un consumidor lo interprete como un porcentaje acotado.
+    if (utilization > 1 + Number.EPSILON * 16) {
+      warnings.push(
+        `W-UTILIZACION-MAYOR-UNO: ${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
+      );
+    }
   }
 
   // Ranking de cuellos de botella (sección 6 de RESULTS_FORMAT.md): `resourceWait.total`
@@ -381,6 +391,6 @@ export function aggregateReplication(
       totalCost,
     },
     bottlenecks,
-    warnings: [...run.warnings],
+    warnings,
   };
 }

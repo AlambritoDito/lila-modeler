@@ -76,11 +76,20 @@ function meanBottlenecks(results: readonly RunResult[]): BottleneckEntry[] {
   });
 
   return [...ids]
-    .map((elementId) => ({
-      elementId,
-      resourceWaitTotal: mean(byResult.map((entries) => entries.get(elementId)?.resourceWaitTotal ?? 0)),
-      utilization: mean(byResult.map((entries) => entries.get(elementId)?.utilization ?? 0)),
-    }))
+    .map((elementId) => {
+      const appearances = byResult.flatMap((entries) => {
+        const entry = entries.get(elementId);
+        return entry === undefined ? [] : [entry];
+      });
+      return {
+        elementId,
+        // La espera total es una métrica incondicional: una réplica sin espera aporta cero.
+        resourceWaitTotal: mean(byResult.map((entries) => entries.get(elementId)?.resourceWaitTotal ?? 0)),
+        // La utilización describe el recurso del cuello observado. Si el elemento no fue cuello
+        // en una réplica, no hay observación de esa relación y no se inventa un cero.
+        utilization: mean(appearances.map((entry) => entry.utilization)),
+      };
+    })
     .filter((entry) => entry.resourceWaitTotal > 0)
     .sort(
       (left, right) =>
