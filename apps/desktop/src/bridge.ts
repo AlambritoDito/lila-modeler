@@ -42,9 +42,31 @@ export interface LilaBridge {
   readProject(dir: string): Promise<LilaProjectDocument>;
   /**
    * Escribe el proyecto completo en `dir` (ya autorizada). Rechaza sin tocar disco si alguna
-   * corrida ya existe con otro contenido (`E-RUN-DUPLICADO`).
+   * corrida ya existe con otro contenido (`E-RUN-DUPLICADO`), si algún destino es un symlink
+   * (`E-SYMLINK`), si `options.saveAs` y la carpeta ya tiene otro proyecto (`E-CARPETA-OCUPADA`,
+   * OP-14), o si algún archivo cambió en disco desde la última lectura/escritura y no se pidió
+   * `options.overwrite` (`E-CAMBIO-EXTERNO`, OP-14 incremento 2).
    */
-  writeProject(dir: string, document: ProjectDocument): Promise<void>;
+  writeProject(dir: string, document: ProjectDocument, options?: WriteProjectOptions): Promise<void>;
+
+  /**
+   * Informa a main si el documento activo tiene cambios sin guardar (OP-14, issue #74): decide si
+   * `win.on('close')`/`before-quit` deben interceptar el cierre para ofrecer guardar/descartar.
+   */
+  setDirty(dirty: boolean): void;
+  /**
+   * Registra `cb` para cuando main pide guardar antes de cerrar (el usuario eligió "Guardar" en el
+   * diálogo nativo de cierre). `cb` debe resolver `true` solo si guardó con éxito: main usa ese
+   * valor para decidir si cierra la ventana o mantiene el error visible. Devuelve una función para
+   * cancelar la suscripción. El preload solo reenvía el evento IPC — no hay lógica aquí más que la
+   * de mensajería (ver `preload.cts`).
+   */
+  onCloseRequested(cb: () => Promise<boolean>): () => void;
+}
+
+export interface WriteProjectOptions {
+  readonly saveAs?: boolean;
+  readonly overwrite?: boolean;
 }
 
 declare global {

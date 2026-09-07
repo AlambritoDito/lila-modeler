@@ -12,8 +12,9 @@
  * - `lila-project.json`: `{ version: 1, id, name, model: { id, name, revision }, scenarioRevisions }`.
  * - `runs/<runId>.result.json`: el `StoredRun` completo.
  */
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { isSymlink } from './safePaths.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
 
 const MODEL_FILE = 'model.bpmn';
@@ -110,8 +111,13 @@ async function readScenarios(
 ): Promise<Record<string, ScenarioDocument>> {
   let entries: string[];
   try {
+    // `entry.isFile()`/`isSymbolicLink()` vienen de `d_type` (sin stat adicional) y son
+    // mutuamente excluyentes: un symlink NO cuenta como `isFile()`, así que sin incluir también
+    // `isSymbolicLink()` aquí, un `*.scenario.json` que sea enlace desaparecería en silencio en
+    // vez de quedar excluido con su motivo en `problems` (OP-14, revisión de A: "sigue symlinks
+    // fuera de la carpeta autorizada", issue #71).
     entries = (await readdir(dir, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(SCENARIO_SUFFIX))
+      .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(SCENARIO_SUFFIX))
       .map((entry) => entry.name);
   } catch (error) {
     if (isNotFound(error)) return {};
@@ -120,8 +126,12 @@ async function readScenarios(
 
   const scenarios: Record<string, ScenarioDocument> = {};
   for (const name of entries) {
+    const filePath = join(dir, name);
     try {
-      const raw = await readFile(join(dir, name), 'utf8');
+      if (await isSymlink(filePath)) {
+        throw new Error('es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).');
+      }
+      const raw = await readFile(filePath, 'utf8');
       const parsed: unknown = JSON.parse(raw);
       if (!isPlainObject(parsed)) {
         throw new Error('el contenido no es un objeto JSON.');
@@ -136,10 +146,23 @@ async function readScenarios(
 
 async function readRuns(dir: string, problems: ProjectProblem[]): Promise<StoredRun[]> {
   const runsDir = join(dir, RUNS_DIR);
+
+  // `runs` en sí como symlink hacia fuera: `readdir(runsDir)` seguiría el enlace y listaría el
+  // contenido de una carpeta ajena sin que ningún archivo individual "parezca" un enlace (OP-14,
+  // revisión de A, issue #71). Se excluye entera, igual que un `*.scenario.json` roto: no se
+  // aborta la lectura del proyecto por esto.
+  if (await isSymlink(runsDir)) {
+    problems.push({
+      file: RUNS_DIR,
+      message: 'es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).',
+    });
+    return [];
+  }
+
   let entries: string[];
   try {
     entries = (await readdir(runsDir, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(RUN_SUFFIX))
+      .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(RUN_SUFFIX))
       .map((entry) => entry.name);
   } catch (error) {
     if (isNotFound(error)) return [];
@@ -150,6 +173,9 @@ async function readRuns(dir: string, problems: ProjectProblem[]): Promise<Stored
   for (const name of entries) {
     const file = `${RUNS_DIR}/${name}`;
     try {
+      if (await isSymlink(join(runsDir, name))) {
+        throw new Error('es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).');
+      }
       const raw = await readFile(join(runsDir, name), 'utf8');
       const parsed: unknown = JSON.parse(raw);
       if (
@@ -214,19 +240,103 @@ function randomSuffix(): string {
   return `${process.pid}-${crypto.randomUUID()}`;
 }
 
+export interface WriteProjectOptions {
+  /**
+   * `true` cuando esta escritura es un "Guardar como" hacia una carpeta recién elegida (no la
+   * activa hasta ahora): dispara la comprobación de "carpeta ocupada" (ver `assertFolderNotOccupied`).
+   * Un guardado normal a la carpeta ya activa no la necesita (y no debe bloquear el caso legítimo
+   * de "abrí una carpeta con un `model.bpmn` puesto a mano y ahora guardo ahí").
+   */
+  readonly saveAs?: boolean;
+  /**
+   * `true` para saltar la detección de cambios externos (OP-14, incremento 2): ver
+   * `assertNoExternalChanges`.
+   */
+  readonly overwrite?: boolean;
+}
+
 /**
- * Escribe el documento completo. Antes de tocar el disco resuelve todas las corridas: una que ya
- * existe con **otro** contenido es `E-RUN-DUPLICADO` y aborta sin escribir nada (ni el modelo, ni
- * los escenarios, ni el manifiesto) — "no reemplazar archivos válidos parcialmente" del contrato.
- * Una corrida con el mismo contenido es no-op (no se reescribe). El resto de archivos (modelo,
- * escenarios, manifiesto) siempre se reescriben.
+ * Guardia de "Guardar como" (OP-14, revisión de A: "openProject no debe permitir guardar el
+ * proyecto anterior en la carpeta nueva", issues #74/#70). Antes de escribir en una carpeta recién
+ * elegida (no la que ya se venía usando), rechaza si esa carpeta ya contiene otro proyecto:
+ * `lila-project.json` con un `id` distinto, o un `model.bpmn` sin manifiesto (contenido ajeno sin
+ * forma de saber si es "el mismo proyecto"). Una carpeta vacía, o con el manifiesto del mismo
+ * `documentId`, es válida. Un manifiesto ilegible se trata como ausente (mismo criterio que
+ * `readManifest`): no bloquea una carpeta que en realidad podría ser propia por un JSON roto.
  */
-export async function writeProjectFolder(dir: string, document: ProjectDocument): Promise<void> {
+async function assertFolderNotOccupied(dir: string, documentId: string): Promise<void> {
+  let manifestId: string | null = null;
+  try {
+    const raw = await readFile(join(dir, MANIFEST_FILE), 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (isPlainObject(parsed) && typeof parsed.id === 'string') manifestId = parsed.id;
+  } catch (error) {
+    if (!isNotFound(error)) {
+      // Manifiesto ilegible (no JSON, permisos, etc.): no se puede determinar el dueño: se sigue
+      // como si no existiera en vez de bloquear con un falso positivo.
+    }
+  }
+  if (manifestId !== null) {
+    if (manifestId !== documentId) {
+      throw new ProjectIOError(
+        'E-CARPETA-OCUPADA',
+        `La carpeta ya contiene el proyecto "${manifestId}"; "Guardar como" no puede escribir ahí el proyecto "${documentId}".`,
+      );
+    }
+    return;
+  }
+  try {
+    await stat(join(dir, MODEL_FILE));
+  } catch (error) {
+    if (isNotFound(error)) return; // sin manifiesto ni modelo: carpeta vacía, válida.
+    throw error;
+  }
+  throw new ProjectIOError(
+    'E-CARPETA-OCUPADA',
+    `La carpeta ya contiene "${MODEL_FILE}" de otro proyecto sin manifiesto; "Guardar como" no puede escribir ahí.`,
+  );
+}
+
+/** Rechaza (`E-SYMLINK`) si `dest` ya existe como symlink: no se escribe para no reemplazar ni seguir un enlace hacia fuera de la carpeta autorizada. */
+async function assertNotSymlinkDestination(dest: string): Promise<void> {
+  if (await isSymlink(dest)) {
+    throw new ProjectIOError(
+      'E-SYMLINK',
+      `"${dest}" es un symlink; no se escribe para no seguirlo fuera de la carpeta autorizada.`,
+    );
+  }
+}
+
+/**
+ * Escribe el documento completo. Antes de tocar el disco: (a) si `options.saveAs`, verifica que la
+ * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) resuelve todas las
+ * corridas — una que ya existe con **otro** contenido es `E-RUN-DUPLICADO` y aborta sin escribir
+ * nada (ni el modelo, ni los escenarios, ni el manifiesto) — "no reemplazar archivos válidos
+ * parcialmente" del contrato; una corrida con el mismo contenido es no-op; (c) rechaza si algún
+ * destino (incluida la propia carpeta `runs`) ya es un symlink, sin tocar el enlace ni lo que
+ * apunte fuera (OP-14, revisión de A, issue #71). El resto de archivos (modelo, escenarios,
+ * manifiesto) siempre se reescriben.
+ */
+export async function writeProjectFolder(
+  dir: string,
+  document: ProjectDocument,
+  options: WriteProjectOptions = {},
+): Promise<void> {
+  if (options.saveAs === true) {
+    await assertFolderNotOccupied(dir, document.id);
+  }
+
   const runsDir = join(dir, RUNS_DIR);
   const runWrites: PendingWrite[] = [];
 
+  if (document.runs.length > 0) {
+    // La carpeta `runs` en sí como symlink hacia fuera: `readFile`/`mkdir` de abajo la seguirían.
+    await assertNotSymlinkDestination(runsDir);
+  }
+
   for (const run of document.runs) {
     const dest = join(runsDir, `${run.id}${RUN_SUFFIX}`);
+    await assertNotSymlinkDestination(dest);
     const content = `${JSON.stringify(run, null, 2)}\n`;
     let existing: string | null = null;
     try {
@@ -262,6 +372,13 @@ export async function writeProjectFolder(dir: string, document: ProjectDocument)
     })),
     ...runWrites,
   ];
+
+  // Defensa en profundidad además del chequeo puntual de `runsDir`/cada corrida de arriba: vuelve
+  // a comprobar TODOS los destinos (modelo, manifiesto, escenarios incluidos) justo antes de tocar
+  // disco, para que ningún camino nuevo que se añada aquí pueda olvidarse de la comprobación.
+  for (const { dest } of writes) {
+    await assertNotSymlinkDestination(dest);
+  }
 
   if (runWrites.length > 0) {
     await mkdir(runsDir, { recursive: true });
