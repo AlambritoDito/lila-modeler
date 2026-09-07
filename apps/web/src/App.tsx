@@ -72,7 +72,7 @@ type EstadoSim =
   | { tipo: 'simulando'; progreso: SimulationProgress | null }
   | { tipo: 'error'; mensaje: string };
 
-export function App({ store }: { store: ProjectStore }): React.JSX.Element {
+export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const [modelador, setModelador] = useState<Modelador | null>(null);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -344,12 +344,12 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir proyecto</button>
         <button className="boton primario" disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar proyecto</button>
         <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
-        <button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
+        {bpmnFilesEnabled && <><button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
           Abrir .bpmn
         </button>
         <button type="button" className="boton primario" onClick={() => void exportar()}>
           Exportar .bpmn
-        </button>
+        </button></>}
       </header>
 
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la

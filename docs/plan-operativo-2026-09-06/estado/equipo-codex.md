@@ -33,3 +33,5 @@ QA navegador real 65560c7: proyecto propio → ASIS 60s → TOBE 30s → Worker 
 Próximo: integrar OP12 listo, OP08/14 listos de B/F y último C; elegir DesktopStore, checkpoint completo serializado, entregar SHA a F para aceptación empaquetada con Vite detenido. OP16/extras pospuestos. No tocar producción/main/releases/npm ni limpiar worktrees.
 
 Último C 17ec08f integrado: export default no interactivo bloquea pérdidas, guardar/export explícitos usan interactivo:true; preflight antes de createProject; edición de proceso/anotaciones y undo de primera extensión. 45 tests C dirigidos y tipos pasan. Sin nuevos frentes: solo cierre P0 e integración B/F.
+
+Bootstrap B integrado con 63 tests App/store + tipos web/desktop PASS; main elige DesktopStore. A oculta botones de BPMN suelto en escritorio mediante bpmnFilesEnabled=false para evitar el uso incorrecto de métodos históricos; no requiere trabajo de B para el recorrido por carpetas. Mantener así hasta import/export real. Siguiente consume OP11 listo de E.
