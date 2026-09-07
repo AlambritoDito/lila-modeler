@@ -12,7 +12,9 @@ import { applyTheme } from './theme/applyTheme';
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
   // LILA-209: el shell lintea el escenario activo con la misma función que el panel; aquí se
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
-  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn() }));
+  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
+  // LILA-207: los servicios que la paleta usa para insertar una figura.
+  fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn() }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
@@ -28,6 +30,18 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador
     exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
+    // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
+    servicios: {
+      modeling: { createShape: mocks.crearFigura },
+      elementFactory: { createShape: mocks.fabricar, createParticipantShape: vi.fn() },
+      canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
+      create: { start: mocks.arrastrar },
+      directEditing: { activate: mocks.editarNombre },
+      // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
+      // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
+      elementRegistry: { filter: () => [] },
+      rules: { allowed: () => true },
+    },
   } as unknown as Modelador); }, [onListo]);
   return <div>Modelo montado</div>;
 } }));
@@ -59,6 +73,8 @@ beforeEach(async () => {
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.worker.mockResolvedValue(done);
   mocks.exportXml.mockResolvedValue(newModelXml());
+  mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
+  mocks.crearFigura.mockImplementation((figura: object) => figura);
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
@@ -335,4 +351,45 @@ it('el pie lleva errores, avisos, escenario y semilla heredada del escenario act
   await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(pie.textContent).toContain('TO-BE 3 cajeros');
   expect(pie.textContent).toContain('Semilla 42');
+});
+
+/** El setter nativo + el evento `input` es lo que React traduce a `onChange`. */
+function teclear(campo: HTMLInputElement, texto: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  act(() => {
+    setter?.call(campo, texto);
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+const figuras = (): HTMLButtonElement[] => [...container.querySelectorAll<HTMLButtonElement>('.paleta .figura')];
+
+it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se compacta', async () => {
+  const tarea = figuras().find((b) => b.title === 'Tarea de usuario');
+  expect(tarea).toBeDefined();
+  // `Enter` sobre un ítem es la activación por defecto del `<button>`; jsdom no la ejecuta
+  // (no implementa el comportamiento de activación del teclado), así que se comprueba que el
+  // ítem es un botón nativo enfocable —que es lo que da ese `Enter`— y se activa.
+  await act(async () => { tarea!.focus(); });
+  expect(document.activeElement).toBe(tarea);
+  await act(async () => { tarea!.click(); });
+  expect(mocks.fabricar).toHaveBeenCalledWith({ type: 'bpmn:UserTask', eventDefinitionType: undefined, isExpanded: undefined });
+  // Centro del viewbox de arriba, y colgada de la raíz visible.
+  expect(mocks.crearFigura).toHaveBeenCalledWith({ type: 'bpmn:UserTask', eventDefinitionType: undefined, isExpanded: undefined, id: 'Figura_nueva' }, { x: 500, y: 250 }, 'raiz');
+  expect(mocks.editarNombre).toHaveBeenCalledOnce();
+
+  // El filtro deja solo las coincidencias, sin acentos ni mayúsculas, y se lleva los grupos vacíos.
+  const filtro = container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!;
+  teclear(filtro, 'anotacion');
+  expect(figuras().map((b) => b.title)).toEqual(['Anotación']);
+  expect([...container.querySelectorAll('.paleta summary')].map((s) => s.textContent)).toEqual(['Artefactos']);
+  teclear(filtro, '');
+  expect(figuras().length).toBeGreaterThan(15);
+
+  // Modo compacto: se va el campo de filtro y los nombres, pero cada ítem conserva su tooltip.
+  await act(async () => { porEtiqueta('Modo compacto').click(); });
+  expect(container.querySelector('.paleta.compacta')).not.toBeNull();
+  expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
+  expect(figuras().find((b) => b.title === 'Tarea de usuario')).toBeDefined();
+  expect(localStorage.getItem('lila.paleta')).toBe('compacta');
 });

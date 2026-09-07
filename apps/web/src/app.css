@@ -25,11 +25,13 @@ body {
 .app {
   display: grid;
   grid-template-areas:
-    'barra     barra'
-    'lienzo    panel'
-    'diagramas panel'
-    'estado    estado';
-  grid-template-columns: 1fr 320px;
+    'barra     barra     barra'
+    'paleta    lienzo    panel'
+    'paleta    diagramas panel'
+    'estado    estado    estado';
+  /* La paleta (LILA-207) fija su propio ancho —236 px, o 48 en compacto— y la columna se
+     encoge a 0 cuando no se pinta (modos Resultados y Comparar). */
+  grid-template-columns: auto 1fr 320px;
   grid-template-rows: auto 1fr auto auto;
   height: 100vh;
 }
@@ -900,17 +902,223 @@ body {
 .diagramas .cerrar:hover:not(:disabled) {
   color: var(--fg-primary);
 }
+/* ---------- paleta de figuras (LILA-207) ---------- */
+
+/* Medidas del artboard 01 (`docs/design/Lila Modeler.dc.html`): raíl de 236 px, filtro y botón
+   de 28 px, filas de 30 px, rótulos de grupo en versalita de 10 px y pie en mono de 10 px. No
+   hay tokens para esos anchos, así que van en píxeles; los paddings verticales se multiplican
+   por `--espacio` para que la densidad los siga moviendo. */
+.paleta {
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  grid-area: paleta;
+  min-height: 0;
+  width: 236px;
+}
+
+/* Modo compacto: solo iconos. El nombre sigue en el `title` de cada botón, que es el tooltip. */
+.paleta.compacta {
+  width: 48px;
+}
+
+.paleta-filtro {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: calc(10px * var(--espacio, 1)) 12px;
+}
+
+.paleta.compacta .paleta-filtro {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.paleta-filtro label {
+  align-items: center;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--fg-disabled);
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  height: 28px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.paleta-filtro input {
+  background: none;
+  border: none;
+  color: var(--fg-primary);
+  font: 400 11px/1 var(--font-ui);
+  min-width: 0;
+  outline: none;
+  width: 100%;
+}
+
+.paleta-filtro .boton.icono {
+  background: none;
+  height: 28px;
+  width: 28px;
+}
+
+.paleta-filtro .boton.icono[aria-pressed='true'] {
+  border-color: var(--accent-tertiary);
+  color: var(--accent-tertiary);
+}
+
+.paleta-grupos {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.paleta-grupos summary {
+  align-items: center;
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: flex;
+  font: 700 10px/1 var(--font-ui);
+  gap: 6px;
+  letter-spacing: 0.14em;
+  list-style: none;
+  padding: calc(9px * var(--espacio, 1)) 12px calc(6px * var(--espacio, 1));
+  text-transform: uppercase;
+}
+
+.paleta-grupos summary::-webkit-details-marker {
+  display: none;
+}
+
+/* El chevrón del artboard: apunta abajo cuando el grupo está abierto y a la derecha cuando no. */
+.paleta-grupos summary::before {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  content: '';
+  height: 5px;
+  rotate: 45deg;
+  translate: 0 -2px;
+  width: 5px;
+}
+
+.paleta-grupos details:not([open]) summary {
+  color: var(--fg-disabled);
+}
+
+.paleta-grupos details:not([open]) summary::before {
+  rotate: -45deg;
+  translate: 0 0;
+}
+
+/* En compacto no hay sitio para el rótulo del grupo: queda una raya de separación y los iconos
+   se ven seguidos, así que los grupos se fuerzan abiertos (plegarlos sin rótulo sería un
+   control invisible). */
+.paleta.compacta .paleta-grupos summary {
+  display: none;
+}
+
+.paleta.compacta .paleta-grupos details + details {
+  border-top: 1px solid var(--border);
+}
+
+.paleta .figura {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--fg-primary);
+  cursor: grab;
+  display: flex;
+  font: 400 12px/1 var(--font-ui);
+  gap: 10px;
+  /* 30 px es la fila del artboard a densidad normal; la densidad la mueve como a la barra y a
+     las pestañas (`--espacio`), que si no la paleta se queda fuera del ajuste. */
+  height: calc(30px * var(--espacio, 1));
+  padding: 0 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.paleta .figura:hover:enabled,
+.paleta .figura:focus-visible {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+  outline: none;
+}
+
+.paleta .figura:disabled {
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+/* Los iconos son la tipografía `bpmn-font` que ya carga `bpmn-js.css`; aquí solo se les da
+   tamaño y se alinean con el nombre. */
+.paleta .figura [class^='bpmn-icon-'] {
+  flex: none;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.paleta .figura .nombre {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* «arrastrar» solo aparece en el ítem apuntado, como en el artboard. */
+.paleta .figura .pista {
+  font: 500 9px/1 var(--font-mono);
+  opacity: 0;
+}
+
+.paleta .figura:hover:enabled .pista,
+.paleta .figura:focus-visible .pista {
+  opacity: 0.75;
+}
+
+.paleta.compacta .figura {
+  justify-content: center;
+  padding: 0;
+}
+
+.paleta.compacta .figura .nombre,
+.paleta.compacta .figura .pista {
+  display: none;
+}
+
+.paleta .vacio {
+  color: var(--fg-disabled);
+  margin: 0;
+  padding: calc(6px * var(--espacio, 1)) 12px;
+}
+
+.paleta footer {
+  border-top: 1px solid var(--border);
+  color: var(--fg-disabled);
+  font: 400 10px/1.4 var(--font-mono);
+  padding: calc(8px * var(--espacio, 1)) 12px;
+}
+
+.paleta footer span {
+  color: var(--fg-muted);
+}
+
+/* En 48 px el pie no cabe: el modo compacto se explica solo con el botón, que sigue teniendo su
+   tooltip. */
+.paleta.compacta footer {
+  display: none;
+}
+
 /* ---------- validación (LILA-209) ---------- */
 
-/* ponytail: 56 px = alto del chip + su margen, a mano. Techo: si los chips cambian de alto hay
-   que tocar este número; camino, la regla entera sobra con LILA-207 (paleta en un raíl propio).
-   La paleta de bpmn-js se pinta dentro del lienzo, en la esquina superior izquierda
-   (`left: 20px; top: 20px`), que es justo donde van los chips. Se baja lo que miden los chips
-   más su margen; el selector es más específico que el de bpmn-js, así que no hace falta
-   `!important`. En el artboard la paleta es un raíl propio fuera del lienzo (LILA-207) y
-   entonces esta regla sobra. Su ancho no sirve para esquivarla: cambia sola a dos columnas
-   cuando el lienzo no es lo bastante alto. */
-.lienzo .djs-palette { top: 56px; }
+/* La paleta de bpmn-js se pintaba dentro del lienzo, en la esquina superior izquierda, justo
+   donde van los chips. Desde LILA-207 la paleta es un raíl propio fuera del lienzo (`.paleta`,
+   abajo) con nombres, filtro y modo compacto, así que la nativa se esconde y la esquina vuelve
+   a ser de los chips. */
+.lienzo .djs-palette { display: none; }
 
 /* Chips «n errores · n avisos» arriba a la izquierda del lienzo, como en
    `docs/design/01-modelar-1440.png`. La separación de 1 px entre los dos chips es el fondo del
