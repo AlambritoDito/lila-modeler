@@ -10,20 +10,11 @@ El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
 **referencia, no código a copiar**: la app se construye con los tokens del brief
 (`apps/web/src/theme/`), no con el design system del artefacto.
 
-## Capturas de la app real
+## Captura de la app real
 
-**No** son artboards: son capturas de la app que corre en `apps/web`, con
-`examples/pedido/model.bpmn` cargado, hechas con Chrome headless a 1440×900 sobre el tema
-Eva-01. Sirven para comparar lo construido contra los artboards de abajo; la lectura de esa
-comparación está en `COMPARACION-2026-09-07.md`.
-
-| Archivo | Qué enseña | Ticket |
-|---|---|---|
-| `shell-modelar.png` | el shell original (barra, lienzo, panel, estado) | LILA-057 |
-| `app-2026-09-07-modelar-eva01.png` | la app antes de alinearla con el artefacto | — |
-| `app-05-resultados.png` | Resultados con las cifras en JetBrains Mono a la derecha | #238 |
-| `app-12-modernist.png` | radio 0 y la escala de densidad | #238 |
-| `app-01-modelar-1440.png` | Modelar con la barra superior y el pie del artboard 01 | #237 |
+`shell-modelar.png` **no** es un artboard: es una captura de 1440×900 de la app que corre en
+`apps/web`, con `examples/pedido/model.bpmn` cargado (LILA-057). Sirve para comparar lo
+construido contra los artboards de abajo cuando estos existan.
 
 ## Capturas de los artboards
 
@@ -60,6 +51,7 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-05-resultados.png` | Resultados con una corrida de `examples/pedido`: cifras en mono alineadas a la derecha | #238 |
 | `app-01c-minimapa.png` | Modelar con el minimapa abierto abajo a la izquierda, zoom +/−/ajustar abajo a la derecha y pestaña con ✕ y «+» | #240 |
 | `app-01d-marcadores.png` | Modelar con el chip «6 avisos» y el disco de validación sobre cada figura sin parámetros en el escenario AS-IS | #241 |
+| `app-01-modelar-1440.png` | Modelar con la barra superior del artboard 01 (logo, proyecto + archivo en mono, modos, buscador, deshacer/rehacer, EJECUTAR SIMULACIÓN, ⚙) y el pie con errores/avisos, escenario, semilla, densidad y zoom | #237 |
 
 ## Inventario de componentes React
 
