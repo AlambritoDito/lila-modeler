@@ -133,7 +133,22 @@ describe('DesktopStore.createProject', () => {
     const doc = documentoBase();
 
     await expect(store.createProject(doc)).resolves.toEqual(doc);
-    expect(bridge.writes).toEqual([{ dir: '/carpeta/nueva', document: doc }]);
+    expect(bridge.writes).toEqual([{ dir: '/carpeta/nueva', document: doc, options: { saveAs: true } }]);
+  });
+
+  it('carpeta ocupada (writeProject rechaza E-CARPETA-OCUPADA): rechaza y no deja el proyecto como activo (OP-14, revisión de A, issues #71/#74)', async () => {
+    // Simula lo que hace `assertFolderNotOccupied` en `projectIO.ts` cuando main recibe
+    // `saveAs: true` sobre una carpeta con otro proyecto: rechaza sin escribir. La cobertura real
+    // de esa lógica (con fs real) vive en `projectIO.test.ts`; esto verifica que `DesktopStore`
+    // realmente le manda `saveAs: true` para que esa comprobación llegue a correr.
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/ocupada');
+    bridge.writeProject = async (_dir, _document, options) => {
+      if (options?.saveAs === true) throw new Error('E-CARPETA-OCUPADA: la carpeta ya contiene otro proyecto.');
+    };
+    const store = new DesktopStore(bridge);
+
+    await expect(store.createProject(documentoBase())).rejects.toThrow('E-CARPETA-OCUPADA');
   });
 
   it('el error de writeProject rechaza la promesa', async () => {
@@ -201,6 +216,18 @@ describe('DesktopStore.saveProject', () => {
     expect(bridge.writes).toEqual([]);
   });
 
+  it('sin carpeta activa (primer guardado): pasa { saveAs: true } aunque no se pida "Guardar como" (OP-14, revisión de A: P0 "nuevo proyecto sobre carpeta ocupada aún sobrescribe", issues #71/#74)', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/recien-elegida');
+    const store = new DesktopStore(bridge);
+    const doc = documentoBase();
+
+    await expect(store.saveProject(doc)).resolves.toEqual(doc);
+    expect(bridge.writes).toEqual([
+      { dir: '/carpeta/recien-elegida', document: doc, options: { saveAs: true, overwrite: false } },
+    ]);
+  });
+
   it('con carpeta activa (de un createProject previo): guarda sin volver a preguntar', async () => {
     const bridge = new FakeBridge();
     bridge.queueChooseFolder('/carpeta/pedido');
@@ -210,7 +237,7 @@ describe('DesktopStore.saveProject', () => {
     const doc2 = documentoBase({ name: 'Pedido v2' });
     await expect(store.saveProject(doc2)).resolves.toEqual(doc2);
     expect(bridge.writes).toEqual([
-      { dir: '/carpeta/pedido', document: documentoBase() },
+      { dir: '/carpeta/pedido', document: documentoBase(), options: { saveAs: true } },
       { dir: '/carpeta/pedido', document: doc2, options: { saveAs: false, overwrite: false } },
     ]);
   });
@@ -266,7 +293,9 @@ describe('DesktopStore.saveProject — guardia de identidad (E-PROYECTO-DISTINTO
     const otro = documentoBase({ id: 'proyecto-2' });
     await expect(store.saveProject(otro)).rejects.toThrow('E-PROYECTO-DISTINTO');
     // No se tocó el bridge: ni siquiera se preguntó por una carpeta ni se escribió nada.
-    expect(bridge.writes).toEqual([{ dir: '/carpeta/pedido', document: documentoBase({ id: 'proyecto-1' }) }]);
+    expect(bridge.writes).toEqual([
+      { dir: '/carpeta/pedido', document: documentoBase({ id: 'proyecto-1' }), options: { saveAs: true } },
+    ]);
   });
 
   it('así el shell nunca escribe el proyecto anterior en la carpeta recién abierta', async () => {
@@ -284,7 +313,9 @@ describe('DesktopStore.saveProject — guardia de identidad (E-PROYECTO-DISTINTO
     await expect(store.saveProject(documentoBase({ id: 'proyecto-anterior' }))).rejects.toThrow(
       'E-PROYECTO-DISTINTO',
     );
-    expect(bridge.writes).toEqual([{ dir: '/carpeta/anterior', document: documentoBase({ id: 'proyecto-anterior' }) }]);
+    expect(bridge.writes).toEqual([
+      { dir: '/carpeta/anterior', document: documentoBase({ id: 'proyecto-anterior' }), options: { saveAs: true } },
+    ]);
   });
 
   it('"Guardar como" (saveAs) sí permite escribir un documento con otro id', async () => {
