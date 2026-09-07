@@ -345,7 +345,8 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 - **R-ARR-3 — Parada de la corrida.** `t_stop = run.duration` si está definido; si no, la corrida
   termina cuando el heap se vacía. Con ambos definidos, manda lo primero que ocurra: el heap vacío
   también termina la corrida antes de `run.duration`. Es error `E-SIN-PARADA` que no haya ni
-  `run.duration` ni ningún `triggerCount`. *(prueba: LILA-026, LILA-013)*
+  `run.duration` ni ningún `triggerCount` **en un start** (solo el `start` monta generador, R-ARR-1:
+  un `triggerCount` en un `timer` intermedio es `E-CAMPO-NO-APLICA` y no cuenta como parada). *(prueba: LILA-026, LILA-013)*
 - **R-ARR-4 — Ejemplo normativo.** `duration = 3600`, `triggerCount = 10000`, llegadas constantes
   cada 10 s ⇒ llegadas en `t = 0, 10, …, 3590` ⇒ `started = 360`. *(prueba: LILA-026)*
 - **R-ARR-5 — En vuelo al parar.** En `t_stop` se descartan los eventos pendientes. Los casos

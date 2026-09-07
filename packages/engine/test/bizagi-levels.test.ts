@@ -105,7 +105,7 @@ test('nivel 1: los conteos publicados (corregido y roto) suman el total de token
   );
   const corrected = expected.values.correctedRun.instancesCompleted;
   expect(corrected.green + corrected.yellow + corrected.red).toBe(corrected.total);
-  expect(corrected.total).toBe(expected.values.maxArrivalCount);
+  expect(corrected.total).toBe(expected.values.configuration.maxArrivalCount);
 });
 
 test('nivel 3 y nivel 4: mismo proceso y mismos recursos base que nivel 2 (mismo Emergency attendance process)', () => {

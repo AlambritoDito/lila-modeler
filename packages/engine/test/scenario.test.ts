@@ -175,7 +175,7 @@ describe('validateScenario contra el IR', () => {
     expect(scenarioErrors(validateScenario(scenario, pedidoIr()))).toEqual([]);
   });
 
-  test('probability fuera de un sequence flow y selection sin resources son error', () => {
+  test('probability, selection e interTriggerTimer en un timer intermedio son error (R4, R5, R14)', () => {
     const raw = clone(AS_IS) as Record<string, never>;
     (raw['elements'] as Record<string, Record<string, unknown>>)['Timer_Reposo'] = {
       probability: 0.5,
@@ -184,8 +184,16 @@ describe('validateScenario contra el IR', () => {
     };
     const scenario = ScenarioSchema.parse(raw);
 
+    // R5 (LILA-186 QA): `interTriggerTimer` solo va en un `start`. El «timer generador» de R5 es
+    // el `bpmn:startEvent` con `timerEventDefinition`, que SEMANTICS § 2 ya mapea a `start`; un
+    // `timer` en el IR es el `intermediateCatchEvent` de retardo, sobre el que `core/sim.ts`
+    // nunca monta generador de llegadas.
     const codes = scenarioErrors(validateScenario(scenario, pedidoIr())).map((e) => e.path);
-    expect(codes).toEqual(['elements.Timer_Reposo.probability', 'elements.Timer_Reposo.selection']);
+    expect(codes).toEqual([
+      'elements.Timer_Reposo.probability',
+      'elements.Timer_Reposo.interTriggerTimer',
+      'elements.Timer_Reposo.selection',
+    ]);
   });
 
   test('una ref de recurso o de calendario inexistente es error (R9)', () => {

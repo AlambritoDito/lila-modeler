@@ -2,11 +2,10 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "Bizagi nivel 4 - analisis de calendarios (3 enfermeras + turnos)",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_4_example.htm sobre la configuracion de recursos del nivel 3 (3 enfermeras). SCENARIO_FORMAT.md v1 no permite que un mismo pool de recursos tenga capacidad distinta segun el calendario (Bizagi si lo permite); los 4 recursos cuya disponibilidad varia por turno (Call center agent, Basic ambulance, Quick attention vehicle, Receptionist) se modelan como 3 pools -- uno por turno, cada uno con su propio 'calendar' y su capacidad de esa franja -- y la tarea los selecciona con selection:'or' (encola en los 3, arranca con el que este abierto; como los calendarios no se solapan, en la practica solo uno esta disponible a la vez). Nurse y Ambulance no varian por turno (3 y 4 en las tres franjas) y se dejan como un solo pool sin calendario (24x7). Ver examples/bizagi-levels/level-4/README y expected.json.",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_4_example.htm sobre la configuracion de recursos del nivel 3 (3 enfermeras). Llegadas y probabilidades: ver la nota de examples/bizagi-levels/level-2/scenario.json (mismo control constante de 5 min, 2017 tokens, Green/Yellow/Red 20/30/50%). SCENARIO_FORMAT.md v1 no permite que un mismo pool de recursos tenga capacidad distinta segun el calendario (Bizagi si lo permite, LILA-164); los 4 recursos cuya disponibilidad varia por turno (Call center agent, Basic ambulance, Quick attention vehicle, Receptionist) se modelan como 3 pools -- uno por turno, cada uno con su propio 'calendar' y su capacidad de esa franja -- y la tarea los selecciona con selection:'or' (encola en los 3, arranca con el que este abierto; como los calendarios no se solapan, en la practica solo uno esta disponible a la vez). Nurse y Ambulance no varian por turno (3 y 4 en las tres franjas) y se dejan como un solo pool sin calendario (24x7). Asignacion QAV/BA: igual que en level-3/scenario.json (ver su nota) -- QAV con quickAttentionVehicle_*, BA con basicAmbulance_*, la lectura que cuadra con las tablas de costo/utilizacion publicadas y no con la prosa cruzada de requerimientos. Ver examples/bizagi-levels/level-4/README y expected.json. El workaround de pools por turno y su espera fuera de horario (offHoursWait) queda documentado como pendiente de LILA-164 en docs/BIZAGI_PARITY.md.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T00:00:00+00:00",
-    "duration": 604800,
     "currency": "USD"
   },
   "calendars": {
@@ -38,7 +37,10 @@
     "receptionist_night":   { "name": "Receptionist (night)",   "type": "role", "capacity": 1, "fixedCost": 3, "costPerHour": 0, "calendar": "night" }
   },
   "elements": {
-    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "constant", "value": 300 }, "triggerCount": 2017 },
+    "Flow_Red":    { "probability": 0.5 },
+    "Flow_Yellow": { "probability": 0.3 },
+    "Flow_Green":  { "probability": 0.2 },
     "Task_Recibir": {
       "processingTime": { "type": "constant", "value": 240 }, "fixedCost": 2,
       "resources": [ { "ref": "callCenterAgent_morning" }, { "ref": "callCenterAgent_day" }, { "ref": "callCenterAgent_night" } ],
@@ -52,12 +54,12 @@
                          "resources": [ { "ref": "ambulance", "quantity": 1 } ] },
     "Task_LlegarQAV": {
       "processingTime": { "type": "constant", "value": 420 }, "fixedCost": 0,
-      "resources": [ { "ref": "basicAmbulance_morning" }, { "ref": "basicAmbulance_day" }, { "ref": "basicAmbulance_night" } ],
+      "resources": [ { "ref": "quickAttentionVehicle_morning" }, { "ref": "quickAttentionVehicle_day" }, { "ref": "quickAttentionVehicle_night" } ],
       "selection": "or"
     },
     "Task_LlegarBA": {
       "processingTime": { "type": "constant", "value": 600 }, "fixedCost": 0,
-      "resources": [ { "ref": "quickAttentionVehicle_morning" }, { "ref": "quickAttentionVehicle_day" }, { "ref": "quickAttentionVehicle_night" } ],
+      "resources": [ { "ref": "basicAmbulance_morning" }, { "ref": "basicAmbulance_day" }, { "ref": "basicAmbulance_night" } ],
       "selection": "or"
     },
     "Task_Autorizar": {

@@ -307,8 +307,17 @@ function reserved(
   }
 }
 
-/** Tipos de nodo que admiten `interTriggerTimer` / `triggerCount` (R5). */
-const GENERATORS = new Set(['start', 'timer']);
+/**
+ * Tipos de nodo que admiten `interTriggerTimer` / `triggerCount` (R5).
+ *
+ * Solo `start`. El «timer generador» de R5 es el `bpmn:startEvent` con `timerEventDefinition`,
+ * que la § 2 de `docs/SEMANTICS.md` ya mapea a `start`: un `timer` en el IR es siempre el
+ * `bpmn:intermediateCatchEvent` de retardo (§ 9), y `core/sim.ts` solo monta generador de
+ * llegadas sobre nodos `start` (R-ARR-1, R-PERF-5). Aceptarlo en un `timer` dejaba pasar un
+ * campo que no hace nada y, peor, un `triggerCount` ahí satisfacía R6 sin dar ninguna parada
+ * real: la corrida no terminaba nunca. (LILA-186 QA.)
+ */
+const GENERATORS = new Set(['start']);
 
 /**
  * R10 — probabilidades de un XOR divergente (§ 6 de `docs/SEMANTICS.md`, R-XOR-1…5). Duplica a
@@ -451,19 +460,21 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
       });
     }
 
-    // R5 — llegadas solo en starts y timers generadores.
+    // R5 — llegadas solo en starts (el start con timer ya es `start` en el IR).
     for (const field of ['interTriggerTimer', 'triggerCount'] as const) {
       if (element[field] !== undefined && (node === undefined || !GENERATORS.has(node.type))) {
         problems.push({
           code: 'E-CAMPO-NO-APLICA',
           path: `elements.${id}.${field}`,
           severity: 'error',
-          message: `elements.${id}.${field}: solo se admite en un evento de inicio o un timer generador.`,
+          message: `elements.${id}.${field}: solo se admite en un evento de inicio.`,
         });
       }
     }
 
-    if (element.triggerCount !== undefined) triggerCounts += 1;
+    // R6: solo cuenta como parada el `triggerCount` de un elemento que de verdad genera; en
+    // cualquier otro nodo es `E-CAMPO-NO-APLICA` y la corrida seguiría sin condición de parada.
+    if (element.triggerCount !== undefined && node !== undefined && GENERATORS.has(node.type)) triggerCounts += 1;
 
     // R-REC-2/9/10 — recursos solo en tareas; referencia, cantidad y duplicados se rechazan
     // antes de entrar al scheduler para que una solicitud imposible nunca quede en cola.

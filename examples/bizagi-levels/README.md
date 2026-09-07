@@ -1,81 +1,122 @@
 # examples/bizagi-levels — réplicas de los ejemplos oficiales de Bizagi
 
-LILA-010. Cuatro carpetas, una por nivel de simulación de Bizagi
-(`docs.bizagi.com` → Modeler → Simulación), cada una con `model.bpmn`,
-`scenario.json` (`docs/SCENARIO_FORMAT.md`) y `expected.json` citando la URL
-y los números publicados en texto en cada página. Fuente: los cuatro
-`level_N_example.htm` de `help.bizagi.com/platform/en/`.
+LILA-010, corregido por LILA-187. Cuatro carpetas, una por nivel de simulación
+de Bizagi, cada una con `model.bpmn`, `scenario.json`
+(`docs/SCENARIO_FORMAT.md`) y `expected.json` citando la URL y los números
+publicados. Fuente: los cuatro `level_N_example.htm` de
+`help.bizagi.com/platform/en/`.
 
 Las páginas de Bizagi renderizan la mayoría de sus tablas de resultados como
 capturas de pantalla (`ProcessValidationNN.png`, `ResourcesAnalysisN.png`,
-`CalendarAnalysisN.png`), no como texto — no son accesibles vía fetch/scraping
-de texto. Cada `expected.json` transcribe **solo los números que la página da
-en prosa** (citados textualmente), y documenta en su campo `nota` qué tablas
-existen únicamente como imagen y no se transcribieron, para no inventar
-cifras.
+`CalendarAnalysisN.png`), no como texto. Cada dato de estos ejemplos lleva su
+cita: los números que la página da en prosa van con la frase textual en
+`expected.json` (`quote`/`quotes`), y los que solo existen en una captura van
+transcritos con la URL de la imagen en su campo `source` y una `nota` que dice
+de dónde salen. Nada está inventado ni calibrado contra el motor.
+
+**Los cuatro niveles modelan el mismo proceso** («Emergency attendance
+process», diagrama en
+[simulationexample2.png](https://help.bizagi.com/platform/en/simulationexample2.png)),
+con la topología publicada:
+
+```
+Receive Emergency Report (4 min) → Classify Triage (5 min) → XOR "Triage type"
+  ├ Red    50 % → AND ( Manage patient entry 11 min ‖ Pick up patient 20 min ) → Authorize Entry (4 min) → Red Triage end
+  ├ Yellow 30 % → Arrive at patient place QAV (7 min) → Yellow Triage end
+  └ Green  20 % → Arrive at patient place BA (10 min) → Green Triage end
+```
+
+Y las llegadas de la corrida publicada: **constantes cada 5 min**, 2017 tokens
+y sin `duration` (Bizagi deja drenar la corrida: 2017 iniciadas = 2017
+completadas). LILA-187 corrigió las tres erratas de la réplica original: la
+topología (eran siete tareas en secuencia), las llegadas (eran exponenciales de
+media 5 min) y las etiquetas del nivel 1.
 
 ## Nivel 1 — [`level_1_example.htm`](https://help.bizagi.com/platform/en/level_1_example.htm)
 
-Validación de rutas (sin tiempos, sin recursos, sin costos): ejemplo
-"Validating the Emergency attendance process" — gateway XOR `Triage type`
-(Green 20% / Yellow 30% / Red 50%) seguido de un Parallel Gateway de
-divergencia sin convergencia (el error que enseña el tutorial). `model.bpmn`
-reproduce la versión **corregida** (con el Parallel Gateway de convergencia
-añadido), ya que es el diagrama BPMN válido que el resto del repo usa como
-referencia; los conteos de la corrida "rota" (antes del fix) se guardan en
-`expected.json` solo como dato histórico/pedagógico. Los nombres de tarea
-dentro de cada rama de triage no están publicados en texto (solo en
-capturas): se usan nombres representativos, documentados como tales en el
-propio `.bpmn`.
+Validación de rutas: sin tiempos, sin recursos, sin costos. El nivel 1 de
+Bizagi solo habilita los porcentajes de los gateways y el «Max. arrival count»
+del start, así que `scenario.json` declara `triggerCount: 1000` sin
+`interTriggerTimer`: son 1000 llegadas en `t = 0` (`docs/SEMANTICS.md`
+R-ARR-1), sin consumir reloj.
+
+`model.bpmn` reproduce la versión **corregida** del tutorial (con el Parallel
+Gateway de convergencia añadido); los conteos de la corrida «rota» —el error
+que el tutorial enseña a diagnosticar— se guardan en `expected.json` solo como
+dato histórico.
+
+Los tres conteos publicados (483 + 315 + 202) van con la etiqueta que les
+corresponde: la prosa de la página solo da la suma, pero la tabla fila por fila
+([processvalidation42.png](https://help.bizagi.com/platform/en/processvalidation42.png))
+publica «Red Triage end 483 · Yellow Triage end 315 · Green Triage end 202», y
+con Red 50 % / Yellow 30 % / Green 20 % el 483 solo puede ser la rama del 50 %.
+La réplica original los tenía invertidos.
 
 ## Nivel 2 — [`level_2_example.htm`](https://help.bizagi.com/platform/en/level_2_example.htm)
 
-Análisis de tiempos de proceso con recursos infinitos: ejemplo "Performing a
-time analysis for the Emergency attendance process" (7 tareas en secuencia,
-llegadas cada 5 min en promedio, 1 semana simulada). `expected.json` cita el
-tiempo de espera mínimo/máximo/promedio publicado (16 / 33 / 25 min 3 s).
+Análisis de tiempos con capacidad infinita de recursos (sin `resources`).
+`expected.json` cita el ciclo mínimo / máximo / medio publicado en prosa
+(16 / 33 min / 25 min 3 s) y transcribe la tabla completa por elemento de
+[processvalidation47.png](https://help.bizagi.com/platform/en/processvalidation47.png).
+Esa tabla es la que fija las llegadas: 2017 instancias exactas (10080 / 5 + 1)
+no salen de un Poisson.
 
-La misma página también trae un "simple process" abstracto (Start → Task 1
-(1h) → XOR → Task 2 (2h) / Task 3 (3h) → End, 100 tokens) con resultados
-exactos publicados (min/max/avg/total por tarea y por proceso) — no se
-modela aquí porque este ticket pide un ejemplo por nivel y el "Emergency
-attendance process" es el que se reutiliza consistentemente en los niveles
-2–4 de la documentación oficial; queda como referencia citable para quien
-quiera reproducirlo aparte.
+La misma página trae además un «simple process» abstracto (Start → Task 1 →
+XOR → Task 2 / Task 3 → End, 100 tokens) con resultados exactos publicados; no
+se modela aquí porque el ejemplo por nivel es el «Emergency attendance
+process», que es el que se reutiliza en los niveles 2–4.
 
 ## Nivel 3 — [`level_3_example.htm`](https://help.bizagi.com/platform/en/level_3_example.htm)
 
-Mismo proceso, con recursos, colas y costos (tablas completas de recursos,
-requerimientos por actividad y costos, todas publicadas en texto). La página
-compara 2 enfermeras (cuello de botella: 99,85% de utilización, espera media
-3h 39min 38s) contra 3 enfermeras (69,75% de utilización, espera media 25min
-15s) y recomienda la segunda; `scenario.json` modela la configuración final
-(3 enfermeras), de la que parte el nivel 4. Ambas corridas están citadas en
-`expected.json`.
+Mismo proceso con recursos, colas y costos. La página compara 2 enfermeras
+(cuello de botella: 99,85 % de utilización, ciclo medio 3 h 39 min 38 s) contra
+3 enfermeras (69,75 %, 25 min 15 s) y recomienda la segunda; `scenario.json`
+modela la configuración final de 3 enfermeras, de la que parte el nivel 4.
+Ambas corridas están en `expected.json`.
 
-Nota curiosa conservada tal cual de la fuente: la tabla de requerimientos de
-recursos por actividad asigna "Arrive at patient place QAV → Basic
-ambulance" y "Arrive at patient place BA → Quick attention vehicle" — los
-nombres de tarea y de recurso están cruzados respecto a lo que uno
-esperaría. Se reproduce verbatim (no es un error nuestro).
+Sobre los dos vehículos: la tabla de requerimientos en prosa asigna «Arrive at
+patient place QAV → Basic ambulance» y «Arrive at patient place BA → Quick
+attention vehicle», cruzada respecto al nombre de la tarea. La tabla de costos
+([resourcesanalysis3.png](https://help.bizagi.com/platform/en/resourcesanalysis3.png))
+solo cuadra con la lectura natural — *Quick Attention Vehicle* 11 124 = 618
+(tokens de QAV) × 18, *Basic Ambulance* 9825 = 393 (tokens de BA) × 25 — así
+que `scenario.json` usa esa asignación y lo deja escrito en su `description`.
 
 ## Nivel 4 — [`level_4_example.htm`](https://help.bizagi.com/platform/en/level_4_example.htm)
 
-Igual que el nivel 3 (3 enfermeras) más 3 calendarios de turno (mañana
-06–14h, tarde 14–22h, noche 22–06h) con disponibilidad de recursos que varía
-por turno (tabla publicada íntegra). `SCENARIO_FORMAT.md` v1 no admite que un
-mismo pool de recursos tenga capacidad distinta según el calendario (Bizagi
-sí); los 4 recursos cuya disponibilidad varía por turno se modelan como 3
-pools — uno por turno, cada uno con su propio `calendar` — seleccionados con
-`selection: "or"` en la tarea (documentado en el `.bpmn` y en `scenario.json`).
-`expected.json` cita el único resultado agregado publicado en texto (espera
-media sube de 25min15s a 25min26s) y el detalle de la tarea "Arrive at
-patient place BA" (espera máxima 15 min, media 0,74 min).
+Igual que el nivel 3 más tres calendarios de turno (mañana 06–14 h, tarde
+14–22 h, noche 22–06 h) con disponibilidad de recursos que varía por turno.
 
-## Cómo se verificó
+**Pendiente de LILA-164 (#164)**: `SCENARIO_FORMAT.md` v1 no admite que un
+mismo pool tenga capacidad distinta según el calendario, y Bizagi sí. La
+réplica lo modela con tres pools —uno por turno, cada uno con su `calendar`—
+seleccionados con `selection: "or"`, y el efecto colateral está medido: el
+calendario efectivo de la tarea pasa a ser el del turno concedido (R-CAL-4), el
+trabajo se pausa al cerrar el turno y aparece una `offHoursWait` que en Bizagi
+es 0 (sus tres turnos cubren las 24 h). Es el único nivel que no cuadra **entero**
+dentro del ±5 % (los niveles 1 y 3 tienen además los residuos puntuales D2, D5 y
+D6); el detalle está en `docs/BIZAGI_PARITY.md` § D7.
 
-`packages/engine/test/bizagi-levels.test.ts` valida, sin depender del parser
-BPMN (que aún no existe): que cada `.bpmn` es XML BPMN 2.0 bien formado con
-DI, que todo `sequenceFlow` resuelve `sourceRef`/`targetRef`, que cada
-`scenario.json` cumple R3/R6/R9/R13 de `SCENARIO_FORMAT.md`, y que cada
-`expected.json` cita una URL de `help.bizagi.com`.
+## Cómo se verifica
+
+- `packages/engine/test/bizagi-levels.test.ts`: forma de los archivos, sin
+  depender del parser BPMN — XML BPMN 2.0 bien formado con DI, `sequenceFlow`
+  con `sourceRef`/`targetRef` que resuelven, R3/R6/R9/R13 de
+  `SCENARIO_FORMAT.md` y la URL de `help.bizagi.com` en cada `expected.json`.
+- `packages/engine/test/bizagi-parity.test.ts`: simula estas cuatro carpetas
+  **tal cual están committeadas** y compara cada número publicado con
+  tolerancia ±5 %. Cada fila lleva escrito de qué lado de la tolerancia está,
+  así que una que cambie de lado pone el test en rojo.
+- `packages/engine/test/bizagi-levels.qa.test.ts`: QA de LILA-186/187 — los
+  cuatro `model.bpmn` entran por `parseBpmn` sin nada fuera del perfil y con
+  ids NCName, los `scenario.json` validan contra el JSON Schema publicado (no
+  solo contra zod), el lint no dice nada salvo `W-ELEMENTO-SIN-PARAMETROS`,
+  los XOR suman 1 sin `W-XOR-NORMALIZADA` y ningún número de `expected.json`
+  se queda sin `quote`/`quotes` o `source`.
+
+Diferencias vivas hoy: **D2** (nivel 1, la rama Yellow contra la corrida única
+de Bizagi, −5,4 %), **D5** y **D6** (nivel 3: el máximo con 3 enfermeras y la
+media del caso saturado con 2) y **D7** (el nivel 4 entero, pendiente de
+LILA-164). Todo lo demás de los niveles 1–3 cuadra dentro del ±5 %. El detalle
+de cada una está en `docs/BIZAGI_PARITY.md` § Diferencias documentadas, que es
+la fuente de verdad de esta lista.

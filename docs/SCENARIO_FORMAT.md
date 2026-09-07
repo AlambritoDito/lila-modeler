@@ -51,7 +51,7 @@ No se aceptan claves desconocidas en la raíz (`strict`): un campo mal escrito e
 | `baseTimeUnit` | `"s"` \| `"min"` \| `"h"` \| `"day"` | no | `"s"` | **Solo presentación**: en qué unidad se imprimen los tiempos. No cambia ni un número interno. |
 | `currency` | string ISO 4217 | no | — | Moneda de los costos. Si falta, los importes se reportan sin símbolo. |
 
-² Al menos uno de `run.duration` o un `triggerCount` en `elements` (regla R6). Si están los dos, gana lo primero que ocurra.
+² Al menos uno de `run.duration` o un `triggerCount` en un `start` de `elements` (regla R6). Si están los dos, gana lo primero que ocurra.
 
 ### 2.3 `calendars`
 
@@ -91,8 +91,8 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `resources` | array de `{ ref, quantity }` | tareas | — | `ref` = clave de `resources`; `quantity` integer ≥ 1, default `1`. Sin `resources` ⇒ capacidad infinita. |
 | `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás; si hay varios libres a la vez gana el que aparece primero en `resources` (R-REC-6). |
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |
-| `interTriggerTimer` | distribución (§ 3) | starts y timers generadores | — | Tiempo entre llegadas, en segundos. |
-| `triggerCount` | integer ≥ 1 | starts y timers generadores | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
+| `interTriggerTimer` | distribución (§ 3) | starts (incluido el start con timer) | — | Tiempo entre llegadas, en segundos. |
+| `triggerCount` | integer ≥ 1 | starts (incluido el start con timer) | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
 | `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3). |
 | `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. |
 
@@ -152,8 +152,8 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | **R2** | `baseTimeUnit` **solo afecta a la presentación**. |
 | **R3** | Las claves de `elements` **deben existir en el IR**: si falta, **error** citando el `id`; si sobra en el IR (elemento del modelo sin parámetros), **warning**. |
 | **R4** | `probability` solo en **sequence flows**. |
-| **R5** | `interTriggerTimer` / `triggerCount` solo en **starts y timers generadores**. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
-| **R6** | Al menos uno de `run.duration` o `triggerCount`. Con `triggerCount` a solas la corrida termina al vaciarse el heap. |
+| **R5** | `interTriggerTimer` / `triggerCount` solo en **starts**, incluido el `bpmn:startEvent` con `timerEventDefinition` (que `SEMANTICS.md` § 2 mapea a `start`). Un `bpmn:intermediateCatchEvent` con timer es retardo, nunca generador: los dos campos ahí son `E-CAMPO-NO-APLICA`. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
+| **R6** | Al menos uno de `run.duration` o un `triggerCount` **en un start** (el de un elemento que no genera no cuenta como parada). Con `triggerCount` a solas la corrida termina al vaciarse el heap. |
 | R7 | `version` debe ser `1`; la raíz y todos los objetos son estrictos (clave desconocida ⇒ error). |
 | R8 | `model` y `run` deben existir **en el escenario resuelto**; `run.start` debe ser ISO 8601 **con offset** y designar un instante que **existe**: fecha civil real (`2026-02-31`, `2026-13-01` y `2026-02-29` son error, `2024-02-29` no), hora `00:00:00`–`23:59:59` y offset `±00:00`–`±23:59`. `24:00` no se admite aquí (sí en `intervals[].to`, R13): como instante de arranque se escribe `00:00` del día siguiente. |
 | R9 | Toda `ref` de `elements[*].resources[]` debe existir en `resources`; toda clave de `calendar` debe existir en `calendars`. Error citando el `id` y la clave. |
