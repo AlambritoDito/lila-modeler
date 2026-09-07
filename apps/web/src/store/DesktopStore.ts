@@ -1,0 +1,192 @@
+/**
+ * `ProjectSessionStore` de Electron (OP-08, LILA-071, ADR-018/023): la carpeta de proyecto vive
+ * en disco vía `window.lila` (`chooseFolder`/`readProject`/`writeProject`, `apps/desktop/src/
+ * bridge.ts`). El `LilaBridge` se inyecta por constructor —por defecto `window.lila`— para poder
+ * probar esta clase con un puente falso en jsdom, sin Electron.
+ *
+ * `import type { LilaBridge }` cruza a `apps/desktop/src/bridge.ts`: compila bajo el `tsconfig`
+ * de `apps/web` (sin `rootDir` propio), a diferencia de la dirección contraria (`bridge.ts`
+ * importando de aquí), que revienta con `TS6059` — ver el comentario de cabecera de
+ * `apps/desktop/src/projectTypes.ts`.
+ */
+import type { RunResult } from '@lila/engine';
+import type { Scenario } from '@lila/engine/schema';
+import type { LilaBridge, LilaProjectDocument } from '../../../desktop/src/bridge.js';
+import type {
+  ProcessData,
+  ProcessSummary,
+  ProjectDocument,
+  ProjectSessionStore,
+  ScenarioDocument,
+  StoredRun,
+} from './ProjectStore';
+
+type ProjectProblem = LilaProjectDocument['problems'][number];
+
+function requireWindowLila(): LilaBridge {
+  if (typeof window === 'undefined' || window.lila === undefined) {
+    throw new Error('DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?');
+  }
+  return window.lila;
+}
+
+/**
+ * Separa `problems` (extensión de B, no forma parte de `ProjectDocument`) y castea
+ * `runs[].result` de `unknown` (lo que tipa el puente, que no depende de `@lila/engine`) a
+ * `RunResult`. Es el único cast de esta clase: no oculta una invalidez de dominio, solo repara
+ * una frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine` — el valor en
+ * tiempo de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
+ */
+function toProjectDocument(
+  raw: LilaProjectDocument,
+): { document: ProjectDocument; problems: readonly ProjectProblem[] } {
+  const { problems, ...rest } = raw;
+  const runs: StoredRun[] = rest.runs.map((run) => ({ ...run, result: run.result as RunResult }));
+  return { document: { ...rest, runs }, problems };
+}
+
+export class DesktopStore implements ProjectSessionStore {
+  private readonly bridge: LilaBridge;
+  /** Carpeta del proyecto abierto/guardado con éxito por última vez; `null` antes del primero. */
+  private activeDir: string | null = null;
+  /** Último documento leído/escrito con éxito; respalda los métodos históricos de abajo. */
+  private activeDocument: ProjectDocument | null = null;
+  private problems: readonly ProjectProblem[] = [];
+
+  constructor(bridge: LilaBridge = requireWindowLila()) {
+    this.bridge = bridge;
+  }
+
+  /** Escenarios que `readProject` no pudo interpretar en la última lectura (JSON roto, etc.). */
+  get lastProblems(): readonly ProjectProblem[] {
+    return this.problems;
+  }
+
+  async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
+    const dir = await this.bridge.chooseFolder();
+    if (dir === null) return null;
+    await this.bridge.writeProject(dir, document);
+    this.activeDir = dir;
+    this.activeDocument = document;
+    this.problems = [];
+    return document;
+  }
+
+  async openProject(): Promise<ProjectDocument | null> {
+    const dir = await this.bridge.chooseFolder();
+    if (dir === null) return null;
+    const raw = await this.bridge.readProject(dir);
+    const { document, problems } = toProjectDocument(raw);
+    this.activeDir = dir;
+    this.activeDocument = document;
+    this.problems = problems;
+    return document;
+  }
+
+  async saveProject(
+    document: ProjectDocument,
+    options?: { saveAs?: boolean },
+  ): Promise<ProjectDocument | null> {
+    let dir = this.activeDir;
+    if (dir === null || options?.saveAs === true) {
+      const chosen = await this.bridge.chooseFolder();
+      // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
+      // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
+      if (chosen === null) return null;
+      dir = chosen;
+    }
+    // Si `writeProject` rechaza, la promesa de aquí rechaza también y ni `activeDir` ni
+    // `activeDocument` cambian: solo tras un `writeProject` exitoso se confirma la carpeta.
+    await this.bridge.writeProject(dir, document);
+    this.activeDir = dir;
+    this.activeDocument = document;
+    return document;
+  }
+
+  setDirty(_dirty: boolean): void {
+    // No-op documentado: la confirmación nativa "guardar/descartar/cancelar" al cerrar es OP-14.
+  }
+
+  onSaveRequested(_save: () => Promise<boolean>): () => void {
+    // No-op documentado (OP-14): todavía no hay un listener de cierre de ventana que registrar
+    // aquí; se devuelve una función de "cancelar suscripción" vacía en vez de lanzar, para que
+    // quien llame con la forma opcional del contrato no tenga que comprobar si existe.
+    return () => {};
+  }
+
+  // -- Métodos históricos de `ProjectStore` (LILA-058) ----------------------------------------
+  // Mínimo viable sobre el documento activo en memoria + `saveProject`, sin reinventar: esta
+  // modalidad solo tiene un proyecto abierto a la vez, así que "processId" no distingue nada
+  // propio — es el mismo compromiso que ya asume `BrowserStore` ("el id real es irrelevante en
+  // esta modalidad", ver `App.tsx`). Quedan aquí porque `ProjectSessionStore` extiende
+  // `ProjectStore`; el flujo pensado para esta modalidad es `createProject`/`openProject`/
+  // `saveProject` de arriba.
+
+  private emptyDocument(id: string): ProjectDocument {
+    return {
+      version: 1,
+      id: crypto.randomUUID(),
+      name: id,
+      model: { id, name: id, xml: '', revision: 0 },
+      scenarios: {},
+      scenarioRevisions: {},
+      runs: [],
+    };
+  }
+
+  private scenarioFileName(name: string): string {
+    return name.endsWith('.scenario.json') ? name : `${name}.scenario.json`;
+  }
+
+  async listProcesses(): Promise<readonly ProcessSummary[]> {
+    if (this.activeDocument === null) return [];
+    return [{ id: this.activeDocument.model.id, name: this.activeDocument.model.name }];
+  }
+
+  async getProcess(id: string): Promise<ProcessData | null> {
+    if (this.activeDocument !== null && this.activeDocument.model.id === id) {
+      return { xml: this.activeDocument.model.xml, name: this.activeDocument.model.name };
+    }
+    // No es el proceso ya cargado: como en `BrowserStore`, se abre el selector (aquí, de
+    // carpeta) y se lee el proyecto completo; cancelar devuelve `null` igual que allí.
+    const document = await this.openProject();
+    if (document === null) return null;
+    return { xml: document.model.xml, name: document.model.name };
+  }
+
+  async putProcess(id: string, xml: string): Promise<void> {
+    const base = this.activeDocument ?? this.emptyDocument(id);
+    await this.saveProject({ ...base, model: { ...base.model, xml } });
+  }
+
+  async listScenarios(_processId: string): Promise<readonly string[]> {
+    return this.activeDocument === null ? [] : Object.keys(this.activeDocument.scenarios);
+  }
+
+  async putScenario(processId: string, name: string, scenario: Scenario): Promise<void> {
+    const base = this.activeDocument ?? this.emptyDocument(processId);
+    const fileName = this.scenarioFileName(name);
+    await this.saveProject({
+      ...base,
+      scenarios: { ...base.scenarios, [fileName]: scenario as unknown as ScenarioDocument },
+      scenarioRevisions: { ...base.scenarioRevisions, [fileName]: (base.scenarioRevisions[fileName] ?? 0) + 1 },
+    });
+  }
+
+  async putRun(processId: string, scenarioName: string, result: RunResult): Promise<void> {
+    const base = this.activeDocument ?? this.emptyDocument(processId);
+    const fileName = this.scenarioFileName(scenarioName);
+    const run: StoredRun = {
+      id: crypto.randomUUID(),
+      scenarioName: fileName,
+      result,
+      inputs: {
+        modelRevision: base.model.revision,
+        scenarioRevision: base.scenarioRevisions[fileName] ?? 0,
+        xml: base.model.xml,
+        scenario: base.scenarios[fileName] ?? {},
+      },
+    };
+    await this.saveProject({ ...base, runs: [...base.runs, run] });
+  }
+}
