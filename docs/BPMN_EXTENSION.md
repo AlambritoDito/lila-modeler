@@ -93,6 +93,15 @@ Los parámetros de simulación (`processingTime`, `resources`, `interTriggerTime
 - **Se genera un id nuevo** al copiar/pegar un elemento — un elemento copiado es una entidad distinta y no debe arrastrar los datos (`lila:*`, escenario) del original bajo el mismo id.
 - **Sanitización reversible para ids ajenos no-NCName**: algunas herramientas (Bizagi entre ellas) pueden emitir ids que no son NCName válidos. Al importar, Lila sanitiza esos ids a NCName y guarda el mapa `idSanitizado → idOriginal` en `ir.source.originalIds` (ver la forma de `ProcessIR` en la sección 6 del documento de estructura), de modo que un re-export pueda restaurar el id original si la herramienta de destino lo necesita. La sanitización es determinista (mismo id ajeno → mismo id sanitizado) para que reimportar el mismo archivo no genere ids distintos cada vez.
 
+El editor aplica el mismo `sanitizeXmlIds` del motor antes de entregar el documento a bpmn-js y
+conserva el mapa por instancia de modelador. Al exportar, restaura en una sola pasada tanto las
+declaraciones como las referencias (`sourceRef`, `targetRef`, `default`, `bpmnElement` y referencias
+textuales), incluidas las de BPMNDI. La apertura se prepara en una instancia candidata y solo
+reemplaza el lienzo activo cuando la importación completa termina; un XML mal formado o sin diagrama
+renderizable no sustituye el XML, selección, servicios ni historial anteriores. Si el lector reportó
+una pérdida semántica —por ejemplo, una referencia topológica rota— la exportación exige una decisión
+visible con el detalle del aviso, porque el árbol serializado ya no puede reconstruir ese contenido.
+
 ### Id de proceso
 
 - Clave lógica de un proceso: **`bpmn:process@id` (slug ASCII) + `lila:versionTag`**. Ejemplo: `credito-solicitud` + `1.3.0`. Es la clave que identifica "el mismo proceso, versión X" a través de reimportaciones y ediciones — no es solo `process@id`, porque dos versiones del mismo proceso de negocio pueden (y en general deben) coexistir como archivos o commits distintos con el mismo `process@id`.
