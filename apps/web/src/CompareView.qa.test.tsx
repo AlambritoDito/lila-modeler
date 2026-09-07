@@ -369,7 +369,7 @@ const fakeIr = (nodeId = 'A'): ProcessIR => ({
   id: 'Process_Fake',
   name: '',
   nodes: { [nodeId]: { incoming: [], name: 'Tarea A', outgoing: [], type: 'task' } },
-  source: { exporter: 'test', exporterVersion: '1', originalIds: {} },
+  source: { exporter: 'test', exporterVersion: '1', originalIds: {}, warnings: [] },
 });
 
 /** Fila de recurso por id y etiqueta, con sus celdas ya en texto. */

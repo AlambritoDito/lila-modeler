@@ -10,15 +10,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseBpmn } from '@lila/engine/bpmn';
 import {
-  ScenarioSchema,
-  resolveExtends,
-  type ResolvedScenario,
   type Scenario,
 } from '@lila/engine/schema';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { PanelPropiedades } from './PropertiesPanel';
 import { ScenarioPanel } from './ScenarioPanel';
+import { ResultsView } from './ResultsView';
+import { prepareSimulation } from './simulationGate';
+import type { StoredRun } from './store/ProjectStore';
 import type { Corrida } from './BottleneckOverlay';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
@@ -64,20 +64,6 @@ function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
   return typeof nombre === 'string' ? nombre : archivo;
 }
 
-/** Resuelve la cadena `extends` (el TO-BE hereda del AS-IS) contra el mapa de arriba, sin disco. */
-function cargarEscenario(archivo: string, escenarios: Escenarios): ResolvedScenario {
-  const combinado = resolveExtends(archivo, (ruta) => {
-    const crudo = escenarios[ruta];
-    if (crudo === undefined) throw new Error(`escenario desconocido: ${ruta}`);
-    return crudo;
-  });
-  const parsed = ScenarioSchema.parse(combinado);
-  if (parsed.model === undefined || parsed.run === undefined) {
-    throw new Error(`${archivo} no resuelve a un escenario completo (falta model o run).`);
-  }
-  return parsed as ResolvedScenario;
-}
-
 /** Fase de la simulación, para lo que enseña el panel derecho. */
 type EstadoSim =
   | { tipo: 'inactivo' }
@@ -93,6 +79,11 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     error: null,
   });
   const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
+  const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
+  const [revision, setRevision] = useState(0);
+  const revisionRef = useRef(0);
+  const [runs, setRuns] = useState<StoredRun[]>([]);
+  const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
   const [pestana, setPestana] = useState<(typeof PESTANAS)[number]>('Propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
@@ -125,6 +116,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   function cancelarCorrida(): void {
     enVuelo.current?.abort();
     enVuelo.current = null;
+    setSim({ tipo: 'inactivo' });
   }
 
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
@@ -134,25 +126,29 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     modelador?.cuellos(corrida, verCuellos);
   }, [modelador, corrida, verCuellos]);
 
-  // El IR se reparsea cuando cambia el diagrama activo. No se engancha a cada `elements.changed`
-  // del lienzo: parsear el XML entero por cada tecla del editor de nombres no lo pide nadie, y
-  // `simular()` vuelve a parsear de todas formas antes de correr.
+  useEffect(() => {
+    if (modelador === null) return;
+    return modelador.suscribir(['commandStack.changed'], () => {
+      revisionRef.current += 1;
+      setRevision(revisionRef.current);
+      cancelarCorrida();
+      setCorrida(null);
+    });
+  }, [modelador]);
+
+  useEffect(() => () => { enVuelo.current?.abort(); }, []);
+
+  // Reparsear la revisión reciente, sin aceptar un parseo anterior que termine tarde.
   useEffect(() => {
     if (modelador === null) return;
     let vivo = true;
-    void modelador
-      .exportar()
-      .then((xml) => parseBpmn(xml))
-      .then(({ ir: parseado }) => {
+    const timer = setTimeout(() => {
+      void modelador.exportar().then((xml) => parseBpmn(xml)).then(({ ir: parseado }) => {
         if (vivo) setIr(parseado);
-      })
-      .catch(() => {
-        if (vivo) setIr(null);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, [modelador, procesoId]);
+      }).catch(() => { if (vivo) setIr(null); });
+    }, 150);
+    return () => { vivo = false; clearTimeout(timer); };
+  }, [modelador, procesoId, revision]);
 
   useEffect(() => {
     void fetch(TEMA_URL)
@@ -188,6 +184,9 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       // La corrida en vuelo es del proceso anterior: su resultado no puede pintarse sobre el
       // diagrama nuevo (ni aunque los ids coincidan por casualidad).
       cancelarCorrida();
+      revisionRef.current += 1;
+      setRevision(revisionRef.current);
+      setRuns([]);
       setProcesoId(id);
       setArchivo(datos.name);
       // El resultado anterior es de otro proceso: dejarlo puesto pintaría cuellos de botella que
@@ -212,15 +211,26 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     enVuelo.current = control;
     setSim({ progreso: null, tipo: 'simulando' });
     try {
-      const scenario = cargarEscenario(escenarioId, escenarios);
-      const { ir } = await parseBpmn(await modelador.exportar());
-      const { result } = await runInWorker(ir, scenario, {
+      const modelRevision = revisionRef.current;
+      const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
+      const xml = await modelador.exportar();
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios);
+      if (control.signal.aborted || enVuelo.current !== control) return;
+      const { result: rawResult } = await runInWorker(ir, scenario, {
         signal: control.signal,
         onProgress: (progreso) => {
-          setSim({ progreso, tipo: 'simulando' });
+          if (!control.signal.aborted && enVuelo.current === control) setSim({ progreso, tipo: 'simulando' });
         },
       });
+      if (control.signal.aborted || enVuelo.current !== control || modelRevision !== revisionRef.current) return;
+      const result = { ...rawResult, warnings: [...new Set([...warnings, ...rawResult.warnings])] };
+      setIr(ir);
+      setRuns((previous) => [...previous, {
+        id: crypto.randomUUID(), scenarioName: escenarioId, result,
+        inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
+      }]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
+      setModo('Resultados');
       setSim({ tipo: 'inactivo' });
     } catch (e: unknown) {
       // Cancelar no es un error que enseñar: quien canceló ya dejó la UI como quería. Se
@@ -248,9 +258,9 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
             <button
               key={m}
               type="button"
-              className={m === 'Modelar' ? 'modo activo' : 'modo'}
-              disabled={m !== 'Modelar'}
-              title={m === 'Modelar' ? undefined : 'Todavía no implementado'}
+              className={m === modo ? 'modo activo' : 'modo'}
+              disabled={m === 'Comparar'}
+              onClick={() => { setModo(m); if (m === 'Simular') setPestana('Simulación'); }}
             >
               {m}
             </button>
@@ -267,6 +277,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
           izquierda; la esquina inferior derecha queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
+      <div className="zona-modelo" style={{ visibility: modo === 'Resultados' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -278,6 +289,14 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         />
       )}
 
+      </div>
+      {modo === 'Resultados' && (
+        <section className="zona-resultados">
+          {corrida !== null && ir !== null
+            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
+            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'El historial anterior está desactualizado.'}</p>}
+        </section>
+      )}
       <aside className="panel">
         <nav className="pestanas">
           {PESTANAS.map((p) => (
@@ -325,6 +344,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
             >
               {sim.tipo === 'simulando' ? 'Simulando…' : 'Simular'}
             </button>
+            {sim.tipo === 'simulando' && <button type="button" className="boton" onClick={cancelarCorrida}>Cancelar</button>}
             {sim.tipo === 'simulando' && (
               <p className="vacio">
                 {sim.progreso === null
@@ -358,6 +378,10 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
               escenarios={escenarios}
               onCambio={(archivo, escenario) => {
                 setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+                // Cualquier padre extends editado invalida también sus descendientes.
+                setScenarioRevisions((previous) => Object.fromEntries(
+                  [...new Set([...Object.keys(escenarios), archivo])].map((key) => [key, (previous[key] ?? 0) + 1]),
+                ));
                 // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
                 // que al cambiar de escenario en el selector (LILA-064).
                 cancelarCorrida();
@@ -374,6 +398,10 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
               }}
               onDuplicar={(archivo, escenario) => {
                 setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+                // Cualquier padre extends editado invalida también sus descendientes.
+                setScenarioRevisions((previous) => Object.fromEntries(
+                  [...new Set([...Object.keys(escenarios), archivo])].map((key) => [key, (previous[key] ?? 0) + 1]),
+                ));
                 setEscenarioId(archivo);
                 cancelarCorrida();
                 setCorrida(null);
