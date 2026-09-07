@@ -83,7 +83,23 @@ export interface LilaBridge {
    * suscripción.
    */
   onOpenPath(cb: (path: OpenPathRequest) => void): () => void;
+
+  /**
+   * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell
+   * las despacha a las mismas funciones que los botones de la barra. Los aceleradores viven en el
+   * menú (`menu.ts`), no en el renderer: así el atajo no se dispara dos veces en Windows/Linux.
+   */
+  onMenu(cb: (action: MenuAction) => void): () => void;
 }
+
+/** Lo que el menú nativo puede pedirle al shell. `openRecent` lleva la carpeta de `listRecents()`. */
+export type MenuAction =
+  | 'ajustes'
+  | 'nuevo'
+  | 'abrir'
+  | 'guardar'
+  | 'guardarComo'
+  | { readonly openRecent: string };
 
 export interface WriteProjectOptions {
   readonly saveAs?: boolean;

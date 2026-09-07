@@ -39,6 +39,17 @@ Quien llame a `applyTheme` con un tema de fuera (un JSON de disco, un import de
 LILA-114) tiene que capturar ese error y enseñárselo al usuario; la página de
 humo de `main.tsx` lo hace en `--status-error`. Los
 temas integrados se sirven como archivos estáticos y se piden por `fetch`, así
-que cambiar un valor del JSON y recargar cambia la UI sin recompilar. LILA-113
-(persistencia y `ThemeProvider`) y LILA-114 (editor, validación de un JSON
-inválido, importar/exportar) amplían este documento.
+que cambiar un valor del JSON y recargar cambia la UI sin recompilar.
+
+## Elegir tema (LILA-113, versión mínima)
+
+`App.tsx` conoce los temas integrados por id (`eva-01`, `papel`), pide `./<id>.json` y lo pasa a
+`applyTheme`. La elección se guarda en `localStorage['lila.tema']` y la densidad en
+`localStorage['lila.densidad']` (`compacta` / `normal` / `comoda`), que la app escribe encima del
+token `density` del tema y expone como `data-densidad` en `.app` para el CSS. localStorage vale
+igual en el navegador y en Electron (el protocolo `lila://` es un esquema estándar con origen
+propio), así que no hay un almacén distinto por plataforma. No hay `ThemeProvider`: con dos temas y
+un `useState` sobra un contexto. Cambiar de tema vuelve a montar el lienzo de bpmn-js con el XML
+actual porque `Modeler.tsx` fija los colores de las figuras al construir el modelador; el coste es
+perder la pila de deshacer. LILA-114 (editor de tokens, validación de un JSON importado,
+exportar) amplía este documento.

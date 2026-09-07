@@ -79,13 +79,10 @@ un ticket propio.
 **Tipografía: Archivo.** `font.ui` es `Archivo, Inter, system-ui, sans-serif`
 (el brief decía Inter; la sesión de Claude Design eligió Archivo y esa elección
 manda). `font.diagram` usa la misma pila; `font.mono` sigue siendo JetBrains
-Mono con `ui-monospace` de reserva. La webfont sigue **sin cargarse** después de
-LILA-057: traerla exige o una dependencia nueva (`@fontsource/archivo`) o un
-`<link>` a Google Fonts, y ninguna de las dos cabe en un ticket que no puede
-añadir dependencias y en una app que también se empaqueta con Electron y tiene
-que funcionar sin red. Mientras tanto manda el fallback (`system-ui`). Decidirlo
-—bajar los `.woff2` al repositorio con su licencia SIL OFL, o quedarse con el
-fallback— es trabajo de LILA-113 o de un ticket propio.
+Mono con `ui-monospace` de reserva. La webfont se carga desde `@fontsource/archivo`
+(pesos 400–700, importados en `apps/web/src/main.tsx`): Vite empaqueta los `.woff2`,
+así que funciona sin red y dentro del CSP `'self'` de Electron. Decidido por Brito el
+2026-09-07 tras ver la demo con el fallback `system-ui`.
 
 **Papel usa rojo tinta como acento.** `accent.primary` del tema claro es
 `#EC3013`, no un neutro apagado, para demostrar que el sistema aguanta un acento

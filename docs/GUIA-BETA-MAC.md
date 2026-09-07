@@ -140,9 +140,19 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   `~/Library/Application Support/Lila Modeler/estado.json`, y se restauran al volver a abrir la
   app (si la ventana guardada ya no cabe en ninguna pantalla conectada, se usa el tamaño por
   defecto).
-- **Recientes todavía no tiene menú en la interfaz** (limitación): el mecanismo para listarlos y
-  reabrirlos ya existe en el puente (`DesktopStore.listRecents()`/`openRecent()`), pero no hay
-  ningún botón o menú en `App.tsx` que los use todavía.
+- **Archivo → Abrir reciente** lista esos proyectos (más nuevo primero) y los reabre sin
+  diálogo; si la carpeta ya no existe, desaparece de la lista y la app lo dice en la barra de
+  estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), Guardar (`⌘S`), Guardar como
+  (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app.
+
+### Ajustes
+
+- `⌘,` (o el botón ⚙ de la barra, o «Tema: …» en la barra de estado) abre **Ajustes →
+  Apariencia**: tema (Eva-01 oscuro, Papel claro) y densidad (compacta, normal, cómoda). El cambio
+  de tema es inmediato, repinta también el diagrama y se recuerda entre arranques (localStorage de
+  la app, bajo `lila://`). Cambiar de tema vuelve a montar el lienzo, así que vacía la pila de
+  deshacer; el diagrama y los cambios sin guardar se conservan.
+- El editor de colores por token e importar/exportar temas es LILA-114 (#144), pendiente.
 
 ## Limitaciones de esta beta
 
@@ -165,7 +175,6 @@ lista a ciegas en una fecha posterior)*
 - **Editor visual de calendarios pospuesto**: `calendars` se edita con los mismos campos de
   formulario genérico que el resto del escenario (números, texto, listas de intervalos); no hay
   todavía una vista de calendario/horario dibujada.
-- **Sin menú de recientes** en la interfaz (ver «Recientes y ventana» arriba).
 - **`Exportar CSV` solo está disponible en el modo Resultados**, no en Comparar.
 - **Sin conversión de moneda ni normalización de unidades entre corridas**: si se comparan
   escenarios con `currency` o `baseTimeUnit` distintos, la app avisa (ver "Comparar" arriba) en vez

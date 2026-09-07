@@ -108,6 +108,10 @@ class FakeBridge implements LilaBridge {
     };
   }
 
+  onMenu(): () => void {
+    return () => {};
+  }
+
   triggerOpenPath(path: OpenPathRequest): void {
     if (this.openPathCb === null) {
       throw new Error('FakeBridge.triggerOpenPath: no hay callback registrado (onOpenPath).');

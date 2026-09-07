@@ -21,6 +21,7 @@ import { ScenarioPanel } from './ScenarioPanel';
 import { ResultsView } from './ResultsView';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
+import type { MenuAction } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
@@ -42,13 +43,48 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 
-type ProjectAction = 'new' | 'open' | 'bpmn';
+type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string };
 
 const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
 const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 
-/** Tema por defecto. Se pide por fetch para que editar el JSON y recargar cambie la UI. */
-const TEMA_URL = './eva-01.json';
+/** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
+const TEMAS = { 'eva-01': 'Eva-01', papel: 'Papel' } as const;
+type TemaId = keyof typeof TEMAS;
+const TEMA_IDS = Object.keys(TEMAS) as TemaId[];
+const DENSIDADES = ['compacta', 'normal', 'comoda'] as const;
+type Densidad = (typeof DENSIDADES)[number];
+
+/** Preferencias de apariencia. localStorage vale igual en el navegador y bajo `lila://` en Electron. */
+function preferencia<T extends string>(clave: string, validas: readonly T[], porDefecto: T): T {
+  try {
+    const v = localStorage.getItem(clave);
+    return validas.includes(v as T) ? (v as T) : porDefecto;
+  } catch { return porDefecto; }
+}
+function recordar(clave: string, valor: string): void {
+  try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
+}
+async function cargarTema(id: TemaId): Promise<Theme> {
+  const r = await fetch(`./${id}.json`);
+  if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
+  return r.json() as Promise<Theme>;
+}
+
+/**
+ * Texto de atajo para los tooltips: `⌘S` en Mac, `Ctrl+S` en el resto. En el navegador solo se
+ * anuncian los que la página llega a ver: Chrome y Safari se quedan `⌘N` (ventana nueva) y `⌘,`
+ * (preferencias) antes de entregarlos, así que ahí solo valen dentro de Electron, donde son
+ * aceleradores del menú nativo.
+ */
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
+function atajo(tecla: string, soloDesktop = false): string {
+  if (soloDesktop && !DESKTOP) return '';
+  const shift = tecla.startsWith('⇧');
+  const letra = shift ? tecla.slice(1) : tecla;
+  return MAC ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`;
+}
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
@@ -109,6 +145,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // sabe"; `null`, "no se pudo cargar, seguimos con los valores por defecto de tokens.css".
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
+  const [temaId, setTemaId] = useState<TemaId>(() => preferencia('lila.tema', TEMA_IDS, 'eva-01'));
+  const [densidad, setDensidad] = useState<Densidad>(() => preferencia('lila.densidad', DENSIDADES, 'normal'));
+  // XML con el que se monta el lienzo. Cambia solo al cambiar de tema: bpmn-js congela los colores
+  // de las figuras al montar (`Modeler.tsx`), así que un tema nuevo es un lienzo nuevo con el
+  // diagrama de ahora. ponytail: remontar pierde la pila de deshacer; hacer reactivo bpmnRenderer si molesta.
+  const [xmlLienzo, setXmlLienzo] = useState(pedido);
+  const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
@@ -209,6 +252,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
       if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
+      if (typeof kind === 'object') {
+        const doc = await adapter.openRecent?.(kind.recent);
+        if (doc) await activate(doc, true, beforeToken);
+        else if (doc === null) setIoError('Ese proyecto ya no está en su carpeta; se quitó de recientes.');
+        return;
+      }
       const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
       if (data === null) return;
       const parsed = await parseBpmn(data.xml);
@@ -261,11 +310,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }, [modelador, procesoId, revision]);
 
   useEffect(() => {
-    void fetch(TEMA_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
-        return r.json() as Promise<Theme>;
-      })
+    void cargarTema(temaId)
       .then((t) => {
         applyTheme(t);
         setTema(t);
@@ -276,6 +321,61 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         setAvisoTema(e instanceof Error ? e.message : String(e));
         setTema(null);
       });
+    // Solo al arrancar; los cambios posteriores pasan por `cambiarTema`, que además remonta el lienzo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // `density` es un token del tema (`applyTheme` lo reescribe), así que la preferencia se
+  // vuelve a aplicar encima cada vez que cambia el tema.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--density', densidad);
+    recordar('lila.densidad', densidad);
+  }, [densidad, tema]);
+
+  async function cambiarTema(id: TemaId): Promise<void> {
+    if (id === temaId) return;
+    try {
+      const t = await cargarTema(id);
+      const xml = modelador === null ? xmlLienzo : await modelador.exportar();
+      applyTheme(t);
+      // Todo en el mismo commit: el lienzo se remonta una sola vez y ya con los tokens nuevos.
+      setXmlLienzo(xml);
+      setTema(t);
+      setTemaId(id);
+      setAvisoTema(null);
+      recordar('lila.tema', id);
+    } catch (e: unknown) {
+      setAvisoTema(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /**
+   * Único despachador de acciones globales: los atajos del navegador y el menú nativo de Electron
+   * (`window.lila.onMenu`) llaman a lo mismo que los botones de la barra.
+   */
+  function ejecutar(accion: MenuAction): void {
+    if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    else if (accion === 'nuevo') void projectAction('new');
+    else if (accion === 'abrir') void projectAction('open');
+    else if (accion === 'guardar') void guardar();
+    else if (accion === 'guardarComo') void guardar(true);
+    else void projectAction({ recent: accion.openRecent });
+  }
+  const ejecutarRef = useRef(ejecutar);
+  ejecutarRef.current = ejecutar;
+  useEffect(() => {
+    // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
+    // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux.
+    const teclas = (e: KeyboardEvent) => {
+      if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
+      if (accion === undefined) return;
+      e.preventDefault();
+      ejecutarRef.current(accion);
+    };
+    window.addEventListener('keydown', teclas);
+    const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
+    return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
   }, []);
 
   /**
@@ -330,7 +430,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   return (
-    <div className="app">
+    <div className="app" data-densidad={densidad}>
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">Cambios sin guardar</h2>
         <p>Guarda los cambios de {projectName} antes de continuar, o descártalos.</p>
@@ -360,17 +460,41 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </button>
           ))}
         </nav>
-        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo proyecto</button>
-        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir proyecto</button>
-        <button className="boton primario" disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar proyecto</button>
-        <button className="boton" disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
+        <button className="boton" title={`Nuevo proyecto${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo</button>
+        <button className="boton" title={`Abrir proyecto${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir</button>
+        <button className="boton primario" title={`Guardar proyecto${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar</button>
+        <button className="boton" title={`Guardar como${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
         {bpmnFilesEnabled && <><button type="button" className="boton" onClick={() => void projectAction('bpmn')} disabled={ioBusy || modelador === null}>
           Abrir .bpmn
         </button>
         <button type="button" className="boton primario" onClick={() => void exportar()}>
           Exportar .bpmn
         </button></>}
+        <button type="button" className="boton icono" title={`Ajustes${atajo(',', true)}`} aria-label="Ajustes" onClick={() => ejecutar('ajustes')}>⚙</button>
       </header>
+
+      <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
+        <form method="dialog">
+          <h2 id="ajustes-titulo">Ajustes</h2>
+          <h3>Apariencia</h3>
+          <label className="campo">
+            Tema
+            <select value={temaId} onChange={(e) => void cambiarTema(e.target.value as TemaId)}>
+              {TEMA_IDS.map((id) => <option key={id} value={id}>{TEMAS[id]}</option>)}
+            </select>
+          </label>
+          <label className="campo">
+            Densidad
+            <select value={densidad} onChange={(e) => setDensidad(e.target.value as Densidad)}>
+              <option value="compacta">Compacta</option>
+              <option value="normal">Normal</option>
+              <option value="comoda">Cómoda</option>
+            </select>
+          </label>
+          <p className="vacio">Tipografía: {(tema?.tokens?.['font.ui'] ?? 'Archivo').split(',')[0]}. Editar cada color e importar o exportar temas llega en LILA-114.</p>
+          <div className="acciones"><button className="boton primario">Cerrar</button></div>
+        </form>
+      </dialog>
 
       {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
           izquierda; la esquina inferior derecha queda libre para la marca de agua
@@ -380,7 +504,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <div className="lienzo" />
       ) : (
         <Lienzo
-          xmlInicial={pedido}
+          key={temaId}
+          xmlInicial={xmlLienzo}
           onListo={setModelador}
           onEstado={setEstado}
           onSeleccion={setSeleccion}
@@ -535,7 +660,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         >
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
-        <span>Tema: {tema?.name ?? 'Eva-01'}</span>
+        <button type="button" className="enlace" title={`Ajustes${atajo(',', true)}`} onClick={() => ejecutar('ajustes')}>Tema: {tema?.name ?? 'Eva-01'}</button>
         {estado.avisos > 0 && (
           <span role="alert" className="aviso">
             {estado.avisos} avisos al importar; revisa el diagnóstico antes de simular o exportar

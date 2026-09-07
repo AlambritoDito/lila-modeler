@@ -16,7 +16,7 @@
  *   verifica que el mensaje venga del frame principal de la propia app (`isTrustedSender`,
  *   `ipcGuards.ts`) — un frame anidado o una URL de navegación ajena no puede invocar el puente.
  */
-import { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -24,6 +24,7 @@ import type { OpenPathRequest, Recent } from './bridge.js';
 import { decideClose, type CloseChoice } from './closeGuard.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
+import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath } from './openPath.js';
 import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
@@ -272,6 +273,20 @@ async function persistSessionState(): Promise<void> {
 async function recordRecent(dir: string, name: string): Promise<void> {
   sessionState = addRecent(sessionState, { dir, name, openedAt: new Date().toISOString() });
   await persistSessionState();
+  refreshMenu();
+}
+
+/**
+ * Menú nativo (plantilla en `menu.ts`): Preferencias… (`CmdOrCtrl+,`), Archivo con Abrir reciente
+ * y los aceleradores de guardar/abrir/nuevo. Cada ítem manda su acción al renderer por
+ * `lila:menu`; el shell la despacha. Se reconstruye entero cada vez que cambian los recientes.
+ */
+function refreshMenu(): void {
+  const win = mainWindow;
+  const template = menuTemplate(sessionState.recents, process.platform, (action) => {
+    if (win !== null && !win.isDestroyed()) win.webContents.send('lila:menu', action);
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 /** Tamaño usado cuando no hay bounds recordados, o los recordados ya no caben en ninguna pantalla. */
@@ -374,6 +389,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     } catch {
       sessionState = removeRecent(sessionState, dirArg);
       await persistSessionState();
+      refreshMenu();
       return null;
     }
     authorizedFolders.add(real);
@@ -709,6 +725,7 @@ app.whenReady().then(async () => {
   const win = createWindow(!isSmoke, bounds);
   mainWindow = win;
   registerIpcHandlers(win);
+  refreshMenu();
   if (!isSmoke) attachCloseGuard(win);
 
   // `.bpmn` como argumento de línea de comandos (Windows/Linux): sin empaquetar, `argv[0]` es el

@@ -50,3 +50,10 @@ Trabajadores B y E: libres, sin tareas activas. Worktrees conservados.
 2. `ProjectDocument.problems?: readonly { file: string; message: string }[]` opcional, para que abrir una carpeta con un escenario JSON roto no descarte el proyecto ni el archivo.
 3. Aplicar `estado/OP-06-parche-225-vite.patch` en `vite.config.ts`.
 4. Tomar la corrección de fixtures de 97dabb0 (o su equivalente) para que el typecheck de web pase sobre la rama canónica.
+
+## OP-G (2026-09-07, rama `codex/op-g-ajustes` sobre `codex/operativo-20260906`)
+Origen: Brito probó el DMG y no encontró configuración (`⌘,` no hacía nada: `main.ts` no construía `Menu`, así que Electron dejaba el menú por defecto sin Preferencias). Entregado:
+- Menú nativo (`apps/desktop/src/menu.ts`, puro y con test): Preferencias… `CmdOrCtrl+,` en el menú de la app (macOS) o en Archivo (resto); Archivo con Nuevo/Abrir/Guardar/Guardar como y **Abrir reciente** alimentado por `estado.json` (cierra la petición a A de OP-14 sobre `listRecents/openRecent`). Canal nuevo `lila:menu` (main → renderer) y `onMenu` en el puente.
+- Ajustes → Apariencia en `App.tsx` (`<dialog>` nativo, botón ⚙ y «Tema:» de la barra de estado): tema Eva-01/Papel en caliente (remonta el lienzo con el XML actual) y densidad; persistido en localStorage (`lila.tema`, `lila.densidad`). Atajos web `⌘S/⇧⌘S/⌘O` (Chrome se queda `⌘N` y `⌘,`; en Electron van por el menú). Es la versión mínima de #143; el editor de tokens sigue en #144.
+- Fuente Archivo cargada por `@fontsource/archivo` (decisión de Brito; el fallback `system-ui` era buena parte de la distancia con el diseño).
+Verificado: typecheck web+desktop, `npm test` 1273/1 omitido, build + smoke `{ok:true}`, demo web en navegador (cambio a Papel repinta lienzo y persiste tras recargar). No verificado: pulsación real de `⌘,` en la app empaquetada (computer-use denegado; el menú se construye en el smoke sin error y el despacho está cubierto por `menu.test.ts` y `App.test.tsx`).
