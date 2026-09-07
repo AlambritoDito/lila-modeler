@@ -9,7 +9,7 @@
  * El texto de los errores `E-NOSOP` es normativo y sale literal de `docs/SEMANTICS.md` § 3
  * (R-NOSOP-1 y R-NOSOP-2); los códigos, de la § 17.
  */
-import { validateIr, type IrProblem, type ProcessIR } from '../core/ir.js';
+import { validateIr, type IrProblem, type ProcessIR, type SourceWarning } from '../core/ir.js';
 import type { UnsupportedElement } from './parse.js';
 
 /**
@@ -22,7 +22,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationWarning {
-  code: 'W-MSGFLOW' | 'W-COND';
+  code: 'W-MSGFLOW' | 'W-COND' | 'W-PARSE';
   id: string;
   message: string;
 }
@@ -101,6 +101,74 @@ function unsupportedProblem(el: UnsupportedElement): IrProblem {
   };
 }
 
+/**
+ * `unparsable content <X> ... nested error: illegal ID <Y>` / `... duplicate ID <Y>`: moddle-xml
+ * tiró el elemento entero (y todo su contenido) al leer el XML. Un `unknown type <...>` también
+ * es "unparsable content", pero lo que se pierde ahí es un elemento que el perfil no conoce
+ * (`bpmn:LoopCounter` de Bizagi, extensiones ajenas): no era ni iba a ser un nodo del IR.
+ */
+const DISCARDED_ID_MESSAGE = /(?:illegal|duplicate) ID </;
+
+/** Prefijo del elemento que moddle no pudo leer, dentro de `unparsable content <prefijo:Tipo>`. */
+const UNPARSABLE_PREFIX = /unparsable content <([^:>]+):/;
+
+/**
+ * Prefijos de la capa de diagrama (BPMN DI: `bpmndi`, `di`, `dc`, `dd`). Es geometría pura —
+ * `parseBpmn` no la lee y el IR no la guarda —, así que un id repetido o ilegal ahí descarta una
+ * forma del dibujo, nunca un nodo ni un flujo: se queda en `W-PARSE` (R-NOSOP-6).
+ */
+const DIAGRAM_PREFIXES = new Set(['bpmndi', 'di', 'dc', 'dd']);
+
+function isDiagramOnly(message: string): boolean {
+  const prefix = UNPARSABLE_PREFIX.exec(message)?.[1];
+  return prefix !== undefined && DIAGRAM_PREFIXES.has(prefix);
+}
+
+/**
+ * Propiedades de moddle-xml que son topología del grafo de tokens: una referencia rota ahí
+ * significa que un nodo o un flujo desapareció del IR sin dejar rastro. Las demás que
+ * bpmn-moddle reporta en los exports reales (`bpmn:messageRef`, `bpmn:dataStoreRef`,
+ * `bpmn:categoryValueRef`, …) cuelgan de construcciones que el perfil v1 ya ignora (mensajes,
+ * data stores, categorías): una referencia rota ahí no descarta nada del grafo.
+ */
+const GRAPH_REFERENCE_PROPERTIES = new Set([
+  'bpmn:sourceRef',
+  'bpmn:targetRef',
+  'bpmn:attachedToRef',
+  'bpmn:flowNodeRef',
+  'bpmn:default',
+]);
+
+/**
+ * `docs/SEMANTICS.md` R-NOSOP-6: un aviso de bpmn-moddle implica pérdida en el grafo en dos
+ * casos — un elemento completo que moddle tiró por id ilegal o duplicado, o una referencia rota
+ * sobre una propiedad de topología. Todo lo demás es inofensivo y se queda en `W-PARSE`.
+ */
+function impliesDiscardedElement(w: SourceWarning): boolean {
+  if (DISCARDED_ID_MESSAGE.test(w.message)) return !isDiagramOnly(w.message);
+  return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property);
+}
+
+/** Texto normativo de R-NOSOP-6; `w.message` es el aviso de moddle, ya aplanado a una línea. */
+function parseWarningProblem(w: SourceWarning, fallbackId: string): IrProblem {
+  const id = w.elementId ?? fallbackId;
+  return {
+    code: 'E-PARSE-INCOMPLETO',
+    id,
+    message: `${id}: el lector XML descartó contenido del modelo, que quedó incompleto: ${w.message}.`,
+  };
+}
+
+/** Texto normativo de R-NOSOP-6 para el aviso inofensivo. */
+function parseWarningNotice(w: SourceWarning, fallbackId: string): ValidationWarning {
+  const id = w.elementId ?? fallbackId;
+  return {
+    code: 'W-PARSE',
+    id,
+    message: `${id}: aviso del lector XML, sin pérdida de nodos ni flujos: ${w.message}.`,
+  };
+}
+
 /** Ids alcanzables siguiendo los flujos salientes desde cada `start`. */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
   const seen = new Set<string>(starts);
@@ -132,6 +200,14 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
   for (const el of opts.unsupported ?? []) {
     if (NOT_A_NODE.has(el.qname)) continue;
     errors.push(unsupportedProblem(el));
+  }
+
+  for (const w of ir.source.warnings) {
+    if (impliesDiscardedElement(w)) {
+      errors.push(parseWarningProblem(w, ir.id));
+    } else {
+      warnings.push(parseWarningNotice(w, ir.id));
+    }
   }
 
   if ((opts.messageFlowCount ?? 0) > 0) {

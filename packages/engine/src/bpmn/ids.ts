@@ -75,8 +75,14 @@ export function sanitizeIds(ids: readonly string[]): Map<string, string> {
   return sanitizedToOriginal;
 }
 
-/** Cualquier valor de atributo XML `algo="..."`, para recolectar candidatos a id. */
-const ID_ATTR = /\bid="([^"]*)"/g;
+/** Declaración de id XML con comillas dobles o simples. */
+const ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+/**
+ * Atributo XML completo. Los dos grupos de valor permiten conservar el tipo de comilla que
+ * traía cada atributo al sustituir una definición o referencia.
+ */
+const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
 
 /**
  * Sanitiza los ids no-NCName directamente en el texto del XML, antes de dárselo a
@@ -90,11 +96,10 @@ const ID_ATTR = /\bid="([^"]*)"/g;
  * `fromXML` no tiene nada que sanitizar: hay que reescribir el XML primero.
  *
  * Devuelve el XML con cada id no-NCName reemplazado por su versión sanitizada (determinista,
- * vía `sanitizeIds`) en toda posición donde aparece como valor completo de atributo
- * (`id="..."`, pero también `sourceRef="..."`, `targetRef="..."`, `default="..."`,
- * `bpmnElement="..."`, etc. — cualquier atributo que referencie el id) o como contenido de
- * texto de un elemento (`<bpmn:flowNodeRef>...</bpmn:flowNodeRef>`), junto con el mapa
- * `idSanitizado -> idOriginal` (vacío si no había nada que sanitizar).
+ * vía `sanitizeIds`) en toda posición donde aparece como valor completo de atributo, con
+ * comillas simples o dobles (`id`, `sourceRef`, `targetRef`, `default`, `bpmnElement`, etc.),
+ * o como contenido de texto de un elemento (`<bpmn:flowNodeRef>...</bpmn:flowNodeRef>`),
+ * junto con el mapa `idSanitizado -> idOriginal` (vacío si no había nada que sanitizar).
  *
  * ponytail: reemplazo de texto con regex, no un recorrido XML real. Techo: no reescribe un id
  * dentro de una lista separada por espacios (p. ej. `dataInputRefs="a b c"` con `b` inválido);
@@ -106,17 +111,26 @@ export function sanitizeXmlIds(xml: string): {
   sanitizedToOriginal: Map<string, string>;
 } {
   const ids = new Set<string>();
-  for (const match of xml.matchAll(ID_ATTR)) ids.add(match[1] as string);
+  for (const match of xml.matchAll(ID_ATTR)) ids.add((match[1] ?? match[2]) as string);
 
   const sanitizedToOriginal = sanitizeIds([...ids]);
   if (sanitizedToOriginal.size === 0) return { xml, sanitizedToOriginal };
 
-  let out = xml;
+  const originalToSanitized = new Map(
+    [...sanitizedToOriginal].map(([sanitized, original]) => [original, sanitized]),
+  );
+  let out = xml.replace(XML_ATTR, (attribute, prefix, doubleQuoted, singleQuoted) => {
+    const original = (doubleQuoted ?? singleQuoted) as string;
+    const sanitized = originalToSanitized.get(original);
+    if (sanitized === undefined) return attribute;
+
+    const quote = doubleQuoted === undefined ? "'" : '"';
+    return `${prefix}${quote}${sanitized}${quote}`;
+  });
+
   for (const [candidate, original] of sanitizedToOriginal) {
     const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out
-      .replace(new RegExp(`="${escaped}"`, 'g'), `="${candidate}"`)
-      .replace(new RegExp(`>${escaped}<`, 'g'), `>${candidate}<`);
+    out = out.replace(new RegExp(`>${escaped}<`, 'g'), `>${candidate}<`);
   }
 
   return { xml: out, sanitizedToOriginal };
