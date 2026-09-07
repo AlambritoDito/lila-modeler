@@ -1,6 +1,6 @@
 /**
- * Shell de la app web (LILA-057): barra superior con los modos, paleta de bpmn-js a la
- * izquierda, lienzo al centro, panel derecho con pestañas y barra de estado abajo. La
+ * Shell de la app web (LILA-057): barra superior con los modos, paleta propia de figuras a la
+ * izquierda (LILA-207), lienzo al centro, panel derecho con pestañas y barra de estado abajo. La
  * disposición es la del brief `prompts/claude-design-ui.md`; los colores salen todos de los
  * tokens de LILA-112, sin un solo hex aquí.
  *
@@ -15,7 +15,8 @@ import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
-import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
+import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
+import { Paleta } from './Paleta';
 import { PanelPropiedades } from './PropertiesPanel';
 import { problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { ResultsView } from './ResultsView';
@@ -85,6 +86,15 @@ function atajo(tecla: string, soloDesktop = false): string {
   const shift = tecla.startsWith('⇧');
   const letra = shift ? tecla.slice(1) : tecla;
   return MAC ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`;
+}
+
+/**
+ * Los servicios del lienzo para la paleta (LILA-207). El getter de `Modelador` lanza mientras no
+ * haya un BPMN abierto; devolver `null` deja la paleta pintada pero inerte en vez de tumbar el
+ * render.
+ */
+function serviciosDe(modelador: Modelador | null): Servicios | null {
+  try { return modelador?.servicios ?? null; } catch { return null; }
 }
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
@@ -611,8 +621,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </form>
       </dialog>
 
-      {/* La paleta de figuras la pinta bpmn-js dentro de este contenedor, arriba a la
-          izquierda; la esquina inferior derecha queda libre para la marca de agua
+      {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
+          pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
+          pinta y su columna de la retícula se encoge a 0. */}
+      {(modo === 'Modelar' || modo === 'Simular') && <Paleta servicios={serviciosDe(modelador)} />}
+
+      {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
       <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (

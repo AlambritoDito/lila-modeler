@@ -60,12 +60,37 @@ export interface EstadoLienzo {
  * siga sin importar bpmn-js: `PropertiesPanel.tsx` solo conoce esta interfaz.
  */
 export interface Servicios {
-  modeling: Modeling;
+  modeling: Modeling & {
+    /** Cuelga una figura ya fabricada de `target`, en `posicion` del sistema del diagrama. */
+    createShape(figura: unknown, posicion: Punto, target: unknown): unknown;
+  };
   bpmnFactory: BpmnFactory;
   selection: Selection;
   /** Raíz visible actual; permite editar un proceso simple al seleccionar el fondo. */
   rootElement?(): unknown;
+  /**
+   * Los cuatro servicios que usa la paleta propia (LILA-207). Se describen aquí con la forma
+   * mínima que hace falta —no con los tipos genéricos de bpmn-js— para que `Paleta.tsx` no
+   * tenga que importar nada del editor.
+   */
+  create: { start(evento: Event, figura: unknown): void };
+  elementFactory: {
+    createShape(atributos: { type: string; eventDefinitionType?: string | undefined; isExpanded?: boolean | undefined }): unknown;
+    createParticipantShape(): unknown;
+  };
+  canvas: { viewbox(): Rectangulo; getRootElement(): unknown };
+  /** `activate` abre la edición del nombre de la figura recién creada. */
+  directEditing: { activate(figura: unknown): void };
+  /** Para saber sobre qué elemento cae el punto donde se inserta (`Paleta.tsx`). */
+  elementRegistry: { filter(prueba: (elemento: Elemento) => boolean): Elemento[] };
+  /** Las reglas de bpmn-js: quién puede contener a quién. */
+  rules: { allowed(accion: string, contexto: object): unknown };
 }
+
+interface Punto { x: number; y: number }
+interface Rectangulo extends Punto { width: number; height: number }
+/** Lo mínimo de un elemento del diagrama para saber si un punto cae dentro. */
+export interface Elemento { x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown }
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
@@ -305,10 +330,16 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       get servicios(): Servicios {
         if (activo === null) throw new Error('El modelador todavía no tiene un BPMN abierto.');
         return {
-          modeling: activo.get<Modeling>('modeling'),
+          modeling: activo.get<Servicios['modeling']>('modeling'),
           bpmnFactory: activo.get<BpmnFactory>('bpmnFactory'),
           selection: activo.get<Selection>('selection'),
           rootElement: () => activo?.get<Canvas>('canvas').getRootElement(),
+          create: activo.get<Servicios['create']>('create'),
+          elementFactory: activo.get<Servicios['elementFactory']>('elementFactory'),
+          canvas: activo.get<Servicios['canvas']>('canvas'),
+          directEditing: activo.get<Servicios['directEditing']>('directEditing'),
+          elementRegistry: activo.get<Servicios['elementRegistry']>('elementRegistry'),
+          rules: activo.get<Servicios['rules']>('rules'),
         };
       },
       suscribir: (eventos, escuchar) => {
