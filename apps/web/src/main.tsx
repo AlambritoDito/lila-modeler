@@ -10,6 +10,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
+import { PanelPropiedades } from './PropertiesPanel';
 import { applyTheme, type Theme } from './theme/applyTheme';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -33,12 +34,6 @@ const TEMA_URL = '/eva-01.json';
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
-
-const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
-  Propiedades: 'El panel de propiedades llega en LILA-060.',
-  Documentación: 'Los campos lila: llegan en LILA-060.',
-  Simulación: 'Los parámetros del escenario llegan en LILA-061.',
-};
 
 function App(): React.JSX.Element {
   // El store se crea una sola vez, con el benchmark ya cargado: así `listProcesses()` lo
@@ -153,7 +148,11 @@ function App(): React.JSX.Element {
             </button>
           ))}
         </nav>
-        <p className="vacio">{PLACEHOLDER[pestana]}</p>
+        {pestana === 'Simulación' ? (
+          <p className="vacio">Los parámetros del escenario llegan en LILA-061.</p>
+        ) : (
+          <PanelPropiedades modelador={modelador} pestana={pestana} />
+        )}
       </aside>
 
       <nav className="diagramas">

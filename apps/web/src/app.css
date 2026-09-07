@@ -273,3 +273,130 @@ body {
 
   --bjs-font-family: var(--font-diagram);
 }
+
+/* ---------- panel de propiedades (LILA-060) ---------- */
+
+.campos {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo > span {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.campo > output {
+  padding: 5px 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.campos input,
+.campos select,
+.campos textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  min-width: 0;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+.campos textarea {
+  resize: vertical;
+}
+
+.campos input:focus,
+.campos select:focus,
+.campos textarea:focus {
+  border-color: var(--accent-primary);
+  outline: 1px solid var(--accent-primary);
+}
+
+.campos input:disabled {
+  color: var(--fg-disabled);
+}
+
+.campos input::placeholder,
+.campos textarea::placeholder {
+  color: var(--fg-disabled);
+}
+
+.grupo {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.grupo h3 {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  margin: 0;
+}
+
+.fila {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.fila > output {
+  flex: 1;
+  min-width: 0;
+}
+
+/* La `×` de quitar: cuadrada y del ancho justo, para que no le robe sitio al campo. */
+.quitar {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.quitar:hover {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.anadir {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent-tertiary);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 0;
+}
+
+.anadir:hover {
+  color: var(--accent-primary);
+}
+
+/* El desplegable RACI se queda con el ancho de su opción más larga; el resto de la fila es
+   para el id del rol, que es lo que de verdad se escribe. */
+.fila select {
+  flex: none;
+  width: auto;
+}

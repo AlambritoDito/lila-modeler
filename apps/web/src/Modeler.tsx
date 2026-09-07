@@ -7,8 +7,11 @@
  * pueden crecer sin repartir bpmn-js por toda la aplicación.
  */
 import Modeler from 'bpmn-js/lib/Modeler';
+import type BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
+import type Modeling from 'bpmn-js/lib/features/modeling/Modeling';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type Selection from 'diagram-js/lib/features/selection/Selection';
 import { useEffect, useRef } from 'react';
 // El descriptor de la extensión `lila:` es el de `packages/engine/src/bpmn/lila.moddle.json`,
 // única definición del namespace (ADR-012). Se importa del paquete compilado, así que
@@ -31,12 +34,26 @@ export interface EstadoLienzo {
   error: string | null;
 }
 
+/**
+ * Los servicios de bpmn-js que el panel de propiedades (LILA-060) necesita para leer y escribir
+ * el moddle vivo. Se exponen aquí y no por `modeler.get()` suelto para que el resto de la app
+ * siga sin importar bpmn-js: `PropertiesPanel.tsx` solo conoce esta interfaz.
+ */
+export interface Servicios {
+  modeling: Modeling;
+  bpmnFactory: BpmnFactory;
+  selection: Selection;
+}
+
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
   abrir(xml: string): Promise<boolean>;
   exportar(): Promise<string>;
   ajustar(): void;
+  servicios: Servicios;
+  /** Escucha eventos del `eventBus`; devuelve la función que se desuscribe. */
+  suscribir(eventos: string[], escuchar: () => void): () => void;
 }
 
 interface Props {
@@ -134,6 +151,17 @@ export function Lienzo({ xmlInicial, onListo, onEstado }: Props): React.JSX.Elem
       exportar: async () => (await modeler.saveXML({ format: true })).xml ?? '',
       ajustar: () => {
         if (conTamano()) canvas.zoom('fit-viewport');
+      },
+      servicios: {
+        modeling: modeler.get<Modeling>('modeling'),
+        bpmnFactory: modeler.get<BpmnFactory>('bpmnFactory'),
+        selection: modeler.get<Selection>('selection'),
+      },
+      suscribir: (eventos, escuchar) => {
+        modeler.on(eventos, escuchar);
+        return () => {
+          modeler.off(eventos, escuchar);
+        };
       },
     });
     void abrir(xmlInicial);
