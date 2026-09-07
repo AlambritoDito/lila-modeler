@@ -485,3 +485,100 @@ describe('duplicar', () => {
     });
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * 6 — OP-11: capacidad de recursos, Fija y Por turno (LILA-164)
+ * ------------------------------------------------------------------ */
+
+describe('capacidad de recursos: Fija y Por turno', () => {
+  it('«Por turno» produce capacity: [{calendar, capacity}] válido y «Fija» no deja la lista detrás', () => {
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+
+    // `horno` no trae `calendar` de pool (R16 los hace excluyentes): es el candidato limpio.
+    const variante = 'campo-resources.horno.capacity-variante';
+    elegir(variante, 'turno');
+    pulsar('Añadir tramo');
+    elegir('campo-resources.horno.capacity[0].calendar', 'oficina');
+    teclear('campo-resources.horno.capacity[0].capacity', '2');
+    pulsar('Guardar');
+
+    const porTurno = guardados.at(-1)!.escenario;
+    expect((porTurno['resources'] as Json)['horno']).toMatchObject({
+      capacity: [{ calendar: 'oficina', capacity: 2 }],
+    });
+
+    // Lo que valida el motor, no una réplica de su semántica en el test.
+    const resueltoTurno = resolveExtends('as-is.scenario.json', (ruta) => {
+      if (ruta !== 'as-is.scenario.json') throw new Error(`escenario desconocido: ${ruta}`);
+      return porTurno;
+    });
+    const parsed = ScenarioSchema.safeParse(resueltoTurno);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(scenarioErrors(validateScenario(parsed.data, ir))).toEqual([]);
+    }
+
+    // Volver a «Fija»: el id original reaparece y no queda el array de tramos escondido detrás.
+    elegir(variante, 'fija');
+    pulsar('Guardar');
+    const fija = guardados.at(-1)!.escenario;
+    const horno = (fija['resources'] as Json)['horno'] as Json;
+    expect(typeof horno['capacity']).toBe('number');
+    expect(Array.isArray(horno['capacity'])).toBe(false);
+    expect((document.getElementById('campo-resources.horno.capacity') as HTMLInputElement).value).toBe(
+      '1',
+    );
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 7 — OP-11: campos reservados heredados, eliminación explícita con null
+ * ------------------------------------------------------------------ */
+
+describe('campos reservados: quitar heredado', () => {
+  it('«Quitar heredado» escribe priority: null y el escenario resuelto valida sin el campo', () => {
+    const guardados: Guardado[] = [];
+    const recursosPadre = asIsCorto()['resources'] as Json;
+    const padre: Json = {
+      ...asIsCorto(),
+      resources: {
+        ...recursosPadre,
+        cajero: { ...(recursosPadre['cajero'] as Json), priority: 1 },
+      },
+    };
+    const hijo: Json = { version: 1, name: 'Hijo', extends: 'as-is.scenario.json' };
+
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': padre, 'hijo.scenario.json': hijo }}
+        archivoInicial="hijo.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+
+    // Estado visible antes de tocar nada: heredado del padre, con su valor.
+    expect(document.body.textContent).toContain('heredado: 1');
+
+    pulsar('Quitar heredado');
+    pulsar('Guardar');
+
+    const delta = guardados[0]!.escenario;
+    expect((delta['resources'] as Json)['cajero']).toMatchObject({ priority: null });
+
+    const resuelto = comoLilaRun('hijo.scenario.json', {
+      'as-is.scenario.json': padre,
+      'hijo.scenario.json': delta,
+    });
+    expect(resuelto.resources?.['cajero']?.priority).toBeUndefined();
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+  });
+});
