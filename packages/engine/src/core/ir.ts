@@ -37,6 +37,21 @@ export interface Flow {
   isDefault: boolean;
 }
 
+/**
+ * Un aviso que `bpmn-moddle` emitió al leer el XML (`fromXML().warnings`), tal cual —
+ * `parseBpmn` no los clasifica ni descarta, solo los conserva (LILA-185/#198). `validate(ir)`
+ * es quien decide si cada uno implica un elemento descartado del grafo (`E-PARSE-INCOMPLETO`)
+ * o es inofensivo (`W-PARSE`); ver `docs/SEMANTICS.md` § 3 y § 17.
+ */
+export interface SourceWarning {
+  /** Texto de moddle, en una sola línea (sin los saltos de línea que trae "unparsable content"). */
+  message: string;
+  /** Id del elemento afectado, cuando moddle lo identifica o se puede extraer del mensaje. */
+  elementId?: string;
+  /** Propiedad de moddle-xml en la referencia rota (p. ej. `bpmn:sourceRef`), si el aviso es de ese tipo. */
+  property?: string;
+}
+
 /** Procedencia del modelo: quién lo exportó y con qué ids venía. */
 export interface IrSource {
   exporter: string;
@@ -46,6 +61,8 @@ export interface IrSource {
    * (aplanado de subprocesos, desambiguación). Identidad cuando no se reescribió nada.
    */
   originalIds: Record<string, string>;
+  /** Avisos de `bpmn-moddle` al leer el XML, en el orden en que los devolvió `fromXML`. */
+  warnings: SourceWarning[];
 }
 
 /** Proceso completo. `nodes` y `flows` comparten el espacio de ids de BPMN. */
@@ -60,6 +77,7 @@ export interface ProcessIR {
 /** Códigos de error de validación (secciones 3 y 17 de `docs/SEMANTICS.md`). */
 export type IrProblemCode =
   | 'E-NOSOP'
+  | 'E-PARSE-INCOMPLETO'
   | 'E-FLUJO-COLGANTE'
   | 'E-ID-DUPLICADO'
   | 'E-REF-INEXISTENTE'

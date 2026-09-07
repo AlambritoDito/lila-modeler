@@ -208,6 +208,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "Task_TomarPedido": "Task_TomarPedido",
       "Timer_Reposo": "Timer_Reposo",
     },
+    "warnings": [],
   },
 }
 `;

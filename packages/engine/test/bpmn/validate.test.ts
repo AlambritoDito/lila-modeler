@@ -20,7 +20,7 @@ function ir(partial: Partial<ProcessIR> = {}): ProcessIR {
     name: '',
     nodes: {},
     flows: {},
-    source: { exporter: '', exporterVersion: '', originalIds: {} },
+    source: { exporter: '', exporterVersion: '', originalIds: {}, warnings: [] },
     ...partial,
   };
 }
@@ -71,6 +71,13 @@ test('los exports de Bizagi pasan por validate sin lanzar excepción', async () 
     // es reventar, y todo problema cita el id de un elemento.
     expect(Array.isArray(result.errors)).toBe(true);
     for (const problem of result.errors) expect(problem.id).not.toBe('');
+    // Aceptación LILA-185: los ids no NCName pasan por `sanitizeIds` y no pierden elementos; los
+    // avisos que sí emite moddle en estos exports (messageRef, dataStoreRef, categoryValueRef,
+    // `unknown type <bpmn:LoopCounter>`) son inofensivos y se quedan en W-PARSE.
+    expect(
+      result.errors.filter((problem) => problem.code === 'E-PARSE-INCOMPLETO'),
+      name,
+    ).toEqual([]);
   }
 });
 
@@ -165,6 +172,76 @@ test('W-MSGFLOW agrega el conteo y W-COND cita cada flujo condicionado (LILA-163
       code: 'W-COND',
       id: 'Flow_Condition',
       message: 'Flow_Condition: conditionExpression se ignora; el ramaje es probabilístico.',
+    },
+  ]);
+});
+
+// Aceptación LILA-185: un export que pierde elementos al cargarse no puede validar en verde.
+test('parseBpmn conserva los avisos de bpmn-moddle en ir.source.warnings (LILA-185)', async () => {
+  const parsed = await parseBpmn(fixture('parse-incompleto.bpmn'));
+
+  expect(parsed.ir.source.warnings).toEqual([
+    {
+      message: expect.stringContaining('unknown type <bpmn:LoopCounter>') as unknown as string,
+    },
+    {
+      message: expect.stringContaining('duplicate ID <Task_Revisar>') as unknown as string,
+      elementId: 'Task_Revisar',
+    },
+  ]);
+  // El elemento que moddle tiró no está en el IR: el archivo declara dos tareas, el IR trae una.
+  expect(Object.values(parsed.ir.nodes).filter((node) => node.type === 'task')).toHaveLength(1);
+});
+
+test('un id duplicado produce E-PARSE-INCOMPLETO con el texto de SEMANTICS R-NOSOP-6 (LILA-185)', async () => {
+  const parsed = await parseBpmn(fixture('parse-incompleto.bpmn'));
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+  const parseErrors = errors.filter((error) => error.code === 'E-PARSE-INCOMPLETO');
+  expect(parseErrors).toHaveLength(1);
+  expect(parseErrors[0]?.id).toBe('Task_Revisar');
+  expect(parseErrors[0]?.message).toMatch(
+    /^Task_Revisar: el lector XML descartó contenido del modelo, que quedó incompleto: unparsable content <bpmn:task> detected .* duplicate ID <Task_Revisar>\.$/,
+  );
+
+  // El `unknown type` de Bizagi no descarta ningún nodo: se queda en aviso.
+  const parseWarnings = warnings.filter((warning) => warning.code === 'W-PARSE');
+  expect(parseWarnings).toHaveLength(1);
+  expect(parseWarnings[0]?.id).toBe('Process_Incompleto');
+  expect(parseWarnings[0]?.message).toMatch(
+    /^Process_Incompleto: aviso del lector XML, sin pérdida de nodos ni flujos: unparsable content <bpmn:LoopCounter> detected .* unknown type <bpmn:LoopCounter>\.$/,
+  );
+});
+
+test('una referencia rota de topología es error y una de mensaje solo aviso (LILA-185)', () => {
+  const base = ir({
+    nodes: { Start_1: { type: 'start', name: '', incoming: [], outgoing: [] } },
+    source: {
+      exporter: '',
+      exporterVersion: '',
+      originalIds: {},
+      warnings: [
+        { message: 'unresolved reference <Task_X>', elementId: 'Flow_1', property: 'bpmn:targetRef' },
+        { message: 'unresolved reference <Message_1>', elementId: 'Event_1', property: 'bpmn:messageRef' },
+      ],
+    },
+  });
+  const { errors, warnings } = validate(base);
+
+  expect(errors.filter((error) => error.code === 'E-PARSE-INCOMPLETO')).toEqual([
+    {
+      code: 'E-PARSE-INCOMPLETO',
+      id: 'Flow_1',
+      message:
+        'Flow_1: el lector XML descartó contenido del modelo, que quedó incompleto: unresolved reference <Task_X>.',
+    },
+  ]);
+  expect(warnings.filter((warning) => warning.code === 'W-PARSE')).toEqual([
+    {
+      code: 'W-PARSE',
+      id: 'Event_1',
+      message:
+        'Event_1: aviso del lector XML, sin pérdida de nodos ni flujos: unresolved reference <Message_1>.',
     },
   ]);
 });
