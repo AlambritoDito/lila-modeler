@@ -140,6 +140,42 @@ body {
   padding: 16px 12px;
 }
 
+/* Pestaña «Simulación» del panel derecho: escenario, correr y el interruptor del overlay de
+   cuellos de botella (LILA-064). Los `.vacio` de dentro son las líneas de estado, así que
+   pierden el `padding` vertical de la variante suelta. */
+.simulacion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.simulacion .vacio {
+  padding: 0;
+}
+
+.campo {
+  align-items: center;
+  color: var(--fg-muted);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.campo select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  padding: 4px 8px;
+}
+
+.interruptor {
+  cursor: pointer;
+  justify-content: flex-start;
+}
+
 .diagramas {
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
