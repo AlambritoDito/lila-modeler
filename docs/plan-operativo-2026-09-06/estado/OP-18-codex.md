@@ -4,7 +4,7 @@ Dueño F para E2E/artefactos; A prepara recorrido del shell vigente. Base integr
 ## Recorrido propio que ya soporta el shell (pendiente aceptación empaquetada)
 1. Abrir app final sin Vite; Nuevo proyecto → elegir carpeta temporal vacía con espacios/tilde. Se crea un modelo propio con IDs UUID y dos escenarios, sin cajero/horno ni IDs del ejemplo.
 2. Documentación → Versión del proceso = beta-qa; Simulación permite seleccionar la tarea por su ID y Propiedades cambiar Nombre. Probar Deshacer/Rehacer y volver a Guardar proyecto.
-3. En Simular/Simulación, AS-IS tiene duración constante 60 s para la tarea; TO-BE hereda AS-IS y sobrescribe a 30 s. Ambos existen desde Nuevo; se pueden editar run.replications (por ejemplo 30), seed=42. Guardar proyecto antes del cierre.
+3. En Simular/Simulación, AS-IS tiene duración constante 60 s para la tarea; TO-BE hereda AS-IS: editar su duración de tarea para sobrescribirla a 30 s (inicialmente hereda 60 s). Ambos existen desde Nuevo; se pueden editar run.replications (por ejemplo 30), seed=42. Guardar proyecto antes del cierre.
 4. Cerrar/reabrir app → Abrir proyecto → MISMA carpeta. Verificar versión/nombre editados y escenarios antes de simular. La reapertura de app sola puede mostrar ejemplo hasta elegir carpeta si B no restaura proyecto.
 5. Simular AS-IS y TO-BE con Worker real → Comparar (base AS-IS) → tiempo de ciclo TO-BE esperado menor; en el modelo secuencial nuevo, 60→30 da -50%. Resultados de cada escenario → CSV; verificar archivo real y valores, no solo clic.
 6. Volver a guardar tras simular y reabrir para comprobar snapshots persistidos y comparación restaurada. Confirmaciones de cambios: cierre nativo de B; Nuevo/Abrir de A ofrecen Guardar/Descartar/Cancelar.
