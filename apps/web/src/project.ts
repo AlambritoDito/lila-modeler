@@ -1,3 +1,4 @@
+import { resolveScenarioPath } from '@lila/engine/schema';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
@@ -63,7 +64,7 @@ export function nextScenarioRevisions(file: string, scenarios: Readonly<Record<s
   while (grew) {
     grew = false;
     for (const [name, raw] of Object.entries(scenarios)) {
-      if (typeof raw.extends === 'string' && affected.has(raw.extends) && !affected.has(name)) { affected.add(name); grew = true; }
+      if (typeof raw.extends === 'string' && affected.has(resolveScenarioPath(name, raw.extends)) && !affected.has(name)) { affected.add(name); grew = true; }
     }
   }
   return { ...revisions, ...Object.fromEntries([...affected].map((name) => [name, (revisions[name] ?? 0) + 1])) };

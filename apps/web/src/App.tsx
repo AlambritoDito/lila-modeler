@@ -12,6 +12,7 @@ import { parseBpmn } from '@lila/engine/bpmn';
 import { type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
 import { CompareView } from './CompareView';
+import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
@@ -131,8 +132,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
     return run ? [run] : [];
   });
   const ordered = [...latest].sort((a, b) => Number(b.scenarioName === baseId) - Number(a.scenarioName === baseId));
-  const currencies = new Set(ordered.map((r) => (r.inputs.scenario.run as Record<string, unknown>)?.currency ?? ''));
-  const comparable = ordered.length >= 2 && currencies.size === 1;
+  const comparable = ordered.length >= 2 && ordered.some((r) => r.scenarioName === baseId);
 
   useEffect(() => {
     const run = [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
@@ -365,7 +365,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         <section className="zona-resultados">
           {corrida !== null && ir !== null
             ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
-            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'El historial anterior está desactualizado.'}</p>}
+            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'No hay corrida actual para el escenario seleccionado.'}</p>}
         </section>
       )}
       {modo === 'Comparar' && <section className="zona-resultados">
@@ -374,9 +374,10 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
         </select></label>
         {comparable && ir !== null
           ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result))}
+              runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
-          : <p>{currencies.size > 1 ? 'No se comparan costos entre monedas diferentes sin conversión.' : 'Simula al menos dos escenarios de la revisión actual para comparar.'}</p>}
+          : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
         {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
       </section>}
       <aside className="panel">
@@ -479,7 +480,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
               }}
               ir={ir}
               seleccion={seleccion}
-              onSeleccionar={setSeleccion}
+              onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
             />
           </div>
         ) : (
@@ -488,6 +489,8 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       </aside>
 
       <nav className="diagramas">
+        <button className="boton" disabled={!modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>Deshacer</button>
+        <button className="boton" disabled={!modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>Rehacer</button>
         <button type="button" className="pestana activa">
           {archivo}
         </button>
