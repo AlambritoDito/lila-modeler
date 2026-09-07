@@ -1,0 +1,15 @@
+diff --git a/apps/web/vite.config.ts b/apps/web/vite.config.ts
+index c25824b..c1856ca 100644
+--- a/apps/web/vite.config.ts
++++ b/apps/web/vite.config.ts
+@@ -26,6 +26,10 @@ export default defineConfig({
+         fileURLToPath(new URL('.', import.meta.url)),
+         fileURLToPath(new URL('../../examples', import.meta.url)),
+         fileURLToPath(new URL('../../packages/engine', import.meta.url)),
++        // #225: bpmn-js referencia sus fuentes (`bpmn.woff2`, …) desde el CSS por `url()`, y esas
++        // peticiones salen como `/@fs/<raíz>/node_modules/...`; sin esta entrada Vite las
++        // rechaza con 403 y los iconos de la paleta se ven vacíos.
++        fileURLToPath(new URL('../../node_modules', import.meta.url)),
+       ],
+     },
+   },
