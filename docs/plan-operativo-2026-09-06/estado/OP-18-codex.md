@@ -14,3 +14,6 @@ Abrir/Exportar BPMN SUELTO están ocultos en escritorio por limitación de méto
 ## Evidencia actual y reserva
 Web real: creación propia, edición/undo, dos simulaciones/Comparar, guardado, modal Cancelar/Guardar y continuar PASS. Electron fuente f061c32: smoke sin Vite PASS. Esto NO sustituye el recorrido empaquetado de F.
 Vite de A detenido; no modificar código funcional después del SHA con el que se construya artefacto final. Informar SHA exacto, ubicación .app/DMG y cada paso probado. No entregar el DMG antiguo de OP12 como beta final.
+
+## Cierre de integración A (2026-09-07 07:06)
+F entregó e2adccd, funcional89f82bd, DMG arm64 con1265 tests/1omitido y QA E2E por seam. B corrigió los P0 reportados. A consume entrega completa y comprueba equivalencia funcional con SHA del artefacto. Próximo: suite/tipos/build combinados, después recorrido nativo real por CUA incluyendo edición BPMN y diálogos, ya accesibles. No sustituir pruebas nativas por el seam ni declarar edición empaquetada probada antes de ejecutarla.
