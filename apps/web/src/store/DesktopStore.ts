@@ -31,18 +31,23 @@ function requireWindowLila(): LilaBridge {
 }
 
 /**
- * Separa `problems` (extensión de B, no forma parte de `ProjectDocument`) y castea
+ * Propaga `problems` DENTRO del `ProjectDocument` devuelto (OP-14, revisión de A, issue #71:
+ * "problems sigue eliminado en toProjectDocument" — A ya declara `problems?` opcional en
+ * `ProjectDocument`, así que ya no hace falta extraerlo a un canal aparte para que sobreviva:
+ * `App.tsx#activate` lee `doc.problems` directamente del documento que devuelven
+ * `createProject`/`openProject`/`saveProject`/`openRecent`). También se expone en
+ * `this.problems`/`lastProblems` por compatibilidad con el resto de esta clase, y se castea
  * `runs[].result` de `unknown` (lo que tipa el puente, que no depende de `@lila/engine`) a
- * `RunResult`. Es el único cast de esta clase: no oculta una invalidez de dominio, solo repara
- * una frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine` — el valor en
- * tiempo de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
+ * `RunResult` — el único cast de esta clase: no oculta una invalidez de dominio, solo repara una
+ * frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine`, el valor en tiempo
+ * de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
  */
 function toProjectDocument(
   raw: LilaProjectDocument,
 ): { document: ProjectDocument; problems: readonly ProjectProblem[] } {
   const { problems, ...rest } = raw;
   const runs: StoredRun[] = rest.runs.map((run) => ({ ...run, result: run.result as RunResult }));
-  return { document: { ...rest, runs }, problems };
+  return { document: { ...rest, runs, problems }, problems };
 }
 
 export class DesktopStore implements ProjectSessionStore {
@@ -62,10 +67,17 @@ export class DesktopStore implements ProjectSessionStore {
     return this.problems;
   }
 
+  /**
+   * `{ saveAs: true }` SIEMPRE (OP-14, revisión de A: P0 "nuevo proyecto sobre carpeta ocupada
+   * aún sobrescribe", issues #71/#74). La carpeta que devuelve `chooseFolder()` aquí nunca es la
+   * carpeta activa de este documento — no existe una todavía — así que para `main`/`projectIO`
+   * es siempre un "destino nuevo": sin `saveAs: true`, `assertFolderNotOccupied` ni se ejecuta y
+   * un `model.bpmn`/manifiesto ajeno en esa carpeta se sobrescribe en silencio.
+   */
   async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
     const dir = await this.bridge.chooseFolder();
     if (dir === null) return null;
-    await this.bridge.writeProject(dir, document);
+    await this.bridge.writeProject(dir, document, { saveAs: true });
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = [];
@@ -94,29 +106,42 @@ export class DesktopStore implements ProjectSessionStore {
     document: ProjectDocument,
     options?: { saveAs?: boolean; overwrite?: boolean },
   ): Promise<ProjectDocument | null> {
-    const saveAs = options?.saveAs === true;
+    const explicitSaveAs = options?.saveAs === true;
     // Guardia de identidad (OP-14, revisión de A: "openProject no debe permitir guardar el
     // proyecto anterior en la carpeta nueva", issues #74/#70). Un guardado normal (sin "Guardar
     // como") del documento activo debe seguir siendo el mismo proyecto que el que está abierto:
     // si no lo es, el llamador tiene un documento obsoleto en memoria y hay que decírselo antes de
     // tocar disco, no escribirlo silenciosamente encima de la carpeta abierta.
-    if (!saveAs && this.activeDocument !== null && document.id !== this.activeDocument.id) {
+    if (!explicitSaveAs && this.activeDocument !== null && document.id !== this.activeDocument.id) {
       throw new Error(
         'E-PROYECTO-DISTINTO: el documento a guardar no es el proyecto activo; usa "Guardar como" para escribirlo en una carpeta nueva.',
       );
     }
     let dir = this.activeDir;
-    if (dir === null || saveAs) {
+    // "Destino nuevo" (OP-14, revisión de A: P0 "nuevo proyecto sobre carpeta ocupada aún
+    // sobrescribe", issues #71/#74) en dos casos: "Guardar como" explícito, o el primer guardado
+    // sin carpeta activa todavía (`dir === null`) — en AMBOS acaba de elegirse una carpeta que
+    // nunca fue la activa de este documento, así que main debe correr la comprobación de
+    // ocupación (`assertFolderNotOccupied`, solo se dispara con `saveAs: true`). Antes de este
+    // fix, el primer guardado pasaba el `saveAs` explícito (`false` por defecto) tal cual, y un
+    // `model.bpmn`/manifiesto ajeno en la carpeta recién elegida se sobrescribía sin avisar.
+    // (La condición se repite tal cual en el `if`, en vez de leerse de una variable ya calculada,
+    // para que TypeScript siga pudiendo angostar `dir` a `string` después de este bloque.)
+    let isNewDestination: boolean;
+    if (dir === null || explicitSaveAs) {
+      isNewDestination = true;
       const chosen = await this.bridge.chooseFolder();
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
       dir = chosen;
+    } else {
+      isNewDestination = false;
     }
-    // Si `writeProject` rechaza (incluido `E-CARPETA-OCUPADA` en "Guardar como", o
+    // Si `writeProject` rechaza (incluido `E-CARPETA-OCUPADA` en "destino nuevo", o
     // `E-CAMBIO-EXTERNO` sin `overwrite`), la promesa de aquí rechaza también y ni `activeDir` ni
     // `activeDocument` cambian: solo tras un `writeProject` exitoso se confirma la carpeta.
-    await this.bridge.writeProject(dir, document, { saveAs, overwrite: options?.overwrite === true });
+    await this.bridge.writeProject(dir, document, { saveAs: isNewDestination, overwrite: options?.overwrite === true });
     this.activeDir = dir;
     this.activeDocument = document;
     return document;

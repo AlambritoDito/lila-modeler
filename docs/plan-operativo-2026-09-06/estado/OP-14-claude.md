@@ -363,3 +363,99 @@ cat "$TMPDIR/lila-e2e-b.log"
   revisó el código a mano en vez de añadir una prueba frágil. `rollbackCommit`/`undoCommitStep`
   están escritos para ser triviales de leer (un `try/catch` que devuelve `boolean`, sin estado
   oculto) precisamente para que esa revisión manual sea suficientemente confiable.
+
+## Incremento 4 — tres P0 reproducidos por A (revisión 997a72f, issues #71/#74)
+
+Base: `1e136e3` (fast-forward de `codex/claude-entrega-20260906`, ya incluía los incrementos 1-3
+de arriba). Los tres P0 los reprodujo A sobre este código; ninguno requirió reabrir diseño.
+
+### P0-1 — "nuevo proyecto sobre carpeta ocupada aún sobrescribe"
+
+**Decisión**: cualquier escritura hacia una carpeta que no es la activa del mismo `id` del
+documento (`createProject`, el primer `saveProject` sin `activeDir` todavía, "Guardar como") pasa
+`{ saveAs: true }` a `bridge.writeProject`, para que main corra `assertFolderNotOccupied`
+(`projectIO.ts`, ya existía y ya se llamaba correctamente desde `main.ts`/`writeProjectFolder` —
+el bug estaba enteramente en `DesktopStore`, que no siempre marcaba el destino como nuevo).
+
+**Razón**: `createProject` llamaba `this.bridge.writeProject(dir, document)` sin opciones — nunca
+disparaba la comprobación de ocupación pasara lo que pasara. `saveProject`, en el primer guardado
+(`this.activeDir === null`), elegía carpeta nueva pero reenviaba el `saveAs` explícito del llamador
+(`false` por defecto) tal cual — mismo problema para "primer guardado". Fix: `createProject` ahora
+pasa `{ saveAs: true }` siempre; `saveProject` calcula `isNewDestination = dir === null ||
+explicitSaveAs` ANTES de pedir carpeta, y usa ese valor (no el `saveAs` explícito del llamador)
+como `options.saveAs` de la escritura. La guardia de identidad (`E-PROYECTO-DISTINTO`) sigue
+usando el `saveAs` explícito del llamador, sin cambios — no se mezclan los dos conceptos.
+
+**Prueba**: `DesktopStore.test.ts` — nueva prueba "sin carpeta activa (primer guardado): pasa
+`{ saveAs: true }`..." (el caso que antes fallaba en silencio) y "carpeta ocupada (writeProject
+rechaza E-CARPETA-OCUPADA): rechaza y no deja el proyecto como activo" (con un bridge falso que
+simula el rechazo real de `assertFolderNotOccupied`); se actualizaron las aserciones de
+`bridge.writes` de los tests existentes de `createProject` para reflejar el `{ saveAs: true }` que
+ahora siempre viaja. La cobertura de `assertFolderNotOccupied` en sí (con fs real, carpeta ajena
+intacta byte a byte) ya existía en `projectIO.test.ts` (incremento 1) y sigue verde sin tocarla.
+
+### P0-2 — "lectura de model.bpmn (y manifiesto) sigue symlinks"
+
+**Decisión**: `lstat` (vía `isSymlink`, `safePaths.ts`, ya existente) antes de leer tanto
+`model.bpmn` como `lila-project.json` en `readProjectFolder`/`readManifest`. Symlink en
+`model.bpmn` → fatal (`E-SYMLINK`), mismo criterio que "ausente" (`E-SIN-MODELO`): sin poder
+confiar en su origen, no hay nada que abrir. Symlink en `lila-project.json` → se excluye y queda
+en `problems`, reconstruido como si faltara (mismo criterio que un manifiesto roto/no-JSON).
+`requireAuthorizedDir` (`main.ts`) YA comprobaba `realpath(dir)` en cada llamada desde el
+incremento 1 — no hizo falta tocarlo, se verificó que sigue ahí (líneas 89-106).
+
+**Razón**: la protección de symlinks del incremento 1 solo cubría escenarios (`*.scenario.json`) y
+la carpeta `runs` — A reprodujo el caso con `model.bpmn` mismo (y el manifiesto) sin cubrir:
+`readFile(modelPath)`/`readFile(manifestPath)` se llamaban directo, sin `isSymlink` antes, así que
+un `model.bpmn` symlinkeado a un archivo externo devolvía su contenido como si fuera el modelo del
+proyecto.
+
+**Prueba**: dos casos nuevos en `projectIO.test.ts`, describe `symlinks — lectura`: "model.bpmn
+symlink a un archivo externo: E-SYMLINK, no se lee el contenido ajeno" y "lila-project.json
+symlink a un archivo externo: se excluye, queda en problems, y el manifiesto se reconstruye"
+(verifica que el `id`/revisión del documento NO son los del archivo ajeno enlazado). Ambos con
+symlinks reales (`node:fs/promises.symlink`) en carpetas temporales (`mkdtemp`), como el resto del
+describe.
+
+### P0-3 — "problems sigue eliminado en toProjectDocument"
+
+**Decisión**: `toProjectDocument` (`DesktopStore.ts`) ahora incluye `problems` DENTRO del
+`ProjectDocument` que devuelve, en vez de extraerlo a un canal aparte — A ya declara `problems?`
+opcional en `ProjectDocument` (`apps/web/src/store/ProjectStore.ts:75`), así que no hizo falta
+tocar `LilaProjectDocument` (`bridge.ts`) ni inventar ningún campo extra: `problems` viaja en el
+`ProjectDocument` de A.
+
+**Razón**: `App.tsx#activate` (línea 196-197) lee `doc.problems` directamente del documento que
+devuelven `createProject`/`openProject`/`saveProject`/`openRecent` para mostrar el aviso al abrir
+— pero `toProjectDocument` destructuraba `problems` fuera del documento (`const { problems, ...rest
+} = raw`) y solo lo exponía por separado (`this.problems`/`lastProblems`, pensado para cuando A
+todavía no admitía el campo). Con `ProjectDocument.problems?` ya declarado por A, el documento
+devuelto llegaba SIN el campo y `doc.problems` en `App.tsx` era siempre `undefined`: el diagnóstico
+de "este escenario no se pudo leer" nunca se veía en la modalidad de escritorio. `lastProblems` se
+conserva (no se rompe nada que ya dependiera de él).
+
+**Prueba**: `DesktopStore.test.ts`, test de `openProject` renombrado a "ida y vuelta: propaga
+'problems' en el documento devuelto (y en lastProblems)...", con una aserción nueva
+`expect(document?.problems).toEqual(...)` además de la ya existente sobre `lastProblems`.
+
+### Comandos y resultado
+
+```
+npx vitest run apps/desktop apps/web/src/store          # 10 archivos, 168 tests, todos verdes
+npx tsc -p apps/desktop/tsconfig.json --noEmit           # limpio
+npm run typecheck -w @lila/web                           # limpio
+npm run build -w @lila/web && npm run build -w @lila/desktop   # ok
+LILA_SMOKE=1 npx electron apps/desktop                   # {"ok":true,"consoleErrors":[],"loadFailure":null}
+```
+
+### Archivos tocados
+
+- `apps/desktop/src/projectIO.ts` (P0-2)
+- `apps/desktop/src/projectIO.test.ts` (P0-2, tests nuevos)
+- `apps/web/src/store/DesktopStore.ts` (P0-1, P0-3)
+- `apps/web/src/store/DesktopStore.test.ts` (P0-1, P0-3, tests nuevos/actualizados)
+- Este archivo.
+
+Nada de `main.ts`/`bridge.ts`/`safePaths.ts` cambió: `assertFolderNotOccupied`,
+`requireAuthorizedDir` e `isSymlink` ya existían y ya funcionaban — los tres bugs estaban en cómo
+(o si) el resto del código los invocaba, no en su lógica.
