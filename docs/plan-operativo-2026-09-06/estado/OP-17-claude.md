@@ -39,3 +39,76 @@
 Escribir `THIRD_PARTY_LICENSES.md`, luego `docs/GUIA-BETA-MAC.md`, luego la sección corta en
 `README.md`. Commits separados por entregable, mensaje `docs: OP-17 …` con los issues
 correspondientes.
+
+---
+
+## Estado final (incremento 1 entregado)
+
+- SHA base: `287e3e2` (tras el merge). SHA final: `f552cce`.
+- Commits: `a7d45cc` (estado inicial), `3b08446` (`THIRD_PARTY_LICENSES.md`, #77), `79d071f`
+  (`docs/GUIA-BETA-MAC.md`, #55/#75/#76), `f552cce` (sección en `README.md`, #55).
+- No se tocó código ni `docs/MCP.md`; solo los cuatro archivos previstos.
+
+### Qué se verificó ejecutando
+
+- `npm run build -w @lila/engine` — OK, sin salida (tsc limpio).
+- `npm run build -w @lila/web` — OK; build de Vite genera `apps/web/dist` (bundle principal
+  968.73 kB / 283.24 kB gzip, aviso de tamaño preexistente de Vite, no de este ticket).
+- `npm run build -w @lila/desktop` — OK; `tsc --build` + `copy-web.mjs` copian
+  `apps/web/dist` → `apps/desktop/dist/web`.
+- `grep -c zod apps/web/dist/assets/index-*.js` → 5 coincidencias: confirma que `zod` (de
+  `@lila/engine`, no solo de la CLI) queda dentro del bundle que carga la ventana de Electron,
+  no solo en `node_modules`.
+- `python3 -c "import json; ..."` sobre cada `node_modules/<paquete>/package.json` del árbol de
+  `bpmn-js` (18 paquetes transitivos) y de las dependencias directas (`react`, `react-dom`,
+  `zod`, `electron`) — versión y licencia leídas del propio manifiesto instalado, no de memoria.
+- `curl` a `raw.githubusercontent.com/electron/electron/v44.2.0/DEPS` — confirma Chromium
+  `152.0.7977.76` y Node `v24.20.0` embebidos en Electron `44.2.0` (la versión exacta que usa
+  `apps/desktop/package.json`); no se adivinó ninguna de las dos.
+- `lsof -i :5173 …` antes de tocar nada de build: hay un proceso de otro trabajador ("Codex")
+  escuchando en `:5173`; no se tocó, no afecta a los builds de producción de este ticket.
+- `xattr` sobre el `.app` existente en `apps/desktop/release/mac-arm64/`: solo trae
+  `com.apple.provenance` (build local), no `com.apple.quarantine` — coherente con que es un
+  artefacto compilado en esta máquina, no descargado; la guía describe el caso de descarga real
+  (quarantine sí presente) que es el que le va a pasar a quien reciba el `.dmg`.
+
+### Qué NO se verificó (y por qué, o dónde queda anotado)
+
+- **No se regeneró el DMG** (`npm run dist:mac -w @lila/desktop`): el de OP-12
+  (`apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg`, sha `f0ba8ed`) sigue siendo válido
+  porque no hay cambio de código en este incremento (solo documentación); regenerarlo habría sido
+  trabajo redundante. Los tres comandos de build que sí componen `dist:mac` (`build -w
+  @lila/engine`, `build -w @lila/web`, `build -w @lila/desktop`) se verificaron por separado.
+- **No se probó interactivamente el flujo real de "Guardar proyecto" en la app empaquetada**
+  (a qué carpeta cae la descarga del `.lila.json` dentro de Electron): no hay entorno para
+  simular el clic de un diálogo nativo desde este agente, mismo límite que ya documentó B en
+  OP-02. La guía lo dice explícitamente en vez de inventar una ruta de descarga.
+- **No se ejecutó `npm ci`**: no hizo falta (ninguna dependencia nueva en este incremento, todo
+  documental); el comando queda en la guía como primer paso para quien clona limpio.
+- Windows/Linux: no compilados ni probados (ya documentado como limitación por OP-12; este
+  incremento no cambia ese estado, solo lo repite en la guía de usuario).
+
+### Limitaciones documentadas en la guía (resumen; ver `docs/GUIA-BETA-MAC.md` para el detalle)
+
+Sin firma/notarización, sin icono propio (#76), solo macOS arm64 probado, persistencia en carpeta
+de proyecto pendiente del bootstrap de A (`main.tsx` sigue con `BrowserStore`: "Guardar proyecto"
+hoy descarga un `.lila.json` suelto, no escribe `model.bpmn`/`*.scenario.json`/
+`lila-project.json`/`runs/` aunque ese código ya exista en `apps/desktop/src/projectIO.ts` y
+`DesktopStore`), editor visual de calendarios pospuesto, diálogos nativos no probados
+interactivamente.
+
+### Pendientes del ticket OP-17 (no entran en este incremento)
+
+- **Incremento 2 (MCP, issues #56/#48)**: cadena `run_simulation`/`compare_scenarios` por stdio,
+  y lo que exige la preparación de publicación npm (#223) — explícitamente fuera de alcance según
+  la instrucción recibida para esta sesión; no se tocó `docs/MCP.md`.
+- **Guía definitiva tras el bootstrap de A**: en cuanto `main.tsx` instancie `DesktopStore` (ver
+  petición de B en `estado/OP-08-claude.md`), la sección "Guardar y recuperar" de
+  `docs/GUIA-BETA-MAC.md` queda desactualizada por diseño (describe el estado de `287e3e2`) y hay
+  que reescribirla para documentar el flujo real de carpeta de proyecto.
+- No se declara aquí ningún issue (#55/#75/#76/#77) como cerrado del todo: este paquete cumple su
+  parte de la aceptación de OP-17 (guía que no describe nada inexistente, licencias con la marca
+  de bpmn.io), pero el cierre de cada issue depende de que se cumplan también sus criterios en
+  otros paquetes (p. ej. #76 icono propio es de F/empaquetado, no de este incremento).
+
+Sesión trabajadora: cerrada para este incremento. Cesión a otro equipo: no.
