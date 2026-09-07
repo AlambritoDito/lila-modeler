@@ -105,7 +105,7 @@ interface FlowMetrics {
 
 ```ts
 interface ResourceMetrics {
-  utilization: number;   // fracción 0..1
+  utilization: number;   // fracción >= 0; puede superar 1, ver R-CAL-9
   busyTime: number;      // segundos
   fixedCost: number;
   unitCost: number;
@@ -114,7 +114,7 @@ interface ResourceMetrics {
 ```
 
 - **`busyTime`** — segundos-unidad que el pool estuvo ocupado atendiendo instancias, sumados sobre las unidades ocupadas: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s. Se agrega **por fila** del event log (ADR-025): cada fila **de la cohorte medida** con `resourceId` y `startedAt` no nulos aporta `resourceQuantity ×` el tiempo **abierto** de `[max(startedAt, warmup), min(endedAt ?? observedUntil, t_stop)]` según el calendario efectivo de esa actividad —el mismo con el que se calculó su `resourceCost`, de ahí que la identidad de R-COST-4 siga cuadrando—; sin calendarios ese tiempo abierto es el intervalo entero. Una unidad reservada mientras la tarea está pausada fuera de horario no acumula `busyTime` (R-CAL-6). Una fila sentinel, o una que nunca llegó a arrancar, aporta 0. Las filas de casos iniciados antes del `warmup` no aportan aunque su ocupación caiga dentro de la ventana: por R-ARR-7 esos casos existen y retrasan a los demás, pero no entran en ninguna integral (ver sección 8).
-- **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). En nivel 3 (sin calendarios, M2) `availableTime = statisticsDuration`, es decir la ventana `[warmup, t_stop]`; los calendarios de M3 solo cambian ese denominador (R-CAL-9). Expresada como fracción `0..1`; la CLI la imprime como porcentaje (columna Bizagi `Utilization %`). Con `capacity × availableTime = 0` vale 0, no `NaN`. **Límite conocido** (QA de LILA-041, abierto para LILA-044): el denominador mira solo el calendario **del pool**, así que un pool sin calendario que solo participa en tareas cuyo calendario efectivo sí lo tiene aparece diluido contra el reloj de pared. En `examples/pedido` el pool `horno` ocupa el 99,9 % de las horas en que su tarea puede correr y la tabla imprime 27,5 %.
+- **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). En nivel 3 (sin calendarios, M2) `availableTime = statisticsDuration`, es decir la ventana `[warmup, t_stop]`; los calendarios de M3 solo cambian ese denominador (R-CAL-9). Es una fracción `≥ 0`, que la CLI imprime como porcentaje (columna Bizagi `Utilization %`): puede superar 1 cuando trabajo iniciado con mayor capacidad continúa después de una bajada sin apropiación. No se aplica clamp; `W-UTILIZACION-MAYOR-UNO` hace visible el caso. Con `capacity × availableTime = 0` vale 0, no `NaN`. La métrica es atribuible a la cohorte posterior al `warmup`: trabajo anterior no aporta `busyTime`, aunque siga ocupando físicamente el pool, y el denominador conserva toda la capacidad de la ventana. **Límite conocido** (QA de LILA-041, abierto para LILA-044): el denominador mira solo el calendario **del pool**, así que un pool sin calendario que solo participa en tareas cuyo calendario efectivo sí lo tiene aparece diluido contra el reloj de pared. En `examples/pedido` el pool `horno` ocupa el 99,9 % de las horas en que su tarea puede correr y la tabla imprime 27,5 %.
 - **`fixedCost`** — `resources[id].fixedCost × usos`, donde *usos* es `Σ resourceQuantity` sobre las filas que llegaron a ocupar el pool (una tarea que ocupa 2 unidades son 2 usos, R-COST-2).
 - **`unitCost`** — `costPerHour del recurso × (busyTime / 3600)` (costo por las horas efectivamente ocupadas).
 - **`totalCost`** — `fixedCost + unitCost`. Identidad verificable contra el log:
@@ -175,11 +175,16 @@ interface Percentiles {
 interface BottleneckEntry {
   elementId: string;
   resourceWaitTotal: number;  // segundos, = elements[elementId].resourceWait.total
-  utilization: number;        // del recurso principal asignado al elemento, 0..1
+  utilization: number;        // del recurso principal asignado al elemento, >= 0
 }
 ```
 
 Ranking de elementos ordenado descendentemente por `elements[elementId].resourceWait.total` (el elemento donde más tiempo total se perdió esperando recurso). Desempate: mayor `utilization` primero (del recurso — o, si el elemento usa varios pools, el mayor `utilization` entre ellos); si también empata, `elementId` ascendente, para que el orden sea total y determinista. Elementos con `resourceWait.total = 0` no aparecen en el ranking. Es una métrica que Bizagi no ofrece (sección 3: "Ranking de cuellos de botella — Bizagi ✗ / Lila ✓").
+
+Con varias replicaciones, `resourceWaitTotal` es la media incondicional: una réplica donde el
+elemento no espera aporta 0, igual que en `elements[id].resourceWait.total`. `utilization` es la
+media condicional sobre las réplicas donde el elemento sí aparece en `bottlenecks`; su ausencia no
+es una observación de utilización cero y no reduce artificialmente el valor publicado.
 
 Los pools de un elemento se leen del **event log** (`resourceId` de sus filas), no del escenario:
 cada fila ya trae el pool efectivamente asignado, así que el ranking vale igual para un solo pool,
@@ -316,6 +321,7 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
 - Una clave de `elements` en el escenario que no corresponde a ningún id del IR (sobra, no falta — una clave que falta es error, no warning).
 - Una referencia `lila:*Ref` colgante hacia el catálogo (ver `BPMN_EXTENSION.md`).
 - Uso de una distribución `normal`/`truncatedNormal` con probabilidad de muestrear un valor negativo mayor a 1 % (se trunca a 0, pero se avisa).
+- Utilización mayor que 1 por trabajo que continúa tras una bajada de capacidad sin apropiación (`W-UTILIZACION-MAYOR-UNO`); el valor no se trunca.
 
 ---
 
