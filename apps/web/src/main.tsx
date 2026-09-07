@@ -10,10 +10,16 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { parseBpmn } from '@lila/engine/bpmn';
-import { ScenarioSchema, resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
-import type { SimulationProgress } from '@lila/engine';
+import {
+  ScenarioSchema,
+  resolveExtends,
+  type ResolvedScenario,
+  type Scenario,
+} from '@lila/engine/schema';
+import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador } from './Modeler';
 import { PanelPropiedades } from './PropertiesPanel';
+import { ScenarioPanel } from './ScenarioPanel';
 import type { Corrida } from './BottleneckOverlay';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
@@ -45,22 +51,31 @@ const TEMA_URL = '/eva-01.json';
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
 
-const PLACEHOLDER: Record<(typeof PESTANAS)[number], string> = {
+/** «Simulación» ya no está: la pinta `ScenarioPanel` (LILA-061). */
+const PLACEHOLDER: Partial<Record<(typeof PESTANAS)[number], string>> = {
   Propiedades: 'El panel de propiedades llega en LILA-060.',
   Documentación: 'Los campos lila: llegan en LILA-060.',
-  Simulación: 'Los parámetros del escenario llegan en LILA-061.',
 };
 
-/** Escenarios del benchmark, por nombre de archivo (el que resuelve `extends`). */
-const ESCENARIOS: Readonly<Record<string, { etiqueta: string; json: unknown }>> = {
-  'as-is.scenario.json': { etiqueta: 'AS-IS', json: asIsJson },
-  'to-be-3-cajeros.scenario.json': { etiqueta: 'TO-BE 3 cajeros', json: toBeJson },
+/** Escenarios de la sesión, por nombre de archivo (el que resuelve `extends`). */
+type Escenarios = Readonly<Record<string, Record<string, unknown>>>;
+
+/** Los dos del benchmark; el panel de escenario (LILA-061) añade copias a este mismo mapa. */
+const ESCENARIOS_INICIALES: Escenarios = {
+  'as-is.scenario.json': asIsJson as Record<string, unknown>,
+  'to-be-3-cajeros.scenario.json': toBeJson as Record<string, unknown>,
 };
+
+/** Etiqueta del selector: el `name` del escenario, que es lo que también imprime la CLI. */
+function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
+  const nombre = escenarios[archivo]?.['name'];
+  return typeof nombre === 'string' ? nombre : archivo;
+}
 
 /** Resuelve la cadena `extends` (el TO-BE hereda del AS-IS) contra el mapa de arriba, sin disco. */
-function cargarEscenario(archivo: string): ResolvedScenario {
+function cargarEscenario(archivo: string, escenarios: Escenarios): ResolvedScenario {
   const combinado = resolveExtends(archivo, (ruta) => {
-    const crudo = ESCENARIOS[ruta]?.json;
+    const crudo = escenarios[ruta];
     if (crudo === undefined) throw new Error(`escenario desconocido: ${ruta}`);
     return crudo;
   });
@@ -99,6 +114,13 @@ function App(): React.JSX.Element {
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
+  // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
+  // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
+  const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
+  // IR del diagrama del lienzo, para que el panel valide con `validateScenario` (reglas R3…R14)
+  // y no solo con el esquema. `null` mientras no se haya podido parsear.
+  const [ir, setIr] = useState<ProcessIR | null>(null);
+  const [seleccion, setSeleccion] = useState<string | null>(null);
   // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
   // una segunda ruta de limpieza que se pueda olvidar de correr.
@@ -124,6 +146,26 @@ function App(): React.JSX.Element {
   useEffect(() => {
     modelador?.cuellos(corrida, verCuellos);
   }, [modelador, corrida, verCuellos]);
+
+  // El IR se reparsea cuando cambia el diagrama activo. No se engancha a cada `elements.changed`
+  // del lienzo: parsear el XML entero por cada tecla del editor de nombres no lo pide nadie, y
+  // `simular()` vuelve a parsear de todas formas antes de correr.
+  useEffect(() => {
+    if (modelador === null) return;
+    let vivo = true;
+    void modelador
+      .exportar()
+      .then((xml) => parseBpmn(xml))
+      .then(({ ir: parseado }) => {
+        if (vivo) setIr(parseado);
+      })
+      .catch(() => {
+        if (vivo) setIr(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [modelador, procesoId]);
 
   useEffect(() => {
     void fetch(TEMA_URL)
@@ -165,6 +207,8 @@ function App(): React.JSX.Element {
       // el diagrama nuevo no tiene (o, peor, sobre ids que coinciden por casualidad).
       setCorrida(null);
       setSim({ tipo: 'inactivo' });
+      // La selección era del diagrama anterior: su id no tiene por qué existir en el nuevo.
+      setSeleccion(null);
     }
   }
 
@@ -181,7 +225,7 @@ function App(): React.JSX.Element {
     enVuelo.current = control;
     setSim({ progreso: null, tipo: 'simulando' });
     try {
-      const scenario = cargarEscenario(escenarioId);
+      const scenario = cargarEscenario(escenarioId, escenarios);
       const { ir } = await parseBpmn(await modelador.exportar());
       const { result } = await runInWorker(ir, scenario, {
         signal: control.signal,
@@ -239,7 +283,12 @@ function App(): React.JSX.Element {
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
-        <Lienzo xmlInicial={pedido} onListo={setModelador} onEstado={setEstado} />
+        <Lienzo
+          xmlInicial={pedido}
+          onListo={setModelador}
+          onEstado={setEstado}
+          onSeleccion={setSeleccion}
+        />
       )}
 
       <aside className="panel">
@@ -274,9 +323,9 @@ function App(): React.JSX.Element {
                   setSim({ tipo: 'inactivo' });
                 }}
               >
-                {Object.entries(ESCENARIOS).map(([id, { etiqueta }]) => (
+                {Object.keys(escenarios).map((id) => (
                   <option key={id} value={id}>
-                    {etiqueta}
+                    {etiquetaEscenario(id, escenarios)}
                   </option>
                 ))}
               </select>
@@ -317,7 +366,35 @@ function App(): React.JSX.Element {
                 : (corrida.result.bottlenecks[0]?.elementId ??
                   'Ningún elemento esperó por un recurso en esta corrida.')}
             </p>
-            <p className="vacio">{PLACEHOLDER.Simulación}</p>
+            <ScenarioPanel
+              archivo={escenarioId}
+              escenarios={escenarios}
+              onCambio={(archivo, escenario) => {
+                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+                // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
+                // que al cambiar de escenario en el selector (LILA-064).
+                cancelarCorrida();
+                setCorrida(null);
+              }}
+              onGuardar={() => {
+                void store.putScenario(
+                  procesoId,
+                  escenarioId.replace(/\.scenario\.json$/, ''),
+                  // El escenario puede ser inválido: se guarda igual y el panel lo marca. Es la
+                  // aceptación de LILA-061, y por eso el cast en vez de un `parse` que lo tire.
+                  (escenarios[escenarioId] ?? {}) as unknown as Scenario,
+                );
+              }}
+              onDuplicar={(archivo, escenario) => {
+                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+                setEscenarioId(archivo);
+                cancelarCorrida();
+                setCorrida(null);
+              }}
+              ir={ir}
+              seleccion={seleccion}
+              onSeleccionar={setSeleccion}
+            />
           </div>
         ) : (
           <PanelPropiedades modelador={modelador} pestana={pestana} />
