@@ -155,7 +155,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
   async function snapshot(): Promise<ProjectDocument> {
     if (modelador === null) throw new Error('El modelador todavía no está listo.');
     const atRevision = revisionRef.current;
-    const xml = await modelador.exportar();
+    const xml = await modelador.exportar({ interactivo: true });
     if (atRevision !== revisionRef.current) throw new Error('El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.');
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
@@ -205,6 +205,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
       const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
       if (data === null) return;
       const parsed = await parseBpmn(data.xml);
+      await modelador.comprobar?.(data.xml);
       const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? 'Mi proyecto' : data.name.replace(/\.(bpmn|xml)$/i, ''),
         model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
@@ -317,7 +318,7 @@ export function App({ store }: { store: ProjectStore }): React.JSX.Element {
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
-    try { await store.putProcess(procesoId, await modelador.exportar()); }
+    try { await store.putProcess(procesoId, await modelador.exportar({ interactivo: true })); }
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 

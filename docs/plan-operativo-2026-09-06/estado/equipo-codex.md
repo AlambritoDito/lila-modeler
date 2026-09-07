@@ -1,6 +1,6 @@
 # Disponibilidad Codex — estado vigente
 
-A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. Un solo trabajador: C (Sol) cierra OP09/OP15; D terminó. Sin cesión de tareas. Saldo 15% restante (consulta tras 74a252c): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
+A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/brito/development/lila-wt-integracion`. C y D terminaron sus incrementos; ningún trabajador activo. A integra y prueba. Sin cesión de tareas. Saldo 15% restante (consulta tras 74a252c): solo P0 breves, conservar reserva. Tres resets intactos; prohibido consumirlos.
 
 ## Commits listos
 - Commit común: 71e653e. Contrato publicado: 7550249, `CONTRATO-PROYECTO.md` y `ProjectSessionStore`.
@@ -22,3 +22,5 @@ A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/
 QA navegador real 65560c7: proyecto propio → ASIS 60s → TOBE 30s → Worker real → comparar -50% → guardar: PASS, consola limpia. QA OP09/15: seleccionar actividad, editar nombre, deshacer/rehacer conserva ID, PASS. Filechooser del navegador interno no entregó evento; no se cuenta como reapertura desktop. Fixtures `/tmp/lila-qa-codex` para QA local.
 
 Próximo: integrar OP12 listo, OP08/14 listos de B/F y último C; elegir DesktopStore, checkpoint completo serializado, entregar SHA a F para aceptación empaquetada con Vite detenido. OP16/extras pospuestos. No tocar producción/main/releases/npm ni limpiar worktrees.
+
+Último C 17ec08f integrado: export default no interactivo bloquea pérdidas, guardar/export explícitos usan interactivo:true; preflight antes de createProject; edición de proceso/anotaciones y undo de primera extensión. 45 tests C dirigidos y tipos pasan. Sin nuevos frentes: solo cierre P0 e integración B/F.
