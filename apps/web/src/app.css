@@ -140,6 +140,42 @@ body {
   padding: 16px 12px;
 }
 
+/* Pestaña «Simulación» del panel derecho: escenario, correr y el interruptor del overlay de
+   cuellos de botella (LILA-064). Los `.vacio` de dentro son las líneas de estado, así que
+   pierden el `padding` vertical de la variante suelta. */
+.simulacion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.simulacion .vacio {
+  padding: 0;
+}
+
+.campo {
+  align-items: center;
+  color: var(--fg-muted);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.campo select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  padding: 4px 8px;
+}
+
+.interruptor {
+  cursor: pointer;
+  justify-content: flex-start;
+}
+
 .diagramas {
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -273,3 +309,233 @@ body {
 
   --bjs-font-family: var(--font-diagram);
 }
+
+/* ---------- panel de propiedades (LILA-060) ---------- */
+
+.campos {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo > span {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+}
+
+.campo > output {
+  padding: 5px 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.campos input,
+.campos select,
+.campos textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  min-width: 0;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+.campos textarea {
+  resize: vertical;
+}
+
+.campos input:focus,
+.campos select:focus,
+.campos textarea:focus {
+  border-color: var(--accent-primary);
+  outline: 1px solid var(--accent-primary);
+}
+
+.campos input:disabled {
+  color: var(--fg-disabled);
+}
+
+.campos input::placeholder,
+.campos textarea::placeholder {
+  color: var(--fg-disabled);
+}
+
+.grupo {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.grupo h3 {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  margin: 0;
+}
+
+.fila {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.fila > output {
+  flex: 1;
+  min-width: 0;
+}
+
+/* La `×` de quitar: cuadrada y del ancho justo, para que no le robe sitio al campo. */
+.quitar {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.quitar:hover {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.anadir {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent-tertiary);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 0;
+}
+
+.anadir:hover {
+  color: var(--accent-primary);
+}
+
+/* El desplegable RACI se queda con el ancho de su opción más larga; el resto de la fila es
+   para el id del rol, que es lo que de verdad se escribe. */
+.fila select {
+  flex: none;
+  width: auto;
+}
+/* ---------- panel de escenario (LILA-061) ---------- */
+
+/* Todo el panel sale del JSON Schema, así que no hay una regla por campo: se estilan las tres
+   piezas que el generador produce —un campo, un objeto anidado y una entrada de registro— y
+   cualquier campo nuevo del esquema hereda el aspecto sin tocar este archivo. */
+
+.escenario {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.escenario-cabecera {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.escenario summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.campo-schema {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+
+.campo-schema label,
+.campo-schema .etiqueta {
+  color: var(--fg-muted);
+}
+
+.campo-schema input[type='text'],
+.campo-schema select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  padding: 3px 6px;
+  width: 100%;
+}
+
+.campo-schema input[type='checkbox'] {
+  width: auto;
+}
+
+.escenario .anidado {
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+  padding-left: 8px;
+}
+
+.escenario .entrada {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 4px 0;
+  padding: 4px 8px 8px;
+}
+
+.escenario .entrada legend {
+  color: var(--fg-primary);
+  display: flex;
+  gap: 8px;
+}
+
+.escenario .anadir {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.escenario .anadir input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg-primary);
+  font: inherit;
+  min-width: 0;
+  padding: 3px 6px;
+}
+
+.escenario .ids {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.escenario .error,
+.escenario .aviso {
+  margin: 0;
+}
+
+/* Mantener montado el modelador conserva undo/selección entre modos. */
+.zona-modelo { grid-area: lienzo; position: relative; min-width: 0; min-height: 0; }
+.zona-modelo > .lienzo { width: 100%; height: 100%; }
+.zona-resultados { grid-area: lienzo; overflow: auto; padding: 16px; min-width: 0; z-index: 1; }

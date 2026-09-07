@@ -2,14 +2,16 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "Bizagi nivel 2 - analisis de tiempos",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_2_example.htm: tiempos de proceso, recursos infinitos (sin resources).",
+  "description": "Reproduce https://help.bizagi.com/platform/en/level_2_example.htm: tiempos de proceso, recursos infinitos (sin resources). Llegadas: la pagina describe el control simple como 'tokens are generated every 5 minutes' (constante), y la tabla de resultados (processvalidation47.png) trae exactamente 2017 instancias iniciadas y completadas -- 10080/5 + 1 -- imposible con una exponencial de media 5 min (que solo aparece, detras del icono 'advanced', en el ejemplo generico de 100 tokens de esta misma pagina). Sin duration: Bizagi drena la corrida completa (2017 = 2017) en vez de cortar a la semana con casos en vuelo. Probabilidades del gateway 'Triage type' publicadas en prosa en https://help.bizagi.com/platform/en/level_1_example.htm (Green 20% / Yellow 30% / Red 50%).",
   "model": "model.bpmn",
   "run": {
-    "start": "2026-01-05T00:00:00+00:00",
-    "duration": 604800
+    "start": "2026-01-05T00:00:00+00:00"
   },
   "elements": {
-    "StartEvent_Llegada": { "interTriggerTimer": { "type": "exponential", "mean": 300 } },
+    "StartEvent_Llegada": { "interTriggerTimer": { "type": "constant", "value": 300 }, "triggerCount": 2017 },
+    "Flow_Red":    { "probability": 0.5 },
+    "Flow_Yellow": { "probability": 0.3 },
+    "Flow_Green":  { "probability": 0.2 },
     "Task_Recibir":    { "processingTime": { "type": "constant", "value": 240 } },
     "Task_Clasificar": { "processingTime": { "type": "constant", "value": 300 } },
     "Task_Gestionar":  { "processingTime": { "type": "constant", "value": 660 } },

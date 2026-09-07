@@ -164,14 +164,18 @@ function pos(cal: Calendar, t: number): number {
   return (t + cal.offset) % WEEK;
 }
 
-/** ¿Está abierto el calendario en `t`? `from` inclusivo, `to` exclusivo (R-CAL-2). */
-export function isOpen(cal: Calendar, t: number): boolean {
-  const p = pos(cal, t);
+/** ¿Está abierto el calendario en la posición `p` de la semana? Lo comparten `isOpen` y `compileCapacity`. */
+function openAtPos(cal: Calendar, p: number): boolean {
   for (const [start, end] of cal.intervals) {
     if (p < start) return false; // ordenados: ninguno posterior puede contener p
     if (p < end) return true;
   }
   return false;
+}
+
+/** ¿Está abierto el calendario en `t`? `from` inclusivo, `to` exclusivo (R-CAL-2). */
+export function isOpen(cal: Calendar, t: number): boolean {
+  return openAtPos(cal, pos(cal, t));
 }
 
 /** Primer instante abierto en `[t, ∞)`; devuelve `t` si ya está abierto (R-CAL-3). */
@@ -272,4 +276,135 @@ export function intersect(a: Calendar, b: Calendar): Calendar {
   }
 
   return build(out, a.offset);
+}
+
+/**
+ * Unión de dos calendarios del mismo `offset`: abierto cuando lo está cualquiera de los dos.
+ * Es el calendario de un pool con `capacity` por intervalos (R-CAL-11): el pool está abierto
+ * mientras quede al menos una unidad disponible. `build` ya une solapes y adyacencias.
+ */
+export function union(a: Calendar, b: Calendar): Calendar {
+  return build([...a.intervals, ...b.intervals], a.offset);
+}
+
+/* ------------------------------------------------------------------ *
+ * Capacidad por intervalos (R-CAL-11, LILA-164)
+ * ------------------------------------------------------------------ */
+
+/** Un tramo declarado de capacidad: `capacity` unidades mientras `calendar` esté abierto. */
+export interface CapacityEntry {
+  /** `undefined` = siempre abierto (el pool sin calendario, o con un `default` inexistente). */
+  readonly calendar: Calendar | undefined;
+  readonly capacity: number;
+}
+
+/**
+ * Capacidad de un pool como función escalonada de la semana (R-CAL-11).
+ *
+ * `segments` cubre `[0, WEEK)` sin huecos, ordenado por inicio y **sin ningún cero**: los tramos
+ * en que el pool está cerrado toman la capacidad del siguiente tramo abierto. Eso es lo que
+ * generaliza R-CAL-6 sin cambiar nada del caso de un solo calendario: la concesión ocurre aunque
+ * el pool esté cerrado y el trabajo espera a la apertura, así que la capacidad que ve el
+ * planificador durante el cierre es la que habrá al abrir.
+ */
+export interface CapacitySchedule {
+  /** `[inicio de semana, capacidad]`, ordenado, `segments[0][0] === 0`, toda capacidad `≥ 1`. */
+  readonly segments: readonly (readonly [number, number])[];
+  readonly offset: number;
+  /** Mayor capacidad de la semana: el tope contra el que se valida `quantity` (R-REC-2). */
+  readonly max: number;
+  /** Definida si la capacidad no cambia nunca; el motor entonces no agenda ningún evento. */
+  readonly constant: number | undefined;
+}
+
+/** Índice del segmento que contiene la posición `p` de la semana. */
+function segmentAt(schedule: CapacitySchedule, p: number): number {
+  const { segments } = schedule;
+  for (let i = segments.length - 1; i >= 0; i--) if (p >= segments[i]![0]) return i;
+  return 0;
+}
+
+/**
+ * Compila los tramos declarados a la función escalonada. Dos tramos cuyos calendarios se
+ * **solapan suman** su capacidad en el solape (a diferencia de los intervalos de un mismo
+ * calendario, que se unen): son dos grupos distintos de unidades del mismo rol.
+ */
+export function compileCapacity(entries: readonly CapacityEntry[], offset: number): CapacitySchedule {
+  if (entries.length === 0) throw new RangeError('E-REC-CAPACIDAD: un pool necesita al menos un tramo de capacidad.');
+
+  const boundaries = new Set<number>([0]);
+  for (const entry of entries) {
+    if (entry.calendar === undefined) continue;
+    for (const [start, end] of entry.calendar.intervals) {
+      boundaries.add(start % WEEK);
+      boundaries.add(end % WEEK); // `end === WEEK` cae en 0, que ya está
+    }
+  }
+  const starts = [...boundaries].sort((left, right) => left - right);
+
+  const raw = starts.map((p) => {
+    let total = 0;
+    for (const entry of entries) {
+      if (entry.calendar === undefined || openAtPos(entry.calendar, p)) total += entry.capacity;
+    }
+    return total;
+  });
+
+  // Los tramos cerrados heredan la capacidad del siguiente abierto (circularmente). Siempre hay
+  // alguno abierto: todo calendario tiene al menos un intervalo (R-CAL-2) y toda `capacity ≥ 1`.
+  const filled = [...raw];
+  const open = raw.findIndex((value) => value > 0);
+  if (open < 0) throw new RangeError('E-CAL-VACIO: el pool no tiene ningún tramo de capacidad abierto.');
+  for (let i = starts.length - 1; i >= 0; i--) {
+    if (filled[i]! > 0) continue;
+    filled[i] = filled[(i + 1) % starts.length]!;
+  }
+  // La pasada circular puede dejar un cero si el hueco cruza el lunes 00:00: una segunda pasada
+  // hacia atrás desde el primer abierto lo cierra (dos pasadas bastan, el relleno es monótono).
+  for (let i = starts.length - 1; i >= 0; i--) if (filled[i] === 0) filled[i] = filled[(i + 1) % starts.length]!;
+
+  const segments: (readonly [number, number])[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const capacity = filled[i]!;
+    if (segments.length > 0 && segments[segments.length - 1]![1] === capacity) continue;
+    segments.push([starts[i]!, capacity]);
+  }
+
+  let max = 0;
+  for (const [, capacity] of segments) max = Math.max(max, capacity);
+  return {
+    segments,
+    offset,
+    max,
+    constant: segments.length === 1 ? segments[0]![1] : undefined,
+  };
+}
+
+/** Capacidad efectiva del pool en `t` (R-CAL-11). */
+export function capacityAt(schedule: CapacitySchedule, t: number): number {
+  if (schedule.constant !== undefined) return schedule.constant;
+  return schedule.segments[segmentAt(schedule, (t + schedule.offset) % WEEK)]![1];
+}
+
+/**
+ * Primer instante `> t` en que la capacidad **sube**. Es el único evento de calendario del heap
+ * (R-CAL-3, R-CAL-11): al bajar no hay nada que planificar, y al subir hay que despertar la cola.
+ * Requiere una capacidad no constante (si lo fuera no habría nada que despertar).
+ */
+export function nextCapacityRise(schedule: CapacitySchedule, t: number): number {
+  const { segments } = schedule;
+  const length = (index: number): number => (segments[index + 1]?.[0] ?? WEEK) - segments[index]![0];
+  const p = (t + schedule.offset) % WEEK;
+  let index = segmentAt(schedule, p);
+  // Fin absoluto del segmento en curso; a partir de ahí, un segmento entero por vuelta.
+  let boundary = t + (length(index) - (p - segments[index]![0]));
+  // Se compara cada segmento con el **anterior**, no con el de `t`: desde el turno de mayor
+  // capacidad la siguiente subida llega después de una bajada, y comparar contra `t` no la vería.
+  for (let step = 0; step < segments.length; step++) {
+    const next = (index + 1) % segments.length;
+    if (segments[next]![1] > segments[index]![1]) return boundary;
+    boundary += length(next);
+    index = next;
+  }
+  throw new RangeError('E-REC-CAPACIDAD: la capacidad no sube nunca; el horario debería ser constante.');
 }

@@ -8,266 +8,202 @@
                   exporter="Lila Modeler examples (hand-written)"
                   exporterVersion="0.0.0">
 
-  <bpmn:process id="Process_BizagiLevel1" name="Validacion de rutas - Urgencias" isExecutable="false">
-    <bpmn:documentation>Reconstrucción del ejemplo "Validating the Emergency attendance process" de
-https://help.bizagi.com/platform/en/level_1_example.htm (LILA-010, nivel 1: solo validación de
-rutas, sin tiempos ni recursos). La página solo publica el nombre de los gateways (XOR "Triage
-type" y un Parallel Gateway de divergencia/convergencia) y los conteos de tokens antes y después
-de corregir el diagrama; los nombres de las tareas dentro de cada rama de triage no están en el
-texto, solo en capturas de pantalla no accesibles como texto. Task_AtenderX/Task_RegistrarX son
-nombres representativos para reproducir la estructura (XOR de 3 salidas + AND fork/join por rama)
-necesaria para que los conteos publicados (1000 tokens; 483+315+202=1000 tras la corrección)
-tengan sentido. Ver examples/bizagi-levels/level-1/expected.json.</bpmn:documentation>
+  <bpmn:process id="Process_Urgencias" name="Emergency attendance process" isExecutable="false">
+    <bpmn:documentation>Reconstrucción del "Emergency attendance process" usado en
+https://help.bizagi.com/platform/en/level_1_example.htm (LILA-010/LILA-187, nivel 1: validación de
+rutas, sin tiempos ni recursos). Mismo proceso que los niveles 2, 3 y 4, tal como hace la
+documentación oficial de Bizagi. Topología (diagrama, carriles y nombres de tarea) tomada de
+https://help.bizagi.com/platform/en/simulationexample2.png — el mismo diagrama en los cuatro
+niveles, incluida la versión ya corregida con el Parallel Gateway de convergencia (el error que el
+tutorial enseña a diagnosticar es la versión SIN esa convergencia; ver expected.json#brokenRun):
+Receive Emergency Report -> Classify Triage -> XOR "Triage type" con tres ramas: Red (Parallel
+Gateway: Manage patient entry || Pick up patient, join, Authorize Entry, End "Red Triage end"),
+Yellow (Arrive at patient place QAV, End "Yellow Triage end") y Green (Arrive at patient place BA,
+End "Green Triage end"). Las probabilidades (Green 20% / Yellow 30% / Red 50%) están publicadas en
+prosa en esta misma página y se citan en scenario.json. Antes de LILA-187 los nombres de tarea eran
+placeholders ("Atender/Registrar") porque se creía que solo la suma de tokens estaba publicada; la
+tabla fila por fila (processvalidation42.png) confirma los nombres reales, ya usados aquí.
+LILA-187 corrige además la errata de LILA-010 en las etiquetas de expected.json (483 es la rama Red
+del 50 %, no Green).</bpmn:documentation>
 
-    <bpmn:startEvent id="StartEvent_Llegada" name="Llega paciente">
-      <bpmn:outgoing>Flow_Start_Triage</bpmn:outgoing>
+    <bpmn:startEvent id="StartEvent_Llegada" name="Llega reporte">
+      <bpmn:outgoing>Flow_Start_Recibir</bpmn:outgoing>
     </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Recibir" sourceRef="StartEvent_Llegada" targetRef="Task_Recibir" />
 
-    <bpmn:sequenceFlow id="Flow_Start_Triage" sourceRef="StartEvent_Llegada" targetRef="Gateway_Triage" />
+    <bpmn:task id="Task_Recibir" name="Receive Emergency Report">
+      <bpmn:incoming>Flow_Start_Recibir</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recibir_Clasificar</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Recibir_Clasificar" sourceRef="Task_Recibir" targetRef="Task_Clasificar" />
+
+    <bpmn:task id="Task_Clasificar" name="Classify Triage">
+      <bpmn:incoming>Flow_Recibir_Clasificar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Clasificar_Triage</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Clasificar_Triage" sourceRef="Task_Clasificar" targetRef="Gateway_Triage" />
 
     <bpmn:exclusiveGateway id="Gateway_Triage" name="Triage type">
-      <bpmn:incoming>Flow_Start_Triage</bpmn:incoming>
-      <bpmn:outgoing>Flow_Green</bpmn:outgoing>
-      <bpmn:outgoing>Flow_Yellow</bpmn:outgoing>
+      <bpmn:incoming>Flow_Clasificar_Triage</bpmn:incoming>
       <bpmn:outgoing>Flow_Red</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Yellow</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Green</bpmn:outgoing>
     </bpmn:exclusiveGateway>
 
-    <bpmn:sequenceFlow id="Flow_Green" name="Green" sourceRef="Gateway_Triage" targetRef="Gateway_ForkGreen" />
-    <bpmn:sequenceFlow id="Flow_Yellow" name="Yellow" sourceRef="Gateway_Triage" targetRef="Gateway_ForkYellow" />
-    <bpmn:sequenceFlow id="Flow_Red" name="Red" sourceRef="Gateway_Triage" targetRef="Gateway_ForkRed" />
+    <bpmn:sequenceFlow id="Flow_Red"    name="Red"    sourceRef="Gateway_Triage" targetRef="Gateway_ForkRed" />
+    <bpmn:sequenceFlow id="Flow_Yellow" name="Yellow" sourceRef="Gateway_Triage" targetRef="Task_LlegarQAV" />
+    <bpmn:sequenceFlow id="Flow_Green"  name="Green"  sourceRef="Gateway_Triage" targetRef="Task_LlegarBA" />
 
-    <bpmn:parallelGateway id="Gateway_ForkGreen">
-      <bpmn:incoming>Flow_Green</bpmn:incoming>
-      <bpmn:outgoing>Flow_ForkGreen_A</bpmn:outgoing>
-      <bpmn:outgoing>Flow_ForkGreen_B</bpmn:outgoing>
-    </bpmn:parallelGateway>
-    <bpmn:task id="Task_AtenderGreen" name="Atender (Green)">
-      <bpmn:incoming>Flow_ForkGreen_A</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinGreen_A</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="Task_RegistrarGreen" name="Registrar (Green)">
-      <bpmn:incoming>Flow_ForkGreen_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinGreen_B</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:parallelGateway id="Gateway_JoinGreen">
-      <bpmn:incoming>Flow_JoinGreen_A</bpmn:incoming>
-      <bpmn:incoming>Flow_JoinGreen_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_Green_End</bpmn:outgoing>
-    </bpmn:parallelGateway>
-    <bpmn:sequenceFlow id="Flow_ForkGreen_A" sourceRef="Gateway_ForkGreen" targetRef="Task_AtenderGreen" />
-    <bpmn:sequenceFlow id="Flow_ForkGreen_B" sourceRef="Gateway_ForkGreen" targetRef="Task_RegistrarGreen" />
-    <bpmn:sequenceFlow id="Flow_JoinGreen_A" sourceRef="Task_AtenderGreen" targetRef="Gateway_JoinGreen" />
-    <bpmn:sequenceFlow id="Flow_JoinGreen_B" sourceRef="Task_RegistrarGreen" targetRef="Gateway_JoinGreen" />
-    <bpmn:sequenceFlow id="Flow_Green_End" sourceRef="Gateway_JoinGreen" targetRef="EndEvent_Green" />
-    <bpmn:endEvent id="EndEvent_Green" name="Fin (Green)">
-      <bpmn:incoming>Flow_Green_End</bpmn:incoming>
-    </bpmn:endEvent>
-
-    <bpmn:parallelGateway id="Gateway_ForkYellow">
-      <bpmn:incoming>Flow_Yellow</bpmn:incoming>
-      <bpmn:outgoing>Flow_ForkYellow_A</bpmn:outgoing>
-      <bpmn:outgoing>Flow_ForkYellow_B</bpmn:outgoing>
-    </bpmn:parallelGateway>
-    <bpmn:task id="Task_AtenderYellow" name="Atender (Yellow)">
-      <bpmn:incoming>Flow_ForkYellow_A</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinYellow_A</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:task id="Task_RegistrarYellow" name="Registrar (Yellow)">
-      <bpmn:incoming>Flow_ForkYellow_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinYellow_B</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:parallelGateway id="Gateway_JoinYellow">
-      <bpmn:incoming>Flow_JoinYellow_A</bpmn:incoming>
-      <bpmn:incoming>Flow_JoinYellow_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_Yellow_End</bpmn:outgoing>
-    </bpmn:parallelGateway>
-    <bpmn:sequenceFlow id="Flow_ForkYellow_A" sourceRef="Gateway_ForkYellow" targetRef="Task_AtenderYellow" />
-    <bpmn:sequenceFlow id="Flow_ForkYellow_B" sourceRef="Gateway_ForkYellow" targetRef="Task_RegistrarYellow" />
-    <bpmn:sequenceFlow id="Flow_JoinYellow_A" sourceRef="Task_AtenderYellow" targetRef="Gateway_JoinYellow" />
-    <bpmn:sequenceFlow id="Flow_JoinYellow_B" sourceRef="Task_RegistrarYellow" targetRef="Gateway_JoinYellow" />
-    <bpmn:sequenceFlow id="Flow_Yellow_End" sourceRef="Gateway_JoinYellow" targetRef="EndEvent_Yellow" />
-    <bpmn:endEvent id="EndEvent_Yellow" name="Fin (Yellow)">
-      <bpmn:incoming>Flow_Yellow_End</bpmn:incoming>
-    </bpmn:endEvent>
-
-    <bpmn:parallelGateway id="Gateway_ForkRed">
+    <!-- Rama Red: fork paralelo (Manage patient entry || Pick up patient), join y Authorize Entry. -->
+    <bpmn:parallelGateway id="Gateway_ForkRed" name="ParallelGateway">
       <bpmn:incoming>Flow_Red</bpmn:incoming>
-      <bpmn:outgoing>Flow_ForkRed_A</bpmn:outgoing>
-      <bpmn:outgoing>Flow_ForkRed_B</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ForkRed_Gestionar</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ForkRed_Recoger</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:task id="Task_AtenderRed" name="Atender (Red)">
-      <bpmn:incoming>Flow_ForkRed_A</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinRed_A</bpmn:outgoing>
+    <bpmn:sequenceFlow id="Flow_ForkRed_Gestionar" sourceRef="Gateway_ForkRed" targetRef="Task_Gestionar" />
+    <bpmn:sequenceFlow id="Flow_ForkRed_Recoger"   sourceRef="Gateway_ForkRed" targetRef="Task_Recoger" />
+
+    <bpmn:task id="Task_Gestionar" name="Manage patient entry">
+      <bpmn:incoming>Flow_ForkRed_Gestionar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Gestionar_JoinRed</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="Task_RegistrarRed" name="Registrar (Red)">
-      <bpmn:incoming>Flow_ForkRed_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_JoinRed_B</bpmn:outgoing>
+    <bpmn:task id="Task_Recoger" name="Pick up patient">
+      <bpmn:incoming>Flow_ForkRed_Recoger</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recoger_JoinRed</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:parallelGateway id="Gateway_JoinRed">
-      <bpmn:incoming>Flow_JoinRed_A</bpmn:incoming>
-      <bpmn:incoming>Flow_JoinRed_B</bpmn:incoming>
-      <bpmn:outgoing>Flow_Red_End</bpmn:outgoing>
+    <bpmn:sequenceFlow id="Flow_Gestionar_JoinRed" sourceRef="Task_Gestionar" targetRef="Gateway_JoinRed" />
+    <bpmn:sequenceFlow id="Flow_Recoger_JoinRed"   sourceRef="Task_Recoger"   targetRef="Gateway_JoinRed" />
+
+    <bpmn:parallelGateway id="Gateway_JoinRed" name="ParallelGateway">
+      <bpmn:incoming>Flow_Gestionar_JoinRed</bpmn:incoming>
+      <bpmn:incoming>Flow_Recoger_JoinRed</bpmn:incoming>
+      <bpmn:outgoing>Flow_JoinRed_Autorizar</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:sequenceFlow id="Flow_ForkRed_A" sourceRef="Gateway_ForkRed" targetRef="Task_AtenderRed" />
-    <bpmn:sequenceFlow id="Flow_ForkRed_B" sourceRef="Gateway_ForkRed" targetRef="Task_RegistrarRed" />
-    <bpmn:sequenceFlow id="Flow_JoinRed_A" sourceRef="Task_AtenderRed" targetRef="Gateway_JoinRed" />
-    <bpmn:sequenceFlow id="Flow_JoinRed_B" sourceRef="Task_RegistrarRed" targetRef="Gateway_JoinRed" />
-    <bpmn:sequenceFlow id="Flow_Red_End" sourceRef="Gateway_JoinRed" targetRef="EndEvent_Red" />
-    <bpmn:endEvent id="EndEvent_Red" name="Fin (Red)">
-      <bpmn:incoming>Flow_Red_End</bpmn:incoming>
+    <bpmn:sequenceFlow id="Flow_JoinRed_Autorizar" sourceRef="Gateway_JoinRed" targetRef="Task_Autorizar" />
+
+    <bpmn:task id="Task_Autorizar" name="Authorize Entry">
+      <bpmn:incoming>Flow_JoinRed_Autorizar</bpmn:incoming>
+      <bpmn:outgoing>Flow_Autorizar_FinRed</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_Autorizar_FinRed" sourceRef="Task_Autorizar" targetRef="EndEvent_Red" />
+    <bpmn:endEvent id="EndEvent_Red" name="Red Triage end">
+      <bpmn:incoming>Flow_Autorizar_FinRed</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Rama Yellow: Arrive at patient place QAV. -->
+    <bpmn:task id="Task_LlegarQAV" name="Arrive at patient place QAV">
+      <bpmn:incoming>Flow_Yellow</bpmn:incoming>
+      <bpmn:outgoing>Flow_QAV_FinYellow</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_QAV_FinYellow" sourceRef="Task_LlegarQAV" targetRef="EndEvent_Yellow" />
+    <bpmn:endEvent id="EndEvent_Yellow" name="Yellow Triage end">
+      <bpmn:incoming>Flow_QAV_FinYellow</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Rama Green: Arrive at patient place BA. -->
+    <bpmn:task id="Task_LlegarBA" name="Arrive at patient place BA">
+      <bpmn:incoming>Flow_Green</bpmn:incoming>
+      <bpmn:outgoing>Flow_BA_FinGreen</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_BA_FinGreen" sourceRef="Task_LlegarBA" targetRef="EndEvent_Green" />
+    <bpmn:endEvent id="EndEvent_Green" name="Green Triage end">
+      <bpmn:incoming>Flow_BA_FinGreen</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>
 
   <bpmndi:BPMNDiagram id="BPMNDiagram_BizagiLevel1">
-    <bpmndi:BPMNPlane id="BPMNPlane_BizagiLevel1" bpmnElement="Process_BizagiLevel1">
+    <bpmndi:BPMNPlane id="BPMNPlane_BizagiLevel1" bpmnElement="Process_Urgencias">
 
       <bpmndi:BPMNShape id="StartEvent_Llegada_di" bpmnElement="StartEvent_Llegada">
-        <dc:Bounds x="120" y="282" width="36" height="36" />
+        <dc:Bounds x="80" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recibir_di" bpmnElement="Task_Recibir">
+        <dc:Bounds x="160" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Clasificar_di" bpmnElement="Task_Clasificar">
+        <dc:Bounds x="300" y="180" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Triage_di" bpmnElement="Gateway_Triage">
-        <dc:Bounds x="210" y="275" width="50" height="50" />
-      </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Gateway_ForkGreen_di" bpmnElement="Gateway_ForkGreen">
-        <dc:Bounds x="320" y="55" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_AtenderGreen_di" bpmnElement="Task_AtenderGreen">
-        <dc:Bounds x="420" y="0" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_RegistrarGreen_di" bpmnElement="Task_RegistrarGreen">
-        <dc:Bounds x="420" y="120" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_JoinGreen_di" bpmnElement="Gateway_JoinGreen">
-        <dc:Bounds x="570" y="55" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="EndEvent_Green_di" bpmnElement="EndEvent_Green">
-        <dc:Bounds x="670" y="62" width="36" height="36" />
-      </bpmndi:BPMNShape>
-
-      <bpmndi:BPMNShape id="Gateway_ForkYellow_di" bpmnElement="Gateway_ForkYellow">
-        <dc:Bounds x="320" y="275" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_AtenderYellow_di" bpmnElement="Task_AtenderYellow">
-        <dc:Bounds x="420" y="220" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_RegistrarYellow_di" bpmnElement="Task_RegistrarYellow">
-        <dc:Bounds x="420" y="340" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_JoinYellow_di" bpmnElement="Gateway_JoinYellow">
-        <dc:Bounds x="570" y="275" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="EndEvent_Yellow_di" bpmnElement="EndEvent_Yellow">
-        <dc:Bounds x="670" y="282" width="36" height="36" />
+        <dc:Bounds x="450" y="195" width="50" height="50" />
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="Gateway_ForkRed_di" bpmnElement="Gateway_ForkRed">
-        <dc:Bounds x="320" y="495" width="50" height="50" />
+        <dc:Bounds x="540" y="195" width="50" height="50" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_AtenderRed_di" bpmnElement="Task_AtenderRed">
-        <dc:Bounds x="420" y="440" width="100" height="80" />
+      <bpmndi:BPMNShape id="Task_Gestionar_di" bpmnElement="Task_Gestionar">
+        <dc:Bounds x="640" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_RegistrarRed_di" bpmnElement="Task_RegistrarRed">
-        <dc:Bounds x="420" y="560" width="100" height="80" />
+      <bpmndi:BPMNShape id="Task_Recoger_di" bpmnElement="Task_Recoger">
+        <dc:Bounds x="640" y="300" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_JoinRed_di" bpmnElement="Gateway_JoinRed">
-        <dc:Bounds x="570" y="495" width="50" height="50" />
+        <dc:Bounds x="800" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Autorizar_di" bpmnElement="Task_Autorizar">
+        <dc:Bounds x="900" y="180" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_Red_di" bpmnElement="EndEvent_Red">
-        <dc:Bounds x="670" y="502" width="36" height="36" />
+        <dc:Bounds x="1050" y="202" width="36" height="36" />
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="Flow_Start_Triage_di" bpmnElement="Flow_Start_Triage">
-        <di:waypoint x="156" y="300" />
-        <di:waypoint x="210" y="300" />
-      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Task_LlegarQAV_di" bpmnElement="Task_LlegarQAV">
+        <dc:Bounds x="540" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Yellow_di" bpmnElement="EndEvent_Yellow">
+        <dc:Bounds x="690" y="422" width="36" height="36" />
+      </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="Flow_Green_di" bpmnElement="Flow_Green">
-        <di:waypoint x="235" y="275" />
-        <di:waypoint x="235" y="80" />
-        <di:waypoint x="320" y="80" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkGreen_A_di" bpmnElement="Flow_ForkGreen_A">
-        <di:waypoint x="345" y="55" />
-        <di:waypoint x="345" y="40" />
-        <di:waypoint x="420" y="40" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkGreen_B_di" bpmnElement="Flow_ForkGreen_B">
-        <di:waypoint x="345" y="105" />
-        <di:waypoint x="345" y="160" />
-        <di:waypoint x="420" y="160" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinGreen_A_di" bpmnElement="Flow_JoinGreen_A">
-        <di:waypoint x="520" y="40" />
-        <di:waypoint x="595" y="40" />
-        <di:waypoint x="595" y="55" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinGreen_B_di" bpmnElement="Flow_JoinGreen_B">
-        <di:waypoint x="520" y="160" />
-        <di:waypoint x="595" y="160" />
-        <di:waypoint x="595" y="105" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Green_End_di" bpmnElement="Flow_Green_End">
-        <di:waypoint x="620" y="80" />
-        <di:waypoint x="670" y="80" />
-      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Task_LlegarBA_di" bpmnElement="Task_LlegarBA">
+        <dc:Bounds x="540" y="520" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Green_di" bpmnElement="EndEvent_Green">
+        <dc:Bounds x="690" y="542" width="36" height="36" />
+      </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="Flow_Yellow_di" bpmnElement="Flow_Yellow">
-        <di:waypoint x="260" y="300" />
-        <di:waypoint x="320" y="300" />
+      <bpmndi:BPMNEdge id="Flow_Start_Recibir_di" bpmnElement="Flow_Start_Recibir">
+        <di:waypoint x="116" y="220" /><di:waypoint x="160" y="220" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkYellow_A_di" bpmnElement="Flow_ForkYellow_A">
-        <di:waypoint x="345" y="275" />
-        <di:waypoint x="345" y="260" />
-        <di:waypoint x="420" y="260" />
+      <bpmndi:BPMNEdge id="Flow_Recibir_Clasificar_di" bpmnElement="Flow_Recibir_Clasificar">
+        <di:waypoint x="260" y="220" /><di:waypoint x="300" y="220" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkYellow_B_di" bpmnElement="Flow_ForkYellow_B">
-        <di:waypoint x="345" y="325" />
-        <di:waypoint x="345" y="380" />
-        <di:waypoint x="420" y="380" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinYellow_A_di" bpmnElement="Flow_JoinYellow_A">
-        <di:waypoint x="520" y="260" />
-        <di:waypoint x="595" y="260" />
-        <di:waypoint x="595" y="275" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinYellow_B_di" bpmnElement="Flow_JoinYellow_B">
-        <di:waypoint x="520" y="380" />
-        <di:waypoint x="595" y="380" />
-        <di:waypoint x="595" y="325" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Yellow_End_di" bpmnElement="Flow_Yellow_End">
-        <di:waypoint x="620" y="300" />
-        <di:waypoint x="670" y="300" />
+      <bpmndi:BPMNEdge id="Flow_Clasificar_Triage_di" bpmnElement="Flow_Clasificar_Triage">
+        <di:waypoint x="400" y="220" /><di:waypoint x="450" y="220" />
       </bpmndi:BPMNEdge>
 
       <bpmndi:BPMNEdge id="Flow_Red_di" bpmnElement="Flow_Red">
-        <di:waypoint x="235" y="325" />
-        <di:waypoint x="235" y="520" />
-        <di:waypoint x="320" y="520" />
+        <di:waypoint x="500" y="220" /><di:waypoint x="540" y="220" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkRed_A_di" bpmnElement="Flow_ForkRed_A">
-        <di:waypoint x="345" y="495" />
-        <di:waypoint x="345" y="480" />
-        <di:waypoint x="420" y="480" />
+      <bpmndi:BPMNEdge id="Flow_Yellow_di" bpmnElement="Flow_Yellow">
+        <di:waypoint x="475" y="245" /><di:waypoint x="475" y="440" /><di:waypoint x="540" y="440" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ForkRed_B_di" bpmnElement="Flow_ForkRed_B">
-        <di:waypoint x="345" y="545" />
-        <di:waypoint x="345" y="600" />
-        <di:waypoint x="420" y="600" />
+      <bpmndi:BPMNEdge id="Flow_Green_di" bpmnElement="Flow_Green">
+        <di:waypoint x="475" y="245" /><di:waypoint x="475" y="560" /><di:waypoint x="540" y="560" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinRed_A_di" bpmnElement="Flow_JoinRed_A">
-        <di:waypoint x="520" y="480" />
-        <di:waypoint x="595" y="480" />
-        <di:waypoint x="595" y="495" />
+
+      <bpmndi:BPMNEdge id="Flow_ForkRed_Gestionar_di" bpmnElement="Flow_ForkRed_Gestionar">
+        <di:waypoint x="565" y="195" /><di:waypoint x="565" y="120" /><di:waypoint x="640" y="120" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_JoinRed_B_di" bpmnElement="Flow_JoinRed_B">
-        <di:waypoint x="520" y="600" />
-        <di:waypoint x="595" y="600" />
-        <di:waypoint x="595" y="545" />
+      <bpmndi:BPMNEdge id="Flow_ForkRed_Recoger_di" bpmnElement="Flow_ForkRed_Recoger">
+        <di:waypoint x="565" y="245" /><di:waypoint x="565" y="340" /><di:waypoint x="640" y="340" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_Red_End_di" bpmnElement="Flow_Red_End">
-        <di:waypoint x="620" y="520" />
-        <di:waypoint x="670" y="520" />
+      <bpmndi:BPMNEdge id="Flow_Gestionar_JoinRed_di" bpmnElement="Flow_Gestionar_JoinRed">
+        <di:waypoint x="740" y="120" /><di:waypoint x="825" y="120" /><di:waypoint x="825" y="195" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recoger_JoinRed_di" bpmnElement="Flow_Recoger_JoinRed">
+        <di:waypoint x="740" y="340" /><di:waypoint x="825" y="340" /><di:waypoint x="825" y="245" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JoinRed_Autorizar_di" bpmnElement="Flow_JoinRed_Autorizar">
+        <di:waypoint x="850" y="220" /><di:waypoint x="900" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Autorizar_FinRed_di" bpmnElement="Flow_Autorizar_FinRed">
+        <di:waypoint x="1000" y="220" /><di:waypoint x="1050" y="220" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_QAV_FinYellow_di" bpmnElement="Flow_QAV_FinYellow">
+        <di:waypoint x="640" y="440" /><di:waypoint x="690" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_BA_FinGreen_di" bpmnElement="Flow_BA_FinGreen">
+        <di:waypoint x="640" y="560" /><di:waypoint x="690" y="560" />
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>
