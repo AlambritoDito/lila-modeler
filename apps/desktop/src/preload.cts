@@ -26,11 +26,10 @@ const { contextBridge, ipcRenderer } = electron;
 const lila = {
   platform: 'desktop',
   version: process.versions.electron ?? '',
-  openFolder: () => ipcRenderer.invoke('lila:openFolder') as Promise<string | null>,
-  listFiles: (dir: string) => ipcRenderer.invoke('lila:listFiles', dir) as Promise<string[]>,
-  readFile: (dir: string, rel: string) => ipcRenderer.invoke('lila:readFile', dir, rel) as Promise<string>,
-  writeFile: (dir: string, rel: string, content: string) =>
-    ipcRenderer.invoke('lila:writeFile', dir, rel, content) as Promise<void>,
+  chooseFolder: () => ipcRenderer.invoke('lila:chooseFolder') as Promise<string | null>,
+  readProject: (dir: string) => ipcRenderer.invoke('lila:readProject', dir) as ReturnType<LilaBridge['readProject']>,
+  writeProject: (dir: string, document: unknown) =>
+    ipcRenderer.invoke('lila:writeProject', dir, document) as Promise<void>,
 } satisfies LilaBridge;
 
 contextBridge.exposeInMainWorld('lila', lila);
