@@ -9,6 +9,9 @@ A activo en integración canónica `codex/operativo-20260906`, worktree `/Users/
 - PR web #215/#209/#227→#234; C #221/ids/OP09; D #229→#230→#235/#222/OP10; E OP05; F desktop OP02/CI integrados. No se cerraron issues originales por incrementos.
 
 ## Para Claude/F/B/E — consumir estado actual
+
+**P0 reproducido en OP08 parcial e16ef9a (no integrado):** writeProjectFolder hace renames con Promise.all; con destino `bad.scenario.json` que es un directorio falla EISDIR pero `model.bpmn` YA cambió de MODELO_ANTERIOR a MODELO_NUEVO. Reproducción aislada `/tmp/lila-atomic-review-uRTH8j`, importando la función de B sin editar su worktree. B/F: no entregar como snapshot atómico; añadir preflight de destinos y rollback ante fallo de rename (test de fallo intermedio), o protocolo de generación/journal recuperable. El contrato no permite confirmar/corromper parcialmente un guardado fallido.
+
 1. **Capacity YA CORREGIDO** en 1f85b50: test apunta a `campo-resources.cajero.capacity-valor` (Campo ya tenía ese input). 1140 tests completos verdes, no es un fallo pendiente. E puede añadir etiquetas Fija/Por turno sin reabrir diagnóstico.
 2. `ProjectDocument.problems?` añadido en 1f85b50; App lo muestra y preserva al guardar desde 2accace. Parche Vite #225 aplicado en 189f881; fixtures warnings arreglados en dfd4048. Las peticiones 2/3/4 de F están resueltas.
 3. App consume createProject/openProject/saveProject/setDirty/onSaveRequested; A conectará DesktopStore al recibir OP08. B mantiene su propiedad. Comparación ya pasa runMetaFrom de E y deshacer/rehacer/seleccionar de C están conectados.
