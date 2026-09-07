@@ -6,6 +6,7 @@ const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const pedido = `${repo}examples/pedido/model.bpmn`;
 const boundary = fileURLToPath(new URL('./fixtures/boundary-event.bpmn', import.meta.url));
 const warningsFixture = fileURLToPath(new URL('./fixtures/warnings.bpmn', import.meta.url));
+const incompleto = fileURLToPath(new URL('./fixtures/parse-incompleto.bpmn', import.meta.url));
 
 let out: string[];
 
@@ -93,4 +94,37 @@ test('validate sin ruta sale con 1', async () => {
 
 test('--help sale con 0', async () => {
   expect(await main(['--help'])).toBe(0);
+});
+
+// Aceptación LILA-185: un modelo que perdió elementos al cargarse sale con 1 y lo dice.
+test('validate sobre un export que pierde elementos sale con 1 e imprime E-PARSE-INCOMPLETO', async () => {
+  const code = await main(['validate', incompleto]);
+  const text = out.join('\n');
+
+  expect(code).toBe(1);
+  expect(text).toContain(
+    'error  E-PARSE-INCOMPLETO  Task_Revisar: el lector XML descartó contenido del modelo, que quedó incompleto:',
+  );
+  expect(text).toContain('duplicate ID <Task_Revisar>');
+  expect(text).toContain(
+    'aviso  W-PARSE  Process_Incompleto: aviso del lector XML, sin pérdida de nodos ni flujos:',
+  );
+});
+
+// QA LILA-185: un export con solo avisos de lectura (`W-PARSE`) no puede salir con 1, y el JSON
+// de `--json` tiene que seguir siendo JSON con los mensajes crudos de moddle (traen `<` y `>`).
+test('validate --json lleva los avisos del lector y sale con 0 si no hay errores', async () => {
+  const code = await main(['validate', '--json', `${repo}examples/bizagi-exports/bizagi-miwg-B.1.0-roundtrip.bpmn`]);
+  const report = JSON.parse(out.join('\n')) as {
+    ir: { source: { warnings: { message: string }[] } };
+    errors: unknown[];
+    warnings: { code: string; message: string }[];
+  };
+
+  expect(code).toBe(0);
+  expect(report.errors).toEqual([]);
+  expect(report.ir.source.warnings.length).toBeGreaterThan(0);
+  expect(report.warnings.filter((w) => w.code === 'W-PARSE')).toHaveLength(
+    report.ir.source.warnings.length,
+  );
 });

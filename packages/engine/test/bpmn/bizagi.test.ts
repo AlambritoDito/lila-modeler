@@ -59,7 +59,7 @@ test('un id no-NCName de un fixture tipo Bizagi se sanitiza y se recupera en ori
                   xmlns:bizagi="http://www.bizagi.com/bpmn20"
                   id="Definitions_1" targetNamespace="urn:t">
   <bpmn:process id="Process_1" name="Con ids de Bizagi" isExecutable="true">
-    <bpmn:startEvent id="1-inicio" name="Inicio" />
+    <bpmn:startEvent id='1-inicio' name="Inicio" />
     <bpmn:task id="2-revisar" name="Revisar">
       <bpmn:extensionElements>
         <bizagi:BizagiExtensions xmlns:bizagi="http://www.bizagi.com/bpmn20">
@@ -69,9 +69,9 @@ test('un id no-NCName de un fixture tipo Bizagi se sanitiza y se recupera en ori
         </bizagi:BizagiExtensions>
       </bpmn:extensionElements>
     </bpmn:task>
-    <bpmn:endEvent id="3-fin" name="Fin" />
-    <bpmn:sequenceFlow id="4-flujo1" sourceRef="1-inicio" targetRef="2-revisar" />
-    <bpmn:sequenceFlow id="5-flujo2" sourceRef="2-revisar" targetRef="3-fin" />
+    <bpmn:endEvent id='3-fin' name="Fin" />
+    <bpmn:sequenceFlow id='4-flujo1' sourceRef="1-inicio" targetRef='2-revisar' />
+    <bpmn:sequenceFlow id="5-flujo2" sourceRef='2-revisar' targetRef="3-fin" />
   </bpmn:process>
 </bpmn:definitions>`;
 
@@ -80,6 +80,8 @@ test('un id no-NCName de un fixture tipo Bizagi se sanitiza y se recupera en ori
   // Ninguno de los ids originales ("1-inicio", ...) es NCName (empiezan por dígito): todos se
   // sanitizan, y el IR los usa como clave sanitizada, no el original.
   expect(Object.keys(ir.nodes)).toHaveLength(3);
+  expect(Object.keys(ir.flows)).toHaveLength(2);
+  expect(ir.source.warnings).toEqual([]);
   expect(Object.keys(ir.nodes)).not.toContain('1-inicio');
   expect(Object.keys(ir.nodes)).not.toContain('2-revisar');
   expect(Object.keys(ir.nodes)).not.toContain('3-fin');

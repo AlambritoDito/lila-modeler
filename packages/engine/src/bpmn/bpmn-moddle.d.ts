@@ -61,11 +61,24 @@ declare module 'bpmn-moddle' {
     value?: string;
   }
 
+  /**
+   * Aviso que moddle-xml recoge en vez de lanzar, por dos motivos distintos: una referencia que
+   * no se pudo resolver (`property` es la propiedad rota, p. ej. `bpmn:sourceRef`, `element` el
+   * elemento que la declara) o un elemento entero descartado al leer el XML ("unparsable
+   * content", con la razón en `error.message`: `illegal ID <...>` o `unknown type <...>`).
+   */
+  export interface ModdleWarning {
+    message: string;
+    error?: { message: string };
+    element?: ModdleElement;
+    property?: string;
+  }
+
   export interface Moddle {
     fromXML(
       xml: string,
       typeName?: string,
-    ): Promise<{ rootElement: ModdleElement; warnings: unknown[] }>;
+    ): Promise<{ rootElement: ModdleElement; warnings: ModdleWarning[] }>;
     toXML(element: ModdleElement, options?: unknown): Promise<{ xml: string }>;
     create(type: string, attrs?: Record<string, unknown>): ModdleElement;
   }

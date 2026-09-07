@@ -10,10 +10,10 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   publicDir: 'src/theme/themes',
-  // `results.html` (demo de LILA-062) NO se declara como entrada de `build`: en dev Vite sirve
-  // cualquier `.html` de la raíz del proyecto, así que `npm run dev` la abre igual, y así el
-  // bundle de producción —el que publica LILA-067 en GitHub Pages— no incluye una página de
-  // demostración que nadie debería encontrarse en la app.
+  // Ni `results.html` (demo de LILA-062) ni `compare.html` (demo de LILA-063) se declaran como
+  // entrada de `build`: en dev Vite sirve cualquier `.html` de la raíz del proyecto, así que
+  // `npm run dev` las abre igual, y así el bundle de producción —el que publica LILA-067 en
+  // GitHub Pages— no incluye páginas de demostración que nadie debería encontrarse en la app.
   //
   // `server.fs.allow` **acota**, no amplía: por defecto Vite deja servir toda la raíz del
   // monorepo (la detecta por `package-lock.json`), incluidos `BACKLOG.md` e
@@ -26,6 +26,10 @@ export default defineConfig({
         fileURLToPath(new URL('.', import.meta.url)),
         fileURLToPath(new URL('../../examples', import.meta.url)),
         fileURLToPath(new URL('../../packages/engine', import.meta.url)),
+        // #225: bpmn-js referencia sus fuentes (`bpmn.woff2`, …) desde el CSS por `url()`, y esas
+        // peticiones salen como `/@fs/<raíz>/node_modules/...`; sin esta entrada Vite las
+        // rechaza con 403 y los iconos de la paleta se ven vacíos.
+        fileURLToPath(new URL('../../node_modules', import.meta.url)),
       ],
     },
   },
