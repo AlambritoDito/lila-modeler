@@ -53,7 +53,11 @@ export interface ColumnDef<Row> {
   header: string;
   /** Valor comparable para ordenar; `numeric` decide si se compara como número. */
   sortValue: (row: Row) => number | string;
-  display: (row: Row) => string;
+  /** Casi siempre un string (`formatNumber`/`formatDuration`); CompareView (LILA-063) le mete
+   * JSX para la marca `*` de significancia sin duplicar la tabla. */
+  display: (row: Row) => ReactNode;
+  /** Estilo extra por celda; CompareView (LILA-063) lo usa para resaltar solo las que cambian. */
+  cellStyle?: (row: Row) => CSSProperties;
   numeric?: boolean;
 }
 
@@ -79,7 +83,7 @@ export function sortRows<Row>(
   });
 }
 
-const sectionStyle: CSSProperties = {
+export const sectionStyle: CSSProperties = {
   background: 'var(--bg-surface)',
   border: '1px solid var(--border)',
   borderRadius: 8,
@@ -94,7 +98,7 @@ const titleRowStyle: CSSProperties = {
   marginBottom: 8,
 };
 
-const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14, margin: 0 };
+export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14, margin: 0 };
 
 const exportButtonStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
@@ -106,20 +110,20 @@ const exportButtonStyle: CSSProperties = {
   padding: '4px 10px',
 };
 
-const tableWrapStyle: CSSProperties = {
+export const tableWrapStyle: CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 6,
   maxHeight: 420,
   overflow: 'auto',
 };
 
-const tableStyle: CSSProperties = {
+export const tableStyle: CSSProperties = {
   borderCollapse: 'collapse',
   fontVariantNumeric: 'tabular-nums',
   width: '100%',
 };
 
-const thStyle: CSSProperties = {
+export const thStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   color: 'var(--fg-muted)',
   cursor: 'pointer',
@@ -131,14 +135,14 @@ const thStyle: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const tdStyle: CSSProperties = {
+export const tdStyle: CSSProperties = {
   borderTop: '1px solid var(--border)',
   color: 'var(--fg-primary)',
   padding: '3px 8px',
   whiteSpace: 'nowrap',
 };
 
-function sortIndicator(sort: SortState | null, key: string): string {
+export function sortIndicator(sort: SortState | null, key: string): string {
   if (sort === null || sort.key !== key) return '';
   return sort.dir === 'asc' ? ' ▲' : ' ▼';
 }
@@ -163,16 +167,18 @@ function downloadCsv(filename: string, contents: string): void {
   }
 }
 
-interface DataTableProps<Row> {
+export interface DataTableProps<Row> {
   title: string;
   columns: readonly ColumnDef<Row>[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
-  csvFilename: string;
-  csvContents: string;
+  /** Sin CSV no hay botón "Exportar CSV" (CompareView, LILA-063, no exporta nada todavía). */
+  csvFilename?: string;
+  csvContents?: string;
 }
 
-function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents }: DataTableProps<Row>): ReactNode {
+/** Tabla ordenable genérica; ResultsView (LILA-062) y CompareView (LILA-063) la comparten. */
+export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents }: DataTableProps<Row>): ReactNode {
   const [sort, setSort] = useState<SortState | null>(null);
   const sorted = sortRows(rows, columns, sort);
 
@@ -188,13 +194,15 @@ function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents
     <section style={sectionStyle}>
       <div style={titleRowStyle}>
         <h2 style={h2Style}>{title}</h2>
-        <button
-          type="button"
-          style={exportButtonStyle}
-          onClick={() => downloadCsv(csvFilename, csvContents)}
-        >
-          Exportar CSV
-        </button>
+        {csvContents !== undefined && csvFilename !== undefined && (
+          <button
+            type="button"
+            style={exportButtonStyle}
+            onClick={() => downloadCsv(csvFilename, csvContents)}
+          >
+            Exportar CSV
+          </button>
+        )}
       </div>
       <div style={tableWrapStyle}>
         <table style={tableStyle}>
@@ -226,7 +234,11 @@ function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents
                 {columns.map((column) => (
                   <td
                     key={column.key}
-                    style={{ ...tdStyle, textAlign: column.numeric === true ? 'right' : 'left' }}
+                    style={{
+                      ...tdStyle,
+                      textAlign: column.numeric === true ? 'right' : 'left',
+                      ...column.cellStyle?.(row),
+                    }}
                   >
                     {column.display(row)}
                   </td>
@@ -465,7 +477,8 @@ function BottleneckCard({
 const TABS = ['elements', 'resources', 'process', 'flows'] as const;
 type Tab = (typeof TABS)[number];
 
-const TAB_LABELS: Readonly<Record<Tab, string>> = {
+/** Rótulos de sección en español; CompareView (LILA-063) los reutiliza para no inventar otros. */
+export const TAB_LABELS: Readonly<Record<Tab, string>> = {
   elements: 'Elementos del proceso',
   flows: 'Flujos',
   process: 'Proceso',
