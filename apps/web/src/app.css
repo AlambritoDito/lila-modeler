@@ -36,48 +36,223 @@ body {
 
 /* ---------- barra superior ---------- */
 
+/* Alturas, anchos y tamaños de letra salen del artboard 01 (`docs/design/Lila Modeler.dc.html`):
+   barra de 52 px, buscador de 210 px, iconos de 30 px, acción primaria de 32 px en versalita de
+   11 px. No hay tokens para esas medidas, así que van en píxeles; los verticales se multiplican
+   por `--espacio` para que la densidad los siga moviendo. */
 .barra {
   align-items: center;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
   display: flex;
-  gap: 12px;
+  gap: 10px;
   grid-area: barra;
-  padding: calc(6px * var(--espacio, 1)) 12px;
+  padding: calc(10px * var(--espacio, 1)) 14px;
+}
+
+/* La identidad y los modos ocupan la barra de arriba abajo —el subrayado del modo activo va
+   pegado al borde inferior, como en el artefacto—, así que se comen el padding vertical de la
+   barra en vez de heredarlo. */
+.identidad,
+.modos {
+  align-self: stretch;
+  margin: calc(-10px * var(--espacio, 1)) 0;
+}
+
+.identidad {
+  align-items: center;
+  border-right: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  padding-right: 16px;
+}
+
+.logo {
+  fill: var(--accent-primary);
+  flex: none;
+  height: 22px;
+  width: 22px;
 }
 
 .proyecto {
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .archivo {
   color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.hueco {
+  flex: 1;
 }
 
 .modos {
   display: flex;
-  gap: 4px;
-  margin: 0 auto;
 }
 
 .modo {
+  align-items: center;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   color: var(--fg-muted);
   cursor: pointer;
+  display: flex;
   font: inherit;
-  padding: calc(6px * var(--espacio, 1)) 14px;
+  font-weight: 500;
+  padding: calc(2px * var(--espacio, 1)) 20px;
 }
 
 .modo.activo {
   border-bottom-color: var(--accent-tertiary);
-  color: var(--fg-primary);
+  color: var(--accent-tertiary);
+  font-weight: 600;
 }
 
 .modo:disabled {
   color: var(--fg-disabled);
   cursor: not-allowed;
+}
+
+/* Menú «Archivo» de la web. `<details>` ya es el desplegable del navegador: se abre con ratón y
+   con teclado, y no necesita ni estado en React ni una dependencia. En Electron no se pinta —
+   estas acciones son el menú nativo. */
+.menu-archivo {
+  position: relative;
+}
+
+.menu-archivo > summary {
+  border: 1px solid var(--border);
+  cursor: pointer;
+  list-style: none;
+  padding: calc(5px * var(--espacio, 1)) 12px;
+}
+
+.menu-archivo > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-archivo[open] > summary,
+.menu-archivo > summary:hover {
+  background: var(--bg-hover);
+}
+
+.menu-archivo > div {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  min-width: 14rem;
+  position: absolute;
+  top: 100%;
+  z-index: 2;
+}
+
+.menu-archivo button {
+  background: none;
+  border: none;
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: inherit;
+  padding: calc(7px * var(--espacio, 1)) 12px;
+  text-align: left;
+}
+
+.menu-archivo button:hover:enabled {
+  background: var(--bg-hover);
+}
+
+.menu-archivo button:disabled {
+  color: var(--fg-disabled);
+}
+
+/* Campo de búsqueda inerte: el artefacto le da sitio y ancho fijos; buscar de verdad es la
+   paleta de comandos (LILA-066). */
+.buscador {
+  align-items: center;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  display: flex;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  width: 210px;
+}
+
+.buscador input {
+  background: none;
+  border: none;
+  color: var(--fg-primary);
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  min-width: 0;
+  padding: 0;
+}
+
+.buscador input::placeholder {
+  color: var(--fg-disabled);
+}
+
+.buscador kbd {
+  border: 1px solid var(--border);
+  color: var(--fg-disabled);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 4px;
+}
+
+/* Deshacer/rehacer: dos cuadrados pegados, separados por la línea de fondo. */
+.iconos {
+  background: var(--border);
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+
+.iconos .boton.icono {
+  border: none;
+}
+
+/* Progreso de la corrida, en el hueco de la acción primaria (artboard 03). */
+.progreso {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 5px;
+  width: 210px;
+}
+
+.progreso-cifras {
+  color: var(--fg-muted);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.progreso-cifras .por-ciento {
+  color: var(--accent-primary);
+}
+
+.progreso-pista {
+  background: var(--bg-elevated);
+  height: 4px;
+}
+
+.progreso-pista > div {
+  background: var(--accent-primary);
+  height: 100%;
 }
 
 .boton {
@@ -98,6 +273,37 @@ body {
   border-color: var(--accent-primary);
   color: var(--fg-onAccent);
   font-weight: 600;
+}
+
+.boton:disabled {
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+/* Acción primaria única y su gemela de cancelar: misma caja de 32 px y misma versalita, lo que
+   cambia es el color (artboards 01 y 03). */
+.boton.ejecutar,
+.boton.cancelar {
+  align-items: center;
+  display: flex;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 8px;
+  height: 32px;
+  letter-spacing: 0.08em;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.boton.cancelar {
+  background: none;
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.boton.cancelar:hover {
+  background: var(--bg-hover);
 }
 
 /* ---------- panel derecho y pestañas ---------- */
@@ -192,9 +398,35 @@ body {
   color: var(--fg-muted);
   display: flex;
   font-family: var(--font-mono);
-  gap: 16px;
+  font-size: 10px;
+  gap: 18px;
   grid-area: estado;
-  padding: calc(4px * var(--espacio, 1)) 12px;
+  padding: calc(6px * var(--espacio, 1)) 14px;
+}
+
+/* Cuadradito de color delante de los conteos: hereda el `color` del propio conteo, así que se
+   apaga solo cuando no hay errores ni avisos. */
+.estado .marca {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.estado .marca::before {
+  background: currentColor;
+  content: '';
+  height: 6px;
+  width: 6px;
+}
+
+.estado .separador {
+  background: var(--border);
+  height: 12px;
+  width: 1px;
+}
+
+.estado .acento {
+  color: var(--accent-primary);
 }
 
 .enlace {
@@ -721,8 +953,6 @@ body {
 
 .lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
-.barra { flex-wrap: wrap; }
-
 .confirmar-reemplazo, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
 .confirmar-reemplazo::backdrop, .ajustes::backdrop { background: rgb(0 0 0 / 50%); }
 .confirmar-reemplazo .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -735,7 +965,9 @@ body {
 .ajustes .campo { margin-bottom: 10px; }
 .ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
 .ajustes .acciones { justify-content: flex-end; margin-top: 16px; }
-.boton.icono { padding: calc(5px * var(--espacio, 1)) 8px; line-height: 1; }
+.boton.icono { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-muted); display: grid; flex: none; height: 30px; line-height: 1; padding: 0; place-items: center; width: 30px; }
+.boton.icono:hover:enabled { color: var(--fg-primary); }
+.boton.icono:disabled { color: var(--fg-disabled); }
 
 /* `density` es un token del brief (compacta / normal / cómoda) y el artefacto lo define como un
    multiplicador único de alturas de fila y paddings (`docs/design/11-tabla-tokens.png`): 0,85 ·

@@ -62,41 +62,44 @@ beforeEach(async () => {
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
+  // Modo «Simular»: deja abierta la pestaña Simulación del panel derecho.
   await click('Simular');
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
 it('valida antes del Worker y abre Resultados con avisos preservados', async () => {
-  await click('Simular');
+  await click('Ejecutar simulación');
   expect(mocks.worker).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
   expect(container.textContent).toContain('Modelo montado');
 });
 it('un error de validación impide iniciar Worker', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
-  await click('Simular');
+  await click('Ejecutar simulación');
   expect(mocks.worker).not.toHaveBeenCalled();
   expect(container.textContent).toContain('E-NOSOP: Task_1');
 });
 it('cancelar durante preparación no crea Worker ni queda Simulando', async () => {
   const gate = deferred<{ ir: typeof ir; scenario: typeof scenario; warnings: string[] }>();
   mocks.gate.mockReturnValueOnce(gate.promise);
-  await click('Simular'); await click('Cancelar');
+  await click('Ejecutar simulación'); await click('Cancelar');
   await act(async () => gate.resolve({ ir, scenario, warnings: [] }));
   expect(mocks.worker).not.toHaveBeenCalled();
-  expect(container.textContent).not.toContain('Simulando…');
+  // La barra vuelve a la acción primaria: ni progreso ni botón de cancelar (#237).
+  expect(container.textContent).not.toContain('Replicación');
+  expect(container.textContent).toContain('Ejecutar simulación');
 });
 it.each(['modelo', 'escenario'])('editar %s aborta y descarta resultado y progreso tardíos', async (kind) => {
   const run = deferred<typeof done>(); mocks.worker.mockReturnValueOnce(run.promise);
-  await click('Simular');
+  await click('Ejecutar simulación');
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal; onProgress: (progress: unknown) => void };
   await act(async () => { if (kind === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
   expect(options.signal.aborted).toBe(true);
   await act(async () => { options.onProgress({ fraction: 1, replication: 1 }); run.resolve(done); });
   expect(container.textContent).not.toContain('Resultado actual');
-  expect(container.textContent).not.toContain('Simulando…');
+  expect(container.textContent).not.toContain('Replicación');
 });
 it('desmontar termina la corrida activa', async () => {
-  mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click('Simular');
+  mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click('Ejecutar simulación');
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
 });
@@ -203,7 +206,8 @@ it('cambiar de tema aplica el JSON nuevo, lo recuerda y remonta el lienzo con el
   expect(applyTheme).toHaveBeenLastCalledWith(papel);
   expect(mocks.exportXml).toHaveBeenCalled();
   expect(localStorage.getItem('lila.tema')).toBe('papel');
-  expect(container.textContent).toContain('Tema: Papel');
+  // El tema ya no se anuncia en la barra de estado (#237): se ve y se cambia en Ajustes.
+  expect(select.value).toBe('papel');
 });
 it('arranca con el tema recordado y la densidad como atributo', async () => {
   localStorage.setItem('lila.tema', 'papel'); localStorage.setItem('lila.densidad', 'compacta');
@@ -283,4 +287,48 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
 
 it('sin problemas no hay chips', () => {
   expect(container.querySelector('.chips-validacion')).toBeNull();
+});
+
+// --- Barra superior y barra de estado como el artboard 01 (#237) ---
+
+it('la barra tiene una sola acción primaria y corre el escenario desde cualquier modo', async () => {
+  await click('Modelar');
+  expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
+  await click('Ejecutar simulación');
+  expect(mocks.worker).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain('Resultado actual');
+});
+it('mientras simula, la barra enseña la replicación, el porcentaje y CANCELAR', async () => {
+  mocks.worker.mockReturnValueOnce(new Promise(() => {}));
+  await click('Ejecutar simulación');
+  const { onProgress } = mocks.worker.mock.calls[0]![2] as { onProgress: (p: unknown) => void };
+  await act(async () => { onProgress({ replication: 2, totalReplications: 10, fraction: 0.31 }); });
+  const barra = container.querySelector('.barra')!;
+  expect(barra.textContent).toContain('Replicación 3 de 10');
+  expect(barra.textContent).toContain('31 %');
+  expect(barra.textContent).not.toContain('Ejecutar simulación');
+  await click('Cancelar');
+  expect(barra.textContent).toContain('Ejecutar simulación');
+});
+it('las acciones de proyecto viven en el desplegable Archivo, no sueltas en la barra', async () => {
+  const menu = container.querySelector('.menu-archivo')!;
+  const acciones = [...menu.querySelectorAll('button')].map((b) => b.textContent);
+  expect(acciones).toEqual(expect.arrayContaining(['Nuevo', 'Abrir', 'Guardar', 'Guardar como']));
+  const sueltos = [...container.querySelectorAll('.barra > .boton')].map((b) => b.textContent);
+  expect(sueltos).not.toContain('Guardar');
+  // El desplegable se cierra al elegir: `<details>` no lo hace solo.
+  await click('Guardar');
+  expect((menu as HTMLDetailsElement).open).toBe(false);
+});
+it('el pie lleva errores, avisos, escenario y semilla heredada del escenario activo', async () => {
+  const pie = container.querySelector('.estado')!;
+  expect(pie.textContent).toContain('0 errores');
+  expect(pie.textContent).toContain('0 avisos');
+  expect(pie.textContent).toContain('Escenario');
+  expect(pie.textContent).toContain('AS-IS');
+  expect(pie.textContent).toContain('Semilla 42');
+  const select = container.querySelector<HTMLSelectElement>('.simulacion select')!;
+  await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(pie.textContent).toContain('TO-BE 3 cajeros');
+  expect(pie.textContent).toContain('Semilla 42');
 });
