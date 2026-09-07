@@ -62,6 +62,15 @@ que exporta «Exportar .bpmn» lo acepta `npx lila validate`.
 como primer argumento debe coincidir con `scenario.model`. Un escenario con `resources` o
 `calendars` se simula igual que uno sin ellos: no hace falta ningún gate ni bandera aparte.
 
+## Beta de escritorio (macOS)
+
+Hay una beta de `apps/desktop` (Electron, solo macOS arm64, sin firmar) que empaqueta la app web
+como `.dmg`. Cómo abrirla sin firma, qué trae la ventana al arrancar, el recorrido de uso con los
+textos reales de los botones y las limitaciones conocidas de esta ronda están en
+[`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md). Las licencias de terceros del artefacto
+empaquetado (React, bpmn-js y su árbol, Electron/Chromium/Node) están en
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+
 ## Documentación
 
 - `LILA_MODELER_ESTRUCTURA.md` — decisiones (ADR), diseño del motor, hitos.
