@@ -243,6 +243,34 @@ describe('symlinks — lectura', () => {
     expect(document.runs).toEqual([]);
     expect(problems).toEqual([{ file: 'runs', message: expect.stringContaining('symlink') }]);
   });
+
+  it('model.bpmn symlink a un archivo externo: E-SYMLINK, no se lee el contenido ajeno (OP-14, issue #71)', async () => {
+    const secreto = join(fuera, 'secreto.bpmn');
+    await writeFile(secreto, '<?xml version="1.0"?><robado/>', 'utf8');
+    await symlink(secreto, join(dir, 'model.bpmn'));
+
+    const error = await captureError(() => readProjectFolder(dir));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-SYMLINK');
+  });
+
+  it('lila-project.json symlink a un archivo externo: se excluye, queda en problems, y el manifiesto se reconstruye (OP-14, issue #71)', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const ajeno = join(fuera, 'ajeno-project.json');
+    await writeFile(
+      ajeno,
+      JSON.stringify({ version: 1, id: 'robado', name: 'Robado', model: { id: 'x', name: 'x', revision: 99 } }),
+      'utf8',
+    );
+    await symlink(ajeno, join(dir, 'lila-project.json'));
+
+    const { document, problems } = await readProjectFolder(dir);
+
+    expect(problems).toEqual([{ file: 'lila-project.json', message: expect.stringContaining('symlink') }]);
+    // Reconstruido como si faltara: no hereda el `id`/`name`/revisión del archivo ajeno enlazado.
+    expect(document.id).not.toBe('robado');
+    expect(document.model.revision).toBe(0);
+  });
 });
 
 describe('symlinks — escritura', () => {
