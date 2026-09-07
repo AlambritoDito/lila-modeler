@@ -11,7 +11,7 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import type { LilaBridge, LilaProjectDocument } from '../../../desktop/src/bridge.js';
+import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import type {
   ProcessData,
   ProcessSummary,
@@ -134,6 +134,41 @@ export class DesktopStore implements ProjectSessionStore {
    */
   onSaveRequested(save: () => Promise<boolean>): () => void {
     return this.bridge.onCloseRequested(save);
+  }
+
+  // -- Extensiones de B sobre el contrato (OP-14 incremento 2) ---------------------------------
+  // No forman parte de `ProjectSessionStore` (`ProjectStore.ts`, de A): son propias de esta
+  // modalidad (recientes/apertura de `.bpmn` no existen en `BrowserStore`). Petición a A: conectar
+  // `listRecents`/`openRecent`/`onOpenPath` en la UI (menú "Abrir reciente", manejar
+  // `lila:open-path` al arrancar) — ver `estado/OP-14-claude.md`.
+
+  /** Hasta 10 proyectos abiertos/guardados recientemente, más nuevo primero. */
+  async listRecents(): Promise<readonly Recent[]> {
+    return this.bridge.listRecents();
+  }
+
+  /**
+   * Reabre un proyecto de `listRecents()` sin selector de carpetas. `null` si la carpeta ya no
+   * existe (el bridge ya la quitó de recientes); no lanza por eso.
+   */
+  async openRecent(dir: string): Promise<ProjectDocument | null> {
+    const raw = await this.bridge.openRecent(dir);
+    if (raw === null) return null;
+    const { document, problems } = toProjectDocument(raw);
+    this.activeDir = dir;
+    this.activeDocument = document;
+    this.problems = problems;
+    return document;
+  }
+
+  /** `.bpmn` pendiente de abrir (doble clic, `open-file`, argumento de línea de comandos). Se consume una vez. */
+  async pendingOpenPath(): Promise<OpenPathRequest | null> {
+    return this.bridge.pendingOpenPath();
+  }
+
+  /** Nueva ruta `.bpmn` a abrir mientras la ventana ya está lista (segunda instancia/`open-file`). */
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void {
+    return this.bridge.onOpenPath(cb);
   }
 
   // -- Métodos históricos de `ProjectStore` (LILA-058) ----------------------------------------

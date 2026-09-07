@@ -4,7 +4,7 @@
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
 import { describe, expect, it } from 'vitest';
-import type { LilaBridge, LilaProjectDocument } from '../../../desktop/src/bridge.js';
+import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import type { ProjectDocument } from './ProjectStore';
 
@@ -79,6 +79,40 @@ class FakeBridge implements LilaBridge {
       throw new Error('FakeBridge.triggerCloseRequested: no hay callback registrado (onSaveRequested).');
     }
     return this.closeRequestedCb();
+  }
+
+  recents: Recent[] = [];
+  openRecentImpl: ((dir: string) => Promise<LilaProjectDocument | null>) | null = null;
+  private openPathCb: ((path: OpenPathRequest) => void) | null = null;
+  pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
+
+  async listRecents(): Promise<readonly Recent[]> {
+    return this.recents;
+  }
+
+  async openRecent(dir: string): Promise<LilaProjectDocument | null> {
+    if (this.openRecentImpl === null) {
+      throw new Error('FakeBridge.openRecent: no se configuró `openRecentImpl` en el test.');
+    }
+    return this.openRecentImpl(dir);
+  }
+
+  async pendingOpenPath(): Promise<OpenPathRequest | null> {
+    return this.pendingOpenPathQueue.shift() ?? null;
+  }
+
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void {
+    this.openPathCb = cb;
+    return () => {
+      this.openPathCb = null;
+    };
+  }
+
+  triggerOpenPath(path: OpenPathRequest): void {
+    if (this.openPathCb === null) {
+      throw new Error('FakeBridge.triggerOpenPath: no hay callback registrado (onOpenPath).');
+    }
+    this.openPathCb(path);
   }
 }
 
@@ -325,5 +359,51 @@ describe('DesktopStore — métodos históricos de ProjectStore (mínimo viable)
 
     const datos = await store.getProcess('Process_1');
     expect(datos).toEqual({ xml: XML_MINIMO, name: 'Pedido' });
+  });
+});
+
+describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertura pendiente)', () => {
+  it('listRecents reenvía al bridge', async () => {
+    const bridge = new FakeBridge();
+    bridge.recents = [{ dir: '/carpeta/pedido', name: 'Pedido', openedAt: '2026-01-01T00:00:00.000Z' }];
+    const store = new DesktopStore(bridge);
+
+    await expect(store.listRecents()).resolves.toEqual(bridge.recents);
+  });
+
+  it('openRecent: éxito, activa la carpeta/documento para guardados posteriores', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    const raw: LilaProjectDocument = { ...documentoBase(), problems: [] };
+    bridge.openRecentImpl = async () => raw;
+
+    const document = await store.openRecent('/carpeta/pedido');
+    expect(document?.id).toBe('proyecto-1');
+
+    // Queda activo: un guardado normal posterior escribe en la misma carpeta sin preguntar.
+    await store.saveProject(documentoBase({ name: 'v2' }));
+    expect(bridge.writes.at(-1)?.dir).toBe('/carpeta/pedido');
+  });
+
+  it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => null;
+
+    await expect(store.openRecent('/carpeta/borrada')).resolves.toBeNull();
+  });
+
+  it('pendingOpenPath/onOpenPath reenvían al bridge', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.pendingOpenPathQueue = [{ dir: '/carpeta/pedido', file: 'model.bpmn' }];
+
+    await expect(store.pendingOpenPath()).resolves.toEqual({ dir: '/carpeta/pedido', file: 'model.bpmn' });
+    await expect(store.pendingOpenPath()).resolves.toBeNull(); // se consume una vez.
+
+    const recibidos: OpenPathRequest[] = [];
+    store.onOpenPath((path) => recibidos.push(path));
+    bridge.triggerOpenPath({ dir: '/otra', file: 'model.bpmn' });
+    expect(recibidos).toEqual([{ dir: '/otra', file: 'model.bpmn' }]);
   });
 });

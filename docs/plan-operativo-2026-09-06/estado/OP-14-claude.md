@@ -109,4 +109,119 @@ regresiones en consumidores de `DesktopStore` (`App.tsx`, `store-boundary.test.t
 
 ## Incremento 2 — recientes, ventana, cambios externos, apertura de .bpmn
 
-Ver más abajo (se añade tras completar y verificar este incremento).
+SHA base: `ab2578f` (fin del incremento 1).
+
+### Decisiones y prueba
+
+6. **Estado de sesión.** Módulo puro `apps/desktop/src/sessionState.ts` (`readSessionState`/
+   `writeSessionState` sobre una ruta dada, `addRecent`/`removeRecent`/`withWindowBounds`,
+   `fitsAnyDisplay`), con escritura atómica (temporal + rename, igual criterio que `projectIO.ts`)
+   y lectura tolerante (archivo ausente, JSON roto, o forma inválida → estado por defecto; una
+   entrada de `recents` individual inválida se descarta sin tirar toda la lista). `main.ts` guarda
+   el estado en `<userData>/estado.json`, lo relee al arrancar, y lo persiste entero cada vez que
+   cambia: bounds de ventana al mover/redimensionar (debounce de 400 ms) y al cerrar (sin
+   debounce), y recientes al terminar con éxito `lila:readProject`/`lila:writeProject`/
+   `lila:openRecent`. La ventana se crea con los bounds guardados solo si `fitsAnyDisplay` (contra
+   `screen.getAllDisplays()`) dice que caben en alguna pantalla conectada ahora mismo; si no, usa
+   el tamaño por defecto (1280×800, el mismo de antes de OP-14). Puente: `listRecents()`/
+   `openRecent(dir)`, expuestos en `DesktopStore` como métodos propios (no forman parte de
+   `ProjectSessionStore`/el contrato de A) — **petición a A**: conectarlos en la UI (menú/panel
+   "Abrir reciente").
+   - Prueba: `apps/desktop/src/sessionState.test.ts` (16 casos: tolerancia de lectura, ida y
+     vuelta, `addRecent`/`removeRecent`, `fitsAnyDisplay` con una y varias pantallas);
+     `DesktopStore.test.ts` (`listRecents`/`openRecent` con puente falso, incluida la carpeta ya
+     inexistente).
+
+7. **Cambios externos (`E-CAMBIO-EXTERNO`).** `projectIO.ts` recuerda, por ruta absoluta, el
+   `{mtimeMs, size}` de `model.bpmn`/`lila-project.json`/cada `*.scenario.json` que este proceso
+   leyó o escribió con éxito (`lastSeen`, poblado por `readProjectFolder` y por
+   `writeProjectFolder` tras su propio éxito). Antes de escribir, `assertNoExternalChanges`
+   compara el estado actual en disco contra ese snapshot: si alguno de los archivos que el
+   documento va a sobrescribir tiene un snapshot conocido que **ya no coincide**, rechaza
+   `E-CAMBIO-EXTERNO: <archivos>` sin tocar disco (ni siquiera los archivos que no cambiaron).
+   **Decisión deliberada**: si NO hay snapshot conocido (nunca se leyó ni escribió ese archivo en
+   este proceso), no se bloquea — no hay una "última vez" con la que comparar, y bloquearlo
+   rompería el flujo legítimo ya cubierto por incremento 1 ("abrir una carpeta con un `model.bpmn`
+   puesto a mano y guardar sin `saveAs`" cuando ni siquiera se pasó por `readProjectFolder`
+   primero). `options.overwrite === true` salta la comprobación entera. No cubre
+   `runs/*.result.json` (tienen su propia guardia, `E-RUN-DUPLICADO`, con semántica de contenido,
+   no de momento de modificación). `DesktopStore.saveProject` acepta `options.overwrite` como
+   extensión propia sobre el contrato de A (que solo declara `saveAs?`) y lo reenvía al puente;
+   A decide, ante ese error, si ofrece "Sobrescribir" (pasa `overwrite: true`) o "Guardar como" —
+   **petición a A**.
+   - Prueba: `projectIO.test.ts` (`describe('cambios externos')`, 4 casos: rechazo sin tocar
+     nada, `overwrite` lo salta, releer restablece el snapshot conocido, sin snapshot previo no
+     bloquea).
+
+8. **Apertura de `.bpmn`** (aceptación de OP-12 "arranque frío y segunda apertura"). Módulo puro
+   `apps/desktop/src/openPath.ts` (`isBpmnPath`, `findBpmnArg`) para detectar una ruta `.bpmn` en
+   `argv` sin depender de Electron. `main.ts`: `app.on('open-file', ...)` registrado a nivel de
+   módulo (antes de `whenReady`, porque en macOS puede llegar antes); `requestSingleInstanceLock`
+   + `second-instance` para reusar la ventana existente en vez de abrir una segunda; al arrancar,
+   escanea `process.argv` (Windows/Linux) por una ruta `.bpmn`. `acceptOpenPath` valida que la
+   ruta termine en `.bpmn` y exista, autoriza su carpeta contenedora (`realpath`, igual criterio
+   que `chooseFolder`) y, si la ventana ya está lista, envía `lila:open-path`; si no, la deja en
+   `pendingOpen` para `pendingOpenPath()` (se consume una vez). Puente: `pendingOpenPath()`/
+   `onOpenPath(cb)`, expuestos en `DesktopStore` como métodos propios — **petición a A**: conectar
+   la apertura real en `App.tsx` (llamar `pendingOpenPath()` al montar y suscribirse con
+   `onOpenPath`, tratando el resultado como un `openProject`/`getProcess` ya autorizado en vez de
+   mostrar el selector de carpetas).
+   - Prueba automática: `apps/desktop/src/openPath.test.ts` (7 casos de `findBpmnArg`/`isBpmnPath`
+     puros). El resto (integración real con Electron) **no se automatizó**, solo prueba manual:
+     ```
+     LILA_DEBUG=1 LILA_SMOKE=1 npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"
+     ```
+     Resultado observado:
+     ```
+     [lila] ruta .bpmn aceptada: {"dir":"/Users/.../examples/pedido","file":"model.bpmn"}
+     {"lienzo":true,"tema":true,"fuente":true,"puente":true,"consoleErrors":[],"loadFailure":null,"ok":true}
+     ```
+     Confirma que la ruta se detectó, se autorizó su carpeta (`realpath`), y el resto del arranque
+     (protocolo `lila://`, puente, smoke) siguió funcionando sin interferencia.
+
+### Hardening adicional (no pedido explícitamente, cerrado de paso)
+
+Al tocar `chooseFolder`/`requireAuthorizedDir` para `acceptOpenPath` (que ya necesitaba
+`realpath`), se completó la parte de symlinks del incremento 1 que había quedado sin aplicar al
+nivel de la carpeta autorizada en sí (item 1 del ticket: "la carpeta autorizada se guarda como
+`fs.realpath`"): `chooseFolder` ahora guarda/devuelve `realpath(dir)` (no la ruta cruda del
+diálogo), y `requireAuthorizedDir` vuelve a resolver `realpath` en cada uso y rechaza
+(`E-NO-AUTORIZADO`) si difiere de sí misma — TOCTOU si la carpeta autorizada fue reemplazada por
+un symlink después de autorizarla. Los chequeos por archivo (symlinks en escenarios/`runs`,
+`E-SYMLINK` en escritura) del incremento 1 ya cubrían la superficie de ataque principal
+independientemente de esto.
+
+### Comandos y resultado
+
+```
+npx vitest run apps/desktop apps/web/src/store   # (y también apps/web completo) todos verdes
+npx tsc -p apps/desktop/tsconfig.json --noEmit   # limpio
+npm run typecheck --workspace @lila/web          # limpio
+npm run build -w @lila/web && npm run build -w @lila/desktop   # ok
+LILA_SMOKE=1 npx electron apps/desktop           # ok:true, consoleErrors:[]
+LILA_DEBUG=1 LILA_SMOKE=1 npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"  # ver arriba
+```
+`npx vitest run apps/desktop apps/web` completo: 27 archivos, 343 tests, todos verdes.
+
+### Limitaciones de este incremento
+
+- `estado.json` no se verificó "sobrevive reinicio" con una app empaquetada real (`electron-builder`
+  está fuera de alcance de este ticket); sí con `readSessionState`/`writeSessionState` en disco real
+  (`mkdtemp`) y con el smoke, que carga/crea el estado sin errores.
+- El guardado de bounds al cerrar es best-effort: `writeSessionState` es async y se dispara desde
+  el handler de `close`, sin esperar a que termine antes de que el proceso pueda salir si es la
+  última ventana y nada más lo retiene. No se añadió un mecanismo de "esperar a que termine antes
+  de salir" (fuera de alcance de "debounce simple").
+- `E-CAMBIO-EXTERNO` no cubre `runs/*.result.json` (ver decisión arriba) ni detecta que un archivo
+  rastreado se haya **borrado** externamente (solo modificado): un archivo ausente en el momento
+  de guardar se trata como "no hay conflicto, se crea de nuevo".
+- La integración real de recientes/apertura de `.bpmn` en la UI (menú, atajos, primer render)
+  queda para A, según lo acordado en el reparto de propiedad del ticket.
+
+## Peticiones a A (resumen)
+
+- Conectar `DesktopStore.listRecents()`/`openRecent(dir)` en la UI (menú "Abrir reciente").
+- Conectar `DesktopStore.pendingOpenPath()`/`onOpenPath(cb)` en `App.tsx` (arranque + segunda
+  apertura de un `.bpmn`).
+- Decidir la UX ante `E-CAMBIO-EXTERNO` de `saveProject`: ofrecer "Sobrescribir"
+  (`saveProject(doc, { overwrite: true })`) o "Guardar como" (`{ saveAs: true }`).

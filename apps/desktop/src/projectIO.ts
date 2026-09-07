@@ -51,6 +51,43 @@ function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT';
 }
 
+// -- Detección de cambios externos (OP-14, incremento 2) ----------------------------------------
+// `lastSeen` recuerda, por ruta absoluta, el `{mtimeMs, size}` de la última vez que ESTE proceso
+// leyó o escribió con éxito `model.bpmn`, `lila-project.json` o un `*.scenario.json` — así
+// `writeProjectFolder` puede distinguir "nadie más tocó esto desde que lo vimos" de "alguien más
+// lo modificó en disco mientras tanto" antes de sobrescribirlo sin avisar. Deliberadamente no
+// cubre `runs/*.result.json` (ya tienen su propia guardia, `E-RUN-DUPLICADO`, con otra semántica:
+// comparar contenido, no momento de modificación) ni sobrevive a un reinicio del proceso (reabrir
+// el proyecto vía `readProjectFolder` vuelve a poblar el snapshot, que es exactamente "ya lo vi").
+interface FileSnapshot {
+  readonly mtimeMs: number;
+  readonly size: number;
+}
+
+const lastSeen = new Map<string, FileSnapshot>();
+
+async function currentSnapshot(path: string): Promise<FileSnapshot | null> {
+  try {
+    const info = await stat(path);
+    return { mtimeMs: info.mtimeMs, size: info.size };
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
+  }
+}
+
+function sameSnapshot(a: FileSnapshot | null, b: FileSnapshot | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.mtimeMs === b.mtimeMs && a.size === b.size;
+}
+
+/** Registra el snapshot actual de `path` tras una lectura/escritura con éxito. */
+async function rememberSnapshot(path: string): Promise<void> {
+  const snap = await currentSnapshot(path);
+  if (snap === null) lastSeen.delete(path);
+  else lastSeen.set(path, snap);
+}
+
 /** Manifiesto por defecto cuando `lila-project.json` falta o no se pudo interpretar. */
 function defaultManifest(dir: string): Manifest {
   const nombre = basename(dir);
@@ -68,6 +105,7 @@ async function readManifest(dir: string, problems: ProjectProblem[]): Promise<Ma
   let raw: string;
   try {
     raw = await readFile(target, 'utf8');
+    await rememberSnapshot(target);
   } catch (error) {
     if (isNotFound(error)) return defaultManifest(dir);
     throw error;
@@ -132,6 +170,7 @@ async function readScenarios(
         throw new Error('es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).');
       }
       const raw = await readFile(filePath, 'utf8');
+      await rememberSnapshot(filePath);
       const parsed: unknown = JSON.parse(raw);
       if (!isPlainObject(parsed)) {
         throw new Error('el contenido no es un objeto JSON.');
@@ -206,7 +245,9 @@ export async function readProjectFolder(
 ): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[] }> {
   let xml: string;
   try {
-    xml = await readFile(join(dir, MODEL_FILE), 'utf8');
+    const modelPath = join(dir, MODEL_FILE);
+    xml = await readFile(modelPath, 'utf8');
+    await rememberSnapshot(modelPath);
   } catch (error) {
     if (isNotFound(error)) {
       throw new ProjectIOError('E-SIN-MODELO', `Falta "${MODEL_FILE}" en la carpeta del proyecto: ${dir}`);
@@ -308,14 +349,41 @@ async function assertNotSymlinkDestination(dest: string): Promise<void> {
 }
 
 /**
+ * Rechaza (`E-CAMBIO-EXTERNO`) si algún archivo de `trackedWrites` cambió en disco desde el último
+ * snapshot que este proceso registró de él (`lastSeen`, poblado por `readProjectFolder`/una
+ * escritura anterior). Sin snapshot conocido para un archivo (nunca se leyó ni se escribió en este
+ * proceso) no hay base para decir que "cambió" — se deja pasar, aunque exista con contenido ajeno;
+ * eso es responsabilidad de `assertFolderNotOccupied` (solo en "Guardar como"), no de esto.
+ * `options.overwrite === true` salta la comprobación entera (el llamador ya decidió sobrescribir).
+ */
+async function assertNoExternalChanges(trackedWrites: readonly PendingWrite[], overwrite: boolean): Promise<void> {
+  if (overwrite) return;
+  const changed: string[] = [];
+  for (const { dest } of trackedWrites) {
+    const known = lastSeen.get(dest) ?? null;
+    if (known === null) continue;
+    const current = await currentSnapshot(dest);
+    if (!sameSnapshot(current, known)) changed.push(basename(dest));
+  }
+  if (changed.length > 0) {
+    throw new ProjectIOError(
+      'E-CAMBIO-EXTERNO',
+      `Cambiaron en disco desde la última lectura/escritura, sin guardar: ${changed.join(', ')}.`,
+    );
+  }
+}
+
+/**
  * Escribe el documento completo. Antes de tocar el disco: (a) si `options.saveAs`, verifica que la
- * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) resuelve todas las
- * corridas — una que ya existe con **otro** contenido es `E-RUN-DUPLICADO` y aborta sin escribir
- * nada (ni el modelo, ni los escenarios, ni el manifiesto) — "no reemplazar archivos válidos
- * parcialmente" del contrato; una corrida con el mismo contenido es no-op; (c) rechaza si algún
- * destino (incluida la propia carpeta `runs`) ya es un symlink, sin tocar el enlace ni lo que
- * apunte fuera (OP-14, revisión de A, issue #71). El resto de archivos (modelo, escenarios,
- * manifiesto) siempre se reescriben.
+ * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) salvo
+ * `options.overwrite`, rechaza si el modelo/manifiesto/algún escenario cambió en disco desde la
+ * última lectura o escritura de este proceso (`assertNoExternalChanges`, `E-CAMBIO-EXTERNO`); (c)
+ * resuelve todas las corridas — una que ya existe con **otro** contenido es `E-RUN-DUPLICADO` y
+ * aborta sin escribir nada (ni el modelo, ni los escenarios, ni el manifiesto) — "no reemplazar
+ * archivos válidos parcialmente" del contrato; una corrida con el mismo contenido es no-op; (d)
+ * rechaza si algún destino (incluida la propia carpeta `runs`) ya es un symlink, sin tocar el
+ * enlace ni lo que apunte fuera (OP-14, revisión de A, issue #71). El resto de archivos (modelo,
+ * escenarios, manifiesto) siempre se reescriben.
  */
 export async function writeProjectFolder(
   dir: string,
@@ -363,15 +431,17 @@ export async function writeProjectFolder(
     scenarioRevisions: document.scenarioRevisions,
   };
 
-  const writes: PendingWrite[] = [
+  const trackedWrites: PendingWrite[] = [
     { dest: join(dir, MODEL_FILE), content: document.model.xml },
     { dest: join(dir, MANIFEST_FILE), content: `${JSON.stringify(manifest, null, 2)}\n` },
     ...Object.entries(document.scenarios).map(([name, scenario]) => ({
       dest: join(dir, name),
       content: `${JSON.stringify(scenario, null, 2)}\n`,
     })),
-    ...runWrites,
   ];
+  await assertNoExternalChanges(trackedWrites, options.overwrite === true);
+
+  const writes: PendingWrite[] = [...trackedWrites, ...runWrites];
 
   // Defensa en profundidad además del chequeo puntual de `runsDir`/cada corrida de arriba: vuelve
   // a comprobar TODOS los destinos (modelo, manifiesto, escenarios incluidos) justo antes de tocar
@@ -401,4 +471,11 @@ export async function writeProjectFolder(
   // Fase 2: todos los renames. Cada uno es atómico por sí solo (mismo volumen); no hay una
   // garantía transaccional multi-archivo más allá de eso (ver comentario del ticket).
   await Promise.all(writes.map(({ dest }, i) => rename(tmpPaths[i]!, dest)));
+
+  // Snapshot posterior a la escritura: para el próximo `writeProjectFolder` de este proceso, "lo
+  // que acabamos de escribir" ya cuenta como "lo último que vimos" (solo para los archivos
+  // rastreados; ver `assertNoExternalChanges`).
+  for (const { dest } of trackedWrites) {
+    await rememberSnapshot(dest);
+  }
 }

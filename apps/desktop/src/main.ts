@@ -16,15 +16,27 @@
  *   verifica que el mensaje venga del frame principal de la propia app (`isTrustedSender`,
  *   `ipcGuards.ts`) — un frame anidado o una URL de navegación ajena no puede invocar el puente.
  */
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { OpenPathRequest, Recent } from './bridge.js';
 import { decideClose, type CloseChoice } from './closeGuard.js';
 import { isTrustedSender } from './ipcGuards.js';
+import { findBpmnArg, isBpmnPath } from './openPath.js';
 import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
+import {
+  addRecent,
+  fitsAnyDisplay,
+  readSessionState,
+  removeRecent,
+  withWindowBounds,
+  writeSessionState,
+  type SessionState,
+  type WindowBounds,
+} from './sessionState.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -51,12 +63,27 @@ const authorizedFolders = new Set<string>();
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; worker-src 'self' blob:; connect-src 'self'";
 
-function requireAuthorizedDir(dir: unknown): string {
+/**
+ * Valida `dir` contra `authorizedFolders` (que guarda siempre `realpath`, ver `chooseFolder`/
+ * `acceptOpenPath`) y, además, vuelve a resolver su `realpath` en este momento: si difiere de sí
+ * misma, la carpeta cambió de identidad (p. ej. la reemplazó un symlink) entre la autorización y
+ * este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71).
+ */
+async function requireAuthorizedDir(dir: unknown): Promise<string> {
   if (typeof dir !== 'string' || dir.length === 0) {
     throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
   }
   if (!authorizedFolders.has(dir)) {
     throw new Error('E-NO-AUTORIZADO: la carpeta no fue autorizada por un diálogo.');
+  }
+  let real: string;
+  try {
+    real = await realpath(dir);
+  } catch {
+    throw new Error('E-NO-AUTORIZADO: la carpeta autorizada ya no existe.');
+  }
+  if (real !== dir) {
+    throw new Error('E-NO-AUTORIZADO: la carpeta cambió de identidad desde que se autorizó (symlink).');
   }
   return dir;
 }
@@ -214,21 +241,59 @@ function guardedOn(
   });
 }
 
+// -- Estado de sesión: ventana + recientes (OP-14, incremento 2) -------------------------------
+// Un único objeto en memoria, releído al arrancar y reescrito (entero, atómico) cada vez que
+// cambia algo — la app es de una sola ventana/proceso, así que no hace falta más que eso.
+let sessionState: SessionState = { version: 1, window: null, recents: [] };
+const sessionStatePath = path.join(app.getPath('userData'), 'estado.json');
+
+async function persistSessionState(): Promise<void> {
+  await writeSessionState(sessionStatePath, sessionState);
+}
+
+/** Añade/mueve `dir` al frente de recientes y persiste — llamar tras abrir/crear/guardar con éxito. */
+async function recordRecent(dir: string, name: string): Promise<void> {
+  sessionState = addRecent(sessionState, { dir, name, openedAt: new Date().toISOString() });
+  await persistSessionState();
+}
+
+/** Tamaño usado cuando no hay bounds recordados, o los recordados ya no caben en ninguna pantalla. */
+const DEFAULT_WINDOW_SIZE = { width: 1280, height: 800 };
+
+let boundsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function saveBounds(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) return;
+  const { x, y, width, height } = win.getBounds();
+  sessionState = withWindowBounds(sessionState, { x, y, width, height });
+  await persistSessionState();
+}
+
+/** Debounce simple: varios `move`/`resize` seguidos solo escriben disco una vez, 400 ms después del último. */
+function scheduleSaveBounds(win: BrowserWindow): void {
+  if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
+  boundsSaveTimer = setTimeout(() => void saveBounds(win), 400);
+}
+
 function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:chooseFolder', async (): Promise<string | null> => {
     const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    const dir = result.filePaths[0]!;
+    // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
+    // identidad real desde el principio (issue #71, "la carpeta autorizada se guarda como
+    // fs.realpath"), y `requireAuthorizedDir` puede volver a comprobarla más tarde sin ambigüedad.
+    const dir = await realpath(result.filePaths[0]!);
     authorizedFolders.add(dir);
     return dir;
   });
 
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
-    const dir = requireAuthorizedDir(dirArg);
+    const dir = await requireAuthorizedDir(dirArg);
     try {
       const { document, problems } = await readProjectFolder(dir);
+      await recordRecent(dir, document.name);
       return { ...document, problems };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
@@ -240,12 +305,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
     win,
     'lila:writeProject',
     async (_event, dirArg: unknown, documentArg: unknown, optionsArg: unknown): Promise<void> => {
-      const dir = requireAuthorizedDir(dirArg);
+      const dir = await requireAuthorizedDir(dirArg);
       const document = requireProjectDocument(documentArg);
       const options = requireWriteOptions(optionsArg);
       requireSafeFileNames(dir, document);
       try {
         await writeProjectFolder(dir, document, options);
+        await recordRecent(dir, document.name);
       } catch (error) {
         if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
         throw error;
@@ -255,6 +321,41 @@ function registerIpcHandlers(win: BrowserWindow): void {
 
   guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
     if (typeof value === 'boolean') setDirty(value);
+  });
+
+  guardedHandle(win, 'lila:listRecents', async (): Promise<readonly Recent[]> => sessionState.recents);
+
+  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown) => {
+    if (typeof dirArg !== 'string' || dirArg.length === 0) {
+      throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
+    }
+    // A diferencia de `readProject`, `dir` viene de `recents` (persistido entre arranques), no de
+    // `authorizedFolders` (en memoria, vacío al arrancar) — por eso se re-autoriza aquí en vez de
+    // pasar por `requireAuthorizedDir`. Si ya no existe, se quita de recientes y se informa `null`
+    // (no es un error: la carpeta pudo borrarse o moverse fuera de la app).
+    let real: string;
+    try {
+      real = await realpath(dirArg);
+    } catch {
+      sessionState = removeRecent(sessionState, dirArg);
+      await persistSessionState();
+      return null;
+    }
+    authorizedFolders.add(real);
+    try {
+      const { document, problems } = await readProjectFolder(real);
+      await recordRecent(real, document.name);
+      return { ...document, problems };
+    } catch (error) {
+      if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+      throw error;
+    }
+  });
+
+  guardedHandle(win, 'lila:pendingOpenPath', async (): Promise<OpenPathRequest | null> => {
+    const result = pendingOpen;
+    pendingOpen = null; // se consume una vez.
+    return result;
   });
 }
 
@@ -284,6 +385,64 @@ function registerLilaProtocol(): void {
       });
     } catch {
       return new Response('No encontrado', { status: 404 });
+    }
+  });
+}
+
+// -- Apertura de .bpmn: arranque frío y segunda apertura (OP-14, incremento 2, aceptación de
+// OP-12 "arranque frío y segunda apertura") -----------------------------------------------------
+/** La ventana principal, para reenviar `lila:open-path` cuando ya está lista; `null` antes de crearla. */
+let mainWindow: BrowserWindow | null = null;
+/** Ruta `.bpmn` capturada antes de que `mainWindow` existiera; `pendingOpenPath()` la consume una vez. */
+let pendingOpen: OpenPathRequest | null = null;
+
+/**
+ * Acepta `filePath` como ".bpmn a abrir" si termina en `.bpmn` y existe: autoriza su carpeta
+ * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya está lista, se lo envía
+ * de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para `pendingOpenPath()`. Una
+ * ruta que no exista o no sea `.bpmn` se ignora en silencio (no es un error del usuario: puede ser
+ * cualquier argumento de línea de comandos que no nos interesa).
+ */
+async function acceptOpenPath(filePath: string): Promise<void> {
+  if (!isBpmnPath(filePath)) return;
+  try {
+    await stat(filePath);
+  } catch {
+    return;
+  }
+  const dir = await realpath(path.dirname(filePath));
+  authorizedFolders.add(dir);
+  const request: OpenPathRequest = { dir, file: path.basename(filePath) };
+  if (process.env.LILA_DEBUG === '1') {
+    console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
+  }
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('lila:open-path', request);
+  } else {
+    pendingOpen = request;
+  }
+}
+
+// `open-file` (macOS) puede llegar antes de `app.whenReady()` (doble clic en un `.bpmn` con la app
+// cerrada) — hay que registrar el listener ya, a nivel de módulo, no dentro de `whenReady().then`.
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  void acceptOpenPath(filePath);
+});
+
+// Segunda apertura con la app ya corriendo (Windows/Linux: doble clic en un `.bpmn` lanza una
+// segunda instancia; también cubre "abrir con..." en macOS tras el primer lanzamiento). Sin el
+// lock, cada doble clic abriría una ventana nueva en vez de reusar la existente.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const bpmnArg = findBpmnArg(argv, 1); // `argv` de `second-instance` no incluye el propio ejecutable... salvo que sí (varía por SO); 1 cubre el caso común sin falsos negativos graves si no hay match.
+    if (bpmnArg !== null) void acceptOpenPath(bpmnArg);
+    if (mainWindow !== null) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
 }
@@ -387,10 +546,9 @@ function attachCloseGuard(win: BrowserWindow): void {
   });
 }
 
-function createWindow(show: boolean): BrowserWindow {
+function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
@@ -417,6 +575,18 @@ function createWindow(show: boolean): BrowserWindow {
   // enlaces http(s) legítimos ya se abren fuera vía `setWindowOpenHandler`; esto cierra el resto.
   win.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedSender(url, process.env.LILA_DEV_URL)) event.preventDefault();
+  });
+
+  // Guardar bounds al mover/redimensionar (debounce simple) y al cerrar (sin debounce: puede ser
+  // lo último que se ejecute antes de que el proceso termine).
+  win.on('move', () => scheduleSaveBounds(win));
+  win.on('resize', () => scheduleSaveBounds(win));
+  win.on('close', () => {
+    if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
+    void saveBounds(win);
+  });
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   return win;
@@ -478,10 +648,27 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
 app.whenReady().then(async () => {
   registerLilaProtocol();
 
+  sessionState = await readSessionState(sessionStatePath);
+  // Restaurar bounds guardados solo si caben en alguna pantalla conectada ahora mismo — un
+  // portátil que se desconectó de un monitor externo, por ejemplo, no debe abrir la ventana fuera
+  // de la pantalla visible.
+  const savedBounds = sessionState.window;
+  const bounds =
+    savedBounds !== null && fitsAnyDisplay(savedBounds, screen.getAllDisplays().map((d) => d.bounds))
+      ? savedBounds
+      : null;
+
   const isSmoke = process.env.LILA_SMOKE === '1';
-  const win = createWindow(!isSmoke);
+  const win = createWindow(!isSmoke, bounds);
+  mainWindow = win;
   registerIpcHandlers(win);
   if (!isSmoke) attachCloseGuard(win);
+
+  // `.bpmn` como argumento de línea de comandos (Windows/Linux): sin empaquetar, `argv[0]` es el
+  // binario de Electron y `argv[1]` la carpeta de la app (`electron apps/desktop [...]`);
+  // empaquetada, `argv[0]` ya es el ejecutable de Lila Modeler.
+  const bpmnArg = findBpmnArg(process.argv, app.isPackaged ? 1 : 2);
+  if (bpmnArg !== null) await acceptOpenPath(bpmnArg);
 
   const devUrl = process.env.LILA_DEV_URL;
   const loadPromise = devUrl ? win.loadURL(devUrl) : win.loadURL('lila://app/index.html');

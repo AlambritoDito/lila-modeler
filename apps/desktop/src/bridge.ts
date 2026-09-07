@@ -62,11 +62,45 @@ export interface LilaBridge {
    * de mensajería (ver `preload.cts`).
    */
   onCloseRequested(cb: () => Promise<boolean>): () => void;
+
+  /** Hasta 10 proyectos abiertos/guardados recientemente en esta máquina, más nuevo primero (OP-14). */
+  listRecents(): Promise<readonly Recent[]>;
+  /**
+   * Reabre un proyecto de `listRecents()` sin volver a mostrar el selector nativo de carpetas.
+   * `null` si `dir` ya no existe (y se quita de recientes): no es un error, es "ya no disponible".
+   */
+  openRecent(dir: string): Promise<LilaProjectDocument | null>;
+
+  /**
+   * Ruta `.bpmn` pendiente de abrir: doble clic en el explorador de archivos, `open-file` de
+   * macOS, o argumento de línea de comandos, capturados antes de que la ventana estuviera lista.
+   * Se consume una vez — la segunda llamada devuelve `null` aunque la primera haya devuelto algo.
+   */
+  pendingOpenPath(): Promise<OpenPathRequest | null>;
+  /**
+   * Se dispara cuando llega una nueva ruta `.bpmn` a abrir con la ventana ya lista (segunda
+   * instancia, o `open-file` con la app ya corriendo). Devuelve una función para cancelar la
+   * suscripción.
+   */
+  onOpenPath(cb: (path: OpenPathRequest) => void): () => void;
 }
 
 export interface WriteProjectOptions {
   readonly saveAs?: boolean;
   readonly overwrite?: boolean;
+}
+
+/** Entrada de `listRecents()`: carpeta autorizable de nuevo sin diálogo, y cuándo se abrió. */
+export interface Recent {
+  readonly dir: string;
+  readonly name: string;
+  readonly openedAt: string;
+}
+
+/** `dir` (ya autorizada) y nombre de archivo de un `.bpmn` a abrir (`pendingOpenPath`/`onOpenPath`). */
+export interface OpenPathRequest {
+  readonly dir: string;
+  readonly file: string;
 }
 
 declare global {

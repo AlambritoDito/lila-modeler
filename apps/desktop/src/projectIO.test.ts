@@ -336,3 +336,54 @@ describe('writeProjectFolder — "Guardar como" en carpeta ocupada (E-CARPETA-OC
     await expect(writeProjectFolder(dir, doc)).resolves.toBeUndefined();
   });
 });
+
+describe('writeProjectFolder — cambios externos (E-CAMBIO-EXTERNO)', () => {
+  it('un escenario modificado en disco desde la última lectura: rechaza sin escribir nada, el archivo externo queda intacto', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc); // primera escritura: registra el snapshot de cada archivo.
+
+    // Alguien más (otro proceso, otra sesión) edita el escenario directamente en disco.
+    const editadoExternamente = JSON.stringify({ version: 1, name: 'EDITADO EXTERNAMENTE, más largo que el original' });
+    await writeFile(join(dir, 'as-is.scenario.json'), editadoExternamente, 'utf8');
+
+    const docNuevo = documentoBase({ name: 'Pedido v2' });
+    const error = await captureError(() => writeProjectFolder(dir, docNuevo));
+    expect(error).toBeInstanceOf(ProjectIOError);
+    expect((error as ProjectIOError).code).toBe('E-CAMBIO-EXTERNO');
+    expect((error as ProjectIOError).message).toContain('as-is.scenario.json');
+
+    // Nada se tocó: ni el escenario editado externamente, ni el modelo (que sí iba a cambiar).
+    expect(await readFile(join(dir, 'as-is.scenario.json'), 'utf8')).toBe(editadoExternamente);
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(XML_MINIMO);
+    const entradas = await readdir(dir);
+    expect(entradas.some((nombre) => nombre.includes('.tmp-'))).toBe(false);
+  });
+
+  it('con overwrite:true, escribe encima del cambio externo', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc);
+    await writeFile(join(dir, 'as-is.scenario.json'), JSON.stringify({ version: 1, name: 'EDITADO EXTERNAMENTE' }), 'utf8');
+
+    const docNuevo = documentoBase({ name: 'Pedido v2' });
+    await expect(writeProjectFolder(dir, docNuevo, { overwrite: true })).resolves.toBeUndefined();
+
+    const { document } = await readProjectFolder(dir);
+    expect(document.name).toBe('Pedido v2');
+    expect(document.scenarios).toEqual(doc.scenarios);
+  });
+
+  it('readProjectFolder también registra snapshot: escribir después sin cambios externos funciona', async () => {
+    const doc = documentoBase();
+    await writeProjectFolder(dir, doc);
+    await readProjectFolder(dir); // p.ej. reabrir el proyecto más tarde.
+    await expect(writeProjectFolder(dir, documentoBase({ name: 'Pedido v2' }))).resolves.toBeUndefined();
+  });
+
+  it('sin snapshot previo (nunca leído ni escrito en este proceso), no bloquea: no hay base para decir "cambió"', async () => {
+    // Caso legítimo (igual que el test de "carpeta ocupada" de arriba): un model.bpmn puesto a
+    // mano, nunca visto por este proceso, no debe tratarse como "cambio externo" — no hay un
+    // snapshot anterior con el que compararlo.
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await expect(writeProjectFolder(dir, documentoBase())).resolves.toBeUndefined();
+  });
+});
