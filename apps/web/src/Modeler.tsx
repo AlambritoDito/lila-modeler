@@ -7,6 +7,11 @@
  * pueden crecer sin repartir bpmn-js por toda la aplicación.
  */
 import Modeler from 'bpmn-js/lib/Modeler';
+// Minimapa del lienzo (LILA-208). Es un módulo de diagram-js: se monta solo dentro del
+// contenedor del canvas y viaja con él en `attachTo`, así que el shell no lo dibuja ni lo
+// conoce. Su CSS se importa aquí y se viste con tokens en `app.css` (bloque «minimapa»).
+import minimapModule from 'diagram-js-minimap';
+import 'diagram-js-minimap/assets/diagram-js-minimap.css';
 import type BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import type Modeling from 'bpmn-js/lib/features/modeling/Modeling';
 import type Canvas from 'diagram-js/lib/core/Canvas';
@@ -67,6 +72,12 @@ export interface Modelador {
   /** Comprueba parseo y renderizado en una instancia aislada sin tocar el modelo activo. */
   comprobar?(xml: string): Promise<void>;
   ajustar(): void;
+  /**
+   * Zoom del lienzo para los botones + / − / ajustar (LILA-208). `factor` multiplica la escala
+   * actual (1.2 acerca, 1/1.2 aleja) y `'ajustar'` encuadra el diagrama. Se acota a 20 %–400 %
+   * para que pulsar sin mirar no deje el modelo fuera de la vista.
+   */
+  zoom(factor: number | 'ajustar'): void;
   servicios: Servicios;
   /** Escucha eventos del `eventBus`; devuelve la función que se desuscribe. */
   suscribir(eventos: string[], escuchar: () => void): () => void;
@@ -113,6 +124,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     const opciones = {
       // La extensión `lila:` sobrevive a abrir y exportar sin que el modelador la entienda.
       moddleExtensions: { lila },
+      additionalModules: [minimapModule],
+      // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
+      // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
+      minimap: { open: true },
       // bpmn-js dibuja negro sobre blanco; el lienzo de Lila es oscuro. Los tres colores se
       // leen de los tokens una sola vez, al montar: hacerlos reactivos al cambio de tema en
       // caliente es LILA-113.
@@ -172,9 +187,22 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         const elegidos = evento.newSelection;
         onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
       });
+      // El minimapa reescribe el `title` de su cabecera en inglés («Close minimap») cada vez que
+      // se pliega o se abre. El texto visible ya sale de `app.css`; el tooltip es la única cadena
+      // suya que queda a la vista, así que se traduce aquí en vez de montar un `translate` propio.
+      // Se busca dentro del contenedor de ESTE modelador, no del de React: al abrir un archivo
+      // el anterior sigue montado hasta que se destruye, y su minimapa saldría antes.
+      const suyo = modeler.get<Canvas>('canvas').getContainer();
+      const rotularMinimapa = ({ open }: { open: boolean }): void => {
+        suyo
+          .querySelector('.djs-minimap .toggle')
+          ?.setAttribute('title', open ? 'Plegar minimapa' : 'Desplegar minimapa');
+      };
+      modeler.on('minimap.toggle', rotularMinimapa);
       for (const suscripcion of suscripciones) {
         modeler.on(suscripcion.eventos, suscripcion.escuchar);
       }
+      rotularMinimapa({ open: suyo.querySelector('.djs-minimap')?.classList.contains('open') === true });
     };
 
     const crearCandidato = (): { modeler: Modeler; staging: HTMLDivElement } => {
@@ -259,10 +287,12 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           staging.remove();
         }
       },
-      ajustar: () => {
-        if (activo === null) return;
+      ajustar: () => api.zoom('ajustar'),
+      zoom: (factor) => {
+        if (activo === null || !conTamano()) return;
         const canvas = activo.get<Canvas>('canvas');
-        if (conTamano()) canvas.zoom('fit-viewport');
+        if (factor === 'ajustar') canvas.zoom('fit-viewport');
+        else canvas.zoom(Math.min(4, Math.max(0.2, canvas.zoom() * factor)));
       },
       get servicios(): Servicios {
         if (activo === null) throw new Error('El modelador todavía no tiene un BPMN abierto.');
