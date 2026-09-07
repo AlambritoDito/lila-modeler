@@ -532,9 +532,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </nav>
         {/* En Electron estas acciones son el menú nativo (`apps/desktop/src/menu.ts`) con sus
             aceleradores, así que aquí no se pintan. En el navegador el desplegable es un
-            `<details>`: sin librería, sin estado en React, y con teclado y `Esc` de serie.
-            ponytail: no se cierra al hacer clic fuera; si molesta, un `onBlur` en el summary. */}
-        {!DESKTOP && <details className="menu-archivo">
+            `<details>`: sin librería, sin estado en React y con teclado de serie. `Esc` sí hay
+            que cerrarlo a mano —`<details>` no lo trae, eso es de `<dialog>`/popover—, y basta
+            un `onKeyDown` porque el foco está dentro mientras está abierto.
+            ponytail: no se cierra al hacer clic fuera; techo: si molesta, un `onBlur` en el
+            summary (o `popover` cuando Electron suba de Chromium). */}
+        {!DESKTOP && <details className="menu-archivo" onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
           <summary>Archivo</summary>
           <div onClick={(e) => { (e.currentTarget.parentElement as HTMLDetailsElement).open = false; }}>
             <button type="button" title={`Nuevo proyecto${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo</button>

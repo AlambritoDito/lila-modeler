@@ -210,6 +210,16 @@ body {
   padding: 3px 4px;
 }
 
+/* El artboard está dibujado a 1440 y a 1920. Por debajo de eso la barra no cabe entera y, sin
+   esto, el ⚙ y parte de la acción primaria se salían de la ventana y el documento cogía scroll
+   horizontal (a 1024 la barra medía 1137 px). Lo primero que se va es el campo de búsqueda, que
+   además es el único inerte; el resto —modos, deshacer/rehacer, ejecutar y ⚙— es alcanzable. */
+@media (max-width: 1280px) {
+  .buscador {
+    display: none;
+  }
+}
+
 /* Deshacer/rehacer: dos cuadrados pegados, separados por la línea de fondo. */
 .iconos {
   background: var(--border);

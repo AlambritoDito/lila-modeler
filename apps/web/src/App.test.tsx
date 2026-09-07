@@ -319,6 +319,10 @@ it('las acciones de proyecto viven en el desplegable Archivo, no sueltas en la b
   // El desplegable se cierra al elegir: `<details>` no lo hace solo.
   await click('Guardar');
   expect((menu as HTMLDetailsElement).open).toBe(false);
+  // …y con `Esc`, que `<details>` tampoco trae de serie (#237 [QA]).
+  await act(async () => { (menu as HTMLDetailsElement).open = true; });
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect((menu as HTMLDetailsElement).open).toBe(false);
 });
 it('el pie lleva errores, avisos, escenario y semilla heredada del escenario activo', async () => {
   const pie = container.querySelector('.estado')!;
