@@ -23,3 +23,5 @@ App89f82bd: Nuevo mediante diálogo nativo, proceso=Proyecto QA nativo, tarea=Re
 B/E terminaron sin tareas activas según entrega e2adccd. A corrige este defecto nuevo de integración en su worktree (no toma trabajo inacabado ni archivos de B activos): beta de una sola ventana termina app cuando se cierra la última ventana, en todas las plataformas. Guardias de cierre existentes siguen ejecutándose antes de que ocurra window-all-closed. Decisión reversible, evita añadir ciclo de recreación y listeners IPC duplicados en este cierre P0. Próximo: closeGuard/tipos, commit, rebuild DMG del SHA nuevo y QA nativo final.
 
 Corrección de cierre: 34 tests closeGuard/projectIO y tipos desktop PASS. Se construye nuevo artefacto; aceptación aún pendiente del nuevo SHA.
+
+ACEPTACIÓN FINAL PASS sobre358353d: recorrido nativo completo, incluyendo edición BPMN, botón rojo, reapertura, dos escenarios, comparación−50%, CSV real y segunda reapertura con corridas persistidas.1265 tests PASS /1omitida; tipos/build/DMG PASS. Informe definitivo: ../FINAL.md. DMG/app equivalentes verificados por hash; sin Vite.

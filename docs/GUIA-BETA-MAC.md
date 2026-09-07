@@ -1,6 +1,6 @@
 # Guía de la beta de escritorio (macOS)
 
-Esta guía describe únicamente lo que existe y se ha verificado sobre el SHA `89f82bd`
+Esta guía describe únicamente lo que existe y se ha verificado sobre el SHA `358353d`
 (2026-09-07), el artefacto final de la beta: `DesktopStore` ya está conectado en `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore"), con guardado
 transaccional, cierre seguro con diálogo nativo, recientes y el seam de pruebas E2E descritos
@@ -23,15 +23,7 @@ por ejemplo `Lila Modeler-0.0.1-mac-arm64.dmg`. No se distribuye dentro del repo
 el canal que use el equipo.
 
 La app **no está firmada ni notarizada** (`identity: null` en `electron-builder.yml`, beta local).
-macOS Gatekeeper bloquea un `.app` sin firma la primera vez que se abre. Dos formas de pasar ese
-aviso:
-
-1. **Clic derecho sobre `Lila Modeler.app` → Abrir** (no doble clic normal). Aparece un aviso de
-   "desarrollador no identificado" con un botón "Abrir" que un doble clic no ofrece.
-2. O, desde Terminal, quitar el atributo de cuarentena que macOS pone a lo descargado:
-   ```bash
-   xattr -d com.apple.quarantine "/ruta/a/Lila Modeler.app"
-   ```
+Si macOS bloquea una copia recibida de otra máquina, revisa su procedencia y usa las opciones de apertura que ofrezca el sistema. Esta entrega local se probó sin cambiar protecciones globales ni eliminar atributos de cuarentena.
 
 Sin icono propio todavía (issue #76): la app usa el icono por defecto de Electron en el Dock y en
 el Finder.
@@ -51,15 +43,11 @@ textos de abajo son literales de la interfaz (`apps/web/src/App.tsx`), no paráf
 
 ### Modelar
 
-- El botón **Abrir .bpmn** solo existe en el modo navegador (`bpmnFilesEnabled={!desktop}` en
-  `apps/web/src/main.tsx`); en la app de escritorio no aparece — para traer un `.bpmn` distinto al
-  de ejemplo se usa **Nuevo proyecto**/**Abrir proyecto** (ver «Guardar y recuperar»), o se abre por
-  doble clic sobre el archivo si la asociación del sistema funciona (ver «Limitaciones»).
+- En escritorio se trabaja con **Nuevo proyecto** y **Abrir proyecto** por carpeta. Importar/exportar BPMN suelto y la apertura por doble clic están pendientes de conectar. El recorrido aceptado usa proyectos creados por la app; las carpetas externas sin manifiesto aún requieren normalización de metadatos.
 - El lienzo central es el editor de bpmn-js: se edita arrastrando figuras de la paleta, igual que
   cualquier editor de bpmn.io.
 - **Deshacer** / **Rehacer**: barra inferior, junto al nombre del archivo activo.
-- **Exportar .bpmn**: exporta el XML actual (lo que produce lo puede volver a validar
-  `npx lila validate`, mismo contrato que usa la CLI).
+- El XML editado se guarda como `model.bpmn` dentro de la carpeta del proyecto.
 
 ### Simular (pestaña "Simulación" del panel derecho)
 
@@ -127,7 +115,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 - **Cerrar con cambios sin guardar**: la ventana (botón rojo, Cmd+Q, o cerrarla desde el Dock)
   muestra el diálogo nativo del sistema con **Guardar / Descartar / Cancelar**. "Guardar" espera
   hasta 30 s la respuesta de la app antes de cerrar; si falla o no llega, se avisa y la ventana no
-  se cierra.
+  se cierra. Al cerrar la última ventana termina la aplicación también en Mac; al reabrir, usa **Abrir proyecto** para recuperar la carpeta guardada.
 - **Qué archivos hay en la carpeta de un proyecto**: `model.bpmn` (el diagrama), un
   `<nombre>.scenario.json` por cada escenario (por ejemplo `as-is.scenario.json`,
   `to-be.scenario.json`), `lila-project.json` (metadatos: id, nombre, revisiones) y una subcarpeta
@@ -158,20 +146,14 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 2026-09-07, SHA `89f82bd`; revisar si alguna de estas ya se resolvió antes de creer esta
+*(a fecha 2026-09-07, SHA `358353d`; revisar si alguna de estas ya se resolvió antes de creer esta
 lista a ciegas en una fecha posterior)*
 
-- **Sin firma ni notarización**: hace falta clic derecho → Abrir o `xattr -d
-  com.apple.quarantine` la primera vez (ver arriba).
+- **Sin firma ni notarización**: una copia recibida puede requerir autorización de apertura de macOS (ver arriba).
 - **Sin icono propio** (issue #76): usa el icono por defecto de Electron.
 - **Solo macOS arm64 compilado**: Windows (NSIS) y Linux (AppImage/deb) están configurados en
   `electron-builder.yml` y en la matriz de CI (`.github/workflows/desktop.yml`), pero no se han
   compilado ni probado en ningún runner real todavía.
-- **Edición del BPMN en la app empaquetada no automatizada**: el recorrido de aceptación (OP-18)
-  no pudo accionar la selección de figuras en el lienzo dentro de la `.app` empaquetada por
-  limitaciones de la sesión que lo probó; el editor sí quedó verificado en el navegador por el QA
-  de la interfaz (commit `65560c7`). Queda pendiente una comprobación manual directa sobre el
-  `.app`.
 - **Asociación de `.bpmn` por doble clic no probada** en esta ronda: el manejo de `open-file`/
   `argv` está cubierto por pruebas puras y se verificó pasando la ruta por línea de comandos
   (`... npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"`), pero no se ejercitó
