@@ -54,6 +54,7 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-01b-paleta.png` | Modelar con la paleta propia a la izquierda: filtro «Filtrar figuras», botón de modo compacto, los seis grupos con nombre por figura y el pie «Arrastra al lienzo o pulsa Enter para insertar» | #239 |
 | `app-01-modelar-1440.png` | Modelar con los cinco tickets de la sesión 8 (#237–#241) en Eva-01: barra del artboard 01, paleta propia, chips y marcadores, minimapa y zoom, pestaña con ✕, pie en mono | sesión 8 |
 | `app-10-modelar-papel.png` | La misma pantalla con el tema Papel, al lado del artboard 10 | sesión 8 |
+| `app-03-calendario.png` | Simular con el editor semanal de calendarios: rejilla 7 días × 24 horas del calendario `oficina` de `examples/pedido` (MON–FRI 09:00–18:00 pintadas) y el interruptor «Editar como lista» | #233 |
 
 ## Inventario de componentes React
 
@@ -73,7 +74,7 @@ deja los tokens y los temas, no construye ninguno.
 | Tabla densa ordenable con encabezado fijo y export CSV | Resultados y Comparar | LILA-062 |
 | Resalte de celda con marca de significancia | Comparar | LILA-063 |
 | Selector de escenario (duplicar, hereda de) | modo Simular | LILA-061 |
-| Editor semanal de calendarios por franjas | recursos y calendarios | LILA-061 |
+| Editor semanal de calendarios por franjas | recursos y calendarios | LILA-061 / LILA-203 |
 | Tabla de recursos | modo Simular | LILA-061 |
 | Barra de progreso de corrida con cancelar | ejecutar simulación | LILA-059 |
 | Overlay de simulación sobre el lienzo (tinte + etiqueta) | cuellos de botella | LILA-064 |
@@ -90,10 +91,13 @@ deja los tokens y los temas, no construye ninguno.
 de `@lila/engine/schema`, y las uniones (`oneOf`/`anyOf`) se dibujan con un
 selector de variante más el cuerpo de la elegida. Consecuencia para el diseño: un
 campo nuevo del formato aparece en la UI sin que nadie dibuje nada, pero el panel
-tiene el aspecto que da el esquema, no el del artboard 3. En particular, los
-calendarios se editan como la lista de `intervals` que dice el formato; el
-**editor semanal por franjas** del inventario de componentes sigue pendiente y es
-un ticket propio.
+tiene el aspecto que da el esquema, no el del artboard 3. La excepción es
+`calendars[clave].intervals`, que desde LILA-203 (#233) se edita con el **editor
+semanal por franjas** del artboard —una rejilla de 7 días × 24 horas
+(`apps/web/src/CalendarEditor.tsx`)— con un interruptor a la lista genérica. La
+rejilla es una vista **parcial** del formato: su celda es una hora entera y § 2.3
+admite cualquier `"HH:MM"`, así que un calendario con franjas de minutos se edita
+solo como lista, con aviso y sin redondear.
 
 **Tipografía: Archivo.** `font.ui` es `Archivo, Inter, system-ui, sans-serif`
 (el brief decía Inter; la sesión de Claude Design eligió Archivo y esa elección

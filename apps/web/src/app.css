@@ -800,12 +800,16 @@ body {
   letter-spacing: 0.04em;
 }
 
+.calendario .tramo {
+  grid-column: span 3;
+}
+
 .calendario .hora {
   background: var(--bg-elevated);
   border: 0;
   border-radius: 0;
   cursor: pointer;
-  height: calc(14px * var(--espacio, 1));
+  height: calc(11px * var(--espacio, 1));
   padding: 0;
 }
 

@@ -146,9 +146,11 @@ export function CalendarEditor({
       }}
     >
       <span />
-      {HORAS.map((hora) => (
-        <span key={hora} className="rotulo">
-          {hora % 3 === 0 ? hora : ''}
+      {HORAS.filter((hora) => hora % 3 === 0).map((hora) => (
+        // Un rótulo cada tres horas, ocupando las tres columnas: con 24 columnas de 8 px una cifra
+        // de dos dígitos no cabe en la suya y se pisaría con la siguiente.
+        <span key={hora} className="rotulo tramo">
+          {hora}
         </span>
       ))}
       {DIAS.map((nombre, dia) => (
