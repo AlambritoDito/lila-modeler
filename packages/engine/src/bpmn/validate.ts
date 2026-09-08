@@ -120,8 +120,11 @@ const UNPARSABLE_QNAME = /unparsable content <([^\s>/]+)>/;
 const DIAGRAM_PREFIXES = new Set(['bpmndi', 'di', 'dc', 'dd']);
 
 /**
- * Elementos que la sección 2 «lee y preserva» pero no simula: no son nodos ni flujos del grafo de
- * tokens, así que perder uno no deja el modelo incompleto (LILA-196). Nombres locales del XML.
+ * Elementos que la sección 2 «lee y preserva» pero no simula: aunque estén dentro del proceso
+ * simulado no son nodos ni flujos del grafo de tokens, así que perder uno no deja el modelo
+ * incompleto (LILA-196). Nombres locales del XML. Lo que cae **fuera** de todo `bpmn:process`
+ * (`bpmn:message`, `bpmn:signal`, `bpmn:error`, `bpmn:category`, `bpmn:participant`, …) no
+ * necesita estar aquí: `SourceWarning.processId` ya lo deja fuera del grafo.
  */
 const NOT_A_GRAPH_ELEMENT = new Set([
   'dataObject',
@@ -190,6 +193,11 @@ function classifyParseWarning(w: SourceWarning, processId: string): ParseWarning
   if (w.property === 'bpmn:default') return 'default-roto';
   if (w.property === 'bpmn:incoming' || w.property === 'bpmn:outgoing') return 'flujo-ausente';
   if (DISCARDED_ID_MESSAGE.test(w.message)) {
+    // Sin `processId` el elemento descartado cayó fuera de todo `bpmn:process` (un `bpmn:message`
+    // o un `bpmn:participant` de raíz, la capa de diagrama…): ahí no hay nodos ni flujos que
+    // perder. Un aviso que no se pudo ubicar no llega así: `parseBpmn` lo atribuye al proceso
+    // simulado, para que falle cerrado.
+    if (w.processId === undefined) return 'inofensivo';
     return discardsGraphElement(w.message) ? 'perdida' : 'inofensivo';
   }
   return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property)

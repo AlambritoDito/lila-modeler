@@ -431,10 +431,20 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
 const DISCARDED_ID = /(?:illegal|duplicate) ID <([^>]+)>/;
 
 /**
- * Línea del elemento que moddle no pudo leer, dentro de "unparsable content ... detected line: N".
- * Es un índice **0-based** sobre las líneas del XML, tal como las cuenta el lector de moddle.
+ * Posición del elemento que moddle no pudo leer, dentro de "unparsable content ... detected
+ * line: N column: C". Línea y columna son **0-based** sobre el XML que leyó moddle (el ya
+ * saneado), y apuntan justo al `<` del elemento descartado.
  */
-const DETECTED_LINE = /detected line: (\d+)/;
+const DETECTED_AT = /detected line: (\d+) column: (\d+)/;
+
+/**
+ * Apertura (con sus atributos capturados) o cierre de un `<…:process …>`, con cualquier prefijo
+ * de espacio de nombres. Global: barre el XML entero, no línea a línea.
+ */
+const PROCESS_TAG = /<(?:[\w.-]+:)?process(?![\w.-])([^>]*)>|<\/(?:[\w.-]+:)?process\s*>/g;
+
+/** `id` del `<…:process>`, con comillas dobles o simples (las dos son XML válido). */
+const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
 
 /** `bpmn:Process` que contiene al elemento, subiendo por `$parent`. */
 function ownerProcessId(el: ModdleElement | undefined): string | undefined {
@@ -445,42 +455,77 @@ function ownerProcessId(el: ModdleElement | undefined): string | undefined {
 }
 
 /**
- * Índice línea (0-based, como las reporta moddle) -> id del `bpmn:process` que la contiene, para
- * ubicar en qué proceso quedó lo que el lector descartó (LILA-196: un id duplicado en un pool que
- * Lila no simula no puede bloquear al que sí). Los `bpmn:process` no anidan, así que basta un
- * barrido lineal del XML ya saneado, que es justo el que leyó moddle.
+ * Ubica un aviso de moddle en el `bpmn:process` donde ocurrió (LILA-196): un id duplicado en un
+ * pool que Lila no simula no puede bloquear al que sí, y uno fuera de todo proceso
+ * (`bpmn:message`, `bpmn:signal`, …) no es nodo ni flujo de ninguno.
+ *
+ * Trabaja con **offsets absolutos** sobre el XML saneado —el texto que leyó moddle—, no con
+ * líneas: los exports minificados vienen en una sola línea y una línea puede cerrar un proceso y
+ * abrir el siguiente. Los tramos salen de un barrido global de `PROCESS_TAG` (los `bpmn:process`
+ * no anidan) y la posición del aviso, de convertir su `line`/`column` a offset.
+ *
+ * Falla cerrado: si el aviso no dice dónde ocurrió, se atribuye al proceso simulado y aborta;
+ * nunca se despacha como “de otro proceso”.
+ *
+ * ponytail: los tramos se buscan con regex, no recorriendo el XML. Techo: un `>` dentro del
+ * valor de un atributo del propio `<process …>` cortaría el tramo antes de tiempo. Camino: si
+ * aparece un export real así, tomar los offsets del propio lector (saxen) en vez del texto.
  */
-function processIdByLine(xml: string): (line: number) => string | undefined {
-  const owners: (string | undefined)[] = [];
-  let current: string | undefined;
-  for (const text of xml.split('\n')) {
-    const open = /<(?:[\w.-]+:)?process\b[^>]*?\sid="([^"]*)"/.exec(text);
-    if (open !== null) current = open[1];
-    owners.push(current);
-    if (/<\/(?:[\w.-]+:)?process>/.test(text) || (open !== null && text.includes('/>'))) {
-      current = undefined;
+function warningProcessLocator(
+  xml: string,
+  simulatedProcessId: string,
+): (message: string) => string | undefined {
+  const spans: { start: number; end: number; id: string | undefined }[] = [];
+  let open: { start: number; id: string | undefined } | undefined;
+  for (const tag of xml.matchAll(PROCESS_TAG)) {
+    const attrs = tag[1];
+    const end = tag.index + tag[0].length;
+    if (attrs === undefined) {
+      // Cierre: termina el tramo abierto (si el XML cierra sin abrir, no hay nada que cerrar).
+      if (open !== undefined) spans.push({ ...open, end });
+      open = undefined;
+      continue;
     }
+    // Una apertura sin su cierre (XML malformado) termina donde empieza la siguiente.
+    if (open !== undefined) spans.push({ ...open, end: tag.index });
+    const id = PROCESS_ID_ATTR.exec(attrs);
+    const abierto = { start: tag.index, id: id?.[1] ?? id?.[2] };
+    if (attrs.endsWith('/')) {
+      spans.push({ ...abierto, end });
+      open = undefined;
+    } else open = abierto;
   }
-  return (line) => owners[line];
+  if (open !== undefined) spans.push({ ...open, end: xml.length });
+
+  const lineStarts = [0];
+  for (let i = xml.indexOf('\n'); i !== -1; i = xml.indexOf('\n', i + 1)) lineStarts.push(i + 1);
+
+  return (message) => {
+    const at = DETECTED_AT.exec(message);
+    const start = at === null ? undefined : lineStarts[Number(at[1])];
+    if (start === undefined) return simulatedProcessId;
+    const offset = start + Number(at?.[2]);
+    const span = spans.find((s) => offset >= s.start && offset < s.end);
+    if (span === undefined) return undefined; // fuera de todo `bpmn:process`
+    return span.id ?? simulatedProcessId; // tramo sin `id` legible: también falla cerrado
+  };
 }
 
 /**
  * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
  * una sola línea y rescata el id afectado y el proceso donde ocurrió, de donde los haya. Para una
  * referencia rota (`unresolved reference`), moddle da `element` (quien declara la referencia) y
- * `property` (la propiedad rota). Para un elemento descartado por completo (`unparsable content
- * ... illegal ID <X>` o `... duplicate ID <X>`) no hay `element` — el id solo aparece dentro del
- * mensaje y el proceso solo se deduce de la línea que cita.
+ * `property` (la propiedad rota), así que el proceso sale de subir por `$parent`. Para un elemento
+ * descartado por completo (`unparsable content ... illegal ID <X>` o `... duplicate ID <X>`) no
+ * hay `element`: el id solo aparece dentro del mensaje y el proceso, de la posición que cita.
  */
 function toSourceWarning(
   w: ModdleWarning,
-  processIdAt: (line: number) => string | undefined,
+  locateProcess: (message: string) => string | undefined,
 ): SourceWarning {
   const message = w.message.replace(/\s+/g, ' ').trim();
   const elementId = w.element?.id ?? DISCARDED_ID.exec(message)?.[1];
-  const line = DETECTED_LINE.exec(message)?.[1];
-  const processId =
-    ownerProcessId(w.element) ?? (line === undefined ? undefined : processIdAt(Number(line)));
+  const processId = w.element === undefined ? locateProcess(message) : ownerProcessId(w.element);
   return {
     message,
     ...(elementId === undefined ? {} : { elementId }),
@@ -501,7 +546,6 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   const { xml, sanitizedToOriginal } = sanitizeXmlIds(xmlIn);
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions, warnings: moddleWarnings } = await moddle.fromXML(xml);
-  const processIdAt = processIdByLine(xml);
 
   const processes = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
   const main =
@@ -511,6 +555,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   if (main === undefined) {
     throw new Error('El archivo no contiene ningún bpmn:process.');
   }
+  const locateProcess = warningProcessLocator(xml, main.id);
 
   const c: Collector = {
     nodes: {},
@@ -586,7 +631,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',
         originalIds,
-        warnings: moddleWarnings.map((w) => toSourceWarning(w, processIdAt)),
+        warnings: moddleWarnings.map((w) => toSourceWarning(w, locateProcess)),
       },
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),

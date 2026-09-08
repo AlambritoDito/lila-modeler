@@ -51,9 +51,11 @@ export interface SourceWarning {
   /** Propiedad de moddle-xml en la referencia rota (p. ej. `bpmn:sourceRef`), si el aviso es de ese tipo. */
   property?: string;
   /**
-   * Id del `bpmn:process` donde ocurrió el aviso, cuando se puede ubicar. Los avisos son del
-   * archivo entero y el IR es de **un** proceso: si este id no es el del proceso simulado, lo que
-   * se perdió no estaba en el grafo (R-NOSOP-6).
+   * Id del `bpmn:process` donde ocurrió el aviso. Los avisos son del archivo entero y el IR es de
+   * **un** proceso: si este id no es el del proceso simulado, lo que se perdió no estaba en su
+   * grafo (R-NOSOP-6). Ausente cuando el aviso cae fuera de todo `bpmn:process` (elementos de
+   * raíz, capa de diagrama), que tampoco es grafo. Un aviso que no dice dónde ocurrió se
+   * atribuye al proceso simulado: fallo cerrado, mejor abortar que dar por bueno un grafo roto.
    */
   processId?: string;
 }

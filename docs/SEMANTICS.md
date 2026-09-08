@@ -177,11 +177,13 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     de la sección 2 ya ignora (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`) y
     tipos que moddle no conoce (`unparsable content … unknown type <bpmn:LoopCounter>`, típico de
     los exports de Bizagi). También lo que se descarta de la capa de diagrama (`bpmndi:`, `di:`,
-    `dc:`, `dd:`) y los elementos que la sección 2 lee sin simular (`bpmn:dataObject*`,
-    `bpmn:dataStore*`, `bpmn:textAnnotation`, `bpmn:association`, `bpmn:group`,
-    `bpmn:documentation`, `bpmn:extensionElements`, `bpmn:laneSet`, `bpmn:lane`), aunque sea por
-    id ilegal o duplicado: el IR no los guarda y perderlos no quita ni un nodo ni un flujo. Texto
-    exacto:
+    `dc:`, `dd:`), lo que se descarta **fuera de todo `bpmn:process`** (`bpmn:message`,
+    `bpmn:signal`, `bpmn:error`, `bpmn:category`, `bpmn:participant`, …) y los elementos que la
+    sección 2 lee sin simular (`bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:textAnnotation`,
+    `bpmn:association`, `bpmn:group`, `bpmn:documentation`, `bpmn:extensionElements`,
+    `bpmn:laneSet`, `bpmn:lane`), aunque sea por id ilegal o duplicado: ninguno es nodo ni flujo
+    del grafo de tokens, así que perderlos no quita ni un nodo ni un flujo (de `bpmn:lane` el IR
+    solo se queda el nombre en `Node.lane`, que la CLI usa para mostrar). Texto exacto:
 
     ```
     {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.
@@ -216,7 +218,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
   `{aviso}` es el mensaje de bpmn-moddle literal, aplanado a una sola línea. `{id}` es el id del
   elemento que moddle señala (o el que aparece dentro del mensaje) y, si no hay ninguno, el id del
-  proceso; `{proceso}` es el id del `bpmn:process` donde ocurrió el aviso. Un modelo que perdió
+  proceso; `{proceso}` es el id del `bpmn:process` donde ocurrió el aviso, que se ubica por la
+  posición absoluta que da el propio aviso (`detected line: N column: C`) dentro de los tramos
+  `<bpmn:process …>…</bpmn:process>` del archivo, de modo que un export minificado o con los
+  atributos partidos en varias líneas se clasifica igual que uno indentado. Si un aviso no dice
+  dónde ocurrió, se atribuye al proceso simulado: falla cerrado. Un modelo que perdió
   nodos o flujos del proceso simulado nunca valida en verde: `E-PARSE-INCOMPLETO` aborta y
   `lila validate` sale con 1. Los ids no NCName **no** entran aquí: `sanitizeIds` (R-DURA-4,
   LILA-017/020) los reescribe antes de llegar a moddle. *(prueba: LILA-185, LILA-196)*
