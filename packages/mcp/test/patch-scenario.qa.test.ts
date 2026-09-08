@@ -214,7 +214,21 @@ test('campo reservado y clave desconocida se rechazan con el mensaje del lint, s
     patch: [{ op: 'add', path: '/resources/cajero/capacty', value: 3 }],
   });
   expect(unknown.isError).toBe(true);
+  // El código de § 17 (LILA-198) y el español del esquema (LILA-202): los defectos del escenario
+  // parcheado pasan por `parseScenario` + `schemaIssueLines`, igual que la CLI y `run_simulation`.
+  expect(textOf(unknown)).toContain('E-CLAVE-DESCONOCIDA');
   expect(textOf(unknown)).toContain('capacty');
+  expect(readFileSync(path, 'utf8')).toBe(before);
+
+  // Un defecto que caza el esquema y no el lint (LILA-198 pasó `probability` al lint): sale en
+  // español por `parseScenario`, no el volcado en inglés de zod.
+  const espanol = await patch({
+    scenario: path,
+    patch: [{ op: 'add', path: '/run/warmup', value: -1 }],
+  });
+  expect(espanol.isError).toBe(true);
+  expect(textOf(espanol)).toContain('run.warmup: debe ser ≥ 0');
+  expect(textOf(espanol)).not.toMatch(/Too big|Too small|expected/i);
   expect(readFileSync(path, 'utf8')).toBe(before);
 
   // R-RES-3: el mismo reservado puesto a `null` no dispara el error.
