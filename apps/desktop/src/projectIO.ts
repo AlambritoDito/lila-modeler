@@ -257,11 +257,19 @@ async function readRuns(dir: string, problems: ProjectProblem[]): Promise<Stored
  * "carpeta recién elegida con un `model.bpmn` puesto a mano", así que no genera problema, solo
  * reconstrucción). `model.bpmn` es la excepción: ausente (`E-SIN-MODELO`) o symlink (`E-SYMLINK`)
  * son fatales — sin él, o sin confiar en su origen, no hay nada que abrir en el modelador.
+ *
+ * `modelFile` (LILA-072) es el `.bpmn` a leer como modelo cuando NO es el `model.bpmn` del
+ * proyecto: doble clic en `ventas.bpmn`, o en un `.bpmn` suelto en una carpeta que no es un
+ * proyecto Lila. Se abre igual —el manifiesto ausente ya se reconstruye por defecto y los
+ * escenarios/corridas salen vacíos— y `model.name` pasa a ser ESE nombre en vez del del
+ * manifiesto: es el archivo que el usuario pulsó y el que la UI debe mostrar. `main.ts` valida que
+ * sea un nombre plano dentro de `dir` antes de llegar aquí.
  */
 export async function readProjectFolder(
   dir: string,
+  modelFile: string = MODEL_FILE,
 ): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[] }> {
-  const modelPath = join(dir, MODEL_FILE);
+  const modelPath = join(dir, modelFile);
   // `lstat` antes de leer (OP-14, revisión de A, issue #71: "lectura de model.bpmn sigue
   // symlinks"): a diferencia de un `*.scenario.json` (que se puede excluir y seguir abriendo el
   // resto del proyecto), `model.bpmn` es el único archivo sin el que no hay nada que modelar —
@@ -271,7 +279,7 @@ export async function readProjectFolder(
   if (await isSymlink(modelPath)) {
     throw new ProjectIOError(
       'E-SYMLINK',
-      `"${MODEL_FILE}" es un symlink; no se lee para no seguirlo fuera de la carpeta autorizada.`,
+      `"${modelFile}" es un symlink; no se lee para no seguirlo fuera de la carpeta autorizada.`,
     );
   }
   let xml: string;
@@ -280,7 +288,7 @@ export async function readProjectFolder(
     await rememberSnapshot(modelPath);
   } catch (error) {
     if (isNotFound(error)) {
-      throw new ProjectIOError('E-SIN-MODELO', `Falta "${MODEL_FILE}" en la carpeta del proyecto: ${dir}`);
+      throw new ProjectIOError('E-SIN-MODELO', `Falta "${modelFile}" en la carpeta del proyecto: ${dir}`);
     }
     throw error;
   }
@@ -294,7 +302,14 @@ export async function readProjectFolder(
     version: 1,
     id: manifest.id,
     name: manifest.name,
-    model: { id: manifest.model.id, name: manifest.model.name, xml, revision: manifest.model.revision },
+    // El nombre del manifiesto solo vale para el `model.bpmn` del proyecto; si se pidió otro
+    // `.bpmn`, el nombre honesto es el del archivo abierto (LILA-072).
+    model: {
+      id: manifest.model.id,
+      name: modelFile === MODEL_FILE ? manifest.model.name : modelFile,
+      xml,
+      revision: manifest.model.revision,
+    },
     scenarios,
     scenarioRevisions: manifest.scenarioRevisions,
     runs,

@@ -68,8 +68,11 @@ export interface LilaBridge {
   /**
    * Reabre un proyecto de `listRecents()` sin volver a mostrar el selector nativo de carpetas.
    * `null` si `dir` ya no existe (y se quita de recientes): no es un error, es "ya no disponible".
+   * `file` (LILA-072) es el `.bpmn` a abrir como modelo cuando no es el `model.bpmn` del proyecto
+   * —doble clic en un `.bpmn` cualquiera, incluso uno suelto en una carpeta que no es un proyecto
+   * Lila—; esa apertura no entra en recientes, que guarda carpetas y reabriría el `model.bpmn`.
    */
-  openRecent(dir: string): Promise<LilaProjectDocument | null>;
+  openRecent(dir: string, file?: string): Promise<LilaProjectDocument | null>;
 
   /**
    * Ruta `.bpmn` pendiente de abrir: doble clic en el explorador de archivos, `open-file` de

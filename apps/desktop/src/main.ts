@@ -136,6 +136,25 @@ function requireFlatName(dir: string, name: unknown, suffix: string, label: stri
   return name;
 }
 
+/** El `model.bpmn` de un proyecto Lila; cualquier otro `.bpmn` abierto es un archivo suelto. */
+const MODEL_FILE = 'model.bpmn';
+
+/**
+ * `file` opcional de `lila:openRecent` (LILA-072): el `.bpmn` que el usuario pulsó, cuando no es
+ * el `model.bpmn` del proyecto. `undefined` (o `null`) es "abre el `model.bpmn` de siempre".
+ */
+function requireBpmnName(dir: string, value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || !isBpmnPath(value)) {
+    throw new Error(
+      `E-ARGUMENTO: "file" debe ser un nombre de archivo .bpmn (recibido: ${JSON.stringify(value)}).`,
+    );
+  }
+  // El sufijo ya está comprobado arriba, e insensible a mayúsculas (`Ventas.BPMN` es válido);
+  // aquí solo interesan las comprobaciones de nombre plano y `resolveWithin`.
+  return requireFlatName(dir, value, '', 'file');
+}
+
 /**
  * Comprobación de forma mínima de `ProjectDocument` recibido por IPC: exactamente los campos
  * que `projectIO.writeProjectFolder` necesita para no reventar de forma confusa, sin validar el
@@ -375,7 +394,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
 
   guardedHandle(win, 'lila:listRecents', async (): Promise<readonly Recent[]> => sessionState.recents);
 
-  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown) => {
+  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown, fileArg: unknown) => {
     if (typeof dirArg !== 'string' || dirArg.length === 0) {
       throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
     }
@@ -393,9 +412,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return null;
     }
     authorizedFolders.add(real);
+    const file = requireBpmnName(real, fileArg);
     try {
-      const { document, problems } = await readProjectFolder(real);
-      await recordRecent(real, document.name);
+      const { document, problems } = await readProjectFolder(real, file);
+      // Recientes guarda CARPETAS (`listRecents`/menú Archivo), así que reabrir desde ahí siempre
+      // volvería al `model.bpmn`. Anotar la carpeta de un `.bpmn` suelto prometería algo que la
+      // lista no puede cumplir (hallazgo 6 del QA), así que solo entra el modelo del proyecto.
+      if (file === undefined || file === MODEL_FILE) await recordRecent(real, document.name);
       return { ...document, problems };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
@@ -444,15 +467,23 @@ function registerLilaProtocol(): void {
 // OP-12 "arranque frío y segunda apertura") -----------------------------------------------------
 /** La ventana principal, para reenviar `lila:open-path` cuando ya está lista; `null` antes de crearla. */
 let mainWindow: BrowserWindow | null = null;
-/** Ruta `.bpmn` capturada antes de que `mainWindow` existiera; `pendingOpenPath()` la consume una vez. */
+/** Ruta `.bpmn` capturada antes de que la ventana pudiera recibirla; `pendingOpenPath()` la consume una vez. */
 let pendingOpen: OpenPathRequest | null = null;
+/**
+ * `true` desde que la ventana terminó de cargar su página. `mainWindow !== null` NO basta para
+ * mandar `lila:open-path`: en el arranque en frío por argv (Windows/Linux) la ruta se acepta entre
+ * `createWindow` y `loadURL`, cuando ya hay ventana pero ningún renderer suscrito, y el `send` se
+ * perdería sin dejar nada en `pendingOpen` (hallazgo 2 del QA a LILA-072/074).
+ */
+let windowLoaded = false;
 
 /**
  * Acepta `filePath` como ".bpmn a abrir" si termina en `.bpmn` y existe: autoriza su carpeta
- * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya está lista, se lo envía
- * de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para `pendingOpenPath()`. Una
- * ruta que no exista o no sea `.bpmn` se ignora en silencio (no es un error del usuario: puede ser
- * cualquier argumento de línea de comandos que no nos interesa).
+ * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya tiene su página cargada,
+ * se lo envía de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para que el
+ * renderer lo pida con `pendingOpenPath()` al montar. Una ruta que no exista o no sea `.bpmn` se
+ * ignora en silencio (no es un error del usuario: puede ser cualquier argumento de línea de
+ * comandos que no nos interesa).
  */
 async function acceptOpenPath(filePath: string): Promise<void> {
   if (!isBpmnPath(filePath)) return;
@@ -468,7 +499,7 @@ async function acceptOpenPath(filePath: string): Promise<void> {
     console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
   }
   await e2eLog('openPath', request);
-  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+  if (windowLoaded && mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('lila:open-path', request);
   } else {
     pendingOpen = request;
@@ -648,8 +679,15 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
     if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
     void saveBounds(win);
   });
+  // A partir de aquí el renderer existe y `lila:open-path` llega a alguien (ver `windowLoaded`).
+  win.webContents.on('did-finish-load', () => {
+    if (mainWindow === win) windowLoaded = true;
+  });
   win.on('closed', () => {
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      mainWindow = null;
+      windowLoaded = false;
+    }
   });
 
   return win;

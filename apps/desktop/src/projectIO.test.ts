@@ -103,6 +103,37 @@ describe('readProjectFolder — tolerancia', () => {
     expect((error as ProjectIOError).code).toBe('E-SIN-MODELO');
   });
 
+  it('un .bpmn con otro nombre se abre ESE, no el model.bpmn de al lado (LILA-072)', async () => {
+    const otro = '<?xml version="1.0"?><definitions xmlns="http://example.org" id="Ventas"/>';
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await writeFile(join(dir, 'ventas.bpmn'), otro, 'utf8');
+
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+
+    expect(document.model.xml).toBe(otro);
+    // El nombre visible es el archivo pulsado, no el del manifiesto reconstruido.
+    expect(document.model.name).toBe('ventas.bpmn');
+  });
+
+  it('un .bpmn suelto (carpeta que no es proyecto Lila) abre sin escenarios y sin error (LILA-072)', async () => {
+    await writeFile(join(dir, 'ventas.bpmn'), XML_MINIMO, 'utf8');
+
+    const { document, problems } = await readProjectFolder(dir, 'ventas.bpmn');
+
+    expect(problems).toEqual([]);
+    expect(document.scenarios).toEqual({});
+    expect(document.runs).toEqual([]);
+    expect(document.model.name).toBe('ventas.bpmn');
+    expect(document.model.xml).toBe(XML_MINIMO);
+  });
+
+  it('el .bpmn pedido no existe: E-SIN-MODELO nombra ESE archivo', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const error = await captureError(() => readProjectFolder(dir, 'ventas.bpmn'));
+    expect((error as ProjectIOError).code).toBe('E-SIN-MODELO');
+    expect((error as ProjectIOError).message).toContain('"ventas.bpmn"');
+  });
+
   it('falta lila-project.json: se reconstruye con id nuevo y revisiones 0', async () => {
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
 

@@ -45,7 +45,8 @@ const lila = {
     return () => ipcRenderer.removeListener('lila:close-requested', listener);
   },
   listRecents: () => ipcRenderer.invoke('lila:listRecents') as Promise<readonly Recent[]>,
-  openRecent: (dir: string) => ipcRenderer.invoke('lila:openRecent', dir) as ReturnType<LilaBridge['openRecent']>,
+  openRecent: (dir: string, file?: string) =>
+    ipcRenderer.invoke('lila:openRecent', dir, file) as ReturnType<LilaBridge['openRecent']>,
   pendingOpenPath: () => ipcRenderer.invoke('lila:pendingOpenPath') as Promise<OpenPathRequest | null>,
   onOpenPath: (cb: (path: OpenPathRequest) => void) => {
     const listener = (_event: unknown, path: OpenPathRequest) => cb(path);
