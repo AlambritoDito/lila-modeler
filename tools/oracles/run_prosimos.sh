@@ -26,7 +26,9 @@ fi
 
 # Prosimos fija numpy<2 y scipy: Python 3.11 es la versión con ruedas para toda la pila.
 uv venv "$venv" --python 3.11
-uv pip install --python "$venv/bin/python" --quiet prosimos
+# Versión clavada: el fixture es un punto congelado de Prosimos 2.0.6 y `theory-prosimos.test.ts`
+# comprueba ese número. Sin el pin, regenerar mañana traería otra versión y otras cifras sin avisar.
+uv pip install --python "$venv/bin/python" --quiet "prosimos==${LILA_PROSIMOS_VERSION:-2.0.6}"
 
 mkdir -p "$(dirname "$out")"
 "$venv/bin/python" "$here/run_prosimos.py" --out "$out" "$@"

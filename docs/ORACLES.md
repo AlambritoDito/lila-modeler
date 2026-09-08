@@ -110,7 +110,8 @@ tools/oracles/run_prosimos.sh --n 2000 --replications 10
 ```
 
 Crea un venv con `uv` en `${TMPDIR}/lila-prosimos` (configurable con `LILA_PROSIMOS_VENV`),
-instala `prosimos` desde PyPI y reescribe el fixture. Python 3.11 porque Prosimos exige `<3.12`.
+instala `prosimos==2.0.6` desde PyPI (`LILA_PROSIMOS_VERSION` para probar otra) y reescribe el
+fixture; el test comprueba que la versión del fixture sigue siendo la congelada. Python 3.11 porque Prosimos exige `<3.12`.
 Desde el test, `ORACLES=1 npx vitest run packages/engine/test/theory-prosimos.test.ts` hace lo
 mismo antes de comparar. Borrar el venv al terminar: `rm -rf ${TMPDIR}/lila-prosimos`.
 

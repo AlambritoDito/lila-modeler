@@ -34,6 +34,8 @@ const N_CASES = 5000;
 const SEED = 42;
 const REPLICATIONS = 30;
 const ARRIVAL_MEAN = 10; // segundos
+/** Versión congelada; `run_prosimos.sh` clava la misma al instalar (LILA_PROSIMOS_VERSION). */
+const PROSIMOS_VERSION = '2.0.6';
 
 // Mismas 5 tareas y capacidades que tools/oracles/to_prosimos.py (verificado contra el fixture).
 const TASKS = [
@@ -84,11 +86,21 @@ const scriptPath = resolve(here, '../../../tools/oracles/run_prosimos.sh');
 
 /** `ORACLES=1` regenera el fixture invocando Prosimos (sólo en desarrollo; nunca en CI). */
 function regenerateFixture(): void {
-  execFileSync(
-    scriptPath,
-    ['--n', String(N_CASES), '--seed', String(SEED), '--replications', String(REPLICATIONS)],
-    { encoding: 'utf8', timeout: 600_000, stdio: 'inherit' },
-  );
+  try {
+    execFileSync(
+      scriptPath,
+      ['--n', String(N_CASES), '--seed', String(SEED), '--replications', String(REPLICATIONS)],
+      { encoding: 'utf8', timeout: 600_000, stdio: 'inherit' },
+    );
+  } catch (cause) {
+    // El fallo nativo es un escueto `Command failed: …run_prosimos.sh`: la causa real (falta `uv`,
+    // no hay red, Python 3.11 ausente) sale por stderr del script, así que se apunta a ella.
+    throw new Error(
+      'ORACLES=1 no pudo regenerar el fixture con tools/oracles/run_prosimos.sh; ' +
+        'necesita `uv` (https://astral.sh/uv) y red para instalar Prosimos. Ver el detalle arriba y docs/ORACLES.md.',
+      { cause },
+    );
+  }
 }
 
 function buildIr(): ProcessIR {
@@ -144,7 +156,11 @@ describe('LILA-052 · oráculo Prosimos (fixture congelado)', () => {
 
       // El fixture es el contrato del modelo: si alguien cambia una capacidad aquí sin
       // regenerarlo, el test debe decirlo antes de comparar KPI y no como "no cuadra el ciclo".
+      expect(fixture.prosimosVersion, 'el fixture se generó con otra versión de Prosimos').toBe(
+        PROSIMOS_VERSION,
+      );
       expect(fixture.params.n, 'el fixture se generó con otro número de casos').toBe(N_CASES);
+      expect(fixture.params.seed).toBe(SEED);
       expect(fixture.params.replications).toBe(REPLICATIONS);
       expect(fixture.model.arrival).toEqual({ type: 'exponential', mean: ARRIVAL_MEAN });
       expect(fixture.model.tasks).toEqual(
