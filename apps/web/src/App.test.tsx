@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   abrir: vi.fn(), cuellos: vi.fn(),
   // LILA-209: el shell lintea el escenario activo con la misma función que el panel; aquí se
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
-  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(), cuellos: vi.fn(),
+  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
   // LILA-065: enciende y apaga la animación de tokens de bpmn-js-token-simulation.
   simulacionTokens: vi.fn(),
   // LILA-207: los servicios que la paleta usa para insertar una figura.
