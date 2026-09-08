@@ -8,14 +8,23 @@
  * resalta la celda cuyo texto mostrado difiere del de la base, ver `cellChanged()`; nunca la
  * columna base, que se compara contra sí misma.
  *
- * ponytail: el subconjunto curado de KPIs y las etiquetas Bizagi (docs/RESULTS_FORMAT.md §10) se
- * repiten aquí en vez de importarse de `packages/engine/src/cli.ts`: ese archivo es el binario de
- * la CLI (usa `node:fs`, no está en los `exports` de package.json) y no una librería pensada para
- * compartirse con la web. Si el subconjunto cambia en `lila compare`, hay que actualizar también
- * `DEFAULT_COMPARE_METRICS`/`BIZAGI_COMPARE_LABELS` aquí.
+ * Los nombres de columna salen del mapa único de `@lila/engine/format` (docs/RESULTS_FORMAT.md
+ * §10, LILA-201), el mismo que usan `lila run`, `lila compare` y los CSV.
+ *
+ * ponytail: el subconjunto curado de KPIs sí se repite aquí en vez de importarse de
+ * `packages/engine/src/cli.ts`: ese archivo es el binario de la CLI (usa `node:fs`, no está en los
+ * `exports` de package.json) y no una librería pensada para compartirse con la web. Si el
+ * subconjunto cambia en `lila compare`, hay que actualizar también `DEFAULT_COMPARE_METRICS` aquí.
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { formatDuration, formatNumber, formatSignedPercent, type BaseTimeUnit } from '@lila/engine/format';
+import {
+  columnLabel,
+  formatDuration,
+  formatNumber,
+  formatSignedPercent,
+  isDurationMetric,
+  type BaseTimeUnit,
+} from '@lila/engine/format';
 import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
 import {
   DataTable,
@@ -69,40 +78,6 @@ const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
   'process:totalCost',
 ]);
 
-const BIZAGI_COMPARE_LABELS: Readonly<Record<string, string>> = {
-  'elements:started': 'Instances started',
-  'elements:completed': 'Instances completed',
-  'elements:processing.min': 'Minimum time',
-  'elements:processing.max': 'Maximum time',
-  'elements:processing.mean': 'Average time',
-  'elements:processing.total': 'Total time',
-  'elements:resourceWait.min': 'Minimum time (waiting for resource)',
-  'elements:resourceWait.max': 'Maximum time (waiting for resource)',
-  'elements:resourceWait.mean': 'Average time (waiting for resource)',
-  'elements:resourceWait.sd': 'Standard deviation (waiting for resource)',
-  'elements:resourceWait.total': 'Total time (waiting for resource)',
-  'elements:fixedCostTotal': 'Total fixed cost',
-  'resources:utilization': 'Utilization (%)',
-  'resources:busyTime': 'Busy time',
-  'resources:fixedCost': 'Fixed cost',
-  'resources:unitCost': 'Unit cost',
-  'resources:totalCost': 'Total cost',
-  'flows:count': 'Instances/Tokens completed',
-};
-
-const DURATION_METRIC_PREFIXES: ReadonlySet<string> = new Set([
-  'processing',
-  'resourceWait',
-  'offHoursWait',
-  'cycleTime',
-  'waitTime',
-  'busyTime',
-]);
-
-function isDurationMetric(metric: string): boolean {
-  return DURATION_METRIC_PREFIXES.has(metric.split('.')[0] ?? '');
-}
-
 /**
  * Los únicos campos monetarios de `RunResult` (`run.currency`, docs/RESULTS_FORMAT.md §§2,4,5):
  * `elements[id].fixedCostTotal`, `resources[id].{fixedCost,unitCost,totalCost}` y
@@ -117,7 +92,7 @@ function isCostMetric(metric: string): boolean {
 
 /** Exportada para que el test ubique la fila de un KPI por su etiqueta sin adivinar el HTML. */
 export function compareMetricLabel(scope: CompareScope, metric: string): string {
-  return BIZAGI_COMPARE_LABELS[`${scope}:${metric}`] ?? metric;
+  return columnLabel(scope, metric);
 }
 
 /**

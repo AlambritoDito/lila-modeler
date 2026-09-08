@@ -70,15 +70,19 @@ beforeAll(async () => {
   trBlocks = html.match(/<tr[^]*?<\/tr>/g) ?? [];
 }, 120_000);
 
-/** Ubica la única fila que muestra el id (o, si no hay id, solo el metric) y la etiqueta del KPI. */
+/**
+ * Ubica la única fila que muestra el id (o, si no hay id, solo el metric) y la etiqueta del KPI.
+ * Las filas de `process` no llevan columnas Id/Name, así que su etiqueta es la **primera** celda:
+ * desde LILA-201 `process.totalCost` y `resources[id].totalCost` comparten el nombre `Total cost`
+ * del mapa de § 10 y solo la tabla en la que están los distingue.
+ */
 function findRow(row: CompareRow): string {
-  const idNeedle = row.id === null ? null : `>${row.id}<`;
-  // Envuelto en `><` porque la etiqueta va sola en su celda: "Average time" sería substring de
-  // "Average time (waiting for resource)" sin el borde exacto.
-  const metricNeedle = `>${compareMetricLabel(row.scope, row.metric)}<`;
-  const matches = trBlocks.filter(
-    (tr) => (idNeedle === null || tr.includes(idNeedle)) && tr.includes(metricNeedle),
-  );
+  const label = compareMetricLabel(row.scope, row.metric);
+  const matches = trBlocks.filter((tr) => {
+    const cells = cellsOf(tr);
+    if (row.id === null) return cells.length > 0 && textOf(cells[0]!) === label;
+    return tr.includes(`>${row.id}<`) && cells.some((cell) => textOf(cell) === label);
+  });
   expect(matches, `fila no encontrada para ${row.kpi}`).toHaveLength(1);
   return matches[0]!;
 }
@@ -322,6 +326,17 @@ function findTr(html: string, needle: string): string {
   return matches[0]!;
 }
 
+/** La fila de un KPI de `process`, cuya etiqueta es la primera celda (ver `findRow`). */
+function findProcessTr(html: string, label: string): string {
+  const blocks = html.match(/<tr[^]*?<\/tr>/g) ?? [];
+  const matches = blocks.filter((block) => {
+    const cells = cellsOf(block);
+    return cells.length > 0 && textOf(cells[0]!) === label;
+  });
+  expect(matches, `fila de proceso no encontrada para "${label}"`).toHaveLength(1);
+  return matches[0]!;
+}
+
 describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
   test('(a) monedas distintas: process.totalCost no muestra delta ni resaltado, y aparece el aviso', () => {
     const comparison = compare([
@@ -333,7 +348,7 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
       <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
     );
 
-    const tr = findTr(html, '>totalCost<');
+    const tr = findProcessTr(html, 'Total cost');
     const cells = cellsOf(tr).map(textOf);
     // [Metric, AS-IS, TO-BE]: el valor de TO-BE se ve, pero sin delta y con "no comparable".
     expect(cells[2]).toContain('no comparable');

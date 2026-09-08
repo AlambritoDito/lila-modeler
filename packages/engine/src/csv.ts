@@ -2,6 +2,7 @@
 
 import type { ProcessIR } from './core/ir.js';
 import type { EventLogRow, RunResult } from './core/result.js';
+import { columnLabel, type ResultScope } from './format.js';
 
 type CsvValue = string | number | null | undefined;
 
@@ -20,24 +21,58 @@ export function toCsv(headers: readonly string[], rows: readonly (readonly CsvVa
   return csvRow(headers) + rows.map(csvRow).join('');
 }
 
+/**
+ * Métricas de cada tabla, en orden de columna. Los nombres salen del mapa único de `format.ts`
+ * (docs/RESULTS_FORMAT.md § 10) y aquí van desnudos: el CSV siempre lleva segundos (§ 1), así que
+ * ninguna columna de duración arrastra sufijo de unidad. La CLI y la web sí lo añaden con
+ * `columnHeader`, porque convierten a `baseTimeUnit`.
+ */
+export const ELEMENT_COLUMNS = [
+  'started',
+  'completed',
+  'processing.min',
+  'processing.max',
+  'processing.mean',
+  'processing.total',
+  'resourceWait.min',
+  'resourceWait.max',
+  'resourceWait.mean',
+  'resourceWait.sd',
+  'resourceWait.total',
+  'fixedCostTotal',
+] as const;
+
+export const RESOURCE_COLUMNS = ['utilization', 'busyTime', 'fixedCost', 'unitCost', 'totalCost'] as const;
+
+export const PROCESS_COLUMNS = [
+  'started',
+  'completed',
+  'inFlight',
+  'cycleTime.min',
+  'cycleTime.max',
+  'cycleTime.mean',
+  'cycleTime.sd',
+  'cycleTime.p50',
+  'cycleTime.p90',
+  'cycleTime.p95',
+  'waitTime.min',
+  'waitTime.max',
+  'waitTime.mean',
+  'waitTime.sd',
+  'waitTime.p50',
+  'waitTime.p90',
+  'waitTime.p95',
+  'throughputPerHour',
+  'costPerCase',
+  'totalCost',
+] as const;
+
+function labels(scope: ResultScope, metrics: readonly string[]): string[] {
+  return metrics.map((metric) => columnLabel(scope, metric));
+}
+
 export function elementsCsv(ir: ProcessIR, result: RunResult): string {
-  const headers = [
-    'Id',
-    'Name',
-    'Type',
-    'Instances started',
-    'Instances completed',
-    'Minimum time',
-    'Maximum time',
-    'Average time',
-    'Total time',
-    'Minimum time (waiting for resource)',
-    'Maximum time (waiting for resource)',
-    'Average time (waiting for resource)',
-    'Standard deviation (waiting for resource)',
-    'Total time (waiting for resource)',
-    'Total fixed cost',
-  ];
+  const headers = ['Id', 'Name', 'Type', ...labels('elements', ELEMENT_COLUMNS)];
   const rows = Object.entries(result.elements).map(([id, metrics]) => {
     const node = ir.nodes[id];
     return [
@@ -62,7 +97,7 @@ export function elementsCsv(ir: ProcessIR, result: RunResult): string {
 }
 
 export function flowsCsv(ir: ProcessIR, result: RunResult): string {
-  const headers = ['Id', 'Name', 'From', 'To', 'Instances/Tokens completed'];
+  const headers = ['Id', 'Name', 'From', 'To', columnLabel('flows', 'count')];
   const rows = Object.entries(result.flows).map(([id, metrics]) => {
     const flow = ir.flows[id];
     return [id, flow?.name ?? '', flow?.from ?? '', flow?.to ?? '', metrics.count];
@@ -74,7 +109,7 @@ export function resourcesCsv(
   result: RunResult,
   names: Readonly<Record<string, string | undefined>> = {},
 ): string {
-  const headers = ['Id', 'Name', 'Utilization (%)', 'Busy time', 'Fixed cost', 'Unit cost', 'Total cost'];
+  const headers = ['Id', 'Name', ...labels('resources', RESOURCE_COLUMNS)];
   const rows = Object.entries(result.resources).map(([id, metrics]) => [
     id,
     names[id] ?? '',
@@ -88,28 +123,7 @@ export function resourcesCsv(
 }
 
 export function processCsv(result: RunResult): string {
-  const headers = [
-    'Instances started',
-    'Instances completed',
-    'In flight',
-    'Cycle time minimum',
-    'Cycle time maximum',
-    'Cycle time average',
-    'Cycle time standard deviation',
-    'Cycle time p50',
-    'Cycle time p90',
-    'Cycle time p95',
-    'Wait time minimum',
-    'Wait time maximum',
-    'Wait time average',
-    'Wait time standard deviation',
-    'Wait time p50',
-    'Wait time p90',
-    'Wait time p95',
-    'Throughput per hour',
-    'Cost per case',
-    'Total cost',
-  ];
+  const headers = labels('process', PROCESS_COLUMNS);
   const { process } = result;
   return toCsv(headers, [
     [

@@ -184,7 +184,9 @@ Ranking de elementos ordenado descendentemente por `elements[elementId].resource
 Con varias replicaciones, `resourceWaitTotal` es la media incondicional: una réplica donde el
 elemento no espera aporta 0, igual que en `elements[id].resourceWait.total`. `utilization` es la
 media condicional sobre las réplicas donde el elemento sí aparece en `bottlenecks`; su ausencia no
-es una observación de utilización cero y no reduce artificialmente el valor publicado.
+es una observación de utilización cero y no reduce artificialmente el valor publicado. Promediar
+así no reordena el ranking, que lo decide `resourceWaitTotal`: `utilization` solo desempata.
+*(prueba: LILA-201, sobre `examples/pedido`)*
 
 Los pools de un elemento se leen del **event log** (`resourceId` de sus filas), no del escenario:
 cada fila ya trae el pool efectivamente asignado, así que el ranking vale igual para un solo pool,
@@ -329,6 +331,22 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
 
 La CLI (`lila run`) imprime las tablas de `elements` y `resources` con los **nombres de columna de Bizagi**, verificados contra la ayuda oficial (`help.bizagi.com`, niveles 1–4 y `simulation_in_bizagi.htm`; ver `investigacion-2026-09-03/02-bizagi-simulacion.md`), para que un usuario que migra desde Bizagi pueda comparar números sin traducir columnas. Bizagi usa indistintamente "Tokens" e "Instances" según la página de ayuda; se documentan ambas variantes observadas.
 
+**Un solo mapa de nombres** *(LILA-201)*. Las tablas de abajo viven en el código una sola vez, en
+`COLUMN_LABELS` (`packages/engine/src/format.ts`), con la clave `${ámbito}:${ruta de la métrica}`
+—la misma partición `scope`/`metric` que produce `compare()` (sección 11)—. Lo consumen las cuatro
+superficies que enseñan resultados y ninguna redefine un nombre por su cuenta:
+
+| Superficie | Nombre de columna | Unidad de las duraciones |
+|---|---|---|
+| `lila run` (tablas de consola) | `columnHeader(scope, metric, unit)` | `baseTimeUnit`, con sufijo ` (min)` / ` (h)` … |
+| `lila compare` (columna *Metric*) | `columnLabel(scope, metric)` | la fila lleva la unidad; el rótulo no |
+| CSV de `csv.ts` (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`) | `columnLabel(scope, metric)` | **segundos** (sección 1), por eso el rótulo va desnudo: `Busy time`, no `Busy time (min)` |
+| `ResultsView` de la web | `columnLabel(...)` + ` (unidad)` en duraciones | `baseTimeUnit`, igual que la CLI |
+
+Es decir: el nombre es único y el sufijo de unidad lo añade solo quien convierte a `baseTimeUnit`.
+Una métrica sin nombre en el mapa (`queueLength.mean`, `offHoursWait.*`) conserva su ruta interna
+en vez de recibir un nombre inventado. *(prueba: LILA-201)*
+
 ### Tabla "Process elements" (niveles 1–4)
 
 | Campo interno (`RunResult.elements[id]`) | Nombre de columna Bizagi |
@@ -346,7 +364,14 @@ La CLI (`lila run`) imprime las tablas de `elements` y `resources` con los **nom
 | `resourceWait.total` | Total time (waiting for resource) |
 | `fixedCostTotal` | Total fixed cost |
 
-`offHoursWait`, `queueLength`, `resources[id].busyTime`, los percentiles de `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase`, `process.totalCost` y `bottlenecks` **no tienen columna equivalente en Bizagi** — son las métricas extra listadas en la sección 3 del documento de estructura ("Extras que Bizagi no da"); la CLI las imprime en tablas adicionales sin intentar nombrarlas "a la Bizagi".
+La consola de `lila run`, `elements.csv` y la pestaña "Elementos del proceso" de la web imprimen
+esta tabla **completa**, en este orden y con las columnas `Id`, `Name` y `Type` delante
+*(LILA-201: hasta entonces la consola se quedaba en `Total time` y perdía el grupo "waiting for
+resource" y el costo fijo, que el CSV y la web sí traían)*. `lila compare` y la vista de
+comparación no son tablas de resultados sino de KPI, y muestran su subconjunto curado (sección 11)
+con estos mismos nombres.
+
+`offHoursWait`, `queueLength`, `resources[id].busyTime`, los percentiles de `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase`, `process.totalCost` y `bottlenecks` **no tienen columna equivalente en Bizagi** — son las métricas extra listadas en la sección 3 del documento de estructura ("Extras que Bizagi no da"); la CLI las imprime en tablas adicionales sin intentar nombrarlas "a la Bizagi", pero sus nombres viven en el mismo mapa para que consola, CSV y web no los escriban distinto.
 
 ### Tabla "Resources" (niveles 3–4)
 
@@ -366,6 +391,43 @@ La tabla lista **una fila por pool declarado**, también los que quedaron con 0 
 | Campo interno (`RunResult.flows[id]`) | Nombre de columna Bizagi |
 |---|---|
 | `count` | Instances/Tokens completed (para el sequence flow) |
+
+### Tabla "Process summary" / "Proceso" (extras de Lila)
+
+Bizagi no publica esta tabla; los nombres son de Lila y salen del mismo mapa.
+
+| Campo interno (`RunResult.process`) | Nombre de columna |
+|---|---|
+| `started` | Instances started |
+| `completed` | Instances completed |
+| `inFlight` | In flight |
+| `cycleTime.min` / `.max` / `.mean` / `.sd` | Cycle time minimum / maximum / average / standard deviation |
+| `cycleTime.p50` / `.p90` / `.p95` | Cycle time p50 / p90 / p95 |
+| `waitTime.min` / `.max` / `.mean` / `.sd` | Wait time minimum / maximum / average / standard deviation |
+| `waitTime.p50` / `.p90` / `.p95` | Wait time p50 / p90 / p95 |
+| `throughputPerHour` | Throughput per hour |
+| `costPerCase` | Cost per case |
+| `totalCost` | Total cost |
+
+`process.csv` y la pestaña "Proceso" de la web llevan las **20** columnas. La consola de `lila run`
+imprime un subconjunto —`started`, `completed`, `inFlight`, la media y los percentiles p50/p90/p95
+de `cycleTime` y de `waitTime`, `throughputPerHour`, `costPerCase` y `totalCost`— porque las 20 no
+caben legibles en una fila de terminal; los mínimos, máximos y desviaciones siguen íntegros en
+`--json` y en el CSV. *(LILA-201: antes la consola llamaba `Average cycle`, `p50` y
+`Throughput/hour` a lo que el CSV y la web ya llamaban `Cycle time average`, `Cycle time p50` y
+`Throughput per hour`, y no imprimía ni `totalCost` ni la espera.)*
+
+### Tabla "Cuellos de botella"
+
+Ranking de la sección 6, sin equivalente en Bizagi. Columnas: `Id`, `Name`,
+`Total time (waiting for resource)` (= `elements:resourceWait.total`) y `Utilization (%)`
+(= `resources:utilization`).
+
+Se imprime **siempre**, también cuando el escenario no declara ni un pool: sin recursos el ranking
+está vacío por construcción (R-DEG-1) y la superficie lo dice con "Sin espera por recurso
+detectada." en vez de callar la sección. Así la consola y la tarjeta de `ResultsView` en la web
+enseñan lo mismo ante el mismo `RunResult`. *(decisión: LILA-201; prueba: `cli-run.test.ts`,
+`ResultsView.test.tsx`)*
 
 Nota de confianza: los nombres exactos arriba están marcados `[verified]` en la investigación citada salvo el desglose de "waiting for resource" en columnas separadas Min/Max/Avg/Std.Dev/Total, que la ayuda de Bizagi describe como grupo pero sin dar el texto literal de cada subcolumna — se usa el patrón `Minimum/Maximum/Average/Standard deviation/Total time` por consistencia con el grupo de `processing`. Si al reproducir el ejemplo oficial de nivel 3/4 de Bizagi (prueba de aceptación de M1, sección 7 del documento de estructura) el texto real difiere, este documento se corrige entonces sin abrir un ticket aparte.
 
