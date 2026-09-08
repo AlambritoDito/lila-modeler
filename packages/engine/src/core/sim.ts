@@ -516,6 +516,21 @@ export function runReplication(
     warningCounts.set(message, (warningCounts.get(message) ?? 0) + 1);
   };
 
+  // R-DEG-3 (LILA-198): un escenario que no declara **ni un** `processingTime` —validación de
+  // rutas, como el nivel 1 de Bizagi— sacaba un `W-TAREA-SIN-TIEMPO` por tarea en cada corrida:
+  // ruido por diseño, no un olvido. Ahí el aviso es uno solo y lista los ids. Si el escenario
+  // declara algún tiempo, cada tarea sin el suyo sigue avisando por separado: eso sí es un olvido.
+  const noDeclaraTiempos = Object.values(spec).every((element) => element.processingTime === undefined);
+  const tareasSinTiempo = noDeclaraTiempos
+    ? Object.keys(ir.nodes).filter((nodeId) => ir.nodes[nodeId]!.type === 'task')
+    : [];
+  if (tareasSinTiempo.length > 0) {
+    warn(
+      `W-TAREA-SIN-TIEMPO: ${tareasSinTiempo.join(', ')}: el escenario no declara ningún ` +
+        'processingTime; esas tareas duran 0 segundos.',
+    );
+  }
+
   const flows: Record<string, number> = {};
   for (const flowId of Object.keys(ir.flows)) flows[flowId] = 0;
   const elements: Record<string, ElementCounters> = {};
@@ -958,11 +973,11 @@ export function runReplication(
         // R-EVT-1: timer sin recurso. R-DEG-3 / R-EVT-2: sin processingTime dura 0.
         const dist = spec[next.nodeId]?.processingTime;
         if (dist === undefined) {
-          warn(
-            node.type === 'timer'
-              ? `W-TIMER-SIN-TIEMPO: ${next.nodeId}: sin processingTime; retarda 0 segundos.`
-              : `W-TAREA-SIN-TIEMPO: ${next.nodeId}: sin processingTime; dura 0 segundos.`,
-          );
+          if (node.type === 'timer') {
+            warn(`W-TIMER-SIN-TIEMPO: ${next.nodeId}: sin processingTime; retarda 0 segundos.`);
+          } else if (tareasSinTiempo.length === 0) {
+            warn(`W-TAREA-SIN-TIEMPO: ${next.nodeId}: sin processingTime; dura 0 segundos.`);
+          }
         }
         const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
         const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];

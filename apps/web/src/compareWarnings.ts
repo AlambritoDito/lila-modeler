@@ -46,9 +46,9 @@ export interface CompareWarningsResult {
 const NO_CURRENCY = 'sin moneda';
 
 /**
- * `run.seed`/`run.replications` tienen default en `RunSchema` (1 y 1 respectivamente): una corrida
- * sin el campo declarado en sus metadatos de comparación se trata como si valiera ese default, no
- * como "desconocido", porque es lo mismo que produciría el motor. `currency` no tiene default (una
+ * `run.replications` tiene default en `RunSchema` (1) y `run.seed` lo aplica el motor (`?? 1`,
+ * R-DEG-4): una corrida sin el campo declarado en sus metadatos de comparación se trata como si
+ * valiera ese default, no como "desconocido", porque es lo mismo que produciría el motor. `currency` no tiene default (una
  * corrida sin moneda no tiene costos en ninguna), así que ahí sí se distingue de un valor real.
  */
 function effectiveSeed(run: CompareRunMeta): number {
@@ -114,8 +114,11 @@ export function runMetaFrom(name: string, scenario: ResolvedScenario, result: Ru
     baseTimeUnit: scenario.run.baseTimeUnit as BaseTimeUnit,
     name,
     replications: scenario.run.replications,
-    seed: scenario.run.seed,
     warnings: result.warnings,
+    // `run.seed` dejó de tener default en `RunSchema` (LILA-198: sin él no se puede avisar
+    // `W-SIN-SEED`), así que se omite igual que `currency` cuando el escenario no lo declara;
+    // `effectiveSeed` sigue leyéndolo como 1, que es lo que usa el motor.
+    ...(scenario.run.seed === undefined ? {} : { seed: scenario.run.seed }),
     // `run.currency` no tiene default en `RunSchema` (a diferencia de seed/replications/
     // baseTimeUnit): con `exactOptionalPropertyTypes` un campo opcional no admite `undefined`
     // explícito, así que se omite del todo en vez de escribir `currency: undefined`.

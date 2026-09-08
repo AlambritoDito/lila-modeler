@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 
 import { parseBpmn } from '../src/bpmn/index.js';
+import type { ProcessIR } from '../src/core/ir.js';
+import type { SimScenario } from '../src/core/sim.js';
 import { simulate, type EventLogRow } from '../src/index.js';
 import type { ResolvedScenario } from '../src/scenario.js';
 import {
@@ -169,4 +171,53 @@ describe('degradación de calendarios (LILA-043)', () => {
 
     expect(actual).toBe(readFileSync(PEDIDO_GOLDEN_PATH, 'utf8'));
   }, 60_000);
+});
+
+/**
+ * R-DEG-3 (LILA-198) — el aviso de tarea sin `processingTime` en un escenario que no declara
+ * ninguno: un escenario de validación de rutas sacaba un aviso por tarea en cada corrida.
+ */
+describe('R-DEG-3 — tareas sin processingTime (LILA-198)', () => {
+  const IR_DOS_TAREAS: ProcessIR = {
+    id: 'Process_Deg3',
+    name: '',
+    nodes: {
+      Start: { type: 'start', name: '', incoming: [], outgoing: ['Flow_SA'] },
+      A: { type: 'task', name: '', incoming: ['Flow_SA'], outgoing: ['Flow_AB'] },
+      B: { type: 'task', name: '', incoming: ['Flow_AB'], outgoing: ['Flow_BE'] },
+      End: { type: 'end', name: '', incoming: ['Flow_BE'], outgoing: [] },
+    },
+    flows: {
+      Flow_SA: { from: 'Start', to: 'A', name: '', isDefault: false },
+      Flow_AB: { from: 'A', to: 'B', name: '', isDefault: false },
+      Flow_BE: { from: 'B', to: 'End', name: '', isDefault: false },
+    },
+    source: { exporter: 'test', exporterVersion: '1', originalIds: {} },
+  };
+
+  const escenario = (elements: SimScenario['elements']): SimScenario => ({
+    run: { duration: 100, seed: 1 },
+    elements: { Start: { interTriggerTimer: { type: 'constant', value: 10 }, triggerCount: 3 }, ...elements },
+  });
+
+  test('sin ningún processingTime declarado: un solo aviso que lista los ids', () => {
+    const warnings = simulate(IR_DOS_TAREAS, escenario({}), { log: false }).warnings;
+
+    expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
+      'W-TAREA-SIN-TIEMPO: A, B: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.',
+    ]);
+  });
+
+  test('con algún processingTime declarado, la tarea que se olvidó avisa sola y con su contador', () => {
+    const warnings = simulate(
+      IR_DOS_TAREAS,
+      escenario({ A: { processingTime: { type: 'constant', value: 5 } } }),
+      { log: false },
+    ).warnings;
+
+    // Aquí el aviso sí señala un olvido concreto: se conserva por tarea, con el contador de § 17.
+    expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
+      'W-TAREA-SIN-TIEMPO: B: sin processingTime; dura 0 segundos. (3 veces)',
+    ]);
+  });
 });

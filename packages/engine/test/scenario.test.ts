@@ -34,12 +34,18 @@ describe('esquema del escenario', () => {
     }
   });
 
-  test('probability: 1.5 se rechaza', () => {
+  test('probability: 1.5 la rechaza el lint con E-PROB-RANGO, no el esquema (§ 17, LILA-198)', () => {
     const bad = clone(AS_IS) as Record<string, never>;
     (bad['elements'] as Record<string, Record<string, number>>)['Flow_Aprobado']!['probability'] = 1.5;
-    const result = ScenarioSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.path.join('.')).toBe('elements.Flow_Aprobado.probability');
+    // El esquema ya no acota el rango a propósito: así el defecto llega al lint con el código del
+    // catálogo y su ruta, en vez de un defecto genérico de zod que no lleva código.
+    const parsed = ScenarioSchema.safeParse(bad);
+    expect(parsed.success).toBe(true);
+    const error = scenarioErrors(validateScenario(parsed.data!, pedidoIr())).find(
+      (problem) => problem.path === 'elements.Flow_Aprobado.probability',
+    );
+    expect(error?.code).toBe('E-PROB-RANGO');
+    expect(error?.message).toContain('fuera de [0, 1]');
   });
 
   test('una clave desconocida es error, no silencio (R7/R-RES-4)', () => {
@@ -109,7 +115,11 @@ describe('esquema del escenario', () => {
       elements: { Task_TomarPedido: { resources: [{ ref: 'cajero' }] } },
     });
 
-    expect(minimal.run).toMatchObject({ warmup: 0, replications: 1, seed: 1, baseTimeUnit: 's' });
+    expect(minimal.run).toMatchObject({ warmup: 0, replications: 1, baseTimeUnit: 's' });
+    // `seed` no lleva default en el esquema desde LILA-198: R-DEG-4 pide avisar `W-SIN-SEED`
+    // cuando el escenario no la declara, y con default el lint no podría distinguirlo de un 1
+    // escrito a mano. El valor neutro (1) lo aplica el motor.
+    expect(minimal.run?.seed).toBeUndefined();
     expect(minimal.resources?.['cajero']).toMatchObject({
       type: 'role',
       costPerHour: 0,
@@ -224,7 +234,8 @@ describe('validateScenario contra el IR', () => {
     expect(errors.map((problem) => problem.code)).toEqual([
       'E-REC-CANTIDAD',
       'E-REC-DUPLICADO',
-      'E-CAMPO-NO-APLICA',
+      // Un timer con recursos tiene código propio en § 17 (LILA-198).
+      'E-TIMER-RECURSO',
     ]);
   });
 
@@ -304,11 +315,12 @@ describe('JSON Schema generado', () => {
     expect(validateJsonSchema(committed, AS_IS)).toEqual([]);
     expect(validateJsonSchema(committed, TO_BE)).toEqual([]);
 
+    // Desde LILA-198 el rango de `probability` no vive en el esquema sino en el lint
+    // (`E-PROB-RANGO`): ni zod ni el JSON Schema publicado lo rechazan, y siguen coincidiendo.
     const bad = clone(AS_IS) as Record<string, never>;
     (bad['elements'] as Record<string, Record<string, number>>)['Flow_Aprobado']!['probability'] = 1.5;
-    expect(validateJsonSchema(committed, bad)).toContainEqual(
-      expect.stringContaining('$.elements.Flow_Aprobado.probability'),
-    );
+    expect(ScenarioSchema.safeParse(bad).success).toBe(true);
+    expect(validateJsonSchema(committed, bad)).toEqual([]);
 
     const unknownKey = clone(AS_IS) as Record<string, never>;
     (unknownKey['resources'] as Record<string, Record<string, number>>)['cajero'] = { capacty: 3 };

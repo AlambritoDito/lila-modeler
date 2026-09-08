@@ -65,9 +65,13 @@ describe.each(levels)('QA LILA-187 · examples/bizagi-levels/level-%i', (level) 
     const { ir } = await parseBpmn(leer(level, 'model.bpmn'));
     const problemas = validateScenario(escenarioDe(level), ir);
     expect(problemas.filter((p) => p.severity === 'error')).toEqual([]);
-    // El único aviso admisible es el del elemento del modelo que el escenario no parametriza
-    // (gateways y ends, que no llevan parámetros; en el nivel 1, además, las tareas sin tiempo).
-    expect([...new Set(problemas.map((p) => p.code))].sort()).toEqual(['W-ELEMENTO-SIN-PARAMETROS']);
+    // Los avisos admisibles son el del elemento del modelo que el escenario no parametriza
+    // (gateways y ends, que no llevan parámetros; en el nivel 1, además, las tareas sin tiempo) y
+    // `W-SIN-SEED`: ninguno de los cuatro niveles declara `run.seed` (R-DEG-4, LILA-198).
+    expect([...new Set(problemas.map((p) => p.code))].sort()).toEqual([
+      'W-ELEMENTO-SIN-PARAMETROS',
+      'W-SIN-SEED',
+    ]);
   });
 
   test('ataque 11: toda clave de `elements` existe en el IR (R3) y las de flujo son sequence flows', async () => {
@@ -105,6 +109,29 @@ describe.each(levels)('QA LILA-187 · examples/bizagi-levels/level-%i', (level) 
     const rutas = Object.entries(valores).flatMap(([k, v]) => sinProcedencia(v, `$.values.${k}`, false));
     expect(rutas).toEqual([]);
   });
+});
+
+/**
+ * LILA-198 — el nivel 1 es el caso del ticket: valida rutas, no declara ni un `processingTime` ni
+ * `run.seed`, y sacaba un `W-TAREA-SIN-TIEMPO` por tarea en cada corrida (siete) y ningún
+ * `W-SIN-SEED`. Ahora el aviso de tiempos es uno solo con los ids (R-DEG-3) y el de la semilla
+ * está (R-DEG-4).
+ */
+test('LILA-198: el nivel 1 avisa una sola vez de las tareas sin tiempo, y avisa de la semilla', async () => {
+  const { ir } = await parseBpmn(leer(1, 'model.bpmn'));
+  const scenario = escenarioDe(1);
+  const tareas = Object.entries(ir.nodes)
+    .filter(([, node]) => node.type === 'task')
+    .map(([id]) => id);
+  expect(tareas.length).toBeGreaterThan(1);
+
+  const warnings = simulate(ir, scenario, { log: false }).warnings;
+  expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
+    `W-TAREA-SIN-TIEMPO: ${tareas.join(', ')}: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.`,
+  ]);
+
+  const aviso = validateScenario(scenario, ir).find((problema) => problema.code === 'W-SIN-SEED');
+  expect(aviso).toMatchObject({ severity: 'warning', path: 'run.seed' });
 });
 
 /**
