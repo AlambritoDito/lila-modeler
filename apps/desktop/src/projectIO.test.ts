@@ -7,7 +7,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
+import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
 import type { ProjectDocument, StoredRun } from './projectTypes.js';
 
 /** Ejecuta `fn`, espera que rechace, y devuelve el error capturado (o falla la prueba si no rechaza). */
@@ -599,5 +599,12 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
     const { loose } = await readProjectFolder(dir);
     expect(loose).toBe(false);
+  });
+
+  it('hasProjectModel: true solo si hay un model.bpmn que reabrir (hallazgo 9 del QA)', async () => {
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    expect(await hasProjectModel(dir)).toBe(false);
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    expect(await hasProjectModel(dir)).toBe(true);
   });
 });

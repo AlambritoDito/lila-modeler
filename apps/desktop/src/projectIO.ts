@@ -322,6 +322,19 @@ export async function readProjectFolder(
   return { document, problems, loose };
 }
 
+/**
+ * `true` si `dir` tiene un `model.bpmn` legible como archivo — o sea, si reabrir esa carpeta como
+ * proyecto (recientes, menú Archivo) va a funcionar. `main.ts` lo usa para no anotar en recientes
+ * la carpeta de un `.bpmn` suelto, que prometería un proyecto que no existe (hallazgo 9 del QA).
+ */
+export async function hasProjectModel(dir: string): Promise<boolean> {
+  try {
+    return (await stat(join(dir, MODEL_FILE))).isFile();
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+}
 
 interface PendingWrite {
   readonly dest: string;

@@ -26,9 +26,9 @@ import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath } from './openPath.js';
-import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
-import { mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
+import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import {
   addRecent,
   fitsAnyDisplay,
@@ -107,20 +107,13 @@ async function requireAuthorizedDir(dir: unknown): Promise<string> {
 }
 
 /**
- * Valida que `name` sea un nombre de archivo plano (sin `/`, sin `\`, sin `..`) terminado en
- * `suffix`, y que además resuelva dentro de `dir` (defensa en profundidad además de la forma:
- * un nombre sin barras ya no puede escaparse, pero `resolveWithin` es la misma comprobación que
- * usa el resto del puente y cuesta cero repetirla aquí).
+ * Valida que `name` sea un nombre de archivo plano (`isFlatName`: sin `/`, sin `\`, ni `.`/`..`
+ * exactos) terminado en `suffix`, y que además resuelva dentro de `dir` (defensa en profundidad
+ * además de la forma: un nombre sin barras ya no puede escaparse, pero `resolveWithin` es la misma
+ * comprobación que usa el resto del puente y cuesta cero repetirla aquí).
  */
 function requireFlatName(dir: string, name: unknown, suffix: string, label: string): string {
-  if (
-    typeof name !== 'string' ||
-    name.length === 0 ||
-    name.includes('/') ||
-    name.includes('\\') ||
-    name.includes('..') ||
-    !name.endsWith(suffix)
-  ) {
+  if (typeof name !== 'string' || !isFlatName(name) || !name.endsWith(suffix)) {
     throw new Error(
       `E-ARGUMENTO: "${label}" debe ser un nombre de archivo plano terminado en "${suffix}" (recibido: ${JSON.stringify(name)}).`,
     );
@@ -135,9 +128,6 @@ function requireFlatName(dir: string, name: unknown, suffix: string, label: stri
   }
   return name;
 }
-
-/** El `model.bpmn` de un proyecto Lila; cualquier otro `.bpmn` abierto es un archivo suelto. */
-const MODEL_FILE = 'model.bpmn';
 
 /**
  * Nombre de `.bpmn` opcional del puente (LILA-072): el `file` de `lila:openRecent` (el archivo que
@@ -305,6 +295,18 @@ async function recordRecent(dir: string, name: string): Promise<void> {
 }
 
 /**
+ * `recordRecent` solo si en `dir` hay un `model.bpmn` que reabrir (hallazgos 6 y 9 del QA):
+ * recientes guarda CARPETAS y el menú Archivo las reabre por su `model.bpmn`, así que anotar la
+ * carpeta de un `.bpmn` suelto prometería un proyecto que no existe (`E-SIN-MODELO` al reabrir).
+ * Un proyecto Lila de verdad abierto por su `ventas.bpmn` SÍ entra: su `model.bpmn` sigue ahí y
+ * reabrirlo funciona. Comparar el nombre del archivo pedido contra `model.bpmn` no servía: era
+ * sensible a mayúsculas y dejaba fuera ese caso legítimo.
+ */
+async function recordRecentIfProject(dir: string, name: string): Promise<void> {
+  if (await hasProjectModel(dir)) await recordRecent(dir, name);
+}
+
+/**
  * Menú nativo (plantilla en `menu.ts`): Preferencias… (`CmdOrCtrl+,`), Archivo con Abrir reciente
  * y los aceleradores de guardar/abrir/nuevo. Cada ítem manda su acción al renderer por
  * `lila:menu`; el shell la despacha. Se reconstruye entero cada vez que cambian los recientes.
@@ -384,7 +386,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
       requireSafeFileNames(dir, document);
       try {
         await writeProjectFolder(dir, document, options);
-        await recordRecent(dir, document.name);
+        // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
+        // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
+        await recordRecentIfProject(dir, document.name);
         await e2eLog('writeProject', { dir, ok: true });
       } catch (error) {
         if (error instanceof ProjectIOError) {
@@ -424,10 +428,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     const file = requireBpmnName(real, fileArg);
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
-      // Recientes guarda CARPETAS (`listRecents`/menú Archivo), así que reabrir desde ahí siempre
-      // volvería al `model.bpmn`. Anotar la carpeta de un `.bpmn` suelto prometería algo que la
-      // lista no puede cumplir (hallazgo 6 del QA), así que solo entra el modelo del proyecto.
-      if (file === undefined || file === MODEL_FILE) await recordRecent(real, document.name);
+      await recordRecentIfProject(real, document.name);
       return { ...document, problems, loose };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
