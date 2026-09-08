@@ -165,20 +165,22 @@ function modeladorFalso(idsEnLienzo: readonly string[]): Falso {
  * ------------------------------------------------------------------ */
 
 describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
-  // §6 fija el orden en el motor; el overlay no puede reordenar ni "mejorar" el desempate.
+  // §6 fija el orden en el motor; el overlay no puede reordenar ni "mejorar" el desempate. Las
+  // seis esperan más de lo que trabajan (nivel `high`), así que el único corte que les aplica
+  // #226 es el techo de cinco: entran las cinco primeras, en su orden y con su `rango`.
   it('con empates en resourceWait.total respeta el orden de bottlenecks tal cual', () => {
     const empatadas: Fila[] = [
-      { espera: 30, id: 'Task_F', proceso: 100, total: 900, utilizacion: 0.9 },
-      { espera: 30, id: 'Task_A', proceso: 100, total: 900, utilizacion: 0.9 },
-      { espera: 20, id: 'Task_E', proceso: 100, total: 600, utilizacion: 0.5 },
-      { espera: 20, id: 'Task_B', proceso: 100, total: 600, utilizacion: 0.4 },
-      { espera: 10, id: 'Task_D', proceso: 100, total: 300, utilizacion: 0.3 },
-      { espera: 10, id: 'Task_C', proceso: 100, total: 300, utilizacion: 0.3 },
+      { espera: 30, id: 'Task_F', proceso: 10, total: 900, utilizacion: 0.9 },
+      { espera: 30, id: 'Task_A', proceso: 10, total: 900, utilizacion: 0.9 },
+      { espera: 20, id: 'Task_E', proceso: 10, total: 600, utilizacion: 0.5 },
+      { espera: 20, id: 'Task_B', proceso: 10, total: 600, utilizacion: 0.4 },
+      { espera: 10, id: 'Task_D', proceso: 10, total: 300, utilizacion: 0.3 },
+      { espera: 10, id: 'Task_C', proceso: 10, total: 300, utilizacion: 0.3 },
     ];
     const model = overlayModel(resultadoFalso(empatadas), escenario('min'));
 
-    expect(Object.keys(model)).toEqual(['Task_F', 'Task_A', 'Task_E', 'Task_B', 'Task_D', 'Task_C']);
-    expect(Object.values(model).map((e) => e.rango)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(Object.keys(model)).toEqual(['Task_F', 'Task_A', 'Task_E', 'Task_B', 'Task_D']);
+    expect(Object.values(model).map((e) => e.rango)).toEqual([0, 1, 2, 3, 4]);
     expect(Object.values(model).filter((e) => e.principal).map((_, i) => i)).toHaveLength(1);
     expect(model['Task_F']?.principal).toBe(true);
   });
@@ -200,17 +202,58 @@ describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
     expect(model['Task_Unica']?.nivel).toBe('low');
   });
 
-  // R-DURA-2: los valores viven en segundos y `baseTimeUnit` es solo presentación. La etiqueta
-  // tiene que decir «2 min», no «120 min» ni «120 s».
-  it('la etiqueta convierte a baseTimeUnit y no imprime segundos crudos', () => {
-    const filas = [{ espera: 120, id: 'Task_Espera', proceso: 120, utilizacion: 0.5 }];
+  // QA de #226: el corte por nivel `high` se llevó por delante la única aserción sobre `mid` (la
+  // que seguía a `Task_TomarPedido` entre AS-IS y TO-BE en `BottleneckOverlay.test.ts`), y
+  // sustituir la rama del medio de `nivelDeRatio` por `'low'` pasaba toda la suite de `apps/web`.
+  // Aquí ninguna llega a `high`, así que las tres se pintan por el camino de las tres primeras y
+  // los dos umbrales (0,05 y 1) quedan fijados por sus dos lados.
+  it('los umbrales low/mid salen del ratio espera/proceso de cada tarea', () => {
+    const model = overlayModel(
+      resultadoFalso([
+        { espera: 99, id: 'Task_CasiAlta', proceso: 100, utilizacion: 0.5 },
+        { espera: 5, id: 'Task_JustoMid', proceso: 100, utilizacion: 0.5 },
+        { espera: 4.9, id: 'Task_Baja', proceso: 100, utilizacion: 0.5 },
+      ]),
+      escenario('min'),
+    );
 
-    expect(overlayModel(resultadoFalso(filas), escenario('min'))['Task_Espera']?.etiqueta).toBe(
-      'espera media 2 min · utilización 50%',
+    expect(model['Task_CasiAlta']?.nivel).toBe('mid');
+    expect(model['Task_JustoMid']?.nivel).toBe('mid');
+    expect(model['Task_Baja']?.nivel).toBe('low');
+  });
+
+  // Y el otro lado de `RATIO_HIGH`: un ratio de exactamente 1 ya es `high`, mientras que 0,99 se
+  // queda en `mid`. Task_CasiAlta se pinta igual, pero por ser el rango 0 (el corte de #226
+  // incluye siempre al principal), no por su nivel — de ahí que se afirmen los dos niveles.
+  it('un ratio de exactamente 1 es alto y el de 0,99 se queda en mid', () => {
+    const model = overlayModel(
+      resultadoFalso([
+        { espera: 99, id: 'Task_CasiAlta', proceso: 100, total: 990, utilizacion: 0.5 },
+        { espera: 100, id: 'Task_Alta', proceso: 100, total: 500, utilizacion: 0.5 },
+      ]),
+      escenario('min'),
     );
-    expect(overlayModel(resultadoFalso(filas), escenario('s'))['Task_Espera']?.etiqueta).toBe(
-      'espera media 120 s · utilización 50%',
-    );
+
+    expect(Object.keys(model)).toEqual(['Task_CasiAlta', 'Task_Alta']);
+    expect(model['Task_CasiAlta']?.nivel).toBe('mid');
+    expect(model['Task_CasiAlta']?.principal).toBe(true);
+    expect(model['Task_Alta']?.nivel).toBe('high');
+    expect(model['Task_Alta']?.rango).toBe(1);
+  });
+
+  // R-DURA-2: los valores viven en segundos y `baseTimeUnit` es solo presentación. La etiqueta
+  // tiene que decir «2 min», no «120 min» ni «120». Desde #226 la etiqueta corta elige por su
+  // cuenta la unidad más gruesa que siga siendo legible (con `min` y con `s` sale la misma) y es
+  // el `title` el que conserva la unidad del escenario.
+  it('la etiqueta no imprime segundos crudos y el title respeta baseTimeUnit', () => {
+    const filas = [{ espera: 120, id: 'Task_Espera', proceso: 120, utilizacion: 0.5 }];
+    const enMinutos = overlayModel(resultadoFalso(filas), escenario('min'))['Task_Espera'];
+    const enSegundos = overlayModel(resultadoFalso(filas), escenario('s'))['Task_Espera'];
+
+    expect(enMinutos?.etiqueta).toBe('2 min · 50%');
+    expect(enSegundos?.etiqueta).toBe('2 min · 50%');
+    expect(enMinutos?.titulo).toBe('espera media 2 min · utilización 50%');
+    expect(enSegundos?.titulo).toBe('espera media 120 s · utilización 50%');
   });
 
   // `processing.mean = 0` con espera > 0 no lo produce el motor, pero un 0/0 daría `NaN` y

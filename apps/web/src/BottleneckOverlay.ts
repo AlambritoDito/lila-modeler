@@ -8,7 +8,9 @@
  *
  * El ranking **no se recalcula aquí**: se recorre `result.bottlenecks` tal cual, que ya viene
  * ordenado por `resourceWait.total` con desempate por utilización (docs/RESULTS_FORMAT.md §6) y
- * ya trae la `utilization` del recurso principal de cada elemento. Así el overlay, la tarjeta de
+ * ya trae la `utilization` del recurso principal de cada elemento. Lo único que hace el overlay
+ * es **cortarlo** (ver `TECHO`): pinta siempre el rango 0 y los cuellos de nivel `high`, o las
+ * tres primeras si no hay ninguno, y nunca más de cinco. Así el overlay, la tarjeta de
  * `ResultsView` (LILA-062) y `lila run` coinciden siempre, y el escenario solo se usa para saber
  * en qué unidad presentar los tiempos.
  *
@@ -46,7 +48,10 @@ export type NivelEspera = 'low' | 'mid' | 'high';
 
 export interface OverlayEntry {
   nivel: NivelEspera;
+  /** Texto corto de la etiqueta sobre la tarea: cabe en el ancho de una tarea (#226). */
   etiqueta: string;
+  /** Texto completo, sin recortar, para el `title` de la etiqueta (#226). */
+  titulo: string;
   /** `true` solo para `bottlenecks[0]`: la tarea donde más tiempo total se perdió esperando. */
   principal: boolean;
   /** Posición en `result.bottlenecks` (0 = principal). */
@@ -55,7 +60,8 @@ export interface OverlayEntry {
 
 /**
  * Mapa `id de elemento -> entrada`. El orden de inserción **es** el de `result.bottlenecks`, así
- * que `Object.keys(modelo)` devuelve el ranking del motor sin volver a ordenar nada.
+ * que `Object.keys(modelo)` devuelve el ranking del motor (recortado, ver `TECHO`) sin volver a
+ * ordenar nada; `rango` conserva siempre la posición original.
  */
 export type OverlayModel = Readonly<Record<string, OverlayEntry>>;
 
@@ -84,8 +90,10 @@ export interface Corrida {
  * tarea depende de su **orden** frente a las demás, no de cuánto cambió su propia espera — así,
  * `Task_TomarPedido` nunca cambiaba de nivel entre AS-IS y TO-BE 3 cajeros aunque su espera media
  * bajara de 14,9 s a 2,2 s, porque siempre seguía siendo la segunda de dos. Este ratio es propio
- * de cada tarea, no depende de las demás, así que sí refleja ese cambio (ver
- * `BottleneckOverlay.test.ts`).
+ * de cada tarea, no depende de las demás, así que sí refleja ese cambio. Los dos umbrales
+ * quedan fijados en `BottleneckOverlay.qa.test.ts` («los umbrales low/mid…», «un ratio de
+ * exactamente 1…»): desde #226 el corte deja fuera del lienzo las tareas que no son `high`, así
+ * que ya no hay ninguna que seguir entre AS-IS y TO-BE sobre `examples/pedido`.
  */
 const RATIO_LOW = 0.05;
 const RATIO_HIGH = 1;
@@ -96,15 +104,56 @@ function nivelDeRatio(ratio: number): NivelEspera {
   return 'high';
 }
 
+/** Segundos por unidad. `format.ts` tiene la misma tabla pero no la exporta. */
+const SEGUNDOS: Readonly<Record<BaseTimeUnit, number>> = { day: 86_400, h: 3_600, min: 60, s: 1 };
+/** De la más gruesa a la más fina: gana la primera en la que la espera valga 1 o más. */
+const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
+/** Abreviatura de la unidad en la etiqueta; el `title` sigue usando el código del escenario. */
+const ABREVIATURA: Readonly<Record<BaseTimeUnit, string>> = { day: 'd', h: 'h', min: 'min', s: 's' };
+
 /**
- * Función pura: recorre `result.bottlenecks` en su orden y arma la entrada de cada elemento. Sin
+ * Espera media en la unidad más gruesa en la que siga valiendo 1 o más, con un decimal como
+ * mucho. La etiqueta vive sobre una tarea de ~100 px y `formatDuration` con la unidad del
+ * escenario da hasta seis decimales: «espera media 3000.559774 min · utilización
+ * 34.354969201139535%» medía 311 px sobre `examples/pedido` (#226). El texto completo no se
+ * pierde: va en el `title` de la etiqueta.
+ */
+function esperaCorta(seconds: number): string {
+  const unidad = UNIDADES.find((u) => seconds >= SEGUNDOS[u]) ?? 's';
+  // Redondeo a un decimal *en la unidad elegida* antes de formatear, no después.
+  const paso = SEGUNDOS[unidad] / 10;
+  return `${formatDuration(Math.round(seconds / paso) * paso, unidad)} ${ABREVIATURA[unidad]}`;
+}
+
+/**
+ * Cuántas tareas del ranking se pintan (#226). Decisión: el rango 0 **siempre**, sea cual sea su
+ * nivel —es el que nombra el panel derecho y el único que lleva halo—, más las de nivel `high`
+ * —las que esperan más de lo que trabajan, que son las que el usuario vino a buscar—; si no hay
+ * ninguna alta, las tres primeras del ranking, para que el lienzo no se quede mudo justo después
+ * de simular; y nunca más de `TECHO`, porque cada entrada añade una etiqueta flotante sobre el
+ * diagrama.
+ *
+ * El rango 0 se trata aparte porque `bottlenecks` viene ordenado por `resourceWait.total` y el
+ * nivel sale del ratio `resourceWait.mean / processing.mean`: son dos ordenaciones distintas, así
+ * que el primero del ranking puede ser `mid` mientras otro es `high`. Filtrar solo por nivel
+ * dejaba al principal sin pintar y sin halo, con el panel derecho nombrando una tarea invisible.
+ *
+ * // ponytail: techo fijo de 5 y sin control en la UI. El siguiente paso, cuando alguien pida
+ * // ver más (o menos), es un campo «cuántos cuellos pintar» en Ajustes que alimente este corte.
+ */
+const TECHO = 5;
+const SIN_ALTAS = 3;
+
+/**
+ * Función pura: recorre `result.bottlenecks` en su orden, arma la entrada de cada elemento y se
+ * queda con las que se pintan (`TECHO`). Sin
  * recursos en el escenario (R-DEG-1) o sin ninguna tarea con espera, `bottlenecks` viene vacío y
  * el mapa queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada.
  */
 export function overlayModel(result: RunResult, scenario: ResolvedScenario): OverlayModel {
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
 
-  const model: Record<string, OverlayEntry> = {};
+  const entradas: [string, OverlayEntry][] = [];
   for (const [rango, entrada] of result.bottlenecks.entries()) {
     const metrics = result.elements[entrada.elementId];
     // Un `bottlenecks` sin su elemento en `elements` no lo produce el motor; si llegara de un
@@ -115,16 +164,24 @@ export function overlayModel(result: RunResult, scenario: ResolvedScenario): Ove
     // la espera es infinitamente mayor que el proceso — el caso más alto, no un error.
     const ratio =
       metrics.processing.mean > 0 ? metrics.resourceWait.mean / metrics.processing.mean : Infinity;
-    model[entrada.elementId] = {
-      etiqueta:
-        `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}` +
-        ` · utilización ${formatNumber(entrada.utilization * 100)}%`,
-      nivel: nivelDeRatio(ratio),
-      principal: rango === 0,
-      rango,
-    };
+    entradas.push([
+      entrada.elementId,
+      {
+        etiqueta: `${esperaCorta(metrics.resourceWait.mean)} · ${Math.round(entrada.utilization * 100)}%`,
+        nivel: nivelDeRatio(ratio),
+        principal: rango === 0,
+        rango,
+        titulo:
+          `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}` +
+          ` · utilización ${formatNumber(entrada.utilization * 100)}%`,
+      },
+    ]);
   }
-  return model;
+  const altas = entradas.filter(([, entry]) => entry.nivel === 'high');
+  const corte = altas.length > 0 ? altas : entradas.slice(0, SIN_ALTAS);
+  const principal = entradas[0];
+  if (principal !== undefined && !corte.includes(principal)) corte.unshift(principal);
+  return Object.fromEntries(corte.slice(0, TECHO));
 }
 
 /* ------------------------------------------------------------------ *
@@ -197,6 +254,9 @@ function etiquetaHtml(entry: OverlayEntry): HTMLElement {
   const div = document.createElement('div');
   div.className = 'lila-bottleneck-label';
   div.textContent = entry.etiqueta;
+  // La etiqueta es un `div` de `overlays`, no un `<text>` del SVG: el equivalente a `<title>`
+  // aquí es el atributo `title`, que da el texto sin recortar al pasar el ratón (#226).
+  div.title = entry.titulo;
   return div;
 }
 

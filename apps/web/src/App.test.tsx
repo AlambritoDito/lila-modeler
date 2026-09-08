@@ -10,6 +10,9 @@ import { App } from './App';
 import { applyTheme } from './theme/applyTheme';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
+  // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
+  // corrida se pinta o se limpia el lienzo.
+  abrir: vi.fn(), cuellos: vi.fn(),
   // LILA-209: el shell lintea el escenario activo con la misma función que el panel; aquí se
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
   problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
@@ -30,7 +33,7 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
   } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.publicarEstado = onEstado; onListo({
-    exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
+    exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
@@ -52,7 +55,13 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
 let root: Root;
 let session: ProjectSessionStore;
 let container: HTMLDivElement;
-const ir = { id: 'Process_1', source: { originalIds: {} } };
+// `nodes` es lo que el panel lee para nombrar el cuello principal (#226): una tarea con nombre
+// y otra sin él, que son los dos caminos de `nombreDeCuello`.
+const ir = { id: 'Process_1', nodes: { Task_Preparar: { name: 'Preparar alimento' }, Task_Anonima: { name: '' } }, source: { originalIds: {} } };
+/** Corrida con un cuello de botella pintable, para el overlay y el panel derecho (#226). */
+const conCuello = (elementId: string) => ({ result: { warnings: [], bottlenecks: [{ elementId, utilization: 0.9 }] }, logSample: [] });
+/** Última llamada a `Modelador.cuellos`: `[corrida, visible]`. */
+const ultimoOverlay = () => mocks.cuellos.mock.calls.at(-1) as [{ result: { bottlenecks: { elementId: string }[] } } | null, boolean];
 const scenario = { model: 'model.bpmn', run: { seed: 42 } };
 const done = { result: { warnings: ['W-MOTOR'], bottlenecks: [] }, logSample: [] };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((r) => { resolve = r; }); return { promise, resolve }; }
@@ -74,6 +83,7 @@ beforeEach(async () => {
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
+  mocks.abrir.mockResolvedValue(true);
   mocks.worker.mockResolvedValue(done);
   mocks.exportXml.mockResolvedValue(newModelXml());
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
@@ -121,6 +131,61 @@ it('desmontar termina la corrida activa', async () => {
   mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click('Ejecutar simulación');
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
+});
+
+// #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo.
+it.each([['Task_Preparar', 'Preparar alimento (Task_Preparar)'], ['Task_Anonima', 'Task_Anonima']])(
+  'el panel nombra el cuello principal %s',
+  async (elementId, texto) => {
+    mocks.worker.mockResolvedValue(conCuello(elementId));
+    await click('Ejecutar simulación');
+    expect(container.textContent).toContain(texto);
+  },
+);
+
+// #226 punto 6: el interruptor «Cuellos de botella» no tenía prueba.
+it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar', async () => {
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click('Ejecutar simulación');
+  expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
+  expect(ultimoOverlay()[1]).toBe(true);
+
+  const interruptor = container.querySelector<HTMLInputElement>('.campo.interruptor input')!;
+  await act(async () => interruptor.click());
+  // Apagar no descarta la corrida: `sincronizarOverlay` limpia el lienzo por `visible = false`.
+  expect(ultimoOverlay()[0]).not.toBeNull();
+  expect(ultimoOverlay()[1]).toBe(false);
+
+  await act(async () => interruptor.click());
+  expect(ultimoOverlay()[1]).toBe(true);
+  expect(interruptor.checked).toBe(true);
+});
+
+/**
+ * #226 punto 5. El ticket describía que tras un `abrir()` fallido había que mover el interruptor
+ * dos veces, porque el lienzo se quedaba limpio con la corrida todavía en el estado. Ya no:
+ * `Modeler.abrir` solo destruye la instancia anterior (y con ella su overlay) en el camino de
+ * éxito, así que al fallar el diagrama en pantalla sigue siendo el de antes — y su overlay, su
+ * corrida y su interruptor tienen que seguir intactos, que es lo que fija esta prueba.
+ */
+it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', async () => {
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click('Ejecutar simulación');
+  const pintadas = mocks.cuellos.mock.calls.length;
+
+  const xml = newModelXml(); const parsed = await parseBpmn(xml);
+  const doc: ProjectDocument = { version: 1, id: 'otro', name: 'Otra carpeta', model: { id: parsed.ir.id, name: 'roto.bpmn', xml, revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc);
+  mocks.abrir.mockResolvedValueOnce(false);
+  // Simular deja el proyecto sin guardar: abrir pasa antes por la guardia de cambios.
+  await click('Abrir'); await click('Descartar');
+
+  expect(mocks.abrir).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain('Pedido de ejemplo');
+  expect(container.textContent).toContain('Preparar alimento (Task_Preparar)');
+  // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
+  expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
+  expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
 });
 
 it('guardar cancelado mantiene cambios pendientes', async () => {
