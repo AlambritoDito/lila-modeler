@@ -242,7 +242,8 @@ deja el escenario inválido (estructuralmente, por `docs/SCENARIO_FORMAT.md` § 
 propia operación de JSON Patch no se puede aplicar — un `path` inexistente en `replace`, una
 operación desconocida) es `isError: true`, sin escribir nada. No hay ambigüedad "resultado
 correcto pero el modelo tiene errores" aquí: si el escenario resultante no valida, no hay nada que
-devolver.
+devolver. Los defectos del esquema salen por `parseScenario` (LILA-202): en español y con los
+códigos de `docs/SEMANTICS.md` § 17 (`E-CLAVE-DESCONOCIDA: …`), el mismo texto que la CLI.
 
 ## `saveTo`
 

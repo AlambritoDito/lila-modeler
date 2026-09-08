@@ -25,6 +25,7 @@ import {
 import { runResultSchema } from '@lila/engine/result-schema';
 import {
   resolveExtends,
+  schemaIssueLines,
   scenarioErrors,
   parseScenario,
   validateScenario,
@@ -404,18 +405,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * ScenarioSchema + modelo + `validateScenario`, en una sola pasada: la misma comprobación sirve
+ * Esquema + modelo + `validateScenario`, en una sola pasada: la misma comprobación sirve
  * para el modo (a) sobre el escenario ya parcheado, y para el modo (b) sobre el candidato que
  * realmente se va a escribir (que puede no coincidir con el parcheado si `extendsFrom` no es el
  * mismo archivo que `scenario`). Solo si esto no devuelve error se escribe algo a disco.
+ * El esquema se pasa por `parseScenario` (LILA-202), no por `ScenarioSchema.safeParse`: los
+ * defectos del escenario parcheado salen en español, igual que en la CLI y en `run_simulation`.
  */
 async function validatePatchedScenario(
   raw: unknown,
 ): Promise<{ ok: true; scenario: ResolvedScenario; notes: string[] } | { ok: false; error: string }> {
-  const parsed = ScenarioSchema.safeParse(raw);
+  const parsed = parseScenario(raw);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`);
-    return { ok: false, error: `escenario inválido tras el patch: ${issues.join('; ')}` };
+    // `schemaIssueLines` es la que pone los códigos de § 17 (`E-CLAVE-DESCONOCIDA`) que la CLI ya
+    // emite (LILA-198); formatear los defectos aquí a mano los perdía.
+    return { ok: false, error: `escenario inválido tras el patch: ${schemaIssueLines(parsed.error.issues).join('; ')}` };
   }
   // `ScenarioSchema` tiene `model` y `run` opcionales (un archivo con `extends` los hereda), así
   // que un patch puede borrarlos y aun así pasar el esquema. `loadResolvedScenario` los exige y es
