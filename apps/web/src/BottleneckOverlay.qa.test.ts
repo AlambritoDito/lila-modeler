@@ -202,6 +202,42 @@ describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
     expect(model['Task_Unica']?.nivel).toBe('low');
   });
 
+  // QA de #226: el corte por nivel `high` se llevó por delante la única aserción sobre `mid` (la
+  // que seguía a `Task_TomarPedido` entre AS-IS y TO-BE en `BottleneckOverlay.test.ts`), y
+  // sustituir la rama del medio de `nivelDeRatio` por `'low'` pasaba toda la suite de `apps/web`.
+  // Aquí ninguna llega a `high`, así que las tres se pintan por el camino de las tres primeras y
+  // los dos umbrales (0,05 y 1) quedan fijados por sus dos lados.
+  it('los umbrales low/mid salen del ratio espera/proceso de cada tarea', () => {
+    const model = overlayModel(
+      resultadoFalso([
+        { espera: 99, id: 'Task_CasiAlta', proceso: 100, utilizacion: 0.5 },
+        { espera: 5, id: 'Task_JustoMid', proceso: 100, utilizacion: 0.5 },
+        { espera: 4.9, id: 'Task_Baja', proceso: 100, utilizacion: 0.5 },
+      ]),
+      escenario('min'),
+    );
+
+    expect(model['Task_CasiAlta']?.nivel).toBe('mid');
+    expect(model['Task_JustoMid']?.nivel).toBe('mid');
+    expect(model['Task_Baja']?.nivel).toBe('low');
+  });
+
+  // Y el otro lado de `RATIO_HIGH`: un ratio de exactamente 1 ya es `high`, así que el corte
+  // deja fuera a la que espera un pelo menos que su propio tiempo de proceso.
+  it('un ratio de exactamente 1 es alto y desplaza del lienzo a la de ratio 0,99', () => {
+    const model = overlayModel(
+      resultadoFalso([
+        { espera: 99, id: 'Task_CasiAlta', proceso: 100, total: 990, utilizacion: 0.5 },
+        { espera: 100, id: 'Task_Alta', proceso: 100, total: 500, utilizacion: 0.5 },
+      ]),
+      escenario('min'),
+    );
+
+    expect(Object.keys(model)).toEqual(['Task_Alta']);
+    expect(model['Task_Alta']?.nivel).toBe('high');
+    expect(model['Task_Alta']?.rango).toBe(1);
+  });
+
   // R-DURA-2: los valores viven en segundos y `baseTimeUnit` es solo presentación. La etiqueta
   // tiene que decir «2 min», no «120 min» ni «120». Desde #226 la etiqueta corta elige por su
   // cuenta la unidad más gruesa que siga siendo legible (con `min` y con `s` sale la misma) y es

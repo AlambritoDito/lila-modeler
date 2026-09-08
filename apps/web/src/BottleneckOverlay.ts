@@ -90,8 +90,10 @@ export interface Corrida {
  * tarea depende de su **orden** frente a las demás, no de cuánto cambió su propia espera — así,
  * `Task_TomarPedido` nunca cambiaba de nivel entre AS-IS y TO-BE 3 cajeros aunque su espera media
  * bajara de 14,9 s a 2,2 s, porque siempre seguía siendo la segunda de dos. Este ratio es propio
- * de cada tarea, no depende de las demás, así que sí refleja ese cambio (ver
- * `BottleneckOverlay.test.ts`).
+ * de cada tarea, no depende de las demás, así que sí refleja ese cambio. Los dos umbrales
+ * quedan fijados en `BottleneckOverlay.qa.test.ts` («los umbrales low/mid…», «un ratio de
+ * exactamente 1…»): desde #226 el corte deja fuera del lienzo las tareas que no son `high`, así
+ * que ya no hay ninguna que seguir entre AS-IS y TO-BE sobre `examples/pedido`.
  */
 const RATIO_LOW = 0.05;
 const RATIO_HIGH = 1;
