@@ -235,7 +235,11 @@ export const RunSchema = z.strictObject({
   // Sin `.default(1)`: R-DEG-4 pide avisar (`W-SIN-SEED`) cuando el escenario no la declara, y
   // con default el lint no puede distinguir "no declarada" de "declarada en 1" (LILA-198). El
   // valor neutro sigue siendo 1 y lo aplica quien simula (`core/sim.ts`).
-  seed: z.int().optional(),
+  //
+  // El `default: 1` sí sigue en el JSON Schema publicado, como **anotación** (que es lo único
+  // que significa ahí): el panel de escenario lo lee para saber qué escribir al añadir el campo
+  // (`valorVacio` en `ScenarioPanel.tsx`). Sin él escribiría el `minimum` del entero seguro.
+  seed: z.int().meta({ default: 1 }).optional(),
   baseTimeUnit: z.enum(['s', 'min', 'h', 'day']).default('s'),
   currency: z.string().regex(/^[A-Z]{3}$/, 'run.currency debe ser un código ISO 4217').optional(),
   // § 4 — reservado: aceptado por el esquema, rechazado por el motor.
@@ -586,6 +590,10 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
   // R-PLAN-1: el `bpmn:subProcess` embebido desaparece del IR al aplanar, pero sus nodos
   // conservan de quién venían. Sin este conjunto, `elements[subProcessId]` sería un id
   // desconocido y no `E-SUBPROC-PARAMETRO` (R-PLAN-3, § 17).
+  //
+  // ponytail: `subprocessId` guarda solo el subproceso inmediato (`bpmn/parse.ts`, `walk`), así
+  // que con anidamiento se reconoce el más interno y no la cadena. Techo declarado en R-PLAN-3;
+  // subirlo pide llevar los ids de todas las cajas al IR, que no es de este ticket.
   const subprocessIds = new Set(
     Object.values(ir.nodes)
       .map((node) => node.subprocessId)

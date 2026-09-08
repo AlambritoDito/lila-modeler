@@ -30,7 +30,9 @@ import {
   duplicarEscenario,
   borrar,
   escribir,
+  esquemaDe,
   problemasEscenario,
+  valorVacio,
   type Contexto,
   type EsquemaJson,
   ScenarioPanel,
@@ -368,6 +370,19 @@ describe('extends', () => {
   const escenarios = (): Record<string, Json> => ({
     'as-is.scenario.json': asIsCorto(),
     'to-be-3-cajeros.scenario.json': leerJson('examples/pedido/to-be-3-cajeros.scenario.json'),
+  });
+
+  // LILA-198 quitó el `.default(1)` de `run.seed` del esquema zod para poder avisar `W-SIN-SEED`.
+  // El panel no lee el default de zod sino el del JSON Schema publicado, que es una **anotación**:
+  // sin él `valorVacio` cae al `minimum` del entero seguro y añadir la semilla escribiría
+  // -9007199254740991 en el archivo. El default sigue en el JSON Schema por `.meta({ default: 1 })`.
+  it('añadir `run.seed` escribe 1, no el mínimo del entero seguro (LILA-198)', () => {
+    const seed = esquemaDe('run').properties?.['seed'];
+    expect(seed?.default).toBe(1);
+    expect(valorVacio(seed!)).toBe(1);
+    // Y el default sigue siendo solo anotación: zod no lo aplica, que es lo que hace posible el aviso.
+    const resuelto = ScenarioSchema.parse({ version: 1, name: 'x', model: 'model.bpmn', run: { start: '2026-09-07T08:00:00Z', duration: 10 } });
+    expect(resuelto.run?.seed).toBeUndefined();
   });
 
   it('editar un valor heredado deja en el hijo solo ese campo', () => {

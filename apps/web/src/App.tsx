@@ -684,7 +684,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
           : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
-        {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
+        {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
       </section>}
       <aside className="panel" inert={ioBusy}>
         <nav className="pestanas">

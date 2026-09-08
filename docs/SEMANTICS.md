@@ -205,7 +205,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-PLAN-3 — El subproceso no tiene tiempo propio.** `elements[subProcessId].processingTime` (o
   `resources`, o `fixedCost`) es error `E-SUBPROC-PARAMETRO` citando el id: el tiempo del subproceso
   es la suma de lo que ocurre dentro. Las métricas por subproceso se agregan desde `subprocessId`.
-  El lint lo caza aunque el subproceso ya no sea un nodo del IR: sus nodos citan de quién vienen.
+  El lint lo caza aunque el subproceso ya no sea un nodo del IR: sus nodos citan de quién vienen
+  (`ProcessIR.nodes[x].subprocessId`). **Límite conocido**: ese campo guarda solo el subproceso
+  *inmediato*, así que con subprocesos anidados el lint reconoce el más interno; declarar
+  parámetros en uno exterior sale hoy como `E-ELEMENTO-DESCONOCIDO`. Cerrarlo pide llevar la
+  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket.
   *(prueba: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = tarea con tiempo global.** Un `bpmn:callActivity` se traduce a
   `task` y **no** se expande el proceso llamado, aunque esté en el archivo. Su duración es su
