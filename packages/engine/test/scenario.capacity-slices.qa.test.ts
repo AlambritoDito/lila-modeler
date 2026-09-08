@@ -232,7 +232,8 @@ describe('(13) catálogo de errores de § 17', () => {
 
     const textos = new Set<string>();
     for (const fuente of fuentes) {
-      for (const [, texto] of readFileSync(fuente, 'utf8').matchAll(/['`](E-REC-CAPACIDAD:[^'`\n]*)['`]/g)) {
+      // Las tres comillas: una comilla doble dejaba pasar el texto sin que el test se enterase.
+      for (const [, texto] of readFileSync(fuente, 'utf8').matchAll(/['"`](E-REC-CAPACIDAD:[^'"`\n]*)['"`]/g)) {
         textos.add(texto!.replace('${poolId}', '<pool>'));
       }
     }
