@@ -303,6 +303,20 @@ describe('corte del ranking (#226)', () => {
     expect(model['Rango0_mid']?.principal).toBe(true);
     expect(model['Rango1_high']?.nivel).toBe('high');
   });
+
+  // El principal va *dentro* del techo, no encima: cinco etiquetas como mucho aunque el rango 0
+  // entre por la excepción y haya seis altas detrás. Sin esto, anteponerlo después del recorte
+  // (seis etiquetas sobre el diagrama) pasaba toda la suite.
+  it('el principal cuenta dentro del techo de cinco, no se suma a él', () => {
+    const model = modelo([
+      { espera: 1000, id: 'P_mid', proceso: 5000, utilizacion: 0.9 },
+      ...[6, 5, 4, 3, 2, 1].map((n) => ({ espera: n * 100, id: `H${n}`, proceso: 10, utilizacion: 0.5 })),
+    ]);
+
+    expect(Object.keys(model)).toEqual(['P_mid', 'H6', 'H5', 'H4', 'H3']);
+    expect(Object.values(model).map((e) => e.rango)).toEqual([0, 1, 2, 3, 4]);
+    expect(model['P_mid']?.nivel).toBe('mid');
+  });
 });
 
 describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
