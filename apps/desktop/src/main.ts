@@ -427,6 +427,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   guardedHandle(win, 'lila:pendingOpenPath', async (): Promise<OpenPathRequest | null> => {
+    // Que el renderer pida la ruta pendiente ES la prueba de que ya está vivo y suscrito a
+    // `lila:open-path` (`App.tsx` registra `onOpenPath` en la misma pasada). `did-finish-load`
+    // llega DESPUÉS de esto (es el `load` de la página, tras sus subrecursos), así que sin esta
+    // línea queda una rendija: una ruta que llegue entre esta llamada y `did-finish-load`
+    // —`second-instance` de Windows contra una ventana recién arrancada— se guardaría en
+    // `pendingOpen` cuando ya nadie va a volver a pedirlo, y se perdería en silencio.
+    windowLoaded = true;
     const result = pendingOpen;
     pendingOpen = null; // se consume una vez.
     return result;
