@@ -431,19 +431,61 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
 const DISCARDED_ID = /(?:illegal|duplicate) ID <([^>]+)>/;
 
 /**
- * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
- * una sola línea y rescata el id afectado de donde lo haya. Para una referencia rota
- * (`unresolved reference`), moddle da `element` (quien declara la referencia) y `property`
- * (la propiedad rota). Para un elemento descartado por completo (`unparsable content ... illegal
- * ID <X>` o `... duplicate ID <X>`) no hay `element` — el id solo aparece dentro del mensaje.
+ * Línea del elemento que moddle no pudo leer, dentro de "unparsable content ... detected line: N".
+ * Es un índice **0-based** sobre las líneas del XML, tal como las cuenta el lector de moddle.
  */
-function toSourceWarning(w: ModdleWarning): SourceWarning {
+const DETECTED_LINE = /detected line: (\d+)/;
+
+/** `bpmn:Process` que contiene al elemento, subiendo por `$parent`. */
+function ownerProcessId(el: ModdleElement | undefined): string | undefined {
+  for (let p = el; p !== undefined; p = p.$parent) {
+    if (p.$type === 'bpmn:Process') return p.id;
+  }
+  return undefined;
+}
+
+/**
+ * Índice línea (0-based, como las reporta moddle) -> id del `bpmn:process` que la contiene, para
+ * ubicar en qué proceso quedó lo que el lector descartó (LILA-196: un id duplicado en un pool que
+ * Lila no simula no puede bloquear al que sí). Los `bpmn:process` no anidan, así que basta un
+ * barrido lineal del XML ya saneado, que es justo el que leyó moddle.
+ */
+function processIdByLine(xml: string): (line: number) => string | undefined {
+  const owners: (string | undefined)[] = [];
+  let current: string | undefined;
+  for (const text of xml.split('\n')) {
+    const open = /<(?:[\w.-]+:)?process\b[^>]*?\sid="([^"]*)"/.exec(text);
+    if (open !== null) current = open[1];
+    owners.push(current);
+    if (/<\/(?:[\w.-]+:)?process>/.test(text) || (open !== null && text.includes('/>'))) {
+      current = undefined;
+    }
+  }
+  return (line) => owners[line];
+}
+
+/**
+ * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
+ * una sola línea y rescata el id afectado y el proceso donde ocurrió, de donde los haya. Para una
+ * referencia rota (`unresolved reference`), moddle da `element` (quien declara la referencia) y
+ * `property` (la propiedad rota). Para un elemento descartado por completo (`unparsable content
+ * ... illegal ID <X>` o `... duplicate ID <X>`) no hay `element` — el id solo aparece dentro del
+ * mensaje y el proceso solo se deduce de la línea que cita.
+ */
+function toSourceWarning(
+  w: ModdleWarning,
+  processIdAt: (line: number) => string | undefined,
+): SourceWarning {
   const message = w.message.replace(/\s+/g, ' ').trim();
   const elementId = w.element?.id ?? DISCARDED_ID.exec(message)?.[1];
+  const line = DETECTED_LINE.exec(message)?.[1];
+  const processId =
+    ownerProcessId(w.element) ?? (line === undefined ? undefined : processIdAt(Number(line)));
   return {
     message,
     ...(elementId === undefined ? {} : { elementId }),
     ...(w.property === undefined ? {} : { property: w.property }),
+    ...(processId === undefined ? {} : { processId }),
   };
 }
 
@@ -459,6 +501,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   const { xml, sanitizedToOriginal } = sanitizeXmlIds(xmlIn);
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions, warnings: moddleWarnings } = await moddle.fromXML(xml);
+  const processIdAt = processIdByLine(xml);
 
   const processes = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
   const main =
@@ -543,7 +586,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',
         originalIds,
-        warnings: moddleWarnings.map(toSourceWarning),
+        warnings: moddleWarnings.map((w) => toSourceWarning(w, processIdAt)),
       },
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),

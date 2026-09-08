@@ -162,12 +162,12 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   afectado y la propiedad rota cuando moddle los da) y `validate(ir)` los clasifica en dos, sin
   descartar ninguno:
 
-  - **Error `E-PARSE-INCOMPLETO`** cuando el aviso implica que se perdió algo del grafo: un
-    elemento entero **del modelo** que moddle tiró por `id` ilegal o duplicado (`unparsable
-    content … nested error: illegal ID <X>` / `duplicate ID <X>`), o una referencia sin resolver
-    sobre una
-    propiedad de topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`,
-    `bpmn:flowNodeRef`, `bpmn:default`). Texto exacto:
+  - **Error `E-PARSE-INCOMPLETO`** cuando el aviso implica que se perdió un nodo o un flujo **del
+    proceso simulado**: un elemento entero que moddle tiró por `id` ilegal o duplicado
+    (`unparsable content … nested error: illegal ID <X>` / `duplicate ID <X>`) y que sería nodo o
+    flujo según el perfil de la sección 2, o una referencia sin resolver sobre una propiedad de
+    topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`, `bpmn:flowNodeRef`).
+    Texto exacto:
 
     ```
     {id}: el lector XML descartó contenido del modelo, que quedó incompleto: {aviso}.
@@ -177,18 +177,49 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     de la sección 2 ya ignora (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`) y
     tipos que moddle no conoce (`unparsable content … unknown type <bpmn:LoopCounter>`, típico de
     los exports de Bizagi). También lo que se descarta de la capa de diagrama (`bpmndi:`, `di:`,
-    `dc:`, `dd:`), aunque sea por id ilegal o duplicado: es geometría, el IR no la lee y perderla
-    no quita ni un nodo ni un flujo. No se pierde ningún nodo ni ningún flujo. Texto exacto:
+    `dc:`, `dd:`) y los elementos que la sección 2 lee sin simular (`bpmn:dataObject*`,
+    `bpmn:dataStore*`, `bpmn:textAnnotation`, `bpmn:association`, `bpmn:group`,
+    `bpmn:documentation`, `bpmn:extensionElements`, `bpmn:laneSet`, `bpmn:lane`), aunque sea por
+    id ilegal o duplicado: el IR no los guarda y perderlos no quita ni un nodo ni un flujo. Texto
+    exacto:
 
     ```
     {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.
     ```
 
+  - **Aviso `W-PARSE`, referencia a un flujo ausente**: una referencia sin resolver sobre
+    `bpmn:incoming` o `bpmn:outgoing` no descarta nada por sí misma — el elemento nombra un flujo
+    que no está en el modelo cargado, y el IR deriva `incoming`/`outgoing` de los flujos que sí
+    existen. Si ese flujo se perdió, el error lo emite el aviso que lo descartó, no este. Texto
+    exacto:
+
+    ```
+    {id}: el lector XML no encontró un flujo que este elemento declara; el grafo se construye sin él: {aviso}.
+    ```
+
+  - **Aviso `W-PARSE`, aviso de otro proceso**: los avisos son del archivo entero y el IR es de
+    **un** proceso (los demás viajan en `ParseResult.ignoredProcessIds`). Lo que se descartó en
+    otro `bpmn:process` no deja incompleto el que se simula, así que nunca aborta y el aviso dice
+    de qué proceso viene. Texto exacto:
+
+    ```
+    {id}: aviso del lector XML en {proceso}, otro proceso del archivo que Lila no simula: {aviso}.
+    ```
+
+  - **Aviso `W-XOR-DEFAULT-ROTO`**: un `bpmn:default` que apunta a un flujo inexistente no
+    descarta nada del grafo; solo se pierde la marca `isDefault`, y la sección 6 (R-XOR-1/R-XOR-2)
+    reparte igual sin ella. Texto exacto:
+
+    ```
+    {id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: {aviso}.
+    ```
+
   `{aviso}` es el mensaje de bpmn-moddle literal, aplanado a una sola línea. `{id}` es el id del
   elemento que moddle señala (o el que aparece dentro del mensaje) y, si no hay ninguno, el id del
-  proceso. Un modelo que perdió elementos al cargarse nunca valida en verde: `E-PARSE-INCOMPLETO`
-  aborta y `lila validate` sale con 1. Los ids no NCName **no** entran aquí: `sanitizeIds`
-  (R-DURA-4, LILA-017/020) los reescribe antes de llegar a moddle. *(prueba: LILA-185)*
+  proceso; `{proceso}` es el id del `bpmn:process` donde ocurrió el aviso. Un modelo que perdió
+  nodos o flujos del proceso simulado nunca valida en verde: `E-PARSE-INCOMPLETO` aborta y
+  `lila validate` sale con 1. Los ids no NCName **no** entran aquí: `sanitizeIds` (R-DURA-4,
+  LILA-017/020) los reescribe antes de llegar a moddle. *(prueba: LILA-185, LILA-196)*
 
 ---
 
@@ -801,7 +832,9 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`.
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
+`W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
+`isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`).
 
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
@@ -830,7 +863,7 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-PERF-5 | varios starts | LILA-026 |
 | R-NOSOP-1 … R-NOSOP-3 | texto exacto y catálogo de no soportados | LILA-021, LILA-163 |
 | R-NOSOP-4, R-NOSOP-5 | no degradar; errores estructurales | LILA-021 |
-| R-NOSOP-6 | avisos de bpmn-moddle: `E-PARSE-INCOMPLETO` / `W-PARSE` | LILA-185 |
+| R-NOSOP-6 | avisos de bpmn-moddle: `E-PARSE-INCOMPLETO` / `W-PARSE` / `W-XOR-DEFAULT-ROTO` | LILA-185, LILA-196 |
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |

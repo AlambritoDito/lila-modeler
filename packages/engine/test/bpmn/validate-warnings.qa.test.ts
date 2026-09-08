@@ -104,7 +104,7 @@ test('el aviso de moddle llega aplanado a una sola línea (LILA-185)', async () 
   for (const w of ir.source.warnings) expect(w.message).not.toMatch(/\s\s|[\n\t]/);
 });
 
-/** Las dos plantillas normativas de R-NOSOP-6, tal como están en el documento. */
+/** Las plantillas normativas de R-NOSOP-6, tal como están en el documento y en su orden. */
 function plantillasDeSemantics(): string[] {
   const doc = readFileSync(`${repo}docs/SEMANTICS.md`, 'utf8');
   const desde = doc.indexOf('- **R-NOSOP-6');
@@ -137,4 +137,130 @@ test('el texto de E-PARSE-INCOMPLETO y W-PARSE es el de SEMANTICS R-NOSOP-6 (LIL
   expect(aviso?.message).toBe(
     rellenar(plantillaAviso as string, 'Process_Incompleto', desconocido?.message as string),
   );
+});
+
+/**
+ * Casos de LILA-196: la clasificación es por lo que se pierde **del proceso simulado**, y cada
+ * aviso dice la verdad sobre lo que pasó. Las plantillas salen del propio documento, así que un
+ * cambio de texto en uno solo de los dos lados rompe el test.
+ */
+const [, PLANTILLA_INOFENSIVA, PLANTILLA_FLUJO_AUSENTE, PLANTILLA_OTRO_PROCESO, PLANTILLA_DEFAULT] =
+  plantillasDeSemantics();
+
+/** Rellena una plantilla de R-NOSOP-6 con el id, el aviso de moddle y (si toca) el proceso. */
+function rellenar(plantilla: string, id: string, aviso: string, proceso = ''): string {
+  return plantilla.replace('{id}', id).replace('{proceso}', proceso).replace('{aviso}', aviso);
+}
+
+// (A) Dos `bpmn:dataObject` con el mismo id: el perfil de la sección 2 los lee y no los simula,
+// así que moddle tirando el segundo no deja el grafo incompleto y no puede abortar la corrida.
+test('un id duplicado entre elementos que el perfil no simula no es error (LILA-196)', async () => {
+  const xml = proceso(`    <bpmn:startEvent id="Start_1"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>Flow_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="End_1" />
+    <bpmn:dataObject id="Datos_1" />
+    <bpmn:dataObject id="Datos_1" />`);
+  const parsed = await parseBpmn(xml);
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+  expect(errors).toEqual([]);
+  expect(warnings).toEqual([
+    {
+      code: 'W-PARSE',
+      id: 'Datos_1',
+      message: rellenar(
+        PLANTILLA_INOFENSIVA as string,
+        'Datos_1',
+        parsed.ir.source.warnings[0]?.message as string,
+      ),
+    },
+  ]);
+});
+
+// (B) `bpmn:incoming`/`bpmn:outgoing` sin resolver: el elemento nombra un flujo que no está en el
+// modelo cargado. Decir "sin pérdida de nodos ni flujos" sería mentira cuando ese flujo se perdió,
+// así que el aviso describe lo que de verdad pasa.
+test('una referencia rota en bpmn:incoming avisa del flujo ausente (LILA-196)', async () => {
+  const xml = proceso(`    <bpmn:startEvent id="Start_1"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="Task_1"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:incoming>Flow_9</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>Flow_2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="End_1" />`);
+  const parsed = await parseBpmn(xml);
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+  expect(errors).toEqual([]);
+  expect(warnings).toEqual([
+    {
+      code: 'W-PARSE',
+      id: 'Task_1',
+      message: rellenar(
+        PLANTILLA_FLUJO_AUSENTE as string,
+        'Task_1',
+        parsed.ir.source.warnings[0]?.message as string,
+      ),
+    },
+  ]);
+  expect(parsed.ir.nodes.Task_1?.incoming).toEqual(['Flow_1']);
+});
+
+// (C) `bpmn:default` roto: no se descarta nada, solo se pierde la marca `isDefault`, y § 6
+// (R-XOR-1/R-XOR-2) reparte igual sin ella. Aviso propio, no error.
+test('un bpmn:default hacia un flujo inexistente emite W-XOR-DEFAULT-ROTO (LILA-196)', async () => {
+  const xml = proceso(`    <bpmn:startEvent id="Start_1"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gw_1" default="Flow_Fantasma"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>Flow_2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Gw_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Gw_1" targetRef="End_1" />`);
+  const parsed = await parseBpmn(xml);
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+  expect(errors).toEqual([]);
+  expect(warnings).toEqual([
+    {
+      code: 'W-XOR-DEFAULT-ROTO',
+      id: 'Gw_1',
+      message: rellenar(
+        PLANTILLA_DEFAULT as string,
+        'Gw_1',
+        parsed.ir.source.warnings[0]?.message as string,
+      ),
+    },
+  ]);
+  expect(parsed.ir.flows.Flow_2?.isDefault).toBe(false);
+});
+
+// (E) Los avisos son del archivo entero y el IR es de un solo proceso: un id duplicado dentro de
+// un pool que Lila no simula no puede bloquear al que sí, y el aviso dice de dónde viene.
+test('un id duplicado en un proceso que Lila no simula no aborta y cita el proceso (LILA-196)', async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs" targetNamespace="urn:lila:qa">
+  <bpmn:process id="Process_1" isExecutable="true">
+    <bpmn:startEvent id="Start_1"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>Flow_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="End_1" />
+  </bpmn:process>
+  <bpmn:process id="Process_2">
+    <bpmn:task id="Tarea_Otra" />
+    <bpmn:task id="Tarea_Otra" />
+  </bpmn:process>
+</bpmn:definitions>`;
+  const parsed = await parseBpmn(xml);
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+  expect(parsed.ir.id).toBe('Process_1');
+  expect(parsed.ignoredProcessIds).toEqual(['Process_2']);
+  expect(errors).toEqual([]);
+  expect(warnings).toEqual([
+    {
+      code: 'W-PARSE',
+      id: 'Tarea_Otra',
+      message: rellenar(
+        PLANTILLA_OTRO_PROCESO as string,
+        'Tarea_Otra',
+        parsed.ir.source.warnings[0]?.message as string,
+        'Process_2',
+      ),
+    },
+  ]);
 });

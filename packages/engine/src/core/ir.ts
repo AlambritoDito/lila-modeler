@@ -50,6 +50,12 @@ export interface SourceWarning {
   elementId?: string;
   /** Propiedad de moddle-xml en la referencia rota (p. ej. `bpmn:sourceRef`), si el aviso es de ese tipo. */
   property?: string;
+  /**
+   * Id del `bpmn:process` donde ocurrió el aviso, cuando se puede ubicar. Los avisos son del
+   * archivo entero y el IR es de **un** proceso: si este id no es el del proceso simulado, lo que
+   * se perdió no estaba en el grafo (R-NOSOP-6).
+   */
+  processId?: string;
 }
 
 /** Procedencia del modelo: quién lo exportó y con qué ids venía. */
