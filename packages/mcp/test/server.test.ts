@@ -57,10 +57,16 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las cuatro tools', async () => {
+test('listTools devuelve las cinco tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
-  expect(names).toEqual(['compare_scenarios', 'describe_process', 'run_simulation', 'validate_bpmn']);
+  expect(names).toEqual([
+    'compare_scenarios',
+    'describe_process',
+    'patch_scenario',
+    'run_simulation',
+    'validate_bpmn',
+  ]);
 });
 
 test('validate_bpmn sobre examples/pedido: 0 errores, mismo JSON que la CLI', async () => {
@@ -200,6 +206,21 @@ test('describe_process lista los otros procesos del archivo, no simulados', asyn
   const { resumen } = JSON.parse(textOf(result)) as { resumen: string };
   expect(resumen).toContain('Otros procesos del archivo, no simulados: Process_Cliente');
   expect(resumen).toContain('Validación: 0 errores, 1 aviso.');
+});
+
+test('describe_process acepta `xml` inline igual que validate_bpmn (LILA-056)', async () => {
+  const xml = readFileSync(pedidoBpmn, 'utf8');
+  const inline = await client.callTool({ name: 'describe_process', arguments: { xml } });
+  const porRuta = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn } });
+  expect(inline.isError ?? false).toBe(false);
+  expect(textOf(inline)).toBe(textOf(porRuta));
+
+  const ambos = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn, xml } });
+  expect(ambos.isError).toBe(true);
+  expect(textOf(ambos)).toContain('no los dos');
+
+  const ninguno = await client.callTool({ name: 'describe_process', arguments: {} });
+  expect(ninguno.isError).toBe(true);
 });
 
 test('describe_process agrupa por lane y por subproceso embebido', async () => {
