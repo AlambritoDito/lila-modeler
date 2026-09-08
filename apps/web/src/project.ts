@@ -1,4 +1,5 @@
 import { ScenarioSchema, resolveScenarioPath } from '@lila/engine/schema';
+import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
@@ -41,8 +42,8 @@ export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument
 export function newModelXml(): string {
   const suffix = crypto.randomUUID().replaceAll('-', '');
   const p = `Process_${suffix}`, a = `Start_${suffix}`, b = `Task_${suffix}`, c = `End_${suffix}`, f = `Flow_A_${suffix}`, g = `Flow_B_${suffix}`;
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${suffix}" targetNamespace="https://lila-modeler.org/bpmn" exporter="Lila Modeler" exporterVersion="0.0.0">
+  return marcarExportador(`<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${suffix}" targetNamespace="https://lila-modeler.org/bpmn">
 <bpmn:process id="${p}" name="Mi proceso" isExecutable="false">
 <bpmn:startEvent id="${a}" name="Inicio"><bpmn:outgoing>${f}</bpmn:outgoing></bpmn:startEvent>
 <bpmn:task id="${b}" name="Actividad"><bpmn:incoming>${f}</bpmn:incoming><bpmn:outgoing>${g}</bpmn:outgoing></bpmn:task>
@@ -54,7 +55,7 @@ export function newModelXml(): string {
 <bpmndi:BPMNShape id="ShapeC_${suffix}" bpmnElement="${c}"><dc:Bounds x="430" y="180" width="36" height="36"/></bpmndi:BPMNShape>
 <bpmndi:BPMNEdge id="EdgeA_${suffix}" bpmnElement="${f}"><di:waypoint x="196" y="198"/><di:waypoint x="260" y="198"/></bpmndi:BPMNEdge>
 <bpmndi:BPMNEdge id="EdgeB_${suffix}" bpmnElement="${g}"><di:waypoint x="360" y="198"/><di:waypoint x="430" y="198"/></bpmndi:BPMNEdge>
-</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>`;
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>`);
 }
 export function changeToken(id: string, modelRevision: number, scenarios: Readonly<Record<string, number>>, runIds: readonly string[]): string {
   return JSON.stringify([id, modelRevision, scenarios, runIds]);

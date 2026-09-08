@@ -1,9 +1,7 @@
-import { sanitizeXmlIds } from '@lila/engine/bpmn';
-import webPackage from '../package.json' with { type: 'json' };
+import { marcarExportador, sanitizeXmlIds } from '@lila/engine/bpmn';
 
 const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
 const XML_TEXT = />([^<>]*)</g;
-const DEFINITIONS = /<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?definitions\b[^>]*>/;
 const TOPOLOGY_PROPERTIES = new Set([
   'bpmn:sourceRef',
   'bpmn:targetRef',
@@ -124,23 +122,14 @@ export function autorizarExportacion(
   if (!continuar) throw new Error(`Exportación cancelada por contenido perdido:\n${detalle}`);
 }
 
-function escribirAtributo(tag: string, name: string, value: string): string {
-  const attribute = new RegExp(`(\\s${name}\\s*=\\s*)(?:"[^"]*"|'[^']*')`);
-  if (attribute.test(tag)) return tag.replace(attribute, `$1"${value}"`);
-  return tag.replace(/>$/, ` ${name}="${value}">`);
-}
-
-/** Restituye identidad externa y marca inequívocamente la versión que escribió el archivo. */
+/**
+ * Restituye identidad externa y marca inequívocamente la versión que escribió el archivo. La
+ * marca la pone `marcarExportador` del motor (LILA-194): un único sitio escribe
+ * `exporter`/`exporterVersion`, con la versión de `@lila/engine`, no la de esta app.
+ */
 export function finalizarExportacion(
   xml: string,
   originalIds: ReadonlyMap<string, string>,
 ): string {
-  const restaurado = restaurarXmlIds(xml, originalIds);
-  return restaurado.replace(DEFINITIONS, (tag) =>
-    escribirAtributo(
-      escribirAtributo(tag, 'exporter', 'Lila Modeler'),
-      'exporterVersion',
-      webPackage.version,
-    ),
-  );
+  return marcarExportador(restaurarXmlIds(xml, originalIds));
 }

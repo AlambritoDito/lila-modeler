@@ -19,4 +19,4 @@ export type {
 } from './core/result.js';
 export type { AbortSignalLike, SimElement, SimResource, SimRun, SimScenario } from './core/sim.js';
 
-export const version = '0.0.0';
+export { version } from './version.js';
