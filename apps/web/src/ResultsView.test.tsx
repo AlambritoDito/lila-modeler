@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { parseBpmn } from '@lila/engine/bpmn';
-import { formatDuration, formatNumber } from '@lila/engine/format';
+import { columnLabel, formatDuration, formatNumber } from '@lila/engine/format';
 import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '@lila/engine/csv';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type { BottleneckEntry, ProcessIR, RunResult } from '@lila/engine';
@@ -221,6 +221,27 @@ describe('ResultsView (LILA-062)', () => {
       expect(positions[i - 1]).toBeGreaterThanOrEqual(0);
       expect(positions[i]).toBeGreaterThan(positions[i - 1]!);
     }
+  });
+
+  it('los encabezados salen del mapa único de `@lila/engine/format` (LILA-201)', async () => {
+    const ir = await loadIr();
+    const result = loadGolden();
+    const scenario = scenarioWithUnit('min');
+    const html = renderToStaticMarkup(<ResultsView ir={ir} scenario={scenario} result={result} />);
+
+    // Texto exacto de cada `<th>` de la pestaña visible por defecto ("Elementos del proceso").
+    const headers = [...html.matchAll(/<th [^>]*>(.*?)<\/th>/g)].map((match) =>
+      match[1]!.replaceAll('<!-- -->', ''),
+    );
+    // Mismas columnas y orden que `elements.csv`, con el sufijo de unidad solo en las duraciones
+    // (docs/RESULTS_FORMAT.md § 10): la web no puede llamar distinto a la columna que el CSV.
+    const csvHeader = elementsCsv(ir, result).split('\r\n')[0]!.split(',');
+    expect(headers).toHaveLength(csvHeader.length);
+    for (const [index, name] of csvHeader.entries()) {
+      expect([name, `${name} (min)`], name).toContain(headers[index]);
+    }
+    expect(headers).toContain(columnLabel('elements', 'fixedCostTotal'));
+    expect(headers).toContain(`${columnLabel('elements', 'resourceWait.sd')} (min)`);
   });
 
   it('sin cuellos de botella muestra el mensaje vacío en vez de una lista', async () => {

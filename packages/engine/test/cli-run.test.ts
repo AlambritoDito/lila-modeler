@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../src/cli.js';
-import { formatDuration, formatNumber } from '../src/format.js';
+import { ELEMENT_COLUMNS, PROCESS_COLUMNS, RESOURCE_COLUMNS } from '../src/csv.js';
+import { columnHeader, columnLabel, formatDuration, formatNumber } from '../src/format.js';
 import { runResultSchema } from '../src/result.schema.js';
 
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../examples/pedido');
@@ -116,10 +117,10 @@ describe('lila run (LILA-046)', () => {
     // R-DEG-1: sin `resources` en el escenario no hay tabla de recurso (SEMANTICS.md § 14). La
     // salida tiene que seguir siendo la de M1, byte a byte, después de LILA-184.
     expect(text).not.toContain('Resources');
-    // LILA-188: la sección de cuellos de botella se cierra con la misma puerta que `Resources`.
-    // Sin un solo pool declarado no hay «espera por recurso» de la que hablar, y anunciar su
-    // ausencia en un escenario de nivel 1–2 es ruido que la tabla de recursos no imprime.
-    expect(text).not.toContain('Cuellos de botella');
+    // LILA-201: la sección de cuellos sí se imprime sin pools (RESULTS_FORMAT.md § 10), con el
+    // mismo texto que la tarjeta de la web ante un ranking vacío.
+    expect(text).toContain('Cuellos de botella');
+    expect(text).toContain('Sin espera por recurso detectada.');
     expect(formatDuration(90, 'min')).toBe('1.5');
   });
 
@@ -220,6 +221,86 @@ describe('lila run (LILA-046)', () => {
     expect(json.warnings.some((warning) => warning.includes('declara calendarios'))).toBe(false);
   });
 
+  test('un único mapa de nombres alimenta consola y CSV (LILA-201)', async () => {
+    const scenario = join(fixture.root, 'nombres.scenario.json');
+    const csvOutput = join(fixture.root, 'nombres-csv');
+    writeFileSync(
+      scenario,
+      JSON.stringify({
+        version: 1,
+        name: 'Nombres de columna',
+        model: 'models/model.bpmn',
+        run: { start: '2026-09-07T08:00:00-06:00', duration: 600, baseTimeUnit: 'min' },
+        resources: { agente: { capacity: 1 } },
+        elements: {
+          Start: { interTriggerTimer: { type: 'constant', value: 30 } },
+          Task: { processingTime: { type: 'constant', value: 90 }, resources: [{ ref: 'agente' }] },
+        },
+      }),
+      'utf8',
+    );
+
+    expect(await main(['run', fixture.model, scenario, '--csv', csvOutput])).toBe(0);
+    const lines = output.join('\n').split('\n');
+    const consoleHeader = (title: string): string[] =>
+      lines[lines.indexOf(title) + 1]!.split(/ {2,}/);
+    const csvHeader = (file: string): string[] =>
+      readFileSync(join(csvOutput, file), 'utf8').split('\r\n')[0]!.split(',');
+
+    // Los nombres literales de RESULTS_FORMAT.md § 10 que la consola no imprimía hasta LILA-201.
+    expect(consoleHeader('Process elements')).toEqual([
+      'Id',
+      'Name',
+      'Type',
+      'Instances started',
+      'Instances completed',
+      'Minimum time (min)',
+      'Maximum time (min)',
+      'Average time (min)',
+      'Total time (min)',
+      'Minimum time (waiting for resource) (min)',
+      'Maximum time (waiting for resource) (min)',
+      'Average time (waiting for resource) (min)',
+      'Standard deviation (waiting for resource) (min)',
+      'Total time (waiting for resource) (min)',
+      'Total fixed cost',
+    ]);
+
+    // Y la regla de § 10 que evita los tres nombres para un mismo campo: consola y CSV llevan la
+    // misma columna en el mismo sitio, y la única diferencia es el sufijo de unidad que añade
+    // quien convierte a `baseTimeUnit` (el CSV siempre está en segundos).
+    for (const [title, file] of [
+      ['Process elements', 'elements.csv'],
+      ['Sequence flows', 'flows.csv'],
+      ['Resources', 'resources.csv'],
+    ] as const) {
+      const [csv, console_] = [csvHeader(file), consoleHeader(title)];
+      expect(console_, title).toHaveLength(csv.length);
+      for (const [index, name] of csv.entries()) {
+        expect([name, `${name} (min)`], `${title}[${index}]`).toContain(console_[index]);
+      }
+    }
+
+    // "Process summary" imprime un subconjunto de `process.csv`, con la misma regla.
+    const processCsvHeader = csvHeader('process.csv');
+    expect(processCsvHeader).toEqual(PROCESS_COLUMNS.map((metric) => columnLabel('process', metric)));
+    for (const name of consoleHeader('Process summary (extras)')) {
+      const bare = name.endsWith(' (min)') ? name.slice(0, -' (min)'.length) : name;
+      expect(processCsvHeader, name).toContain(bare);
+    }
+    expect(consoleHeader('Process summary (extras)')).toContain(columnLabel('process', 'totalCost'));
+
+    // La tabla de cuellos reutiliza dos columnas del mismo mapa (§ 6 y § 10).
+    expect(consoleHeader('Cuellos de botella')).toEqual([
+      'Id',
+      'Name',
+      columnHeader('elements', 'resourceWait.total', 'min'),
+      columnLabel('resources', 'utilization'),
+    ]);
+    expect(ELEMENT_COLUMNS).toContain('resourceWait.total');
+    expect(RESOURCE_COLUMNS).toContain('utilization');
+  });
+
   test('rechaza un model posicional distinto de scenario.model', async () => {
     const scenario = join(fixture.root, 'mismatch.scenario.json');
     writeFileSync(
@@ -316,7 +397,7 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       const parsed = JSON.parse(readFileSync(firstJson, 'utf8')) as {
         resources: Record<string, { utilization: number; busyTime: number }>;
         bottlenecks: Array<{ elementId: string; resourceWaitTotal: number; utilization: number }>;
-        process: { costPerCase: number };
+        process: { costPerCase: number; totalCost: number };
       };
       expect(runResultSchema.safeParse(parsed).success).toBe(true);
       expect(Object.keys(parsed.resources)).toContain('cajero');
@@ -354,12 +435,25 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       expect(bottleneckRow[2]).toBe(formatDuration(firstBottleneck.resourceWaitTotal, 'min'));
       expect(bottleneckRow[3]).toBe(formatNumber(firstBottleneck.utilization * 100));
 
-      // LILA-188: costPerCase en la tabla de proceso (docs/RESULTS_FORMAT.md §5).
+      // LILA-201: el ranking de `examples/pedido` es estable y `meanBottlenecks` no lo reordena
+      // al promediar la utilización solo sobre las réplicas donde el elemento aparece (§ 6).
+      expect(parsed.bottlenecks.map((entry) => entry.elementId)).toEqual([
+        'Task_Preparar',
+        'Task_TomarPedido',
+      ]);
+
+      // LILA-188: costPerCase en la tabla de proceso (docs/RESULTS_FORMAT.md §5); LILA-201 le
+      // añade `totalCost` y la media/percentiles de `waitTime`.
       const processHeaderIndex = lines.indexOf('Process summary (extras)') + 1;
-      expect(lines[processHeaderIndex]!.split(/ {2,}/).at(-1)).toBe('Cost per case');
-      expect(lines[processHeaderIndex + 2]!.split(/ {2,}/).at(-1)).toBe(
-        formatNumber(parsed.process.costPerCase),
-      );
+      const processHeader = lines[processHeaderIndex]!.split(/ {2,}/);
+      const processRow = lines[processHeaderIndex + 2]!.split(/ {2,}/);
+      expect(processHeader.at(-2)).toBe('Cost per case');
+      expect(processRow.at(-2)).toBe(formatNumber(parsed.process.costPerCase));
+      expect(processHeader.at(-1)).toBe('Total cost');
+      expect(processRow.at(-1)).toBe(formatNumber(parsed.process.totalCost));
+      for (const metric of ['waitTime.mean', 'waitTime.p50', 'waitTime.p90', 'waitTime.p95']) {
+        expect(processHeader, metric).toContain(columnHeader('process', metric, 'min'));
+      }
     },
     60_000,
   );
@@ -421,8 +515,11 @@ describe('README · el ejemplo de `lila run` (LILA-188)', () => {
       expect(lines[bottleneckIndex + 3]).not.toBe('');
 
       const processIndex = lines.indexOf('Process summary (extras)');
-      const costPerCase = Number(lines[processIndex + 3]!.split(/ {2,}/).at(-1));
-      expect(costPerCase).toBeGreaterThan(0);
+      // `Cost per case` cerraba la tabla hasta LILA-201; ahora la cierra `Total cost`.
+      const processRow = lines[processIndex + 3]!.split(/ {2,}/);
+      expect(lines[processIndex + 1]!.split(/ {2,}/).slice(-2)).toEqual(['Cost per case', 'Total cost']);
+      expect(Number(processRow.at(-2))).toBeGreaterThan(0);
+      expect(Number(processRow.at(-1))).toBeGreaterThan(0);
     },
     60_000,
   );

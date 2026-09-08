@@ -23,6 +23,8 @@ import {
   type StagedFile,
 } from './cli-shared.js';
 import {
+  ELEMENT_COLUMNS,
+  RESOURCE_COLUMNS,
   elementsCsv,
   eventLogCsvHeader,
   eventLogRowCsv,
@@ -35,10 +37,13 @@ import { compare, type CompareResult, type CompareScope } from './core/compare.j
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
+  columnHeader,
+  columnLabel,
   formatDuration,
   formatNumber,
   formatSignedPercent,
   formatTable,
+  isDurationMetric,
   type BaseTimeUnit,
 } from './format.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
@@ -163,6 +168,32 @@ function modelHasErrors(validation: ValidationResult): boolean {
   return true;
 }
 
+/**
+ * Subconjunto de `PROCESS_COLUMNS` que imprime la tabla "Process summary": las 20 columnas de
+ * `process.csv` no caben legibles en una sola fila de consola, así que la CLI se queda con la
+ * media y los percentiles de ciclo y espera más los tres agregados de costo/rendimiento
+ * (docs/RESULTS_FORMAT.md § 10). Los mínimos, máximos y desviaciones siguen en `--json` y en el
+ * CSV, que no tienen ancho de terminal.
+ * ponytail: lista literal en vez de un filtro sobre `PROCESS_COLUMNS`; si algún día la tabla
+ * imprime las 20, se sustituye por `PROCESS_COLUMNS` y se borra esta constante.
+ */
+const PROCESS_SUMMARY_COLUMNS = [
+  'started',
+  'completed',
+  'inFlight',
+  'cycleTime.mean',
+  'cycleTime.p50',
+  'cycleTime.p90',
+  'cycleTime.p95',
+  'waitTime.mean',
+  'waitTime.p50',
+  'waitTime.p90',
+  'waitTime.p95',
+  'throughputPerHour',
+  'costPerCase',
+  'totalCost',
+] as const;
+
 function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunResult): void {
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const currency = scenario.run.currency;
@@ -177,17 +208,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   console.log('Process elements');
   console.log(
     formatTable(
-      [
-        'Id',
-        'Name',
-        'Type',
-        'Instances started',
-        'Instances completed',
-        `Minimum time (${unit})`,
-        `Maximum time (${unit})`,
-        `Average time (${unit})`,
-        `Total time (${unit})`,
-      ],
+      ['Id', 'Name', 'Type', ...ELEMENT_COLUMNS.map((metric) => columnHeader('elements', metric, unit))],
       Object.entries(result.elements).map(([id, metrics]) => {
         const node = ir.nodes[id];
         return [
@@ -200,6 +221,12 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
           formatDuration(metrics.processing.max, unit),
           formatDuration(metrics.processing.mean, unit),
           formatDuration(metrics.processing.total, unit),
+          formatDuration(metrics.resourceWait.min, unit),
+          formatDuration(metrics.resourceWait.max, unit),
+          formatDuration(metrics.resourceWait.mean, unit),
+          formatDuration(metrics.resourceWait.sd, unit),
+          formatDuration(metrics.resourceWait.total, unit),
+          formatNumber(metrics.fixedCostTotal),
         ];
       }),
     ),
@@ -209,7 +236,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   console.log('Sequence flows');
   console.log(
     formatTable(
-      ['Id', 'Name', 'From', 'To', 'Instances/Tokens completed'],
+      ['Id', 'Name', 'From', 'To', columnLabel('flows', 'count')],
       Object.entries(result.flows).map(([id, metrics]) => {
         const flow = ir.flows[id];
         return [id, flow?.name ?? '', flow?.from ?? '', flow?.to ?? '', formatNumber(metrics.count)];
@@ -224,7 +251,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
     console.log('Resources');
     console.log(
       formatTable(
-        ['Id', 'Name', 'Utilization (%)', `Busy time (${unit})`, 'Fixed cost', 'Unit cost', 'Total cost'],
+        ['Id', 'Name', ...RESOURCE_COLUMNS.map((metric) => columnHeader('resources', metric, unit))],
         Object.entries(result.resources).map(([id, metrics]) => [
           id,
           resourceNames[id] ?? '',
@@ -238,27 +265,30 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
     );
   }
 
-  // Misma puerta que la tabla `Resources`: sin un solo pool declarado no existe la espera por
-  // recurso (R-DEG-1) y la sección sobra. Con pools, en cambio, un ranking vacío es información
-  // —nadie hizo cola— y se dice explícitamente.
-  if (Object.keys(result.resources).length > 0) {
-    console.log('');
-    console.log('Cuellos de botella');
-    if (result.bottlenecks.length === 0) {
-      console.log('Sin espera por recurso detectada.');
-    } else {
-      console.log(
-        formatTable(
-          ['Id', 'Name', `Total time (waiting for resource) (${unit})`, 'Utilization (%)'],
-          result.bottlenecks.map((entry) => [
-            entry.elementId,
-            ir.nodes[entry.elementId]?.name ?? '',
-            formatDuration(entry.resourceWaitTotal, unit),
-            formatNumber(entry.utilization * 100),
-          ]),
-        ),
-      );
-    }
+  // La sección se imprime siempre, con pools o sin ellos (docs/RESULTS_FORMAT.md § 10): un
+  // ranking vacío es información —nadie hizo cola— y así la CLI dice lo mismo que la tarjeta de
+  // `ResultsView` en la web, que nunca se ocultó.
+  console.log('');
+  console.log('Cuellos de botella');
+  if (result.bottlenecks.length === 0) {
+    console.log('Sin espera por recurso detectada.');
+  } else {
+    console.log(
+      formatTable(
+        [
+          'Id',
+          'Name',
+          columnHeader('elements', 'resourceWait.total', unit),
+          columnLabel('resources', 'utilization'),
+        ],
+        result.bottlenecks.map((entry) => [
+          entry.elementId,
+          ir.nodes[entry.elementId]?.name ?? '',
+          formatDuration(entry.resourceWaitTotal, unit),
+          formatNumber(entry.utilization * 100),
+        ]),
+      ),
+    );
   }
 
   const process = result.process;
@@ -266,17 +296,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   console.log('Process summary (extras)');
   console.log(
     formatTable(
-      [
-        'Instances started',
-        'Instances completed',
-        'In flight',
-        `Average cycle (${unit})`,
-        `p50 (${unit})`,
-        `p90 (${unit})`,
-        `p95 (${unit})`,
-        'Throughput/hour',
-        'Cost per case',
-      ],
+      PROCESS_SUMMARY_COLUMNS.map((metric) => columnHeader('process', metric, unit)),
       [[
         formatNumber(process.started),
         formatNumber(process.completed),
@@ -285,8 +305,13 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
         formatDuration(process.cycleTime.p50, unit),
         formatDuration(process.cycleTime.p90, unit),
         formatDuration(process.cycleTime.p95, unit),
+        formatDuration(process.waitTime.mean, unit),
+        formatDuration(process.waitTime.p50, unit),
+        formatDuration(process.waitTime.p90, unit),
+        formatDuration(process.waitTime.p95, unit),
         formatNumber(process.throughputPerHour),
         formatNumber(process.costPerCase),
+        formatNumber(process.totalCost),
       ]],
     ),
   );
@@ -486,51 +511,6 @@ const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
   'process:totalCost',
 ]);
 
-/** Nombres de columna Bizagi (docs/RESULTS_FORMAT.md §10); lo que no tiene equivalente conserva el path interno. */
-const BIZAGI_COMPARE_LABELS: Readonly<Record<string, string>> = {
-  'elements:started': 'Instances started',
-  'elements:completed': 'Instances completed',
-  'elements:processing.min': 'Minimum time',
-  'elements:processing.max': 'Maximum time',
-  'elements:processing.mean': 'Average time',
-  'elements:processing.total': 'Total time',
-  'elements:resourceWait.min': 'Minimum time (waiting for resource)',
-  'elements:resourceWait.max': 'Maximum time (waiting for resource)',
-  'elements:resourceWait.mean': 'Average time (waiting for resource)',
-  'elements:resourceWait.sd': 'Standard deviation (waiting for resource)',
-  'elements:resourceWait.total': 'Total time (waiting for resource)',
-  'elements:fixedCostTotal': 'Total fixed cost',
-  'resources:utilization': 'Utilization (%)',
-  'resources:busyTime': 'Busy time',
-  'resources:fixedCost': 'Fixed cost',
-  'resources:unitCost': 'Unit cost',
-  'resources:totalCost': 'Total cost',
-  'flows:count': 'Instances/Tokens completed',
-};
-
-/**
- * Métricas cuyo valor son segundos y por tanto se convierten a `baseTimeUnit` al imprimir
- * (R-DURA-2). `busyTime` son segundos-unidad (RESULTS_FORMAT.md § 4) y también se convierte: dejar
- * la única duración que solo aparece con `--all` en segundos crudos, junto a costos derivados de
- * ella ya convertidos, hacía ilegible la tabla de recursos.
- */
-const DURATION_METRIC_PREFIXES: ReadonlySet<string> = new Set([
-  'processing',
-  'resourceWait',
-  'offHoursWait',
-  'cycleTime',
-  'waitTime',
-  'busyTime',
-]);
-
-function isDurationMetric(metric: string): boolean {
-  return DURATION_METRIC_PREFIXES.has(metric.split('.')[0] ?? '');
-}
-
-function compareMetricLabel(scope: CompareScope, metric: string): string {
-  return BIZAGI_COMPARE_LABELS[`${scope}:${metric}`] ?? metric;
-}
-
 /** Valor de una sola celda, sin delta: usado también para la columna base. */
 function formatCompareValue(metric: string, value: number | null, unit: BaseTimeUnit): string {
   if (value === null) return '-';
@@ -627,7 +607,7 @@ function printCompareResult(
         ],
         rows.map((row) => [
           ...(withId ? [row.id ?? '', rowLabel(ir, resourceNames, scope, row.id)] : []),
-          compareMetricLabel(scope, row.metric),
+          columnLabel(scope, row.metric),
           ...row.values.map((value, index) =>
             index === 0
               ? formatCompareValue(row.metric, value, unit)

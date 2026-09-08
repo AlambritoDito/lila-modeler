@@ -532,15 +532,16 @@ describe('QA LILA-047 · ataque 8: --all y la lista curada', () => {
     ]) {
       expect(curada, `falta la fila ${label}`).toContain(label);
     }
-    // Y los KPI que Bizagi no tiene conservan su path interno, sin inventarles nombre.
+    // LILA-201: las extras de proceso también salen del mapa único de § 10 (`Cycle time average`,
+    // no `cycleTime.mean`); solo los KPI que ni Bizagi ni § 10 bautizan conservan su path interno.
     expect(curada).toContain('queueLength.mean');
-    expect(curada).toContain('cycleTime.mean');
+    expect(curada).toContain('Cycle time average');
 
     // La curada no trae flujos ni percentiles; `--all` sí, y no pierde ninguna fila de la curada.
     expect(curada).not.toContain('Sequence flows');
-    expect(curada).not.toContain('cycleTime.p95');
+    expect(curada).not.toContain('Cycle time p95');
     expect(todas).toContain('Sequence flows');
-    expect(todas).toContain('cycleTime.p95');
+    expect(todas).toContain('Cycle time p95');
     expect(todas).toContain('Instances/Tokens completed');
     for (const label of ['Minimum time', 'Maximum time', 'Total time', 'Fixed cost', 'Unit cost']) {
       expect(todas, `--all debería traer ${label}`).toContain(label);

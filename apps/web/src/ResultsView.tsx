@@ -20,7 +20,13 @@ import {
   processCsv,
   resourcesCsv,
 } from '@lila/engine/csv';
-import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
+import {
+  columnLabel,
+  formatDuration,
+  formatNumber,
+  type BaseTimeUnit,
+  type ResultScope,
+} from '@lila/engine/format';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type {
   BottleneckEntry,
@@ -317,19 +323,30 @@ function idNameColumns<Row extends { id: string; name: string }>(): ColumnDef<Ro
   ];
 }
 
-function numberColumn<Row>(key: string, header: string, get: (row: Row) => number): ColumnDef<Row> {
-  return { display: (row) => formatNumber(get(row)), header, key, numeric: true, sortValue: get };
+/**
+ * El `key` de cada columna es la ruta de la métrica dentro de `RunResult`, así que el rótulo sale
+ * del mapa único de `@lila/engine/format` (docs/RESULTS_FORMAT.md § 10, LILA-201): esta vista, la
+ * CLI y los CSV no pueden llamar distinto a la misma columna.
+ */
+function numberColumn<Row>(scope: ResultScope, key: string, get: (row: Row) => number): ColumnDef<Row> {
+  return {
+    display: (row) => formatNumber(get(row)),
+    header: columnLabel(scope, key),
+    key,
+    numeric: true,
+    sortValue: get,
+  };
 }
 
 function durationColumn<Row>(
+  scope: ResultScope,
   key: string,
-  header: string,
   unit: BaseTimeUnit,
   get: (row: Row) => number,
 ): ColumnDef<Row> {
   return {
     display: (row) => formatDuration(get(row), unit),
-    header: `${header} (${unit})`,
+    header: `${columnLabel(scope, key)} (${unit})`,
     key,
     numeric: true,
     sortValue: get,
@@ -341,43 +358,18 @@ function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
   return [
     ...idNameColumns<ElementRow>(),
     { display: (row) => row.type, header: 'Type', key: 'type', sortValue: (row) => row.type },
-    numberColumn('started', 'Instances started', (row) => row.metrics.started),
-    numberColumn('completed', 'Instances completed', (row) => row.metrics.completed),
-    durationColumn('processing.min', 'Minimum time', unit, (row) => row.metrics.processing.min),
-    durationColumn('processing.max', 'Maximum time', unit, (row) => row.metrics.processing.max),
-    durationColumn('processing.mean', 'Average time', unit, (row) => row.metrics.processing.mean),
-    durationColumn('processing.total', 'Total time', unit, (row) => row.metrics.processing.total),
-    durationColumn(
-      'resourceWait.min',
-      'Minimum time (waiting for resource)',
-      unit,
-      (row) => row.metrics.resourceWait.min,
-    ),
-    durationColumn(
-      'resourceWait.max',
-      'Maximum time (waiting for resource)',
-      unit,
-      (row) => row.metrics.resourceWait.max,
-    ),
-    durationColumn(
-      'resourceWait.mean',
-      'Average time (waiting for resource)',
-      unit,
-      (row) => row.metrics.resourceWait.mean,
-    ),
-    durationColumn(
-      'resourceWait.sd',
-      'Standard deviation (waiting for resource)',
-      unit,
-      (row) => row.metrics.resourceWait.sd,
-    ),
-    durationColumn(
-      'resourceWait.total',
-      'Total time (waiting for resource)',
-      unit,
-      (row) => row.metrics.resourceWait.total,
-    ),
-    numberColumn('fixedCostTotal', 'Total fixed cost', (row) => row.metrics.fixedCostTotal),
+    numberColumn('elements', 'started', (row) => row.metrics.started),
+    numberColumn('elements', 'completed', (row) => row.metrics.completed),
+    durationColumn('elements', 'processing.min', unit, (row) => row.metrics.processing.min),
+    durationColumn('elements', 'processing.max', unit, (row) => row.metrics.processing.max),
+    durationColumn('elements', 'processing.mean', unit, (row) => row.metrics.processing.mean),
+    durationColumn('elements', 'processing.total', unit, (row) => row.metrics.processing.total),
+    durationColumn('elements', 'resourceWait.min', unit, (row) => row.metrics.resourceWait.min),
+    durationColumn('elements', 'resourceWait.max', unit, (row) => row.metrics.resourceWait.max),
+    durationColumn('elements', 'resourceWait.mean', unit, (row) => row.metrics.resourceWait.mean),
+    durationColumn('elements', 'resourceWait.sd', unit, (row) => row.metrics.resourceWait.sd),
+    durationColumn('elements', 'resourceWait.total', unit, (row) => row.metrics.resourceWait.total),
+    numberColumn('elements', 'fixedCostTotal', (row) => row.metrics.fixedCostTotal),
   ];
 }
 
@@ -387,7 +379,7 @@ function flowColumns(): ColumnDef<FlowRow>[] {
     ...idNameColumns<FlowRow>(),
     { display: (row) => row.from, header: 'From', key: 'from', sortValue: (row) => row.from },
     { display: (row) => row.to, header: 'To', key: 'to', sortValue: (row) => row.to },
-    numberColumn('count', 'Instances/Tokens completed', (row) => row.metrics.count),
+    numberColumn('flows', 'count', (row) => row.metrics.count),
   ];
 }
 
@@ -395,11 +387,11 @@ function flowColumns(): ColumnDef<FlowRow>[] {
 function resourceColumns(unit: BaseTimeUnit): ColumnDef<ResourceRow>[] {
   return [
     ...idNameColumns<ResourceRow>(),
-    numberColumn('utilization', 'Utilization (%)', (row) => row.metrics.utilization * 100),
-    durationColumn('busyTime', 'Busy time', unit, (row) => row.metrics.busyTime),
-    numberColumn('fixedCost', 'Fixed cost', (row) => row.metrics.fixedCost),
-    numberColumn('unitCost', 'Unit cost', (row) => row.metrics.unitCost),
-    numberColumn('totalCost', 'Total cost', (row) => row.metrics.totalCost),
+    numberColumn('resources', 'utilization', (row) => row.metrics.utilization * 100),
+    durationColumn('resources', 'busyTime', unit, (row) => row.metrics.busyTime),
+    numberColumn('resources', 'fixedCost', (row) => row.metrics.fixedCost),
+    numberColumn('resources', 'unitCost', (row) => row.metrics.unitCost),
+    numberColumn('resources', 'totalCost', (row) => row.metrics.totalCost),
   ];
 }
 
@@ -410,26 +402,26 @@ function resourceColumns(unit: BaseTimeUnit): ColumnDef<ResourceRow>[] {
  */
 function processColumns(unit: BaseTimeUnit): ColumnDef<RunResult>[] {
   return [
-    numberColumn('started', 'Instances started', (r) => r.process.started),
-    numberColumn('completed', 'Instances completed', (r) => r.process.completed),
-    numberColumn('inFlight', 'In flight', (r) => r.process.inFlight),
-    durationColumn('cycleTime.min', 'Cycle time minimum', unit, (r) => r.process.cycleTime.min),
-    durationColumn('cycleTime.max', 'Cycle time maximum', unit, (r) => r.process.cycleTime.max),
-    durationColumn('cycleTime.mean', 'Cycle time average', unit, (r) => r.process.cycleTime.mean),
-    durationColumn('cycleTime.sd', 'Cycle time standard deviation', unit, (r) => r.process.cycleTime.sd),
-    durationColumn('cycleTime.p50', 'Cycle time p50', unit, (r) => r.process.cycleTime.p50),
-    durationColumn('cycleTime.p90', 'Cycle time p90', unit, (r) => r.process.cycleTime.p90),
-    durationColumn('cycleTime.p95', 'Cycle time p95', unit, (r) => r.process.cycleTime.p95),
-    durationColumn('waitTime.min', 'Wait time minimum', unit, (r) => r.process.waitTime.min),
-    durationColumn('waitTime.max', 'Wait time maximum', unit, (r) => r.process.waitTime.max),
-    durationColumn('waitTime.mean', 'Wait time average', unit, (r) => r.process.waitTime.mean),
-    durationColumn('waitTime.sd', 'Wait time standard deviation', unit, (r) => r.process.waitTime.sd),
-    durationColumn('waitTime.p50', 'Wait time p50', unit, (r) => r.process.waitTime.p50),
-    durationColumn('waitTime.p90', 'Wait time p90', unit, (r) => r.process.waitTime.p90),
-    durationColumn('waitTime.p95', 'Wait time p95', unit, (r) => r.process.waitTime.p95),
-    numberColumn('throughputPerHour', 'Throughput per hour', (r) => r.process.throughputPerHour),
-    numberColumn('costPerCase', 'Cost per case', (r) => r.process.costPerCase),
-    numberColumn('totalCost', 'Total cost', (r) => r.process.totalCost),
+    numberColumn('process', 'started', (r) => r.process.started),
+    numberColumn('process', 'completed', (r) => r.process.completed),
+    numberColumn('process', 'inFlight', (r) => r.process.inFlight),
+    durationColumn('process', 'cycleTime.min', unit, (r) => r.process.cycleTime.min),
+    durationColumn('process', 'cycleTime.max', unit, (r) => r.process.cycleTime.max),
+    durationColumn('process', 'cycleTime.mean', unit, (r) => r.process.cycleTime.mean),
+    durationColumn('process', 'cycleTime.sd', unit, (r) => r.process.cycleTime.sd),
+    durationColumn('process', 'cycleTime.p50', unit, (r) => r.process.cycleTime.p50),
+    durationColumn('process', 'cycleTime.p90', unit, (r) => r.process.cycleTime.p90),
+    durationColumn('process', 'cycleTime.p95', unit, (r) => r.process.cycleTime.p95),
+    durationColumn('process', 'waitTime.min', unit, (r) => r.process.waitTime.min),
+    durationColumn('process', 'waitTime.max', unit, (r) => r.process.waitTime.max),
+    durationColumn('process', 'waitTime.mean', unit, (r) => r.process.waitTime.mean),
+    durationColumn('process', 'waitTime.sd', unit, (r) => r.process.waitTime.sd),
+    durationColumn('process', 'waitTime.p50', unit, (r) => r.process.waitTime.p50),
+    durationColumn('process', 'waitTime.p90', unit, (r) => r.process.waitTime.p90),
+    durationColumn('process', 'waitTime.p95', unit, (r) => r.process.waitTime.p95),
+    numberColumn('process', 'throughputPerHour', (r) => r.process.throughputPerHour),
+    numberColumn('process', 'costPerCase', (r) => r.process.costPerCase),
+    numberColumn('process', 'totalCost', (r) => r.process.totalCost),
   ];
 }
 
