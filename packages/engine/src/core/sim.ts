@@ -559,6 +559,13 @@ export function runReplication(
    * terminaría nunca.
    */
   const pendingCapacity = new Set<string>();
+  // ponytail: el barrido es O(actividades vivas) por evento de capacidad. Medido (LILA-204, con un
+  // contador temporal sobre esta función): con llegadas repartidas en el tiempo cuesta ≤ 2,5 % de
+  // la corrida (0,0–4,4 ms de 28–382 ms en 10–50 pools con turnos y 2000–5000 casos); solo con
+  // 5000 casos inyectados a la vez —cola permanente de miles— sube al 25–29 % (64 ms de 254 y
+  // 191 ms de 668). Techo: modelos saturados con muchos pools de capacidad variable. Siguiente
+  // paso si aparece uno real: un contador de esperas por pool mantenido en el alta, la concesión
+  // y el cierre de la actividad, en vez de recorrer el mapa.
   const waitsOnPool = (poolId: string): boolean => {
     for (const activity of activities.values()) {
       if (activity.closed || activity.allocation !== undefined) continue;

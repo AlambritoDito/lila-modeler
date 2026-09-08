@@ -795,6 +795,13 @@ un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esq
 mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
 mano. Es el mismo desajuste que ya documenta el párrafo final de esta sección.
 
+Esos dos son **todos** los textos de `E-REC-CAPACIDAD` que emite `packages/engine/src`. Los dos
+guardias internos de `core/calendar.ts` —`compileCapacity` sin tramos y `nextCapacityRise` con un
+horario constante— son invariantes de la API de `core/`, inalcanzables desde un escenario (los caza
+antes `assertSupportedResourceScenario`, y el segundo solo se llama con horario no constante), así
+que lanzan **sin** código de catálogo. Antes lanzaban con `E-REC-CAPACIDAD` y sin pool: dos textos
+que esta sección no recogía. La exhaustividad la fija un test (LILA-204).
+
 Avisos (no abortan; viajan en `RunResult.warnings[]`, siempre con el id del elemento implicado y,
 cuando se repiten por caso, con un contador agregado en vez de una línea por ocurrencia):
 

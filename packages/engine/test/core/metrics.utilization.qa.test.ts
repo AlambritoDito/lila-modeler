@@ -41,6 +41,29 @@ describe('utilización atribuible a la cohorte y capacidad no apropiativa (LILA-
     expect(result.warnings).not.toContainEqual(expect.stringContaining('W-UTILIZACION-MAYOR-UNO'));
   });
 
+  test('la ocupación de calentamiento tampoco se descuenta del denominador (0,5, no 1)', () => {
+    // QA de LILA-204: los dos casos de arriba valen 0 con denominador 0 y con denominador
+    // completo, así que no distinguen la decisión de R-CAL-9 de su alternativa. Aquí sí: el caso
+    // 1 (t = 0, fuera de la cohorte) ocupa `[0, 30]`, de los que 10 s caen en la ventana medida
+    // `[20, 40]`; el caso 2 (t = 20, medido) arranca al soltarse la unidad y aporta 10 s.
+    // Denominador completo ⇒ 10/20 = 0,5. Descontar la ocupación no medida daría 10/10 = 1.
+    const scenario: SimScenario = {
+      run: { duration: 40, warmup: 20, seed: 1 },
+      elements: {
+        Start: { triggerCount: 2, interTriggerTimer: { type: 'constant', value: 20 } },
+        Task: { processingTime: { type: 'constant', value: 30 }, resources: [{ ref: 'agente' }] },
+      },
+      resources: { agente: { capacity: 1 } },
+    };
+    const run = runReplication(IR, scenario);
+    const result = aggregateReplication(IR, run, scenario);
+
+    expect(run.statisticsDuration).toBe(20);
+    expect(run.rows.filter((row) => row.elementId === 'Task').map((row) => row.startedAt)).toEqual([0, 30]);
+    expect(result.resources.agente).toMatchObject({ busyTime: 10, utilization: 0.5 });
+    expect(result.warnings).not.toContainEqual(expect.stringContaining('W-UTILIZACION-MAYOR-UNO'));
+  });
+
   test('dos tareas largas cruzan 2 → 1 y producen 4/3 sin clamp, con diagnóstico', () => {
     const everyDay = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
     const scenario: SimScenario = {
