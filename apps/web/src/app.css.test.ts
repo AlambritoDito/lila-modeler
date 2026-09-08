@@ -38,3 +38,17 @@ it('el minimapa se viste con los tokens del tema y sin radio', () => {
   expect(minimapa).toContain('left: 14px');
   expect(bloque('.lienzo .djs-minimap .viewport-dom')).toContain('var(--accent-primary)');
 });
+
+it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus mandos (LILA-065)', () => {
+  // El modo se enciende desde la barra superior, así que el botón «Token Simulation» que el
+  // módulo inyecta en el lienzo sobra. Lo que NO puede taparse es el resto de su interfaz: la
+  // paleta de play/pausa/reiniciar (`.bts-palette`), los botones sobre las figuras que arrancan
+  // un token y ponen puntos de parada (`.bts-context-pad`), el registro (`.bts-log`) y sus
+  // avisos (`.bts-notifications`). Sin ellos no se puede animar paso a paso, que es la
+  // aceptación del ticket.
+  expect(bloque('.lienzo .bts-toggle-mode')).toContain('display: none');
+  for (const mando of ['bts-palette', 'bts-context-pad', 'bts-log', 'bts-notification', 'bts-token']) {
+    const reglas = appCss.match(new RegExp(`[^}]*\\.${mando}[^{]*\\{[^}]*\\}`, 'g')) ?? [];
+    expect(reglas.filter((r) => /display:\s*none|visibility:\s*hidden/.test(r))).toEqual([]);
+  }
+});

@@ -1203,6 +1203,27 @@ body {
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
 
+/* ---------- validar rutas (LILA-065) ---------- */
+
+/* Botón propio de bpmn-js-token-simulation: el modo ya se enciende y se apaga desde la pestaña
+   de la barra superior (`App.tsx`), así que dejarlo también aquí solo desincroniza el estado si
+   alguien lo pulsa sin que React se entere. */
+.lienzo .bts-toggle-mode { display: none; }
+
+.aviso-token-sim {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 1;
+  max-width: 420px;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  font: 500 11px/1.4 var(--font-ui);
+}
+
 /* Disco de 16 px en la esquina superior derecha de la figura (`ValidationMarkers.ts`). Redondo
    a propósito pese al radio 0 del resto de la UI: en el artboard el marcador es un círculo, y
    sobre una figura BPMN es lo que lo distingue de un adorno del diagrama. */

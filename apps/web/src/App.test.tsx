@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   abrir: vi.fn(), cuellos: vi.fn(),
   // LILA-209: el shell lintea el escenario activo con la misma función que el panel; aquí se
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
-  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
+  problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(), cuellos: vi.fn(),
+  // LILA-065: enciende y apaga la animación de tokens de bpmn-js-token-simulation.
+  simulacionTokens: vi.fn(),
   // LILA-207: los servicios que la paleta usa para insertar una figura.
   fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
   // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
@@ -34,7 +36,7 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.publicarEstado = onEstado; onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
-    validacion: mocks.validacion, seleccionar: mocks.seleccionar,
+    validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
     servicios: {
@@ -371,6 +373,38 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
 
 it('sin problemas no hay chips', () => {
   expect(container.querySelector('.chips-validacion')).toBeNull();
+});
+
+// --- «Validar rutas» (LILA-065) ---
+
+it('«Validar rutas» aparece junto a los demás modos y avisa de que no es la simulación DES', async () => {
+  const modos = [...container.querySelectorAll('.modos .modo')].map((b) => b.textContent);
+  expect(modos).toEqual(['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas']);
+  await click('Validar rutas');
+  expect(container.textContent).toContain(
+    'Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni produce resultados.',
+  );
+});
+
+it('entrar en «Validar rutas» activa la animación de tokens y salir la desactiva', async () => {
+  await click('Validar rutas');
+  expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
+  await click('Modelar');
+  expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
+});
+
+it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de validación', async () => {
+  await act(async () => {
+    mocks.problemas = [{ ruta: 'elements.Task_1', mensaje: 'sin parámetros', severidad: 'warning' }];
+    mocks.scenarioChange();
+  });
+  mocks.validacion.mockClear();
+  mocks.cuellos.mockClear();
+  await click('Validar rutas');
+  expect(mocks.validacion).toHaveBeenLastCalledWith(null);
+  expect(mocks.cuellos).toHaveBeenLastCalledWith(null, false);
+  await click('Modelar');
+  expect(mocks.validacion).toHaveBeenLastCalledWith(expect.objectContaining({ marcadores: expect.anything() }));
 });
 
 // --- Barra superior y barra de estado como el artboard 01 (#237) ---

@@ -38,8 +38,9 @@ que carga `eva-01.json` al vuelo.
 
 ## Recorrido de uso
 
-La barra superior tiene cuatro modos: **Modelar**, **Simular**, **Resultados**, **Comparar**. Los
-textos de abajo son literales de la interfaz (`apps/web/src/App.tsx`), no paráfrasis.
+La barra superior tiene cinco modos: **Modelar**, **Simular**, **Resultados**, **Comparar** y
+**Validar rutas**. Los textos de abajo son literales de la interfaz (`apps/web/src/App.tsx`), no
+paráfrasis.
 
 ### Modelar
 
@@ -95,6 +96,20 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
 - Sección **Significancia**: el asterisco (`*`) en una celda significa "diferencia significativa
   (IC95 sin solapamiento) contra la base"; las celdas resaltadas son las que cambiaron respecto a
   la base. Si el aviso 3 de arriba aplica, esta sección lo repite y no se pinta ningún asterisco.
+
+### Validar rutas
+
+- **No es la simulación DES del motor**: anima los tokens de `bpmn-js-token-simulation` sobre el
+  diagrama abierto. No lee el escenario activo ni produce resultados, y la propia pestaña lo dice:
+  «Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni
+  produce resultados.» Sirve para ver a ojo por dónde pasan las rutas, no para medir.
+- Mientras el modo está activo no se pintan el overlay de cuellos de botella ni los marcadores de
+  validación, y el diagrama no se puede editar; al volver a **Modelar** todo vuelve a su sitio.
+- Los controles son los del propio módulo de bpmn.io y **están en inglés** (LILA-065): la paleta de
+  la izquierda del lienzo («Play/Pause Simulation», «Reset Simulation», «Toggle Simulation Log»),
+  los botones que aparecen sobre las figuras («Trigger Event» para arrancar desde un evento de
+  inicio, «Add pause point» para parar en una actividad y avanzar paso a paso, «Set Sequence Flow»
+  para elegir la salida de una compuerta) y los avisos del registro.
 
 ### Guardar y recuperar
 
