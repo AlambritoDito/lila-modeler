@@ -29,9 +29,13 @@ fileAssociations:
 artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 win:
   target: nsis
+# ponytail: solo AppImage. El target "deb" usa fpm, que exige "homepage" y
+# "author.email" en package.json (fallan el build con "Please specify
+# project homepage" / "Please specify author 'email'") — son datos de
+# publicación que este ticket (#73, CI en verde) no decide. Reintroducir
+# "deb" cuando haya homepage/autor reales para el paquete.
 linux:
   target:
     - AppImage
-    - deb
   category: Office
 publish: null
