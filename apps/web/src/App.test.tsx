@@ -508,6 +508,42 @@ it.each([
   expect(session.saveProject).toHaveBeenCalledTimes(guardados);
 });
 
+// QA de #258 (ronda 2): Escape dispara el `cancel` nativo del `<dialog>`; si no resolviera la
+// espera, el cierre de Electron se quedaría 30 s colgado antes de cancelarse. Resuelve «cancelar».
+it('Escape en el diálogo de pérdida resuelve la espera con «cancelar» y no escribe nada', async () => {
+  let pedirGuardado!: () => Promise<boolean>;
+  await act(async () => root.unmount());
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  root = createRoot(container);
+  await act(async () => root.render(<App store={conCierre} />));
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  let resultado: boolean | 'pendiente' = 'pendiente';
+  await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
+  await act(async () => { dialogoPerdida()!.dispatchEvent(new Event('cancel', { cancelable: true })); });
+  expect(resultado).toBe(false);
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).not.toHaveBeenCalled();
+});
+
+// QA de #258 (ronda 2): el diálogo bloquea el ratón, pero no los atajos ni los aceleradores del
+// menú nativo. Abrir o crear un proyecto mientras espera cambiaría el documento por debajo.
+it('con el diálogo de pérdida abierto, Cmd+O y Cmd+N no tocan el proyecto', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+  await click('Guardar');
+  expect(dialogoPerdida()).not.toBeNull();
+
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true })); });
+  expect(session.openProject).not.toHaveBeenCalled();
+  expect(dialogoPerdida()).not.toBeNull();
+
+  // Contestado el diálogo, la puerta se abre otra vez.
+  await act(async () => { enDialogo(dialogoPerdida()!, 'Cancelar').click(); });
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
+  expect(session.openProject).toHaveBeenCalledOnce();
+});
+
 // QA: con una sola referencia el texto va en singular, en el pie y en el diálogo.
 it('el aviso de pérdida concuerda en singular', async () => {
   await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 4, avisos: 1, error: null, perdidas: [], refsRotas: ['Message_1'] }); });

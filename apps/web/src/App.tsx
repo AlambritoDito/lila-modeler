@@ -334,7 +334,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     return true;
   }
   async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
-    if (adapter === null || modelador === null || ioLock.current) return;
+    // QA de #258: el diálogo de pérdida es modal para el ratón, pero Cmd+O/Cmd+N —y en Electron
+    // los aceleradores del menú nativo— llegan igual por `window`. Sin esta puerta, abrir otro
+    // proyecto mientras el diálogo espera cambiaba el documento por debajo y lo dejaba pidiendo
+    // permiso para perder referencias que ya no son de este archivo. Es la ref y no el estado:
+    // el `onClick` de «Guardar y continuar» quedó cerrado sobre el render en el que el diálogo
+    // aún estaba abierto, y con el estado se bloquearía a sí mismo.
+    if (adapter === null || modelador === null || ioLock.current || respuestaPerdida.current !== null) return;
     if (dirty && !confirmed) { setPendingAction(kind); return; }
     const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
