@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -211,5 +212,35 @@ describe('(13) catálogo de errores de § 17', () => {
       'E-REC-CAPACIDAD: enfermera: capacity debe ser un entero mayor o igual que 1.',
     );
     expect(semantics).toContain('E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.');
+  });
+
+  /**
+   * LILA-204: el QA de LILA-164 encontró dos textos de `E-REC-CAPACIDAD` en `core/calendar.ts` que
+   * § 17 no recogía. Eran guardias internos, no errores del escenario, y ahora lanzan sin código.
+   * Este test cierra la puerta a que vuelva a haber un texto del catálogo fuera del catálogo.
+   */
+  test('§ 17 recoge todos los textos de `E-REC-CAPACIDAD` que emite el motor', () => {
+    const fuentes: string[] = [];
+    const recorrer = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const ruta = join(dir, entry.name);
+        if (entry.isDirectory()) recorrer(ruta);
+        else if (entry.name.endsWith('.ts')) fuentes.push(ruta);
+      }
+    };
+    recorrer(fileURLToPath(new URL('packages/engine/src', repoRoot)));
+
+    const textos = new Set<string>();
+    for (const fuente of fuentes) {
+      for (const [, texto] of readFileSync(fuente, 'utf8').matchAll(/['`](E-REC-CAPACIDAD:[^'`\n]*)['`]/g)) {
+        textos.add(texto!.replace('${poolId}', '<pool>'));
+      }
+    }
+
+    expect([...textos].sort()).toEqual([
+      'E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.',
+      'E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.',
+    ]);
+    for (const texto of textos) expect(semantics).toContain(texto);
   });
 });

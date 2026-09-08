@@ -330,7 +330,10 @@ function segmentAt(schedule: CapacitySchedule, p: number): number {
  * calendario, que se unen): son dos grupos distintos de unidades del mismo rol.
  */
 export function compileCapacity(entries: readonly CapacityEntry[], offset: number): CapacitySchedule {
-  if (entries.length === 0) throw new RangeError('E-REC-CAPACIDAD: un pool necesita al menos un tramo de capacidad.');
+  // Guardia de la API interna, no un error del catálogo (§ 17): un escenario con la lista vacía
+  // lo rechaza antes `assertSupportedResourceScenario` con `E-REC-CAPACIDAD` y el pool citado, y
+  // aquí no hay pool que citar. Llevar el código dejaba dos textos fuera del catálogo (LILA-204).
+  if (entries.length === 0) throw new RangeError('compileCapacity: hace falta al menos un tramo de capacidad.');
 
   const boundaries = new Set<number>([0]);
   for (const entry of entries) {
@@ -406,5 +409,8 @@ export function nextCapacityRise(schedule: CapacitySchedule, t: number): number 
     boundary += length(next);
     index = next;
   }
-  throw new RangeError('E-REC-CAPACIDAD: la capacidad no sube nunca; el horario debería ser constante.');
+  // Invariante de la llamada, no error del escenario: solo se llega aquí con un horario que
+  // `compileCapacity` declaró no constante, y un horario de dos o más tramos siempre sube en el
+  // ciclo semanal. Sin código de catálogo por lo mismo que arriba (LILA-204).
+  throw new RangeError('nextCapacityRise: la capacidad no sube nunca; el horario debería ser constante.');
 }
