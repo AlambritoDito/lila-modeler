@@ -97,6 +97,19 @@ test('los segmentos constructor y prototype también se rechazan', async () => {
  * JSON Patch RFC 6902
  * ------------------------------------------------------------------ */
 
+test('`move` y `copy` se rechazan con su nombre, y `from` no se aplica en silencio', async () => {
+  const path = copyAsIs();
+  const before = readFileSync(path, 'utf8');
+  // `docs/MCP.md` promete que las dos no están: si alguien las implementa a medias, o el `from`
+  // del esquema empieza a colarse por otra rama, esto lo caza antes de que escriba un escenario.
+  for (const op of ['move', 'copy'] as const) {
+    const result = await patch({ scenario: path, patch: [{ op, from: '/name', path: '/description' }] });
+    expect(result.isError, op).toBe(true);
+    expect(textOf(result), op).toContain(`operación no soportada: "${op}"`);
+    expect(readFileSync(path, 'utf8')).toBe(before);
+  }
+});
+
 test('add/replace/test sin `value` es error explícito, no un borrado silencioso', async () => {
   const path = copyAsIs();
   const before = readFileSync(path, 'utf8');

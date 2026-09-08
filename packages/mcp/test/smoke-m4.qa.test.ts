@@ -10,7 +10,7 @@
  *
  * Requiere `dist/` (`npm run build`).
  */
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -236,11 +236,22 @@ test('`.mcp.json` del repo apunta a un comando que existe tras `npm run build`',
   expect(existsSync(join(repo, 'packages/engine/dist/cli.js'))).toBe(true);
   expect(existsSync(join(repo, 'packages/mcp/dist/server.js'))).toBe(true);
   expect(lila.args[1]).toBe('mcp');
-  // Y arrancar así de verdad responde: sin argumentos de más y sin ensuciar stdout.
-  const sobra = spawn(process.execPath, [lilaBin, 'mcp', 'de-más'], { cwd: repo });
-  expect(sobra.pid).toBeGreaterThan(0);
-  sobra.kill('SIGKILL');
 });
+
+test('`lila mcp` con argumentos de más falla en español; `--help` imprime la ayuda', () => {
+  // Los dos casos que **no** arrancan servidor, que son los que alguien escribe a mano. El test
+  // anterior solo comprobaba que el proceso nacía (`pid > 0`) y lo mataba: `lila mcp de-más`
+  // podía haber arrancado el servidor igualmente y nadie se enteraba.
+  const sobra = spawnSync(process.execPath, [lilaBin, 'mcp', 'de-más'], { cwd: repo, encoding: 'utf8' });
+  expect(sobra.status).toBe(1);
+  expect(sobra.stderr).toContain('lila mcp: no acepta argumentos.');
+  expect(sobra.stdout).toBe(''); // stdout es el transporte: nada que no sea protocolo.
+
+  const ayuda = spawnSync(process.execPath, [lilaBin, 'mcp', '--help'], { cwd: repo, encoding: 'utf8' });
+  expect(ayuda.status).toBe(0);
+  expect(ayuda.stdout).toContain('lila mcp');
+  expect(ayuda.stdout).toContain('Arranca el servidor MCP por stdio');
+}, 120_000);
 
 test('docs/MCP.md documenta las tools reales, con los argumentos reales', async () => {
   const doc = readFileSync(join(repo, 'docs/MCP.md'), 'utf8');
