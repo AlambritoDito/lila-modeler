@@ -1,0 +1,153 @@
+{
+  "$comment": "Fixture congelado del oráculo Prosimos (LILA-052). Regenerar con `tools/oracles/run_prosimos.sh`; ver docs/ORACLES.md. Ni código ni binarios de Prosimos entran al repo: sólo estas cifras.",
+  "oracle": "prosimos",
+  "prosimosVersion": "2.0.6",
+  "python": "3.11.15",
+  "generatedAt": "2026-09-05",
+  "model": {
+    "description": "5 tareas secuenciales, un pool por tarea, llegadas exponenciales, 24x7",
+    "arrival": {
+      "type": "exponential",
+      "mean": 10.0
+    },
+    "tasks": [
+      {
+        "id": "T1",
+        "capacity": 2,
+        "processingTime": {
+          "type": "uniform",
+          "min": 5,
+          "max": 15
+        }
+      },
+      {
+        "id": "T2",
+        "capacity": 3,
+        "processingTime": {
+          "type": "uniform",
+          "min": 10,
+          "max": 30
+        }
+      },
+      {
+        "id": "T3",
+        "capacity": 1,
+        "processingTime": {
+          "type": "uniform",
+          "min": 3,
+          "max": 8
+        }
+      },
+      {
+        "id": "T4",
+        "capacity": 2,
+        "processingTime": {
+          "type": "uniform",
+          "min": 8,
+          "max": 20
+        }
+      },
+      {
+        "id": "T5",
+        "capacity": 1,
+        "processingTime": {
+          "type": "uniform",
+          "min": 2,
+          "max": 7
+        }
+      }
+    ]
+  },
+  "params": {
+    "n": 5000,
+    "seed": 42,
+    "replications": 30,
+    "startingAt": "2026-01-05T00:00:00.000000+00:00"
+  },
+  "kpis": {
+    "process.cycleTime.mean": {
+      "mean": 65.62010421544885,
+      "ci95": [
+        65.35224809026738,
+        65.88796034063031
+      ]
+    },
+    "process.cycleTime.p95": {
+      "mean": 93.29768856576304,
+      "ci95": [
+        92.34780899078422,
+        94.24756814074186
+      ]
+    },
+    "resources.T1.utilization": {
+      "mean": 0.5001298739221862,
+      "ci95": [
+        0.49780260861891235,
+        0.5024571392254601
+      ]
+    },
+    "elements.T1.resourceWait.mean": {
+      "mean": 1.9202520145208195,
+      "ci95": [
+        1.8731005642510499,
+        1.9674034647905891
+      ]
+    },
+    "resources.T2.utilization": {
+      "mean": 0.6661050682301205,
+      "ci95": [
+        0.6628847593095469,
+        0.6693253771506941
+      ]
+    },
+    "elements.T2.resourceWait.mean": {
+      "mean": 3.8832577755521474,
+      "ci95": [
+        3.73838179184022,
+        4.028133759264074
+      ]
+    },
+    "resources.T3.utilization": {
+      "mean": 0.5496045555582122,
+      "ci95": [
+        0.546801108346977,
+        0.5524080027694473
+      ]
+    },
+    "elements.T3.resourceWait.mean": {
+      "mean": 1.8087957697603865,
+      "ci95": [
+        1.7910576485297918,
+        1.8265338909909812
+      ]
+    },
+    "resources.T4.utilization": {
+      "mean": 0.6996268469714226,
+      "ci95": [
+        0.6961717320229879,
+        0.7030819619198574
+      ]
+    },
+    "elements.T4.resourceWait.mean": {
+      "mean": 3.3788156592070413,
+      "ci95": [
+        3.2663434361597115,
+        3.491287882254371
+      ]
+    },
+    "resources.T5.utilization": {
+      "mean": 0.45009020041774445,
+      "ci95": [
+        0.4477409559280326,
+        0.4524394449074563
+      ]
+    },
+    "elements.T5.resourceWait.mean": {
+      "mean": 0.6597040185416191,
+      "ci95": [
+        0.6533827983506295,
+        0.6660252387326087
+      ]
+    }
+  }
+}

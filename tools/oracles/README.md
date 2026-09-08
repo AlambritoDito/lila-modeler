@@ -9,6 +9,12 @@ normal.
 - `des_simpy.py` — implementación independiente en SimPy del modelo de 5 tareas secuenciales con
   recursos de capacidad 1-3 (LILA-049), usada por
   `packages/engine/test/theory-simpy.test.ts`.
+- `to_prosimos.py` + `run_prosimos.py` + `run_prosimos.sh` — el mismo modelo corrido con Prosimos
+  (LILA-052). Prosimos **no declara licencia**, así que ni su código ni sus binarios entran al
+  repo: sólo se congela su salida en `packages/engine/test/fixtures/oracles/prosimos-chain5.json`,
+  que `packages/engine/test/theory-prosimos.test.ts` compara **siempre** (sin Python, también en
+  CI). Ver `docs/ORACLES.md` para el estado de licencia, la conversión del escenario y las
+  tolerancias.
 
 ## `ORACLES=1 npm test`
 
