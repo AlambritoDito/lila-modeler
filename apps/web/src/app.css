@@ -776,6 +776,55 @@ body {
   margin: 0;
 }
 
+/* ---------- editor semanal de calendarios (LILA-203) ---------- */
+
+/* Una sola rejilla para el rótulo del día y las 24 horas: la columna de la hora mide lo mismo en
+   las siete filas sin medir nada, y la cabecera de horas es una fila más. `touch-action: none`
+   porque el gesto de pintar es un arrastre y el navegador lo interpretaría como desplazamiento. */
+.calendario {
+  display: grid;
+  grid-template-columns: 2.4rem repeat(24, 1fr);
+  gap: 1px;
+  margin: 4px 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.calendario .rotulo {
+  align-self: center;
+  color: var(--fg-muted);
+  font: 500 9px/1 var(--font-mono);
+}
+
+.calendario .dia {
+  letter-spacing: 0.04em;
+}
+
+.calendario .tramo {
+  grid-column: span 3;
+}
+
+.calendario .hora {
+  background: var(--bg-elevated);
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  height: calc(11px * var(--espacio, 1));
+  padding: 0;
+}
+
+.calendario .hora.abierta {
+  background: var(--accent-primary);
+}
+
+.calendario .hora:hover {
+  outline: 1px solid var(--border-strong);
+}
+
+.calendario .hora:focus-visible {
+  outline: 1px solid var(--fg-primary);
+}
+
 /* Mantener montado el modelador conserva undo/selección entre modos. */
 .zona-modelo { grid-area: lienzo; position: relative; min-width: 0; min-height: 0; }
 .zona-modelo > .lienzo { width: 100%; height: 100%; }

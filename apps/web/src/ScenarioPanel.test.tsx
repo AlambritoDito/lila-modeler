@@ -37,6 +37,7 @@ import {
   type EsquemaJson,
   ScenarioPanel,
 } from './ScenarioPanel.js';
+import { DIAS, aCeldas, aIntervals, celda, type Intervalo } from './CalendarEditor.js';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
@@ -123,6 +124,60 @@ function pulsar(texto: string): void {
   const destino = boton(texto);
   act(() => {
     destino.click();
+  });
+}
+
+/**
+ * Un trazo de la rejilla semanal: `pointerdown` en la primera celda y, para cada salto, un
+ * `pointerout` de la celda anterior con la siguiente en `relatedTarget`. Es de ahí de donde React
+ * sintetiza `onPointerEnter`: su plugin de enter/leave se desentiende del `pointerover` cuando el
+ * `relatedTarget` también está dentro del árbol React, y deja el trabajo al `pointerout`.
+ */
+function arrastrar(etiquetas: readonly string[]): void {
+  const celdas = etiquetas.map((etiqueta) => {
+    const encontrada = [...document.querySelectorAll('button')].find(
+      (b) => b.getAttribute('aria-label') === etiqueta,
+    );
+    if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
+    return encontrada;
+  });
+  act(() => {
+    celdas[0]!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, buttons: 1 }));
+  });
+  for (let i = 1; i < celdas.length; i += 1) {
+    act(() => {
+      celdas[i - 1]!.dispatchEvent(
+        new PointerEvent('pointerout', { bubbles: true, buttons: 1, relatedTarget: celdas[i]! }),
+      );
+    });
+  }
+  act(() => {
+    celdas.at(-1)!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  });
+}
+
+/**
+ * El mismo trazo, pero con todos los eventos en un solo `act`: en el navegador `pointerenter` es un
+ * evento **continuo** y React no repinta síncronamente entre uno y otro, así que un arrastre rápido
+ * entrega varias celdas contra el mismo estado. Con `arrastrar` (un `act` por evento) el fallo no
+ * se ve.
+ */
+function arrastrarRapido(etiquetas: readonly string[]): void {
+  const celdas = etiquetas.map((etiqueta) => {
+    const encontrada = [...document.querySelectorAll('button')].find(
+      (b) => b.getAttribute('aria-label') === etiqueta,
+    );
+    if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
+    return encontrada;
+  });
+  act(() => {
+    celdas[0]!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, buttons: 1 }));
+    for (let i = 1; i < celdas.length; i += 1) {
+      celdas[i - 1]!.dispatchEvent(
+        new PointerEvent('pointerout', { bubbles: true, buttons: 1, relatedTarget: celdas[i]! }),
+      );
+    }
+    celdas.at(-1)!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
   });
 }
 
@@ -605,5 +660,323 @@ describe('campos reservados: quitar heredado', () => {
     });
     expect(resuelto.resources?.['cajero']?.priority).toBeUndefined();
     expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 8 — LILA-203: editor semanal de calendarios (rejilla ↔ `intervals`)
+ * ------------------------------------------------------------------ */
+
+/** Conjuntos pseudoaleatorios reproducibles: «cualquier conjunto» sin añadir fast-check. */
+function conjuntoAleatorio(semilla: number): Set<number> {
+  let estado = semilla >>> 0 || 1;
+  const celdas = new Set<number>();
+  for (let i = 0; i < 7 * 24; i += 1) {
+    estado = (estado * 1_664_525 + 1_013_904_223) >>> 0;
+    if (estado % 3 === 0) celdas.add(i);
+  }
+  return celdas;
+}
+
+describe('editor semanal de calendarios (LILA-203)', () => {
+  it('aCeldas(aIntervals(c)) devuelve c para cualquier conjunto', () => {
+    for (let semilla = 1; semilla <= 200; semilla += 1) {
+      const celdas = conjuntoAleatorio(semilla);
+      expect([...aCeldas(aIntervals(celdas))].sort((a, b) => a - b), `semilla ${semilla}`).toEqual(
+        [...celdas].sort((a, b) => a - b),
+      );
+    }
+    // Y los dos extremos, que un generador aleatorio no garantiza tocar.
+    for (const celdas of [new Set<number>(), new Set([...Array.from({ length: 168 }).keys()])]) {
+      expect(aCeldas(aIntervals(celdas))).toEqual(celdas);
+    }
+  });
+
+  it('aIntervals(aCeldas(i)) describe las mismas horas abiertas que i', () => {
+    const casos: Intervalo[][] = [
+      [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
+      // Solapes y duplicados: § 2.3 dice unión, no suma.
+      [
+        { days: ['MON'], from: '08:00', to: '12:00' },
+        { days: ['MON'], from: '10:00', to: '14:00' },
+        { days: ['MON'], from: '10:00', to: '14:00' },
+      ],
+      // Ventana nocturna partida en dos (R13) y 24×7 con `to: "24:00"`.
+      [
+        { days: ['SAT'], from: '22:00', to: '24:00' },
+        { days: ['SUN'], from: '00:00', to: '06:00' },
+      ],
+      [{ days: [...DIAS], from: '00:00', to: '24:00' }],
+    ];
+    for (const intervals of casos) {
+      const celdas = aCeldas(intervals);
+      expect(aCeldas(aIntervals(celdas)), JSON.stringify(intervals)).toEqual(celdas);
+    }
+  });
+
+  it('agrupa los días con la misma franja y cierra el día con to: "24:00" (R13)', () => {
+    const laboral = aCeldas([{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }]);
+    expect(aIntervals(laboral)).toEqual([
+      { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+    ]);
+    // La última hora del día no se escribe `23:00`: sin `"24:00"` el calendario perdería 60 s.
+    expect(aIntervals(new Set([celda(0, 23)]))).toEqual([{ days: ['MON'], from: '23:00', to: '24:00' }]);
+    // Un día con dos franjas distintas y otro con solo una: se agrupa por franja, no por día.
+    const partido = new Set([...aCeldas([
+      { days: ['MON', 'TUE'], from: '09:00', to: '11:00' },
+      { days: ['MON'], from: '16:00', to: '17:00' },
+    ])]);
+    expect(aIntervals(partido)).toEqual([
+      { days: ['MON', 'TUE'], from: '09:00', to: '11:00' },
+      { days: ['MON'], from: '16:00', to: '17:00' },
+    ]);
+  });
+
+  it('pintar y arrastrar en la rejilla escribe el array entero y lila run lo acepta', () => {
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+
+    // Sábado 09:00 y, arrastrando sin soltar, 10:00: el gesto del artboard, sin librería.
+    arrastrar(['SAT 09:00', 'SAT 10:00']);
+    pulsar('Guardar');
+
+    const delta = guardados.at(-1)!.escenario;
+    // § 6: el array entero, no solo el intervalo nuevo.
+    expect((delta['calendars'] as Json)['oficina']).toEqual({
+      // Ordenados por franja: el sábado abre a la misma hora pero cierra antes.
+      intervals: [
+        { days: ['SAT'], from: '09:00', to: '11:00' },
+        { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+      ],
+    });
+
+    const resuelto = comoLilaRun('as-is.scenario.json', { 'as-is.scenario.json': delta });
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+
+    // Repintar encima cierra: el segundo trazo sobre una celda abierta la borra.
+    arrastrar(['SAT 09:00', 'SAT 10:00']);
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
+      intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
+    });
+  });
+
+  it('un calendario con franjas de minutos se edita como lista, sin redondear', () => {
+    const conMinutos: Json = {
+      ...asIsCorto(),
+      calendars: { oficina: { intervals: [{ days: ['MON'], from: '09:30', to: '13:45' }] } },
+    };
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': conMinutos }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    expect(document.body.textContent).toContain(
+      'este calendario tiene franjas de minutos; edítalo como lista',
+    );
+    // No hay rejilla que pueda mentir sobre esos minutos, y la lista sigue enseñando el valor real.
+    expect(document.querySelector('.calendario')).toBeNull();
+    expect(
+      (document.getElementById('campo-calendars.oficina.intervals[0].from') as HTMLInputElement).value,
+    ).toBe('09:30');
+  });
+
+  it('el interruptor rejilla/lista enseña los mismos intervalos en las dos vistas', () => {
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    expect(document.querySelector('.calendario')).not.toBeNull();
+    pulsar('Editar como lista');
+    expect(document.querySelector('.calendario')).toBeNull();
+    expect(
+      (document.getElementById('campo-calendars.oficina.intervals[0].from') as HTMLInputElement).value,
+    ).toBe('09:00');
+    pulsar('Editar como rejilla');
+    expect(document.querySelector('.calendario')).not.toBeNull();
+  });
+
+  // Añadidos por el QA de LILA-203.
+
+  it('un arrastre rápido pinta todas las celdas, no solo la última', () => {
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    arrastrarRapido(['SAT 09:00', 'SAT 10:00', 'SAT 11:00', 'SAT 12:00']);
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
+      intervals: [
+        { days: ['SAT'], from: '09:00', to: '13:00' },
+        { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+      ],
+    });
+  });
+
+  it('no reescribe intervalos que no entiende mientras nadie pinte', () => {
+    // `from == to` y `to < from` rompen R13 y la rejilla no puede dibujarlos: el editor los deja
+    // como están —redondear o borrar lo que no se ve sería cambiar el escenario por enseñarlo— y
+    // el error del validador sigue saliendo.
+    const feo: Json = {
+      ...asIsCorto(),
+      calendars: {
+        oficina: {
+          intervals: [
+            { days: ['MON'], from: '18:00', to: '09:00' },
+            { days: ['TUE'], from: '09:00', to: '09:00' },
+          ],
+        },
+      },
+    };
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': feo }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual(
+      (feo['calendars'] as Json)['oficina'],
+    );
+    expect(document.body.textContent).toContain('R13');
+  });
+
+  it('pintar un calendario heredado escribe el array entero en el hijo y no toca al padre', () => {
+    const guardados: Guardado[] = [];
+    const padre = asIsCorto();
+    const hijo = leerJson('examples/pedido/to-be-3-cajeros.scenario.json');
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': padre, 'to-be-3-cajeros.scenario.json': hijo }}
+        archivoInicial="to-be-3-cajeros.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    // El hijo no declara `calendars`: la rejilla enseña el del padre (§ 6, resuelto).
+    arrastrar(['SAT 09:00']);
+    pulsar('Guardar');
+
+    const delta = guardados.at(-1)!.escenario;
+    expect((delta['calendars'] as Json)['oficina']).toEqual({
+      intervals: [
+        { days: ['SAT'], from: '09:00', to: '10:00' },
+        { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+      ],
+    });
+    // El padre en memoria no se ha tocado y el resuelto conserva lo suyo (`capacity: 3`).
+    expect(padre['calendars']).toEqual({
+      oficina: { intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }] },
+    });
+    const resuelto = comoLilaRun('to-be-3-cajeros.scenario.json', {
+      'as-is.scenario.json': padre,
+      'to-be-3-cajeros.scenario.json': delta,
+    });
+    expect(resuelto.resources?.['cajero']?.capacity).toBe(3);
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+  });
+
+  it('vaciar la rejilla del todo deja el escenario con E-CAL-VACIO, no con un calendario inventado', () => {
+    const guardados: Guardado[] = [];
+    const uno: Json = {
+      ...asIsCorto(),
+      calendars: { oficina: { intervals: [{ days: ['MON'], from: '09:00', to: '10:00' }] } },
+    };
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': uno }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    arrastrar(['MON 09:00']);
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({ intervals: [] });
+    expect(document.body.textContent).toContain('E-CAL-VACIO');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 9 — LILA-203: el `priority` heredado de § 4 y las etiquetas de `capacity`
+ * ------------------------------------------------------------------ */
+
+describe('resto de LILA-203', () => {
+  // El caso de `resources[pool].priority` ya lo fija «campos reservados: quitar heredado» (arriba);
+  // este es el de § 4 literal, donde `priority` vive en `elements[task]`.
+  it('un priority heredado en un elemento se quita y el JSON del hijo lleva priority: null', () => {
+    const guardados: Guardado[] = [];
+    const elementosPadre = asIsCorto()['elements'] as Json;
+    const padre: Json = {
+      ...asIsCorto(),
+      elements: {
+        ...elementosPadre,
+        Task_TomarPedido: { ...(elementosPadre['Task_TomarPedido'] as Json), priority: 3 },
+      },
+    };
+    const hijo: Json = { version: 1, name: 'Hijo', extends: 'as-is.scenario.json' };
+
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': padre, 'hijo.scenario.json': hijo }}
+        archivoInicial="hijo.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+
+    pulsar('Task_TomarPedido');
+    expect(document.body.textContent).toContain('heredado: 3');
+    pulsar('Quitar heredado');
+    pulsar('Guardar');
+
+    const delta = guardados.at(-1)!.escenario;
+    expect((delta['elements'] as Json)['Task_TomarPedido']).toEqual({ priority: null });
+
+    const resuelto = comoLilaRun('hijo.scenario.json', {
+      'as-is.scenario.json': padre,
+      'hijo.scenario.json': delta,
+    });
+    expect(resuelto.elements?.['Task_TomarPedido']?.priority).toBeUndefined();
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+  });
+
+  it('el selector de capacity dice «Fija» y «Por turno», no «número entero» y «lista»', () => {
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    const selector = document.getElementById('campo-resources.horno.capacity-variante');
+    expect(selector).toBeInstanceOf(HTMLSelectElement);
+    expect([...(selector as HTMLSelectElement).options].map((o) => o.text)).toEqual([
+      'Fija',
+      'Por turno',
+    ]);
   });
 });
