@@ -863,7 +863,43 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
-`isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`).
+`isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
+`W-RECURSO-SATURADO`.
+
+`W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
+del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool
+y por corrida:
+
+```
+W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
+```
+
+La señal es **el pool lleno**. Una instancia en cola se atribuye solo a los pools que no tuvieron
+ni una unidad libre durante al menos la mitad de su `resourceWait` —la espera ya sin el tiempo de
+calendario cerrado (R-REC-8)—. Por eso un pool ocioso atado por AND, que hereda la cola entera de
+la instancia (R-REC-4), y una alternativa OR libre, en cuya cola la instancia también está
+(R-REC-6), llegan al criterio con demanda cero: el aviso no puede contradecir a
+`resources[poolId].utilization`. Una OR reparte además su demanda entre las alternativas que sí
+estaban llenas, porque consume exactamente una.
+
+Sobre esa demanda atribuida se exige `ρ = demanda atribuida / unidades concedidas ≥ 1,1` y, además,
+una de estas dos: que la cola atribuida media en la segunda mitad de `[warmup, t_stop]` supere la
+capacidad efectiva del pool (su `Σᵢ capacityᵢ × openTimeᵢ` de R-CAL-9 dividida entre sus propias
+horas abiertas, o sea unidades y no unidades diluidas por el calendario) y sea al menos 1,5 veces
+la de la primera mitad; **o** que las instancias atribuidas que seguían en cola al cortar sean al
+menos el 25 % de las unidades concedidas. Las colas se promedian sobre el tiempo en que el pool
+estuvo lleno, que es el único en que la cola de un pool significa algo y deja fuera el
+`offHoursWait` sin tener que restarlo aparte. Una cola estacionaria larga no avisa: M/M/1 con
+ρ = 0,8 tiene `Lq = 3,2` y sus dos mitades miden lo mismo.
+
+Con varias replicaciones la decisión se toma **una sola vez sobre la media** de esas cantidades, no
+réplica a réplica: la saturación es una propiedad del pool y de la corrida, y deduplicar avisos
+dejaría que una sola réplica que cruza un umbral por azar decidiera por las treinta. `X` es el ρ de
+esa media, con un decimal.
+
+Es un aviso, no un error: no cambia ninguna métrica. Lo que señala es que `resourceWait` y
+`bottlenecks` de ese pool son números que crecen con la duración de la corrida y no son comparables
+con los de un pool estable. *(prueba: LILA-191)*
 
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
@@ -925,6 +961,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-REC-8 | `resourceWait = started − enabled − offHoursWait` | LILA-036, LILA-041 |
 | R-REC-9, R-REC-10 | pool duplicado; qué elementos admiten recursos | LILA-013, LILA-021 |
 | R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
+| `W-RECURSO-SATURADO` | pool sin estado estacionario: cola atribuida solo a los pools que estuvieron llenos, decidida sobre la media de las réplicas | LILA-191 |
 | R-CAL-1, R-CAL-2, R-CAL-3 | patrón semanal, intervalos (`to > from`, `to` admite `24:00`), primitivas y derivadas | LILA-040 (`24:00`: LILA-041) |
 | R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
 | R-CAL-9 | utilización atribuible a la cohorte sobre horas disponibles; puede superar 1 sin apropiación (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (denominador por tramos: LILA-164) |

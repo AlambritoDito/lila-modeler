@@ -324,6 +324,14 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
 - Una referencia `lila:*Ref` colgante hacia el catálogo (ver `BPMN_EXTENSION.md`).
 - Uso de una distribución `normal`/`truncatedNormal` con probabilidad de muestrear un valor negativo mayor a 1 % (se trunca a 0, pero se avisa).
 - Utilización mayor que 1 por trabajo que continúa tras una bajada de capacidad sin apropiación (`W-UTILIZACION-MAYOR-UNO`); el valor no se trunca.
+- Un pool cuya cola crece sin estabilizarse: llega más trabajo del que puede despachar y no hay
+  estado estacionario (`W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)`,
+  uno por pool y por corrida). El aviso no cambia ninguna métrica; avisa de que el
+  `resourceWait.total` de las tareas de ese pool y su puesto en `bottlenecks` (sección 6) crecen
+  con la duración de la corrida y no son comparables con los de un pool estable. `X` es el ρ
+  estimado del propio log: la demanda atribuida al pool —solo las esperas en que **él** estuvo
+  lleno, no las que comparte por AND o por OR— entre las unidades que concedió, promediado entre
+  replicaciones. El criterio completo está en `SEMANTICS.md` § 17. *(LILA-191)*
 
 ---
 

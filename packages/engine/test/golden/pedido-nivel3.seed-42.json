@@ -438,7 +438,8 @@
     "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4615 casos quedaron con tokens esperando en el join.",
     "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4625 casos quedaron con tokens esperando en el join.",
     "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4599 casos quedaron con tokens esperando en el join.",
-    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4604 casos quedaron con tokens esperando en el join."
+    "W-JOIN-BLOQUEADO: Gateway_ANDJoin: 4604 casos quedaron con tokens esperando en el join.",
+    "W-RECURSO-SATURADO: horno: la cola crece sin estabilizarse (λ/μ·c ≈ 1.9)"
   ],
   "replications": {
     "count": 30,

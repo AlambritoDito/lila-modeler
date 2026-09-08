@@ -21,7 +21,13 @@ import type {
   Stat,
   StatSd,
 } from './result.js';
-import { activityCalendar, capacitySlices, compileCalendars } from './sim.js';
+import {
+  activityCalendar,
+  capacitySlices,
+  compileCalendars,
+  poolCalendar,
+  poolCapacityBound,
+} from './sim.js';
 import type { ReplicationRun, SimScenario } from './sim.js';
 
 const EMPTY_STAT: Readonly<Stat> = { min: 0, max: 0, mean: 0, total: 0 };
@@ -157,6 +163,142 @@ function queueLength(intervals: readonly Interval[], windowDuration: number): { 
   return { mean: windowDuration > 0 ? integral / windowDuration : 0, max };
 }
 
+/* ------------------------------------------------------------------ *
+ * LILA-191 · saturación de un pool
+ * ------------------------------------------------------------------ */
+
+/**
+ * Evidencia de saturación de un pool en **una** replicación, ya reducida a escalares para que
+ * `simulate` pueda promediarla entre réplicas antes de decidir (LILA-191). Nada de esto entra en
+ * `RunResult`: solo alimenta el aviso.
+ */
+export interface PoolLoad {
+  /** Unidades pedidas por instancias que esperaron a este pool **estando lleno**. */
+  demand: number;
+  /** Unidades que el pool concedió dentro de la ventana (`usesByPool`). */
+  served: number;
+  /** Unidades atribuidas que seguían en cola al cortar la corrida. */
+  pending: number;
+  /** Capacidad media del pool **dentro de su calendario**: `disponible / horas abiertas`. */
+  capacity: number;
+  /** Instancias atribuidas en cola, en media sobre el tiempo que el pool estuvo lleno. */
+  firstHalf: number;
+  secondHalf: number;
+}
+
+/** ρ ≥ este valor: por debajo, la demanda atribuida no supera al rendimiento y no hay saturación. */
+const SATURATION_RHO = 1.1;
+/** La cola de la segunda mitad tiene que ser al menos esto por la de la primera para «crecer». */
+const SATURATION_GROWTH = 1.5;
+/** …o quedar pendiente esta fracción de lo atendido, que es el mismo hecho medido al corte. */
+const SATURATION_PENDING = 0.25;
+
+/**
+ * El aviso de LILA-191, o `undefined` si el pool alcanza estado estacionario.
+ *
+ * La señal es «el pool estuvo **lleno** mientras había instancias esperándolo»: `load` solo
+ * cuenta esperas atribuidas a pools que de verdad no tenían una unidad libre, así que un pool
+ * ocioso atado por AND (R-REC-4) o una alternativa OR libre (R-REC-6) llegan aquí con `demand`
+ * cero por más larga que sea la cola de la instancia. Sobre esa demanda se pide (a) ρ ≥ 1,1,
+ * (b) que la cola crezca entre mitades de la ventana por encima de la capacidad, **o** que el
+ * pendiente al corte sea una fracción clara de lo atendido. Una cola estacionaria larga no avisa:
+ * M/M/1 con ρ = 0,8 tiene `Lq = 3,2` y las dos mitades miden lo mismo.
+ */
+export function saturationWarning(poolId: string, load: PoolLoad): string | undefined {
+  if (load.served <= 0 || load.capacity <= 0) return undefined;
+  const rho = load.demand / load.served;
+  if (rho < SATURATION_RHO) return undefined;
+  const growing = load.secondHalf > load.capacity && load.secondHalf >= SATURATION_GROWTH * load.firstHalf;
+  const backlogged = load.pending >= SATURATION_PENDING * load.served;
+  if (!growing && !backlogged) return undefined;
+  return `W-RECURSO-SATURADO: ${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho.toFixed(1)})`;
+}
+
+/** Cambio de ocupación de un pool: `+q` al conceder, `-q` al liberar. */
+interface OccupancyEvent {
+  t: number;
+  delta: number;
+}
+
+/**
+ * Tramos maximales en que el pool tuvo **todas** sus unidades ocupadas. Con la ocupación
+ * reconstruida del propio log no hace falta contador nuevo en el kernel: `sim.ts` ya escribe
+ * `startedAt`/`endedAt` y `resourceQuantity` de cada asignación.
+ *
+ * // ponytail: la capacidad de referencia es el tope semanal (`poolCapacityBound`), no la del
+ * // instante. Con `capacity` por tramos (LILA-164) un pool lleno durante el turno flojo no se
+ * // detecta como lleno; el aviso deja de salir, nunca sale de más. Camino de mejora, si aparece
+ * // un caso real: intercalar aquí los cambios de `compileCapacity`.
+ */
+function fullIntervals(events: OccupancyEvent[], capacity: number): Interval[] {
+  if (capacity <= 0 || events.length === 0) return [];
+  // Las tomas antes que las liberaciones en el mismo instante: quien releva a otro no abre un
+  // hueco de duración cero que partiría el tramo en dos.
+  events.sort((left, right) => left.t - right.t || right.delta - left.delta);
+  const intervals: Interval[] = [];
+  let used = 0;
+  let openedAt = Number.NaN;
+  for (const event of events) {
+    const wasFull = used >= capacity;
+    used += event.delta;
+    const isFull = used >= capacity;
+    if (!wasFull && isFull) openedAt = event.t;
+    else if (wasFull && !isFull) {
+      if (event.t > openedAt) intervals.push({ from: openedAt, to: event.t });
+      openedAt = Number.NaN;
+    }
+  }
+  return intervals;
+}
+
+/** Índice del primer tramo que termina después de `t`; los tramos son disjuntos y crecientes. */
+function firstEndingAfter(intervals: readonly Interval[], t: number): number {
+  let low = 0;
+  let high = intervals.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (intervals[middle]!.to <= t) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/**
+ * Solape de `[from, to)` con los tramos, partido por `middle`. La búsqueda binaria mantiene el
+ * costo en O(tramos solapados) por instancia: un pool saturado tiene un solo tramo enorme y uno
+ * sano tiene tramos cortos que casi ninguna espera cruza.
+ */
+function overlap(
+  intervals: readonly Interval[],
+  from: number,
+  to: number,
+  middle: number,
+): { total: number; first: number; second: number } {
+  let total = 0;
+  let first = 0;
+  let second = 0;
+  for (let index = firstEndingAfter(intervals, from); index < intervals.length; index++) {
+    const interval = intervals[index]!;
+    if (interval.from >= to) break;
+    const start = Math.max(interval.from, from);
+    const end = Math.min(interval.to, to);
+    if (end <= start) continue;
+    total += end - start;
+    if (start < middle) first += Math.min(end, middle) - start;
+    if (end > middle) second += end - Math.max(start, middle);
+  }
+  return { total, first, second };
+}
+
+/** Una espera observada de una instancia, con el tiempo **abierto** que pasó esperando recurso. */
+interface WaitRecord {
+  elementId: string;
+  from: number;
+  to: number;
+  /** `row.resourceWait`: la espera sin el tiempo de calendario cerrado (RESULTS_FORMAT § 7). */
+  open: number;
+}
+
 /**
  * Convierte una replicación del kernel DES en un `RunResult` completo.
  *
@@ -176,11 +318,19 @@ function queueLength(intervals: readonly Interval[], windowDuration: number): { 
  * `scenario` solo aporta las definiciones de pool (capacidad y costos); sin `resources` el
  * resultado conserva exactamente la forma de M1 (`resources: {}`, `bottlenecks: []`) para no
  * romper el golden de degradación (R-DEG-1, LILA-039).
+ *
+ * `loads` es la salida opcional de LILA-191: recibe la evidencia de saturación **sin decidir**,
+ * para que `simulate` promedie entre réplicas y emita el aviso una sola vez. Sin `loads` la
+ * decisión se toma aquí con las cantidades de esta réplica, que es la misma cuenta con R = 1.
+ * // ponytail: parámetro de salida en vez de un campo nuevo en `RunResult`. Techo: quien llame a
+ * // `aggregateReplication` a mano tiene que pasar el mapa si quiere agregar. Camino de mejora,
+ * // si algún consumidor más lo necesita: publicarlo en el contrato de resultados.
  */
 export function aggregateReplication(
   ir: ProcessIR,
   run: ReplicationRun,
   scenario: SimScenario = { run: {} },
+  loads?: Map<string, PoolLoad>,
 ): RunResult {
   // Precondición de frontera con LILA-027: el productor entrega `cases`, `elements` y `flows`
   // pertenecientes a una misma ventana estadística. Puede conservar en `rows` eventos previos al
@@ -200,6 +350,13 @@ export function aggregateReplication(
   const poolsByElement = new Map<string, Set<string>>();
   const busyByPool = new Map<string, number>();
   const usesByPool = new Map<string, number>();
+  // LILA-191: ocupación por pool y esperas por instancia. La atribución necesita las dos cosas
+  // completas —una espera se atribuye a un pool según lo lleno que estuviera **ese** pool— así
+  // que se resuelve en una segunda pasada, ya cerrada la ocupación. Sin `resources` en el
+  // escenario no se acumula nada: el camino de M1/M2 no paga por esto (R-DEG-1).
+  const tracksSaturation = scenario.resources !== undefined;
+  const occupancyByPool = new Map<string, OccupancyEvent[]>();
+  const waits: WaitRecord[] = [];
 
   // R-ARR-7: la ventana estadística es `[warmup, stoppedAt]`. Se deriva del propio
   // `ReplicationRun` para que la integral no dependa de que el escenario recibido aquí sea el
@@ -259,6 +416,13 @@ export function aggregateReplication(
         : openTime(calendar, occupiedFrom, occupiedTo);
       busyByPool.set(entry.resourceId, (busyByPool.get(entry.resourceId) ?? 0) + quantity * occupied);
       usesByPool.set(entry.resourceId, (usesByPool.get(entry.resourceId) ?? 0) + quantity);
+      // LILA-191: la ocupación se mide en tiempo de reloj, no en tiempo abierto: un pool que
+      // conserva la unidad durante el cierre del calendario (R-CAL-8) sigue sin tenerla libre.
+      if (tracksSaturation && occupiedTo > occupiedFrom) {
+        const events = occupancyByPool.get(entry.resourceId) ?? [];
+        events.push({ t: occupiedFrom, delta: quantity }, { t: occupiedTo, delta: -quantity });
+        occupancyByPool.set(entry.resourceId, events);
+      }
     }
 
     // La cola pertenece a la instancia, no a la fila: todas las filas de una AND comparten
@@ -270,6 +434,20 @@ export function aggregateReplication(
       const intervals = queueByElement.get(row.elementId) ?? [];
       intervals.push({ from: waitFrom, to: waitTo });
       queueByElement.set(row.elementId, intervals);
+    }
+    // LILA-191: la espera se guarda entera y se reparte entre pools en la segunda pasada. Se
+    // lee la declaración del elemento y no el log porque la instancia que seguía en cola al
+    // cortar no asignó nada y su única fila es el sentinel `resourceId = null` (R-REC-11):
+    // mirando el log desaparecería justo la evidencia de la saturación.
+    if (tracksSaturation && waitTo > waitFrom && scenario.elements?.[row.elementId]?.resources !== undefined) {
+      // `row.resourceWait` ya descuenta el calendario cerrado; el `min` solo lo acota a la parte
+      // de la espera que cae dentro de la ventana estadística.
+      waits.push({
+        elementId: row.elementId,
+        from: waitFrom,
+        to: waitTo,
+        open: Math.min(row.resourceWait, waitTo - waitFrom),
+      });
     }
 
     if (row.status !== 'completed' || row.startedAt === null || row.endedAt === null) continue;
@@ -301,6 +479,53 @@ export function aggregateReplication(
     metrics.queueLength = queueLength(queueByElement.get(nodeId) ?? [], windowDuration);
     metrics.fixedCostTotal = fixedCostByElement.get(nodeId) ?? 0;
     elements[nodeId] = metrics;
+  }
+
+  // LILA-191, segunda pasada: repartir cada espera entre los pools que estuvieron llenos durante
+  // la mayor parte de ella. Es lo único que distingue al pool que de verdad frena la cola de los
+  // que la comparten por construcción: con AND (R-REC-4) la cola es la de la instancia y la
+  // heredan todos sus pools; con OR (R-REC-6) la instancia se encola en todas las alternativas.
+  const middle = windowStart + windowDuration / 2;
+  const fullByPool = new Map<string, Interval[]>();
+  const demandByPool = new Map<string, number>();
+  const pendingByPool = new Map<string, number>();
+  const firstHalfByPool = new Map<string, number>();
+  const secondHalfByPool = new Map<string, number>();
+  if (tracksSaturation) {
+    for (const [poolId, events] of occupancyByPool) {
+      const pool = scenario.resources?.[poolId];
+      if (pool === undefined) continue;
+      fullByPool.set(poolId, fullIntervals(events, poolCapacityBound(pool, scenario.calendars ?? {})));
+    }
+    const attributed: { ref: string; quantity: number; first: number; second: number }[] = [];
+    for (const wait of waits) {
+      const element = scenario.elements![wait.elementId]!;
+      attributed.length = 0;
+      if (wait.open > 0) {
+        for (const request of element.resources!) {
+          const full = fullByPool.get(request.ref);
+          if (full === undefined) continue;
+          const shared = overlap(full, wait.from, wait.to, middle);
+          // «La mayor parte de la espera»: la mitad del tiempo abierto que la instancia pasó
+          // esperando recurso. Por debajo, el pool tenía unidades libres y no es quien la frena.
+          if (shared.total >= wait.open / 2) {
+            attributed.push({ ref: request.ref, quantity: request.quantity ?? 1, first: shared.first, second: shared.second });
+          }
+        }
+      }
+      if (attributed.length === 0) continue;
+      // Una OR consume **una** alternativa (R-REC-6): repartir su demanda entre las que estaban
+      // llenas evita el ρ = 1/cuota que salía de contarla entera en cada una.
+      const share = element.selection === 'or' && attributed.length > 1 ? 1 / attributed.length : 1;
+      const pending = wait.to >= windowEnd;
+      for (const entry of attributed) {
+        const weight = entry.quantity * share;
+        demandByPool.set(entry.ref, (demandByPool.get(entry.ref) ?? 0) + weight);
+        if (pending) pendingByPool.set(entry.ref, (pendingByPool.get(entry.ref) ?? 0) + weight);
+        firstHalfByPool.set(entry.ref, (firstHalfByPool.get(entry.ref) ?? 0) + entry.first * share);
+        secondHalfByPool.set(entry.ref, (secondHalfByPool.get(entry.ref) ?? 0) + entry.second * share);
+      }
+    }
   }
 
   // R-COST-2 y R-CAL-9. Todo pool declarado aparece aunque no se haya usado, para que los mapas
@@ -341,6 +566,35 @@ export function aggregateReplication(
       warnings.push(
         `W-UTILIZACION-MAYOR-UNO: ${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
       );
+    }
+    // LILA-191: pool que nunca alcanza estado estacionario. `utilization` está acotada por la
+    // capacidad y no distingue «justo al límite» de «el doble de lo que puede atender»; la cola
+    // atribuida sí. El aviso no toca ninguna métrica: advierte de que `resourceWait` y
+    // `bottlenecks` de este pool crecen con la duración de la corrida y no comparan con nada.
+    if (tracksSaturation) {
+      // Capacidad **efectiva**: `available` ya integra `Σ capacity_i × horas abiertas_i`, así que
+      // dividirla entre las horas abiertas del pool devuelve unidades, no unidades diluidas por
+      // el calendario (con un solo tramo es exactamente `capacity`).
+      const calendar = poolCalendar(calendars, pool);
+      const open = calendar === undefined ? windowDuration : openTime(calendar, windowStart, windowEnd);
+      const full = fullByPool.get(poolId) ?? [];
+      const fullFirst = overlap(full, windowStart, middle, middle).total;
+      const fullSecond = overlap(full, middle, windowEnd, middle).total;
+      const load: PoolLoad = {
+        demand: demandByPool.get(poolId) ?? 0,
+        served: usesByPool.get(poolId) ?? 0,
+        pending: pendingByPool.get(poolId) ?? 0,
+        capacity: open > 0 ? available / open : 0,
+        // Cola media **mientras el pool estuvo lleno**: es el único tiempo en que la cola de un
+        // pool significa algo, y deja fuera el `offHoursWait` sin tener que restarlo aparte.
+        firstHalf: fullFirst > 0 ? (firstHalfByPool.get(poolId) ?? 0) / fullFirst : 0,
+        secondHalf: fullSecond > 0 ? (secondHalfByPool.get(poolId) ?? 0) / fullSecond : 0,
+      };
+      loads?.set(poolId, load);
+      // Con una sola replicación esta es ya la decisión final; `simulate` rehace la cuenta sobre
+      // la media de las `load` cuando hay varias (R-ARR-8).
+      const warning = loads === undefined ? saturationWarning(poolId, load) : undefined;
+      if (warning !== undefined) warnings.push(warning);
     }
   }
 
