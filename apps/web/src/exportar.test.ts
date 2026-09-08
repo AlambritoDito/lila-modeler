@@ -25,6 +25,7 @@ import {
   autorizarExportacion,
   finalizarExportacion,
   prepararImportacionTransaccional,
+  referenciasRotas,
 } from './modelerXml';
 
 const raiz = new URL('../../../', import.meta.url);
@@ -206,20 +207,59 @@ describe('el XML que exporta la app web', () => {
     expect(preparada.originalIds.get(saneado as string)).toBe('9Task bad.x');
   });
 
-  it('no abre confirmación para snapshots automáticos y solo pregunta en exportación explícita', () => {
-    let confirmaciones = 0;
-    const confirmar = (): boolean => {
-      confirmaciones += 1;
-      return true;
-    };
+  // La decisión visible es el diálogo de `App.tsx` (LILA-192): aquí solo se corta lo que pasaría
+  // a espaldas del usuario —el snapshot de guardar y el export que alimenta a la simulación—.
+  it('bloquea las exportaciones automáticas ante pérdida y deja pasar la explícita', () => {
     const perdidas = ['unresolved reference <Flow_inexistente>'];
 
-    expect(() => autorizarExportacion(perdidas, {}, confirmar)).toThrow(
+    expect(() => autorizarExportacion(perdidas, {})).toThrow(
       /Exportación bloqueada.*Flow_inexistente/s,
     );
-    expect(confirmaciones).toBe(0);
-    expect(() => autorizarExportacion(perdidas, { interactivo: true }, confirmar)).not.toThrow();
-    expect(confirmaciones).toBe(1);
+    expect(() => autorizarExportacion(perdidas, { interactivo: true })).not.toThrow();
+    expect(() => autorizarExportacion([], {})).not.toThrow();
+  });
+
+  // LILA-192: el aviso previo a la descarga sale de aquí. Los `messageRef` / `dataStoreRef` /
+  // `categoryValueRef` de los fixtures de Bizagi apuntan a ids que el archivo nunca declara;
+  // bpmn-moddle no los resuelve, no entran en el árbol y el XML exportado ya no los lleva.
+  it('enumera las referencias rotas del fixture de Bizagi que exportar se lleva por delante', async () => {
+    const ruta = 'examples/bizagi-exports/bizagi-miwg-B.1.0-roundtrip.bpmn';
+    const original = leer(ruta);
+
+    expect(referenciasRotas(original)).toEqual([
+      'Message_1373655174960',
+      'Message_1373655174959',
+      'DS1373655174514',
+      'Value_Cat1373655174961',
+    ]);
+    // Y es verdad que se pierden: ninguno sobrevive al ida y vuelta.
+    const exportado = await exportar(original);
+    for (const id of referenciasRotas(original)) expect(exportado).not.toContain(id);
+    // El resto de fixtures no tiene ninguna, así que abrirlos no enseña el aviso.
+    expect(referenciasRotas(leer('examples/pedido/model.bpmn'))).toEqual([]);
+  });
+
+  it('no confunde una referencia resuelta ni un id declarado más abajo con una rota', () => {
+    const sano = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
+      <bpmn:receiveTask id="Task_1" messageRef='Message_1' />
+      <bpmn:message id="Message_1" name="Pedido" />
+    </bpmn:definitions>`;
+    expect(referenciasRotas(sano)).toEqual([]);
+    expect(referenciasRotas(sano.replace('id="Message_1"', 'id="Otro"'))).toEqual(['Message_1']);
+  });
+
+  it('la importación preparada trae las referencias rotas del XML de origen', async () => {
+    const candidato = {
+      importXML: async (): Promise<{ warnings: readonly unknown[] }> => ({ warnings: [] }),
+      destroy: (): void => undefined,
+    };
+    const preparada = await prepararImportacionTransaccional(
+      '<bpmn:receiveTask id="Task_1" messageRef="Message_fantasma" />',
+      () => candidato,
+    );
+
+    expect(preparada.refsRotas).toEqual(['Message_fantasma']);
+    expect(preparada.perdidas).toEqual([]);
   });
 
   it('escapa la comilla doble de un id definido originalmente con comillas simples', async () => {

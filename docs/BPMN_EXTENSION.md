@@ -280,3 +280,42 @@ Correspondencia con el catálogo referenciado (`catalog.json`, fuera de este doc
 - **ADR-014** (namespace único, definido una sola vez): implementado en las secciones 1, 2 y 4 — un solo IRI, un solo descriptor compartido por editor/CLI/servidor, elementos (no atributos en el punto de inserción) para permitir listas, crecimiento aditivo, plan de verificación de round-trip en M4 con fallback a `annotations.json`.
 
 Si en el futuro alguna decisión de este documento entra en conflicto con una ADR nueva o revisada, gana la ADR y este documento se actualiza para reflejarla (nunca al revés).
+
+---
+
+## 7. Round-trip en la app web
+
+La app web abre un `.bpmn` con bpmn-js y lo vuelve a escribir con `saveXML`, es decir con
+bpmn-moddle serializando **el árbol que bpmn-moddle pudo leer**. Eso fija exactamente qué
+sobrevive a abrir-y-exportar (LILA-192, `apps/web/src/modelerXml.ts`):
+
+**Se conserva**
+
+- Los ids originales del archivo, incluidos los que no son NCName. Al importar se sanean de
+  forma reversible (sección 3) y al exportar se restauran uno a uno, en atributos, en texto y en
+  las referencias del BPMNDI, con las comillas y las entidades del original.
+- Los elementos `lila:` de este documento y las extensiones ajenas (`bizagi:` y compañía): el
+  descriptor `lila` va en `moddleExtensions` y el resto viaja como contenido genérico.
+- El diagrama (`bpmndi`), la documentación, los nombres y la topología.
+- `exporter`/`exporterVersion` en `definitions`, que los reescribe siempre `marcarExportador`.
+
+**No se conserva**
+
+- Las referencias por id que apuntan a un elemento que el archivo nunca declara —`messageRef`,
+  `dataStoreRef`, `categoryValueRef`—: bpmn-moddle no las resuelve, no llegan al árbol y el
+  archivo exportado ya no las lleva. Los fixtures de `examples/bizagi-exports` son un caso real.
+- Lo que el import descarta con un aviso de contenido no parseable o de referencia de topología
+  sin resolver: si no entró en el modelo, no puede salir en el XML.
+
+**Cómo se avisa** (nunca en silencio, que era la queja de LILA-192)
+
+- La barra de estado enseña la lista completa como **error** —no como aviso—, con los ids:
+  «N elementos o referencias se perderán al exportar: …» (LILA-193).
+- «Exportar .bpmn» abre antes de descargar un diálogo con esa misma lista y dos salidas,
+  «Exportar igualmente» y «Cancelar»; cancelar no descarga nada.
+- Las exportaciones que el usuario no ve —el snapshot de guardar el proyecto y el XML que
+  alimenta a la simulación— no pueden aceptar esa pérdida por él: `autorizarExportacion` las
+  corta con un error cuando hay avisos de pérdida.
+
+Nada de esto reescribe el serializador: la fidelidad byte a byte con el archivo de origen no es
+una promesa de la app, y conservar atributos rotos exigiría un serializador propio.

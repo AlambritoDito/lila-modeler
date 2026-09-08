@@ -163,6 +163,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     zoom: 1,
     elementos: 0,
     avisos: 0,
+    perdidas: [],
+    refsRotas: [],
     error: null,
   });
   const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
@@ -178,6 +180,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => {
     if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
   }, [pendingAction]);
+  // Decisión de exportar a pesar de la pérdida (LILA-192). Es estado de React y no un
+  // `window.confirm` porque el diálogo tiene que verse, leerse y probarse como el resto de la app.
+  const [confirmarPerdida, setConfirmarPerdida] = useState(false);
+  const exportDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (confirmarPerdida && !exportDialog.current?.open) exportDialog.current?.showModal();
+  }, [confirmarPerdida]);
   const [baseId, setBaseId] = useState('as-is.scenario.json');
   const adapter = projectStore(store);
   const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
@@ -497,8 +506,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }
   }
 
-  async function exportar(): Promise<void> {
+  /**
+   * Todo lo que el archivo original tiene y el XML exportado no tendrá: los avisos del import
+   * que implican pérdida (LILA-193) y las referencias que ya venían rotas (LILA-192). Es la
+   * misma lista que se pinta en el pie y que enumera el diálogo de exportación.
+   */
+  const perdidasAlExportar = [...estado.perdidas, ...estado.refsRotas];
+
+  async function exportar(confirmado = false): Promise<void> {
     if (modelador === null) return;
+    // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
+    if (!confirmado && perdidasAlExportar.length > 0) { setConfirmarPerdida(true); return; }
+    setConfirmarPerdida(false);
     try { await store.putProcess(procesoId, await modelador.exportar({ interactivo: true })); }
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
@@ -516,6 +535,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           })()}>Guardar y continuar</button>
           <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>Descartar</button>
           <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>Cancelar</button>
+        </div>
+      </dialog>}
+      {confirmarPerdida && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); setConfirmarPerdida(false); }}>
+        <h2 id="perdida-titulo">Se perderán {plural(perdidasAlExportar.length, 'referencia', 'referencias')} que el archivo original ya tenía rotas</h2>
+        <p>El editor solo puede escribir lo que pudo leer, así que el .bpmn descargado no las llevará:</p>
+        <ul>{perdidasAlExportar.map((perdida) => <li key={perdida}>{perdida}</li>)}</ul>
+        <div className="acciones">
+          <button className="boton primario" type="button" onClick={() => void exportar(true)}>Exportar igualmente</button>
+          <button className="boton" type="button" onClick={() => setConfirmarPerdida(false)}>Cancelar</button>
         </div>
       </dialog>}
       <header className="barra">
@@ -812,9 +840,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
-        {estado.avisos > 0 && (
+        {perdidasAlExportar.length > 0 && (
+          <span role="alert" className="error">
+            {plural(perdidasAlExportar.length, 'elemento o referencia', 'elementos o referencias')}{' '}
+            {perdidasAlExportar.length === 1 ? 'se perderá' : 'se perderán'} al exportar:{' '}
+            {perdidasAlExportar.join(' · ')}
+          </span>
+        )}
+        {estado.avisos - estado.perdidas.length > 0 && (
           <span role="alert" className="aviso">
-            {estado.avisos} avisos al importar; revisa el diagnóstico antes de simular o exportar
+            {estado.avisos - estado.perdidas.length} avisos al importar; revisa el diagnóstico antes de simular o exportar
           </span>
         )}
         {estado.error !== null && (

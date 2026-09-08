@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
   problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
   // LILA-207: los servicios que la paleta usa para insertar una figura.
-  fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn() }));
+  fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
+  // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
+  // callback para poder empujar un estado de lienzo concreto desde los tests.
+  publicarEstado: (_estado: unknown) => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
@@ -25,8 +28,8 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
     return null;
   } }));
-vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
-  useEffect(() => { onListo({
+vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
+  useEffect(() => { mocks.publicarEstado = onEstado; onListo({
     exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
@@ -75,7 +78,7 @@ beforeEach(async () => {
   mocks.exportXml.mockResolvedValue(newModelXml());
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
   mocks.crearFigura.mockImplementation((figura: object) => figura);
-  session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
+  session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn(), putProcess: vi.fn(async () => {}) } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   // Modo «Simular»: deja abierta la pestaña Simulación del panel derecho.
@@ -392,4 +395,55 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
   expect(figuras().find((b) => b.title === 'Tarea de usuario')).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+// --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---
+
+const ESTADO_CON_PERDIDA = {
+  zoom: 1, elementos: 12, avisos: 3, error: null,
+  perdidas: ['unresolved reference <Flow_inexistente>'],
+  refsRotas: ['Message_1373655174960', 'DS1373655174514'],
+};
+const dialogoPerdida = (): HTMLDialogElement | null => container.querySelector('.confirmar-perdida');
+
+it('la pérdida al importar se ve como error con los ids, y el resto sigue siendo el contador de avisos', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+  const pie = container.querySelector('.estado')!;
+  const alerta = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('error'))!;
+  expect(alerta).toBeDefined();
+  expect(alerta.textContent).toContain('3 elementos o referencias se perderán al exportar');
+  expect(alerta.textContent).toContain('Message_1373655174960');
+  expect(alerta.textContent).toContain('DS1373655174514');
+  expect(alerta.textContent).toContain('Flow_inexistente');
+  // De los 3 avisos del import, 1 implicaba pérdida y ya se cuenta arriba: quedan 2.
+  const aviso = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('aviso'))!;
+  expect(aviso.textContent).toContain('2 avisos al importar');
+});
+
+it('sin pérdida, exportar descarga directamente y no abre ningún diálogo', async () => {
+  await click('Exportar .bpmn');
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.putProcess).toHaveBeenCalledOnce();
+});
+
+it('con pérdida, exportar pide confirmación: cancelar no descarga y aceptar sí', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  await click('Exportar .bpmn');
+  const dialogo = dialogoPerdida()!;
+  expect(dialogo).not.toBeNull();
+  expect(dialogo.textContent).toContain('Se perderán 3 referencias que el archivo original ya tenía rotas');
+  expect([...dialogo.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+    'unresolved reference <Flow_inexistente>', 'Message_1373655174960', 'DS1373655174514',
+  ]);
+  expect(session.putProcess).not.toHaveBeenCalled();
+
+  await act(async () => { [...dialogo.querySelectorAll('button')].find((b) => b.textContent === 'Cancelar')!.click(); });
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.putProcess).not.toHaveBeenCalled();
+
+  await click('Exportar .bpmn');
+  await act(async () => { [...dialogoPerdida()!.querySelectorAll('button')].find((b) => b.textContent === 'Exportar igualmente')!.click(); });
+  expect(session.putProcess).toHaveBeenCalledOnce();
+  expect(dialogoPerdida()).toBeNull();
 });

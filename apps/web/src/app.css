@@ -1171,9 +1171,10 @@ body {
 
 .lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
-.confirmar-reemplazo, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
-.confirmar-reemplazo::backdrop, .ajustes::backdrop { background: rgb(0 0 0 / 50%); }
-.confirmar-reemplazo .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirmar-reemplazo, .confirmar-perdida, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
+.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .ajustes::backdrop { background: rgb(0 0 0 / 50%); }
+.confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirmar-perdida ul { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 
 /* ---------- ajustes ---------- */
 

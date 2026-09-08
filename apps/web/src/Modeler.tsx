@@ -50,6 +50,16 @@ export interface EstadoLienzo {
    * las tareas se abre como si estuviera entero.
    */
   avisos: number;
+  /**
+   * El subconjunto de esos avisos que implica pérdida al volver a serializar (LILA-193): no son
+   * «revisa esto», son «esto ya no está en el modelo».
+   */
+  perdidas: string[];
+  /**
+   * Ids que el archivo original referencia sin declararlos (LILA-192). moddle no los conserva,
+   * así que exportar los borra aunque el import no se haya quejado de nada.
+   */
+  refsRotas: string[];
   /** Mensaje del último import fallido, o `null` si todo fue bien. */
   error: string | null;
 }
@@ -183,6 +193,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     let activo: Modeler | null = null;
     let originalIds = new Map<string, string>();
     let perdidas: string[] = [];
+    let refsRotas: string[] = [];
     let ultimaApertura = 0;
     const suscripciones = new Set<{ eventos: string[]; escuchar: () => void }>();
 
@@ -194,7 +205,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
 
     const publicar = (error: string | null): void => {
       if (activo === null) {
-        onEstado({ zoom: 1, avisos, elementos: 0, error });
+        onEstado({ zoom: 1, avisos, perdidas, refsRotas, elementos: 0, error });
         return;
       }
       const canvas = activo.get<Canvas>('canvas');
@@ -203,6 +214,8 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       onEstado({
         zoom: Number.isFinite(zoom) ? zoom : 1,
         avisos,
+        perdidas,
+        refsRotas,
         // La raíz no tiene padre y las etiquetas externas cuelgan de su elemento: ni una ni
         // otras son "elementos del diagrama" para quien mira la barra de estado.
         elementos: registro.filter((el) => el.parent != null && el.labelTarget == null).length,
@@ -280,6 +293,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       activo = candidato;
       originalIds = preparada.originalIds;
       perdidas = preparada.perdidas;
+      refsRotas = preparada.refsRotas;
       avisos = preparada.avisos.length;
       vincular(candidato);
       if (anterior !== null) {
