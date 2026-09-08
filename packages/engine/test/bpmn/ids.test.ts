@@ -1,5 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { isNCName, newId, sanitizeIds, sanitizeXmlIds } from '../../src/bpmn/index.js';
+import {
+  isNCName,
+  marcarExportador,
+  newId,
+  parseBpmn,
+  sanitizeIds,
+  sanitizeXmlIds,
+} from '../../src/bpmn/index.js';
 
 test('10 000 ids generados son NCName únicos', () => {
   const ids = new Set<string>();
@@ -132,4 +140,39 @@ test('sanitizeXmlIds no toca el XML si todos los ids ya son NCName', () => {
 
   expect(sanitizedToOriginal.size).toBe(0);
   expect(out).toBe(xml);
+});
+
+// LILA-194: `marcarExportador` es el único sitio que escribe exporter/exporterVersion.
+
+const RAIZ = new URL('../../../../', import.meta.url);
+const leer = (rel: string): string => readFileSync(new URL(rel, RAIZ), 'utf8');
+const VERSION_MOTOR = (JSON.parse(leer('packages/engine/package.json')) as { version: string })
+  .version;
+
+test('un export de Bizagi guardado por Lila queda marcado, y el original conserva su exporter', async () => {
+  const bizagi = leer('examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn');
+  const marcado = marcarExportador(bizagi);
+
+  expect(marcado).toContain('exporter="Lila Modeler"');
+  expect(marcado).toContain(`exporterVersion="${VERSION_MOTOR}"`);
+  expect((await parseBpmn(marcado)).ir.source).toMatchObject({
+    exporter: 'Lila Modeler',
+    exporterVersion: VERSION_MOTOR,
+  });
+
+  // Bizagi no declara estos atributos (BPMN_EXTENSION.md sección 3): el archivo de origen se
+  // lee tal cual, sin que la marca lo contamine.
+  expect((await parseBpmn(bizagi)).ir.source.exporter).toBe('');
+});
+
+test('la marca reemplaza el exporter que ya traía el archivo', async () => {
+  const propio = leer('examples/pedido/model.bpmn');
+  expect((await parseBpmn(propio)).ir.source.exporter).toBe('Lila Modeler examples (hand-written)');
+
+  const marcado = marcarExportador(propio);
+  expect(marcado).not.toContain('hand-written');
+  expect((await parseBpmn(marcado)).ir.source).toMatchObject({
+    exporter: 'Lila Modeler',
+    exporterVersion: VERSION_MOTOR,
+  });
 });

@@ -121,7 +121,7 @@ Todo `.bpmn` que Lila escribe declara, en `bpmn:definitions`:
     ...>
 ```
 
-`exporterVersion` es la versión de paquete de `@lila/engine` (o de la app) que generó el archivo — sirve para diagnosticar diferencias de comportamiento entre versiones del motor, igual que hacen bpmn-js y Camunda Modeler con sus propios `exporter`/`exporterVersion`. Bizagi, por comparación, **no** declara estos atributos en su export (verificado en 5 archivos reales — ver `investigacion-2026-09-03/02-bizagi-simulacion.md`), lo que hace imposible saber qué versión de Bizagi Modeler generó un archivo dado; Lila evita ese problema desde el día uno.
+`exporterVersion` es la versión de paquete de `@lila/engine` que generó el archivo (siempre la del motor, también cuando quien guarda es la app web: los dos atributos los escribe un único helper, `marcarExportador` en `packages/engine/src/bpmn/ids.ts`) — sirve para diagnosticar diferencias de comportamiento entre versiones del motor, igual que hacen bpmn-js y Camunda Modeler con sus propios `exporter`/`exporterVersion`. Bizagi, por comparación, **no** declara estos atributos en su export (verificado en 5 archivos reales — ver `investigacion-2026-09-03/02-bizagi-simulacion.md`), lo que hace imposible saber qué versión de Bizagi Modeler generó un archivo dado; Lila evita ese problema desde el día uno.
 
 ---
 

@@ -1,6 +1,9 @@
-// Generador y sanitizador de ids BPMN (política de ids, ADR-012 / docs/BPMN_EXTENSION.md
-// sección 3). Vive fuera de packages/engine/src/core/, así que no hay restricción de
-// dependencias — pero no necesita ninguna.
+// Generador y sanitizador de ids BPMN y marca de exportador (política de ids y atributos
+// exporter/exporterVersion, ADR-012 / docs/BPMN_EXTENSION.md sección 3). Vive fuera de
+// packages/engine/src/core/, así que no hay restricción de dependencias — y solo necesita la
+// versión del propio paquete.
+
+import { version } from '../version.js';
 
 /** NCName válido: XML Name sin ":" (empieza por letra/"_", sigue con letras/dígitos/"_"/"-"/"."). */
 const NCNAME_START = /^[A-Za-z_]/;
@@ -134,4 +137,36 @@ export function sanitizeXmlIds(xml: string): {
   }
 
   return { xml: out, sanitizedToOriginal };
+}
+
+/** Nombre con el que Lila se identifica en `bpmn:definitions` (BPMN_EXTENSION.md sección 3). */
+const EXPORTER = 'Lila Modeler';
+
+/** Etiqueta de apertura de `definitions`, con o sin prefijo de namespace. */
+const DEFINITIONS = /<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?definitions\b[^>]*>/;
+
+/** Fija `name="value"` en una etiqueta de apertura, reemplazando el atributo si ya estaba. */
+function escribirAtributo(tag: string, name: string, value: string): string {
+  const attribute = new RegExp(`(\\s${name}\\s*=\\s*)(?:"[^"]*"|'[^']*')`);
+  if (attribute.test(tag)) return tag.replace(attribute, `$1"${value}"`);
+  return tag.replace(/>$/, ` ${name}="${value}">`);
+}
+
+/**
+ * Marca el XML como escrito por Lila: `exporter="Lila Modeler"` y `exporterVersion` con la
+ * versión de `@lila/engine`, tal y como exige `docs/BPMN_EXTENSION.md` sección 3. Es el único
+ * sitio del repo que escribe esos atributos: toda escritura de `.bpmn` (la app web al exportar,
+ * y cualquier camino futuro de la CLI) pasa por aquí. `exporter` sustituye al del archivo de
+ * origen; `parseBpmn` sigue leyendo el que trae el archivo de entrada y lo conserva en
+ * `ir.source` para el diagnóstico.
+ *
+ * ponytail: sustitución de texto sobre la etiqueta `definitions`, no reserialización con
+ * bpmn-moddle. Es lo que permite marcar un XML ya serializado sin reformatearlo ni arriesgar
+ * pérdida de contenido. Techo: un `>` dentro del valor de un atributo de esa etiqueta cortaría
+ * la coincidencia; no es XML que ninguna herramienta real produzca.
+ */
+export function marcarExportador(xml: string): string {
+  return xml.replace(DEFINITIONS, (tag) =>
+    escribirAtributo(escribirAtributo(tag, 'exporter', EXPORTER), 'exporterVersion', version),
+  );
 }
