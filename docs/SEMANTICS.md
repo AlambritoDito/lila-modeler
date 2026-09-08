@@ -876,7 +876,10 @@ W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
 
 La señal es **el pool lleno**: sin unidades libres suficientes para conceder, o sea con menos
 disponibles que la menor `quantity` con que alguna tarea lo pide —un pool de `capacity` 3 pedido de
-dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. Una
+dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. El
+umbral es del pool: si otra tarea pide ese mismo pool de una en una manda esa `quantity`, y
+entonces la tarea que pide de dos en dos puede estar bloqueada sin que el pool cuente como lleno
+—el aviso deja de salir, nunca sale de más—. Una
 instancia en cola se atribuye solo a los pools que estuvieron llenos —tiempo de **reloj**: quien
 conserva la unidad durante el cierre del calendario (R-CAL-8) tampoco la tiene libre— durante al
 menos la mitad de su espera con el pool abierto (su `resourceWait`, ya sin el tiempo de calendario

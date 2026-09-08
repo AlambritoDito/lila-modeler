@@ -519,6 +519,13 @@ export function aggregateReplication(
     // La menor `quantity` con que alguna tarea pide el pool: es lo que tiene que quedar libre
     // para que el kernel pueda conceder, y por debajo de eso el pool está lleno aunque `used`
     // no llegue a `capacity` (R-REC-2 lo acota, así que siempre hay al menos una).
+    //
+    // ponytail: el umbral es del **pool**, no de la petición. Si dos tareas piden el mismo pool
+    // con `quantity` distinta manda la menor, así que la que pide de dos en dos puede estar
+    // bloqueada (`capacity` 3, `used` 2) sin que el pool cuente como lleno: su espera no se le
+    // atribuye y el aviso deja de salir, nunca sale de más. Camino de mejora, si aparece un caso
+    // real: tramos «lleno» por `quantity` pedida, cuidando que el denominador de las colas
+    // (`fullFirst`/`fullSecond`) siga siendo el del pool.
     const minQuantityByPool = new Map<string, number>();
     for (const element of Object.values(scenario.elements ?? {})) {
       for (const request of element.resources ?? []) {
