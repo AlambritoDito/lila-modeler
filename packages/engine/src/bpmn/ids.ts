@@ -149,7 +149,10 @@ const DEFINITIONS = /<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?definitions\b[^>]*>/;
 function escribirAtributo(tag: string, name: string, value: string): string {
   const attribute = new RegExp(`(\\s${name}\\s*=\\s*)(?:"[^"]*"|'[^']*')`);
   if (attribute.test(tag)) return tag.replace(attribute, `$1"${value}"`);
-  return tag.replace(/>$/, ` ${name}="${value}">`);
+  // La etiqueta puede venir autocerrada (`<definitions ... />`, un modelo sin contenido):
+  // insertar antes de `>` a secas dejaría `... / exporter="…">`, que ya no es XML.
+  const cierre = tag.endsWith('/>') ? ' />' : '>';
+  return tag.replace(/\s*\/?>$/, ` ${name}="${value}"${cierre}`);
 }
 
 /**
@@ -162,8 +165,10 @@ function escribirAtributo(tag: string, name: string, value: string): string {
  *
  * ponytail: sustitución de texto sobre la etiqueta `definitions`, no reserialización con
  * bpmn-moddle. Es lo que permite marcar un XML ya serializado sin reformatearlo ni arriesgar
- * pérdida de contenido. Techo: un `>` dentro del valor de un atributo de esa etiqueta cortaría
- * la coincidencia; no es XML que ninguna herramienta real produzca.
+ * pérdida de contenido. Techo: se marca la primera `definitions` del texto, así que un `>`
+ * dentro del valor de un atributo de esa etiqueta, o un comentario XML que contenga
+ * `<definitions` antes de la raíz, desviarían la marca; no es XML que bpmn-moddle produzca
+ * (serializa sin comentarios), y es lo que se le pasa aquí en todos los caminos de escritura.
  */
 export function marcarExportador(xml: string): string {
   return xml.replace(DEFINITIONS, (tag) =>

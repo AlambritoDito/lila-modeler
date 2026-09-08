@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { BpmnModdle } from 'bpmn-moddle';
 import { expect, test } from 'vitest';
 import {
   isNCName,
@@ -148,6 +150,9 @@ const RAIZ = new URL('../../../../', import.meta.url);
 const leer = (rel: string): string => readFileSync(new URL(rel, RAIZ), 'utf8');
 const VERSION_MOTOR = (JSON.parse(leer('packages/engine/package.json')) as { version: string })
   .version;
+const BIZAGI = readdirSync(fileURLToPath(new URL('examples/bizagi-exports', RAIZ)))
+  .filter((f) => f.endsWith('.bpmn'))
+  .map((f) => `examples/bizagi-exports/${f}`);
 
 test('un export de Bizagi guardado por Lila queda marcado, y el original conserva su exporter', async () => {
   const bizagi = leer('examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn');
@@ -175,4 +180,55 @@ test('la marca reemplaza el exporter que ya traía el archivo', async () => {
     exporter: 'Lila Modeler',
     exporterVersion: VERSION_MOTOR,
   });
+});
+
+// QA LILA-194: la marca es sustitución de texto sobre la etiqueta `definitions`. Estas son las
+// formas de esa etiqueta que sí produce una herramienta real.
+test.each([
+  ['sin prefijo', '<definitions xmlns="urn:x" id="D"></definitions>'],
+  ['prefijo bpmn2', '<bpmn2:definitions xmlns:bpmn2="urn:x" id="D"></bpmn2:definitions>'],
+  ['prefijo semantic', '<semantic:definitions xmlns:semantic="urn:x" id="D"></semantic:definitions>'],
+  ['atributos en varias líneas', '<bpmn:definitions\n  xmlns:bpmn="urn:x"\n  id="D">\n</bpmn:definitions>'],
+  ['exporter ajeno con comillas simples', `<definitions id="D" exporter='Camunda Modeler'></definitions>`],
+  ['exporterVersion antes que exporter', '<definitions exporterVersion="9.9" exporter="Camunda" id="D"></definitions>'],
+])('marca la etiqueta definitions %s una sola vez', (_caso, xml) => {
+  const marcado = marcarExportador(xml);
+
+  expect(marcado).toContain(`exporter="Lila Modeler"`);
+  expect(marcado).toContain(`exporterVersion="${VERSION_MOTOR}"`);
+  expect(marcado.match(/\sexporter=/g)).toHaveLength(1);
+  expect(marcado.match(/\sexporterVersion=/g)).toHaveLength(1);
+  // Volver a marcar un archivo ya marcado no duplica atributos ni cambia nada.
+  expect(marcarExportador(marcado)).toBe(marcado);
+});
+
+test('marcar una etiqueta `definitions` autocerrada deja XML que moddle sigue leyendo', async () => {
+  // Un `<definitions ... />` sin hijos es lo que serializa bpmn-moddle para un modelo vacío;
+  // escribir el atributo antes del `>` a secas dejaba `... / exporter="…">`, ya no XML.
+  const vacio =
+    '<?xml version="1.0" encoding="UTF-8"?>\n<bpmn:definitions ' +
+    'xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1" ' +
+    'targetNamespace="urn:lila:test" />';
+  const marcado = marcarExportador(vacio);
+
+  expect(marcado).toContain(`exporterVersion="${VERSION_MOTOR}" />`);
+  await expect(BpmnModdle().fromXML(marcado)).resolves.toBeDefined();
+});
+
+test('marcar un export de Bizagi no cambia nada del IR salvo el exporter', async () => {
+  for (const archivo of [
+    'examples/pedido/model.bpmn',
+    ...BIZAGI,
+  ]) {
+    const original = leer(archivo);
+    const antes = await parseBpmn(original);
+    const despues = await parseBpmn(marcarExportador(original));
+    const sinExporter = (p: typeof antes): unknown => ({
+      ...p,
+      ir: { ...p.ir, source: { ...p.ir.source, exporter: '', exporterVersion: '' } },
+    });
+
+    expect(sinExporter(despues), archivo).toEqual(sinExporter(antes));
+    expect(despues.ir.source.exporterVersion, archivo).toBe(VERSION_MOTOR);
+  }
 });
