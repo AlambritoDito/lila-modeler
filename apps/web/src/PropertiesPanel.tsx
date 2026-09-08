@@ -521,7 +521,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
           return (
             <div className="fila" key={i}>
               <select
-                aria-label="Tipo de responsabilidad"
+                aria-label={`Tipo de responsabilidad ${i + 1}`}
                 value={tipo}
                 onChange={(e) => {
                   editarExtension(escritor, elemento, responsabilidad, { type: e.target.value });
@@ -541,7 +541,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
               </select>
               <input
                 type="text"
-                aria-label="Rol"
+                aria-label={`Rol ${i + 1}`}
                 placeholder="id del rol"
                 value={responsabilidad.roleRef ?? ''}
                 onChange={(e) => {
@@ -553,7 +553,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
                 type="button"
                 className="quitar"
                 title="Quitar responsabilidad"
-                aria-label="Quitar responsabilidad"
+                aria-label={`Quitar responsabilidad ${i + 1}`}
                 onClick={() => {
                   quitarExtension(escritor, elemento, responsabilidad);
                   refrescar();
@@ -608,7 +608,7 @@ function ListaDeReferencias({
         <div className="fila" key={i}>
           <input
             type="text"
-            aria-label={etiqueta}
+            aria-label={`${etiqueta} ${i + 1}`}
             placeholder={ayuda}
             value={referencia.ref ?? ''}
             onChange={(e) => {
@@ -619,8 +619,8 @@ function ListaDeReferencias({
           <button
             type="button"
             className="quitar"
-            title={`Quitar de ${etiqueta.toLowerCase()}`}
-            aria-label={`Quitar de ${etiqueta.toLowerCase()}`}
+            title={`Quitar de ${etiqueta.toLowerCase()} ${i + 1}`}
+            aria-label={`Quitar de ${etiqueta.toLowerCase()} ${i + 1}`}
             onClick={() => {
               quitarExtension(escritor, elemento, referencia);
               refrescar();
