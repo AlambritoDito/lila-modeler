@@ -1,5 +1,10 @@
 appId: net.perfer.lila-modeler
 productName: Lila Modeler
+# El nombre del paquete (@lila/desktop) no sirve como nombre de ejecutable: el
+# @ y la / rompen el AppImage en Linux ("executableName contains characters
+# that cannot be safely used in file paths"). Fijamos un nombre válido en las
+# tres plataformas (#73); productName y artifactName no cambian.
+executableName: lila-modeler
 directories:
   output: release
 files:

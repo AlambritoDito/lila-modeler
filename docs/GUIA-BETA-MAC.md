@@ -200,8 +200,9 @@ El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web
 
 - `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg` — el instalador.
 - `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg.blockmap`.
-- `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
-  probar rápido.
+- `apps/desktop/release/mac-arm64/lila-modeler.app` — la app sin empaquetar en DMG, útil para
+  probar rápido (el nombre del `.app` y del ejecutable interno salen de `executableName` en
+  `electron-builder.yml`, no de `productName`; el DMG sigue mostrando "Lila Modeler").
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,
   escrito por `apps/desktop/scripts/origen.mjs` al final de `dist:mac`.
 
@@ -219,7 +220,7 @@ npm run pack:mac -w @lila/desktop   # mismo build, pero --dir en vez de --mac
 Verificación mínima de que el paquete arranca, sin abrir ventana:
 
 ```bash
-LILA_SMOKE=1 "apps/desktop/release/mac-arm64/Lila Modeler.app/Contents/MacOS/Lila Modeler"
+LILA_SMOKE=1 "apps/desktop/release/mac-arm64/lila-modeler.app/Contents/MacOS/lila-modeler"
 ```
 
 Imprime un JSON (`lienzo`, `tema`, `fuente`, `puente`, `consoleErrors`, `loadFailure`, `ok`) y
