@@ -348,10 +348,12 @@ describe('(6) utilización con capacidad por tramos', () => {
   });
 
   test('R-ARR-7: un caso nacido antes del `warmup` no cuenta en el numerador aunque ocupe el pool', () => {
-    // Hallazgo documentado, no defecto de LILA-164: la ventana `[warmup, t_stop]` del denominador
-    // es de reloj (R-CAL-9) mientras que el numerador solo suma casos medidos (R-ARR-7). Un pool
-    // ocupado al 100 % por un caso anterior al warmup reporta utilización 0. Pasa igual con
-    // `capacity` numérica y `calendar`, así que es de M3 y se deja fijado aquí, no corregido.
+    // Decisión de contrato (R-CAL-9, LILA-204), no defecto de LILA-164: la utilización es
+    // atribuible a la cohorte medida. El numerador solo suma casos nacidos tras el `warmup`
+    // (R-ARR-7) y el denominador conserva toda la capacidad disponible de `[warmup, t_stop]`, así
+    // que un pool ocupado al 100 % por un caso de calentamiento reporta 0. Descontar esa ocupación
+    // del denominador mezclaría cohortes y dejaría de medir capacidad disponible. Pasa igual con
+    // `capacity` numérica y `calendar`, y se fija aquí en las dos formas.
     const scenario = ocupadoSiempre(4 * HOUR); // 04:00 del lunes, dentro del turno de noche
     const metrics = aggregateReplication(IR_SIMPLE, runReplication(IR_SIMPLE, scenario), scenario);
     expect(metrics.resources.agente!.busyTime).toBe(0);
@@ -549,5 +551,35 @@ describe('(10) coste del evento de subida de capacidad', () => {
     const elapsed = Date.now() - t0;
     expect(casos).toBeGreaterThan(200000);
     expect(elapsed, `${elapsed} ms`).toBeLessThan(10000);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * (11) Guardias internos de `calendar.ts` sin código de catálogo
+ * ------------------------------------------------------------------ */
+
+describe('(11) guardias internos de `compileCapacity` y `nextCapacityRise` (LILA-204)', () => {
+  const mensajeDe = (accion: () => unknown): string => {
+    try {
+      accion();
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    throw new Error('se esperaba un error y no lo hubo');
+  };
+
+  test('no llevan `E-REC-CAPACIDAD`: son invariantes de la API, no errores del escenario', () => {
+    // El escenario con la lista vacía lo caza antes `core/sim.ts` con el pool citado (§ 17); aquí
+    // no hay pool que citar y el código de catálogo solo confundía a quien lo buscase en § 17.
+    expect(mensajeDe(() => compileCapacity([], 0))).toBe(
+      'compileCapacity: hace falta al menos un tramo de capacidad.',
+    );
+    // `nextCapacityRise` solo se llama con horario no constante; con uno constante es un fallo del
+    // llamador, no del escenario.
+    const constante = compileCapacity([{ calendar: undefined, capacity: 2 }], 0);
+    expect(constante.constant).toBe(2);
+    expect(mensajeDe(() => nextCapacityRise(constante, 0))).toBe(
+      'nextCapacityRise: la capacidad no sube nunca; el horario debería ser constante.',
+    );
   });
 });
