@@ -435,6 +435,20 @@ it('una ruta que llega con una E/S en curso avisa en vez de descartarse', async 
   await act(async () => { guardado.resolve(null); });
 });
 
+it('una ruta que llega con el diálogo de cambios sin guardar abierto no pisa la acción pendiente', async () => {
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(proyecto('p11', 'Nunca'));
+  const puente = puenteConRutas(null);
+  await remontar();
+  await act(async () => mocks.changed());
+  await click('Nuevo'); // deja `pendingAction = 'new'` con el diálogo abierto.
+  await act(async () => { puente.emitir({ dir: '/p/cinco', file: 'ventas.bpmn' }); });
+  expect(container.textContent).toContain('No se abrió "ventas.bpmn"');
+  // «Descartar» sigue haciendo lo que el usuario pidió (Nuevo), no la ruta que llegó en medio.
+  await click('Descartar');
+  expect(session.createProject).toHaveBeenCalledOnce();
+  expect((session as unknown as { openRecent: ReturnType<typeof vi.fn> }).openRecent).not.toHaveBeenCalled();
+});
+
 it('desmontar da de baja la suscripción a onOpenPath', async () => {
   const puente = puenteConRutas(null);
   await remontar();
