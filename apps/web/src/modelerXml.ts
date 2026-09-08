@@ -1,6 +1,7 @@
 import { marcarExportador, sanitizeXmlIds } from '@lila/engine/bpmn';
 
 const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
+const XML_ATTR_NOMBRADO = /\s([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const XML_TEXT = />([^<>]*)</g;
 const TOPOLOGY_PROPERTIES = new Set([
   'bpmn:sourceRef',
@@ -9,6 +10,11 @@ const TOPOLOGY_PROPERTIES = new Set([
   'bpmn:flowNodeRef',
   'bpmn:default',
 ]);
+/**
+ * Referencias que bpmn-moddle resuelve por id y descarta si no las encuentra: no llegan al
+ * árbol, así que al reserializar desaparecen del archivo (LILA-192).
+ */
+const REFERENCIAS_POR_ID = new Set(['messageRef', 'dataStoreRef', 'categoryValueRef', 'dataObjectRef']);
 
 export interface ImportableBpmn {
   importXML(xml: string): Promise<{ warnings: readonly unknown[] }>;
@@ -20,11 +26,16 @@ export interface ImportacionPreparada<T> {
   originalIds: Map<string, string>;
   avisos: readonly unknown[];
   perdidas: string[];
+  /** Ids que el original referencia sin declararlos: se pierden al exportar (LILA-192). */
+  refsRotas: string[];
 }
 
 export interface OpcionesExportacion {
-  /** Solo una acción explícita del usuario puede pedir la decisión visible. */
-  interactivo?: boolean;
+  /**
+   * El usuario ya leyó la lista de pérdidas en el diálogo de `App.tsx` y dijo que sí. Es la
+   * única forma de exportar con pérdida: nadie decide por él, ni siquiera guardar (LILA-192).
+   */
+  aceptarPerdida?: boolean;
 }
 
 function warningMessage(warning: unknown): string {
@@ -52,6 +63,28 @@ export function advertenciasDePerdida(warnings: readonly unknown[]): string[] {
 }
 
 /**
+ * Ids referenciados por `messageRef`, `dataStoreRef` o `categoryValueRef` que el propio archivo
+ * no declara (LILA-192). bpmn-moddle no los puede resolver y los deja fuera del árbol, así que
+ * el XML exportado ya no los lleva: el usuario tiene que enterarse antes de descargar. Se lee el
+ * XML de origen —no el árbol— justamente porque ahí es donde todavía están.
+ *
+ * ponytail: comparación textual de atributos, como el resto de este módulo; no hay parser XML
+ * en la app web. Techo: un id declarado dentro de un CDATA o de un comentario contaría como
+ * declarado. Siguiente paso, si molesta: leerlos del `rootElement` de moddle.
+ */
+export function referenciasRotas(xml: string): string[] {
+  const declarados = new Set<string>();
+  const referidos: string[] = [];
+  for (const coincidencia of xml.matchAll(XML_ATTR_NOMBRADO)) {
+    const valor = (coincidencia[2] ?? coincidencia[3]) as string;
+    const local = (coincidencia[1] as string).replace(/^[^:]*:/, '');
+    if (local === 'id') declarados.add(valor);
+    else if (REFERENCIAS_POR_ID.has(local)) referidos.push(valor);
+  }
+  return [...new Set(referidos)].filter((id) => !declarados.has(id));
+}
+
+/**
  * Importa en una instancia candidata. El llamador conserva la instancia activa hasta que esta
  * promesa resuelva, y por tanto un fallo no puede borrar ni su XML ni su command stack.
  */
@@ -68,6 +101,7 @@ export async function prepararImportacionTransaccional<T extends ImportableBpmn>
       originalIds: preparado.sanitizedToOriginal,
       avisos: warnings,
       perdidas: advertenciasDePerdida(warnings),
+      refsRotas: referenciasRotas(xml),
     };
   } catch (error: unknown) {
     candidato.destroy();
@@ -102,24 +136,18 @@ export function restaurarXmlIds(xml: string, originalIds: ReadonlyMap<string, st
 }
 
 /**
- * Bloquea snapshots y simulaciones silenciosamente ante pérdida. Solo una exportación explícita
- * puede abrir la decisión visible y continuar después de aceptarla.
+ * Corta **toda** exportación con pérdida que el usuario no haya aceptado: el XML que alimenta a
+ * la simulación, el snapshot con el que guardar reescribe `model.bpmn` y la descarga anterior al
+ * diálogo. `aceptarPerdida` es exactamente el «sí» del diálogo de `App.tsx` (LILA-192), que es
+ * donde se lee la lista de lo que se pierde; sin ese sí, aquí se lanza.
  */
 export function autorizarExportacion(
   perdidas: readonly string[],
   opciones: OpcionesExportacion = {},
-  confirmar: (mensaje: string) => boolean = (mensaje) => window.confirm(mensaje),
 ): void {
-  if (perdidas.length === 0) return;
+  if (perdidas.length === 0 || opciones.aceptarPerdida === true) return;
   const detalle = perdidas.map((warning) => `• ${warning}`).join('\n');
-  if (opciones.interactivo !== true) {
-    throw new Error(`Exportación bloqueada por contenido perdido:\n${detalle}`);
-  }
-  const continuar = confirmar(
-    `El archivo original contenía referencias o elementos que no se pudieron importar. ` +
-      `Si exportas ahora, ese contenido se perderá:\n\n${detalle}\n\n¿Exportar de todos modos?`,
-  );
-  if (!continuar) throw new Error(`Exportación cancelada por contenido perdido:\n${detalle}`);
+  throw new Error(`Exportación bloqueada por contenido perdido:\n${detalle}`);
 }
 
 /**

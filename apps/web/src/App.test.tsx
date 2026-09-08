@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // sustituye por una lista fija para poder mirar los chips sin montar el panel de verdad.
   problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
   // LILA-207: los servicios que la paleta usa para insertar una figura.
-  fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn() }));
+  fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
+  // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
+  // callback para poder empujar un estado de lienzo concreto desde los tests.
+  publicarEstado: (_estado: unknown) => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
@@ -25,8 +28,8 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
     return null;
   } }));
-vi.mock('./Modeler', () => ({ Lienzo: ({ onListo }: { onListo: (model: Modelador) => void }) => {
-  useEffect(() => { onListo({
+vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
+  useEffect(() => { mocks.publicarEstado = onEstado; onListo({
     exportar: mocks.exportXml, abrir: async () => true, cuellos: vi.fn(), ajustar: mocks.ajustar, zoom: mocks.zoom,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
@@ -75,7 +78,7 @@ beforeEach(async () => {
   mocks.exportXml.mockResolvedValue(newModelXml());
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
   mocks.crearFigura.mockImplementation((figura: object) => figura);
-  session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn() } as unknown as ProjectSessionStore;
+  session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn(), putProcess: vi.fn(async () => {}) } as unknown as ProjectSessionStore;
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   // Modo «Simular»: deja abierta la pestaña Simulación del panel derecho.
@@ -392,4 +395,161 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
   expect(figuras().find((b) => b.title === 'Tarea de usuario')).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+// --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---
+
+const ESTADO_CON_PERDIDA = {
+  zoom: 1, elementos: 12, avisos: 3, error: null,
+  perdidas: ['unresolved reference <Flow_inexistente>'],
+  refsRotas: ['Message_1373655174960', 'DS1373655174514'],
+};
+const dialogoPerdida = (): HTMLDialogElement | null => container.querySelector('.confirmar-perdida');
+/** «Cancelar» existe también en la barra de simulación: los botones se buscan dentro del diálogo. */
+function enDialogo(dialogo: HTMLDialogElement, etiqueta: string): HTMLButtonElement {
+  const boton = [...dialogo.querySelectorAll('button')].find((b) => b.textContent === etiqueta);
+  expect(boton, etiqueta).toBeDefined();
+  return boton!;
+}
+
+it('la pérdida al importar se ve como error con los ids, y el resto sigue siendo el contador de avisos', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+  const pie = container.querySelector('.estado')!;
+  const alerta = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('error'))!;
+  expect(alerta).toBeDefined();
+  expect(alerta.textContent).toContain('3 elementos o referencias se perderán al exportar');
+  expect(alerta.textContent).toContain('Message_1373655174960');
+  expect(alerta.textContent).toContain('DS1373655174514');
+  expect(alerta.textContent).toContain('Flow_inexistente');
+  // De los 3 avisos del import, 1 implicaba pérdida y ya se cuenta arriba: quedan 2.
+  const aviso = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('aviso'))!;
+  expect(aviso.textContent).toContain('2 avisos al importar');
+});
+
+it('sin pérdida, exportar descarga directamente y no abre ningún diálogo', async () => {
+  await click('Exportar .bpmn');
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.putProcess).toHaveBeenCalledOnce();
+});
+
+it('con pérdida, exportar pide confirmación: cancelar no descarga y aceptar sí', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  await click('Exportar .bpmn');
+  const dialogo = dialogoPerdida()!;
+  expect(dialogo).not.toBeNull();
+  expect(dialogo.textContent).toContain('Se perderán 3 referencias que el archivo original ya tenía rotas');
+  expect([...dialogo.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+    'unresolved reference <Flow_inexistente>', 'Message_1373655174960', 'DS1373655174514',
+  ]);
+  expect(session.putProcess).not.toHaveBeenCalled();
+
+  await act(async () => { [...dialogo.querySelectorAll('button')].find((b) => b.textContent === 'Cancelar')!.click(); });
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.putProcess).not.toHaveBeenCalled();
+
+  await click('Exportar .bpmn');
+  await act(async () => { [...dialogoPerdida()!.querySelectorAll('button')].find((b) => b.textContent === 'Exportar igualmente')!.click(); });
+  expect(session.putProcess).toHaveBeenCalledOnce();
+  expect(dialogoPerdida()).toBeNull();
+});
+
+it('sin pérdida, guardar escribe directamente y no abre ningún diálogo', async () => {
+  await click('Guardar');
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+// QA de #258: guardar reescribe `model.bpmn` en disco, así que no puede aceptar la pérdida por
+// el usuario. Pasa por el mismo diálogo que exportar, con el verbo de la acción que espera.
+it('con pérdida, guardar pide la misma confirmación: cancelar no escribe nada y aceptar guarda una vez', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  await click('Guardar');
+  const dialogo = dialogoPerdida()!;
+  expect(dialogo).not.toBeNull();
+  expect([...dialogo.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Guardar igualmente', 'Cancelar']);
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  await act(async () => { enDialogo(dialogo, 'Cancelar').click(); });
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  // El atajo llega al mismo sitio que el botón: `guardar()` es el único camino al disco.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true })); });
+  expect(dialogoPerdida()).not.toBeNull();
+  await act(async () => { enDialogo(dialogoPerdida()!, 'Guardar igualmente').click(); });
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(dialogoPerdida()).toBeNull();
+});
+
+// QA de #258: el cierre de Electron pide guardar por `onSaveRequested` y espera un booleano. El
+// diálogo se ve —la ventana sigue abierta—, y cancelar devuelve `false`, que `closeGuard` lee
+// como «no se guardó» y le hace cancelar el cierre: nada se escribe y nada se queda colgado.
+it.each([
+  ['Cancelar', false, 0],
+  ['Guardar igualmente', true, 1],
+] as const)('cerrar con pérdida espera el diálogo; «%s» devuelve %s al puente', async (accion, esperado, guardados) => {
+  let pedirGuardado!: () => Promise<boolean>;
+  await act(async () => root.unmount());
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  root = createRoot(container);
+  await act(async () => root.render(<App store={conCierre} />));
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  let resultado: boolean | 'pendiente' = 'pendiente';
+  await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
+  expect(dialogoPerdida()).not.toBeNull();
+  expect(resultado).toBe('pendiente');
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  await act(async () => { enDialogo(dialogoPerdida()!, accion).click(); });
+  expect(resultado).toBe(esperado);
+  expect(session.saveProject).toHaveBeenCalledTimes(guardados);
+});
+
+// QA de #258 (ronda 2): Escape dispara el `cancel` nativo del `<dialog>`; si no resolviera la
+// espera, el cierre de Electron se quedaría 30 s colgado antes de cancelarse. Resuelve «cancelar».
+it('Escape en el diálogo de pérdida resuelve la espera con «cancelar» y no escribe nada', async () => {
+  let pedirGuardado!: () => Promise<boolean>;
+  await act(async () => root.unmount());
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  root = createRoot(container);
+  await act(async () => root.render(<App store={conCierre} />));
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  let resultado: boolean | 'pendiente' = 'pendiente';
+  await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
+  await act(async () => { dialogoPerdida()!.dispatchEvent(new Event('cancel', { cancelable: true })); });
+  expect(resultado).toBe(false);
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).not.toHaveBeenCalled();
+});
+
+// QA de #258 (ronda 2): el diálogo bloquea el ratón, pero no los atajos ni los aceleradores del
+// menú nativo. Abrir o crear un proyecto mientras espera cambiaría el documento por debajo.
+it('con el diálogo de pérdida abierto, Cmd+O y Cmd+N no tocan el proyecto', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+  await click('Guardar');
+  expect(dialogoPerdida()).not.toBeNull();
+
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true })); });
+  expect(session.openProject).not.toHaveBeenCalled();
+  expect(dialogoPerdida()).not.toBeNull();
+
+  // Contestado el diálogo, la puerta se abre otra vez.
+  await act(async () => { enDialogo(dialogoPerdida()!, 'Cancelar').click(); });
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
+  expect(session.openProject).toHaveBeenCalledOnce();
+});
+
+// QA: con una sola referencia el texto va en singular, en el pie y en el diálogo.
+it('el aviso de pérdida concuerda en singular', async () => {
+  await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 4, avisos: 1, error: null, perdidas: [], refsRotas: ['Message_1'] }); });
+  const pie = container.querySelector('.estado')!;
+  expect(pie.textContent).toContain('1 elemento o referencia se perderá al exportar: Message_1');
+  expect(pie.textContent).toContain('1 aviso al importar');
+  await click('Exportar .bpmn');
+  expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe('Se perderá 1 referencia que el archivo original ya tenía rota');
 });
