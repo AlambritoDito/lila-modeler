@@ -9,8 +9,8 @@
  * El ranking **no se recalcula aquí**: se recorre `result.bottlenecks` tal cual, que ya viene
  * ordenado por `resourceWait.total` con desempate por utilización (docs/RESULTS_FORMAT.md §6) y
  * ya trae la `utilization` del recurso principal de cada elemento. Lo único que hace el overlay
- * es **cortarlo** (ver `TECHO`): pinta los cuellos de nivel `high`, o las tres primeras si no
- * hay ninguno, y nunca más de cinco. Así el overlay, la tarjeta de
+ * es **cortarlo** (ver `TECHO`): pinta siempre el rango 0 y los cuellos de nivel `high`, o las
+ * tres primeras si no hay ninguno, y nunca más de cinco. Así el overlay, la tarjeta de
  * `ResultsView` (LILA-062) y `lila run` coinciden siempre, y el escenario solo se usa para saber
  * en qué unidad presentar los tiempos.
  *
@@ -126,10 +126,17 @@ function esperaCorta(seconds: number): string {
 }
 
 /**
- * Cuántas tareas del ranking se pintan (#226). Decisión: solo las de nivel `high` —las que
- * esperan más de lo que trabajan, que son las que el usuario vino a buscar—; si no hay ninguna,
- * las tres primeras del ranking, para que el lienzo no se quede mudo justo después de simular; y
- * nunca más de `TECHO`, porque cada entrada añade una etiqueta flotante sobre el diagrama.
+ * Cuántas tareas del ranking se pintan (#226). Decisión: el rango 0 **siempre**, sea cual sea su
+ * nivel —es el que nombra el panel derecho y el único que lleva halo—, más las de nivel `high`
+ * —las que esperan más de lo que trabajan, que son las que el usuario vino a buscar—; si no hay
+ * ninguna alta, las tres primeras del ranking, para que el lienzo no se quede mudo justo después
+ * de simular; y nunca más de `TECHO`, porque cada entrada añade una etiqueta flotante sobre el
+ * diagrama.
+ *
+ * El rango 0 se trata aparte porque `bottlenecks` viene ordenado por `resourceWait.total` y el
+ * nivel sale del ratio `resourceWait.mean / processing.mean`: son dos ordenaciones distintas, así
+ * que el primero del ranking puede ser `mid` mientras otro es `high`. Filtrar solo por nivel
+ * dejaba al principal sin pintar y sin halo, con el panel derecho nombrando una tarea invisible.
  *
  * // ponytail: techo fijo de 5 y sin control en la UI. El siguiente paso, cuando alguien pida
  * // ver más (o menos), es un campo «cuántos cuellos pintar» en Ajustes que alimente este corte.
@@ -171,7 +178,10 @@ export function overlayModel(result: RunResult, scenario: ResolvedScenario): Ove
     ]);
   }
   const altas = entradas.filter(([, entry]) => entry.nivel === 'high');
-  return Object.fromEntries((altas.length > 0 ? altas : entradas.slice(0, SIN_ALTAS)).slice(0, TECHO));
+  const corte = altas.length > 0 ? altas : entradas.slice(0, SIN_ALTAS);
+  const principal = entradas[0];
+  if (principal !== undefined && !corte.includes(principal)) corte.unshift(principal);
+  return Object.fromEntries(corte.slice(0, TECHO));
 }
 
 /* ------------------------------------------------------------------ *

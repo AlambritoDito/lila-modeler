@@ -60,10 +60,14 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 ### Cuántos cuellos pinta el overlay
 
 Decisión de #226, frente al artboard 4, que sugiere una etiqueta por tarea: el overlay pinta
-**solo los cuellos de nivel `high`** —los que esperan más de lo que trabajan, que son los que se
-vino a buscar— y, **si no hay ninguno, las tres primeras del ranking**, para que el lienzo no se
-quede mudo justo después de simular; **nunca más de cinco**, porque cada entrada es una etiqueta
-flotante encima del diagrama. El ranking no se recalcula: el corte respeta el orden de
+**siempre el cuello principal** (el rango 0, sea cual sea su nivel) y **los cuellos de nivel
+`high`** —los que esperan más de lo que trabajan, que son los que se vino a buscar— y, **si no
+hay ninguno alto, las tres primeras del ranking**, para que el lienzo no se quede mudo justo
+después de simular; **nunca más de cinco**, porque cada entrada es una etiqueta
+flotante encima del diagrama. El principal va aparte porque el ranking ordena por
+`resourceWait.total` mientras el nivel sale del ratio espera/proceso: son dos ordenaciones
+distintas, así que sin esa excepción un principal de nivel `mid` se quedaba sin pintar y sin halo
+mientras el panel derecho seguía nombrándolo. El ranking no se recalcula: el corte respeta el orden de
 `result.bottlenecks` (`docs/RESULTS_FORMAT.md` §6), así que el overlay, la tabla de Resultados y
 `lila run` siguen coincidiendo. Las tareas que quedan fuera del lienzo siguen en la tabla de
 Resultados con sus cifras completas. La etiqueta se redondea para caber sobre la tarea (65 px

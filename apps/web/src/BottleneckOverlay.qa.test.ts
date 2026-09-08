@@ -222,9 +222,10 @@ describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
     expect(model['Task_Baja']?.nivel).toBe('low');
   });
 
-  // Y el otro lado de `RATIO_HIGH`: un ratio de exactamente 1 ya es `high`, así que el corte
-  // deja fuera a la que espera un pelo menos que su propio tiempo de proceso.
-  it('un ratio de exactamente 1 es alto y desplaza del lienzo a la de ratio 0,99', () => {
+  // Y el otro lado de `RATIO_HIGH`: un ratio de exactamente 1 ya es `high`, mientras que 0,99 se
+  // queda en `mid`. Task_CasiAlta se pinta igual, pero por ser el rango 0 (el corte de #226
+  // incluye siempre al principal), no por su nivel — de ahí que se afirmen los dos niveles.
+  it('un ratio de exactamente 1 es alto y el de 0,99 se queda en mid', () => {
     const model = overlayModel(
       resultadoFalso([
         { espera: 99, id: 'Task_CasiAlta', proceso: 100, total: 990, utilizacion: 0.5 },
@@ -233,7 +234,9 @@ describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
       escenario('min'),
     );
 
-    expect(Object.keys(model)).toEqual(['Task_Alta']);
+    expect(Object.keys(model)).toEqual(['Task_CasiAlta', 'Task_Alta']);
+    expect(model['Task_CasiAlta']?.nivel).toBe('mid');
+    expect(model['Task_CasiAlta']?.principal).toBe(true);
     expect(model['Task_Alta']?.nivel).toBe('high');
     expect(model['Task_Alta']?.rango).toBe(1);
   });

@@ -288,6 +288,21 @@ describe('corte del ranking (#226)', () => {
 
     expect(Object.keys(model)).toEqual(['T0', 'T1', 'T2', 'T3', 'T4']);
   });
+
+  // `bottlenecks` ordena por `resourceWait.total` y el nivel sale del ratio espera/proceso: el
+  // rango 0 puede ser `mid` mientras otro es `high`. Filtrar solo por nivel dejaba al principal
+  // sin pintar (y sin halo) mientras el panel derecho lo seguía nombrando.
+  it('el principal se pinta aunque no sea de nivel alto', () => {
+    const model = modelo([
+      { espera: 60, id: 'Rango0_mid', proceso: 160, utilizacion: 0.9 },
+      { espera: 50, id: 'Rango1_high', proceso: 10, utilizacion: 0.5 },
+    ]);
+
+    expect(Object.keys(model)).toEqual(['Rango0_mid', 'Rango1_high']);
+    expect(model['Rango0_mid']?.nivel).toBe('mid');
+    expect(model['Rango0_mid']?.principal).toBe(true);
+    expect(model['Rango1_high']?.nivel).toBe('high');
+  });
 });
 
 describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
@@ -306,6 +321,22 @@ describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
     expect(falso.pintar('Task_Revisar').fill).toBe('var(--sim-bottleneck-high)');
     // Un elemento fuera del ranking lo sigue dibujando el renderer por defecto.
     expect(falso.pintar('Gateway_1')).toEqual({});
+  });
+
+  // El halo del principal no puede depender de su nivel (#226, hallazgo del QA en el PR #260).
+  it('marca el principal con el halo aunque su nivel sea `mid`', () => {
+    const filas = [
+      { espera: 60, id: 'Rango0_mid', proceso: 160, utilizacion: 0.9 },
+      { espera: 50, id: 'Rango1_high', proceso: 10, utilizacion: 0.5 },
+    ];
+    const falso = modeladorFalso(filas.map((f) => f.id));
+
+    applyOverlay(falso.modeler, corridaDe(filas));
+
+    expect(falso.etiquetas.map((e) => e.id)).toEqual(['Rango0_mid', 'Rango1_high']);
+    expect([...falso.marcadores.keys()]).toEqual(['Rango0_mid']);
+    expect([...(falso.marcadores.get('Rango0_mid') ?? [])]).toEqual(['lila-bottleneck-principal']);
+    expect(falso.pintar('Rango0_mid').fill).toBe('var(--sim-bottleneck-mid)');
   });
 
   // El motor sanitiza los ids que no son NCName válido y `RunResult` queda keyed por el
