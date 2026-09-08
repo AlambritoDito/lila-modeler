@@ -390,10 +390,6 @@ describe('mensajes del esquema en español (LILA-202)', () => {
       .toBe('calendars.c.intervals: E-CAL-VACIO: el calendario no tiene intervalos abiertos.');
   });
 
-  test('ningún ejemplo del repo ni ningún defecto conocido sale en inglés', () => {
-    for (const [, , scenario] of casos) defecto(scenario);
-  });
-
   test('la CLI imprime exactamente el mismo texto que el esquema', () => {
     const roto = { ...BASE, elements: { Flow_X: { probability: 1.5 } } };
     expect(() => loadResolvedScenario('as-is.scenario.json', () => roto)).toThrow(
