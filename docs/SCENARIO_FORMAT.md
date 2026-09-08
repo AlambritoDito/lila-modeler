@@ -197,7 +197,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | R13 | `intervals[].to > intervals[].from`; una ventana que cruza medianoche se declara como dos intervalos. `to` admite además `"24:00"` (medianoche del día siguiente); `from` no. |
 | R14 | `selection` solo tiene sentido con `resources`; declararlo sin recursos es error. |
 | R15 | `extends`: la ruta debe resolver a un archivo existente y la cadena no puede tener ciclos (§ 6). |
-| R16 | `resources[*].capacity` por intervalos y `resources[*].calendar` son **excluyentes**: el calendario ya va en cada tramo y declarar los dos deja sin definir cuál manda. Error `E-CAPACIDAD-Y-CALENDARIO` citando el pool. Cada `capacity[i].capacity` es entero ≥ 1 y la lista no puede estar vacía (`E-REC-CAPACIDAD`). |
+| R16 | `resources[*].capacity` por intervalos y `resources[*].calendar` son **excluyentes**: el calendario ya va en cada tramo y declarar los dos deja sin definir cuál manda. Error `E-CAPACIDAD-Y-CALENDARIO` citando el pool. Cada `capacity[i].capacity` es entero ≥ 1 y la lista no puede estar vacía (`E-REC-CAPACIDAD`). **El JSON Schema no puede expresar esta regla**: `docs/scenario.schema.json` se genera desde zod y el `anyOf` de `capacity` no ve al hermano `calendar`, así que un pool con los dos pasa el schema y solo lo rechaza `validateScenario` (o el guardia de `core/sim.ts`). Quien valide únicamente con el schema —un editor, un CI ajeno— tiene que correr además el lint. Fijado en test (LILA-204). |
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
