@@ -140,8 +140,9 @@ function requireFlatName(dir: string, name: unknown, suffix: string, label: stri
 const MODEL_FILE = 'model.bpmn';
 
 /**
- * `file` opcional de `lila:openRecent` (LILA-072): el `.bpmn` que el usuario pulsó, cuando no es
- * el `model.bpmn` del proyecto. `undefined` (o `null`) es "abre el `model.bpmn` de siempre".
+ * Nombre de `.bpmn` opcional del puente (LILA-072): el `file` de `lila:openRecent` (el archivo que
+ * el usuario pulsó) y el `options.modelFile` de `lila:writeProject` (aquel en el que hay que
+ * guardar). `undefined` (o `null`) es "el `model.bpmn` de siempre".
  */
 function requireBpmnName(dir: string, value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
@@ -217,7 +218,7 @@ function requireSafeFileNames(dir: string, document: ProjectDocument): void {
 }
 
 /** `{}` si `value` es `undefined`; valida forma mínima en cualquier otro caso. */
-function requireWriteOptions(value: unknown): WriteProjectOptions {
+function requireWriteOptions(dir: string, value: unknown): WriteProjectOptions {
   if (value === undefined) return {};
   if (typeof value !== 'object' || value === null) {
     throw new Error('E-ARGUMENTO: "options" debe ser un objeto.');
@@ -229,11 +230,19 @@ function requireWriteOptions(value: unknown): WriteProjectOptions {
   if (opts.overwrite !== undefined && typeof opts.overwrite !== 'boolean') {
     throw new Error('E-ARGUMENTO: "options.overwrite" debe ser booleano.');
   }
+  if (opts.diagramOnly !== undefined && typeof opts.diagramOnly !== 'boolean') {
+    throw new Error('E-ARGUMENTO: "options.diagramOnly" debe ser booleano.');
+  }
+  // Mismo filtro que el `file` de `openRecent`: nombre plano `.bpmn` dentro de la carpeta
+  // autorizada (LILA-072). El renderer manda aquí el archivo con el que se abrió el proyecto.
+  const modelFile = requireBpmnName(dir, opts.modelFile);
   // `exactOptionalPropertyTypes`: no asignar `undefined` explícito a una propiedad opcional,
   // solo omitirla.
   const result: WriteProjectOptions = {};
   if (typeof opts.saveAs === 'boolean') (result as { saveAs?: boolean }).saveAs = opts.saveAs;
   if (typeof opts.overwrite === 'boolean') (result as { overwrite?: boolean }).overwrite = opts.overwrite;
+  if (typeof opts.diagramOnly === 'boolean') (result as { diagramOnly?: boolean }).diagramOnly = opts.diagramOnly;
+  if (modelFile !== undefined) (result as { modelFile?: string }).modelFile = modelFile;
   return result;
 }
 
@@ -356,9 +365,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
-      const { document, problems } = await readProjectFolder(dir);
+      const { document, problems, loose } = await readProjectFolder(dir);
       await recordRecent(dir, document.name);
-      return { ...document, problems };
+      return { ...document, problems, loose };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;
@@ -371,7 +380,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     async (_event, dirArg: unknown, documentArg: unknown, optionsArg: unknown): Promise<void> => {
       const dir = await requireAuthorizedDir(dirArg);
       const document = requireProjectDocument(documentArg);
-      const options = requireWriteOptions(optionsArg);
+      const options = requireWriteOptions(dir, optionsArg);
       requireSafeFileNames(dir, document);
       try {
         await writeProjectFolder(dir, document, options);
@@ -414,12 +423,12 @@ function registerIpcHandlers(win: BrowserWindow): void {
     authorizedFolders.add(real);
     const file = requireBpmnName(real, fileArg);
     try {
-      const { document, problems } = await readProjectFolder(real, file);
+      const { document, problems, loose } = await readProjectFolder(real, file);
       // Recientes guarda CARPETAS (`listRecents`/menú Archivo), así que reabrir desde ahí siempre
       // volvería al `model.bpmn`. Anotar la carpeta de un `.bpmn` suelto prometería algo que la
       // lista no puede cumplir (hallazgo 6 del QA), así que solo entra el modelo del proyecto.
       if (file === undefined || file === MODEL_FILE) await recordRecent(real, document.name);
-      return { ...document, problems };
+      return { ...document, problems, loose };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;

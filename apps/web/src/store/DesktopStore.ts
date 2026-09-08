@@ -57,6 +57,14 @@ export class DesktopStore implements ProjectSessionStore {
   /** Último documento leído/escrito con éxito; respalda los métodos históricos de abajo. */
   private activeDocument: ProjectDocument | null = null;
   private problems: readonly ProjectProblem[] = [];
+  /**
+   * `.bpmn` con el que se abrió el proyecto activo, cuando no es el `model.bpmn` de la carpeta
+   * (LILA-072, hallazgo 7 del QA): un guardado normal escribe en ESE archivo. `undefined` es
+   * `model.bpmn`, que es también lo que dejan «Nuevo», «Abrir…» y «Guardar como».
+   */
+  private activeModelFile: string | undefined = undefined;
+  /** `true` si el proyecto activo es un diagrama suelto (carpeta sin `lila-project.json`). */
+  private activeLoose = false;
 
   constructor(bridge: LilaBridge = requireWindowLila()) {
     this.bridge = bridge;
@@ -81,6 +89,8 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = [];
+    this.activeModelFile = undefined;
+    this.activeLoose = false;
     return document;
   }
 
@@ -92,6 +102,8 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = problems;
+    this.activeModelFile = undefined;
+    this.activeLoose = false;
     return document;
   }
 
@@ -141,9 +153,23 @@ export class DesktopStore implements ProjectSessionStore {
     // Si `writeProject` rechaza (incluido `E-CARPETA-OCUPADA` en "destino nuevo", o
     // `E-CAMBIO-EXTERNO` sin `overwrite`), la promesa de aquí rechaza también y ni `activeDir` ni
     // `activeDocument` cambian: solo tras un `writeProject` exitoso se confirma la carpeta.
-    await this.bridge.writeProject(dir, document, { saveAs: isNewDestination, overwrite: options?.overwrite === true });
+    // Un guardado normal va al `.bpmn` con el que se abrió el proyecto (LILA-072, hallazgo 7 del
+    // QA): sin esto, abrir `ventas.bpmn` y pulsar ⌘S pisaba el `model.bpmn` de al lado con el
+    // diagrama de ventas y dejaba `ventas.bpmn` con la versión vieja. Un "destino nuevo"
+    // («Guardar como», o el primer guardado) es siempre un proyecto completo con su `model.bpmn`,
+    // así que ahí no se reenvía ni el archivo ni lo de "diagrama suelto".
+    await this.bridge.writeProject(dir, document, {
+      saveAs: isNewDestination,
+      overwrite: options?.overwrite === true,
+      ...(isNewDestination || this.activeModelFile === undefined ? {} : { modelFile: this.activeModelFile }),
+      ...(isNewDestination || !this.activeLoose ? {} : { diagramOnly: true }),
+    });
     this.activeDir = dir;
     this.activeDocument = document;
+    if (isNewDestination) {
+      this.activeModelFile = undefined;
+      this.activeLoose = false;
+    }
     return document;
   }
 
@@ -184,6 +210,8 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = problems;
+    this.activeModelFile = file;
+    this.activeLoose = raw.loose === true;
     return document;
   }
 

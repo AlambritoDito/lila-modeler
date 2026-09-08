@@ -4,7 +4,7 @@
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
 import { describe, expect, it } from 'vitest';
-import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
+import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import type { ProjectDocument } from './ProjectStore';
 
@@ -28,7 +28,7 @@ class FakeBridge implements LilaBridge {
   readonly version = 'test';
 
   private readonly chooseFolderQueue: (string | null)[] = [];
-  readonly writes: { dir: string; document: ProjectDocument; options?: { saveAs?: boolean; overwrite?: boolean } }[] = [];
+  readonly writes: { dir: string; document: ProjectDocument; options?: WriteProjectOptions }[] = [];
   writeShouldFail = false;
   readProjectImpl: ((dir: string) => Promise<LilaProjectDocument>) | null = null;
   readonly dirtyHistory: boolean[] = [];
@@ -53,11 +53,7 @@ class FakeBridge implements LilaBridge {
     return this.readProjectImpl(dir);
   }
 
-  async writeProject(
-    dir: string,
-    document: ProjectDocument,
-    options?: { saveAs?: boolean; overwrite?: boolean },
-  ): Promise<void> {
+  async writeProject(dir: string, document: ProjectDocument, options?: WriteProjectOptions): Promise<void> {
     if (this.writeShouldFail) throw new Error('E-FALLO-SIMULADO: escritura rechazada por el test.');
     this.writes.push(options === undefined ? { dir, document } : { dir, document, options });
   }
@@ -434,6 +430,49 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     await store.openRecent('/carpeta/pedido');
 
     expect(visto).toEqual(['ventas.bpmn', undefined]);
+  });
+
+  it('guardado normal tras abrir otro .bpmn: escribe en ESE archivo (LILA-072, hallazgo 7 del QA)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [] });
+
+    await store.openRecent('/carpeta/pedido', 'ventas.bpmn');
+    await store.saveProject(documentoBase({ name: 'v2' }));
+
+    // Sin `modelFile`, el XML de ventas acabaría en el `model.bpmn` de al lado.
+    expect(bridge.writes.at(-1)?.options).toEqual({ saveAs: false, overwrite: false, modelFile: 'ventas.bpmn' });
+  });
+
+  it('guardado normal de un diagrama suelto: solo el .bpmn (diagramOnly)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+
+    await store.openRecent('/carpeta/descargas', 'ventas.bpmn');
+    await store.saveProject(documentoBase({ name: 'v2' }));
+
+    expect(bridge.writes.at(-1)?.options).toEqual({
+      saveAs: false,
+      overwrite: false,
+      modelFile: 'ventas.bpmn',
+      diagramOnly: true,
+    });
+  });
+
+  it('«Guardar como» de un diagrama suelto crea el proyecto completo y olvida el archivo suelto', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    bridge.queueChooseFolder('/carpeta/elegida');
+
+    await store.openRecent('/carpeta/descargas', 'ventas.bpmn');
+    await store.saveProject(documentoBase(), { saveAs: true });
+    expect(bridge.writes.at(-1)?.options).toEqual({ saveAs: true, overwrite: false });
+
+    // Y el guardado siguiente ya es el de un proyecto normal en la carpeta elegida.
+    await store.saveProject(documentoBase({ name: 'v3' }));
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/elegida', options: { saveAs: false, overwrite: false } });
   });
 
   it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {

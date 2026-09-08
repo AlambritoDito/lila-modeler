@@ -408,6 +408,20 @@ it('un .bpmn suelto (carpeta sin escenarios) abre con el AS-IS por defecto y sin
   expect(pie.textContent).toContain('AS-IS');
 });
 
+it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de advertirlo (LILA-072)', async () => {
+  const suelto = { ...proyecto('p12', 'Suelto'), scenarios: {}, loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  const pie = container.querySelector('.estado')!;
+  expect(pie.textContent).toContain('Diagrama suelto');
+  expect(pie.textContent).toContain('Guardar como');
+
+  await act(async () => { puente.menu('guardarComo'); });
+  expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: true });
+  expect(pie.textContent).not.toContain('Diagrama suelto');
+});
+
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
   mocks.retrasarLienzo = true;
   const abrirReciente = vi.fn().mockResolvedValue(proyecto('p8', 'Tardío'));

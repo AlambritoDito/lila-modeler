@@ -186,6 +186,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [projectName, setProjectName] = useState('Pedido de ejemplo');
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
   const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
+  /** Diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto (LILA-072). */
+  const [suelto, setSuelto] = useState(false);
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
@@ -324,6 +326,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const token = changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
       const saved = await adapter.saveProject(doc, { saveAs });
       if (saved === null) return false;
+      // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
+      if (saveAs) setSuelto(false);
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
@@ -341,6 +345,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
     setProjectProblems(doc.problems ?? []);
+    setSuelto(doc.loose === true);
     if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
@@ -931,6 +936,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         >
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
+        {suelto && (
+          <span className="aviso">
+            Diagrama suelto: los escenarios no se guardan hasta «Guardar como»
+          </span>
+        )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">

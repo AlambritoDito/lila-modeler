@@ -24,6 +24,13 @@ export const LILA_PLATFORM = 'desktop';
  */
 export interface LilaProjectDocument extends ProjectDocument {
   readonly problems: readonly ProjectProblem[];
+  /**
+   * `true` si lo abierto es un diagrama suelto (LILA-072): un `.bpmn` que no es el `model.bpmn` de
+   * la carpeta y cuya carpeta no tiene `lila-project.json`. El renderer lo dice en el pie y lo
+   * devuelve como `options.diagramOnly` al guardar, para que un ⌘S no siembre la carpeta del
+   * usuario con un proyecto entero.
+   */
+  readonly loose?: boolean;
 }
 
 export interface LilaBridge {
@@ -107,6 +114,10 @@ export type MenuAction =
 export interface WriteProjectOptions {
   readonly saveAs?: boolean;
   readonly overwrite?: boolean;
+  /** `.bpmn` donde va el XML; por defecto `model.bpmn` (LILA-072, ver `projectIO.ts`). */
+  readonly modelFile?: string;
+  /** `true` para escribir SOLO ese `.bpmn` (diagrama suelto): sin manifiesto, escenarios ni corridas. */
+  readonly diagramOnly?: boolean;
 }
 
 /** Entrada de `listRecents()`: carpeta autorizable de nuevo sin diálogo, y cuándo se abrió. */

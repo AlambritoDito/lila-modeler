@@ -73,6 +73,11 @@ export interface ProjectDocument {
   readonly runs: readonly StoredRun[];
   /** Archivos inválidos preservados por el adaptador; visibles al abrir. */
   readonly problems?: readonly { readonly file: string; readonly message: string }[];
+  /**
+   * `true` si esto es un diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto
+   * (LILA-072, solo `DesktopStore`). Guardar escribe únicamente ese `.bpmn`; el pie lo advierte.
+   */
+  readonly loose?: boolean;
 }
 /** Snapshot coherente; null es cancelación, error rechaza la promesa. */
 export interface ProjectSessionStore extends ProjectStore {

@@ -530,3 +530,74 @@ describe('writeProjectFolder — transaccional (OP-08, revisión de A, issue #71
     expect(document.name).toBe('Pedido v2');
   });
 });
+
+describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072, hallazgo 7 del QA)', () => {
+  const XML_VENTAS = '<?xml version="1.0"?><definitions xmlns="http://example.org" id="Ventas"/>';
+
+  it('(a) proyecto Lila abierto por ventas.bpmn: guarda EN ventas.bpmn y deja model.bpmn intacto', async () => {
+    await writeProjectFolder(dir, documentoBase()); // proyecto de verdad: manifiesto + model.bpmn.
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+
+    const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(loose).toBe(false); // hay `lila-project.json`: sigue siendo un proyecto Lila.
+
+    const editado = `${XML_VENTAS}<!-- editado -->`;
+    await writeProjectFolder(
+      dir,
+      { ...document, model: { ...document.model, xml: editado } },
+      { modelFile: 'ventas.bpmn' },
+    );
+
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(editado);
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(XML_MINIMO);
+    // Es un proyecto: el resto se guarda igual que siempre, solo cambia a qué `.bpmn` va el XML.
+    expect(await readFile(join(dir, 'lila-project.json'), 'utf8')).toContain('"ventas.bpmn"');
+    expect(await readFile(join(dir, 'as-is.scenario.json'), 'utf8')).toContain('AS-IS');
+  });
+
+  it('ventas.bpmn cambiado en disco desde que se abrió: E-CAMBIO-EXTERNO, sin escribir nada', async () => {
+    await writeProjectFolder(dir, documentoBase());
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+
+    const externo = `${XML_VENTAS}<!-- otro proceso, y más largo -->`;
+    await writeFile(join(dir, 'ventas.bpmn'), externo, 'utf8');
+
+    const error = await captureError(() =>
+      writeProjectFolder(dir, { ...document, model: { ...document.model, xml: 'otra cosa' } }, { modelFile: 'ventas.bpmn' }),
+    );
+    expect((error as ProjectIOError).code).toBe('E-CAMBIO-EXTERNO');
+    expect((error as ProjectIOError).message).toContain('ventas.bpmn');
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(externo);
+  });
+
+  it('(b) diagrama suelto: un guardado normal escribe SOLO ese .bpmn', async () => {
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(loose).toBe(true);
+
+    const run: StoredRun = {
+      id: 'run-suelto',
+      scenarioName: 'as-is.scenario.json',
+      result: { kpis: {} },
+      inputs: { modelRevision: 0, scenarioRevision: 0, xml: XML_VENTAS, scenario: { version: 1 } },
+    };
+    const editado = `${XML_VENTAS}<!-- editado -->`;
+    await writeProjectFolder(
+      dir,
+      { ...document, model: { ...document.model, xml: editado }, scenarios: documentoBase().scenarios, runs: [run] },
+      { modelFile: 'ventas.bpmn', diagramOnly: true },
+    );
+
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(editado);
+    // Ni manifiesto, ni `model.bpmn`, ni escenarios, ni `runs/`: la carpeta del usuario no se
+    // convierte en un proyecto por pulsar ⌘S sobre un `.bpmn` que estaba ahí suelto.
+    expect(await readdir(dir)).toEqual(['ventas.bpmn']);
+  });
+
+  it('un model.bpmn puesto a mano (carpeta sin manifiesto) NO es un diagrama suelto', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    const { loose } = await readProjectFolder(dir);
+    expect(loose).toBe(false);
+  });
+});
