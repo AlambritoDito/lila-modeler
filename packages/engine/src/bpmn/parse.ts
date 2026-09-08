@@ -437,14 +437,39 @@ const DISCARDED_ID = /(?:illegal|duplicate) ID <([^>]+)>/;
  */
 const DETECTED_AT = /detected line: (\d+) column: (\d+)/;
 
+/** Espacio de nombres de BPMN 2.0, el único cuyos `process` delimitan un proceso del archivo. */
+const BPMN_NS = 'http://www.omg.org/spec/BPMN/20100524/MODEL';
+
+/** Declaraciones que atan un prefijo —o el espacio por defecto— al espacio de nombres de BPMN. */
+const XMLNS_BPMN = new RegExp(`xmlns(?::([\\w.-]+))?\\s*=\\s*["']${BPMN_NS}["']`, 'g');
+
 /**
- * Apertura (con sus atributos capturados) o cierre de un `<…:process …>`, con cualquier prefijo
- * de espacio de nombres. Global: barre el XML entero, no línea a línea.
+ * Comentarios, CDATA e instrucciones de proceso: los únicos sitios donde un `<` crudo no abre un
+ * elemento. Se tapan con espacios (conservando los saltos de línea, y por tanto las posiciones)
+ * para que un `<!-- <bpmn:process id="Falso"> -->` no invente un tramo.
  */
-const PROCESS_TAG = /<(?:[\w.-]+:)?process(?![\w.-])([^>]*)>|<\/(?:[\w.-]+:)?process\s*>/g;
+const NO_ES_MARKUP = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g;
 
 /** `id` del `<…:process>`, con comillas dobles o simples (las dos son XML válido). */
 const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+
+/**
+ * Apertura (con sus atributos capturados) o cierre de un `<…:process …>` **de BPMN**, con el
+ * prefijo (o la ausencia de prefijo) que declare este archivo: un `<x:process>` de una extensión
+ * ajena no abre ni cierra tramo. Global: barre el XML entero, no línea a línea. Si el archivo no
+ * declara el espacio de nombres de forma legible, acepta cualquier prefijo, que es lo de antes.
+ */
+function processTagRegex(xml: string): RegExp {
+  const prefijos = [
+    ...new Set(
+      [...xml.matchAll(XMLNS_BPMN)].map((m) =>
+        m[1] === undefined ? '' : `${m[1].replace(/[.-]/g, '\\$&')}:`,
+      ),
+    ),
+  ];
+  const ns = prefijos.length === 0 ? '(?:[\\w.-]+:)?' : `(?:${prefijos.join('|')})`;
+  return new RegExp(`<${ns}process(?![\\w.-])([^>]*)>|</${ns}process\\s*>`, 'g');
+}
 
 /** `bpmn:Process` que contiene al elemento, subiendo por `$parent`. */
 function ownerProcessId(el: ModdleElement | undefined): string | undefined {
@@ -468,16 +493,20 @@ function ownerProcessId(el: ModdleElement | undefined): string | undefined {
  * nunca se despacha como “de otro proceso”.
  *
  * ponytail: los tramos se buscan con regex, no recorriendo el XML. Techo: un `>` dentro del
- * valor de un atributo del propio `<process …>` cortaría el tramo antes de tiempo. Camino: si
- * aparece un export real así, tomar los offsets del propio lector (saxen) en vez del texto.
+ * valor de un atributo del propio `<process …>`, o un `<bpmn:process>` dentro del subconjunto
+ * interno de un `<!DOCTYPE …>`, cortarían el tramo donde no toca. Camino: si aparece un export
+ * real así, tomar los offsets del propio lector (saxen) en vez del texto.
  */
 function warningProcessLocator(
   xml: string,
   simulatedProcessId: string,
 ): (message: string) => string | undefined {
+  // Los tramos se buscan sobre el XML con lo que no es markup tapado; las posiciones no se mueven
+  // porque el relleno conserva la longitud y los saltos de línea.
+  const markup = xml.replace(NO_ES_MARKUP, (t) => t.replace(/[^\n]/g, ' '));
   const spans: { start: number; end: number; id: string | undefined }[] = [];
   let open: { start: number; id: string | undefined } | undefined;
-  for (const tag of xml.matchAll(PROCESS_TAG)) {
+  for (const tag of markup.matchAll(processTagRegex(markup))) {
     const attrs = tag[1];
     const end = tag.index + tag[0].length;
     if (attrs === undefined) {

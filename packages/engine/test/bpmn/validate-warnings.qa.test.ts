@@ -336,6 +336,37 @@ test.each([
   expect(errors.filter((e) => e.code === 'E-PARSE-INCOMPLETO')).toMatchObject([{ id: 'Flow_4' }]);
 });
 
+/**
+ * Tercera vuelta del QA (#249): el barrido de tramos no puede fiarse de cualquier texto que
+ * parezca un `<…:process>`. Un comentario, un CDATA o un elemento `process` de un espacio de
+ * nombres ajeno **dentro** del proceso simulado partían el tramo en dos, y la pérdida real que
+ * venía detrás salía como “aviso de otro proceso” con `lila validate` en verde.
+ */
+test.each([
+  ['un comentario con un <bpmn:process> dentro', '    <!-- <bpmn:process id="Falso"> -->\n'],
+  [
+    'un CDATA con un <bpmn:process> dentro',
+    '    <bpmn:documentation><![CDATA[<bpmn:process id="Falso">]]></bpmn:documentation>\n',
+  ],
+  [
+    'un <x:process> de un espacio de nombres ajeno',
+    '    <bpmn:extensionElements xmlns:x="urn:lila:x"><x:process id="Falso"><x:dato /></x:process></bpmn:extensionElements>\n',
+  ],
+  [
+    'un <x:process /> ajeno autocerrado',
+    '    <bpmn:extensionElements xmlns:x="urn:lila:x"><x:process id="Falso" /></bpmn:extensionElements>\n',
+  ],
+])(
+  '%s no despista al localizador: la pérdida del simulado sigue abortando (LILA-196)',
+  async (_caso, ruido) => {
+    const parsed = await parseBpmn(dosProcesos({ enSim: `${ruido}${FLUJO_DUPLICADO}` }));
+    const { errors } = validate(parsed.ir, { unsupported: parsed.unsupported });
+
+    expect(parsed.ir.id).toBe('Process_Sim');
+    expect(errors.filter((e) => e.code === 'E-PARSE-INCOMPLETO')).toMatchObject([{ id: 'Flow_4' }]);
+  },
+);
+
 // (E), en todas las formas de XML que el QA probó: el duplicado vive en el pool que Lila no
 // simula, así que nunca puede abortar la corrida del que sí, y el aviso nombra el pool.
 test.each([
