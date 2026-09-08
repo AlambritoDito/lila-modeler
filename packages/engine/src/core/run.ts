@@ -6,7 +6,7 @@
  */
 
 import type { ProcessIR } from './ir.js';
-import { aggregateReplication } from './metrics.js';
+import { aggregateReplication, saturationWarning, type PoolLoad } from './metrics.js';
 import { summarizeRunResults } from './replications.js';
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
 import {
@@ -116,6 +116,37 @@ function meanRunResults(results: readonly RunResult[]): RunResult {
 }
 
 /**
+ * LILA-191: la saturación es una propiedad del pool y de la **corrida**, no de la réplica, así
+ * que se decide una sola vez sobre la media de las cantidades. Deduplicar los avisos de cada
+ * réplica no serviría: bastaría con que una sola cruzara el umbral por azar (con ρ = 0,8 y 30
+ * réplicas, unas cinco lo hacen) para que el aviso saliera en la corrida entera.
+ */
+function saturationWarnings(loads: readonly Map<string, PoolLoad>[]): string[] {
+  const warnings: string[] = [];
+  if (loads.length === 0) return warnings;
+  for (const poolId of loads[0]!.keys()) {
+    const total: PoolLoad = { demand: 0, served: 0, pending: 0, capacity: 0, firstHalf: 0, secondHalf: 0 };
+    for (const load of loads) {
+      const entry = load.get(poolId);
+      if (entry === undefined) continue;
+      total.demand += entry.demand;
+      total.served += entry.served;
+      total.pending += entry.pending;
+      total.capacity += entry.capacity;
+      total.firstHalf += entry.firstHalf;
+      total.secondHalf += entry.secondHalf;
+    }
+    // Las medias comparten denominador, así que basta dividir donde el umbral no es una razón.
+    total.capacity /= loads.length;
+    total.firstHalf /= loads.length;
+    total.secondHalf /= loads.length;
+    const warning = saturationWarning(poolId, total);
+    if (warning !== undefined) warnings.push(warning);
+  }
+  return warnings;
+}
+
+/**
  * Simula una o más replicaciones. Una replicación incompleta nunca entra a
  * `replications.kpis`, evitando intervalos de confianza estadísticamente inválidos.
  */
@@ -131,6 +162,8 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     options.log === false || options.onEvent !== undefined ? undefined : [];
   const totalReplications = scenario.run.replications ?? 1;
   const completed: RunResult[] = [];
+  // LILA-191: la evidencia de saturación de cada réplica incluida, en el mismo orden.
+  const loads: Map<string, PoolLoad>[] = [];
   let partial: RunResult | undefined;
   let lastFraction = -1;
 
@@ -180,14 +213,17 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     // Solo el modo retenido conserva las filas más allá de la iteración; en los otros dos el
     // `ReplicationRun` entero queda libre al cerrarla, así que el pico es el de una replicación.
     if (log !== undefined) for (const row of run.rows) log.push(row);
-    const result = aggregateReplication(ir, run, scenario);
+    const load = new Map<string, PoolLoad>();
+    const result = aggregateReplication(ir, run, scenario, load);
 
     if (run.cancelled === true) {
       partial = result;
+      loads.push(load);
       break;
     }
 
     completed.push(result);
+    loads.push(load);
     emitProgress({
       replication,
       completedReplications: completed.length,
@@ -202,6 +238,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   // El IC, en cambio, se calcula más abajo solo con `completed`.
   const included = partial === undefined ? completed : [...completed, partial];
   const result = included.length === 1 ? included[0]! : meanRunResults(included);
+  for (const warning of saturationWarnings(loads)) result.warnings.push(warning);
 
   if (completed.length > 1) result.replications = summarizeRunResults(completed);
   if (cancelled) {
