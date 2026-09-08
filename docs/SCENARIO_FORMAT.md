@@ -47,7 +47,7 @@ No se aceptan claves desconocidas en la raíz (`strict`): un campo mal escrito e
 | `duration` | number (segundos) | no² | — | Duración simulada. Corta la corrida. |
 | `warmup` | number (segundos) | no | `0` | Los casos **iniciados** antes de `warmup` se excluyen de las estadísticas (siguen consumiendo recursos). |
 | `replications` | integer ≥ 1 | no | `1` | Corridas independientes. Con `> 1` el resultado trae `mean`, `sd` e `ic95` por KPI. Bizagi recomienda 30. |
-| `seed` | integer | no | `1` | Semilla del PRNG. Determinismo byte a byte por `(seed, replicación, elementId)` (ADR-017). |
+| `seed` | integer | no | `1` | Semilla del PRNG. Determinismo byte a byte por `(seed, replicación, elementId)` (ADR-017). El default lo aplica el motor, no el esquema: sin declararla sale el aviso `W-SIN-SEED` (R-DEG-4). |
 | `baseTimeUnit` | `"s"` \| `"min"` \| `"h"` \| `"day"` | no | `"s"` | **Solo presentación**: en qué unidad se imprimen los tiempos. No cambia ni un número interno. |
 | `currency` | string ISO 4217 | no | — | Moneda de los costos. Si falta, los importes se reportan sin símbolo. |
 
@@ -128,7 +128,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `interTriggerTimer` | distribución (§ 3) | starts (incluido el start con timer) | — | Tiempo entre llegadas, en segundos. |
 | `triggerCount` | integer ≥ 1 | starts (incluido el start con timer) | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
 | `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3). |
-| `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. |
+| `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. El rango lo comprueba el lint (`E-PROB-RANGO`), no el esquema. |
 
 Nota sobre elementos ausentes: un elemento del diagrama que no aparece en `elements` es válido y toma sus defaults (tarea sin tiempo ni recursos, flujo con reparto equitativo). `elements` es un mapa de excepciones, no un espejo obligatorio del modelo.
 
@@ -185,7 +185,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | **R1** | Todos los tiempos van en **segundos**, salvo `run.start`. |
 | **R2** | `baseTimeUnit` **solo afecta a la presentación**. |
 | **R3** | Las claves de `elements` **deben existir en el IR**: si falta, **error** citando el `id`; si sobra en el IR (elemento del modelo sin parámetros), **warning**. |
-| **R4** | `probability` solo en **sequence flows**. |
+| **R4** | `probability` solo en **sequence flows** (en un nodo es `E-PROB-EN-NODO`). |
 | **R5** | `interTriggerTimer` / `triggerCount` solo en **starts**, incluido el `bpmn:startEvent` con `timerEventDefinition` (que `SEMANTICS.md` § 2 mapea a `start`). Un `bpmn:intermediateCatchEvent` con timer es retardo, nunca generador: los dos campos ahí son `E-CAMPO-NO-APLICA`. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
 | **R6** | Al menos uno de `run.duration` o un `triggerCount` **en un start** (el de un elemento que no genera no cuenta como parada). Con `triggerCount` a solas la corrida termina al vaciarse el heap. |
 | R7 | `version` debe ser `1`; la raíz y todos los objetos son estrictos (clave desconocida ⇒ error). |
@@ -201,7 +201,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
-Los defectos del **esquema** (los que caza zod antes de R3–R16: tipo equivocado, fuera de rango, clave desconocida, variante inexistente) salen en español y citan la ruta — `elements.Flow_Aprobado.probability: debe ser ≤ 1` —, con el mismo texto en la CLI, en el MCP y en el panel de escenario. El catálogo es `erroresEnEspanol` en `packages/engine/src/scenario.ts`, y `parseScenario` es la única puerta que lo aplica; lo que ese mapa no traduce cae en la locale `es` de zod. Los mensajes propios de este documento (R8, R11, R13, `E-CAL-VACIO`…) los escribe el esquema y mandan sobre el mapa. Los errores y avisos **semánticos** son otra cosa: los define el catálogo § 17 de `docs/SEMANTICS.md`.
+Los defectos del **esquema** (los que caza zod antes de R3–R16: tipo equivocado, fuera de rango, clave desconocida, variante inexistente) salen en español y citan la ruta — `run.warmup: debe ser ≥ 0` —, con el mismo texto en la CLI, en el MCP y en el panel de escenario. El catálogo es `erroresEnEspanol` en `packages/engine/src/scenario.ts`, y `parseScenario` es la única puerta que lo aplica; lo que ese mapa no traduce cae en la locale `es` de zod. Única excepción: la clave desconocida sale en la CLI con el texto de § 17 (`E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: …`, que pone `schemaIssueLines`), porque el catálogo de § 17 manda sobre el mapa. Los mensajes propios de este documento (R8, R11, R13, `E-CAL-VACIO`…) los escribe el esquema y mandan sobre el mapa. Los errores y avisos **semánticos** son otra cosa: los define el catálogo § 17 de `docs/SEMANTICS.md`.
 
 ---
 

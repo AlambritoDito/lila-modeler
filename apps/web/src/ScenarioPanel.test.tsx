@@ -30,7 +30,9 @@ import {
   duplicarEscenario,
   borrar,
   escribir,
+  esquemaDe,
   problemasEscenario,
+  valorVacio,
   type Contexto,
   type EsquemaJson,
   ScenarioPanel,
@@ -232,20 +234,20 @@ describe('validación en vivo', () => {
     pulsar('Flow_Aprobado');
     teclear('campo-elements.Flow_Aprobado.probability', '1.5');
 
-    // El texto es el del esquema, no uno inventado por el panel, y es el mismo que imprimen la
-    // CLI y el MCP: en español y citando la ruta (LILA-202).
+    // El texto es el del validador, no uno inventado por el panel. Desde LILA-198 el rango de
+    // `probability` lo comprueba el lint (`E-PROB-RANGO`, § 17 de SEMANTICS) y no el esquema.
     const roto = escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5);
-    const parsed = parseScenario(roto);
-    expect(parsed.success).toBe(false);
-    const esperado = parsed.error!.issues.find(
-      (i) => i.path.join('.') === 'elements.Flow_Aprobado.probability',
+    const parsed = ScenarioSchema.safeParse(roto);
+    expect(parsed.success).toBe(true);
+    const esperado = validateScenario(parsed.data!, ir).find(
+      (problema) => problema.path === 'elements.Flow_Aprobado.probability',
     )!;
-    expect(esperado.message).toBe('debe ser ≤ 1');
+    expect(esperado.code).toBe('E-PROB-RANGO');
     expect(document.body.textContent).toContain(esperado.message);
     // La ruta viaja con el problema (es la que marca el campo y la que imprimen CLI y MCP).
     expect(problemasEscenario(roto, ir)).toContainEqual({
       ruta: 'elements.Flow_Aprobado.probability',
-      mensaje: 'debe ser ≤ 1',
+      mensaje: esperado.message,
       severidad: 'error',
     });
 
@@ -368,6 +370,19 @@ describe('extends', () => {
   const escenarios = (): Record<string, Json> => ({
     'as-is.scenario.json': asIsCorto(),
     'to-be-3-cajeros.scenario.json': leerJson('examples/pedido/to-be-3-cajeros.scenario.json'),
+  });
+
+  // LILA-198 quitó el `.default(1)` de `run.seed` del esquema zod para poder avisar `W-SIN-SEED`.
+  // El panel no lee el default de zod sino el del JSON Schema publicado, que es una **anotación**:
+  // sin él `valorVacio` cae al `minimum` del entero seguro y añadir la semilla escribiría
+  // -9007199254740991 en el archivo. El default sigue en el JSON Schema por `.meta({ default: 1 })`.
+  it('añadir `run.seed` escribe 1, no el mínimo del entero seguro (LILA-198)', () => {
+    const seed = esquemaDe('run').properties?.['seed'];
+    expect(seed?.default).toBe(1);
+    expect(valorVacio(seed!)).toBe(1);
+    // Y el default sigue siendo solo anotación: zod no lo aplica, que es lo que hace posible el aviso.
+    const resuelto = ScenarioSchema.parse({ version: 1, name: 'x', model: 'model.bpmn', run: { start: '2026-09-07T08:00:00Z', duration: 10 } });
+    expect(resuelto.run?.seed).toBeUndefined();
   });
 
   it('editar un valor heredado deja en el hijo solo ese campo', () => {

@@ -200,7 +200,7 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   console.log(`Escenario ${scenario.name}`);
   console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
   console.log(
-    `Semilla ${scenario.run.seed} · Replicaciones ${scenario.run.replications} · Unidad de tiempo ${unit}` +
+    `Semilla ${scenario.run.seed ?? 1} · Replicaciones ${scenario.run.replications} · Unidad de tiempo ${unit}` +
       (currency === undefined ? '' : ` · Moneda ${currency}`),
   );
 
@@ -573,7 +573,7 @@ function printCompareResult(
         String(index),
         compareColumnHeader(entry.scenario.name, index),
         entry.file,
-        formatNumber(entry.scenario.run.seed),
+        formatNumber(entry.scenario.run.seed ?? 1),
         formatNumber(entry.scenario.run.replications),
       ]),
     ),

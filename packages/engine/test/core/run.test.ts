@@ -194,7 +194,11 @@ describe('simulate (LILA-029)', () => {
 
     const result = publicSimulate(IR, input);
 
-    expect(result.warnings).toEqual(['W-TAREA-SIN-TIEMPO: A: sin processingTime; dura 0 segundos. (3 veces)']);
+    // El escenario se queda sin ningún `processingTime`, así que el aviso es el agregado de
+    // R-DEG-3 (LILA-198): uno solo, con los ids, y el mismo en las dos replicaciones.
+    expect(result.warnings).toEqual([
+      'W-TAREA-SIN-TIEMPO: A: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.',
+    ]);
   });
 
   test('promedia la utilización del cuello solo en las réplicas donde aparece', () => {

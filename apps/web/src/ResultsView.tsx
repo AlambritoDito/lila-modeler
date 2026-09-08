@@ -518,7 +518,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 12px' }}>
-        Escenario {scenario.name} · semilla {scenario.run.seed} · replicaciones{' '}
+        Escenario {scenario.name} · semilla {scenario.run.seed ?? 1} · replicaciones{' '}
         {scenario.run.replications} · unidad de tiempo {unit}
         {scenario.run.currency === undefined ? '' : ` · moneda ${scenario.run.currency}`}
       </p>

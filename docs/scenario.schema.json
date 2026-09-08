@@ -46,10 +46,10 @@
           "maximum": 9007199254740991
         },
         "seed": {
-          "default": 1,
           "type": "integer",
           "minimum": -9007199254740991,
-          "maximum": 9007199254740991
+          "maximum": 9007199254740991,
+          "default": 1
         },
         "baseTimeUnit": {
           "default": "s",
@@ -939,9 +939,7 @@
             "type": "string"
           },
           "probability": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1
+            "type": "number"
           },
           "priority": {},
           "preempt": {},

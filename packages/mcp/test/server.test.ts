@@ -356,8 +356,9 @@ test('los defectos del esquema salen en español, con el mismo texto que la CLI 
   const roto = join(tmpdir(), `lila-mcp-es-${process.pid}.scenario.json`);
   writeFileSync(roto, JSON.stringify({
     version: 1, name: 'malo', model: pedidoBpmn,
-    run: { start: '2026-01-01T08:00:00Z', duration: 3600 },
-    elements: { Flow_Aprobado: { probability: 1.5 } },
+    // `probability: 1.5` ya no sirve de cebo del esquema (LILA-198 se la pasó al lint):
+    // `run.warmup` negativo sí lo sigue siendo.
+    run: { start: '2026-01-01T08:00:00Z', duration: 3600, warmup: -1 },
   }));
   try {
     // `describe_process` (lectura del escenario) y `run_simulation` (carga completa) son las dos
@@ -366,11 +367,11 @@ test('los defectos del esquema salen en español, con el mismo texto que la CLI 
       name: 'describe_process',
       arguments: { path: pedidoBpmn, scenario: roto },
     });
-    expect(textOf(descripcion)).toContain('elements.Flow_Aprobado.probability: debe ser ≤ 1');
+    expect(textOf(descripcion)).toContain('run.warmup: debe ser ≥ 0');
 
     const corrida = await client.callTool({ name: 'run_simulation', arguments: { scenario: roto } });
     expect(corrida.isError).toBe(true);
-    expect(textOf(corrida)).toContain('elements.Flow_Aprobado.probability: debe ser ≤ 1');
+    expect(textOf(corrida)).toContain('run.warmup: debe ser ≥ 0');
     expect(textOf(corrida)).not.toMatch(/Too big|expected/i);
   } finally {
     rmSync(roto, { force: true });
@@ -445,7 +446,10 @@ test('run_simulation: structuredContent repite el texto, sin log, y valida contr
 test('run_simulation: un escenario inline inválido no cita un archivo que no existe', async () => {
   const result = await client.callTool({
     name: 'run_simulation',
-    arguments: { scenario: { ...barato(), elements: { Flow_Aprobado: { probability: 1.5 } } } },
+    // Una errata de clave: la rechaza el esquema (`E-CLAVE-DESCONOCIDA`) antes de resolver nada,
+    // que es el camino donde antes se colaba el nombre de un archivo inexistente. (Un
+    // `probability: 1.5` ya no sirve de cebo: desde LILA-198 lo caza el lint, no el esquema.)
+    arguments: { scenario: { ...barato(), elements: { Flow_Aprobado: { probabilty: 1.5 } } } },
   });
   expect(result.isError).toBe(true);
   expect(textOf(result)).toContain('escenario inline: escenario inválido');

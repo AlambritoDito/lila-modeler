@@ -31,6 +31,7 @@ import type { BaseTimeUnit } from './format.js';
 import {
   resolveExtends,
   parseScenario,
+  schemaIssueLines,
   type ResolvedScenario,
   type ScenarioProblem,
   type ScenarioReader,
@@ -69,11 +70,7 @@ export function loadResolvedScenario(file: string, read: ScenarioReader = readJs
   const raw = resolveExtends(file, read);
   const parsed = parseScenario(raw);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => {
-      const path = issue.path.length === 0 ? '$' : issue.path.map(String).join('.');
-      return `${path}: ${issue.message}`;
-    });
-    throw new Error(`${file}: escenario inválido:\n${issues.join('\n')}`);
+    throw new Error(`${file}: escenario inválido:\n${schemaIssueLines(parsed.error.issues).join('\n')}`);
   }
   if (parsed.data.model === undefined) throw new Error(`${file}: el escenario resuelto no declara model.`);
   if (parsed.data.run === undefined) throw new Error(`${file}: el escenario resuelto no declara run.`);
@@ -153,7 +150,7 @@ export function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: B
     );
   }
 
-  const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed));
+  const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed ?? 1));
   if (seeds.size > 1) {
     lines.push(
       `los escenarios corren con semillas distintas (${[...seeds].join(', ')}): se pierden los números ` +

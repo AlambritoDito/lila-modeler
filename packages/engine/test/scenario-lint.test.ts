@@ -12,7 +12,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { ProcessIR } from '../src/core/ir.js';
 import { runReplication, type SimScenario } from '../src/core/sim.js';
-import { RunSchema, ScenarioSchema, scenarioErrors, validateScenario } from '../src/scenario.js';
+import { RunSchema, ScenarioSchema, scenarioErrors, schemaIssueLines, validateScenario } from '../src/scenario.js';
 import { pedidoIr } from './pedido.fixtures.js';
 
 /** IR mínimo: un start y un XOR con `outs` salidas (una por end), para ejercitar R-XOR-1…5. */
@@ -475,3 +475,113 @@ function pedidoIrWithTask(taskId: string): ProcessIR {
     nodes: { ...ir.nodes, [taskId]: { type: 'task', name: '', incoming: [], outgoing: [] } },
   };
 }
+
+/**
+ * LILA-198 — los seis códigos que § 17 listaba como contrato y el código no emitía con ese nombre.
+ *
+ * Cinco los emite ahora `validateScenario` (§ 17 manda: el catálogo era correcto y el que estaba
+ * mal era el código). El sexto, `E-CLAVE-DESCONOCIDA`, lo caza el esquema cerrado antes del lint,
+ * así que su código viaja en la línea que formatea `schemaIssueLines`.
+ */
+describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
+  /** IR con un timer, un subproceso ya aplanado (R-PLAN-1) y una tarea dentro de él. */
+  function irConTimerYSubproceso(): ProcessIR {
+    return {
+      id: 'Process_198',
+      name: '',
+      nodes: {
+        Start: { type: 'start', name: '', incoming: [], outgoing: ['Flow_ST'] },
+        Timer_Espera: { type: 'timer', name: '', incoming: ['Flow_ST'], outgoing: ['Flow_TA'] },
+        Task_Dentro: {
+          type: 'task',
+          name: '',
+          incoming: ['Flow_TA'],
+          outgoing: ['Flow_AE'],
+          subprocessId: 'SubProc_Revision',
+        },
+        End: { type: 'end', name: '', incoming: ['Flow_AE'], outgoing: [] },
+      },
+      flows: {
+        Flow_ST: { from: 'Start', to: 'Timer_Espera', name: '', isDefault: false },
+        Flow_TA: { from: 'Timer_Espera', to: 'Task_Dentro', name: '', isDefault: false },
+        Flow_AE: { from: 'Task_Dentro', to: 'End', name: '', isDefault: false },
+      },
+      source: { exporter: 'test', exporterVersion: '1', originalIds: {} },
+    };
+  }
+
+  const IR_198 = irConTimerYSubproceso();
+  const lint = (elements: Record<string, unknown>, run: Record<string, unknown> = {}) =>
+    validateScenario(ScenarioSchema.parse({ ...BASE, run: { ...BASE.run, ...run }, elements }), IR_198);
+
+  test('E-PROB-EN-NODO: `probability` en un nodo, no en un sequence flow (R-XOR-8)', () => {
+    const error = scenarioErrors(lint({ Task_Dentro: { probability: 0.5 } }))[0];
+    expect(error).toMatchObject({ code: 'E-PROB-EN-NODO', path: 'elements.Task_Dentro.probability' });
+    expect(error?.message).toBe('elements.Task_Dentro.probability: solo se admite en un sequence flow.');
+  });
+
+  test('E-PROB-RANGO: `probability` fuera de [0,1] (R-XOR-6), en el lint y no en el esquema', () => {
+    // El esquema la acepta a propósito (LILA-198): así el defecto llega con su código y su ruta.
+    expect(ScenarioSchema.safeParse({ ...BASE, elements: { Flow_AE: { probability: 1.5 } } }).success).toBe(true);
+    const error = scenarioErrors(lint({ Flow_AE: { probability: 1.5 } }))[0];
+    expect(error).toMatchObject({ code: 'E-PROB-RANGO', path: 'elements.Flow_AE.probability' });
+    expect(error?.message).toBe('elements.Flow_AE.probability: 1.5 está fuera de [0, 1].');
+    expect(scenarioErrors(lint({ Flow_AE: { probability: -0.1 } }))[0]?.code).toBe('E-PROB-RANGO');
+    expect(scenarioErrors(lint({ Flow_AE: { probability: 1 } }))).toEqual([]);
+  });
+
+  test('E-SUBPROC-PARAMETRO: tiempo, recursos o costo en un subproceso embebido (R-PLAN-3)', () => {
+    const errors = scenarioErrors(
+      lint({ SubProc_Revision: { processingTime: { type: 'constant', value: 60 }, fixedCost: 3 } }),
+    );
+    expect(errors.map((problem) => problem.code)).toEqual(['E-SUBPROC-PARAMETRO', 'E-SUBPROC-PARAMETRO']);
+    expect(errors.map((problem) => problem.path)).toEqual([
+      'elements.SubProc_Revision.processingTime',
+      'elements.SubProc_Revision.fixedCost',
+    ]);
+    expect(errors[0]?.message).toContain('SubProc_Revision es un subproceso embebido');
+    // Un id que no es ni nodo, ni flujo, ni subproceso sigue siendo `E-ELEMENTO-DESCONOCIDO` (R3),
+    // y también lo es el subproceso con un campo que no está en la lista de R-PLAN-3.
+    expect(scenarioErrors(lint({ Fantasma: { fixedCost: 1 } }))[0]?.code).toBe('E-ELEMENTO-DESCONOCIDO');
+    expect(scenarioErrors(lint({ SubProc_Revision: { calendar: 'x' } }))[0]?.code).toBe('E-ELEMENTO-DESCONOCIDO');
+  });
+
+  test('E-TIMER-RECURSO: `resources` en un timer (R-EVT-1)', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      resources: { horno: { capacity: 1 } },
+      elements: { Timer_Espera: { resources: [{ ref: 'horno' }] } },
+    });
+    const error = scenarioErrors(validateScenario(scenario, IR_198))[0];
+    expect(error).toMatchObject({ code: 'E-TIMER-RECURSO', path: 'elements.Timer_Espera.resources' });
+    expect(error?.message).toBe('elements.Timer_Espera.resources: un timer es un retardo y no consume recursos.');
+    // Un gateway con recursos no es un timer: sigue siendo el error genérico de campo.
+    expect(
+      scenarioErrors(
+        validateScenario(
+          ScenarioSchema.parse({ ...BASE, resources: { horno: { capacity: 1 } }, elements: { End: { resources: [{ ref: 'horno' }] } } }),
+          IR_198,
+        ),
+      )[0]?.code,
+    ).toBe('E-CAMPO-NO-APLICA');
+  });
+
+  test('W-SIN-SEED: el escenario no declara `run.seed` (R-DEG-4)', () => {
+    const warning = lint({}).find((problem) => problem.code === 'W-SIN-SEED');
+    expect(warning).toMatchObject({ severity: 'warning', path: 'run.seed' });
+    expect(warning?.message).toBe('run.seed: el escenario no declara seed; la corrida usa seed = 1.');
+    // Declararla —aunque sea 1— apaga el aviso: el escenario ya dice con qué semilla se reproduce.
+    expect(lint({}, { seed: 1 }).some((problem) => problem.code === 'W-SIN-SEED')).toBe(false);
+  });
+
+  test('E-CLAVE-DESCONOCIDA: la errata la caza el esquema cerrado, con el código en la línea', () => {
+    const parsed = ScenarioSchema.safeParse({ ...BASE, resources: { cajero: { capacity: 1, capacty: 3 } } });
+    expect(parsed.success).toBe(false);
+    expect(schemaIssueLines(parsed.error?.issues ?? [])).toEqual([
+      'resources.cajero: E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: capacty.',
+    ]);
+    // El resto de defectos del esquema conserva el mensaje de zod tal cual (LILA-232 los traduce).
+    const otro = ScenarioSchema.safeParse({ ...BASE, version: 2 });
+    expect(schemaIssueLines(otro.error?.issues ?? []).join('\n')).not.toContain('E-CLAVE-DESCONOCIDA');
+  });
+});

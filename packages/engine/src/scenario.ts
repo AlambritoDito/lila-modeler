@@ -62,7 +62,7 @@ const localeEs = z.locales.es().localeError;
 /**
  * Los defectos del esquema en español, sin la ruta: la pone quien formatea (la CLI, el MCP y el
  * panel imprimen `${ruta}: ${mensaje}`), así los tres dicen lo mismo —
- * `elements.Flow_X.probability: debe ser ≤ 1`— sin repetir el catálogo.
+ * `run.warmup: debe ser ≥ 0`— sin repetir el catálogo.
  *
  * Zod solo consulta este mapa cuando el defecto **no** trae mensaje propio, así que los `refine`,
  * `regex` y `min` con texto de este archivo siguen mandando (R11, R13, R8…).
@@ -232,7 +232,14 @@ export const RunSchema = z.strictObject({
   duration: positive.optional(),
   warmup: nonNegative.default(0),
   replications: z.int().min(1).default(1),
-  seed: z.int().default(1),
+  // Sin `.default(1)`: R-DEG-4 pide avisar (`W-SIN-SEED`) cuando el escenario no la declara, y
+  // con default el lint no puede distinguir "no declarada" de "declarada en 1" (LILA-198). El
+  // valor neutro sigue siendo 1 y lo aplica quien simula (`core/sim.ts`).
+  //
+  // El `default: 1` sí sigue en el JSON Schema publicado, como **anotación** (que es lo único
+  // que significa ahí): el panel de escenario lo lee para saber qué escribir al añadir el campo
+  // (`valorVacio` en `ScenarioPanel.tsx`). Sin él escribiría el `minimum` del entero seguro.
+  seed: z.int().meta({ default: 1 }).optional(),
   baseTimeUnit: z.enum(['s', 'min', 'h', 'day']).default('s'),
   currency: z.string().regex(/^[A-Z]{3}$/, 'run.currency debe ser un código ISO 4217').optional(),
   // § 4 — reservado: aceptado por el esquema, rechazado por el motor.
@@ -315,7 +322,10 @@ export const ElementSchema = z.strictObject({
   interTriggerTimer: DistributionSchema.optional(),
   triggerCount: z.int().min(1).optional(),
   calendar: z.string().optional(),
-  probability: z.number().min(0).max(1).optional(),
+  // Sin `.min(0).max(1)`: el rango lo comprueba `validateScenario` para poder emitir
+  // `E-PROB-RANGO` del catálogo (§ 17) con su código y su ruta, en vez del defecto genérico de
+  // zod que no lleva código (LILA-198).
+  probability: z.number().optional(),
   // § 4 — reservados.
   priority: z.unknown().optional(),
   preempt: z.unknown().optional(),
@@ -379,8 +389,13 @@ export type ScenarioProblemCode =
   | 'E-REC-CANTIDAD'
   | 'E-CAPACIDAD-Y-CALENDARIO'
   | 'E-CAMPO-NO-APLICA'
+  | 'E-PROB-EN-NODO'
+  | 'E-PROB-RANGO'
+  | 'E-SUBPROC-PARAMETRO'
+  | 'E-TIMER-RECURSO'
   | 'E-SIN-PARADA'
   | 'E-XOR-SUMA-CERO'
+  | 'W-SIN-SEED'
   | 'W-ELEMENTO-SIN-PARAMETROS'
   | 'W-XOR-NORMALIZADA'
   | 'W-XOR-RESIDUO-COMPARTIDO'
@@ -572,6 +587,18 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
   }
 
   let triggerCounts = 0;
+  // R-PLAN-1: el `bpmn:subProcess` embebido desaparece del IR al aplanar, pero sus nodos
+  // conservan de quién venían. Sin este conjunto, `elements[subProcessId]` sería un id
+  // desconocido y no `E-SUBPROC-PARAMETRO` (R-PLAN-3, § 17).
+  //
+  // ponytail: `subprocessId` guarda solo el subproceso inmediato (`bpmn/parse.ts`, `walk`), así
+  // que con anidamiento se reconoce el más interno y no la cadena. Techo declarado en R-PLAN-3;
+  // subirlo pide llevar los ids de todas las cajas al IR, que no es de este ticket.
+  const subprocessIds = new Set(
+    Object.values(ir.nodes)
+      .map((node) => node.subprocessId)
+      .filter((subprocessId): subprocessId is string => subprocessId !== undefined),
+  );
 
   for (const [id, element] of Object.entries(elements)) {
     reserved(problems, `elements.${id}`, element, RESERVED.elements);
@@ -581,24 +608,49 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
 
     // R3 — la clave debe existir en el IR; el error cita el id.
     if (node === undefined && flow === undefined) {
-      problems.push({
-        code: 'E-ELEMENTO-DESCONOCIDO',
-        path: `elements.${id}`,
-        severity: 'error',
-        message: `elements.${id}: el id ${id} no existe en el modelo.`,
-      });
+      // R-PLAN-3 — el subproceso embebido sí es un id del modelo, solo que aplanado: darle tiempo,
+      // recursos o costo propios es `E-SUBPROC-PARAMETRO`, no un id desconocido.
+      const subprocessFields = subprocessIds.has(id)
+        ? (['processingTime', 'resources', 'fixedCost'] as const).filter((field) => element[field] !== undefined)
+        : [];
+      for (const field of subprocessFields) {
+        problems.push({
+          code: 'E-SUBPROC-PARAMETRO',
+          path: `elements.${id}.${field}`,
+          severity: 'error',
+          message: `elements.${id}.${field}: ${id} es un subproceso embebido y no tiene tiempo, recursos ni costo propios; su tiempo es la suma de lo que ocurre dentro.`,
+        });
+      }
+      if (subprocessFields.length === 0) {
+        problems.push({
+          code: 'E-ELEMENTO-DESCONOCIDO',
+          path: `elements.${id}`,
+          severity: 'error',
+          message: `elements.${id}: el id ${id} no existe en el modelo.`,
+        });
+      }
       continue;
     }
 
     checkElementDistributions(problems, id, element);
 
-    // R4 — `probability` solo en sequence flows.
+    // R4 / R-XOR-8 — `probability` solo en sequence flows.
     if (element.probability !== undefined && flow === undefined) {
       problems.push({
-        code: 'E-CAMPO-NO-APLICA',
+        code: 'E-PROB-EN-NODO',
         path: `elements.${id}.probability`,
         severity: 'error',
         message: `elements.${id}.probability: solo se admite en un sequence flow.`,
+      });
+    }
+    // R-XOR-6 — rango de `probability`. Lo comprueba el lint, no el esquema: así el defecto
+    // llega con su código del catálogo y su ruta (§ 17, LILA-198).
+    if (element.probability !== undefined && (element.probability < 0 || element.probability > 1)) {
+      problems.push({
+        code: 'E-PROB-RANGO',
+        path: `elements.${id}.probability`,
+        severity: 'error',
+        message: `elements.${id}.probability: ${element.probability} está fuera de [0, 1].`,
       });
     }
 
@@ -621,11 +673,15 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
     // R-REC-2/9/10 — recursos solo en tareas; referencia, cantidad y duplicados se rechazan
     // antes de entrar al scheduler para que una solicitud imposible nunca quede en cola.
     if ((element.resources?.length ?? 0) > 0 && node?.type !== 'task') {
+      // R-EVT-1: el timer es un retardo, nunca ocupa a nadie; tiene código propio en § 17.
+      const enTimer = node?.type === 'timer';
       problems.push({
-        code: 'E-CAMPO-NO-APLICA',
+        code: enTimer ? 'E-TIMER-RECURSO' : 'E-CAMPO-NO-APLICA',
         path: `elements.${id}.resources`,
         severity: 'error',
-        message: `elements.${id}.resources: solo una tarea puede consumir recursos.`,
+        message: enTimer
+          ? `elements.${id}.resources: un timer es un retardo y no consume recursos.`
+          : `elements.${id}.resources: solo una tarea puede consumir recursos.`,
       });
     }
     const seenResources = new Set<string>();
@@ -695,6 +751,17 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
     });
   }
 
+  // R-DEG-4 — sin `seed` la corrida usa 1: sigue siendo determinista, pero el escenario no dice
+  // con qué semilla se reproduce.
+  if (scenario.run !== undefined && scenario.run.seed === undefined) {
+    problems.push({
+      code: 'W-SIN-SEED',
+      path: 'run.seed',
+      severity: 'warning',
+      message: 'run.seed: el escenario no declara seed; la corrida usa seed = 1.',
+    });
+  }
+
   // R3 — un elemento del modelo sin parámetros es warning, no error.
   for (const id of Object.keys(ir.nodes)) {
     if (elements[id] === undefined) {
@@ -708,6 +775,28 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
   }
 
   return problems;
+}
+
+/**
+ * Defectos del **esquema** (zod) como líneas `ruta: mensaje`, con el código del catálogo (§ 17)
+ * delante cuando el catálogo le da uno propio.
+ *
+ * Hoy solo `E-CLAVE-DESCONOCIDA`: el esquema es cerrado (`strictObject`), así que una errata como
+ * `capacty: 3` la caza zod **antes** del lint contra el IR y nunca llega a `validateScenario`
+ * (LILA-198). El resto conserva el mensaje que ya trae el defecto, que desde LILA-202 viene en
+ * español de `parseScenario`/`erroresEnEspanol`. Para `unrecognized_keys` el texto del catálogo
+ * § 17 manda sobre el del mapa (regla 7 de BACKLOG), así que esta rama lo reemplaza entero.
+ *
+ * ponytail: una función de formato, no un mapa código↔defecto. Techo: si algún día otro código de
+ * § 17 lo emite el esquema, aquí se añade su rama.
+ */
+export function schemaIssueLines(issues: readonly z.core.$ZodIssue[]): string[] {
+  return issues.map((issue) => {
+    const path = issue.path.length === 0 ? '$' : issue.path.map(String).join('.');
+    return issue.code === 'unrecognized_keys'
+      ? `${path}: E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: ${issue.keys.join(', ')}.`
+      : `${path}: ${issue.message}`;
+  });
 }
 
 /** Errores de `validateScenario` (los que impiden simular). */

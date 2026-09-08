@@ -205,7 +205,12 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-PLAN-3 — El subproceso no tiene tiempo propio.** `elements[subProcessId].processingTime` (o
   `resources`, o `fixedCost`) es error `E-SUBPROC-PARAMETRO` citando el id: el tiempo del subproceso
   es la suma de lo que ocurre dentro. Las métricas por subproceso se agregan desde `subprocessId`.
-  *(prueba: LILA-019)*
+  El lint lo caza aunque el subproceso ya no sea un nodo del IR: sus nodos citan de quién vienen
+  (`ProcessIR.nodes[x].subprocessId`). **Límite conocido**: ese campo guarda solo el subproceso
+  *inmediato*, así que con subprocesos anidados el lint reconoce el más interno; declarar
+  parámetros en uno exterior sale hoy como `E-ELEMENTO-DESCONOCIDO`. Cerrarlo pide llevar la
+  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket.
+  *(prueba: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = tarea con tiempo global.** Un `bpmn:callActivity` se traduce a
   `task` y **no** se expande el proceso llamado, aunque esté en el archivo. Su duración es su
   `processingTime` y puede tener recursos y `fixedCost` como cualquier tarea. Es la regla de Bizagi
@@ -264,15 +269,17 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
   las probabilidades normalizadas. *(prueba: LILA-026, LILA-042)*
 - **R-XOR-5 — Suma cero es error.** Si `T = 0` (todas declaradas en 0 y sin residuo), es error
   `E-XOR-SUMA-CERO` citando el gateway: no hay ruta posible. *(prueba: LILA-042)*
-- **R-XOR-6 — Rango.** `probability` fuera de `[0, 1]` lo rechaza el esquema (`E-PROB-RANGO`), no
-  el motor. *(prueba: LILA-013)*
+- **R-XOR-6 — Rango.** `probability` fuera de `[0, 1]` lo rechaza el lint de `validateScenario`
+  (`E-PROB-RANGO`), no el motor. El esquema **no** acota el rango a propósito (LILA-198): si lo
+  hiciera, el defecto saldría como un error genérico de zod, sin el código del catálogo.
+  *(prueba: LILA-013, LILA-198)*
 - **R-XOR-7 — Sorteo.** Se toma **un** uniforme `u ∈ [0,1)` del stream del **gateway** y se elige
   el primer `fi` tal que `u < Σ_{j≤i} p(fj)`, recorriendo en orden de documento. Por error de
   redondeo, si ningún `fi` cumple, se elige el último con `p > 0`. Un token, un sorteo, una salida.
   *(prueba: LILA-026, LILA-030)*
 - **R-XOR-8 — `probability` solo en sequence flows.** `probability` en un nodo es error
   `E-PROB-EN-NODO`; en un flujo cuyo origen no es `xor` ni `or` es aviso `W-PROB-IGNORADA`.
-  *(prueba: LILA-013, LILA-042)*
+  *(prueba: LILA-013, LILA-042, LILA-198)*
 
 ---
 
@@ -339,7 +346,8 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 
 - **R-EVT-1 — Timer = retardo sin recurso.** Un `timer` retiene el token durante
   `elements[id].processingTime` segundos y lo suelta por su única salida. **No consume recursos.**
-  Declarar `resources` en un `timer` es error `E-TIMER-RECURSO` citando el id. *(prueba: LILA-026)*
+  Declarar `resources` en un `timer` es error `E-TIMER-RECURSO` citando el id.
+  *(prueba: LILA-026, LILA-198)*
 - **R-EVT-2 — Timer sin tiempo.** Un `timer` sin `processingTime` retarda 0 segundos y produce aviso
   `W-TIMER-SIN-TIEMPO`. *(prueba: LILA-026)*
 - **R-EVT-3 — El timer corre 24×7 salvo que declare calendario.** Por defecto el retardo del timer
@@ -659,11 +667,15 @@ que hace que el mismo modelo sirva de nivel 1 a nivel 4 de Bizagi.
   `availableTime` = duración de la ventana. El resultado debe ser **idéntico bit a bit** al del
   mismo escenario corrido por el motor de M2. *(prueba: LILA-043)*
 - **R-DEG-3 — Sin `processingTime` en una tarea ⇒ duración 0** más aviso `W-TAREA-SIN-TIEMPO`
-  citando el id. La tarea sigue ocupando recursos durante 0 segundos. *(prueba: LILA-042)*
+  citando el id. La tarea sigue ocupando recursos durante 0 segundos. Si el escenario no declara
+  **ningún** `processingTime` —validación de rutas, como el nivel 1 de Bizagi— el aviso es **uno
+  solo** que lista los ids: un aviso por tarea ahí es ruido por diseño, no un olvido concreto.
+  *(prueba: LILA-042, LILA-198)*
 - **R-DEG-4 — Sin `probability` ⇒ §6 y §7.** Sin `warmup` ⇒ 0. Sin `replications` ⇒ 1. Sin `seed` ⇒
   `seed = 1` y aviso `W-SIN-SEED`: la corrida sigue siendo determinista y reproducible, pero el
-  escenario no dice con qué semilla (todos los ejemplos del repo la declaran).
-  *(prueba: LILA-013, LILA-030)*
+  escenario no dice con qué semilla. Por eso `run.seed` **no** lleva default en el esquema: con
+  default no se podría distinguir "no declarada" de "declarada en 1"; el 1 lo aplica el motor.
+  *(prueba: LILA-013, LILA-030, LILA-198)*
 - **R-DEG-5 — La degradación nunca inventa.** Ningún default introduce esperas, costos ni
   variabilidad: todos son el elemento neutro de su operación. *(prueba: LILA-039, LILA-043)*
 
@@ -698,7 +710,7 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
   por `extends`) **no** dispara el error. *(prueba: LILA-013, LILA-014)*
 - **R-RES-4 — Campos desconocidos.** Una clave no reconocida por el esquema y que no está en la
   lista de reservados es error de esquema `E-CLAVE-DESCONOCIDA` (el esquema es cerrado): protege
-  contra erratas silenciosas del tipo `capacty: 3`. *(prueba: LILA-013)*
+  contra erratas silenciosas del tipo `capacty: 3`. *(prueba: LILA-013, LILA-198)*
 
 ---
 
@@ -793,7 +805,11 @@ aparte, en su propio campo, como en el resto del lint); las tres siguientes son 
 `core/`, que sí llevan el código dentro del mensaje. El lint estático no emite `E-REC-CAPACIDAD`:
 un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esquema zod con su
 mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
-mano. Es el mismo desajuste que ya documenta el párrafo final de esta sección.
+mano. Es el único desajuste que queda; ver el párrafo final de esta sección.
+
+Todos los errores de la tabla salen del lint (`validateScenario`) o del validador del IR, salvo
+`E-CLAVE-DESCONOCIDA`, que lo caza el esquema cerrado antes del lint: el código va delante del
+mensaje en la línea que imprime la CLI, y lo formatea `schemaIssueLines` (LILA-198).
 
 Esos dos son **todos** los textos de `E-REC-CAPACIDAD` que emite `packages/engine/src`. Los dos
 guardias internos de `core/calendar.ts` —`compileCapacity` sin tramos y `nextCapacityRise` con un
@@ -813,11 +829,14 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
 
-Los códigos de este catálogo son los que emite el código de hoy. `E-PROB-EN-NODO`,
-`E-PROB-RANGO`, `E-CLAVE-DESCONOCIDA`, `E-SUBPROC-PARAMETRO`, `E-TIMER-RECURSO` y `W-SIN-SEED`
-siguen listados como contrato pero todavía no se emiten con ese nombre: los tres primeros los
-rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy dentro de
-`E-CAMPO-NO-APLICA`. Cerrar ese desajuste no es de LILA-042.
+`W-TAREA-SIN-TIEMPO` es la excepción a la línea por elemento: cuando el escenario no declara
+**ningún** `processingTime`, el aviso es uno solo y lista los ids de todas las tareas (R-DEG-3,
+LILA-198).
+
+Los códigos de este catálogo son los que emite el código de hoy, con dos salvedades declaradas:
+`E-REC-CAPACIDAD`, que el lint estático no emite (párrafo de arriba, LILA-164), y el par
+`E-REF-DESCONOCIDA` / `E-CAL-DESCONOCIDO`, dos códigos para lo mismo según lo cace el lint o el
+guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 
 ---
 
@@ -839,7 +858,7 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-NOSOP-4, R-NOSOP-5 | no degradar; errores estructurales | LILA-021 |
 | R-NOSOP-6 | avisos de bpmn-moddle: `E-PARSE-INCOMPLETO` / `W-PARSE` | LILA-185 |
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
-| R-PLAN-3 | subproceso sin tiempo propio | LILA-019 |
+| R-PLAN-3 | subproceso sin tiempo propio | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
 | R-TOK-1 | reloj en segundos desde `run.start` | LILA-037 |
 | R-TOK-2 | caso = conjunto de tokens | LILA-026 |
@@ -847,11 +866,11 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-TOK-4 | tránsito instantáneo y `flows.count` | LILA-028 |
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identidad y lifecycle parcial | LILA-033, LILA-037 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: equitativo, residuo al default, normalización, sorteo | LILA-026 (normalización y avisos: LILA-042) |
-| R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042 |
+| R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042, LILA-198 |
 | R-OR-1 … R-OR-7 | OR fork/join, emparejamiento y loops | LILA-026 |
 | R-OR-8 | tokens huérfanos al parar | LILA-026, LILA-028 |
 | R-AND-1 … R-AND-6 | AND fork/join, contador `(caso, join)`, loops | LILA-026 |
-| R-EVT-1 … R-EVT-2 | timer = retardo sin recurso | LILA-026 |
+| R-EVT-1 … R-EVT-2 | timer = retardo sin recurso | LILA-026 (`E-TIMER-RECURSO`: LILA-198) |
 | R-EVT-3 | timer 24×7 salvo calendario propio | LILA-041 |
 | R-EVT-4 | end consume token; caso termina con 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
@@ -876,8 +895,8 @@ rechaza el esquema zod con su mensaje genérico y los dos siguientes viajan hoy 
 | R-COST-5, R-COST-6 | costos ausentes = 0; esperar no cuesta | LILA-013, LILA-036 |
 | R-DEG-1 | sin recursos ⇒ capacidad infinita, bit a bit igual a M1 | LILA-039 |
 | R-DEG-2 | sin calendarios ⇒ 24×7, igual a M2 (bytes en linux/x64; ver R-DET-6) | LILA-043 (motor: LILA-041) |
-| R-DEG-3 … R-DEG-5 | defaults neutros | LILA-042, LILA-013 |
-| R-RES-1 … R-RES-4 | campos reservados y su texto de error | LILA-013 (`null` de `extends`: LILA-014) |
+| R-DEG-3 … R-DEG-5 | defaults neutros | LILA-042, LILA-013 (aviso agregado y `W-SIN-SEED`: LILA-198) |
+| R-RES-1 … R-RES-4 | campos reservados y su texto de error | LILA-013 (`null` de `extends`: LILA-014; `E-CLAVE-DESCONOCIDA`: LILA-198) |
 | R-DET-1 | orden explícito en eventos y colas | LILA-030, LILA-023 |
 | R-DET-2, R-DET-3 | stream por elemento; common random numbers | LILA-024 (what-if: LILA-038) |
 | R-DET-4, R-DET-7 | consumo de uniformes y las 14 distribuciones | LILA-025 |
