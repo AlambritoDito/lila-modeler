@@ -180,12 +180,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => {
     if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
   }, [pendingAction]);
-  // Decisión de exportar a pesar de la pérdida (LILA-192). Es estado de React y no un
+  // Decisión de escribir a pesar de la pérdida (LILA-192). Es estado de React y no un
   // `window.confirm` porque el diálogo tiene que verse, leerse y probarse como el resto de la app.
-  const [confirmarPerdida, setConfirmarPerdida] = useState(false);
+  // El estado es el verbo de la acción que espera respuesta —exportar o guardar—, y el `resolve`
+  // de esa espera vive en la ref: así ambas pasan por el mismo diálogo y ninguna escribe sin el sí.
+  const [confirmarPerdida, setConfirmarPerdida] = useState<'Exportar' | 'Guardar' | null>(null);
+  const respuestaPerdida = useRef<((acepta: boolean) => void) | null>(null);
   const exportDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    if (confirmarPerdida && !exportDialog.current?.open) exportDialog.current?.showModal();
+    if (confirmarPerdida !== null && !exportDialog.current?.open) exportDialog.current?.showModal();
   }, [confirmarPerdida]);
   const [baseId, setBaseId] = useState('as-is.scenario.json');
   const adapter = projectStore(store);
@@ -258,10 +261,34 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   saveRef.current = () => guardar();
   useEffect(() => adapter?.onSaveRequested?.(() => saveRef.current()), [adapter]);
 
+  /**
+   * Todo lo que el archivo original tiene y el XML exportado no tendrá: los avisos del import
+   * que implican pérdida (LILA-193) y las referencias que ya venían rotas (LILA-192). Es la
+   * misma lista que se pinta en el pie y que enumera el diálogo de confirmación.
+   */
+  const perdidasAlExportar = [...estado.perdidas, ...estado.refsRotas];
+
+  /**
+   * `true` si se puede escribir: no hay pérdida, o el usuario la aceptó en el diálogo. Exportar y
+   * guardar comparten esta puerta porque los dos escriben un .bpmn mutilado (LILA-192).
+   */
+  async function aceptaPerdida(verbo: 'Exportar' | 'Guardar'): Promise<boolean> {
+    if (perdidasAlExportar.length === 0) return true;
+    respuestaPerdida.current?.(false);
+    return new Promise<boolean>((resolve) => { respuestaPerdida.current = resolve; setConfirmarPerdida(verbo); });
+  }
+  function responderPerdida(acepta: boolean): void {
+    const resolver = respuestaPerdida.current;
+    respuestaPerdida.current = null;
+    setConfirmarPerdida(null);
+    resolver?.(acepta);
+  }
+
   async function snapshot(): Promise<ProjectDocument> {
     if (modelador === null) throw new Error('El modelador todavía no está listo.');
     const atRevision = revisionRef.current;
-    const xml = await modelador.exportar({ interactivo: true });
+    // `guardar()` ya obtuvo el sí del usuario si había pérdida; aquí no se decide nada.
+    const xml = await modelador.exportar({ aceptarPerdida: true });
     if (atRevision !== revisionRef.current) throw new Error('El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.');
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
@@ -270,6 +297,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   async function guardar(saveAs = false): Promise<boolean> {
     if (adapter === null || ioLock.current) return false;
+    // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
+    // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
+    // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
+    // cancelar el cierre: la ventana sigue abierta con el diálogo delante, sin nada perdido.
+    if (!await aceptaPerdida('Guardar')) return false;
     ioLock.current = true; setIoBusy(true); setIoError(null);
     try {
       const doc = await snapshot();
@@ -506,19 +538,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }
   }
 
-  /**
-   * Todo lo que el archivo original tiene y el XML exportado no tendrá: los avisos del import
-   * que implican pérdida (LILA-193) y las referencias que ya venían rotas (LILA-192). Es la
-   * misma lista que se pinta en el pie y que enumera el diálogo de exportación.
-   */
-  const perdidasAlExportar = [...estado.perdidas, ...estado.refsRotas];
-
-  async function exportar(confirmado = false): Promise<void> {
+  async function exportar(): Promise<void> {
     if (modelador === null) return;
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
-    if (!confirmado && perdidasAlExportar.length > 0) { setConfirmarPerdida(true); return; }
-    setConfirmarPerdida(false);
-    try { await store.putProcess(procesoId, await modelador.exportar({ interactivo: true })); }
+    if (!await aceptaPerdida('Exportar')) return;
+    try { await store.putProcess(procesoId, await modelador.exportar({ aceptarPerdida: true })); }
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
@@ -537,13 +561,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>Cancelar</button>
         </div>
       </dialog>}
-      {confirmarPerdida && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); setConfirmarPerdida(false); }}>
+      {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>
         <h2 id="perdida-titulo">{perdidasAlExportar.length === 1 ? 'Se perderá' : 'Se perderán'} {plural(perdidasAlExportar.length, 'referencia que el archivo original ya tenía rota', 'referencias que el archivo original ya tenía rotas')}</h2>
-        <p>El editor solo puede escribir lo que pudo leer, así que el .bpmn descargado no las llevará:</p>
+        <p>El editor solo puede escribir lo que pudo leer, así que el .bpmn {confirmarPerdida === 'Guardar' ? 'guardado' : 'descargado'} no las llevará:</p>
         <ul>{perdidasAlExportar.map((perdida) => <li key={perdida}>{perdida}</li>)}</ul>
         <div className="acciones">
-          <button className="boton primario" type="button" onClick={() => void exportar(true)}>Exportar igualmente</button>
-          <button className="boton" type="button" onClick={() => setConfirmarPerdida(false)}>Cancelar</button>
+          <button className="boton primario" type="button" onClick={() => responderPerdida(true)}>{confirmarPerdida} igualmente</button>
+          <button className="boton" type="button" onClick={() => responderPerdida(false)}>Cancelar</button>
         </div>
       </dialog>}
       <header className="barra">

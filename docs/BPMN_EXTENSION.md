@@ -311,11 +311,14 @@ sobrevive a abrir-y-exportar (LILA-192, `apps/web/src/modelerXml.ts`):
 
 - La barra de estado enseña la lista completa como **error** —no como aviso—, con los ids:
   «N elementos o referencias se perderán al exportar: …» (LILA-193).
-- «Exportar .bpmn» abre antes de descargar un diálogo con esa misma lista y dos salidas,
-  «Exportar igualmente» y «Cancelar»; cancelar no descarga nada.
-- Las exportaciones que el usuario no ve —el snapshot de guardar el proyecto y el XML que
-  alimenta a la simulación— no pueden aceptar esa pérdida por él: `autorizarExportacion` las
-  corta con un error cuando hay avisos de pérdida.
+- Todo lo que escribe un .bpmn con pérdida pasa antes por el mismo diálogo, con esa misma lista
+  y dos salidas: «Exportar .bpmn» ofrece «Exportar igualmente»/«Cancelar» y guardar el proyecto
+  ofrece «Guardar igualmente»/«Cancelar». Cancelar no descarga ni escribe nada en disco.
+- `autorizarExportacion` corta con un error cualquier exportación con pérdida que no traiga
+  `aceptarPerdida`, es decir el sí explícito de ese diálogo: el XML que alimenta a la simulación
+  —que el usuario no ve— nunca lo trae, y el snapshot de guardar solo lo trae después del sí.
+- En Electron, cancelar el diálogo al guardar devuelve «no se guardó» al cierre de la ventana,
+  así que el cierre se cancela y no se pierde nada.
 
 Nada de esto reescribe el serializador: la fidelidad byte a byte con el archivo de origen no es
 una promesa de la app, y conservar atributos rotos exigiría un serializador propio.

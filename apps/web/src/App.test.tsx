@@ -405,6 +405,12 @@ const ESTADO_CON_PERDIDA = {
   refsRotas: ['Message_1373655174960', 'DS1373655174514'],
 };
 const dialogoPerdida = (): HTMLDialogElement | null => container.querySelector('.confirmar-perdida');
+/** «Cancelar» existe también en la barra de simulación: los botones se buscan dentro del diálogo. */
+function enDialogo(dialogo: HTMLDialogElement, etiqueta: string): HTMLButtonElement {
+  const boton = [...dialogo.querySelectorAll('button')].find((b) => b.textContent === etiqueta);
+  expect(boton, etiqueta).toBeDefined();
+  return boton!;
+}
 
 it('la pérdida al importar se ve como error con los ids, y el resto sigue siendo el contador de avisos', async () => {
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
@@ -446,6 +452,60 @@ it('con pérdida, exportar pide confirmación: cancelar no descarga y aceptar s�
   await act(async () => { [...dialogoPerdida()!.querySelectorAll('button')].find((b) => b.textContent === 'Exportar igualmente')!.click(); });
   expect(session.putProcess).toHaveBeenCalledOnce();
   expect(dialogoPerdida()).toBeNull();
+});
+
+it('sin pérdida, guardar escribe directamente y no abre ningún diálogo', async () => {
+  await click('Guardar');
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+// QA de #258: guardar reescribe `model.bpmn` en disco, así que no puede aceptar la pérdida por
+// el usuario. Pasa por el mismo diálogo que exportar, con el verbo de la acción que espera.
+it('con pérdida, guardar pide la misma confirmación: cancelar no escribe nada y aceptar guarda una vez', async () => {
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  await click('Guardar');
+  const dialogo = dialogoPerdida()!;
+  expect(dialogo).not.toBeNull();
+  expect([...dialogo.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Guardar igualmente', 'Cancelar']);
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  await act(async () => { enDialogo(dialogo, 'Cancelar').click(); });
+  expect(dialogoPerdida()).toBeNull();
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  // El atajo llega al mismo sitio que el botón: `guardar()` es el único camino al disco.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true })); });
+  expect(dialogoPerdida()).not.toBeNull();
+  await act(async () => { enDialogo(dialogoPerdida()!, 'Guardar igualmente').click(); });
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(dialogoPerdida()).toBeNull();
+});
+
+// QA de #258: el cierre de Electron pide guardar por `onSaveRequested` y espera un booleano. El
+// diálogo se ve —la ventana sigue abierta—, y cancelar devuelve `false`, que `closeGuard` lee
+// como «no se guardó» y le hace cancelar el cierre: nada se escribe y nada se queda colgado.
+it.each([
+  ['Cancelar', false, 0],
+  ['Guardar igualmente', true, 1],
+] as const)('cerrar con pérdida espera el diálogo; «%s» devuelve %s al puente', async (accion, esperado, guardados) => {
+  let pedirGuardado!: () => Promise<boolean>;
+  await act(async () => root.unmount());
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  root = createRoot(container);
+  await act(async () => root.render(<App store={conCierre} />));
+  await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
+
+  let resultado: boolean | 'pendiente' = 'pendiente';
+  await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
+  expect(dialogoPerdida()).not.toBeNull();
+  expect(resultado).toBe('pendiente');
+  expect(session.saveProject).not.toHaveBeenCalled();
+
+  await act(async () => { enDialogo(dialogoPerdida()!, accion).click(); });
+  expect(resultado).toBe(esperado);
+  expect(session.saveProject).toHaveBeenCalledTimes(guardados);
 });
 
 // QA: con una sola referencia el texto va en singular, en el pie y en el diálogo.

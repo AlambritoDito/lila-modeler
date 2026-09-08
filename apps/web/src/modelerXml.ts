@@ -31,8 +31,11 @@ export interface ImportacionPreparada<T> {
 }
 
 export interface OpcionesExportacion {
-  /** Solo una acción explícita del usuario puede pedir la decisión visible. */
-  interactivo?: boolean;
+  /**
+   * El usuario ya leyó la lista de pérdidas en el diálogo de `App.tsx` y dijo que sí. Es la
+   * única forma de exportar con pérdida: nadie decide por él, ni siquiera guardar (LILA-192).
+   */
+  aceptarPerdida?: boolean;
 }
 
 function warningMessage(warning: unknown): string {
@@ -133,15 +136,16 @@ export function restaurarXmlIds(xml: string, originalIds: ReadonlyMap<string, st
 }
 
 /**
- * Bloquea snapshots y simulaciones silenciosamente ante pérdida. La exportación explícita la
- * autoriza el usuario en el diálogo de `App.tsx` (LILA-192), que es donde puede leer la lista
- * de lo que se pierde; aquí solo se corta lo que ocurriría a sus espaldas.
+ * Corta **toda** exportación con pérdida que el usuario no haya aceptado: el XML que alimenta a
+ * la simulación, el snapshot con el que guardar reescribe `model.bpmn` y la descarga anterior al
+ * diálogo. `aceptarPerdida` es exactamente el «sí» del diálogo de `App.tsx` (LILA-192), que es
+ * donde se lee la lista de lo que se pierde; sin ese sí, aquí se lanza.
  */
 export function autorizarExportacion(
   perdidas: readonly string[],
   opciones: OpcionesExportacion = {},
 ): void {
-  if (perdidas.length === 0 || opciones.interactivo === true) return;
+  if (perdidas.length === 0 || opciones.aceptarPerdida === true) return;
   const detalle = perdidas.map((warning) => `• ${warning}`).join('\n');
   throw new Error(`Exportación bloqueada por contenido perdido:\n${detalle}`);
 }

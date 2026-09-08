@@ -207,15 +207,16 @@ describe('el XML que exporta la app web', () => {
     expect(preparada.originalIds.get(saneado as string)).toBe('9Task bad.x');
   });
 
-  // La decisión visible es el diálogo de `App.tsx` (LILA-192): aquí solo se corta lo que pasaría
-  // a espaldas del usuario —el snapshot de guardar y el export que alimenta a la simulación—.
-  it('bloquea las exportaciones automáticas ante pérdida y deja pasar la explícita', () => {
+  // Ante pérdida se corta todo —simulación, snapshot de guardar y descarga— salvo que venga el
+  // `aceptarPerdida` que solo pone `App.tsx` tras el sí del usuario en el diálogo (LILA-192).
+  it('bloquea toda exportación con pérdida salvo la que trae el sí del usuario', () => {
     const perdidas = ['unresolved reference <Flow_inexistente>'];
 
     expect(() => autorizarExportacion(perdidas, {})).toThrow(
       /Exportación bloqueada.*Flow_inexistente/s,
     );
-    expect(() => autorizarExportacion(perdidas, { interactivo: true })).not.toThrow();
+    expect(() => autorizarExportacion(perdidas)).toThrow(/Exportación bloqueada/);
+    expect(() => autorizarExportacion(perdidas, { aceptarPerdida: true })).not.toThrow();
     expect(() => autorizarExportacion([], {})).not.toThrow();
   });
 
