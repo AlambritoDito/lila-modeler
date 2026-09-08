@@ -78,4 +78,33 @@ describe('mapa único de nombres de columna (LILA-201)', () => {
     // `process.csv` es exactamente el mapa aplicado a `PROCESS_COLUMNS`, sin unidades.
     expect(PROCESS_COLUMNS.map((metric) => columnLabel('process', metric))).toContain('Total cost');
   });
+
+  // QA LILA-201: hasta aquí los nombres del ámbito `process` solo se comprobaban contra el propio
+  // mapa (`PROCESS_COLUMNS.map(columnLabel)`), que es tautológico: renombrar `In flight` o
+  // `Wait time average` en `format.ts` cambiaba la cabecera de `process.csv` sin romper ninguna
+  // prueba, cosa que antes era imposible porque los rótulos eran literales dentro de `csv.ts`.
+  test('la cabecera de `process.csv` es literal y no la dicta el propio mapa (QA LILA-201)', () => {
+    expect(PROCESS_COLUMNS.map((metric) => columnLabel('process', metric))).toEqual([
+      'Instances started',
+      'Instances completed',
+      'In flight',
+      'Cycle time minimum',
+      'Cycle time maximum',
+      'Cycle time average',
+      'Cycle time standard deviation',
+      'Cycle time p50',
+      'Cycle time p90',
+      'Cycle time p95',
+      'Wait time minimum',
+      'Wait time maximum',
+      'Wait time average',
+      'Wait time standard deviation',
+      'Wait time p50',
+      'Wait time p90',
+      'Wait time p95',
+      'Throughput per hour',
+      'Cost per case',
+      'Total cost',
+    ]);
+  });
 });
