@@ -62,7 +62,7 @@ const localeEs = z.locales.es().localeError;
 /**
  * Los defectos del esquema en español, sin la ruta: la pone quien formatea (la CLI, el MCP y el
  * panel imprimen `${ruta}: ${mensaje}`), así los tres dicen lo mismo —
- * `elements.Flow_X.probability: debe ser ≤ 1`— sin repetir el catálogo.
+ * `run.warmup: debe ser ≥ 0`— sin repetir el catálogo.
  *
  * Zod solo consulta este mapa cuando el defecto **no** trae mensaje propio, así que los `refine`,
  * `regex` y `min` con texto de este archivo siguen mandando (R11, R13, R8…).
@@ -783,7 +783,9 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
  *
  * Hoy solo `E-CLAVE-DESCONOCIDA`: el esquema es cerrado (`strictObject`), así que una errata como
  * `capacty: 3` la caza zod **antes** del lint contra el IR y nunca llega a `validateScenario`
- * (LILA-198). El resto conserva el mensaje de zod tal cual; traducirlos es otro ticket.
+ * (LILA-198). El resto conserva el mensaje que ya trae el defecto, que desde LILA-202 viene en
+ * español de `parseScenario`/`erroresEnEspanol`. Para `unrecognized_keys` el texto del catálogo
+ * § 17 manda sobre el del mapa (regla 7 de BACKLOG), así que esta rama lo reemplaza entero.
  *
  * ponytail: una función de formato, no un mapa código↔defecto. Techo: si algún día otro código de
  * § 17 lo emite el esquema, aquí se añade su rama.

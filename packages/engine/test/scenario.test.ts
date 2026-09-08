@@ -356,10 +356,14 @@ describe('mensajes del esquema en español (LILA-202)', () => {
 
   // Un caso por tipo de defecto que produce hoy `ScenarioSchema` (la aceptación de LILA-202).
   const casos: [string, string, unknown, string][] = [
-    ['too_big', 'too_big', { ...BASE, elements: { Flow_X: { probability: 1.5 } } },
-      'elements.Flow_X.probability: debe ser ≤ 1'],
-    ['too_small inclusivo', 'too_small', { ...BASE, elements: { Flow_X: { probability: -1 } } },
-      'elements.Flow_X.probability: debe ser ≥ 0'],
+    // Desde LILA-198 `probability` no la acota el esquema (la caza el lint con `E-PROB-RANGO`),
+    // así que el cebo de rango es otro campo que el esquema sí acota: `p` de la binomial y
+    // `run.warmup`.
+    ['too_big', 'too_big',
+      { ...BASE, elements: { T: { processingTime: { type: 'binomial', n: 1, p: 1.5 } } } },
+      'elements.T.processingTime.p: debe ser ≤ 1'],
+    ['too_small inclusivo', 'too_small', { ...BASE, run: { ...BASE.run, warmup: -1 } },
+      'run.warmup: debe ser ≥ 0'],
     ['too_small exclusivo', 'too_small', { ...BASE, run: { ...BASE.run, duration: 0 } },
       'run.duration: debe ser > 0'],
     ['too_small de lista', 'too_small',
@@ -403,9 +407,9 @@ describe('mensajes del esquema en español (LILA-202)', () => {
   });
 
   test('la CLI imprime exactamente el mismo texto que el esquema', () => {
-    const roto = { ...BASE, elements: { Flow_X: { probability: 1.5 } } };
+    const roto = { ...BASE, run: { ...BASE.run, warmup: -1 } };
     expect(() => loadResolvedScenario('as-is.scenario.json', () => roto)).toThrow(
-      'elements.Flow_X.probability: debe ser ≤ 1',
+      'run.warmup: debe ser ≥ 0',
     );
   });
 });
