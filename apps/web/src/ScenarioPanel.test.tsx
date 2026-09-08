@@ -156,6 +156,31 @@ function arrastrar(etiquetas: readonly string[]): void {
   });
 }
 
+/**
+ * El mismo trazo, pero con todos los eventos en un solo `act`: en el navegador `pointerenter` es un
+ * evento **continuo** y React no repinta síncronamente entre uno y otro, así que un arrastre rápido
+ * entrega varias celdas contra el mismo estado. Con `arrastrar` (un `act` por evento) el fallo no
+ * se ve.
+ */
+function arrastrarRapido(etiquetas: readonly string[]): void {
+  const celdas = etiquetas.map((etiqueta) => {
+    const encontrada = [...document.querySelectorAll('button')].find(
+      (b) => b.getAttribute('aria-label') === etiqueta,
+    );
+    if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
+    return encontrada;
+  });
+  act(() => {
+    celdas[0]!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, buttons: 1 }));
+    for (let i = 1; i < celdas.length; i += 1) {
+      celdas[i - 1]!.dispatchEvent(
+        new PointerEvent('pointerout', { bubbles: true, buttons: 1, relatedTarget: celdas[i]! }),
+      );
+    }
+    celdas.at(-1)!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Anfitrión: el estado que en la app vive en `main.tsx`
  * ------------------------------------------------------------------ */
@@ -783,6 +808,114 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     ).toBe('09:00');
     pulsar('Editar como rejilla');
     expect(document.querySelector('.calendario')).not.toBeNull();
+  });
+
+  // Añadidos por el QA de LILA-203.
+
+  it('un arrastre rápido pinta todas las celdas, no solo la última', () => {
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    arrastrarRapido(['SAT 09:00', 'SAT 10:00', 'SAT 11:00', 'SAT 12:00']);
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
+      intervals: [
+        { days: ['SAT'], from: '09:00', to: '13:00' },
+        { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+      ],
+    });
+  });
+
+  it('no reescribe intervalos que no entiende mientras nadie pinte', () => {
+    // `from == to` y `to < from` rompen R13 y la rejilla no puede dibujarlos: el editor los deja
+    // como están —redondear o borrar lo que no se ve sería cambiar el escenario por enseñarlo— y
+    // el error del validador sigue saliendo.
+    const feo: Json = {
+      ...asIsCorto(),
+      calendars: {
+        oficina: {
+          intervals: [
+            { days: ['MON'], from: '18:00', to: '09:00' },
+            { days: ['TUE'], from: '09:00', to: '09:00' },
+          ],
+        },
+      },
+    };
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': feo }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual(
+      (feo['calendars'] as Json)['oficina'],
+    );
+    expect(document.body.textContent).toContain('R13');
+  });
+
+  it('pintar un calendario heredado escribe el array entero en el hijo y no toca al padre', () => {
+    const guardados: Guardado[] = [];
+    const padre = asIsCorto();
+    const hijo = leerJson('examples/pedido/to-be-3-cajeros.scenario.json');
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': padre, 'to-be-3-cajeros.scenario.json': hijo }}
+        archivoInicial="to-be-3-cajeros.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    // El hijo no declara `calendars`: la rejilla enseña el del padre (§ 6, resuelto).
+    arrastrar(['SAT 09:00']);
+    pulsar('Guardar');
+
+    const delta = guardados.at(-1)!.escenario;
+    expect((delta['calendars'] as Json)['oficina']).toEqual({
+      intervals: [
+        { days: ['SAT'], from: '09:00', to: '10:00' },
+        { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+      ],
+    });
+    // El padre en memoria no se ha tocado y el resuelto conserva lo suyo (`capacity: 3`).
+    expect(padre['calendars']).toEqual({
+      oficina: { intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }] },
+    });
+    const resuelto = comoLilaRun('to-be-3-cajeros.scenario.json', {
+      'as-is.scenario.json': padre,
+      'to-be-3-cajeros.scenario.json': delta,
+    });
+    expect(resuelto.resources?.['cajero']?.capacity).toBe(3);
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+  });
+
+  it('vaciar la rejilla del todo deja el escenario con E-CAL-VACIO, no con un calendario inventado', () => {
+    const guardados: Guardado[] = [];
+    const uno: Json = {
+      ...asIsCorto(),
+      calendars: { oficina: { intervals: [{ days: ['MON'], from: '09:00', to: '10:00' }] } },
+    };
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': uno }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    arrastrar(['MON 09:00']);
+    pulsar('Guardar');
+    expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({ intervals: [] });
+    expect(document.body.textContent).toContain('E-CAL-VACIO');
   });
 });
 

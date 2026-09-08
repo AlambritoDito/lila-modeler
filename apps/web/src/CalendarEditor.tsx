@@ -126,10 +126,19 @@ export function CalendarEditor({
   const celdas = aCeldas(intervals);
   /** Sentido del trazo en curso: `true` abre, `false` cierra, `null` no hay trazo. */
   const sentido = useRef<boolean | null>(null);
+  /**
+   * El conjunto que acumula el trazo en curso (LILA-203, QA). `onCambio` no vuelve como `intervals`
+   * hasta que React repinta, y `pointerenter` es un evento **continuo**: React no fuerza el
+   * repintado síncrono que sí hace con `pointerdown`. Sin este ref, dos `pointerenter` seguidos
+   * leerían el mismo estado viejo y el arrastre solo pintaría la última celda.
+   */
+  const trazo = useRef<Set<number> | null>(null);
 
   function aplicar(id: number, abrir: boolean): void {
-    if (celdas.has(id) === abrir) return;
-    const nuevas = new Set(celdas);
+    const base = trazo.current ?? celdas;
+    if (base.has(id) === abrir) return;
+    // Con trazo en curso se muta el mismo conjunto: es el estado que verá el siguiente `enter`.
+    const nuevas = trazo.current ?? new Set(celdas);
     if (abrir) nuevas.add(id);
     else nuevas.delete(id);
     onCambio(aIntervals(nuevas));
@@ -138,11 +147,15 @@ export function CalendarEditor({
   return (
     <div
       className="calendario"
+      role="group"
+      aria-label="Horario semanal: días por horas"
       onPointerUp={() => {
         sentido.current = null;
+        trazo.current = null;
       }}
       onPointerLeave={() => {
         sentido.current = null;
+        trazo.current = null;
       }}
     >
       <span />
@@ -168,6 +181,7 @@ export function CalendarEditor({
                 aria-label={`${nombre} ${hhmm(hora)}`}
                 onPointerDown={() => {
                   sentido.current = !abierta;
+                  trazo.current = new Set(celdas);
                   aplicar(id, !abierta);
                 }}
                 onPointerEnter={(e) => {
