@@ -316,7 +316,10 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
   const doc = { version: 1, id: 'p2', name: 'Reciente', model: { id: 'Process_2', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
-  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; } });
+  // El puente falso trae también las dos rutas de apertura de LILA-072/074: `App` las llama al
+  // montar y un puente a medias reventaría aquí igual que en Electron.
+  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    pendingOpenPath: async () => null, onOpenPath: () => () => {} });
   (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(doc);
   await act(async () => root.unmount());
   root = createRoot(container);
@@ -327,6 +330,60 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
   expect(container.textContent).toContain('Reciente');
   await act(async () => { menu!('guardar'); });
   expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+// ---------- abrir un .bpmn por asociación de archivo / arranque en frío (LILA-072, LILA-074) ----------
+
+/** Puente falso con solo lo que mira este bloque; devuelve el espía de baja de `onOpenPath`. */
+function puenteConRutas(pendiente: { dir: string; file: string } | null) {
+  const quitar = vi.fn();
+  let emitir: ((ruta: { dir: string; file: string }) => void) | null = null;
+  vi.stubGlobal('lila', {
+    pendingOpenPath: vi.fn().mockResolvedValue(pendiente),
+    onOpenPath: (cb: (ruta: { dir: string; file: string }) => void) => { emitir = cb; return quitar; },
+    onMenu: () => () => {},
+  });
+  return { quitar, emitir: (ruta: { dir: string; file: string }) => emitir!(ruta) };
+}
+function proyecto(id: string, name: string) {
+  return { version: 1, id, name, model: { id: `Process_${id}`, name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
+}
+async function remontar() {
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  // El efecto espera al modelador y `pendingOpenPath()` es asíncrono: un turno más de microtareas.
+  await act(async () => {});
+}
+
+it('una ruta .bpmn pendiente al arrancar abre su carpeta en el editor', async () => {
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p3', 'Desde doble clic'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  puenteConRutas({ dir: '/p/descargas', file: 'model.bpmn' });
+  await remontar();
+  expect(abrirReciente).toHaveBeenCalledWith('/p/descargas');
+  expect(container.textContent).toContain('Desde doble clic');
+});
+
+it('una ruta .bpmn que llega con la app abierta cambia de proyecto', async () => {
+  const abrirReciente = vi.fn()
+    .mockResolvedValueOnce(proyecto('p4', 'Primero'))
+    .mockResolvedValueOnce(proyecto('p5', 'Segundo'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  const puente = puenteConRutas({ dir: '/p/uno', file: 'model.bpmn' });
+  await remontar();
+  expect(container.textContent).toContain('Primero');
+  await act(async () => { puente.emitir({ dir: '/p/dos', file: 'model.bpmn' }); });
+  expect(abrirReciente).toHaveBeenLastCalledWith('/p/dos');
+  expect(container.textContent).toContain('Segundo');
+});
+
+it('desmontar da de baja la suscripción a onOpenPath', async () => {
+  const puente = puenteConRutas(null);
+  await remontar();
+  expect(puente.quitar).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+  expect(puente.quitar).toHaveBeenCalled();
 });
 
 // ---------- lienzo: zoom, minimapa y pestañas de diagrama (LILA-208) ----------

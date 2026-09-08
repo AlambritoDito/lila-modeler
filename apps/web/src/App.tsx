@@ -23,7 +23,7 @@ import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
-import type { MenuAction } from '../../desktop/src/bridge.js';
+import type { MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
@@ -513,6 +513,26 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
     return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
   }, []);
+
+  /**
+   * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074): main
+   * captura la ruta —doble clic, `open-file` de macOS, argumento de línea de comandos—, autoriza
+   * su carpeta y la entrega por `pendingOpenPath()` (lo que llegó antes de que la ventana
+   * estuviera lista; se consume una vez) o por `onOpenPath` (con la app ya corriendo). Las dos
+   * entran por la MISMA puerta que «Abrir reciente», la única que abre una carpeta ya autorizada
+   * sin selector: así heredan la guardia de cambios sin guardar, el cerrojo de E/S y `activate`.
+   * Espera al modelador porque hasta que el lienzo no está listo `projectAction` no hace nada y la
+   * ruta pendiente se perdería.
+   * ponytail: se abre la carpeta del archivo, no el archivo suelto — un proyecto en disco es la
+   * carpeta entera (`model.bpmn` + escenarios + corridas) y «abrir un .bpmn huérfano» no existe
+   * todavía en el contrato del puente; si hiciera falta, sería un método nuevo en `LilaBridge`.
+   */
+  useEffect(() => {
+    if (modelador === null) return;
+    const abrir = (ruta: OpenPathRequest): void => ejecutarRef.current({ openRecent: ruta.dir });
+    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); });
+    return window.lila?.onOpenPath(abrir);
+  }, [modelador]);
 
   /**
    * Corre el escenario elegido sobre lo que hay en el lienzo **ahora**: se exporta el XML y se
