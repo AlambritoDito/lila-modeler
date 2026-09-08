@@ -55,6 +55,20 @@ Chrome headless 1440×900 contra el dev server, tema Eva-01 y `examples/pedido` 
 | `app-01-modelar-1440.png` | Modelar con los cinco tickets de la sesión 8 (#237–#241) en Eva-01: barra del artboard 01, paleta propia, chips y marcadores, minimapa y zoom, pestaña con ✕, pie en mono | sesión 8 |
 | `app-10-modelar-papel.png` | La misma pantalla con el tema Papel, al lado del artboard 10 | sesión 8 |
 | `app-03-calendario.png` | Simular con el editor semanal de calendarios: rejilla 7 días × 24 horas del calendario `oficina` de `examples/pedido` (MON–FRI 09:00–18:00 pintadas) y el interruptor «Editar como lista» | #233 |
+| `app-04-overlay-cuellos.png` | Simular con el overlay de cuellos de botella sobre `Task_Preparar`: etiqueta corta «2.1 d · 34%» y halo del cuello principal | #226 |
+
+### Cuántos cuellos pinta el overlay
+
+Decisión de #226, frente al artboard 4, que sugiere una etiqueta por tarea: el overlay pinta
+**solo los cuellos de nivel `high`** —los que esperan más de lo que trabajan, que son los que se
+vino a buscar— y, **si no hay ninguno, las tres primeras del ranking**, para que el lienzo no se
+quede mudo justo después de simular; **nunca más de cinco**, porque cada entrada es una etiqueta
+flotante encima del diagrama. El ranking no se recalcula: el corte respeta el orden de
+`result.bottlenecks` (`docs/RESULTS_FORMAT.md` §6), así que el overlay, la tabla de Resultados y
+`lila run` siguen coincidiendo. Las tareas que quedan fuera del lienzo siguen en la tabla de
+Resultados con sus cifras completas. La etiqueta se redondea para caber sobre la tarea (65 px
+contra los 100 px de la tarea; el texto largo medía 287 px) y el texto completo, con la unidad
+del escenario y todos los decimales, está en su `title`.
 
 ## Inventario de componentes React
 

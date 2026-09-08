@@ -91,15 +91,17 @@ describe('overlayModel (LILA-064)', () => {
       resultToBe = simulate(ir, toBe, { log: false });
     }, 120_000);
 
-    it('el orden del overlay es literalmente el de result.bottlenecks', () => {
+    // El corte de #226 (solo nivel `high`) no reordena nada: el orden y el `rango` que quedan son
+    // los que trajo `result.bottlenecks`, ordenado por `resourceWait.total` (§6).
+    it('pinta solo los cuellos de nivel alto, en el orden del motor', () => {
       const model = overlayModel(resultAsIs, asIs);
-      const ranking = resultAsIs.bottlenecks.map((b) => b.elementId);
 
-      expect(Object.keys(model)).toEqual(ranking);
-      // Top-N: los tres primeros del overlay son los tres primeros del ranking del motor, con su
-      // posición explícita — nada aquí vuelve a ordenar por `resourceWait.total` (§6).
-      expect(Object.keys(model).slice(0, 3)).toEqual(ranking.slice(0, 3));
-      expect(ranking.map((id) => model[id]?.rango)).toEqual(ranking.map((_, i) => i));
+      expect(resultAsIs.bottlenecks.map((b) => b.elementId)).toEqual([
+        'Task_Preparar',
+        'Task_TomarPedido',
+      ]);
+      expect(Object.keys(model)).toEqual(['Task_Preparar']);
+      expect(model['Task_Preparar']?.rango).toBe(0);
     });
 
     it('Task_Preparar es bottlenecks[0] y es el único "principal"', () => {
@@ -108,17 +110,27 @@ describe('overlayModel (LILA-064)', () => {
       expect(resultAsIs.bottlenecks[0]?.elementId).toBe('Task_Preparar');
       expect(model['Task_Preparar']?.principal).toBe(true);
       expect(model['Task_Preparar']?.nivel).toBe('high');
-      expect(model['Task_Preparar']?.etiqueta).toMatch(/espera media .* · utilización /);
       expect(Object.values(model).filter((e) => e.principal)).toHaveLength(1);
     });
 
-    // TO-BE triplica la capacidad de cajero (2 -> 3): la espera media de Task_TomarPedido baja de
-    // ~15 s a ~2 s (frente a su propio tiempo de proceso, ~160 s: pasa de "casi el 10 % del
-    // proceso" a "menos del 5 %"), y su nivel baja de "mid" a "low" — el ratio es propio de la
-    // tarea, no depende de las demás (ver `nivelDeRatio`).
-    it('cambiar de escenario cambia el nivel de Task_TomarPedido', () => {
-      expect(overlayModel(resultAsIs, asIs)['Task_TomarPedido']?.nivel).toBe('mid');
-      expect(overlayModel(resultToBe, toBe)['Task_TomarPedido']?.nivel).toBe('low');
+    // #226: la etiqueta larga («espera media 3000.559774 min · utilización 34.354969%») medía
+    // 311 px sobre una tarea de 100 px. La corta redondea a un decimal en la unidad más gruesa
+    // que siga valiendo 1 o más (días, aquí) y el texto completo se conserva en el `title`.
+    it('la etiqueta cabe sobre la tarea y el texto completo va en el title', () => {
+      const entry = overlayModel(resultAsIs, asIs)['Task_Preparar'];
+
+      expect(entry?.etiqueta).toBe('2.1 d · 34%');
+      expect(entry?.titulo).toBe('espera media 3000.559774 min · utilización 34.354969%');
+    });
+
+    // TO-BE triplica la capacidad de cajero (2 -> 3) y la espera media de Task_TomarPedido baja
+    // de ~15 s a ~2 s, pero en los dos escenarios espera muchísimo menos de lo que trabaja
+    // (~160 s): nunca llega a nivel `high`, así que el corte de #226 la deja fuera del lienzo en
+    // los dos. Sigue estando en la tabla de Resultados y en el ranking de `lila run`.
+    it('Task_TomarPedido está en el ranking pero no se pinta en ninguno de los dos escenarios', () => {
+      expect(resultToBe.bottlenecks.map((b) => b.elementId)).toContain('Task_TomarPedido');
+      expect(overlayModel(resultAsIs, asIs)['Task_TomarPedido']).toBeUndefined();
+      expect(overlayModel(resultToBe, toBe)['Task_TomarPedido']).toBeUndefined();
     });
   });
 });
@@ -237,11 +249,46 @@ function corridaDe(
   return { originalIds, result: resultadoFalso(filas), scenario: ESCENARIO };
 }
 
+/** Las tres esperan más de lo que trabajan: nivel `high` las tres, así que se pintan las tres. */
 const RANKING = [
   { espera: 600, id: 'Task_Preparar', proceso: 300, utilizacion: 0.97 },
-  { espera: 60, id: 'Task_TomarPedido', proceso: 160, utilizacion: 0.55 },
-  { espera: 1, id: 'Task_Revisar', proceso: 200, utilizacion: 0.1 },
+  { espera: 500, id: 'Task_TomarPedido', proceso: 160, utilizacion: 0.55 },
+  { espera: 400, id: 'Task_Revisar', proceso: 200, utilizacion: 0.1 },
 ];
+
+/** Cuántas entradas del ranking llegan al lienzo (#226); la decisión está en `docs/design/README.md`. */
+describe('corte del ranking (#226)', () => {
+  const modelo = (filas: readonly { id: string; espera: number; proceso: number; utilizacion: number }[]) =>
+    overlayModel(resultadoFalso(filas), ESCENARIO);
+
+  it('con cuellos de nivel alto se pintan solo esos, conservando su rango', () => {
+    const model = modelo([
+      { espera: 600, id: 'A', proceso: 300, utilizacion: 0.9 },
+      { espera: 60, id: 'B', proceso: 160, utilizacion: 0.5 },
+      { espera: 400, id: 'C', proceso: 200, utilizacion: 0.4 },
+      { espera: 1, id: 'D', proceso: 200, utilizacion: 0.1 },
+    ]);
+
+    expect(Object.keys(model)).toEqual(['A', 'C']);
+    expect(model['C']?.rango).toBe(2);
+  });
+
+  it('sin ninguno de nivel alto se pintan las tres primeras del ranking', () => {
+    const model = modelo(
+      [60, 50, 40, 30, 1].map((espera, i) => ({ espera, id: `T${i}`, proceso: 160, utilizacion: 0.5 })),
+    );
+
+    expect(Object.keys(model)).toEqual(['T0', 'T1', 'T2']);
+  });
+
+  it('nunca más de cinco etiquetas sobre el diagrama', () => {
+    const model = modelo(
+      [700, 600, 500, 400, 300, 200, 100].map((espera, i) => ({ espera, id: `T${i}`, proceso: 10, utilizacion: 0.5 })),
+    );
+
+    expect(Object.keys(model)).toEqual(['T0', 'T1', 'T2', 'T3', 'T4']);
+  });
+});
 
 describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
   it('pinta el ranking en su orden y marca solo bottlenecks[0]', () => {
@@ -256,7 +303,7 @@ describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
     ]);
     expect([...falso.marcadores.keys()]).toEqual(['Task_Preparar']);
     expect(falso.pintar('Task_Preparar').fill).toBe('var(--sim-bottleneck-high)');
-    expect(falso.pintar('Task_Revisar').fill).toBe('var(--sim-bottleneck-low)');
+    expect(falso.pintar('Task_Revisar').fill).toBe('var(--sim-bottleneck-high)');
     // Un elemento fuera del ranking lo sigue dibujando el renderer por defecto.
     expect(falso.pintar('Gateway_1')).toEqual({});
   });
@@ -300,11 +347,13 @@ describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
     const falso = modeladorFalso(RANKING.map((f) => f.id));
     applyOverlay(falso.modeler, corridaDe(RANKING));
 
-    // TO-BE: el cuello de botella principal es otro y Task_Revisar ya no espera a nadie.
+    // TO-BE: el cuello de botella principal es otro y Task_Revisar ya no espera a nadie. Aquí
+    // ninguna llega a nivel `high`, así que se pintan las dos por el camino de las tres primeras
+    // (#226) y Task_Preparar cambia de tinte alto a bajo.
     applyOverlay(
       falso.modeler,
       corridaDe([
-        { espera: 400, id: 'Task_TomarPedido', proceso: 160, utilizacion: 0.8 },
+        { espera: 40, id: 'Task_TomarPedido', proceso: 160, utilizacion: 0.8 },
         { espera: 5, id: 'Task_Preparar', proceso: 300, utilizacion: 0.3 },
       ]),
     );

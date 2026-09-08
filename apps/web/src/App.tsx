@@ -47,6 +47,18 @@ import './app.css';
 
 type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string };
 
+/**
+ * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
+ * BPMN en crudo (`Task_Preparar`), que no es lo que el usuario ve en el lienzo. El id se añade
+ * entre paréntesis solo cuando aporta algo —tareas sin nombre, o ids sanitizados por el motor—,
+ * porque sigue siendo la única clave (regla 5 de BACKLOG.md). `undefined` = no hubo cuellos.
+ */
+function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
+  if (id === undefined) return undefined;
+  const nombre = ir?.nodes[id]?.name;
+  return nombre === undefined || nombre === '' || nombre === id ? id : `${nombre} (${id})`;
+}
+
 const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
 const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 
@@ -804,7 +816,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <p className="vacio">
               {corrida === null
                 ? 'Simula para ver los cuellos de botella sobre el diagrama.'
-                : (corrida.result.bottlenecks[0]?.elementId ??
+                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
                   'Ningún elemento esperó por un recurso en esta corrida.')}
             </p>
             <ScenarioPanel

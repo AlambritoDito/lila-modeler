@@ -165,20 +165,22 @@ function modeladorFalso(idsEnLienzo: readonly string[]): Falso {
  * ------------------------------------------------------------------ */
 
 describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
-  // §6 fija el orden en el motor; el overlay no puede reordenar ni "mejorar" el desempate.
+  // §6 fija el orden en el motor; el overlay no puede reordenar ni "mejorar" el desempate. Las
+  // seis esperan más de lo que trabajan (nivel `high`), así que el único corte que les aplica
+  // #226 es el techo de cinco: entran las cinco primeras, en su orden y con su `rango`.
   it('con empates en resourceWait.total respeta el orden de bottlenecks tal cual', () => {
     const empatadas: Fila[] = [
-      { espera: 30, id: 'Task_F', proceso: 100, total: 900, utilizacion: 0.9 },
-      { espera: 30, id: 'Task_A', proceso: 100, total: 900, utilizacion: 0.9 },
-      { espera: 20, id: 'Task_E', proceso: 100, total: 600, utilizacion: 0.5 },
-      { espera: 20, id: 'Task_B', proceso: 100, total: 600, utilizacion: 0.4 },
-      { espera: 10, id: 'Task_D', proceso: 100, total: 300, utilizacion: 0.3 },
-      { espera: 10, id: 'Task_C', proceso: 100, total: 300, utilizacion: 0.3 },
+      { espera: 30, id: 'Task_F', proceso: 10, total: 900, utilizacion: 0.9 },
+      { espera: 30, id: 'Task_A', proceso: 10, total: 900, utilizacion: 0.9 },
+      { espera: 20, id: 'Task_E', proceso: 10, total: 600, utilizacion: 0.5 },
+      { espera: 20, id: 'Task_B', proceso: 10, total: 600, utilizacion: 0.4 },
+      { espera: 10, id: 'Task_D', proceso: 10, total: 300, utilizacion: 0.3 },
+      { espera: 10, id: 'Task_C', proceso: 10, total: 300, utilizacion: 0.3 },
     ];
     const model = overlayModel(resultadoFalso(empatadas), escenario('min'));
 
-    expect(Object.keys(model)).toEqual(['Task_F', 'Task_A', 'Task_E', 'Task_B', 'Task_D', 'Task_C']);
-    expect(Object.values(model).map((e) => e.rango)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(Object.keys(model)).toEqual(['Task_F', 'Task_A', 'Task_E', 'Task_B', 'Task_D']);
+    expect(Object.values(model).map((e) => e.rango)).toEqual([0, 1, 2, 3, 4]);
     expect(Object.values(model).filter((e) => e.principal).map((_, i) => i)).toHaveLength(1);
     expect(model['Task_F']?.principal).toBe(true);
   });
@@ -201,16 +203,18 @@ describe('overlayModel: ranking, niveles y etiqueta (QA LILA-064)', () => {
   });
 
   // R-DURA-2: los valores viven en segundos y `baseTimeUnit` es solo presentación. La etiqueta
-  // tiene que decir «2 min», no «120 min» ni «120 s».
-  it('la etiqueta convierte a baseTimeUnit y no imprime segundos crudos', () => {
+  // tiene que decir «2 min», no «120 min» ni «120». Desde #226 la etiqueta corta elige por su
+  // cuenta la unidad más gruesa que siga siendo legible (con `min` y con `s` sale la misma) y es
+  // el `title` el que conserva la unidad del escenario.
+  it('la etiqueta no imprime segundos crudos y el title respeta baseTimeUnit', () => {
     const filas = [{ espera: 120, id: 'Task_Espera', proceso: 120, utilizacion: 0.5 }];
+    const enMinutos = overlayModel(resultadoFalso(filas), escenario('min'))['Task_Espera'];
+    const enSegundos = overlayModel(resultadoFalso(filas), escenario('s'))['Task_Espera'];
 
-    expect(overlayModel(resultadoFalso(filas), escenario('min'))['Task_Espera']?.etiqueta).toBe(
-      'espera media 2 min · utilización 50%',
-    );
-    expect(overlayModel(resultadoFalso(filas), escenario('s'))['Task_Espera']?.etiqueta).toBe(
-      'espera media 120 s · utilización 50%',
-    );
+    expect(enMinutos?.etiqueta).toBe('2 min · 50%');
+    expect(enSegundos?.etiqueta).toBe('2 min · 50%');
+    expect(enMinutos?.titulo).toBe('espera media 2 min · utilización 50%');
+    expect(enSegundos?.titulo).toBe('espera media 120 s · utilización 50%');
   });
 
   // `processing.mean = 0` con espera > 0 no lo produce el motor, pero un 0/0 daría `NaN` y
