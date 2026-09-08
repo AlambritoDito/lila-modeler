@@ -201,6 +201,8 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
+Los defectos del **esquema** (los que caza zod antes de R3–R16: tipo equivocado, fuera de rango, clave desconocida, variante inexistente) salen en español y citan la ruta — `elements.Flow_Aprobado.probability: debe ser ≤ 1` —, con el mismo texto en la CLI, en el MCP y en el panel de escenario. El catálogo es `erroresEnEspanol` en `packages/engine/src/scenario.ts`, y `parseScenario` es la única puerta que lo aplica; lo que ese mapa no traduce cae en la locale `es` de zod. Los mensajes propios de este documento (R8, R11, R13, `E-CAL-VACIO`…) los escribe el esquema y mandan sobre el mapa. Los errores y avisos **semánticos** son otra cosa: los define el catálogo § 17 de `docs/SEMANTICS.md`.
+
 ---
 
 ## 6. Semántica de `extends`

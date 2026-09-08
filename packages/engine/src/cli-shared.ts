@@ -30,7 +30,7 @@ import type { RunResult } from './core/result.js';
 import type { BaseTimeUnit } from './format.js';
 import {
   resolveExtends,
-  ScenarioSchema,
+  parseScenario,
   type ResolvedScenario,
   type ScenarioProblem,
   type ScenarioReader,
@@ -67,7 +67,7 @@ export function readJsonFile(file: string): unknown {
  */
 export function loadResolvedScenario(file: string, read: ScenarioReader = readJsonFile): ResolvedScenario {
   const raw = resolveExtends(file, read);
-  const parsed = ScenarioSchema.safeParse(raw);
+  const parsed = parseScenario(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => {
       const path = issue.path.length === 0 ? '$' : issue.path.map(String).join('.');

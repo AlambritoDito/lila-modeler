@@ -246,7 +246,7 @@ describe('uniones sobre un escenario que hereda', () => {
     });
 
     // Y el panel no puede quedarse marcando un error que no ofrece forma de arreglar.
-    expect(document.body.textContent).not.toContain('Unrecognized key');
+    expect(document.body.textContent).not.toContain('clave desconocida');
   });
 });
 
@@ -460,7 +460,7 @@ describe('campos numéricos', () => {
     // diría algo distinto de lo que la persona tecleó.
     expect(run['seed']).toBe('abc');
     expect('warmup' in run).toBe(false);
-    // Y se marca, sin bloquear la escritura.
-    expect(document.body.textContent).toContain('Invalid input');
+    // Y se marca, sin bloquear la escritura, en español (LILA-202).
+    expect(document.body.textContent).toContain('debe ser un número, no un texto');
   });
 });

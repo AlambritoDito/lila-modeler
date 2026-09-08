@@ -18,6 +18,7 @@ import { simulate, type ProcessIR } from '@lila/engine';
 import { parseBpmn } from '@lila/engine/bpmn';
 import {
   ScenarioSchema,
+  parseScenario,
   resolveExtends,
   scenarioErrors,
   validateScenario,
@@ -29,6 +30,7 @@ import {
   duplicarEscenario,
   borrar,
   escribir,
+  problemasEscenario,
   type Contexto,
   type EsquemaJson,
   ScenarioPanel,
@@ -230,14 +232,22 @@ describe('validación en vivo', () => {
     pulsar('Flow_Aprobado');
     teclear('campo-elements.Flow_Aprobado.probability', '1.5');
 
-    // El texto es el del esquema, no uno inventado por el panel.
+    // El texto es el del esquema, no uno inventado por el panel, y es el mismo que imprimen la
+    // CLI y el MCP: en español y citando la ruta (LILA-202).
     const roto = escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5);
-    const parsed = ScenarioSchema.safeParse(roto);
+    const parsed = parseScenario(roto);
     expect(parsed.success).toBe(false);
     const esperado = parsed.error!.issues.find(
       (i) => i.path.join('.') === 'elements.Flow_Aprobado.probability',
     )!;
+    expect(esperado.message).toBe('debe ser ≤ 1');
     expect(document.body.textContent).toContain(esperado.message);
+    // La ruta viaja con el problema (es la que marca el campo y la que imprimen CLI y MCP).
+    expect(problemasEscenario(roto, ir)).toContainEqual({
+      ruta: 'elements.Flow_Aprobado.probability',
+      mensaje: 'debe ser ≤ 1',
+      severidad: 'error',
+    });
 
     // La escritura no se bloquea: el valor inválido está en el archivo y «Guardar» lo publica.
     expect(boton('Guardar').disabled).toBe(false);

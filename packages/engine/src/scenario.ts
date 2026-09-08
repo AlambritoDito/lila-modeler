@@ -17,6 +17,99 @@ import { poolCapacityBound } from './core/sim.js';
 import type { ProcessIR } from './core/ir.js';
 
 /* ------------------------------------------------------------------ *
+ * Mensajes del esquema, en español (LILA-202)
+ * ------------------------------------------------------------------ */
+
+/** Nombres de tipo de zod en español, para `invalid_type`. */
+const TIPOS: Record<string, string> = {
+  array: 'una lista',
+  bigint: 'un entero',
+  boolean: 'un booleano',
+  int: 'un entero',
+  null: 'null',
+  number: 'un número',
+  object: 'un objeto',
+  record: 'un objeto',
+  string: 'un texto',
+  undefined: 'nada',
+};
+
+function tipoEs(nombre: string): string {
+  return TIPOS[nombre] ?? nombre;
+}
+
+/** Tipo del valor recibido, con los mismos nombres que `TIPOS`. */
+function tipoRecibido(valor: unknown): string {
+  if (valor === null) return 'null';
+  return tipoEs(Array.isArray(valor) ? 'array' : typeof valor);
+}
+
+/** `"texto"` entre comillas, el resto tal cual: los `values` de un enum son primitivos. */
+function literal(valor: unknown): string {
+  return typeof valor === 'string' ? `"${valor}"` : String(valor);
+}
+
+/** Unidad de un límite de tamaño según el contenedor. */
+function unidades(origen: string, cantidad: number | bigint): string {
+  const uno = cantidad === 1 || cantidad === 1n;
+  if (origen === 'string') return uno ? 'carácter' : 'caracteres';
+  return uno ? 'elemento' : 'elementos';
+}
+
+/** Los textos que zod trae de fábrica para lo que no traduce este archivo. */
+const localeEs = z.locales.es().localeError;
+
+/**
+ * Los defectos del esquema en español, sin la ruta: la pone quien formatea (la CLI, el MCP y el
+ * panel imprimen `${ruta}: ${mensaje}`), así los tres dicen lo mismo —
+ * `elements.Flow_X.probability: debe ser ≤ 1`— sin repetir el catálogo.
+ *
+ * Zod solo consulta este mapa cuando el defecto **no** trae mensaje propio, así que los `refine`,
+ * `regex` y `min` con texto de este archivo siguen mandando (R11, R13, R8…).
+ *
+ * ponytail: solo se traducen los seis códigos que produce hoy `ScenarioSchema`; el resto cae en la
+ * locale `es` de zod, así nada sale en inglés aunque el esquema crezca. Si algún código de la
+ * locale acaba sonando raro en un escenario, se le añade su `case` aquí.
+ */
+export const erroresEnEspanol: z.core.$ZodErrorMap = (issue) => {
+  switch (issue.code) {
+    case 'invalid_type': {
+      const esperado = tipoEs(issue.expected);
+      // `input: undefined` es una clave que falta, no un valor de otro tipo.
+      return issue.input === undefined
+        ? `es obligatorio y debe ser ${esperado}`
+        : `debe ser ${esperado}, no ${tipoRecibido(issue.input)}`;
+    }
+    case 'too_big':
+      return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
+        ? `debe ser ${issue.inclusive === false ? '<' : '≤'} ${issue.maximum}`
+        : `debe tener como mucho ${issue.maximum} ${unidades(issue.origin, issue.maximum)}`;
+    case 'too_small':
+      return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
+        ? `debe ser ${issue.inclusive === false ? '>' : '≥'} ${issue.minimum}`
+        : `debe tener al menos ${issue.minimum} ${unidades(issue.origin, issue.minimum)}`;
+    case 'invalid_value':
+      return issue.values.length === 1
+        ? `debe ser ${literal(issue.values[0])}`
+        : `debe ser uno de: ${issue.values.map(literal).join(', ')}`;
+    case 'unrecognized_keys':
+      return issue.keys.length === 1
+        ? `clave desconocida: ${literal(issue.keys[0])}`
+        : `claves desconocidas: ${issue.keys.map(literal).join(', ')}`;
+    case 'invalid_union': {
+      // Unión discriminada: la ruta ya apunta al discriminante y `options` son sus valores. El
+      // tipo crudo del defecto no las declara en todas las variantes, de ahí el aserto.
+      const opciones = issue.options as readonly unknown[] | undefined;
+      return opciones === undefined
+        ? 'no encaja con ninguna de las formas admitidas'
+        : `debe ser uno de: ${opciones.map(literal).join(', ')}`;
+    }
+    default:
+      return localeEs(issue);
+  }
+};
+
+/* ------------------------------------------------------------------ *
  * § 3 — Distribuciones (14, parámetros nombrados, segundos)
  * ------------------------------------------------------------------ */
 
@@ -251,6 +344,20 @@ export const ScenarioSchema = z.strictObject({
 });
 
 export type Scenario = z.output<typeof ScenarioSchema>;
+
+/**
+ * La única puerta de entrada al esquema para quien enseña los defectos a una persona: aplica
+ * `erroresEnEspanol`. La CLI (`cli-shared.ts`), el MCP (`packages/mcp`) y el panel de escenario
+ * la usan, y por eso los tres dicen exactamente lo mismo (LILA-202).
+ *
+ * Es un `safeParse` con mapa, no un `z.config()` global: `@lila/engine` es una librería y
+ * reconfigurar el zod del proceso al importarla cambiaría también los mensajes de esquemas que
+ * no son suyos (los `inputSchema` del servidor MCP, por ejemplo).
+ */
+export function parseScenario(raw: unknown): z.ZodSafeParseResult<Scenario> {
+  return ScenarioSchema.safeParse(raw, { error: erroresEnEspanol });
+}
+
 export type ScenarioInput = z.input<typeof ScenarioSchema>;
 
 /** Escenario ya resuelto (`extends` aplicado): `model` y `run` dejan de ser opcionales. */

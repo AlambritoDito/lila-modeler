@@ -10,6 +10,16 @@ it('resuelve y valida el escenario real antes de simular', async () => {
 it('bloquea parámetros inválidos', async () => {
   await expect(prepareSimulation(xml, 'bad', { bad: { ...raw, run: { duration: -1 } } })).rejects.toThrow();
 });
+// Los defectos del esquema son la tercera boca de `parseScenario` (LILA-202): la CLI y el MCP
+// tienen la suya en `scenario.test.ts` y `packages/mcp/test/server.test.ts`. Sin esta, volver a
+// `ScenarioSchema.parse` aquí no rompe nada y el `ZodError` en inglés reaparece en la barra.
+it('un defecto del esquema llega en español y citando la ruta, igual que en la CLI (LILA-202)', async () => {
+  const elements = { ...(raw['elements'] as Record<string, unknown>), Flow_Aprobado: { probability: 1.5 } };
+  await expect(prepareSimulation(xml, 'roto', { roto: { ...raw, elements } })).rejects.toThrow(
+    'elements.Flow_Aprobado.probability: debe ser ≤ 1',
+  );
+});
+
 it('bloquea elementos BPMN fuera del perfil antes de simular', async () => {
   const bad = xml.replace(/bpmn:task/g, 'bpmn:adHocSubProcess');
   await expect(prepareSimulation(bad, 'base', { base: raw })).rejects.toThrow();
