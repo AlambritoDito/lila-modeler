@@ -40,6 +40,8 @@ import {
   type ScenarioReader,
 } from '@lila/engine/schema';
 
+import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+
 /* ------------------------------------------------------------------ *
  * JSON Schema: el subconjunto que produce `z.toJSONSchema` para el escenario
  * ------------------------------------------------------------------ */
@@ -611,6 +613,74 @@ function CampoCapacidadRecurso({
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * `calendars[clave].intervals` (LILA-203): rejilla semanal o lista
+ * ------------------------------------------------------------------ */
+
+/** `['calendars', <clave>, 'intervals']`: la única ruta donde la rejilla semanal significa algo. */
+function esIntervalosCalendario(ruta: Ruta): boolean {
+  return ruta.length === 3 && ruta[0] === 'calendars' && ruta[2] === 'intervals';
+}
+
+/**
+ * La rejilla del artboard 3 más el interruptor a la lista genérica del esquema.
+ *
+ * La rejilla es una vista **parcial** del formato —su celda es una hora entera y § 2.3 admite
+ * cualquier `"HH:MM"`—, así que un calendario con franjas de minutos se edita solo como lista, con
+ * el aviso: redondearlo para poder dibujarlo sería cambiar el escenario por enseñarlo.
+ *
+ * ponytail: la lista se dibuja llamando al mismo `Campo` con un `sufijo`, que es lo que corta la
+ * recursión (la intercepción de arriba solo mira el campo sin sufijo). Un `Campo` que ya sabe
+ * dibujar arrays de objetos desde el esquema no se duplica aquí por tener dos vistas.
+ */
+function CampoIntervalos({
+  esquema,
+  ruta,
+  ctx,
+}: {
+  esquema: EsquemaJson;
+  ruta: Ruta;
+  ctx: Contexto;
+}): React.JSX.Element {
+  const [rejilla, setRejilla] = useState(true);
+  const valor = leer(ctx.resuelto, ruta);
+  const intervals = (Array.isArray(valor) ? valor : []) as Intervalo[];
+  const conMinutos = tieneMinutos(intervals);
+  const enRejilla = rejilla && !conMinutos;
+  return (
+    <div className="campo-schema">
+      <span className="etiqueta">intervals</span>
+      {conMinutos ? (
+        <p className="aviso">este calendario tiene franjas de minutos; edítalo como lista</p>
+      ) : (
+        <button
+          type="button"
+          className="enlace"
+          onClick={() => {
+            setRejilla(!rejilla);
+          }}
+        >
+          {enRejilla ? 'Editar como lista' : 'Editar como rejilla'}
+        </button>
+      )}
+      {enRejilla ? (
+        <>
+          <CalendarEditor
+            intervals={intervals}
+            onCambio={(nuevos) => {
+              // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
+              ctx.editar(ruta, nuevos);
+            }}
+          />
+          <Problemas ruta={ruta} ctx={ctx} />
+        </>
+      ) : (
+        <Campo esquema={esquema} ruta={ruta} etiqueta="intervals" requerido ctx={ctx} sufijo="-lista" />
+      )}
+    </div>
+  );
+}
+
 /** Las propiedades de un objeto, saltándose los `const` (los enseña el selector de variante). */
 function Propiedades({
   esquema,
@@ -720,6 +790,12 @@ export function Campo({
   // calendarios ya declarados, no como el formulario genérico de un `{calendar, capacity}` suelto.
   if (esCapacidadRecurso(ruta, esquema)) {
     return <CampoCapacidadRecurso esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
+
+  // `calendars[clave].intervals` (LILA-203): la rejilla semanal en vez de la lista genérica de
+  // objetos. El `sufijo` corta la recursión: la vista de lista vuelve a entrar aquí ya marcada.
+  if (sufijo === '' && esIntervalosCalendario(ruta)) {
+    return <CampoIntervalos esquema={esquema} ruta={ruta} ctx={ctx} />;
   }
 
   // Unión: selector de variante + cuerpo de la elegida. Con esto las 14 distribuciones y la
