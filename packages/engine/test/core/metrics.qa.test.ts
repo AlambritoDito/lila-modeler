@@ -412,6 +412,43 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     ]);
   }, SLOW);
 
+  test('dos pools en AND genuinamente saturados avisan los dos', async () => {
+    // El discriminante no puede ser «uno por tarea»: aquí los dos pools están de verdad llenos
+    // toda la corrida (ρ ≈ 2 cada uno) y los dos frenan la cola.
+    const warnings = await saturationOf('mm1/mm1-rho08/scenario.json', (scenario) => {
+      scenario.run.replications = 3;
+      scenario.resources = { ...scenario.resources, servidorB: { capacity: 1 } };
+      scenario.elements = {
+        ...scenario.elements,
+        Task_Servicio: {
+          processingTime: { type: 'exponential', mean: 750 },
+          resources: [{ ref: 'servidor', quantity: 1 }, { ref: 'servidorB', quantity: 1 }],
+          selection: 'and',
+        },
+      };
+    });
+
+    expect(warnings).toEqual([
+      'W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: servidorB: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+    ]);
+  }, SLOW);
+
+  test('un pool compartido por dos tareas avisa una vez, no una por tarea', async () => {
+    // `cajero` (capacity 1) lo satura `Task_TomarPedido`; `Task_Revisar` también lo pide y espera
+    // por su culpa. El aviso pertenece al pool: una sola línea, y ninguna para `cocinero`, que es
+    // la otra alternativa OR de `Task_Revisar` y está ociosa (utilización 0,32).
+    const warnings = await saturationOf('pedido/as-is.scenario.json', (scenario) => {
+      scenario.run.replications = 2;
+      scenario.resources!['cajero']!.capacity = 1;
+      scenario.elements!['Task_TomarPedido']!.processingTime = { type: 'constant', value: 600 };
+    });
+
+    expect(warnings).toEqual([
+      'W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (λ/μ·c ≈ 2.5)',
+    ]);
+  }, SLOW);
+
   test.each(['level-1', 'level-2', 'level-3', 'level-4'])(
     'ningún pool de examples/bizagi-levels/%s avisa',
     async (level) => {
