@@ -180,13 +180,16 @@ test('W-MSGFLOW agrega el conteo y W-COND cita cada flujo condicionado (LILA-163
 test('parseBpmn conserva los avisos de bpmn-moddle en ir.source.warnings (LILA-185)', async () => {
   const parsed = await parseBpmn(fixture('parse-incompleto.bpmn'));
 
+  // `processId` (LILA-196) ubica el aviso en su `bpmn:process`: los dos son del que se simula.
   expect(parsed.ir.source.warnings).toEqual([
     {
       message: expect.stringContaining('unknown type <bpmn:LoopCounter>') as unknown as string,
+      processId: 'Process_Incompleto',
     },
     {
       message: expect.stringContaining('duplicate ID <Task_Revisar>') as unknown as string,
       elementId: 'Task_Revisar',
+      processId: 'Process_Incompleto',
     },
   ]);
   // El elemento que moddle tiró no está en el IR: el archivo declara dos tareas, el IR trae una.

@@ -22,7 +22,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationWarning {
-  code: 'W-MSGFLOW' | 'W-COND' | 'W-PARSE';
+  code: 'W-MSGFLOW' | 'W-COND' | 'W-PARSE' | 'W-XOR-DEFAULT-ROTO';
   id: string;
   message: string;
 }
@@ -109,8 +109,8 @@ function unsupportedProblem(el: UnsupportedElement): IrProblem {
  */
 const DISCARDED_ID_MESSAGE = /(?:illegal|duplicate) ID </;
 
-/** Prefijo del elemento que moddle no pudo leer, dentro de `unparsable content <prefijo:Tipo>`. */
-const UNPARSABLE_PREFIX = /unparsable content <([^:>]+):/;
+/** Nombre calificado del elemento que moddle no pudo leer, en `unparsable content <bpmn:task>`. */
+const UNPARSABLE_QNAME = /unparsable content <([^\s>/]+)>/;
 
 /**
  * Prefijos de la capa de diagrama (BPMN DI: `bpmndi`, `di`, `dc`, `dd`). Es geometría pura —
@@ -119,9 +119,38 @@ const UNPARSABLE_PREFIX = /unparsable content <([^:>]+):/;
  */
 const DIAGRAM_PREFIXES = new Set(['bpmndi', 'di', 'dc', 'dd']);
 
-function isDiagramOnly(message: string): boolean {
-  const prefix = UNPARSABLE_PREFIX.exec(message)?.[1];
-  return prefix !== undefined && DIAGRAM_PREFIXES.has(prefix);
+/**
+ * Elementos que la sección 2 «lee y preserva» pero no simula: aunque estén dentro del proceso
+ * simulado no son nodos ni flujos del grafo de tokens, así que perder uno no deja el modelo
+ * incompleto (LILA-196). Nombres locales del XML. Lo que cae **fuera** de todo `bpmn:process`
+ * (`bpmn:message`, `bpmn:signal`, `bpmn:error`, `bpmn:category`, `bpmn:participant`, …) no
+ * necesita estar aquí: `SourceWarning.processId` ya lo deja fuera del grafo.
+ */
+const NOT_A_GRAPH_ELEMENT = new Set([
+  'dataObject',
+  'dataObjectReference',
+  'dataStore',
+  'dataStoreReference',
+  'textAnnotation',
+  'association',
+  'group',
+  'documentation',
+  'extensionElements',
+  'laneSet',
+  'lane',
+]);
+
+/**
+ * ¿Lo que moddle descartó habría sido nodo o flujo del proceso simulado? La capa de diagrama y los
+ * elementos de la lista de arriba no entran al IR; cualquier otro descarte cuenta como pérdida,
+ * incluido el de un tipo desconocido: más vale abortar que simular un grafo con un nodo menos.
+ */
+function discardsGraphElement(message: string): boolean {
+  const qname = UNPARSABLE_QNAME.exec(message)?.[1];
+  if (qname === undefined) return true;
+  const colon = qname.indexOf(':');
+  if (colon !== -1 && DIAGRAM_PREFIXES.has(qname.slice(0, colon))) return false;
+  return !NOT_A_GRAPH_ELEMENT.has(qname.slice(colon + 1));
 }
 
 /**
@@ -130,23 +159,50 @@ function isDiagramOnly(message: string): boolean {
  * bpmn-moddle reporta en los exports reales (`bpmn:messageRef`, `bpmn:dataStoreRef`,
  * `bpmn:categoryValueRef`, …) cuelgan de construcciones que el perfil v1 ya ignora (mensajes,
  * data stores, categorías): una referencia rota ahí no descarta nada del grafo.
+ *
+ * `bpmn:default` e `bpmn:incoming`/`bpmn:outgoing` no están aquí aunque sean topología: no
+ * descartan nada por sí mismos y tienen su propio aviso (LILA-196).
  */
 const GRAPH_REFERENCE_PROPERTIES = new Set([
   'bpmn:sourceRef',
   'bpmn:targetRef',
   'bpmn:attachedToRef',
   'bpmn:flowNodeRef',
-  'bpmn:default',
 ]);
 
 /**
- * `docs/SEMANTICS.md` R-NOSOP-6: un aviso de bpmn-moddle implica pérdida en el grafo en dos
- * casos — un elemento completo que moddle tiró por id ilegal o duplicado, o una referencia rota
- * sobre una propiedad de topología. Todo lo demás es inofensivo y se queda en `W-PARSE`.
+ * `docs/SEMANTICS.md` R-NOSOP-6: los cinco desenlaces de un aviso de bpmn-moddle. Solo `perdida`
+ * aborta; los demás avisan sin mentir sobre lo que se perdió (LILA-196).
  */
-function impliesDiscardedElement(w: SourceWarning): boolean {
-  if (DISCARDED_ID_MESSAGE.test(w.message)) return !isDiagramOnly(w.message);
-  return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property);
+type ParseWarningKind =
+  /** Se fue del grafo un nodo o un flujo del proceso simulado: `E-PARSE-INCOMPLETO`. */
+  | 'perdida'
+  /** El aviso es de otro `bpmn:process` del archivo, que Lila no simula. */
+  | 'otro-proceso'
+  /** Un `bpmn:incoming`/`bpmn:outgoing` que nombra un flujo ausente del modelo cargado. */
+  | 'flujo-ausente'
+  /** `bpmn:default` roto: solo se pierde la marca `isDefault` (§ 6, R-XOR-1/2). */
+  | 'default-roto'
+  /** Cualquier otro aviso: no toca el grafo. */
+  | 'inofensivo';
+
+function classifyParseWarning(w: SourceWarning, processId: string): ParseWarningKind {
+  // Los avisos son del archivo entero y el IR es de un solo proceso: lo que se perdió en otro
+  // pool no puede dejar incompleto el que se simula.
+  if (w.processId !== undefined && w.processId !== processId) return 'otro-proceso';
+  if (w.property === 'bpmn:default') return 'default-roto';
+  if (w.property === 'bpmn:incoming' || w.property === 'bpmn:outgoing') return 'flujo-ausente';
+  if (DISCARDED_ID_MESSAGE.test(w.message)) {
+    // Sin `processId` el elemento descartado cayó fuera de todo `bpmn:process` (un `bpmn:message`
+    // o un `bpmn:participant` de raíz, la capa de diagrama…): ahí no hay nodos ni flujos que
+    // perder. Un aviso que no se pudo ubicar no llega así: `parseBpmn` lo atribuye al proceso
+    // simulado, para que falle cerrado.
+    if (w.processId === undefined) return 'inofensivo';
+    return discardsGraphElement(w.message) ? 'perdida' : 'inofensivo';
+  }
+  return w.property !== undefined && GRAPH_REFERENCE_PROPERTIES.has(w.property)
+    ? 'perdida'
+    : 'inofensivo';
 }
 
 /** Texto normativo de R-NOSOP-6; `w.message` es el aviso de moddle, ya aplanado a una línea. */
@@ -159,9 +215,34 @@ function parseWarningProblem(w: SourceWarning, fallbackId: string): IrProblem {
   };
 }
 
-/** Texto normativo de R-NOSOP-6 para el aviso inofensivo. */
-function parseWarningNotice(w: SourceWarning, fallbackId: string): ValidationWarning {
+/** Textos normativos de R-NOSOP-6 para los avisos que no abortan, uno por caso. */
+function parseWarningNotice(
+  w: SourceWarning,
+  kind: Exclude<ParseWarningKind, 'perdida'>,
+  fallbackId: string,
+): ValidationWarning {
   const id = w.elementId ?? fallbackId;
+  if (kind === 'otro-proceso') {
+    return {
+      code: 'W-PARSE',
+      id,
+      message: `${id}: aviso del lector XML en ${w.processId}, otro proceso del archivo que Lila no simula: ${w.message}.`,
+    };
+  }
+  if (kind === 'flujo-ausente') {
+    return {
+      code: 'W-PARSE',
+      id,
+      message: `${id}: el lector XML no encontró un flujo que este elemento declara; el grafo se construye sin él: ${w.message}.`,
+    };
+  }
+  if (kind === 'default-roto') {
+    return {
+      code: 'W-XOR-DEFAULT-ROTO',
+      id,
+      message: `${id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: ${w.message}.`,
+    };
+  }
   return {
     code: 'W-PARSE',
     id,
@@ -203,11 +284,9 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
   }
 
   for (const w of ir.source.warnings) {
-    if (impliesDiscardedElement(w)) {
-      errors.push(parseWarningProblem(w, ir.id));
-    } else {
-      warnings.push(parseWarningNotice(w, ir.id));
-    }
+    const kind = classifyParseWarning(w, ir.id);
+    if (kind === 'perdida') errors.push(parseWarningProblem(w, ir.id));
+    else warnings.push(parseWarningNotice(w, kind, ir.id));
   }
 
   if ((opts.messageFlowCount ?? 0) > 0) {

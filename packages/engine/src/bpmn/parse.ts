@@ -431,19 +431,135 @@ function isNonEmptyProcess(el: ModdleElement): boolean {
 const DISCARDED_ID = /(?:illegal|duplicate) ID <([^>]+)>/;
 
 /**
- * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
- * una sola línea y rescata el id afectado de donde lo haya. Para una referencia rota
- * (`unresolved reference`), moddle da `element` (quien declara la referencia) y `property`
- * (la propiedad rota). Para un elemento descartado por completo (`unparsable content ... illegal
- * ID <X>` o `... duplicate ID <X>`) no hay `element` — el id solo aparece dentro del mensaje.
+ * Posición del elemento que moddle no pudo leer, dentro de "unparsable content ... detected
+ * line: N column: C". Línea y columna son **0-based** sobre el XML que leyó moddle (el ya
+ * saneado), y apuntan justo al `<` del elemento descartado.
  */
-function toSourceWarning(w: ModdleWarning): SourceWarning {
+const DETECTED_AT = /detected line: (\d+) column: (\d+)/;
+
+/** Espacio de nombres de BPMN 2.0, el único cuyos `process` delimitan un proceso del archivo. */
+const BPMN_NS = 'http://www.omg.org/spec/BPMN/20100524/MODEL';
+
+/** Declaraciones que atan un prefijo —o el espacio por defecto— al espacio de nombres de BPMN. */
+const XMLNS_BPMN = new RegExp(`xmlns(?::([\\w.-]+))?\\s*=\\s*["']${BPMN_NS}["']`, 'g');
+
+/**
+ * Comentarios, CDATA e instrucciones de proceso: los únicos sitios donde un `<` crudo no abre un
+ * elemento. Se tapan con espacios (conservando los saltos de línea, y por tanto las posiciones)
+ * para que un `<!-- <bpmn:process id="Falso"> -->` no invente un tramo.
+ */
+const NO_ES_MARKUP = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g;
+
+/** `id` del `<…:process>`, con comillas dobles o simples (las dos son XML válido). */
+const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+
+/**
+ * Apertura (con sus atributos capturados) o cierre de un `<…:process …>` **de BPMN**, con el
+ * prefijo (o la ausencia de prefijo) que declare este archivo: un `<x:process>` de una extensión
+ * ajena no abre ni cierra tramo. Global: barre el XML entero, no línea a línea. Si el archivo no
+ * declara el espacio de nombres de forma legible, acepta cualquier prefijo, que es lo de antes.
+ */
+function processTagRegex(xml: string): RegExp {
+  const prefijos = [
+    ...new Set(
+      [...xml.matchAll(XMLNS_BPMN)].map((m) =>
+        m[1] === undefined ? '' : `${m[1].replace(/[.-]/g, '\\$&')}:`,
+      ),
+    ),
+  ];
+  const ns = prefijos.length === 0 ? '(?:[\\w.-]+:)?' : `(?:${prefijos.join('|')})`;
+  return new RegExp(`<${ns}process(?![\\w.-])([^>]*)>|</${ns}process\\s*>`, 'g');
+}
+
+/** `bpmn:Process` que contiene al elemento, subiendo por `$parent`. */
+function ownerProcessId(el: ModdleElement | undefined): string | undefined {
+  for (let p = el; p !== undefined; p = p.$parent) {
+    if (p.$type === 'bpmn:Process') return p.id;
+  }
+  return undefined;
+}
+
+/**
+ * Ubica un aviso de moddle en el `bpmn:process` donde ocurrió (LILA-196): un id duplicado en un
+ * pool que Lila no simula no puede bloquear al que sí, y uno fuera de todo proceso
+ * (`bpmn:message`, `bpmn:signal`, …) no es nodo ni flujo de ninguno.
+ *
+ * Trabaja con **offsets absolutos** sobre el XML saneado —el texto que leyó moddle—, no con
+ * líneas: los exports minificados vienen en una sola línea y una línea puede cerrar un proceso y
+ * abrir el siguiente. Los tramos salen de un barrido global de `PROCESS_TAG` (los `bpmn:process`
+ * no anidan) y la posición del aviso, de convertir su `line`/`column` a offset.
+ *
+ * Falla cerrado: si el aviso no dice dónde ocurrió, se atribuye al proceso simulado y aborta;
+ * nunca se despacha como “de otro proceso”.
+ *
+ * ponytail: los tramos se buscan con regex, no recorriendo el XML. Techo: un `>` dentro del
+ * valor de un atributo del propio `<process …>`, o un `<bpmn:process>` dentro del subconjunto
+ * interno de un `<!DOCTYPE …>`, cortarían el tramo donde no toca. Camino: si aparece un export
+ * real así, tomar los offsets del propio lector (saxen) en vez del texto.
+ */
+function warningProcessLocator(
+  xml: string,
+  simulatedProcessId: string,
+): (message: string) => string | undefined {
+  // Los tramos se buscan sobre el XML con lo que no es markup tapado; las posiciones no se mueven
+  // porque el relleno conserva la longitud y los saltos de línea.
+  const markup = xml.replace(NO_ES_MARKUP, (t) => t.replace(/[^\n]/g, ' '));
+  const spans: { start: number; end: number; id: string | undefined }[] = [];
+  let open: { start: number; id: string | undefined } | undefined;
+  for (const tag of markup.matchAll(processTagRegex(markup))) {
+    const attrs = tag[1];
+    const end = tag.index + tag[0].length;
+    if (attrs === undefined) {
+      // Cierre: termina el tramo abierto (si el XML cierra sin abrir, no hay nada que cerrar).
+      if (open !== undefined) spans.push({ ...open, end });
+      open = undefined;
+      continue;
+    }
+    // Una apertura sin su cierre (XML malformado) termina donde empieza la siguiente.
+    if (open !== undefined) spans.push({ ...open, end: tag.index });
+    const id = PROCESS_ID_ATTR.exec(attrs);
+    const abierto = { start: tag.index, id: id?.[1] ?? id?.[2] };
+    if (attrs.endsWith('/')) {
+      spans.push({ ...abierto, end });
+      open = undefined;
+    } else open = abierto;
+  }
+  if (open !== undefined) spans.push({ ...open, end: xml.length });
+
+  const lineStarts = [0];
+  for (let i = xml.indexOf('\n'); i !== -1; i = xml.indexOf('\n', i + 1)) lineStarts.push(i + 1);
+
+  return (message) => {
+    const at = DETECTED_AT.exec(message);
+    const start = at === null ? undefined : lineStarts[Number(at[1])];
+    if (start === undefined) return simulatedProcessId;
+    const offset = start + Number(at?.[2]);
+    const span = spans.find((s) => offset >= s.start && offset < s.end);
+    if (span === undefined) return undefined; // fuera de todo `bpmn:process`
+    return span.id ?? simulatedProcessId; // tramo sin `id` legible: también falla cerrado
+  };
+}
+
+/**
+ * Traduce un aviso crudo de bpmn-moddle a `SourceWarning` (LILA-185/#198): aplana el mensaje a
+ * una sola línea y rescata el id afectado y el proceso donde ocurrió, de donde los haya. Para una
+ * referencia rota (`unresolved reference`), moddle da `element` (quien declara la referencia) y
+ * `property` (la propiedad rota), así que el proceso sale de subir por `$parent`. Para un elemento
+ * descartado por completo (`unparsable content ... illegal ID <X>` o `... duplicate ID <X>`) no
+ * hay `element`: el id solo aparece dentro del mensaje y el proceso, de la posición que cita.
+ */
+function toSourceWarning(
+  w: ModdleWarning,
+  locateProcess: (message: string) => string | undefined,
+): SourceWarning {
   const message = w.message.replace(/\s+/g, ' ').trim();
   const elementId = w.element?.id ?? DISCARDED_ID.exec(message)?.[1];
+  const processId = w.element === undefined ? locateProcess(message) : ownerProcessId(w.element);
   return {
     message,
     ...(elementId === undefined ? {} : { elementId }),
     ...(w.property === undefined ? {} : { property: w.property }),
+    ...(processId === undefined ? {} : { processId }),
   };
 }
 
@@ -468,6 +584,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   if (main === undefined) {
     throw new Error('El archivo no contiene ningún bpmn:process.');
   }
+  const locateProcess = warningProcessLocator(xml, main.id);
 
   const c: Collector = {
     nodes: {},
@@ -543,7 +660,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',
         originalIds,
-        warnings: moddleWarnings.map(toSourceWarning),
+        warnings: moddleWarnings.map((w) => toSourceWarning(w, locateProcess)),
       },
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),

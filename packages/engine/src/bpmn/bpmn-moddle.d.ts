@@ -12,6 +12,8 @@ declare module 'bpmn-moddle' {
     $type: string;
     id: string;
     name?: string;
+    /** Elemento que lo contiene; `undefined` en `bpmn:Definitions`. */
+    $parent?: ModdleElement;
     /** `bpmn:Definitions` */
     rootElements?: ModdleElement[];
     exporter?: string;
