@@ -12,6 +12,11 @@ import Modeler from 'bpmn-js/lib/Modeler';
 // conoce. Su CSS se importa aquí y se viste con tokens en `app.css` (bloque «minimapa»).
 import minimapModule from 'diagram-js-minimap';
 import 'diagram-js-minimap/assets/diagram-js-minimap.css';
+// Animación de tokens para la pestaña «Validar rutas» (LILA-065). No es la simulación DES del
+// motor: solo anima el recorrido de tokens sobre el BPMN ya importado, por eso vive junto al
+// minimapa como otro módulo más de bpmn-js y no como algo que el resto de la app conozca.
+import tokenSimulationModule from 'bpmn-js-token-simulation';
+import 'bpmn-js-token-simulation/assets/css/bpmn-js-token-simulation.css';
 import type BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import type Modeling from 'bpmn-js/lib/features/modeling/Modeling';
 import type Canvas from 'diagram-js/lib/core/Canvas';
@@ -130,6 +135,12 @@ export interface Modelador {
    * no acumula nada, así que el shell puede llamarla en cada render.
    */
   validacion(validacion: Validacion | null): void;
+  /**
+   * Activa o desactiva la animación de tokens de `bpmn-js-token-simulation` (LILA-065). No tiene
+   * relación con el motor DES: solo anima el recorrido de tokens sobre las figuras del diagrama
+   * ya importado; el shell la enciende al entrar en «Validar rutas» y la apaga al salir.
+   */
+  simulacionTokens(activa: boolean): void;
   /** Superficie opcional para que el shell añada controles básicos sin importar diagram-js. */
   deshacer?(): void;
   rehacer?(): void;
@@ -167,7 +178,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     const opciones = {
       // La extensión `lila:` sobrevive a abrir y exportar sin que el modelador la entienda.
       moddleExtensions: { lila },
-      additionalModules: [minimapModule],
+      additionalModules: [minimapModule, tokenSimulationModule],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -370,6 +381,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       validacion: (validacion) => {
         if (activo !== null) sincronizarMarcadores(activo, validacion);
+      },
+      simulacionTokens: (activa) => {
+        if (activo !== null) activo.get<{ toggleMode(activa: boolean): void }>('toggleMode').toggleMode(activa);
       },
       deshacer: () => {
         const commands = activo?.get<CommandStack>('commandStack');

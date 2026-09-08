@@ -20,6 +20,7 @@ import { Paleta } from './Paleta';
 import { PanelPropiedades } from './PropertiesPanel';
 import { problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { ResultsView } from './ResultsView';
+import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { MenuAction } from '../../desktop/src/bridge.js';
@@ -59,7 +60,7 @@ function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | 
   return nombre === undefined || nombre === '' || nombre === id ? id : `${nombre} (${id})`;
 }
 
-const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar'] as const;
+const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas'] as const;
 const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
 
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
@@ -386,10 +387,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
   // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
-  // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada.
+  // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
+  // rutas» (LILA-065) se apaga: la animación de tokens no convive con la tinta de cuellos.
   useEffect(() => {
-    modelador?.cuellos(corrida, verCuellos);
-  }, [modelador, corrida, verCuellos]);
+    modelador?.cuellos(corrida, modo !== 'Validar rutas' && verCuellos);
+  }, [modelador, corrida, verCuellos, modo]);
 
   /**
    * Errores y avisos de ahora mismo (LILA-209): el lint del escenario activo —la misma lista
@@ -413,10 +415,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
   // problemas —editar el escenario en el panel, editar el diagrama (revision -> `ir` nuevo),
   // abrir otro proyecto, cambiar de tema (lienzo remontado)— pasa por aquí, y
-  // `Modelador.validacion` es idempotente.
+  // `Modelador.validacion` es idempotente. En «Validar rutas» (LILA-065) se apaga: los discos de
+  // validación no se pintan sobre la animación de tokens.
   useEffect(() => {
-    modelador?.validacion(validacion);
-  }, [modelador, validacion]);
+    modelador?.validacion(modo === 'Validar rutas' ? null : validacion);
+  }, [modelador, validacion, modo]);
 
   useEffect(() => {
     if (modelador === null) return;
@@ -720,6 +723,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
         </div>
+      {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
+          simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
+      {modo === 'Validar rutas' && <TokenSim modelador={modelador} />}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (
