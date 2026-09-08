@@ -232,20 +232,20 @@ describe('validación en vivo', () => {
     pulsar('Flow_Aprobado');
     teclear('campo-elements.Flow_Aprobado.probability', '1.5');
 
-    // El texto es el del esquema, no uno inventado por el panel, y es el mismo que imprimen la
-    // CLI y el MCP: en español y citando la ruta (LILA-202).
+    // El texto es el del validador, no uno inventado por el panel. Desde LILA-198 el rango de
+    // `probability` lo comprueba el lint (`E-PROB-RANGO`, § 17 de SEMANTICS) y no el esquema.
     const roto = escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5);
-    const parsed = parseScenario(roto);
-    expect(parsed.success).toBe(false);
-    const esperado = parsed.error!.issues.find(
-      (i) => i.path.join('.') === 'elements.Flow_Aprobado.probability',
+    const parsed = ScenarioSchema.safeParse(roto);
+    expect(parsed.success).toBe(true);
+    const esperado = validateScenario(parsed.data!, ir).find(
+      (problema) => problema.path === 'elements.Flow_Aprobado.probability',
     )!;
-    expect(esperado.message).toBe('debe ser ≤ 1');
+    expect(esperado.code).toBe('E-PROB-RANGO');
     expect(document.body.textContent).toContain(esperado.message);
     // La ruta viaja con el problema (es la que marca el campo y la que imprimen CLI y MCP).
     expect(problemasEscenario(roto, ir)).toContainEqual({
       ruta: 'elements.Flow_Aprobado.probability',
-      mensaje: 'debe ser ≤ 1',
+      mensaje: esperado.message,
       severidad: 'error',
     });
 

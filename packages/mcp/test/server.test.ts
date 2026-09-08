@@ -445,7 +445,10 @@ test('run_simulation: structuredContent repite el texto, sin log, y valida contr
 test('run_simulation: un escenario inline inválido no cita un archivo que no existe', async () => {
   const result = await client.callTool({
     name: 'run_simulation',
-    arguments: { scenario: { ...barato(), elements: { Flow_Aprobado: { probability: 1.5 } } } },
+    // Una errata de clave: la rechaza el esquema (`E-CLAVE-DESCONOCIDA`) antes de resolver nada,
+    // que es el camino donde antes se colaba el nombre de un archivo inexistente. (Un
+    // `probability: 1.5` ya no sirve de cebo: desde LILA-198 lo caza el lint, no el esquema.)
+    arguments: { scenario: { ...barato(), elements: { Flow_Aprobado: { probabilty: 1.5 } } } },
   });
   expect(result.isError).toBe(true);
   expect(textOf(result)).toContain('escenario inline: escenario inválido');
