@@ -874,22 +874,28 @@ y por corrida:
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
 ```
 
-La señal es **el pool lleno**. Una instancia en cola se atribuye solo a los pools que no tuvieron
-ni una unidad libre durante al menos la mitad de su `resourceWait` —la espera ya sin el tiempo de
-calendario cerrado (R-REC-8)—. Por eso un pool ocioso atado por AND, que hereda la cola entera de
-la instancia (R-REC-4), y una alternativa OR libre, en cuya cola la instancia también está
-(R-REC-6), llegan al criterio con demanda cero: el aviso no puede contradecir a
-`resources[poolId].utilization`. Una OR reparte además su demanda entre las alternativas que sí
-estaban llenas, porque consume exactamente una.
+La señal es **el pool lleno**: sin unidades libres suficientes para conceder, o sea con menos
+disponibles que la menor `quantity` con que alguna tarea lo pide —un pool de `capacity` 3 pedido de
+dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. Una
+instancia en cola se atribuye solo a los pools que estuvieron llenos —tiempo de **reloj**: quien
+conserva la unidad durante el cierre del calendario (R-CAL-8) tampoco la tiene libre— durante al
+menos la mitad de su espera con el pool abierto (su `resourceWait`, ya sin el tiempo de calendario
+cerrado, R-REC-8); con calendario el umbral es por tanto más laxo que en una corrida 24×7. Por eso
+un pool ocioso atado por AND, que hereda la cola entera de la instancia (R-REC-4), y una
+alternativa OR libre, en cuya cola la instancia también está (R-REC-6), llegan al criterio con
+demanda cero: el aviso no puede contradecir a `resources[poolId].utilization`. Una OR reparte
+además su demanda entre las alternativas que sí estaban llenas, porque consume exactamente una.
 
 Sobre esa demanda atribuida se exige `ρ = demanda atribuida / unidades concedidas ≥ 1,1` y, además,
 una de estas dos: que la cola atribuida media en la segunda mitad de `[warmup, t_stop]` supere la
 capacidad efectiva del pool (su `Σᵢ capacityᵢ × openTimeᵢ` de R-CAL-9 dividida entre sus propias
 horas abiertas, o sea unidades y no unidades diluidas por el calendario) y sea al menos 1,5 veces
 la de la primera mitad; **o** que las instancias atribuidas que seguían en cola al cortar sean al
-menos el 25 % de las unidades concedidas. Las colas se promedian sobre el tiempo en que el pool
-estuvo lleno, que es el único en que la cola de un pool significa algo y deja fuera el
-`offHoursWait` sin tener que restarlo aparte. Una cola estacionaria larga no avisa: M/M/1 con
+menos el 25 % de las unidades concedidas **y** la cola de la segunda mitad no sea menor que la de
+la primera —un lote de llegadas simultáneas (R-ARR-1) deja mucho pendiente al corte con la cola
+**bajando**, y eso es trabajo despachándose, no falta de estado estacionario—. Las colas se
+promedian sobre el tiempo en que el pool estuvo lleno, que es el único en que la cola de un pool
+significa algo y deja fuera el `offHoursWait` sin tener que restarlo aparte. Una cola estacionaria larga no avisa: M/M/1 con
 ρ = 0,8 tiene `Lq = 3,2` y sus dos mitades miden lo mismo.
 
 Con varias replicaciones la decisión se toma **una sola vez sobre la media** de esas cantidades, no

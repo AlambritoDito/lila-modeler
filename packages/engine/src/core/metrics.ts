@@ -201,15 +201,18 @@ const SATURATION_PENDING = 0.25;
  * ocioso atado por AND (R-REC-4) o una alternativa OR libre (R-REC-6) llegan aquí con `demand`
  * cero por más larga que sea la cola de la instancia. Sobre esa demanda se pide (a) ρ ≥ 1,1,
  * (b) que la cola crezca entre mitades de la ventana por encima de la capacidad, **o** que el
- * pendiente al corte sea una fracción clara de lo atendido. Una cola estacionaria larga no avisa:
- * M/M/1 con ρ = 0,8 tiene `Lq = 3,2` y las dos mitades miden lo mismo.
+ * pendiente al corte sea una fracción clara de lo atendido sin que la cola haya bajado. Una cola
+ * estacionaria larga no avisa: M/M/1 con ρ = 0,8 tiene `Lq = 3,2` y las dos mitades miden lo mismo.
  */
 export function saturationWarning(poolId: string, load: PoolLoad): string | undefined {
   if (load.served <= 0 || load.capacity <= 0) return undefined;
   const rho = load.demand / load.served;
   if (rho < SATURATION_RHO) return undefined;
   const growing = load.secondHalf > load.capacity && load.secondHalf >= SATURATION_GROWTH * load.firstHalf;
-  const backlogged = load.pending >= SATURATION_PENDING * load.served;
+  // …y la cola no puede estar drenando: con todas las llegadas en `t = 0` (R-ARR-1) queda mucho
+  // pendiente al corte mientras la cola **baja**, que es un lote despachándose, no un pool sin
+  // estado estacionario.
+  const backlogged = load.pending >= SATURATION_PENDING * load.served && load.secondHalf >= load.firstHalf;
   if (!growing && !backlogged) return undefined;
   return `W-RECURSO-SATURADO: ${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho.toFixed(1)})`;
 }
@@ -221,17 +224,34 @@ interface OccupancyEvent {
 }
 
 /**
- * Tramos maximales en que el pool tuvo **todas** sus unidades ocupadas. Con la ocupación
+ * Tramos «lleno» de un pool con sus sumas de prefijos: `prefix[i]` es el tiempo lleno acumulado
+ * antes del tramo `i`, de modo que `fullBefore` resuelve `F(t)` con una búsqueda binaria.
+ */
+interface FullOccupancy {
+  intervals: readonly Interval[];
+  prefix: readonly number[];
+}
+
+const EMPTY_FULL: FullOccupancy = { intervals: [], prefix: [0] };
+
+/**
+ * Tramos maximales en que el pool no tuvo ni una unidad **concedible** libre. Con la ocupación
  * reconstruida del propio log no hace falta contador nuevo en el kernel: `sim.ts` ya escribe
  * `startedAt`/`endedAt` y `resourceQuantity` de cada asignación.
+ *
+ * «Lleno» es `used > capacity − minQuantity`, no `used >= capacity`: el kernel nunca concede por
+ * encima del último múltiplo de la `quantity` pedida, así que un pool de `capacity` 3 pedido de
+ * dos en dos se queda en dos unidades ocupadas y una libre que nadie puede tomar. Con `quantity`
+ * 1 —y `capacity` es entero (R-REC-2)— la condición es literalmente `used >= capacity`.
  *
  * // ponytail: la capacidad de referencia es el tope semanal (`poolCapacityBound`), no la del
  * // instante. Con `capacity` por tramos (LILA-164) un pool lleno durante el turno flojo no se
  * // detecta como lleno; el aviso deja de salir, nunca sale de más. Camino de mejora, si aparece
  * // un caso real: intercalar aquí los cambios de `compileCapacity`.
  */
-function fullIntervals(events: OccupancyEvent[], capacity: number): Interval[] {
-  if (capacity <= 0 || events.length === 0) return [];
+function fullIntervals(events: OccupancyEvent[], capacity: number, minQuantity: number): FullOccupancy {
+  if (capacity <= 0 || events.length === 0) return EMPTY_FULL;
+  const threshold = capacity - minQuantity;
   // Las tomas antes que las liberaciones en el mismo instante: quien releva a otro no abre un
   // hueco de duración cero que partiría el tramo en dos.
   events.sort((left, right) => left.t - right.t || right.delta - left.delta);
@@ -239,16 +259,21 @@ function fullIntervals(events: OccupancyEvent[], capacity: number): Interval[] {
   let used = 0;
   let openedAt = Number.NaN;
   for (const event of events) {
-    const wasFull = used >= capacity;
+    const wasFull = used > threshold;
     used += event.delta;
-    const isFull = used >= capacity;
+    const isFull = used > threshold;
     if (!wasFull && isFull) openedAt = event.t;
     else if (wasFull && !isFull) {
       if (event.t > openedAt) intervals.push({ from: openedAt, to: event.t });
       openedAt = Number.NaN;
     }
   }
-  return intervals;
+  const prefix: number[] = new Array<number>(intervals.length + 1);
+  prefix[0] = 0;
+  for (let index = 0; index < intervals.length; index++) {
+    prefix[index + 1] = prefix[index]! + (intervals[index]!.to - intervals[index]!.from);
+  }
+  return { intervals, prefix };
 }
 
 /** Índice del primer tramo que termina después de `t`; los tramos son disjuntos y crecientes. */
@@ -263,31 +288,30 @@ function firstEndingAfter(intervals: readonly Interval[], t: number): number {
   return low;
 }
 
+/** `F(t)`: tiempo lleno acumulado antes de `t`, en O(log n) sobre las sumas de prefijos. */
+function fullBefore(full: FullOccupancy, t: number): number {
+  const index = firstEndingAfter(full.intervals, t);
+  const interval = full.intervals[index];
+  return full.prefix[index]! + (interval !== undefined && t > interval.from ? t - interval.from : 0);
+}
+
 /**
- * Solape de `[from, to)` con los tramos, partido por `middle`. La búsqueda binaria mantiene el
- * costo en O(tramos solapados) por instancia: un pool saturado tiene un solo tramo enorme y uno
- * sano tiene tramos cortos que casi ninguna espera cruza.
+ * Solape de `[from, to)` con los tramos llenos, partido por `middle`. Cada término es una
+ * diferencia `F(b) − F(a)`, así que cuesta O(log tramos) por espera y no O(tramos cruzados):
+ * recorrerlos hacía el cálculo cuadrático en cuanto un pool acumulaba tramos cortos y las
+ * esperas del pool saturado que lo acompaña en un AND los cruzaban enteros.
  */
 function overlap(
-  intervals: readonly Interval[],
+  full: FullOccupancy,
   from: number,
   to: number,
   middle: number,
 ): { total: number; first: number; second: number } {
-  let total = 0;
-  let first = 0;
-  let second = 0;
-  for (let index = firstEndingAfter(intervals, from); index < intervals.length; index++) {
-    const interval = intervals[index]!;
-    if (interval.from >= to) break;
-    const start = Math.max(interval.from, from);
-    const end = Math.min(interval.to, to);
-    if (end <= start) continue;
-    total += end - start;
-    if (start < middle) first += Math.min(end, middle) - start;
-    if (end > middle) second += end - Math.max(start, middle);
-  }
-  return { total, first, second };
+  const before = fullBefore(full, from);
+  const after = fullBefore(full, to);
+  // `middle` acotado a la espera: fuera de ella una de las dos mitades se lleva el solape entero.
+  const split = fullBefore(full, Math.min(Math.max(middle, from), to));
+  return { total: after - before, first: split - before, second: after - split };
 }
 
 /** Una espera observada de una instancia, con el tiempo **abierto** que pasó esperando recurso. */
@@ -486,16 +510,27 @@ export function aggregateReplication(
   // que la comparten por construcción: con AND (R-REC-4) la cola es la de la instancia y la
   // heredan todos sus pools; con OR (R-REC-6) la instancia se encola en todas las alternativas.
   const middle = windowStart + windowDuration / 2;
-  const fullByPool = new Map<string, Interval[]>();
+  const fullByPool = new Map<string, FullOccupancy>();
   const demandByPool = new Map<string, number>();
   const pendingByPool = new Map<string, number>();
   const firstHalfByPool = new Map<string, number>();
   const secondHalfByPool = new Map<string, number>();
   if (tracksSaturation) {
+    // La menor `quantity` con que alguna tarea pide el pool: es lo que tiene que quedar libre
+    // para que el kernel pueda conceder, y por debajo de eso el pool está lleno aunque `used`
+    // no llegue a `capacity` (R-REC-2 lo acota, así que siempre hay al menos una).
+    const minQuantityByPool = new Map<string, number>();
+    for (const element of Object.values(scenario.elements ?? {})) {
+      for (const request of element.resources ?? []) {
+        const quantity = request.quantity ?? 1;
+        minQuantityByPool.set(request.ref, Math.min(minQuantityByPool.get(request.ref) ?? quantity, quantity));
+      }
+    }
     for (const [poolId, events] of occupancyByPool) {
       const pool = scenario.resources?.[poolId];
       if (pool === undefined) continue;
-      fullByPool.set(poolId, fullIntervals(events, poolCapacityBound(pool, scenario.calendars ?? {})));
+      const capacity = poolCapacityBound(pool, scenario.calendars ?? {});
+      fullByPool.set(poolId, fullIntervals(events, capacity, minQuantityByPool.get(poolId) ?? 1));
     }
     const attributed: { ref: string; quantity: number; first: number; second: number }[] = [];
     for (const wait of waits) {
@@ -577,7 +612,7 @@ export function aggregateReplication(
       // el calendario (con un solo tramo es exactamente `capacity`).
       const calendar = poolCalendar(calendars, pool);
       const open = calendar === undefined ? windowDuration : openTime(calendar, windowStart, windowEnd);
-      const full = fullByPool.get(poolId) ?? [];
+      const full = fullByPool.get(poolId) ?? EMPTY_FULL;
       const fullFirst = overlap(full, windowStart, middle, middle).total;
       const fullSecond = overlap(full, middle, windowEnd, middle).total;
       const load: PoolLoad = {

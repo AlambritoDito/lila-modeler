@@ -329,6 +329,12 @@ describe('el criterio de W-RECURSO-SATURADO es una función de las cantidades pr
     expect(saturationWarning('p', { ...SATURADA, firstHalf: 40, secondHalf: 40, pending: 1 })).toBeUndefined();
   });
 
+  test('el pendiente al corte no basta si la cola está bajando', () => {
+    // R-ARR-1: un lote de llegadas simultáneas deja mucho pendiente al corte mientras la cola
+    // **baja**. Eso es trabajo despachándose, no un pool sin estado estacionario.
+    expect(saturationWarning('p', { ...SATURADA, firstHalf: 40, secondHalf: 30 })).toBeUndefined();
+  });
+
   test('la capacidad efectiva son unidades del pool, no unidades diluidas por el calendario', () => {
     // Con `capacity` 50 la cola de 40 cabe en el pool y no es evidencia de nada; medir la
     // capacidad como `disponible / duración de la ventana` daría 50/3,6 y volvería a avisar.
@@ -446,6 +452,73 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
 
     expect(warnings).toEqual([
       'W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (λ/μ·c ≈ 2.5)',
+    ]);
+  }, SLOW);
+
+  test('un pool pedido de dos en dos se llena aunque `capacity` no sea múltiplo de `quantity`', async () => {
+    // El kernel nunca concede por encima del último múltiplo de `quantity`: con `capacity` 3 y
+    // `quantity` 2 la tercera unidad no la puede tomar nadie y `used >= capacity` no se cumplía
+    // jamás, así que el pool llegaba al criterio con demanda cero pese a tener ρ real 2.
+    const warnings = await saturationOf('mm1/mm1-rho08/scenario.json', (scenario) => {
+      scenario.run.replications = 3;
+      scenario.resources!['servidor']!.capacity = 3;
+      scenario.elements!['Task_Servicio'] = {
+        processingTime: { type: 'exponential', mean: 750 },
+        resources: [{ ref: 'servidor', quantity: 2 }],
+      };
+    });
+
+    expect(warnings).toEqual([
+      'W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+    ]);
+  }, SLOW);
+
+  test.each([
+    [1500, ['W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)']],
+    [375, []],
+  ])('con `capacity` múltiplo de `quantity` el umbral es el de siempre (servicio %i s)', async (mean, expected) => {
+    // `capacity` 4 pedida de dos en dos son dos servidores: `used > capacity − 2` es exactamente
+    // `used >= 4`, así que el caso divisible —el que enmascaraba el fallo— no cambia.
+    const warnings = await saturationOf('mm1/mm1-rho08/scenario.json', (scenario) => {
+      scenario.run.replications = 3;
+      scenario.resources!['servidor']!.capacity = 4;
+      scenario.elements!['Task_Servicio'] = {
+        processingTime: { type: 'exponential', mean },
+        resources: [{ ref: 'servidor', quantity: 2 }],
+      };
+    });
+
+    expect(warnings).toEqual(expected);
+  }, SLOW);
+
+  test('un lote de llegadas simultáneas que drena no avisa (R-ARR-1)', async () => {
+    // 2000 instancias en `t = 0` y ninguna llegada más: al cortar queda cola pendiente de sobra
+    // para el 25 % de lo servido, pero la cola de la segunda mitad es **menor** que la de la
+    // primera. No hay λ que comparar con μ·c: es un lote despachándose.
+    const warnings = await saturationOf('mm1/mm1-rho08/scenario.json', (scenario) => {
+      scenario.run.replications = 1;
+      scenario.run.warmup = 0;
+      scenario.run.duration = 300_000;
+      scenario.elements!['StartEvent_Llegadas'] = { triggerCount: 2000 };
+    });
+
+    expect(warnings).toEqual([]);
+  }, SLOW);
+
+  test('un pool con muchos tramos llenos cortos se atribuye igual que uno con un solo tramo', async () => {
+    // `cajero` acumula miles de tramos llenos cortos y las esperas de `Task_Preparar` los cruzan
+    // enteros: recorrerlos uno a uno hacía el cálculo cuadrático en la duración de la corrida.
+    // Con las sumas de prefijos el solape es `F(b) − F(a)` y el resultado es el mismo.
+    const warnings = await saturationOf('pedido/as-is.scenario.json', (scenario) => {
+      scenario.run.replications = 1;
+      scenario.elements!['StartEvent_Pedido']!.triggerCount = 1_000_000;
+      scenario.elements!['Task_TomarPedido']!.processingTime = { type: 'constant', value: 200 };
+      scenario.elements!['Task_Preparar']!.resources = [{ ref: 'cocinero' }, { ref: 'horno' }, { ref: 'cajero' }];
+    });
+
+    expect(warnings).toEqual([
+      'W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (λ/μ·c ≈ 1.2)',
+      'W-RECURSO-SATURADO: horno: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
     ]);
   }, SLOW);
 
