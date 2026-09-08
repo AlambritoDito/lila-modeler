@@ -81,3 +81,22 @@ Mezclado con squash en esta rama, cada PR con QA adversarial cruzado (otro Opus)
 Trampas: no existe `SendMessage` para reanudar subagentes (relevo nuevo con el worktree y el comentario del QA); un relevo se colgó al lanzar `npm test` tras pushear (se retomó desde `git status`); `Closes #n` no cierra issues al mezclar aquí (cerrar a mano); seis suites a la vez dan timeouts de presupuesto (`performance.test.ts`). Worktrees `../lila-{73,213,217,219,224,228,232,236}-*` borrables.
 
 Decisión pendiente de Brito: `codex/ui-artefacto` desciende linealmente de `main` (71e653e local, 1 por delante de origin): un `git merge --ff-only` de `main` + push cerraría los 9 PR ya contenidos (#209, #215, #221, #222, #227, #229, #230, #234, #235) y dejaría 4 por rebasar (#207/#208, #223, #231).
+
+## Sesión 10 (2026-09-08, orquestador Claude, base `codex/ui-artefacto` f799b78)
+
+El «otro orquestador» de `apps/web` anunciado en la sesión 9 nunca trabajó (sin ramas ni comentarios; comprobado con `gh issue view --comments` y `git branch -r`), así que esta sesión toma `apps/web` y el rebase de los PR huérfanos contra `main`. Reparto (una rama y un worktree por ticket desde `codex/ui-artefacto`, PR con `--base codex/ui-artefacto`, QA adversarial cruzado por PR):
+
+| Rama | Tickets | Agente | Qué |
+|---|---|---|---|
+| `lila-72-74-abrir-bpmn` | #72, #74 | Opus | `App.tsx` conecta `pendingOpenPath`/`onOpenPath`; medición de arranque |
+| `lila-214-216-exportar` | #214, #216 | Opus | aviso antes de exportar con ids perdidos (opción b); avisos de pérdida como error visible |
+| `lila-226-simulacion` | #226 | Opus | etiqueta corta del overlay, solo `high`/top-N documentado, nombre del cuello, reset de `corrida` |
+| `lila-218-propiedades` | #218 | Sonnet | verificación punto por punto y cierre con evidencia |
+| `lila-233-calendario` | #233 | Opus | `CalendarEditor.tsx`, reservados heredados, etiquetas fija/por turno |
+| `lila-65-token-sim` | #65 | Sonnet | `bpmn-js-token-simulation` (única dependencia nueva) |
+| `lila-55-56-mcp` | #55, #56 | Opus | rebase de #207/#208, reconciliado con #232 y #224; PR nuevo |
+| `lila-52-prosimos` | #52 | Sonnet | rebase de #231; PR nuevo |
+| `lila-75-readme` | #75 | Sonnet | README final, al terminar lo demás |
+| — | #60 #61 #63 #64 #164 #198 #200 #201 #206, #73 | Sonnet | higiene: cierre con evidencia (solo lectura) |
+
+Orden de mezcla: 72/74 → 214/216 → 226 → 218 → 65 → 233 → 55/56 → 52 → 75. No se toca: #66, #143/#144, #48/#67/#51/#68/#69/#77, `main`.
