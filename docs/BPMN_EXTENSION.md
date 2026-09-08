@@ -302,7 +302,7 @@ sobrevive a abrir-y-exportar (LILA-192, `apps/web/src/modelerXml.ts`):
 **No se conserva**
 
 - Las referencias por id que apuntan a un elemento que el archivo nunca declara —`messageRef`,
-  `dataStoreRef`, `categoryValueRef`—: bpmn-moddle no las resuelve, no llegan al árbol y el
+  `dataStoreRef`, `categoryValueRef`, `dataObjectRef`—: bpmn-moddle no las resuelve, no llegan al árbol y el
   archivo exportado ya no las lleva. Los fixtures de `examples/bizagi-exports` son un caso real.
 - Lo que el import descarta con un aviso de contenido no parseable o de referencia de topología
   sin resolver: si no entró en el modelo, no puede salir en el XML.

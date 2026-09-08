@@ -447,3 +447,13 @@ it('con pérdida, exportar pide confirmación: cancelar no descarga y aceptar s�
   expect(session.putProcess).toHaveBeenCalledOnce();
   expect(dialogoPerdida()).toBeNull();
 });
+
+// QA: con una sola referencia el texto va en singular, en el pie y en el diálogo.
+it('el aviso de pérdida concuerda en singular', async () => {
+  await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 4, avisos: 1, error: null, perdidas: [], refsRotas: ['Message_1'] }); });
+  const pie = container.querySelector('.estado')!;
+  expect(pie.textContent).toContain('1 elemento o referencia se perderá al exportar: Message_1');
+  expect(pie.textContent).toContain('1 aviso al importar');
+  await click('Exportar .bpmn');
+  expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe('Se perderá 1 referencia que el archivo original ya tenía rota');
+});

@@ -538,7 +538,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       </dialog>}
       {confirmarPerdida && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); setConfirmarPerdida(false); }}>
-        <h2 id="perdida-titulo">Se perderán {plural(perdidasAlExportar.length, 'referencia', 'referencias')} que el archivo original ya tenía rotas</h2>
+        <h2 id="perdida-titulo">{perdidasAlExportar.length === 1 ? 'Se perderá' : 'Se perderán'} {plural(perdidasAlExportar.length, 'referencia que el archivo original ya tenía rota', 'referencias que el archivo original ya tenía rotas')}</h2>
         <p>El editor solo puede escribir lo que pudo leer, así que el .bpmn descargado no las llevará:</p>
         <ul>{perdidasAlExportar.map((perdida) => <li key={perdida}>{perdida}</li>)}</ul>
         <div className="acciones">
@@ -849,7 +849,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}
         {estado.avisos - estado.perdidas.length > 0 && (
           <span role="alert" className="aviso">
-            {estado.avisos - estado.perdidas.length} avisos al importar; revisa el diagnóstico antes de simular o exportar
+            {plural(estado.avisos - estado.perdidas.length, 'aviso', 'avisos')} al importar; revisa el diagnóstico antes de simular o exportar
           </span>
         )}
         {estado.error !== null && (

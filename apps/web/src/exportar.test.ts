@@ -248,6 +248,24 @@ describe('el XML que exporta la app web', () => {
     expect(referenciasRotas(sano.replace('id="Message_1"', 'id="Otro"'))).toEqual(['Message_1']);
   });
 
+  // QA LILA-192: `dataObjectRef` se comporta igual que los otros tres —moddle no lo resuelve,
+  // el elemento sale del árbol y el exportado lo pierde— pero no emite aviso, así que sin
+  // enumerarlo la pérdida vuelve a ser silenciosa, que es justo lo que el ticket prohíbe.
+  it('cuenta el `dataObjectRef` colgante, que se pierde sin que el import avise', async () => {
+    const xml = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D">
+      <bpmn:process id="P">
+        <bpmn:dataObjectReference id="DOR_1" dataObjectRef="DO_fantasma" name="Solicitud" />
+        <bpmn:dataObject id="DO_2" />
+        <bpmn:dataObjectReference id="DOR_2" dataObjectRef="DO_2" />
+      </bpmn:process>
+    </bpmn:definitions>`;
+
+    expect(referenciasRotas(xml)).toEqual(['DO_fantasma']);
+    expect(await exportar(xml)).not.toContain('DO_fantasma');
+    // Y ningún fixture real gana una referencia rota por mirar también este atributo.
+    expect(referenciasRotas(leer('examples/pedido/model.bpmn'))).toEqual([]);
+  });
+
   it('la importación preparada trae las referencias rotas del XML de origen', async () => {
     const candidato = {
       importXML: async (): Promise<{ warnings: readonly unknown[] }> => ({ warnings: [] }),

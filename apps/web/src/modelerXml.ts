@@ -14,7 +14,7 @@ const TOPOLOGY_PROPERTIES = new Set([
  * Referencias que bpmn-moddle resuelve por id y descarta si no las encuentra: no llegan al
  * árbol, así que al reserializar desaparecen del archivo (LILA-192).
  */
-const REFERENCIAS_POR_ID = new Set(['messageRef', 'dataStoreRef', 'categoryValueRef']);
+const REFERENCIAS_POR_ID = new Set(['messageRef', 'dataStoreRef', 'categoryValueRef', 'dataObjectRef']);
 
 export interface ImportableBpmn {
   importXML(xml: string): Promise<{ warnings: readonly unknown[] }>;
