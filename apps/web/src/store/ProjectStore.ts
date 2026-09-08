@@ -81,6 +81,9 @@ export interface ProjectSessionStore extends ProjectStore {
   saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
   setDirty?(dirty: boolean): void;
   onSaveRequested?(save: () => Promise<boolean>): () => void;
-  /** Reabre un proyecto reciente sin diálogo; `null` si ya no existe. Solo `DesktopStore`. */
-  openRecent?(dir: string): Promise<ProjectDocument | null>;
+  /**
+   * Reabre un proyecto reciente sin diálogo; `null` si ya no existe. Solo `DesktopStore`.
+   * `file` es el `.bpmn` a abrir como modelo cuando no es el `model.bpmn` del proyecto (LILA-072).
+   */
+  openRecent?(dir: string, file?: string): Promise<ProjectDocument | null>;
 }

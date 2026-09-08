@@ -18,6 +18,10 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
   // LILA-065: enciende y apaga la animación de tokens de bpmn-js-token-simulation.
   simulacionTokens: vi.fn(),
+  // LILA-072: con `retrasarLienzo`, el lienzo falso NO avisa de que está listo al montar — el test
+  // decide cuándo llamando a `mocks.listo()`, que es lo que separa "la app arrancó" de "el
+  // modelador existe" y permite probar una ruta .bpmn que llega en medio.
+  retrasarLienzo: false, listo: (() => {}) as () => void,
   // LILA-207: los servicios que la paleta usa para insertar una figura.
   fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
   // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
@@ -34,7 +38,7 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
     return null;
   } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
-  useEffect(() => { mocks.publicarEstado = onEstado; onListo({
+  useEffect(() => { mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
@@ -50,7 +54,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       elementRegistry: { filter: () => [] },
       rules: { allowed: () => true },
     },
-  } as unknown as Modelador); }, [onListo]);
+  } as unknown as Modelador); if (!mocks.retrasarLienzo) mocks.listo(); }, [onListo]);
   return <div>Modelo montado</div>;
 } }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -82,6 +86,7 @@ async function click(label: string) {
 beforeEach(async () => {
   vi.resetAllMocks();
   mocks.problemas = [];
+  mocks.retrasarLienzo = false;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
@@ -326,7 +331,8 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
   await act(async () => root.render(<App store={session} />));
   expect(menu).not.toBeNull();
   await act(async () => { menu!({ openRecent: '/p/reciente' }); });
-  expect((session as unknown as { openRecent: ReturnType<typeof vi.fn> }).openRecent).toHaveBeenCalledWith('/p/reciente');
+  // Sin `file`: «Abrir reciente» abre el `model.bpmn` de la carpeta, como siempre.
+  expect((session as unknown as { openRecent: ReturnType<typeof vi.fn> }).openRecent).toHaveBeenCalledWith('/p/reciente', undefined);
   expect(container.textContent).toContain('Reciente');
   await act(async () => { menu!('guardar'); });
   expect(session.saveProject).toHaveBeenCalledOnce();
@@ -338,12 +344,17 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
 function puenteConRutas(pendiente: { dir: string; file: string } | null) {
   const quitar = vi.fn();
   let emitir: ((ruta: { dir: string; file: string }) => void) | null = null;
+  let menu: ((a: unknown) => void) | null = null;
   vi.stubGlobal('lila', {
     pendingOpenPath: vi.fn().mockResolvedValue(pendiente),
     onOpenPath: (cb: (ruta: { dir: string; file: string }) => void) => { emitir = cb; return quitar; },
-    onMenu: () => () => {},
+    onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
   });
-  return { quitar, emitir: (ruta: { dir: string; file: string }) => emitir!(ruta) };
+  return {
+    quitar,
+    emitir: (ruta: { dir: string; file: string }) => emitir!(ruta),
+    menu: (accion: unknown) => menu!(accion),
+  };
 }
 function proyecto(id: string, name: string) {
   return { version: 1, id, name, model: { id: `Process_${id}`, name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
@@ -361,8 +372,16 @@ it('una ruta .bpmn pendiente al arrancar abre su carpeta en el editor', async ()
   (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
   puenteConRutas({ dir: '/p/descargas', file: 'model.bpmn' });
   await remontar();
-  expect(abrirReciente).toHaveBeenCalledWith('/p/descargas');
+  expect(abrirReciente).toHaveBeenCalledWith('/p/descargas', 'model.bpmn');
   expect(container.textContent).toContain('Desde doble clic');
+});
+
+it('se abre EL .bpmn pulsado, no el model.bpmn de la carpeta (LILA-072)', async () => {
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p7', 'Ventas'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  expect(abrirReciente).toHaveBeenCalledWith('/p/descargas', 'ventas.bpmn');
 });
 
 it('una ruta .bpmn que llega con la app abierta cambia de proyecto', async () => {
@@ -374,8 +393,46 @@ it('una ruta .bpmn que llega con la app abierta cambia de proyecto', async () =>
   await remontar();
   expect(container.textContent).toContain('Primero');
   await act(async () => { puente.emitir({ dir: '/p/dos', file: 'model.bpmn' }); });
-  expect(abrirReciente).toHaveBeenLastCalledWith('/p/dos');
+  expect(abrirReciente).toHaveBeenLastCalledWith('/p/dos', 'model.bpmn');
   expect(container.textContent).toContain('Segundo');
+});
+
+it('un .bpmn suelto (carpeta sin escenarios) abre con el AS-IS por defecto y sin errores', async () => {
+  const suelto = { ...proyecto('p10', 'Suelto'), scenarios: {} };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  expect(container.textContent).toContain('Suelto');
+  const pie = container.querySelector('.estado')!;
+  expect(pie.textContent).toContain('0 errores'); // sin AS-IS por defecto sería «escenario desconocido».
+  expect(pie.textContent).toContain('AS-IS');
+});
+
+it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
+  mocks.retrasarLienzo = true;
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p8', 'Tardío'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  const puente = puenteConRutas(null);
+  await remontar();
+  await act(async () => { puente.emitir({ dir: '/p/tres', file: 'ventas.bpmn' }); });
+  expect(abrirReciente).not.toHaveBeenCalled(); // sin modelador `projectAction` no haría nada.
+  await act(async () => { mocks.listo(); });
+  expect(abrirReciente).toHaveBeenCalledWith('/p/tres', 'ventas.bpmn');
+  expect(container.textContent).toContain('Tardío');
+});
+
+it('una ruta que llega con una E/S en curso avisa en vez de descartarse', async () => {
+  const guardado = deferred<ProjectDocument | null>();
+  session.saveProject = vi.fn().mockReturnValue(guardado.promise);
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p9', 'Nunca'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  const puente = puenteConRutas(null);
+  await remontar();
+  await act(async () => { puente.menu('guardar'); }); // toma `ioLock` y no lo suelta.
+  await act(async () => { puente.emitir({ dir: '/p/cuatro', file: 'ventas.bpmn' }); });
+  expect(abrirReciente).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('No se abrió "ventas.bpmn"');
+  await act(async () => { guardado.resolve(null); });
 });
 
 it('desmontar da de baja la suscripción a onOpenPath', async () => {

@@ -82,7 +82,7 @@ class FakeBridge implements LilaBridge {
   }
 
   recents: Recent[] = [];
-  openRecentImpl: ((dir: string) => Promise<LilaProjectDocument | null>) | null = null;
+  openRecentImpl: ((dir: string, file?: string) => Promise<LilaProjectDocument | null>) | null = null;
   private openPathCb: ((path: OpenPathRequest) => void) | null = null;
   pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
 
@@ -90,11 +90,11 @@ class FakeBridge implements LilaBridge {
     return this.recents;
   }
 
-  async openRecent(dir: string): Promise<LilaProjectDocument | null> {
+  async openRecent(dir: string, file?: string): Promise<LilaProjectDocument | null> {
     if (this.openRecentImpl === null) {
       throw new Error('FakeBridge.openRecent: no se configuró `openRecentImpl` en el test.');
     }
-    return this.openRecentImpl(dir);
+    return this.openRecentImpl(dir, file);
   }
 
   async pendingOpenPath(): Promise<OpenPathRequest | null> {
@@ -422,6 +422,18 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     // Queda activo: un guardado normal posterior escribe en la misma carpeta sin preguntar.
     await store.saveProject(documentoBase({ name: 'v2' }));
     expect(bridge.writes.at(-1)?.dir).toBe('/carpeta/pedido');
+  });
+
+  it('openRecent: el `.bpmn` pulsado se reenvía tal cual al puente (LILA-072)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    const visto: (string | undefined)[] = [];
+    bridge.openRecentImpl = async (_dir, file) => { visto.push(file); return { ...documentoBase(), problems: [] }; };
+
+    await store.openRecent('/carpeta/descargas', 'ventas.bpmn');
+    await store.openRecent('/carpeta/pedido');
+
+    expect(visto).toEqual(['ventas.bpmn', undefined]);
   });
 
   it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {

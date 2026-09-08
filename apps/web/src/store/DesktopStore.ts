@@ -174,10 +174,11 @@ export class DesktopStore implements ProjectSessionStore {
 
   /**
    * Reabre un proyecto de `listRecents()` sin selector de carpetas. `null` si la carpeta ya no
-   * existe (el bridge ya la quitó de recientes); no lanza por eso.
+   * existe (el bridge ya la quitó de recientes); no lanza por eso. `file` es el `.bpmn` que se
+   * pulsó cuando no es el `model.bpmn` del proyecto (LILA-072): la misma puerta, otro modelo.
    */
-  async openRecent(dir: string): Promise<ProjectDocument | null> {
-    const raw = await this.bridge.openRecent(dir);
+  async openRecent(dir: string, file?: string): Promise<ProjectDocument | null> {
+    const raw = await this.bridge.openRecent(dir, file);
     if (raw === null) return null;
     const { document, problems } = toProjectDocument(raw);
     this.activeDir = dir;
