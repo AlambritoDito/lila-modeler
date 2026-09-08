@@ -306,7 +306,12 @@ describe('QA LILA-186 · ataque 8: avisos del lint y del motor', () => {
 
   test('`triggerCount` a solas no produce ningún problema de escenario', () => {
     const problemas = validateScenario(
-      resuelto({ Start: { triggerCount: 10 }, A: { processingTime: { type: 'constant', value: 60 } }, End: { fixedCost: 0 } }),
+      // `seed` declarada a propósito: sin ella el lint avisa `W-SIN-SEED` (R-DEG-4, LILA-198) y
+      // este ataque quiere la lista vacía, no ese aviso.
+      resuelto(
+        { Start: { triggerCount: 10 }, A: { processingTime: { type: 'constant', value: 60 } }, End: { fixedCost: 0 } },
+        { seed: 1 },
+      ),
       LINEAL,
     );
     expect(problemas).toEqual([]);
