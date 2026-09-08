@@ -619,7 +619,7 @@ function ListaDeReferencias({
           <button
             type="button"
             className="quitar"
-            title={`Quitar de ${etiqueta.toLowerCase()} ${i + 1}`}
+            title={`Quitar de ${etiqueta.toLowerCase()}`}
             aria-label={`Quitar de ${etiqueta.toLowerCase()} ${i + 1}`}
             onClick={() => {
               quitarExtension(escritor, elemento, referencia);

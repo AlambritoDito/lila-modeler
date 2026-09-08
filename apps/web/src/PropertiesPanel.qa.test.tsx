@@ -19,6 +19,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
+import UpdateModdlePropertiesHandler from 'bpmn-js/lib/features/modeling/cmd/UpdateModdlePropertiesHandler';
+import CommandStack from 'diagram-js/lib/command/CommandStack';
 import EventBus from 'diagram-js/lib/core/EventBus';
 import Selection from 'diagram-js/lib/features/selection/Selection';
 import { act } from 'react';
@@ -196,11 +198,12 @@ function teclear(campo: HTMLInputElement | HTMLTextAreaElement, texto: string): 
   });
 }
 
-/** Busca por prefijo: las filas de una lista llevan el índice añadido al aria-label
- * (LILA-195), así que un campo suelto como "Versión del proceso" sigue casando exacto y el
- * primero de una lista ("Rol" → "Rol 1") es el que toman los tests que no distinguen fila. */
+/** Etiqueta exacta, o etiqueta + índice de fila: las filas de una lista lo llevan añadido
+ * (LILA-195), así que un campo suelto como "Versión del proceso" casa exacto y el primero de
+ * una lista ("Rol" → "Rol 1") es el que toman los tests que no distinguen fila. El espacio del
+ * prefijo no sobra: sin él «Rol» casaría también con un futuro campo «Roles». */
 const campoPorEtiqueta = (raiz: HTMLElement, etiqueta: string): HTMLInputElement => {
-  const campo = raiz.querySelector(`[aria-label^="${etiqueta}"]`);
+  const campo = raiz.querySelector(`[aria-label="${etiqueta}"], [aria-label^="${etiqueta} "]`);
   if (!(campo instanceof HTMLInputElement)) throw new Error(`no hay campo «${etiqueta}»`);
   return campo;
 };
@@ -274,6 +277,59 @@ describe('QA adversarial del panel de propiedades', () => {
 
     anadirExtension(escritor, tarea, 'lila:SystemRef', { ref: 'sys-1' });
     expect(llamadas).toEqual(['updateModdleProperties']);
+  });
+
+  it('un Cmd+Z de verdad tras el primer `lila:` deja el XML byte a byte como estaba', async () => {
+    // Contar comandos es un indicio; lo que la aceptación pide es el XML de vuelta. El
+    // `modeling` del banco no tiene `commandStack`, así que aquí se usa el de diagram-js con el
+    // handler real de bpmn-js, que es quien decide qué revierte un Cmd+Z. El lienzo no hace
+    // falta: `UpdateModdlePropertiesHandler` solo mira el `elementRegistry` para DataObject.
+    const moddle = BpmnModdle({ lila });
+    const { rootElement: definitions } = await moddle.fromXML(leer(PEDIDO));
+    const serializar = async (): Promise<string> =>
+      (await moddle.toXML(definitions, { format: true })).xml as string;
+    const antes = await serializar();
+
+    const commandStack = new CommandStack(new EventBus(), { get: () => undefined } as never);
+    commandStack.register(
+      'element.updateModdleProperties',
+      new UpdateModdlePropertiesHandler({ filter: () => [] } as never),
+    );
+
+    const bo = [...recorrer(definitions)].find((el) => el.id === 'Task_TomarPedido');
+    if (bo === undefined) throw new Error('no está Task_TomarPedido');
+    const tarea: ElementoLienzo = {
+      id: 'Task_TomarPedido',
+      type: bo.$type as string,
+      businessObject: bo as unknown as ElementoModdle,
+    };
+    expect(tarea.businessObject.extensionElements).toBeUndefined();
+
+    const escritor: Escritor = {
+      modeling: {
+        updateProperties: () => {
+          throw new Error('añadir una extensión no toca propiedades del elemento');
+        },
+        updateModdleProperties: (elemento, objeto, propiedades) => {
+          commandStack.execute('element.updateModdleProperties', {
+            element: elemento,
+            moddleElement: objeto,
+            properties: propiedades,
+          });
+        },
+      },
+      bpmnFactory: {
+        create: (tipo, atributos) => moddle.create(tipo, atributos) as ElementoModdle,
+      },
+    };
+
+    anadirExtension(escritor, tarea, 'lila:SystemRef', { ref: 'sys-crm' });
+    expect(await serializar()).toContain('<lila:systemRef ref="sys-crm" />');
+
+    commandStack.undo();
+    // Ni `<bpmn:extensionElements />` vacío ni el `xmlns:lila` colgando: el archivo original.
+    expect(await serializar()).toBe(antes);
+    expect(tarea.businessObject.extensionElements).toBeUndefined();
   });
 
   it('lo que escribe el panel sobrevive a exportar y volver a abrir, con `<`, `&` y acentos', async () => {
@@ -517,6 +573,11 @@ describe('QA adversarial del panel de propiedades', () => {
       expect(etiquetas.length).toBeGreaterThanOrEqual(2);
       expect(new Set(etiquetas).size).toBe(etiquetas.length);
     }
+
+    // Y únicos en todo el panel, no solo dentro de cada lista: el lector de pantalla recorre
+    // el panel entero, así que «Sistemas 1» no puede repetirse con el de otra sección.
+    const todas = etiquetasDe('[aria-label]');
+    expect(new Set(todas).size).toBe(todas.length);
   });
 
   it('todos los controles del panel tienen nombre accesible y el RACI es un `select` nativo', async () => {
