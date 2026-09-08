@@ -32,7 +32,7 @@ import { useMemo, useState } from 'react';
 
 import type { ProcessIR } from '@lila/engine';
 import {
-  ScenarioSchema,
+  parseScenario,
   resolveExtends,
   resolveScenarioPath,
   toJsonSchema,
@@ -290,7 +290,7 @@ export interface Problema {
  * —el diagrama todavía no se ha parseado— solo se valida el esquema.
  */
 export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Problema[] {
-  const parsed = ScenarioSchema.safeParse(resuelto);
+  const parsed = parseScenario(resuelto);
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
       ruta: rutaTexto(issue.path as Ruta),

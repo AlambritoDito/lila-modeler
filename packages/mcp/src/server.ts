@@ -24,7 +24,7 @@ import { runResultSchema } from '@lila/engine/result-schema';
 import {
   resolveExtends,
   scenarioErrors,
-  ScenarioSchema,
+  parseScenario,
   validateScenario,
   type ResolvedScenario,
   type Scenario,
@@ -180,7 +180,7 @@ function resourceLines(scenario: Scenario): string[] {
 /** Recursos por elemento del escenario, o el motivo por el que no se pudo leer. */
 function scenarioResources(file: string): { resources: string[] } | { error: string } {
   try {
-    const parsed = ScenarioSchema.safeParse(resolveExtends(absolutePath(file), readJsonFile));
+    const parsed = parseScenario(resolveExtends(absolutePath(file), readJsonFile));
     if (parsed.success) return { resources: resourceLines(parsed.data) };
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`)

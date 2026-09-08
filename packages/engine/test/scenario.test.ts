@@ -3,8 +3,10 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
+import { loadResolvedScenario } from '../src/cli-shared.js';
 import {
   ScenarioSchema,
+  parseScenario,
   scenarioErrors,
   toJsonSchema,
   validateScenario,
@@ -311,5 +313,91 @@ describe('JSON Schema generado', () => {
     const unknownKey = clone(AS_IS) as Record<string, never>;
     (unknownKey['resources'] as Record<string, Record<string, number>>)['cajero'] = { capacty: 3 };
     expect(validateJsonSchema(committed, unknownKey).length).toBeGreaterThan(0);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Mensajes en español (LILA-202)
+ * ------------------------------------------------------------------ */
+
+describe('mensajes del esquema en español (LILA-202)', () => {
+  const BASE = {
+    version: 1,
+    name: 'x',
+    model: 'model.bpmn',
+    run: { start: '2026-01-01T08:00:00Z', duration: 3600 },
+  };
+
+  /** Vocabulario de los textos de fábrica de zod: si asoma cualquiera, se coló el inglés. */
+  const INGLES = /Invalid|Too (big|small)|Unrecognized|expected|received|option|Required/i;
+
+  /** El primer defecto de un escenario, con el formato `ruta: mensaje` de la CLI y del panel. */
+  function defecto(scenario: unknown): { code: string; texto: string } {
+    const parsed = parseScenario(scenario);
+    if (parsed.success) throw new Error('el escenario era válido');
+    for (const issue of parsed.error.issues) {
+      expect(issue.message, `${issue.code} sale en inglés`).not.toMatch(INGLES);
+    }
+    const first = parsed.error.issues[0]!;
+    return { code: first.code, texto: `${first.path.join('.') || '$'}: ${first.message}` };
+  }
+
+  // Un caso por tipo de defecto que produce hoy `ScenarioSchema` (la aceptación de LILA-202).
+  const casos: [string, string, unknown, string][] = [
+    ['too_big', 'too_big', { ...BASE, elements: { Flow_X: { probability: 1.5 } } },
+      'elements.Flow_X.probability: debe ser ≤ 1'],
+    ['too_small inclusivo', 'too_small', { ...BASE, elements: { Flow_X: { probability: -1 } } },
+      'elements.Flow_X.probability: debe ser ≥ 0'],
+    ['too_small exclusivo', 'too_small', { ...BASE, run: { ...BASE.run, duration: 0 } },
+      'run.duration: debe ser > 0'],
+    ['too_small de lista', 'too_small',
+      { ...BASE, elements: { T: { processingTime: { type: 'user', points: [] } } } },
+      'elements.T.processingTime.points: debe tener al menos 1 elemento'],
+    ['invalid_type', 'invalid_type', { ...BASE, run: { ...BASE.run, seed: 'abc' } },
+      'run.seed: debe ser un número, no un texto'],
+    ['invalid_type entero', 'invalid_type', { ...BASE, run: { ...BASE.run, seed: 1.5 } },
+      'run.seed: debe ser un entero, no un número'],
+    ['invalid_type ausente', 'invalid_type', { version: 1 },
+      'name: es obligatorio y debe ser un texto'],
+    ['invalid_value de enum', 'invalid_value', { ...BASE, run: { ...BASE.run, baseTimeUnit: 'semana' } },
+      'run.baseTimeUnit: debe ser uno de: "s", "min", "h", "day"'],
+    ['invalid_value de literal', 'invalid_value', { ...BASE, version: 2 }, 'version: debe ser 1'],
+    ['unrecognized_keys', 'unrecognized_keys', { ...BASE, elements: { Flow_X: { probabilidad: 1 } } },
+      'elements.Flow_X: clave desconocida: "probabilidad"'],
+    ['unrecognized_keys en plural', 'unrecognized_keys',
+      { ...BASE, elements: { Flow_X: { probabilidad: 1, otra: 2 } } },
+      'elements.Flow_X: claves desconocidas: "probabilidad", "otra"'],
+    ['invalid_union discriminada', 'invalid_union',
+      { ...BASE, elements: { T: { processingTime: { type: 'raro' } } } },
+      'elements.T.processingTime.type: debe ser uno de: "constant", "uniform", "triangular", "exponential", "normal", "truncatedNormal", "lognormal", "gamma", "erlang", "weibull", "beta", "poisson", "binomial", "user"'],
+    ['invalid_union plana', 'invalid_union', { ...BASE, resources: { r: { capacity: 'x' } } },
+      'resources.r.capacity: no encaja con ninguna de las formas admitidas'],
+  ];
+
+  test.each(casos)('%s', (_nombre, code, scenario, esperado) => {
+    const { code: real, texto } = defecto(scenario);
+    expect(real).toBe(code);
+    expect(texto).toBe(esperado);
+  });
+
+  test('el mensaje propio del esquema manda sobre el mapa (R11, R13, R8)', () => {
+    // `refine`, `regex` y `min` con texto siguen diciendo lo suyo: zod no consulta el mapa.
+    expect(defecto({ ...BASE, elements: { T: { processingTime: { type: 'uniform', min: 5, max: 1 } } } }).texto)
+      .toBe('elements.T.processingTime: uniform: se requiere min ≤ max');
+    expect(defecto({ ...BASE, run: { ...BASE.run, currency: 'pesos' } }).texto)
+      .toBe('run.currency: run.currency debe ser un código ISO 4217');
+    expect(defecto({ ...BASE, calendars: { c: { intervals: [] } } }).texto)
+      .toBe('calendars.c.intervals: E-CAL-VACIO: el calendario no tiene intervalos abiertos.');
+  });
+
+  test('ningún ejemplo del repo ni ningún defecto conocido sale en inglés', () => {
+    for (const [, , scenario] of casos) defecto(scenario);
+  });
+
+  test('la CLI imprime exactamente el mismo texto que el esquema', () => {
+    const roto = { ...BASE, elements: { Flow_X: { probability: 1.5 } } };
+    expect(() => loadResolvedScenario('as-is.scenario.json', () => roto)).toThrow(
+      'elements.Flow_X.probability: debe ser ≤ 1',
+    );
   });
 });
