@@ -1,3 +1,5 @@
 dist/
 smoke/
 release/
+# Restos de la receta de iconos (package.json → "icons"): iconutil consume el iconset y se borra.
+*.iconset/
