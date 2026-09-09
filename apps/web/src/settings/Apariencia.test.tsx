@@ -258,3 +258,42 @@ it('eliminar el tema del usuario vuelve al integrado', () => {
   expect(selectTema().value).toBe('eva-01');
   expect(variable('--accent-primary')).toBe('#9EF01A');
 });
+
+/**
+ * Lo tecleado a medias (QA de #277). El hex pasa por `#`, `#1`, `#12`… y el nombre por el vacío:
+ * aplicarlos pinta la app de nada y persistirlos dejaba en disco un tema que al releerlo había que
+ * reparar. El control enseña lo tecleado, lo marca como inválido y no llama a `onTemas`.
+ */
+it('un hex a medias se ve pero no se aplica ni se guarda; al completarlo, sí', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#12');
+  expect(porEtiqueta('Hex de accent.primary').value).toBe('#12');
+  expect(porEtiqueta('Hex de accent.primary').getAttribute('aria-invalid')).toBe('true');
+  expect(variable('--accent-primary')).toBe('#9EF01A');
+  expect(guardado).toEqual([]);
+
+  teclear(porEtiqueta('Hex de accent.primary'), '#123456');
+  expect(porEtiqueta('Hex de accent.primary').getAttribute('aria-invalid')).toBe('false');
+  expect(variable('--accent-primary')).toBe('#123456');
+  expect(guardado).toHaveLength(1);
+  expect(guardado[0]!.tema.tokens['accent.primary']).toBe('#123456');
+});
+
+it('vaciar el tamaño base no guarda «px» como longitud', () => {
+  teclear(porEtiqueta('Tamaño base (px)'), '');
+  expect(porEtiqueta('Tamaño base (px)').getAttribute('aria-invalid')).toBe('true');
+  expect(variable('--font-size-base')).toBe('13px');
+  expect(guardado).toEqual([]);
+  teclear(porEtiqueta('Tamaño base (px)'), '19');
+  expect(variable('--font-size-base')).toBe('19px');
+});
+
+it('el nombre vacío no se persiste: se conserva el anterior hasta que vuelva a haber uno', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#123456');
+  const nombre = (): HTMLInputElement => container.querySelector<HTMLInputElement>('.campo input[type="text"]')!;
+  teclear(nombre(), '');
+  expect(nombre().value).toBe('');
+  expect(nombre().getAttribute('aria-invalid')).toBe('true');
+  expect(guardado[0]!.tema.name).toBe('Eva-01 (copia)');
+  teclear(nombre(), 'Mío');
+  expect(guardado[0]!.tema.name).toBe('Mío');
+});

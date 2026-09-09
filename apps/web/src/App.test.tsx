@@ -32,7 +32,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   publicarEstado: (_estado: unknown) => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
-vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
+// Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
+// `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
+vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
 vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
@@ -92,7 +94,7 @@ beforeEach(async () => {
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.abrir.mockResolvedValue(true);
   mocks.worker.mockResolvedValue(done);
@@ -308,6 +310,39 @@ it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el 
   expect(localStorage.getItem('lila.tema')).toBe('papel');
   // El tema ya no se anuncia en la barra de estado (#237): se ve y se cambia en Ajustes.
   expect(select.value).toBe('papel');
+});
+it('aplicar un tema parcial borra las variables del anterior (docs/THEMES.md)', async () => {
+  // `docs/THEMES.md` promete que un token ausente se queda con el valor por defecto de
+  // `tokens.css`. No era verdad en cuanto se había aplicado otro tema: `applyTheme` escribe en
+  // línea sobre `:root` y no borra, así que un tema parcial —lo que sale de «Importar»— heredaba
+  // en silencio los tokens del anterior y se veía distinto según lo que hubiera antes (QA de #277).
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  raiz.style.setProperty('--accent-primary', '#EC3013');
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // `applyTheme` es un mock aquí: lo que se mide es que el token que el tema nuevo NO trae ya no
+  // está en línea, que es justo lo que lo devuelve al `:root` de `tokens.css` (Eva-01).
+  expect(raiz.style.getPropertyValue('--bg-base')).toBe('');
+  raiz.style.removeProperty('--accent-primary');
+});
+it('Enter en un campo de texto de Ajustes no cierra el diálogo (QA de #277)', async () => {
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(dialog.open).toBe(true);
+  // El `<form method="dialog">` enviaba —o sea cerraba— al pulsar Enter en mitad de teclear un hex.
+  // jsdom no implementa el envío implícito, así que lo que se mide es el `preventDefault`, que es
+  // exactamente lo que en el navegador impide ese envío.
+  const enHex = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => { hexDe('accent.primary').dispatchEvent(enHex); });
+  expect(enHex.defaultPrevented).toBe(true);
+  expect(dialog.open).toBe(true);
+  // Y el botón «Cerrar» sigue cerrando con Enter: ahí el objetivo no es un `<input>`.
+  const cerrar = [...container.querySelectorAll('dialog.ajustes button')].at(-1)!;
+  const enBoton = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => { cerrar.dispatchEvent(enBoton); });
+  expect(enBoton.defaultPrevented).toBe(false);
 });
 it('arranca con el tema recordado y la densidad como atributo', async () => {
   localStorage.setItem('lila.tema', 'papel'); localStorage.setItem('lila.densidad', 'compacta');

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyTheme, tokenToCssVar, type Theme } from './applyTheme';
 import { COLOR_TOKEN_NAMES, TOKEN_NAMES, type TokenName } from './tokens';
+import { saneaTemas } from './temas';
 
 const read = (rel: string): string => readFileSync(new URL(rel, import.meta.url), 'utf8');
 const readTheme = (rel: string): Theme => JSON.parse(read(rel)) as Theme;
@@ -145,5 +146,45 @@ describe('applyTheme', () => {
     const { root, written } = doble();
     applyTheme({ name: 'parcial', tokens: { 'accent.primary': '#00FFAA' } }, root);
     expect([...written]).toEqual([['--accent-primary', '#00FFAA']]);
+  });
+});
+
+/**
+ * Lo que sale de `estado.json` o de `localStorage` puede estar a medias: hasta el QA de #277 un
+ * solo token roto (una edición abandonada en `#12`) descartaba el tema entero y con él los otros
+ * 39, en silencio y al recargar. Ahora se repara token a token.
+ */
+describe('saneaTemas', () => {
+  const ORIGEN = { 'accent.primary': '#9EF01A', 'bg.base': '#12101A' };
+  const guardado = (tokens: unknown, origen: unknown = ORIGEN): unknown[] => [
+    { id: 'u:1', tema: { name: 'Mío', tokens }, origen },
+  ];
+
+  it('un token roto vuelve al origen del tema y el resto del tema sobrevive', () => {
+    const [t] = saneaTemas(guardado({ 'accent.primary': '#12', 'bg.base': '#000000' }));
+    expect(t?.tema.name).toBe('Mío');
+    expect(t?.tema.tokens['accent.primary']).toBe('#9EF01A');
+    expect(t?.tema.tokens['bg.base']).toBe('#000000');
+  });
+
+  it('sin origen válido el token se cae, y ausente lo pinta el default de tokens.css (Eva-01)', () => {
+    const [t] = saneaTemas(guardado({ 'accent.primary': 'azul', 'density': 'enorme' }, {}));
+    expect(t?.tema.tokens['accent.primary']).toBeUndefined();
+    expect(t?.tema.tokens['density']).toBeUndefined();
+  });
+
+  it('un token que no existe no entra, ni desde el tema ni desde el origen', () => {
+    const [t] = saneaTemas(guardado({ 'foo.bar': '#FFFFFF' }, { 'foo.bar': '#FFFFFF' }));
+    expect(t?.tema.tokens['foo.bar']).toBeUndefined();
+    expect(t?.origen['foo.bar']).toBeUndefined();
+  });
+
+  it.each([
+    ['sin nombre', [{ id: 'u:1', tema: { tokens: {} }, origen: {} }]],
+    ['con el nombre en blanco', [{ id: 'u:1', tema: { name: '   ', tokens: {} }, origen: {} }]],
+    ['sin id del usuario', [{ id: 'eva-01', tema: { name: 'X', tokens: {} }, origen: {} }]],
+    ['que no es una lista', {}],
+  ])('descarta lo que no se puede reconstruir: %s', (_caso, dato) => {
+    expect(saneaTemas(dato)).toEqual([]);
   });
 });
