@@ -1,12 +1,17 @@
 name: Desktop
 
-# Empaqueta la SPA con electron-builder por commit, sin publicar (sin tag, sin
-# certificados, sin GitHub Release). Solo se dispara manualmente o en ramas
-# codex/** para no cargar cada PR de main con una compilación de instaladores.
+# Empaqueta la SPA con electron-builder por commit, sin certificados (sin firma,
+# ver #109/E19). Se dispara manualmente, en ramas codex/** (sin publicar, para no
+# cargar cada PR de main con una compilación de instaladores) y en tags v* (publica
+# un GitHub Release en borrador con los tres instaladores para que Brito lo revise).
 on:
   workflow_dispatch:
   push:
     branches: ['codex/**']
+    tags: ['v*']
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -38,3 +43,9 @@ jobs:
           name: lila-desktop-${{ matrix.os }}-${{ github.sha }}
           path: apps/desktop/release/**
           if-no-files-found: error
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: apps/desktop/release/*.{dmg,exe,AppImage}
+          draft: true
+          fail_on_unmatched_files: true
