@@ -6,7 +6,7 @@ files:
   - dist/**
   - package.json
 asar: true
-# Sin icono propio (pendiente #76): electron-builder usa el icono por defecto de Electron.
+# Sin icono propio (pendiente #72): electron-builder usa el icono por defecto de Electron.
 mac:
   target:
     - target: dmg
