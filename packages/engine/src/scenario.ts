@@ -15,164 +15,86 @@ import { z } from 'zod';
 import { checkDistribution } from './core/distributions.js';
 import { poolCapacityBound } from './core/sim.js';
 import type { ProcessIR } from './core/ir.js';
+import { coded, messages, type Catalog, type Locale, type ZodMessages } from './messages/index.js';
 
 /* ------------------------------------------------------------------ *
- * Mensajes del esquema, en español (LILA-202)
+ * Mensajes del esquema (LILA-202, traducidos en LILA-211)
  * ------------------------------------------------------------------ */
-
-/** Nombres de tipo de zod en español, para `invalid_type`. */
-const TIPOS: Record<string, string> = {
-  array: 'una lista',
-  bigint: 'un entero',
-  boolean: 'un booleano',
-  int: 'un entero',
-  null: 'null',
-  number: 'un número',
-  object: 'un objeto',
-  record: 'un objeto',
-  string: 'un texto',
-  undefined: 'nada',
-};
-
-function tipoEs(nombre: string): string {
-  return TIPOS[nombre] ?? nombre;
-}
-
-/** Tipo del valor recibido, con los mismos nombres que `TIPOS`. */
-function tipoRecibido(valor: unknown): string {
-  if (valor === null) return 'null';
-  return tipoEs(Array.isArray(valor) ? 'array' : typeof valor);
-}
 
 /** `"texto"` entre comillas, el resto tal cual: los `values` de un enum son primitivos. */
 function literal(valor: unknown): string {
   return typeof valor === 'string' ? `"${valor}"` : String(valor);
 }
 
-/** Unidad de un límite de tamaño según el contenedor. */
-function unidades(origen: string, cantidad: number | bigint): string {
-  const uno = cantidad === 1 || cantidad === 1n;
-  if (origen === 'string') return uno ? 'carácter' : 'caracteres';
-  return uno ? 'elemento' : 'elementos';
+/** Tipo del valor recibido, con los mismos nombres que usa `zod.typeName`. */
+function receivedType(zod: ZodMessages, valor: unknown): string {
+  if (valor === null) return zod.typeName('null');
+  return zod.typeName(Array.isArray(valor) ? 'array' : typeof valor);
 }
 
-/** Los textos que zod trae de fábrica para lo que no traduce este archivo. */
-const localeEs = z.locales.es().localeError;
-
 /**
- * Los defectos del esquema en español, sin la ruta: la pone quien formatea (la CLI, el MCP y el
- * panel imprimen `${ruta}: ${mensaje}`), así los tres dicen lo mismo —
- * `run.warmup: debe ser ≥ 0`— sin repetir el catálogo.
+ * Los defectos del esquema en el idioma pedido, **sin la ruta**: la pone quien formatea (la CLI,
+ * el MCP y el panel imprimen `${ruta}: ${mensaje}`), así los tres dicen lo mismo —
+ * `run.warmup: must be ≥ 0`— sin repetir el catálogo.
  *
  * Zod solo consulta este mapa cuando el defecto **no** trae mensaje propio, así que los `refine`,
- * `regex` y `min` con texto de este archivo siguen mandando (R11, R13, R8…).
+ * `regex` y `min` con texto del esquema siguen mandando (R11, R13, R8…).
  *
  * ponytail: solo se traducen los seis códigos que produce hoy `ScenarioSchema`; el resto cae en la
- * locale `es` de zod, así nada sale en inglés aunque el esquema crezca. Si algún código de la
+ * locale de zod, así nada sale en otro idioma aunque el esquema crezca. Si algún código de la
  * locale acaba sonando raro en un escenario, se le añade su `case` aquí.
  */
-export const erroresEnEspanol: z.core.$ZodErrorMap = (issue) => {
-  switch (issue.code) {
-    case 'invalid_type': {
-      const esperado = tipoEs(issue.expected);
-      // `input: undefined` es una clave que falta, no un valor de otro tipo.
-      return issue.input === undefined
-        ? `es obligatorio y debe ser ${esperado}`
-        : `debe ser ${esperado}, no ${tipoRecibido(issue.input)}`;
-    }
-    case 'too_big':
-      return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
-        ? `debe ser ${issue.inclusive === false ? '<' : '≤'} ${issue.maximum}`
-        : `debe tener como mucho ${issue.maximum} ${unidades(issue.origin, issue.maximum)}`;
-    case 'too_small':
-      return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
-        ? `debe ser ${issue.inclusive === false ? '>' : '≥'} ${issue.minimum}`
-        : `debe tener al menos ${issue.minimum} ${unidades(issue.origin, issue.minimum)}`;
-    case 'invalid_value':
-      return issue.values.length === 1
-        ? `debe ser ${literal(issue.values[0])}`
-        : `debe ser uno de: ${issue.values.map(literal).join(', ')}`;
-    case 'unrecognized_keys':
-      return issue.keys.length === 1
-        ? `clave desconocida: ${literal(issue.keys[0])}`
-        : `claves desconocidas: ${issue.keys.map(literal).join(', ')}`;
-    case 'invalid_union': {
-      // Unión discriminada: la ruta ya apunta al discriminante y `options` son sus valores. El
-      // tipo crudo del defecto no las declara en todas las variantes, de ahí el aserto.
-      const opciones = issue.options as readonly unknown[] | undefined;
-      return opciones === undefined
-        ? 'no encaja con ninguna de las formas admitidas'
-        : `debe ser uno de: ${opciones.map(literal).join(', ')}`;
-    }
-    default:
-      return localeEs(issue);
-  }
-};
+export function zodErrorMap(locale: Locale = 'en'): z.core.$ZodErrorMap {
+  const zod = messages(locale).zod;
+  /** Los textos que zod trae de fábrica para lo que no traduce este archivo. */
+  const fallback = locale === 'es' ? z.locales.es().localeError : z.locales.en().localeError;
 
-/* ------------------------------------------------------------------ *
- * § 3 — Distribuciones (14, parámetros nombrados, segundos)
- * ------------------------------------------------------------------ */
-
-const nonNegative = z.number().nonnegative();
-const positive = z.number().positive();
+  return (issue) => {
+    switch (issue.code) {
+      case 'invalid_type': {
+        const esperado = zod.typeName(issue.expected);
+        // `input: undefined` es una clave que falta, no un valor de otro tipo.
+        return issue.input === undefined
+          ? zod.required(esperado)
+          : zod.wrongType(esperado, receivedType(zod, issue.input));
+      }
+      case 'too_big':
+        return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
+          ? zod.tooBigNumber(issue.inclusive === false ? '<' : '≤', String(issue.maximum))
+          : zod.tooBigSize(String(issue.maximum), zod.units(issue.origin, issue.maximum));
+      case 'too_small':
+        return issue.origin === 'number' || issue.origin === 'int' || issue.origin === 'bigint'
+          ? zod.tooSmallNumber(issue.inclusive === false ? '>' : '≥', String(issue.minimum))
+          : zod.tooSmallSize(String(issue.minimum), zod.units(issue.origin, issue.minimum));
+      case 'invalid_value':
+        return issue.values.length === 1
+          ? zod.invalidValue(literal(issue.values[0]))
+          : zod.invalidValues(issue.values.map(literal).join(', '));
+      case 'unrecognized_keys':
+        return issue.keys.length === 1
+          ? zod.unrecognizedKey(literal(issue.keys[0]))
+          : zod.unrecognizedKeys(issue.keys.map(literal).join(', '));
+      case 'invalid_union': {
+        // Unión discriminada: la ruta ya apunta al discriminante y `options` son sus valores. El
+        // tipo crudo del defecto no las declara en todas las variantes, de ahí el aserto.
+        const opciones = issue.options as readonly unknown[] | undefined;
+        return opciones === undefined
+          ? zod.invalidUnion()
+          : zod.invalidValues(opciones.map(literal).join(', '));
+      }
+      default:
+        return fallback(issue);
+    }
+  };
+}
 
 /**
- * Las restricciones entre parámetros (`min ≤ mode ≤ max`) van como `refine`: zod las aplica, pero
- * no viajan al JSON Schema generado, que solo sirve al autocompletado del editor.
+ * @deprecated Usa `zodErrorMap('es')`. Se conserva porque es público por `@lila/engine/schema`.
  */
-export const DistributionSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('constant'), value: nonNegative }),
-  z
-    .strictObject({ type: z.literal('uniform'), min: nonNegative, max: nonNegative })
-    .refine((d) => d.min <= d.max, { message: 'uniform: se requiere min ≤ max' }),
-  z
-    .strictObject({
-      type: z.literal('triangular'),
-      min: nonNegative,
-      mode: nonNegative,
-      max: nonNegative,
-    })
-    .refine((d) => d.min <= d.mode && d.mode <= d.max, {
-      message: 'triangular: se requiere min ≤ mode ≤ max',
-    }),
-  z.strictObject({ type: z.literal('exponential'), mean: positive }),
-  z.strictObject({ type: z.literal('normal'), mean: z.number(), sd: nonNegative }),
-  z
-    .strictObject({
-      type: z.literal('truncatedNormal'),
-      mean: z.number(),
-      sd: nonNegative,
-      min: z.number(),
-      max: z.number(),
-    })
-    .refine((d) => d.min <= d.max, { message: 'truncatedNormal: se requiere min ≤ max' }),
-  z.strictObject({ type: z.literal('lognormal'), mean: positive, sd: nonNegative }),
-  z.strictObject({ type: z.literal('gamma'), shape: positive, scale: positive }),
-  z.strictObject({ type: z.literal('erlang'), k: z.int().min(1), mean: positive }),
-  z.strictObject({ type: z.literal('weibull'), shape: positive, scale: positive }),
-  z
-    .strictObject({
-      type: z.literal('beta'),
-      alpha: positive,
-      beta: positive,
-      min: z.number(),
-      max: z.number(),
-    })
-    .refine((d) => d.min <= d.max, { message: 'beta: se requiere min ≤ max' }),
-  z.strictObject({ type: z.literal('poisson'), mean: positive }),
-  z.strictObject({ type: z.literal('binomial'), n: z.int().min(1), p: z.number().min(0).max(1) }),
-  z.strictObject({
-    type: z.literal('user'),
-    points: z
-      .array(z.strictObject({ value: z.number(), probability: nonNegative }))
-      .min(1),
-  }),
-]);
-
-export type Distribution = z.output<typeof DistributionSchema>;
+export const erroresEnEspanol: z.core.$ZodErrorMap = zodErrorMap('es');
 
 /* ------------------------------------------------------------------ *
- * § 2.2 — run
+ * Auxiliares del esquema que no dependen del idioma
  * ------------------------------------------------------------------ */
 
 /** ISO 8601 con offset explícito (R8). `Z` cuenta como offset. */
@@ -204,51 +126,22 @@ function isValidCivilDate(year: number, month: number, day: number): boolean {
 }
 
 /** Mensaje del primer defecto civil de `start`, o `null` si el instante existe. */
-function civilStartError(start: string): string | null {
+function civilStartError(start: string, zod: ZodMessages): string | null {
   const match = ISO_PARTS.exec(start);
   if (match === null) return null; // ya lo rechazó `ISO_WITH_OFFSET`.
   const [, year, month, day, hour, minute, second, offsetHour, offsetMinute] = match;
   if (!isValidCivilDate(Number(year), Number(month), Number(day))) {
-    return `run.start: ${start} no es una fecha válida; ${month}-${day} no existe en el calendario civil.`;
+    return zod.startInvalidDate(start, `${month}-${day}`);
   }
   if (Number(hour) > 23 || Number(minute) > 59 || (second !== undefined && Number(second) > 59)) {
     const clock = second === undefined ? `${hour}:${minute}` : `${hour}:${minute}:${second}`;
-    return `run.start: ${start} no es una hora válida; ${clock} no existe en el reloj civil.`;
+    return zod.startInvalidTime(start, clock);
   }
   if (offsetHour !== undefined && (Number(offsetHour) > 23 || Number(offsetMinute) > 59)) {
-    return `run.start: ${start} no tiene un offset válido; ${offsetHour}:${offsetMinute} no es un desplazamiento horario.`;
+    return zod.startInvalidOffset(start, `${offsetHour}:${offsetMinute}`);
   }
   return null;
 }
-
-export const RunSchema = z.strictObject({
-  start: z
-    .string()
-    .regex(ISO_WITH_OFFSET, 'run.start debe ser ISO 8601 con offset')
-    .superRefine((value, ctx) => {
-      const message = civilStartError(value);
-      if (message !== null) ctx.addIssue({ code: 'custom', message });
-    }),
-  duration: positive.optional(),
-  warmup: nonNegative.default(0),
-  replications: z.int().min(1).default(1),
-  // Sin `.default(1)`: R-DEG-4 pide avisar (`W-SIN-SEED`) cuando el escenario no la declara, y
-  // con default el lint no puede distinguir "no declarada" de "declarada en 1" (LILA-198). El
-  // valor neutro sigue siendo 1 y lo aplica quien simula (`core/sim.ts`).
-  //
-  // El `default: 1` sí sigue en el JSON Schema publicado, como **anotación** (que es lo único
-  // que significa ahí): el panel de escenario lo lee para saber qué escribir al añadir el campo
-  // (`valorVacio` en `ScenarioPanel.tsx`). Sin él escribiría el `minimum` del entero seguro.
-  seed: z.int().meta({ default: 1 }).optional(),
-  baseTimeUnit: z.enum(['s', 'min', 'h', 'day']).default('s'),
-  currency: z.string().regex(/^[A-Z]{3}$/, 'run.currency debe ser un código ISO 4217').optional(),
-  // § 4 — reservado: aceptado por el esquema, rechazado por el motor.
-  timezone: z.unknown().optional(),
-});
-
-/* ------------------------------------------------------------------ *
- * § 2.3 — calendars
- * ------------------------------------------------------------------ */
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 /**
@@ -261,111 +154,270 @@ const HHMM_TO = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 
 export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
-export const CalendarSchema = z.strictObject({
-  intervals: z
-    .array(
-      z
-        .strictObject({
-          days: z.array(z.enum(WEEKDAYS)).min(1),
-          from: z.string().regex(HHMM, 'from debe ser "HH:MM"'),
-          to: z.string().regex(HHMM_TO, 'to debe ser "HH:MM" (se admite "24:00")'),
-        })
-        .refine((i) => i.to > i.from, {
-          message: 'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',
-        }),
-    )
-    // R-CAL-2: sin intervalos el calendario nunca abriría (E-CAL-VACIO, § 17 de SEMANTICS.md).
-    .min(1, 'E-CAL-VACIO: el calendario no tiene intervalos abiertos.'),
-  // § 4 — reservados.
-  holidays: z.unknown().optional(),
-  timezone: z.unknown().optional(),
-});
-
 /* ------------------------------------------------------------------ *
- * § 2.4 — resources
+ * El esquema, por idioma (LILA-211)
  * ------------------------------------------------------------------ */
 
 /**
- * Un tramo de capacidad (§ 2.4, R-CAL-11, LILA-164): `capacity` unidades mientras `calendar` esté
- * abierto. Bizagi lo llama "Resources → Calendars → quantity" (3 enfermeras de día, 1 de noche).
+ * Construye el esquema completo con los textos de `locale`. Es una fábrica y no un módulo de
+ * constantes porque una decena de `message:` viven **dentro** del esquema (`refine`, `regex`,
+ * `min`) y zod no consulta el mapa de errores para ellos: la única forma de traducirlos es
+ * construir el esquema con el idioma ya elegido.
+ *
+ * `scenarioSchema(locale)` memoiza el resultado, así que construir el esquema sigue costando una
+ * vez por idioma y no una por llamada.
  */
-export const CapacityIntervalSchema = z.strictObject({
-  calendar: z.string(),
-  capacity: z.int().min(1),
-});
+function buildSchemas(locale: Locale) {
+  const zod = messages(locale).zod;
 
-export const ResourceSchema = z.strictObject({
-  name: z.string().optional(),
-  type: z.enum(['role', 'equipment']).default('role'),
-  /** Entero ≥ 1, o la lista de tramos por calendario. Excluyente con `calendar` (§ 5, R16). */
-  capacity: z.union([z.int().min(1), z.array(CapacityIntervalSchema).min(1)]),
-  costPerHour: nonNegative.default(0),
-  fixedCost: nonNegative.default(0),
-  calendar: z.string().optional(),
-  // § 4 — reservados. `docs/SEMANTICS.md` R-RES-2 usa `resources.cajero.preempt` como ejemplo.
-  priority: z.unknown().optional(),
-  preempt: z.unknown().optional(),
-});
+  /* ------------------------------------------------------------------ *
+   * § 3 — Distribuciones (14, parámetros nombrados, segundos)
+   * ------------------------------------------------------------------ */
 
-/* ------------------------------------------------------------------ *
- * § 2.5 — elements
- * ------------------------------------------------------------------ */
+  const nonNegative = z.number().nonnegative();
+  const positive = z.number().positive();
 
-export const ElementSchema = z.strictObject({
-  processingTime: DistributionSchema.optional(),
-  resources: z
-    .array(z.strictObject({ ref: z.string(), quantity: z.int().min(1).default(1) }))
-    .optional(),
-  // Sin `.default('and')`: hay que distinguir "no declarado" de "declarado" para la regla R14.
-  selection: z.enum(['and', 'or']).optional(),
-  fixedCost: nonNegative.optional(),
-  interTriggerTimer: DistributionSchema.optional(),
-  triggerCount: z.int().min(1).optional(),
-  calendar: z.string().optional(),
-  // Sin `.min(0).max(1)`: el rango lo comprueba `validateScenario` para poder emitir
-  // `E-PROB-RANGO` del catálogo (§ 17) con su código y su ruta, en vez del defecto genérico de
-  // zod que no lleva código (LILA-198).
-  probability: z.number().optional(),
-  // § 4 — reservados.
-  priority: z.unknown().optional(),
-  preempt: z.unknown().optional(),
-  batch: z.unknown().optional(),
-  conditions: z.unknown().optional(),
-});
+  /**
+   * Las restricciones entre parámetros (`min ≤ mode ≤ max`) van como `refine`: zod las aplica, pero
+   * no viajan al JSON Schema generado, que solo sirve al autocompletado del editor.
+   */
+  const DistributionSchema = z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('constant'), value: nonNegative }),
+    z
+      .strictObject({ type: z.literal('uniform'), min: nonNegative, max: nonNegative })
+      .refine((d) => d.min <= d.max, { message: zod.distributionMinMax('uniform') }),
+    z
+      .strictObject({
+        type: z.literal('triangular'),
+        min: nonNegative,
+        mode: nonNegative,
+        max: nonNegative,
+      })
+      .refine((d) => d.min <= d.mode && d.mode <= d.max, {
+        message: zod.distributionMinModeMax('triangular'),
+      }),
+    z.strictObject({ type: z.literal('exponential'), mean: positive }),
+    z.strictObject({ type: z.literal('normal'), mean: z.number(), sd: nonNegative }),
+    z
+      .strictObject({
+        type: z.literal('truncatedNormal'),
+        mean: z.number(),
+        sd: nonNegative,
+        min: z.number(),
+        max: z.number(),
+      })
+      .refine((d) => d.min <= d.max, { message: zod.distributionMinMax('truncatedNormal') }),
+    z.strictObject({ type: z.literal('lognormal'), mean: positive, sd: nonNegative }),
+    z.strictObject({ type: z.literal('gamma'), shape: positive, scale: positive }),
+    z.strictObject({ type: z.literal('erlang'), k: z.int().min(1), mean: positive }),
+    z.strictObject({ type: z.literal('weibull'), shape: positive, scale: positive }),
+    z
+      .strictObject({
+        type: z.literal('beta'),
+        alpha: positive,
+        beta: positive,
+        min: z.number(),
+        max: z.number(),
+      })
+      .refine((d) => d.min <= d.max, { message: zod.distributionMinMax('beta') }),
+    z.strictObject({ type: z.literal('poisson'), mean: positive }),
+    z.strictObject({ type: z.literal('binomial'), n: z.int().min(1), p: z.number().min(0).max(1) }),
+    z.strictObject({
+      type: z.literal('user'),
+      points: z
+        .array(z.strictObject({ value: z.number(), probability: nonNegative }))
+        .min(1),
+    }),
+  ]);
 
+
+  /* ------------------------------------------------------------------ *
+   * § 2.2 — run
+   * ------------------------------------------------------------------ */
+
+  const RunSchema = z.strictObject({
+    start: z
+      .string()
+      .regex(ISO_WITH_OFFSET, zod.startIso())
+      .superRefine((value, ctx) => {
+        const message = civilStartError(value, zod);
+        if (message !== null) ctx.addIssue({ code: 'custom', message });
+      }),
+    duration: positive.optional(),
+    warmup: nonNegative.default(0),
+    replications: z.int().min(1).default(1),
+    // Sin `.default(1)`: R-DEG-4 pide avisar (`W-SIN-SEED`) cuando el escenario no la declara, y
+    // con default el lint no puede distinguir "no declarada" de "declarada en 1" (LILA-198). El
+    // valor neutro sigue siendo 1 y lo aplica quien simula (`core/sim.ts`).
+    //
+    // El `default: 1` sí sigue en el JSON Schema publicado, como **anotación** (que es lo único
+    // que significa ahí): el panel de escenario lo lee para saber qué escribir al añadir el campo
+    // (`valorVacio` en `ScenarioPanel.tsx`). Sin él escribiría el `minimum` del entero seguro.
+    seed: z.int().meta({ default: 1 }).optional(),
+    baseTimeUnit: z.enum(['s', 'min', 'h', 'day']).default('s'),
+    currency: z.string().regex(/^[A-Z]{3}$/, zod.currencyIso()).optional(),
+    // § 4 — reservado: aceptado por el esquema, rechazado por el motor.
+    timezone: z.unknown().optional(),
+  });
+
+  /* ------------------------------------------------------------------ *
+   * § 2.3 — calendars
+   * ------------------------------------------------------------------ */
+
+  const CalendarSchema = z.strictObject({
+    intervals: z
+      .array(
+        z
+          .strictObject({
+            days: z.array(z.enum(WEEKDAYS)).min(1),
+            from: z.string().regex(HHMM, zod.intervalFrom()),
+            to: z.string().regex(HHMM_TO, zod.intervalTo()),
+          })
+          .refine((i) => i.to > i.from, {
+            message: zod.intervalOrder(),
+          }),
+      )
+      // R-CAL-2: sin intervalos el calendario nunca abriría (E-CAL-VACIO, § 17 de SEMANTICS.md).
+      .min(1, coded('E-CAL-VACIO', messages(locale).codes['E-CAL-VACIO/anonimo']())),
+    // § 4 — reservados.
+    holidays: z.unknown().optional(),
+    timezone: z.unknown().optional(),
+  });
+
+  /* ------------------------------------------------------------------ *
+   * § 2.4 — resources
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Un tramo de capacidad (§ 2.4, R-CAL-11, LILA-164): `capacity` unidades mientras `calendar` esté
+   * abierto. Bizagi lo llama "Resources → Calendars → quantity" (3 enfermeras de día, 1 de noche).
+   */
+  const CapacityIntervalSchema = z.strictObject({
+    calendar: z.string(),
+    capacity: z.int().min(1),
+  });
+
+  const ResourceSchema = z.strictObject({
+    name: z.string().optional(),
+    type: z.enum(['role', 'equipment']).default('role'),
+    /** Entero ≥ 1, o la lista de tramos por calendario. Excluyente con `calendar` (§ 5, R16). */
+    capacity: z.union([z.int().min(1), z.array(CapacityIntervalSchema).min(1)]),
+    costPerHour: nonNegative.default(0),
+    fixedCost: nonNegative.default(0),
+    calendar: z.string().optional(),
+    // § 4 — reservados. `docs/SEMANTICS.md` R-RES-2 usa `resources.cajero.preempt` como ejemplo.
+    priority: z.unknown().optional(),
+    preempt: z.unknown().optional(),
+  });
+
+  /* ------------------------------------------------------------------ *
+   * § 2.5 — elements
+   * ------------------------------------------------------------------ */
+
+  const ElementSchema = z.strictObject({
+    processingTime: DistributionSchema.optional(),
+    resources: z
+      .array(z.strictObject({ ref: z.string(), quantity: z.int().min(1).default(1) }))
+      .optional(),
+    // Sin `.default('and')`: hay que distinguir "no declarado" de "declarado" para la regla R14.
+    selection: z.enum(['and', 'or']).optional(),
+    fixedCost: nonNegative.optional(),
+    interTriggerTimer: DistributionSchema.optional(),
+    triggerCount: z.int().min(1).optional(),
+    calendar: z.string().optional(),
+    // Sin `.min(0).max(1)`: el rango lo comprueba `validateScenario` para poder emitir
+    // `E-PROB-RANGO` del catálogo (§ 17) con su código y su ruta, en vez del defecto genérico de
+    // zod que no lleva código (LILA-198).
+    probability: z.number().optional(),
+    // § 4 — reservados.
+    priority: z.unknown().optional(),
+    preempt: z.unknown().optional(),
+    batch: z.unknown().optional(),
+    conditions: z.unknown().optional(),
+  });
+
+
+  /* ------------------------------------------------------------------ *
+   * § 2.1 — raíz
+   * ------------------------------------------------------------------ */
+
+  const ScenarioSchema = z.strictObject({
+    $schema: z.string().optional(),
+    version: z.literal(1),
+    name: z.string(),
+    description: z.string().optional(),
+    // `model` y `run` son obligatorios en el escenario *resuelto* (§ 2.1 nota ¹), no en un delta.
+    model: z.string().optional(),
+    extends: z.string().optional(),
+    run: RunSchema.optional(),
+    calendars: z.record(z.string(), CalendarSchema).optional(),
+    resources: z.record(z.string(), ResourceSchema).optional(),
+    elements: z.record(z.string(), ElementSchema).optional(),
+  });
+
+  return {
+    Distribution: DistributionSchema,
+    Run: RunSchema,
+    CapacityInterval: CapacityIntervalSchema,
+    Calendar: CalendarSchema,
+    Resource: ResourceSchema,
+    Element: ElementSchema,
+    Scenario: ScenarioSchema,
+  };
+}
+
+const SCHEMAS = new Map<Locale, ReturnType<typeof buildSchemas>>();
+
+function schemas(locale: Locale): ReturnType<typeof buildSchemas> {
+  let built = SCHEMAS.get(locale);
+  if (built === undefined) {
+    built = buildSchemas(locale);
+    SCHEMAS.set(locale, built);
+  }
+  return built;
+}
+
+/** El esquema del escenario con los textos de `locale`; memoizado por idioma. */
+export function scenarioSchema(locale: Locale = 'en'): ReturnType<typeof buildSchemas>['Scenario'] {
+  return schemas(locale).Scenario;
+}
+
+// Los esquemas en el idioma por defecto, que es la forma en que los consume el resto del
+// repositorio (el panel de escenario, el generador de JSON Schema, las pruebas).
+export const DistributionSchema = schemas('en').Distribution;
+export const RunSchema = schemas('en').Run;
+export const CapacityIntervalSchema = schemas('en').CapacityInterval;
+export const CalendarSchema = schemas('en').Calendar;
+export const ResourceSchema = schemas('en').Resource;
+export const ElementSchema = schemas('en').Element;
+export const ScenarioSchema = schemas('en').Scenario;
+
+export type Distribution = z.output<typeof DistributionSchema>;
 export type ElementSpec = z.output<typeof ElementSchema>;
-
-/* ------------------------------------------------------------------ *
- * § 2.1 — raíz
- * ------------------------------------------------------------------ */
-
-export const ScenarioSchema = z.strictObject({
-  $schema: z.string().optional(),
-  version: z.literal(1),
-  name: z.string(),
-  description: z.string().optional(),
-  // `model` y `run` son obligatorios en el escenario *resuelto* (§ 2.1 nota ¹), no en un delta.
-  model: z.string().optional(),
-  extends: z.string().optional(),
-  run: RunSchema.optional(),
-  calendars: z.record(z.string(), CalendarSchema).optional(),
-  resources: z.record(z.string(), ResourceSchema).optional(),
-  elements: z.record(z.string(), ElementSchema).optional(),
-});
-
 export type Scenario = z.output<typeof ScenarioSchema>;
+
+/** Opciones comunes de las funciones públicas que producen texto (LILA-211). */
+export interface LocaleOptions {
+  /** Idioma de los mensajes; `'en'` por defecto. */
+  locale?: Locale | undefined;
+}
 
 /**
  * La única puerta de entrada al esquema para quien enseña los defectos a una persona: aplica
- * `erroresEnEspanol`. La CLI (`cli-shared.ts`), el MCP (`packages/mcp`) y el panel de escenario
- * la usan, y por eso los tres dicen exactamente lo mismo (LILA-202).
+ * `zodErrorMap(locale)` **y** construye el esquema en ese idioma. La CLI (`cli-shared.ts`), el
+ * MCP (`packages/mcp`) y el panel de escenario la usan, y por eso los tres dicen exactamente lo
+ * mismo (LILA-202).
  *
  * Es un `safeParse` con mapa, no un `z.config()` global: `@lila/engine` es una librería y
  * reconfigurar el zod del proceso al importarla cambiaría también los mensajes de esquemas que
  * no son suyos (los `inputSchema` del servidor MCP, por ejemplo).
  */
-export function parseScenario(raw: unknown): z.ZodSafeParseResult<Scenario> {
-  return ScenarioSchema.safeParse(raw, { error: erroresEnEspanol });
+export function parseScenario(
+  raw: unknown,
+  options: LocaleOptions = {},
+): z.ZodSafeParseResult<Scenario> {
+  const locale = options.locale ?? 'en';
+  return scenarioSchema(locale).safeParse(raw, { error: zodErrorMap(locale) });
 }
 
 export type ScenarioInput = z.input<typeof ScenarioSchema>;
@@ -428,6 +480,7 @@ function reserved(
   path: string,
   holder: Record<string, unknown>,
   keys: readonly string[],
+  M: Catalog['codes'],
 ): void {
   for (const key of keys) {
     if (isPresent(holder[key])) {
@@ -435,7 +488,7 @@ function reserved(
         code: 'E-RESERVADO',
         path: `${path}.${key}`,
         severity: 'error',
-        message: `${path}.${key}: campo reservado, no soportado por el simulador en v1.`,
+        message: M['E-RESERVADO'](`${path}.${key}`),
       });
     }
   }
@@ -463,7 +516,8 @@ const GENERATORS = new Set(['start']);
  * CLI mezcla los avisos del lint y los del motor en un `Set<string>` de `${code}: ${message}`
  * (`cli.ts::resultWithBoundaryWarnings`), así que un texto distinto salía **dos veces** en consola
  * y en `RunResult.warnings[]`. El `path` sí conserva `elements.${gatewayId}` para el panel y el
- * JSON. Si alguna vez cambia el texto del motor, hay que cambiar este a la vez (lo fija un test).
+ * JSON. Desde LILA-211 los dos salen de la **misma** entrada del catálogo, así que ya no pueden
+ * separarse por descuido.
  *
  * `E-XOR-SUMA-CERO` no entra en el trato: es error, aborta antes de simular y el motor nunca lo
  * emite, así que conserva el prefijo `elements.` de los demás errores de este archivo.
@@ -473,6 +527,7 @@ function checkXorGateway(
   gatewayId: string,
   outs: readonly string[],
   elements: Record<string, ElementSpec>,
+  M: Catalog['codes'],
 ): void {
   if (outs.length === 0) return; // sin salidas: lo caza el validador del IR (E-GATEWAY-SIN-ARISTAS).
   const declared = outs.map((flowId) => elements[flowId]?.probability);
@@ -487,7 +542,7 @@ function checkXorGateway(
       code: 'W-XOR-RESIDUO-COMPARTIDO',
       path: `elements.${gatewayId}`,
       severity: 'warning',
-      message: `${gatewayId}: el residuo se reparte entre ${missingIds.join(', ')}.`,
+      message: M['W-XOR-RESIDUO-COMPARTIDO'](gatewayId, missingIds.join(', ')),
     });
   }
 
@@ -498,7 +553,7 @@ function checkXorGateway(
       code: 'E-XOR-SUMA-CERO',
       path: `elements.${gatewayId}`,
       severity: 'error',
-      message: `elements.${gatewayId}: las probabilidades del XOR suman 0; no hay ruta posible.`,
+      message: M['E-XOR-SUMA-CERO'](`elements.${gatewayId}`),
     });
   } else if (Math.abs(total - 1) > 1e-9) {
     // R-XOR-4: no suman 1, se normalizan con aviso.
@@ -506,7 +561,7 @@ function checkXorGateway(
       code: 'W-XOR-NORMALIZADA',
       path: `elements.${gatewayId}`,
       severity: 'warning',
-      message: `${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`,
+      message: M['W-XOR-NORMALIZADA'](gatewayId, total),
     });
   }
 }
@@ -520,11 +575,12 @@ function checkElementDistributions(
   problems: ScenarioProblem[],
   id: string,
   element: ElementSpec,
+  locale: Locale,
 ): void {
   for (const field of ['processingTime', 'interTriggerTimer'] as const) {
     const dist = element[field];
     if (dist === undefined) continue;
-    for (const warning of checkDistribution(dist)) {
+    for (const warning of checkDistribution(dist, locale)) {
       problems.push({
         code: warning.code,
         path: `elements.${id}.${field}`,
@@ -541,24 +597,30 @@ function checkElementDistributions(
  *
  * Devuelve la lista completa en una pasada; `severity: 'error'` impide simular.
  */
-export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioProblem[] {
+export function validateScenario(
+  scenario: Scenario,
+  ir: ProcessIR,
+  options: LocaleOptions = {},
+): ScenarioProblem[] {
+  const locale = options.locale ?? 'en';
+  const M = messages(locale).codes;
   const problems: ScenarioProblem[] = [];
   const calendars = scenario.calendars ?? {};
   const resources = scenario.resources ?? {};
   const elements = scenario.elements ?? {};
 
-  if (scenario.run) reserved(problems, 'run', scenario.run, RESERVED.run);
+  if (scenario.run) reserved(problems, 'run', scenario.run, RESERVED.run, M);
   for (const [key, calendar] of Object.entries(calendars)) {
-    reserved(problems, `calendars.${key}`, calendar, RESERVED.calendars);
+    reserved(problems, `calendars.${key}`, calendar, RESERVED.calendars, M);
   }
   for (const [key, resource] of Object.entries(resources)) {
-    reserved(problems, `resources.${key}`, resource, RESERVED.resources);
+    reserved(problems, `resources.${key}`, resource, RESERVED.resources, M);
     if (resource.calendar !== undefined && calendars[resource.calendar] === undefined) {
       problems.push({
         code: 'E-REF-DESCONOCIDA',
         path: `resources.${key}.calendar`,
         severity: 'error',
-        message: `resources.${key}.calendar: el calendario ${resource.calendar} no existe en calendars.`,
+        message: M['E-REF-DESCONOCIDA'](`resources.${key}.calendar`, resource.calendar),
       });
     }
     // R16 — `capacity` por intervalos y `calendar` del pool son excluyentes (R-CAL-11): el
@@ -568,7 +630,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'E-CAPACIDAD-Y-CALENDARIO',
         path: `resources.${key}.capacity`,
         severity: 'error',
-        message: `resources.${key}.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.`,
+        message: M['E-CAPACIDAD-Y-CALENDARIO'](`resources.${key}.capacity`),
       });
     }
     // R9 — el calendario de cada tramo también tiene que existir.
@@ -579,7 +641,10 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
             code: 'E-REF-DESCONOCIDA',
             path: `resources.${key}.capacity[${i}].calendar`,
             severity: 'error',
-            message: `resources.${key}.capacity[${i}].calendar: el calendario ${slice.calendar} no existe en calendars.`,
+            message: M['E-REF-DESCONOCIDA'](
+              `resources.${key}.capacity[${i}].calendar`,
+              slice.calendar,
+            ),
           });
         }
       }
@@ -601,7 +666,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
   );
 
   for (const [id, element] of Object.entries(elements)) {
-    reserved(problems, `elements.${id}`, element, RESERVED.elements);
+    reserved(problems, `elements.${id}`, element, RESERVED.elements, M);
 
     const node = ir.nodes[id];
     const flow = ir.flows[id];
@@ -618,7 +683,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-SUBPROC-PARAMETRO',
           path: `elements.${id}.${field}`,
           severity: 'error',
-          message: `elements.${id}.${field}: ${id} es un subproceso embebido y no tiene tiempo, recursos ni costo propios; su tiempo es la suma de lo que ocurre dentro.`,
+          message: M['E-SUBPROC-PARAMETRO'](`elements.${id}.${field}`, id),
         });
       }
       if (subprocessFields.length === 0) {
@@ -626,13 +691,13 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-ELEMENTO-DESCONOCIDO',
           path: `elements.${id}`,
           severity: 'error',
-          message: `elements.${id}: el id ${id} no existe en el modelo.`,
+          message: M['E-ELEMENTO-DESCONOCIDO'](`elements.${id}`, id),
         });
       }
       continue;
     }
 
-    checkElementDistributions(problems, id, element);
+    checkElementDistributions(problems, id, element, locale);
 
     // R4 / R-XOR-8 — `probability` solo en sequence flows.
     if (element.probability !== undefined && flow === undefined) {
@@ -640,7 +705,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'E-PROB-EN-NODO',
         path: `elements.${id}.probability`,
         severity: 'error',
-        message: `elements.${id}.probability: solo se admite en un sequence flow.`,
+        message: M['E-PROB-EN-NODO'](`elements.${id}.probability`),
       });
     }
     // R-XOR-6 — rango de `probability`. Lo comprueba el lint, no el esquema: así el defecto
@@ -650,7 +715,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'E-PROB-RANGO',
         path: `elements.${id}.probability`,
         severity: 'error',
-        message: `elements.${id}.probability: ${element.probability} está fuera de [0, 1].`,
+        message: M['E-PROB-RANGO'](`elements.${id}.probability`, element.probability),
       });
     }
 
@@ -661,7 +726,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-CAMPO-NO-APLICA',
           path: `elements.${id}.${field}`,
           severity: 'error',
-          message: `elements.${id}.${field}: solo se admite en un evento de inicio.`,
+          message: M['E-CAMPO-NO-APLICA/solo-inicio'](`elements.${id}.${field}`),
         });
       }
     }
@@ -680,8 +745,8 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         path: `elements.${id}.resources`,
         severity: 'error',
         message: enTimer
-          ? `elements.${id}.resources: un timer es un retardo y no consume recursos.`
-          : `elements.${id}.resources: solo una tarea puede consumir recursos.`,
+          ? M['E-TIMER-RECURSO'](`elements.${id}.resources`)
+          : M['E-CAMPO-NO-APLICA/solo-tarea'](`elements.${id}.resources`),
       });
     }
     const seenResources = new Set<string>();
@@ -691,7 +756,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-REC-DESCONOCIDO',
           path: `elements.${id}.resources[${i}].ref`,
           severity: 'error',
-          message: `elements.${id}.resources[${i}].ref: el recurso ${use.ref} no existe en resources.`,
+          message: M['E-REC-DESCONOCIDO/recurso'](`elements.${id}.resources[${i}].ref`, use.ref),
         });
       }
       if (seenResources.has(use.ref)) {
@@ -699,7 +764,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-REC-DUPLICADO',
           path: `elements.${id}.resources[${i}].ref`,
           severity: 'error',
-          message: `elements.${id}.resources[${i}].ref: ${use.ref} aparece más de una vez; usa quantity.`,
+          message: M['E-REC-DUPLICADO/ref'](`elements.${id}.resources[${i}].ref`, use.ref),
         });
       }
       seenResources.add(use.ref);
@@ -712,7 +777,12 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
           code: 'E-REC-CANTIDAD',
           path: `elements.${id}.resources[${i}].quantity`,
           severity: 'error',
-          message: `elements.${id}.resources[${i}].quantity: ${use.quantity} excede capacity ${capacity} de ${use.ref}.`,
+          message: M['E-REC-CANTIDAD/excede-ruta'](
+            `elements.${id}.resources[${i}].quantity`,
+            use.quantity,
+            capacity,
+            use.ref,
+          ),
         });
       }
     }
@@ -721,7 +791,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'E-REF-DESCONOCIDA',
         path: `elements.${id}.calendar`,
         severity: 'error',
-        message: `elements.${id}.calendar: el calendario ${element.calendar} no existe en calendars.`,
+        message: M['E-REF-DESCONOCIDA'](`elements.${id}.calendar`, element.calendar),
       });
     }
 
@@ -731,14 +801,14 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'E-CAMPO-NO-APLICA',
         path: `elements.${id}.selection`,
         severity: 'error',
-        message: `elements.${id}.selection: solo tiene sentido con resources.`,
+        message: M['E-CAMPO-NO-APLICA/selection'](`elements.${id}.selection`),
       });
     }
   }
 
   // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
-    if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements);
+    if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.
@@ -747,7 +817,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
       code: 'E-SIN-PARADA',
       path: 'run.duration',
       severity: 'error',
-      message: 'run.duration: falta una condición de parada; declara run.duration o un triggerCount.',
+      message: M['E-SIN-PARADA']('run.duration'),
     });
   }
 
@@ -758,7 +828,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
       code: 'W-SIN-SEED',
       path: 'run.seed',
       severity: 'warning',
-      message: 'run.seed: el escenario no declara seed; la corrida usa seed = 1.',
+      message: M['W-SIN-SEED']('run.seed'),
     });
   }
 
@@ -769,7 +839,7 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
         code: 'W-ELEMENTO-SIN-PARAMETROS',
         path: `elements.${id}`,
         severity: 'warning',
-        message: `elements.${id}: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.`,
+        message: M['W-ELEMENTO-SIN-PARAMETROS'](`elements.${id}`),
       });
     }
   }
@@ -790,11 +860,15 @@ export function validateScenario(scenario: Scenario, ir: ProcessIR): ScenarioPro
  * ponytail: una función de formato, no un mapa código↔defecto. Techo: si algún día otro código de
  * § 17 lo emite el esquema, aquí se añade su rama.
  */
-export function schemaIssueLines(issues: readonly z.core.$ZodIssue[]): string[] {
+export function schemaIssueLines(
+  issues: readonly z.core.$ZodIssue[],
+  options: LocaleOptions = {},
+): string[] {
+  const M = messages(options.locale).codes;
   return issues.map((issue) => {
     const path = issue.path.length === 0 ? '$' : issue.path.map(String).join('.');
     return issue.code === 'unrecognized_keys'
-      ? `${path}: E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: ${issue.keys.join(', ')}.`
+      ? `${path}: ${coded('E-CLAVE-DESCONOCIDA', M['E-CLAVE-DESCONOCIDA'](issue.keys.join(', ')))}`
       : `${path}: ${issue.message}`;
   });
 }

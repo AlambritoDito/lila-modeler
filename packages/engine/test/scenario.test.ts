@@ -13,6 +13,7 @@ import {
   validateScenario,
   type ScenarioReader,
 } from '../src/scenario.js';
+import type { Locale } from '../src/messages/index.js';
 import { unsupportedKeywords, validateJsonSchema } from './mini-json-schema.js';
 import { AS_IS, TO_BE, clone, pedidoIr } from './pedido.fixtures.js';
 
@@ -47,7 +48,7 @@ describe('esquema del escenario', () => {
       (problem) => problem.path === 'elements.Flow_Aprobado.probability',
     );
     expect(error?.code).toBe('E-PROB-RANGO');
-    expect(error?.message).toContain('fuera de [0, 1]');
+    expect(error?.message).toContain('is outside [0, 1]');
   });
 
   test('una clave desconocida es error, no silencio (R7/R-RES-4)', () => {
@@ -175,9 +176,9 @@ describe('validateScenario contra el IR', () => {
 
     const errors = scenarioErrors(validateScenario(parsed.data!, pedidoIr()));
     expect(errors.map((e) => e.message)).toEqual([
-      'calendars.oficina.holidays: campo reservado, no soportado por el simulador en v1.',
-      'resources.cajero.preempt: campo reservado, no soportado por el simulador en v1.',
-      'elements.Task_TomarPedido.priority: campo reservado, no soportado por el simulador en v1.',
+      'calendars.oficina.holidays: reserved field, not supported by the simulator in v1.',
+      'resources.cajero.preempt: reserved field, not supported by the simulator in v1.',
+      'elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.',
     ]);
   });
 
@@ -334,7 +335,7 @@ describe('JSON Schema generado', () => {
  * Mensajes en español (LILA-202)
  * ------------------------------------------------------------------ */
 
-describe('mensajes del esquema en español (LILA-202)', () => {
+describe('mensajes del esquema (LILA-202, traducidos en LILA-211)', () => {
   const BASE = {
     version: 1,
     name: 'x',
@@ -342,76 +343,104 @@ describe('mensajes del esquema en español (LILA-202)', () => {
     run: { start: '2026-01-01T08:00:00Z', duration: 3600 },
   };
 
-  /** Vocabulario de los textos de fábrica de zod: si asoma cualquiera, se coló el inglés. */
+  /** Vocabulario de los textos de fábrica de zod en inglés: si asoma en `es`, se coló el inglés. */
   const INGLES = /Invalid|Too (big|small)|Unrecognized|expected|received|option|Required/i;
 
   /** El primer defecto de un escenario, con el formato `ruta: mensaje` de la CLI y del panel. */
-  function defecto(scenario: unknown): { code: string; texto: string } {
-    const parsed = parseScenario(scenario);
+  function defecto(scenario: unknown, locale: Locale = 'en'): { code: string; texto: string } {
+    const parsed = parseScenario(scenario, { locale });
     if (parsed.success) throw new Error('el escenario era válido');
-    for (const issue of parsed.error.issues) {
-      expect(issue.message, `${issue.code} sale en inglés`).not.toMatch(INGLES);
+    if (locale === 'es') {
+      for (const issue of parsed.error.issues) {
+        expect(issue.message, `${issue.code} sale en inglés`).not.toMatch(INGLES);
+      }
     }
     const first = parsed.error.issues[0]!;
     return { code: first.code, texto: `${first.path.join('.') || '$'}: ${first.message}` };
   }
 
-  // Un caso por tipo de defecto que produce hoy `ScenarioSchema` (la aceptación de LILA-202).
-  const casos: [string, string, unknown, string][] = [
+  // Un caso por tipo de defecto que produce hoy el esquema (la aceptación de LILA-202), con el
+  // texto en los dos idiomas: `en` es el que sale por defecto, `es` la traducción (LILA-211).
+  const casos: [string, string, unknown, string, string][] = [
     // Desde LILA-198 `probability` no la acota el esquema (la caza el lint con `E-PROB-RANGO`),
     // así que el cebo de rango es otro campo que el esquema sí acota: `p` de la binomial y
     // `run.warmup`.
     ['too_big', 'too_big',
       { ...BASE, elements: { T: { processingTime: { type: 'binomial', n: 1, p: 1.5 } } } },
+      'elements.T.processingTime.p: must be ≤ 1',
       'elements.T.processingTime.p: debe ser ≤ 1'],
     ['too_small inclusivo', 'too_small', { ...BASE, run: { ...BASE.run, warmup: -1 } },
+      'run.warmup: must be ≥ 0',
       'run.warmup: debe ser ≥ 0'],
     ['too_small exclusivo', 'too_small', { ...BASE, run: { ...BASE.run, duration: 0 } },
+      'run.duration: must be > 0',
       'run.duration: debe ser > 0'],
     ['too_small de lista', 'too_small',
       { ...BASE, elements: { T: { processingTime: { type: 'user', points: [] } } } },
+      'elements.T.processingTime.points: must have at least 1 element',
       'elements.T.processingTime.points: debe tener al menos 1 elemento'],
     ['invalid_type', 'invalid_type', { ...BASE, run: { ...BASE.run, seed: 'abc' } },
+      'run.seed: must be a number, not a text',
       'run.seed: debe ser un número, no un texto'],
     ['invalid_type entero', 'invalid_type', { ...BASE, run: { ...BASE.run, seed: 1.5 } },
+      'run.seed: must be an integer, not a number',
       'run.seed: debe ser un entero, no un número'],
     ['invalid_type ausente', 'invalid_type', { version: 1 },
+      'name: is required and must be a text',
       'name: es obligatorio y debe ser un texto'],
     ['invalid_value de enum', 'invalid_value', { ...BASE, run: { ...BASE.run, baseTimeUnit: 'semana' } },
+      'run.baseTimeUnit: must be one of: "s", "min", "h", "day"',
       'run.baseTimeUnit: debe ser uno de: "s", "min", "h", "day"'],
-    ['invalid_value de literal', 'invalid_value', { ...BASE, version: 2 }, 'version: debe ser 1'],
+    ['invalid_value de literal', 'invalid_value', { ...BASE, version: 2 },
+      'version: must be 1',
+      'version: debe ser 1'],
     ['unrecognized_keys', 'unrecognized_keys', { ...BASE, elements: { Flow_X: { probabilidad: 1 } } },
+      'elements.Flow_X: unknown key: "probabilidad"',
       'elements.Flow_X: clave desconocida: "probabilidad"'],
     ['unrecognized_keys en plural', 'unrecognized_keys',
       { ...BASE, elements: { Flow_X: { probabilidad: 1, otra: 2 } } },
+      'elements.Flow_X: unknown keys: "probabilidad", "otra"',
       'elements.Flow_X: claves desconocidas: "probabilidad", "otra"'],
     ['invalid_union discriminada', 'invalid_union',
       { ...BASE, elements: { T: { processingTime: { type: 'raro' } } } },
+      'elements.T.processingTime.type: must be one of: "constant", "uniform", "triangular", "exponential", "normal", "truncatedNormal", "lognormal", "gamma", "erlang", "weibull", "beta", "poisson", "binomial", "user"',
       'elements.T.processingTime.type: debe ser uno de: "constant", "uniform", "triangular", "exponential", "normal", "truncatedNormal", "lognormal", "gamma", "erlang", "weibull", "beta", "poisson", "binomial", "user"'],
     ['invalid_union plana', 'invalid_union', { ...BASE, resources: { r: { capacity: 'x' } } },
+      'resources.r.capacity: does not match any of the accepted shapes',
       'resources.r.capacity: no encaja con ninguna de las formas admitidas'],
   ];
 
-  test.each(casos)('%s', (_nombre, code, scenario, esperado) => {
-    const { code: real, texto } = defecto(scenario);
-    expect(real).toBe(code);
-    expect(texto).toBe(esperado);
+  test.each(casos)('%s', (_nombre, code, scenario, enEsperado, esEsperado) => {
+    const enDefecto = defecto(scenario);
+    expect(enDefecto.code).toBe(code);
+    expect(enDefecto.texto).toBe(enEsperado);
+
+    const esDefecto = defecto(scenario, 'es');
+    expect(esDefecto.code).toBe(code);
+    expect(esDefecto.texto).toBe(esEsperado);
   });
 
   test('el mensaje propio del esquema manda sobre el mapa (R11, R13, R8)', () => {
-    // `refine`, `regex` y `min` con texto siguen diciendo lo suyo: zod no consulta el mapa.
+    // `refine`, `regex` y `min` con texto siguen diciendo lo suyo: zod no consulta el mapa. Por eso
+    // el esquema se construye por idioma y no una sola vez (LILA-211).
     expect(defecto({ ...BASE, elements: { T: { processingTime: { type: 'uniform', min: 5, max: 1 } } } }).texto)
+      .toBe('elements.T.processingTime: uniform: min ≤ max is required');
+    expect(defecto({ ...BASE, elements: { T: { processingTime: { type: 'uniform', min: 5, max: 1 } } } }, 'es').texto)
       .toBe('elements.T.processingTime: uniform: se requiere min ≤ max');
     expect(defecto({ ...BASE, run: { ...BASE.run, currency: 'pesos' } }).texto)
+      .toBe('run.currency: run.currency must be an ISO 4217 code');
+    expect(defecto({ ...BASE, run: { ...BASE.run, currency: 'pesos' } }, 'es').texto)
       .toBe('run.currency: run.currency debe ser un código ISO 4217');
     expect(defecto({ ...BASE, calendars: { c: { intervals: [] } } }).texto)
+      .toBe('calendars.c.intervals: E-CAL-VACIO: the calendar has no open intervals.');
+    expect(defecto({ ...BASE, calendars: { c: { intervals: [] } } }, 'es').texto)
       .toBe('calendars.c.intervals: E-CAL-VACIO: el calendario no tiene intervalos abiertos.');
   });
 
   test('la CLI imprime exactamente el mismo texto que el esquema', () => {
     const roto = { ...BASE, run: { ...BASE.run, warmup: -1 } };
     expect(() => loadResolvedScenario('as-is.scenario.json', () => roto)).toThrow(
-      'run.warmup: debe ser ≥ 0',
+      'run.warmup: must be ≥ 0',
     );
   });
 });

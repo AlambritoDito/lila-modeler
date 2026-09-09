@@ -377,7 +377,7 @@ describe('R16 — `capacity` por intervalos (LILA-164)', () => {
     const errors = scenarioErrors(validateScenario(scenario, pedidoIrWithTask('Task_R')));
     const problema = errors.find((e) => e.path === 'resources.pool.capacity');
     expect(problema?.code).toBe('E-CAPACIDAD-Y-CALENDARIO');
-    expect(problema?.message).toMatch(/excluyentes/);
+    expect(problema?.message).toMatch(/mutually exclusive/);
   });
 
   test('R9: el calendario de cada tramo tiene que existir, y el error cita el tramo', () => {
@@ -412,7 +412,7 @@ describe('R16 — `capacity` por intervalos (LILA-164)', () => {
     );
     // 3 + 1 = 4 unidades declaradas, pero nunca simultáneas: el tope es 3.
     expect(error?.code).toBe('E-REC-CANTIDAD');
-    expect(error?.message).toMatch(/excede capacity 3/);
+    expect(error?.message).toMatch(/exceeds capacity 3/);
   });
 });
 
@@ -517,7 +517,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
   test('E-PROB-EN-NODO: `probability` en un nodo, no en un sequence flow (R-XOR-8)', () => {
     const error = scenarioErrors(lint({ Task_Dentro: { probability: 0.5 } }))[0];
     expect(error).toMatchObject({ code: 'E-PROB-EN-NODO', path: 'elements.Task_Dentro.probability' });
-    expect(error?.message).toBe('elements.Task_Dentro.probability: solo se admite en un sequence flow.');
+    expect(error?.message).toBe('elements.Task_Dentro.probability: only accepted on a sequence flow.');
   });
 
   test('E-PROB-RANGO: `probability` fuera de [0,1] (R-XOR-6), en el lint y no en el esquema', () => {
@@ -525,7 +525,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
     expect(ScenarioSchema.safeParse({ ...BASE, elements: { Flow_AE: { probability: 1.5 } } }).success).toBe(true);
     const error = scenarioErrors(lint({ Flow_AE: { probability: 1.5 } }))[0];
     expect(error).toMatchObject({ code: 'E-PROB-RANGO', path: 'elements.Flow_AE.probability' });
-    expect(error?.message).toBe('elements.Flow_AE.probability: 1.5 está fuera de [0, 1].');
+    expect(error?.message).toBe('elements.Flow_AE.probability: 1.5 is outside [0, 1].');
     expect(scenarioErrors(lint({ Flow_AE: { probability: -0.1 } }))[0]?.code).toBe('E-PROB-RANGO');
     expect(scenarioErrors(lint({ Flow_AE: { probability: 1 } }))).toEqual([]);
   });
@@ -539,7 +539,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
       'elements.SubProc_Revision.processingTime',
       'elements.SubProc_Revision.fixedCost',
     ]);
-    expect(errors[0]?.message).toContain('SubProc_Revision es un subproceso embebido');
+    expect(errors[0]?.message).toContain('SubProc_Revision is an embedded subprocess');
     // Un id que no es ni nodo, ni flujo, ni subproceso sigue siendo `E-ELEMENTO-DESCONOCIDO` (R3),
     // y también lo es el subproceso con un campo que no está en la lista de R-PLAN-3.
     expect(scenarioErrors(lint({ Fantasma: { fixedCost: 1 } }))[0]?.code).toBe('E-ELEMENTO-DESCONOCIDO');
@@ -554,7 +554,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
     });
     const error = scenarioErrors(validateScenario(scenario, IR_198))[0];
     expect(error).toMatchObject({ code: 'E-TIMER-RECURSO', path: 'elements.Timer_Espera.resources' });
-    expect(error?.message).toBe('elements.Timer_Espera.resources: un timer es un retardo y no consume recursos.');
+    expect(error?.message).toBe('elements.Timer_Espera.resources: a timer is a delay and consumes no resources.');
     // Un gateway con recursos no es un timer: sigue siendo el error genérico de campo.
     expect(
       scenarioErrors(
@@ -569,7 +569,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
   test('W-SIN-SEED: el escenario no declara `run.seed` (R-DEG-4)', () => {
     const warning = lint({}).find((problem) => problem.code === 'W-SIN-SEED');
     expect(warning).toMatchObject({ severity: 'warning', path: 'run.seed' });
-    expect(warning?.message).toBe('run.seed: el escenario no declara seed; la corrida usa seed = 1.');
+    expect(warning?.message).toBe('run.seed: the scenario declares no seed; the run uses seed = 1.');
     // Declararla —aunque sea 1— apaga el aviso: el escenario ya dice con qué semilla se reproduce.
     expect(lint({}, { seed: 1 }).some((problem) => problem.code === 'W-SIN-SEED')).toBe(false);
   });
@@ -578,7 +578,7 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
     const parsed = ScenarioSchema.safeParse({ ...BASE, resources: { cajero: { capacity: 1, capacty: 3 } } });
     expect(parsed.success).toBe(false);
     expect(schemaIssueLines(parsed.error?.issues ?? [])).toEqual([
-      'resources.cajero: E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: capacty.',
+      'resources.cajero: E-CLAVE-DESCONOCIDA: key not recognised by the schema: capacty.',
     ]);
     // El resto de defectos del esquema conserva el mensaje de zod tal cual (LILA-232 los traduce).
     const otro = ScenarioSchema.safeParse({ ...BASE, version: 2 });

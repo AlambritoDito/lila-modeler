@@ -12,6 +12,7 @@ import {
   type ScenarioReader,
 } from '../src/scenario.js';
 import { runReplication, type SimScenario } from '../src/core/sim.js';
+import { coded, messages } from '../src/messages/index.js';
 import { validateJsonSchema } from './mini-json-schema.js';
 import { AS_IS, clone, pedidoIr } from './pedido.fixtures.js';
 
@@ -63,7 +64,7 @@ describe('(8) validación de `capacity` por tramos', () => {
     const problems = scenarioErrors(validateScenario(parsed, pedidoIr()));
     const problem = problems.find((p) => p.path === 'resources.enfermera.capacity[1].calendar');
     expect(problem?.code).toBe('E-REF-DESCONOCIDA');
-    expect(problem?.message).toContain('el calendario fantasma no existe');
+    expect(problem?.message).toContain('the calendar fantasma does not exist');
   });
 
   test('`capacity` por tramos junto a `calendar` es `E-CAPACIDAD-Y-CALENDARIO` en `resources.<pool>.capacity`', () => {
@@ -187,7 +188,9 @@ describe('(13) catálogo de errores de § 17', () => {
 
   const mensajeDe = (scenario: SimScenario): string => {
     try {
-      runReplication(ir, scenario);
+      // § 17 es normativo para el **español**: el catálogo `es` es el que tiene que decir
+      // exactamente lo que dice el documento (LILA-211).
+      runReplication(ir, scenario, 0, { locale: 'es' });
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
     }
@@ -217,28 +220,19 @@ describe('(13) catálogo de errores de § 17', () => {
   /**
    * LILA-204: el QA de LILA-164 encontró dos textos de `E-REC-CAPACIDAD` en `core/calendar.ts` que
    * § 17 no recogía. Eran guardias internos, no errores del escenario, y ahora lanzan sin código.
-   * Este test cierra la puerta a que vuelva a haber un texto del catálogo fuera del catálogo.
+   *
+   * Desde LILA-211 los dos textos salen del catálogo en vez de estar escritos aquí, y la guarda de
+   * que no queda ningún `"CÓDIGO: …"` fuera del catálogo —la parte de este test que valía para
+   * todos los códigos y no solo para `E-REC-CAPACIDAD`— vive en `test/messages.test.ts`.
    */
-  test('§ 17 recoge todos los textos de `E-REC-CAPACIDAD` que emite el motor', () => {
-    const fuentes: string[] = [];
-    const recorrer = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const ruta = join(dir, entry.name);
-        if (entry.isDirectory()) recorrer(ruta);
-        else if (entry.name.endsWith('.ts')) fuentes.push(ruta);
-      }
-    };
-    recorrer(fileURLToPath(new URL('packages/engine/src', repoRoot)));
+  test('§ 17 recoge los dos textos de `E-REC-CAPACIDAD` que emite el motor', () => {
+    const M = messages('es').codes;
+    const textos = [
+      coded('E-REC-CAPACIDAD', M['E-REC-CAPACIDAD/sin-tramos']('<pool>')),
+      coded('E-REC-CAPACIDAD', M['E-REC-CAPACIDAD/entero']('<pool>')),
+    ].sort();
 
-    const textos = new Set<string>();
-    for (const fuente of fuentes) {
-      // Las tres comillas: una comilla doble dejaba pasar el texto sin que el test se enterase.
-      for (const [, texto] of readFileSync(fuente, 'utf8').matchAll(/['"`](E-REC-CAPACIDAD:[^'"`\n]*)['"`]/g)) {
-        textos.add(texto!.replace('${poolId}', '<pool>'));
-      }
-    }
-
-    expect([...textos].sort()).toEqual([
+    expect(textos).toEqual([
       'E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.',
       'E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.',
     ]);
