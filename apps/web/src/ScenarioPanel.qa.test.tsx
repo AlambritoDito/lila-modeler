@@ -28,6 +28,11 @@ import {
 } from '@lila/engine/schema';
 
 import { ScenarioPanel, duplicarEscenario } from './ScenarioPanel.js';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
@@ -422,7 +427,7 @@ describe('rutas de los problemas', () => {
     expect(
       document.getElementById('campo-elements.Timer_Reposo.selection')?.closest('.campo-schema')
         ?.textContent,
-    ).toContain('solo tiene sentido con resources');
+    ).toContain('it only makes sense together with resources');
   });
 
   it('R4 se marca en el propio campo `probability`', () => {
@@ -431,7 +436,7 @@ describe('rutas de los problemas', () => {
       document
         .getElementById('campo-elements.Task_TomarPedido.probability')
         ?.closest('.campo-schema')?.textContent,
-    ).toContain('solo se admite en un sequence flow');
+    ).toContain('only accepted on a sequence flow');
   });
 });
 
@@ -460,7 +465,7 @@ describe('campos numéricos', () => {
     // diría algo distinto de lo que la persona tecleó.
     expect(run['seed']).toBe('abc');
     expect('warmup' in run).toBe(false);
-    // Y se marca, sin bloquear la escritura, en español (LILA-202).
-    expect(document.body.textContent).toContain('debe ser un número, no un texto');
+    // Y se marca, sin bloquear la escritura, con el texto del catálogo (LILA-202, LILA-211).
+    expect(document.body.textContent).toContain('must be a number, not a string');
   });
 });

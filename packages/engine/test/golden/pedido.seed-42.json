@@ -384,7 +384,7 @@
   },
   "bottlenecks": [],
   "warnings": [
-    "W-TAREA-SIN-TIEMPO: Task_Empacar: sin processingTime; dura 0 segundos. (10000 veces)"
+    "W-TAREA-SIN-TIEMPO: Task_Empacar: no processingTime; it takes 0 seconds. (10000 times)"
   ],
   "replications": {
     "count": 30,

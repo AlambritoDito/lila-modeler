@@ -8,8 +8,9 @@
  * entera en verde y rompe la app en su primer clic.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { insertar, type Figura } from './Paleta';
+import { filtrar, gruposDeFiguras, insertar, type Figura } from './Paleta';
 import type { Servicios } from './Modeler';
+import { setLocale } from './i18n';
 
 const RAIZ = { id: 'Collaboration_1' };
 const POOL = { id: 'Pool_1', x: 0, y: 0, width: 600, height: 300 };
@@ -56,5 +57,18 @@ describe('insertar (LILA-207)', () => {
     (s.servicios as unknown as { elementRegistry: { filter: () => unknown[] } }).elementRegistry.filter = () => [];
     insertar(s.servicios, TAREA);
     expect(s.createShape).toHaveBeenCalledWith(expect.anything(), { x: 300, y: 150 }, RAIZ);
+  });
+});
+
+describe('filtrar (LILA-207)', () => {
+  it('ignora acentos y mayúsculas: «anotacion» encuentra «Anotación»', () => {
+    // En español, que es donde el catálogo tiene acentos; en inglés lo mismo lo comprueba
+    // `App.test.tsx` sobre la paleta ya pintada.
+    setLocale('es');
+    const grupos = filtrar(gruposDeFiguras(), 'ANOTACION');
+    expect(grupos.map((g) => g.figuras.map((f) => f.nombre))).toEqual([['Anotación']]);
+    setLocale('en');
+    expect(filtrar(gruposDeFiguras(), 'annotation').flatMap((g) => g.figuras.map((f) => f.nombre)))
+      .toEqual(['Annotation']);
   });
 });

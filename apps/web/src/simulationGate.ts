@@ -1,9 +1,17 @@
 import { validateBpmnXml } from '@lila/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
-import { S } from './strings.es';
+import { strings } from './i18n';
 
-/** La misma frontera de validación que CLI, antes de crear un Worker. */
+/**
+ * La misma frontera de validación que CLI, antes de crear un Worker.
+ *
+ * Los mensajes que salen de aquí con `code:` delante son del motor (`validateBpmnXml`,
+ * `validateScenario`, zod), no del catálogo: llegan en el idioma que el motor emite y se enseñan
+ * tal cual, para no tener dos ortografías del mismo error. Pasarle el idioma al motor es #280;
+ * este es uno de los cuatro sitios donde se enchufará.
+ */
 export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn') {
+  const S = strings();
   const model = await validateBpmnXml(xml);
   // `parseScenario` en vez de `ScenarioSchema.parse`: un `ZodError` sin capturar llega a la barra
   // de estado como su volcado JSON en inglés (LILA-202). Aquí sale la misma lista que en la CLI.

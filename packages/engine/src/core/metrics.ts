@@ -11,6 +11,7 @@
 
 import { openTime, type Calendar } from './calendar.js';
 import type { ProcessIR } from './ir.js';
+import { coded, coreMessages, type Locale } from './messages/index.js';
 import type {
   BottleneckEntry,
   ElementMetrics,
@@ -204,7 +205,11 @@ const SATURATION_PENDING = 0.25;
  * pendiente al corte sea una fracción clara de lo atendido sin que la cola haya bajado. Una cola
  * estacionaria larga no avisa: M/M/1 con ρ = 0,8 tiene `Lq = 3,2` y las dos mitades miden lo mismo.
  */
-export function saturationWarning(poolId: string, load: PoolLoad): string | undefined {
+export function saturationWarning(
+  poolId: string,
+  load: PoolLoad,
+  locale: Locale = 'en',
+): string | undefined {
   if (load.served <= 0 || load.capacity <= 0) return undefined;
   const rho = load.demand / load.served;
   if (rho < SATURATION_RHO) return undefined;
@@ -214,7 +219,10 @@ export function saturationWarning(poolId: string, load: PoolLoad): string | unde
   // estado estacionario.
   const backlogged = load.pending >= SATURATION_PENDING * load.served && load.secondHalf >= load.firstHalf;
   if (!growing && !backlogged) return undefined;
-  return `W-RECURSO-SATURADO: ${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho.toFixed(1)})`;
+  return coded(
+    'W-RECURSO-SATURADO',
+    coreMessages(locale).codes['W-RECURSO-SATURADO'](poolId, rho.toFixed(1)),
+  );
 }
 
 /** Cambio de ocupación de un pool: `+q` al conceder, `-q` al liberar. */
@@ -355,6 +363,7 @@ export function aggregateReplication(
   run: ReplicationRun,
   scenario: SimScenario = { run: {} },
   loads?: Map<string, PoolLoad>,
+  locale: Locale = 'en',
 ): RunResult {
   // Precondición de frontera con LILA-027: el productor entrega `cases`, `elements` y `flows`
   // pertenecientes a una misma ventana estadística. Puede conservar en `rows` eventos previos al
@@ -606,7 +615,7 @@ export function aggregateReplication(
     // esa evidencia; el aviso evita que un consumidor lo interprete como un porcentaje acotado.
     if (utilization > 1 + Number.EPSILON * 16) {
       warnings.push(
-        `W-UTILIZACION-MAYOR-UNO: ${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
+        coded('W-UTILIZACION-MAYOR-UNO', coreMessages(locale).codes['W-UTILIZACION-MAYOR-UNO'](poolId)),
       );
     }
     // LILA-191: pool que nunca alcanza estado estacionario. `utilization` está acotada por la
@@ -635,7 +644,7 @@ export function aggregateReplication(
       loads?.set(poolId, load);
       // Con una sola replicación esta es ya la decisión final; `simulate` rehace la cuenta sobre
       // la media de las `load` cuando hay varias (R-ARR-8).
-      const warning = loads === undefined ? saturationWarning(poolId, load) : undefined;
+      const warning = loads === undefined ? saturationWarning(poolId, load, locale) : undefined;
       if (warning !== undefined) warnings.push(warning);
     }
   }
