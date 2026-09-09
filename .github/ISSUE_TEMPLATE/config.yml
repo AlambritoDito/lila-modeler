@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and general discussion
+    url: https://github.com/AlambritoDito/lila-modeler/discussions
+    about: Ask a question or start a discussion that isn't a bug report or feature request.
+  - name: Read the README first
+    url: https://github.com/AlambritoDito/lila-modeler#readme
+    about: Requirements, setup, the CLI and the docs that cover the engine's contracts.

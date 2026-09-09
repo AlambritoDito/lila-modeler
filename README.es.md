@@ -226,6 +226,9 @@ de tiempo de ejecución, con versión y licencia de cada una, está en
 
 ## Cómo contribuir
 
+Ver [`CONTRIBUTING.md`](CONTRIBUTING.md) para la guía completa (setup, checks, proceso de PR;
+en inglés) y [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) para el código de conducta del proyecto.
+
 Antes de tocar el motor, lee `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` y
 `docs/RESULTS_FORMAT.md`. Reglas del repo (cabecera de `BACKLOG.md`):
 
