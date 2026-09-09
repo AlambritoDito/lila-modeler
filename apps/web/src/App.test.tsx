@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   problemas: [] as { ruta: string; mensaje: string; severidad: 'error' | 'warning' }[], seleccionar: vi.fn(), validacion: vi.fn(),
   // LILA-065: enciende y apaga la animación de tokens de bpmn-js-token-simulation.
   simulacionTokens: vi.fn(),
+  // LILA-113: `repintar` relee los tokens en el modelador vivo. `montajes` cuenta cuántas veces se
+  // montó el lienzo: cambiar de tema ya no lo remonta, y ese es justamente el punto del ticket.
+  repintar: vi.fn(), montajes: 0,
   // LILA-072: con `retrasarLienzo`, el lienzo falso NO avisa de que está listo al montar — el test
   // decide cuándo llamando a `mocks.listo()`, que es lo que separa "la app arrancó" de "el
   // modelador existe" y permite probar una ruta .bpmn que llega en medio.
@@ -38,8 +41,9 @@ vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
     return null;
   } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
-  useEffect(() => { mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
+  useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
+    repintar: mocks.repintar,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
@@ -288,14 +292,19 @@ it('bloquea interacción con edición durante apertura y la restaura al cancelar
   expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(false);
 });
 
-it('cambiar de tema aplica el JSON nuevo, lo recuerda y remonta el lienzo con el XML actual', async () => {
+it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el lienzo (LILA-113)', async () => {
   const papel = { name: 'Papel', tokens: { 'bg.base': '#F4F1EC' } };
+  const montajesAntes = mocks.montajes;
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => papel } as Response);
   const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(fetch).toHaveBeenLastCalledWith('./papel.json');
   expect(applyTheme).toHaveBeenLastCalledWith(papel);
-  expect(mocks.exportXml).toHaveBeenCalled();
+  // La aceptación del ticket: el lienzo NO se vuelve a montar (antes cambiaba su `key`, lo que se
+  // llevaba por delante la pila de deshacer) y tampoco hace falta exportar el XML para reabrirlo.
+  expect(mocks.montajes).toBe(montajesAntes);
+  expect(mocks.exportXml).not.toHaveBeenCalled();
+  expect(mocks.repintar).toHaveBeenCalledOnce();
   expect(localStorage.getItem('lila.tema')).toBe('papel');
   // El tema ya no se anuncia en la barra de estado (#237): se ve y se cambia en Ajustes.
   expect(select.value).toBe('papel');
@@ -308,6 +317,36 @@ it('arranca con el tema recordado y la densidad como atributo', async () => {
   expect(fetch).toHaveBeenLastCalledWith('./papel.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
   expect(document.documentElement.style.getPropertyValue('--density')).toBe('compacta');
+});
+it('con puente (escritorio) las preferencias salen y entran por userData, no por localStorage (LILA-113)', async () => {
+  const escrito: unknown[] = [];
+  // localStorage dice otra cosa a propósito: con puente no se lee ni se escribe.
+  localStorage.setItem('lila.tema', 'centinela');
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ tema: 'papel', densidad: 'comoda' }),
+    writeSettings: async (a: unknown) => { escrito.push(a); },
+  });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('comoda');
+  // Solo la densidad al arrancar (su efecto la reescribe tal cual); el tema, al cambiarlo.
+  expect(escrito).toEqual([{ densidad: 'comoda' }]);
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Eva-01', tokens: {} }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'eva-01'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(escrito).toContainEqual({ tema: 'eva-01' });
+  expect(localStorage.getItem('lila.tema')).toBe('centinela');
+});
+it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch (LILA-113)', async () => {
+  localStorage.setItem('lila.tema', 'tema-borrado'); localStorage.setItem('lila.densidad', 'gigante');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
 });
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
@@ -324,7 +363,8 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
   // El puente falso trae también las dos rutas de apertura de LILA-072/074: `App` las llama al
   // montar y un puente a medias reventaría aquí igual que en Electron.
   vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
-    pendingOpenPath: async () => null, onOpenPath: () => () => {} });
+    pendingOpenPath: async () => null, onOpenPath: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {} });
   (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(doc);
   await act(async () => root.unmount());
   root = createRoot(container);
@@ -349,6 +389,8 @@ function puenteConRutas(pendiente: { dir: string; file: string } | null) {
     pendingOpenPath: vi.fn().mockResolvedValue(pendiente),
     onOpenPath: (cb: (ruta: { dir: string; file: string }) => void) => { emitir = cb; return quitar; },
     onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    readSettings: async () => ({}),
+    writeSettings: async () => {},
   });
   return {
     quitar,

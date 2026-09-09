@@ -23,7 +23,7 @@ import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
-import type { MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
+import type { Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
@@ -72,15 +72,46 @@ const TEMA_IDS = Object.keys(TEMAS) as TemaId[];
 const DENSIDADES = S.app.densidades.map((d) => d.id);
 type Densidad = (typeof S.app.densidades)[number]['id'];
 
-/** Preferencias de apariencia. localStorage vale igual en el navegador y bajo `lila://` en Electron. */
-function preferencia<T extends string>(clave: string, validas: readonly T[], porDefecto: T): T {
+/**
+ * Preferencias de apariencia (LILA-113). Con puente van a `<userData>/estado.json`
+ * (`readSettings`/`writeSettings`); sin él, a `localStorage`. Son excluyentes: el puente manda
+ * cuando existe.
+ *
+ * Hasta ahora era `localStorage` en las dos modalidades, con el argumento de que `lila://` es un
+ * esquema con origen propio y por tanto tiene su propio almacén. Sigue siendo verdad, pero el
+ * almacén está dentro del perfil de Chromium de la app: no se ve desde fuera, no se copia a otra
+ * máquina y desaparece si se limpian los datos del sitio. La ventana y los recientes ya viven en
+ * `estado.json`; la apariencia es del mismo tipo de dato y estaba en otro sitio sin motivo.
+ *
+ * Leer es asíncrono porque en escritorio es una llamada IPC. Nunca rechaza: sin preferencias
+ * legibles se arranca con las de fábrica, que es peor que recordar y mejor que no arrancar.
+ */
+async function preferencias(): Promise<Ajustes> {
+  const puente = window.lila;
+  if (puente !== undefined) return puente.readSettings().catch(() => ({}));
   try {
-    const v = localStorage.getItem(clave);
-    return validas.includes(v as T) ? (v as T) : porDefecto;
-  } catch { return porDefecto; }
+    const tema = localStorage.getItem('lila.tema');
+    const densidad = localStorage.getItem('lila.densidad');
+    return { ...(tema === null ? {} : { tema }), ...(densidad === null ? {} : { densidad }) };
+  } catch { return {}; }
 }
-function recordar(clave: string, valor: string): void {
-  try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
+/** Guarda solo lo que cambia; el puente fusiona con lo que ya hubiera (ver `bridge.ts`). */
+function recordar(ajustes: Ajustes): void {
+  const puente = window.lila;
+  if (puente !== undefined) {
+    // Que no se pueda escribir la preferencia no puede tumbar la app ni ensuciar la consola del
+    // smoke: como mucho, la próxima vez arranca con el tema anterior.
+    void puente.writeSettings(ajustes).catch(() => {});
+    return;
+  }
+  try {
+    if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
+    if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
+  } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
+}
+/** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
+function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
+  return validas.includes(valor as T) ? (valor as T) : porDefecto;
 }
 async function cargarTema(id: TemaId): Promise<Theme> {
   const r = await fetch(`./${id}.json`);
@@ -216,14 +247,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
   // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
   // sabe"; `null`, "no se pudo cargar, seguimos con los valores por defecto de tokens.css".
+  // A partir de ahí ya no se remonta nunca: cambiar de tema es `modelador.repintar()`.
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
-  const [temaId, setTemaId] = useState<TemaId>(() => preferencia('lila.tema', TEMA_IDS, 'eva-01'));
-  const [densidad, setDensidad] = useState<Densidad>(() => preferencia('lila.densidad', DENSIDADES, 'normal'));
-  // XML con el que se monta el lienzo. Cambia solo al cambiar de tema: bpmn-js congela los colores
-  // de las figuras al montar (`Modeler.tsx`), así que un tema nuevo es un lienzo nuevo con el
-  // diagrama de ahora. ponytail: remontar pierde la pila de deshacer; hacer reactivo bpmnRenderer si molesta.
-  const [xmlLienzo, setXmlLienzo] = useState(pedido);
+  // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
+  // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
+  // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
+  const [temaId, setTemaId] = useState<TemaId>('eva-01');
+  const [densidad, setDensidad] = useState<Densidad>('normal');
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
@@ -454,18 +485,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }, [modelador, procesoId, revision]);
 
   useEffect(() => {
-    void cargarTema(temaId)
-      .then((t) => {
+    void preferencias().then(async (guardadas) => {
+      const id = valido(guardadas.tema, TEMA_IDS, 'eva-01');
+      setTemaId(id);
+      setDensidad(valido(guardadas.densidad, DENSIDADES, 'normal'));
+      try {
+        const t = await cargarTema(id);
         applyTheme(t);
         setTema(t);
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         // Un tema roto no puede dejar la app en blanco: se avisa y se sigue con Eva-01, que
         // es lo que `tokens.css` trae por defecto.
         setAvisoTema(e instanceof Error ? e.message : String(e));
         setTema(null);
-      });
-    // Solo al arrancar; los cambios posteriores pasan por `cambiarTema`, que además remonta el lienzo.
+      }
+    });
+    // Solo al arrancar; los cambios posteriores pasan por `cambiarTema` y por el selector de densidad.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -473,21 +508,23 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // vuelve a aplicar encima cada vez que cambia el tema.
   useEffect(() => {
     document.documentElement.style.setProperty('--density', densidad);
-    recordar('lila.densidad', densidad);
+    // `tema === undefined` es "las preferencias todavía no se han leído": guardar aquí antes de
+    // eso escribiría el valor de fábrica encima del que hay en disco.
+    if (tema !== undefined) recordar({ densidad });
   }, [densidad, tema]);
 
   async function cambiarTema(id: TemaId): Promise<void> {
     if (id === temaId) return;
     try {
       const t = await cargarTema(id);
-      const xml = modelador === null ? xmlLienzo : await modelador.exportar();
       applyTheme(t);
-      // Todo en el mismo commit: el lienzo se remonta una sola vez y ya con los tokens nuevos.
-      setXmlLienzo(xml);
+      // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
+      // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
+      modelador?.repintar();
       setTema(t);
       setTemaId(id);
       setAvisoTema(null);
-      recordar('lila.tema', id);
+      recordar({ tema: id });
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
@@ -749,8 +786,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <div className="lienzo" />
       ) : (
         <Lienzo
-          key={temaId}
-          xmlInicial={xmlLienzo}
+          xmlInicial={pedido}
           onListo={setModelador}
           onEstado={setEstado}
           onSeleccion={setSeleccion}
