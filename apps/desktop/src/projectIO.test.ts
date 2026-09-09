@@ -601,6 +601,46 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     expect(loose).toBe(false);
   });
 
+  it('cambio externo en el model.bpmn que nadie abrió: no bloquea guardar en ventas.bpmn (QA ronda 3)', async () => {
+    await writeProjectFolder(dir, documentoBase());
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const ajeno = `${XML_MINIMO}<!-- otro proceso tocó model.bpmn, que nadie abrió -->`;
+    await writeFile(join(dir, 'model.bpmn'), ajeno, 'utf8');
+
+    // El snapshot de `E-CAMBIO-EXTERNO` es el del archivo que se escribe; `model.bpmn` ni se
+    // rastrea ni se toca en este guardado.
+    await writeProjectFolder(dir, document, { modelFile: 'ventas.bpmn' });
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(ajeno);
+  });
+
+  it('«Guardar como» de un suelto a otra carpeta: el XML va a model.bpmn y el original no se toca (QA ronda 3)', async () => {
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const destino = await mkdtemp(join(tmpdir(), 'lila-projectIO-destino-'));
+    try {
+      const editado = `${XML_VENTAS}<!-- editado -->`;
+      // «Guardar como» no reenvía ni `modelFile` ni `diagramOnly` (ver `DesktopStore.saveProject`).
+      await writeProjectFolder(destino, { ...document, model: { ...document.model, xml: editado }, scenarios: documentoBase().scenarios }, { saveAs: true });
+      expect(await readFile(join(destino, 'model.bpmn'), 'utf8')).toBe(editado);
+      expect((await readdir(destino)).sort()).toEqual(['as-is.scenario.json', 'lila-project.json', 'model.bpmn']);
+      expect((await readProjectFolder(destino)).loose).toBe(false);
+      expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(XML_VENTAS);
+    } finally {
+      await rm(destino, { recursive: true, force: true });
+    }
+  });
+
+  it('«Guardar como» sobre la MISMA carpeta del suelto: crea el proyecto al lado, sin E-CARPETA-OCUPADA (QA ronda 3)', async () => {
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const editado = `${XML_VENTAS}<!-- editado -->`;
+    await writeProjectFolder(dir, { ...document, model: { ...document.model, xml: editado }, scenarios: documentoBase().scenarios }, { saveAs: true });
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(editado);
+    // El `.bpmn` suelto de partida se queda como estaba: «Guardar como» no lo migra ni lo borra.
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(XML_VENTAS);
+  });
+
   it('hasProjectModel: true solo si hay un model.bpmn que reabrir (hallazgo 9 del QA)', async () => {
     await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
     expect(await hasProjectModel(dir)).toBe(false);

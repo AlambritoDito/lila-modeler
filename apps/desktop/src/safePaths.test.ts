@@ -122,6 +122,7 @@ describe('isFlatName (LILA-072, hallazgo 8 del QA)', () => {
     expect(isFlatName('ventas..v2.bpmn')).toBe(true);
     expect(isFlatName('informe..final.bpmn')).toBe(true);
     expect(isFlatName('..oculto.bpmn')).toBe(true);
+    expect(isFlatName('.bpmn')).toBe(true); // un archivo llamado solo ".bpmn" es legítimo
   });
 
   it('rechaza separadores, vacío y las entradas de directorio . y ..', () => {
