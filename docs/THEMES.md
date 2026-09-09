@@ -70,9 +70,14 @@ no ofrece ni setter ni evento para cambiarlas: se vuelve a ejecutar ese construc
 instancia (con un `eventBus` mudo, para no apilar oyentes de `render.shape`) y después se dispara
 `elements.changed`, que es la vía normal de diagram-js para redibujar. No pasa por el
 `commandStack`, así que ni ensucia el documento ni añade un paso al deshacer, y los colores que un
-elemento traiga en su DI siguen mandando sobre los del tema. `bpmn-js-token-simulation` ya releía
-los tokens en cada activación (`TokenSim.tsx`), así que «Validar rutas» sigue pintando con el tema
-de ahora después de cambiarlo.
+elemento traiga en su DI siguen mandando sobre los del tema.
+
+Esa última regla tiene una consecuencia en «Validar rutas»: los colores neutros del modo
+(`ColoresNeutrosDelTema`, `TokenSim.tsx`) se escriben en el DI al activarlo, o sea que ganan a lo
+que repinte `repintar()`. El módulo relee los tokens en cada activación y no en cada repintado, así
+que `App.tsx` monta `<TokenSim key={temaId}>`: cambiar de tema con el modo encendido lo apaga y lo
+vuelve a encender, y así el diagrama sale con el tema de ahora. Sin esa `key` el diagrama se
+quedaba con el relleno del tema anterior y la etiqueta con el color del nuevo.
 
 **`font.size.base`** se cablea en `body` (`app.css`) y de ahí lo hereda todo lo que no fija su
 propio tamaño. A propósito no está en `html`: las medidas en `rem` del CSS se resolverían contra el

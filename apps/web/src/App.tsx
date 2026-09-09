@@ -88,7 +88,10 @@ type Densidad = (typeof S.app.densidades)[number]['id'];
  */
 async function preferencias(): Promise<Ajustes> {
   const puente = window.lila;
-  if (puente !== undefined) return puente.readSettings().catch(() => ({}));
+  // `try`, no `.catch`: cubre también el puente que no trae `readSettings` —un preload viejo junto
+  // a un renderer nuevo—. Si esto rechazara, el `then` del efecto que lo llama no lo recoge y
+  // `tema` se quedaría en `undefined` para siempre, o sea sin lienzo (QA de #275).
+  if (puente !== undefined) { try { return await puente.readSettings(); } catch { return {}; } }
   try {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
@@ -100,8 +103,9 @@ function recordar(ajustes: Ajustes): void {
   const puente = window.lila;
   if (puente !== undefined) {
     // Que no se pueda escribir la preferencia no puede tumbar la app ni ensuciar la consola del
-    // smoke: como mucho, la próxima vez arranca con el tema anterior.
-    void puente.writeSettings(ajustes).catch(() => {});
+    // smoke: como mucho, la próxima vez arranca con el tema anterior. El `try` cubre el puente que
+    // no trae `writeSettings` —si lanzara, lo haría dentro de un efecto y se llevaría el árbol—.
+    try { void puente.writeSettings(ajustes).catch(() => {}); } catch { /* puente sin el método */ }
     return;
   }
   try {
@@ -804,7 +808,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
           simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
-      {modo === 'Validar rutas' && <TokenSim modelador={modelador} />}
+      {/* `key={temaId}`: los colores neutros del modo se escriben en el DI al activarlo
+          (`ColoresNeutrosDelTema`), y el DI gana a los colores por defecto que repinta
+          `repintar()`. Como el lienzo ya no se remonta al cambiar de tema, sin esta `key` el
+          diagrama se quedaba con los colores del tema anterior y la etiqueta con los del nuevo
+          —texto invisible—. Remontar `TokenSim` apaga y vuelve a encender el modo, que es donde
+          el módulo relee los tokens (QA de #275). */}
+      {modo === 'Validar rutas' && <TokenSim key={temaId} modelador={modelador} />}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (

@@ -340,6 +340,17 @@ it('con puente (escritorio) las preferencias salen y entran por userData, no por
   expect(escrito).toContainEqual({ tema: 'eva-01' });
   expect(localStorage.getItem('lila.tema')).toBe('centinela');
 });
+it('un puente sin readSettings (preload viejo) arranca igual, con lienzo (QA #275)', async () => {
+  // `preferencias()` no puede rechazar: el efecto que la llama no recoge el rechazo, así que la app
+  // se quedaría con `tema === undefined` para siempre, o sea sin lienzo.
+  vi.stubGlobal('lila', { pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {} });
+  const montajesAntes = mocks.montajes;
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  expect(mocks.montajes).toBe(montajesAntes + 1);
+});
 it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch (LILA-113)', async () => {
   localStorage.setItem('lila.tema', 'tema-borrado'); localStorage.setItem('lila.densidad', 'gigante');
   await act(async () => root.unmount());
@@ -575,6 +586,18 @@ it('entrar en «Validar rutas» activa la animación de tokens y salir la desact
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
   await click('Modelar');
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
+});
+
+it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)', async () => {
+  // Los colores neutros del modo se escriben en el DI y el DI gana a lo que repinte `repintar()`:
+  // sin apagar y volver a encender, el diagrama se queda con el relleno del tema anterior y la
+  // etiqueta con el color del nuevo (medido: `#1F1A36` bajo texto `#201E1D`, contraste 1,0:1).
+  await click('Validar rutas');
+  mocks.simulacionTokens.mockClear();
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Papel', tokens: {} }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
 });
 
 it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de validación', async () => {
