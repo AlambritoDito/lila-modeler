@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findBpmnArg, isBpmnPath } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isMiscasedModelFile } from './openPath.js';
 
 describe('isBpmnPath', () => {
   it('acepta .bpmn en cualquier combinación de mayúsculas/minúsculas', () => {
@@ -10,6 +10,24 @@ describe('isBpmnPath', () => {
   it('rechaza otras extensiones', () => {
     expect(isBpmnPath('/ruta/model.xml')).toBe(false);
     expect(isBpmnPath('/ruta/sin-extension')).toBe(false);
+  });
+});
+
+describe('isMiscasedModelFile (LILA-206, P3 del QA)', () => {
+  it('detecta model.bpmn escrito con otras mayúsculas', () => {
+    expect(isMiscasedModelFile('Model.bpmn')).toBe(true);
+    expect(isMiscasedModelFile('MODEL.BPMN')).toBe(true);
+    expect(isMiscasedModelFile('model.BPMN')).toBe(true);
+  });
+
+  it('el model.bpmn exacto no lo es: es el modelo del proyecto y se abre con normalidad', () => {
+    expect(isMiscasedModelFile('model.bpmn')).toBe(false);
+  });
+
+  it('otro diagrama de la misma carpeta no lo es, con las mayúsculas que sea', () => {
+    expect(isMiscasedModelFile('ventas.bpmn')).toBe(false);
+    expect(isMiscasedModelFile('Ventas.BPMN')).toBe(false);
+    expect(isMiscasedModelFile('modelo.bpmn')).toBe(false);
   });
 });
 
