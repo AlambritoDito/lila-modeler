@@ -48,6 +48,17 @@ export function resolveWithin(root: string, rel: string): string {
   return target;
 }
 
+/**
+ * `true` si `name` es un nombre de archivo plano: no vacío, sin separadores (`/` ni `\`) y
+ * distinto de `.` y `..` (las dos entradas de directorio). La SUBCADENA `..` sí vale: un
+ * `ventas..v2.bpmn` o un `informe..final.bpmn` son nombres legítimos y, sin separadores, no pueden
+ * salirse de su carpeta (LILA-072, hallazgo 8 del QA). Quien lo use ancla igualmente con
+ * `resolveWithin`, que es la comprobación que de verdad decide si algo escapa.
+ */
+export function isFlatName(name: string): boolean {
+  return name.length > 0 && !name.includes('/') && !name.includes('\\') && name !== '.' && name !== '..';
+}
+
 const MIME_TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

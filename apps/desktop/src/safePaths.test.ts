@@ -2,7 +2,7 @@ import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PathEscapeError, isSymlink, mimeFor, resolveWithin } from './safePaths.js';
+import { PathEscapeError, isFlatName, isSymlink, mimeFor, resolveWithin } from './safePaths.js';
 
 const ROOT = sep === '\\' ? 'C:\\root' : '/root';
 
@@ -114,5 +114,23 @@ describe('isSymlink', () => {
     } finally {
       await rm(fuera, { recursive: true, force: true });
     }
+  });
+});
+
+describe('isFlatName (LILA-072, hallazgo 8 del QA)', () => {
+  it('acepta un nombre con dos puntos seguidos: no es una subida de carpeta', () => {
+    expect(isFlatName('ventas..v2.bpmn')).toBe(true);
+    expect(isFlatName('informe..final.bpmn')).toBe(true);
+    expect(isFlatName('..oculto.bpmn')).toBe(true);
+    expect(isFlatName('.bpmn')).toBe(true); // un archivo llamado solo ".bpmn" es legítimo
+  });
+
+  it('rechaza separadores, vacío y las entradas de directorio . y ..', () => {
+    expect(isFlatName('')).toBe(false);
+    expect(isFlatName('.')).toBe(false);
+    expect(isFlatName('..')).toBe(false);
+    expect(isFlatName('sub/ventas.bpmn')).toBe(false);
+    expect(isFlatName('..\\..\\etc\\passwd')).toBe(false);
+    expect(isFlatName('../secreto.bpmn')).toBe(false);
   });
 });

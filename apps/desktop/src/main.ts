@@ -26,9 +26,9 @@ import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath } from './openPath.js';
-import { ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
-import { mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
+import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import {
   addRecent,
   fitsAnyDisplay,
@@ -107,20 +107,13 @@ async function requireAuthorizedDir(dir: unknown): Promise<string> {
 }
 
 /**
- * Valida que `name` sea un nombre de archivo plano (sin `/`, sin `\`, sin `..`) terminado en
- * `suffix`, y que además resuelva dentro de `dir` (defensa en profundidad además de la forma:
- * un nombre sin barras ya no puede escaparse, pero `resolveWithin` es la misma comprobación que
- * usa el resto del puente y cuesta cero repetirla aquí).
+ * Valida que `name` sea un nombre de archivo plano (`isFlatName`: sin `/`, sin `\`, ni `.`/`..`
+ * exactos) terminado en `suffix`, y que además resuelva dentro de `dir` (defensa en profundidad
+ * además de la forma: un nombre sin barras ya no puede escaparse, pero `resolveWithin` es la misma
+ * comprobación que usa el resto del puente y cuesta cero repetirla aquí).
  */
 function requireFlatName(dir: string, name: unknown, suffix: string, label: string): string {
-  if (
-    typeof name !== 'string' ||
-    name.length === 0 ||
-    name.includes('/') ||
-    name.includes('\\') ||
-    name.includes('..') ||
-    !name.endsWith(suffix)
-  ) {
+  if (typeof name !== 'string' || !isFlatName(name) || !name.endsWith(suffix)) {
     throw new Error(
       `E-ARGUMENTO: "${label}" debe ser un nombre de archivo plano terminado en "${suffix}" (recibido: ${JSON.stringify(name)}).`,
     );
@@ -134,6 +127,23 @@ function requireFlatName(dir: string, name: unknown, suffix: string, label: stri
     throw error;
   }
   return name;
+}
+
+/**
+ * Nombre de `.bpmn` opcional del puente (LILA-072): el `file` de `lila:openRecent` (el archivo que
+ * el usuario pulsó) y el `options.modelFile` de `lila:writeProject` (aquel en el que hay que
+ * guardar). `undefined` (o `null`) es "el `model.bpmn` de siempre".
+ */
+function requireBpmnName(dir: string, value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string' || !isBpmnPath(value)) {
+    throw new Error(
+      `E-ARGUMENTO: "file" debe ser un nombre de archivo .bpmn (recibido: ${JSON.stringify(value)}).`,
+    );
+  }
+  // El sufijo ya está comprobado arriba, e insensible a mayúsculas (`Ventas.BPMN` es válido);
+  // aquí solo interesan las comprobaciones de nombre plano y `resolveWithin`.
+  return requireFlatName(dir, value, '', 'file');
 }
 
 /**
@@ -198,7 +208,7 @@ function requireSafeFileNames(dir: string, document: ProjectDocument): void {
 }
 
 /** `{}` si `value` es `undefined`; valida forma mínima en cualquier otro caso. */
-function requireWriteOptions(value: unknown): WriteProjectOptions {
+function requireWriteOptions(dir: string, value: unknown): WriteProjectOptions {
   if (value === undefined) return {};
   if (typeof value !== 'object' || value === null) {
     throw new Error('E-ARGUMENTO: "options" debe ser un objeto.');
@@ -210,11 +220,19 @@ function requireWriteOptions(value: unknown): WriteProjectOptions {
   if (opts.overwrite !== undefined && typeof opts.overwrite !== 'boolean') {
     throw new Error('E-ARGUMENTO: "options.overwrite" debe ser booleano.');
   }
+  if (opts.diagramOnly !== undefined && typeof opts.diagramOnly !== 'boolean') {
+    throw new Error('E-ARGUMENTO: "options.diagramOnly" debe ser booleano.');
+  }
+  // Mismo filtro que el `file` de `openRecent`: nombre plano `.bpmn` dentro de la carpeta
+  // autorizada (LILA-072). El renderer manda aquí el archivo con el que se abrió el proyecto.
+  const modelFile = requireBpmnName(dir, opts.modelFile);
   // `exactOptionalPropertyTypes`: no asignar `undefined` explícito a una propiedad opcional,
   // solo omitirla.
   const result: WriteProjectOptions = {};
   if (typeof opts.saveAs === 'boolean') (result as { saveAs?: boolean }).saveAs = opts.saveAs;
   if (typeof opts.overwrite === 'boolean') (result as { overwrite?: boolean }).overwrite = opts.overwrite;
+  if (typeof opts.diagramOnly === 'boolean') (result as { diagramOnly?: boolean }).diagramOnly = opts.diagramOnly;
+  if (modelFile !== undefined) (result as { modelFile?: string }).modelFile = modelFile;
   return result;
 }
 
@@ -274,6 +292,18 @@ async function recordRecent(dir: string, name: string): Promise<void> {
   sessionState = addRecent(sessionState, { dir, name, openedAt: new Date().toISOString() });
   await persistSessionState();
   refreshMenu();
+}
+
+/**
+ * `recordRecent` solo si en `dir` hay un `model.bpmn` que reabrir (hallazgos 6 y 9 del QA):
+ * recientes guarda CARPETAS y el menú Archivo las reabre por su `model.bpmn`, así que anotar la
+ * carpeta de un `.bpmn` suelto prometería un proyecto que no existe (`E-SIN-MODELO` al reabrir).
+ * Un proyecto Lila de verdad abierto por su `ventas.bpmn` SÍ entra: su `model.bpmn` sigue ahí y
+ * reabrirlo funciona. Comparar el nombre del archivo pedido contra `model.bpmn` no servía: era
+ * sensible a mayúsculas y dejaba fuera ese caso legítimo.
+ */
+async function recordRecentIfProject(dir: string, name: string): Promise<void> {
+  if (await hasProjectModel(dir)) await recordRecent(dir, name);
 }
 
 /**
@@ -337,9 +367,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
-      const { document, problems } = await readProjectFolder(dir);
+      const { document, problems, loose } = await readProjectFolder(dir);
       await recordRecent(dir, document.name);
-      return { ...document, problems };
+      return { ...document, problems, loose };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;
@@ -352,11 +382,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
     async (_event, dirArg: unknown, documentArg: unknown, optionsArg: unknown): Promise<void> => {
       const dir = await requireAuthorizedDir(dirArg);
       const document = requireProjectDocument(documentArg);
-      const options = requireWriteOptions(optionsArg);
+      const options = requireWriteOptions(dir, optionsArg);
       requireSafeFileNames(dir, document);
       try {
         await writeProjectFolder(dir, document, options);
-        await recordRecent(dir, document.name);
+        // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
+        // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
+        await recordRecentIfProject(dir, document.name);
         await e2eLog('writeProject', { dir, ok: true });
       } catch (error) {
         if (error instanceof ProjectIOError) {
@@ -375,7 +407,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
 
   guardedHandle(win, 'lila:listRecents', async (): Promise<readonly Recent[]> => sessionState.recents);
 
-  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown) => {
+  guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown, fileArg: unknown) => {
     if (typeof dirArg !== 'string' || dirArg.length === 0) {
       throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
     }
@@ -393,10 +425,11 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return null;
     }
     authorizedFolders.add(real);
+    const file = requireBpmnName(real, fileArg);
     try {
-      const { document, problems } = await readProjectFolder(real);
-      await recordRecent(real, document.name);
-      return { ...document, problems };
+      const { document, problems, loose } = await readProjectFolder(real, file);
+      await recordRecentIfProject(real, document.name);
+      return { ...document, problems, loose };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;
@@ -404,6 +437,13 @@ function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   guardedHandle(win, 'lila:pendingOpenPath', async (): Promise<OpenPathRequest | null> => {
+    // Que el renderer pida la ruta pendiente ES la prueba de que ya está vivo y suscrito a
+    // `lila:open-path` (`App.tsx` registra `onOpenPath` en la misma pasada). `did-finish-load`
+    // llega DESPUÉS de esto (es el `load` de la página, tras sus subrecursos), así que sin esta
+    // línea queda una rendija: una ruta que llegue entre esta llamada y `did-finish-load`
+    // —`second-instance` de Windows contra una ventana recién arrancada— se guardaría en
+    // `pendingOpen` cuando ya nadie va a volver a pedirlo, y se perdería en silencio.
+    windowLoaded = true;
     const result = pendingOpen;
     pendingOpen = null; // se consume una vez.
     return result;
@@ -444,15 +484,23 @@ function registerLilaProtocol(): void {
 // OP-12 "arranque frío y segunda apertura") -----------------------------------------------------
 /** La ventana principal, para reenviar `lila:open-path` cuando ya está lista; `null` antes de crearla. */
 let mainWindow: BrowserWindow | null = null;
-/** Ruta `.bpmn` capturada antes de que `mainWindow` existiera; `pendingOpenPath()` la consume una vez. */
+/** Ruta `.bpmn` capturada antes de que la ventana pudiera recibirla; `pendingOpenPath()` la consume una vez. */
 let pendingOpen: OpenPathRequest | null = null;
+/**
+ * `true` desde que la ventana terminó de cargar su página. `mainWindow !== null` NO basta para
+ * mandar `lila:open-path`: en el arranque en frío por argv (Windows/Linux) la ruta se acepta entre
+ * `createWindow` y `loadURL`, cuando ya hay ventana pero ningún renderer suscrito, y el `send` se
+ * perdería sin dejar nada en `pendingOpen` (hallazgo 2 del QA a LILA-072/074).
+ */
+let windowLoaded = false;
 
 /**
  * Acepta `filePath` como ".bpmn a abrir" si termina en `.bpmn` y existe: autoriza su carpeta
- * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya está lista, se lo envía
- * de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para `pendingOpenPath()`. Una
- * ruta que no exista o no sea `.bpmn` se ignora en silencio (no es un error del usuario: puede ser
- * cualquier argumento de línea de comandos que no nos interesa).
+ * contenedora (`realpath`, igual que `chooseFolder`) y, si la ventana ya tiene su página cargada,
+ * se lo envía de inmediato (`lila:open-path`); si no, lo deja en `pendingOpen` para que el
+ * renderer lo pida con `pendingOpenPath()` al montar. Una ruta que no exista o no sea `.bpmn` se
+ * ignora en silencio (no es un error del usuario: puede ser cualquier argumento de línea de
+ * comandos que no nos interesa).
  */
 async function acceptOpenPath(filePath: string): Promise<void> {
   if (!isBpmnPath(filePath)) return;
@@ -468,7 +516,7 @@ async function acceptOpenPath(filePath: string): Promise<void> {
     console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
   }
   await e2eLog('openPath', request);
-  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+  if (windowLoaded && mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('lila:open-path', request);
   } else {
     pendingOpen = request;
@@ -648,8 +696,15 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
     if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
     void saveBounds(win);
   });
+  // A partir de aquí el renderer existe y `lila:open-path` llega a alguien (ver `windowLoaded`).
+  win.webContents.on('did-finish-load', () => {
+    if (mainWindow === win) windowLoaded = true;
+  });
   win.on('closed', () => {
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      mainWindow = null;
+      windowLoaded = false;
+    }
   });
 
   return win;

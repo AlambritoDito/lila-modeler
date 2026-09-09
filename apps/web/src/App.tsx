@@ -23,7 +23,7 @@ import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
-import type { MenuAction } from '../../desktop/src/bridge.js';
+import type { MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
@@ -46,7 +46,8 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 
-type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string };
+/** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
+type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readonly file?: string };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -185,10 +186,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [projectName, setProjectName] = useState('Pedido de ejemplo');
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
   const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
+  /** Diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto (LILA-072). */
+  const [suelto, setSuelto] = useState(false);
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
   const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
+  /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
+  const rutaPendiente = useRef<OpenPathRequest | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
@@ -321,6 +326,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const token = changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
       const saved = await adapter.saveProject(doc, { saveAs });
       if (saved === null) return false;
+      // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
+      if (saveAs) setSuelto(false);
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
@@ -338,10 +345,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
     setProjectProblems(doc.problems ?? []);
+    setSuelto(doc.loose === true);
     if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
-    setEscenarios(doc.scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
-    const first = Object.keys(doc.scenarios)[0] ?? 'as-is.scenario.json';
+    // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
+    // una carpeta con el modelo puesto a mano— arranca con el AS-IS por defecto, el mismo de
+    // «Nuevo», en vez de dejar el pie con un «escenario desconocido» que el usuario no provocó.
+    const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : doc.scenarios;
+    setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
+    const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('Modelar');
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
@@ -360,7 +372,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     try {
       if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
       if (typeof kind === 'object') {
-        const doc = await adapter.openRecent?.(kind.recent);
+        const doc = await adapter.openRecent?.(kind.recent, kind.file);
         if (doc) await activate(doc, true, beforeToken);
         else if (doc === null) setIoError('Ese proyecto ya no está en su carpeta; se quitó de recientes.');
         return;
@@ -513,6 +525,43 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
     return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
   }, []);
+
+  /**
+   * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074): main
+   * captura la ruta —doble clic, `open-file` de macOS, argumento de línea de comandos—, autoriza
+   * su carpeta y la entrega por `pendingOpenPath()` (lo que llegó antes de que la ventana pudiera
+   * recibirla; se consume una vez) o por `onOpenPath` (con la app ya corriendo). Las dos entran
+   * por la MISMA puerta que «Abrir reciente», la única que abre una carpeta ya autorizada sin
+   * selector, pero llevando `ruta.file`: se abre EL archivo pulsado, no un `model.bpmn` fijo.
+   * ponytail: la carpeta del archivo sigue siendo el proyecto (escenarios y corridas salen de
+   * ahí); un `.bpmn` suelto abre como proyecto sin escenarios y se coloca con «Guardar como».
+   */
+  function abrirRuta(ruta: OpenPathRequest): void {
+    // El lienzo aún no existe: `projectAction` no haría nada y la ruta se perdería (hallazgo 3 del
+    // QA). Se guarda y la abre el efecto de abajo en cuanto haya modelador.
+    if (modelador === null) { rutaPendiente.current = ruta; return; }
+    // Con una E/S en curso o el diálogo de cambios sin guardar abierto, `projectAction` saldría en
+    // silencio o pisaría la acción pendiente (hallazgos 4 y 5): mejor decirlo — el banner se pinta
+    // también dentro del diálogo.
+    if (ioLock.current || pendingAction !== null) {
+      setIoError(`No se abrió "${ruta.file}": hay otra operación en curso. Vuelve a abrirlo cuando termine.`);
+      return;
+    }
+    void projectAction({ recent: ruta.dir, file: ruta.file });
+  }
+  const abrirRutaRef = useRef(abrirRuta);
+  abrirRutaRef.current = abrirRuta;
+  useEffect(() => {
+    const abrir = (ruta: OpenPathRequest): void => abrirRutaRef.current(ruta);
+    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); });
+    return window.lila?.onOpenPath(abrir);
+  }, []);
+  useEffect(() => {
+    const ruta = rutaPendiente.current;
+    if (modelador === null || ruta === null) return;
+    rutaPendiente.current = null;
+    abrirRutaRef.current(ruta);
+  }, [modelador]);
 
   /**
    * Corre el escenario elegido sobre lo que hay en el lienzo **ahora**: se exporta el XML y se
@@ -887,6 +936,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         >
           Zoom {Math.round(estado.zoom * 100)} % · ajustar
         </button>
+        {suelto && (
+          <span className="aviso">
+            Diagrama suelto: los escenarios no se guardan hasta «Guardar como»
+          </span>
+        )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">

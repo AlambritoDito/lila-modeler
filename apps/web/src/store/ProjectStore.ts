@@ -73,6 +73,11 @@ export interface ProjectDocument {
   readonly runs: readonly StoredRun[];
   /** Archivos inválidos preservados por el adaptador; visibles al abrir. */
   readonly problems?: readonly { readonly file: string; readonly message: string }[];
+  /**
+   * `true` si esto es un diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto
+   * (LILA-072, solo `DesktopStore`). Guardar escribe únicamente ese `.bpmn`; el pie lo advierte.
+   */
+  readonly loose?: boolean;
 }
 /** Snapshot coherente; null es cancelación, error rechaza la promesa. */
 export interface ProjectSessionStore extends ProjectStore {
@@ -81,6 +86,9 @@ export interface ProjectSessionStore extends ProjectStore {
   saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
   setDirty?(dirty: boolean): void;
   onSaveRequested?(save: () => Promise<boolean>): () => void;
-  /** Reabre un proyecto reciente sin diálogo; `null` si ya no existe. Solo `DesktopStore`. */
-  openRecent?(dir: string): Promise<ProjectDocument | null>;
+  /**
+   * Reabre un proyecto reciente sin diálogo; `null` si ya no existe. Solo `DesktopStore`.
+   * `file` es el `.bpmn` a abrir como modelo cuando no es el `model.bpmn` del proyecto (LILA-072).
+   */
+  openRecent?(dir: string, file?: string): Promise<ProjectDocument | null>;
 }
