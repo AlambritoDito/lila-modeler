@@ -10,6 +10,9 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 - Cada ticket tiene: qué, aceptación (la prueba que lo cierra), de qué depende, tamaño (S ≤ medio día, M ≤ 2 días, L ≤ 1 semana) y archivos que toca.
 - **Reglas para agentes**: (1) leer `docs/SEMANTICS.md`, `SCENARIO_FORMAT.md` y `RESULTS_FORMAT.md` antes de tocar el motor; (2) `packages/engine/src/core/` no importa nada fuera de `core/` (ni `bpmn-moddle`, ni `node:*`, ni React); (3) ningún ticket cierra sin su prueba de aceptación en verde; (4) nombres de columna de resultados = los de Bizagi (ver `docs/BIZAGI_PARITY.md`); (5) todo tiempo en segundos, dinero en `run.currency`; (6) el `id` BPMN es la única clave; nunca el nombre.
 - **v1 = "como Bizagi"**: épicas E0–E11 (hitos M0–M5). **Después**: E12–E19.
+  «Paridad» aquí es el criterio interno de aceptación (reproducir los resultados publicados), no
+  el posicionamiento público del proyecto: de cara afuera Bizagi es referencia e inspiración
+  (#289).
 - **Cuándo arranca la UI**: la épica E9 puede correr como workstream paralelo a M2/M3 en cuanto cierre M1 (`simulate` y `lila run` existen), empezando por LILA-112 (importar el diseño) y LILA-057 (shell con bpmn-js). Resultados, comparar y overlay (LILA-062…064) esperan a M2; el panel de escenario (LILA-061) conviene después de M3; Electron (E10) al final.
 
 ---
