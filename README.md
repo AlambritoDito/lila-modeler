@@ -184,7 +184,7 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
   `.dmg` de la beta de escritorio.
 - **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
   están configurados en `apps/desktop/electron-builder.yml`, y el workflow `Desktop`
-  (`.github/workflows/desktop.yml`, manual o al empujar a `codex/**`) compila los tres como
+  (`.github/workflows/desktop.yml`, manual, en PR que tocan `apps/desktop` o en tags `v*`) compila los tres como
   artefactos de CI, pero no se han probado ni se distribuyen.
 
 ## Estructura del repo

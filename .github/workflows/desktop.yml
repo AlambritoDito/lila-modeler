@@ -1,8 +1,8 @@
 name: Desktop
 
 # Empaqueta la SPA con electron-builder por commit, sin certificados (sin firma,
-# ver #109/E19). Se dispara manualmente, en ramas codex/** (sin publicar, para no
-# cargar cada PR de main con una compilación de instaladores) y en tags v* (publica
+# ver #109/E19). Se dispara manualmente, en PR que tocan apps/desktop (sin publicar, para no
+# cargar cada PR con una compilación de instaladores) y en tags v* (publica
 # un GitHub Release en borrador con los tres instaladores para que Brito lo revise).
 # Cortar una release: `git tag v0.0.1 && git push origin v0.0.1`. El Release queda en
 # BORRADOR: hay que publicarlo a mano desde la web. Ojo: la versión del nombre de los
@@ -10,8 +10,9 @@ name: Desktop
 # antes de etiquetar o dos tags distintos producirán ficheros con el mismo nombre.
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['apps/desktop/**', '.github/workflows/desktop.yml']
   push:
-    branches: ['codex/**']
     tags: ['v*']
 
 permissions:
