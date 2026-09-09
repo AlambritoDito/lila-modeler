@@ -13,9 +13,9 @@
  * `translate` de bpmn-js, así que no hay punto de extensión donde enchufar el español. Las dos
  * salidas eran forkear el módulo o sustituir los textos ya pintados; se sustituyen, que es
  * exactamente lo que ya se hacía con el `title` del minimapa en `Modeler.tsx`. El inventario de
- * cadenas vive en `S.tokenSim.traducciones` y la sustitución es idempotente (el español no es
- * clave de ese mapa), así que el `MutationObserver` puede volver a pasar sobre su propio cambio
- * sin entrar en bucle.
+ * cadenas vive en `S.tokenSim.traducciones` —vacío en inglés, que es el idioma en el que el
+ * módulo ya escribe— y la sustitución es idempotente (la traducción no es clave de ese mapa), así
+ * que el `MutationObserver` puede volver a pasar sobre su propio cambio sin entrar en bucle.
  *
  * ponytail: el mapa está atado a la versión 0.40.0 del módulo. Techo: si una versión nueva cambia
  * un rótulo, ese rótulo vuelve a verse en inglés —nunca roto—. Siguiente paso, si el módulo llega
@@ -23,7 +23,7 @@
  */
 import { useEffect } from 'react';
 import type { Modelador } from './Modeler';
-import { S } from './strings.es';
+import { strings, useLocale, useStrings } from './i18n';
 
 interface Props {
   modelador: Modelador | null;
@@ -31,6 +31,7 @@ interface Props {
 
 /** `title="Set animation speed = Slow"` y `title="Focus process instance 1"`: clave + variable. */
 function traducirConPrefijo(texto: string): string | undefined {
+  const S = strings();
   if (texto.startsWith(S.tokenSim.prefijoVelocidad)) {
     const nombre = texto.slice(S.tokenSim.prefijoVelocidad.length);
     return S.tokenSim.velocidad(S.tokenSim.traducciones[nombre] ?? nombre);
@@ -41,9 +42,9 @@ function traducirConPrefijo(texto: string): string | undefined {
   return undefined;
 }
 
-/** El español de `texto`, o `undefined` si no es una cadena del módulo (o ya está traducida). */
+/** La traducción de `texto`, o `undefined` si no es una cadena del módulo (o ya está traducida). */
 export function traducirTexto(texto: string): string | undefined {
-  return S.tokenSim.traducciones[texto] ?? traducirConPrefijo(texto);
+  return strings().tokenSim.traducciones[texto] ?? traducirConPrefijo(texto);
 }
 
 /**
@@ -96,6 +97,11 @@ export function observarSimulacion(raiz: HTMLElement): () => void {
 }
 
 export function TokenSim({ modelador }: Props): React.JSX.Element {
+  const S = useStrings();
+  // El idioma no repinta esto por sí solo: lo que hay que rehacer es la sustitución sobre el DOM
+  // que el módulo ya pintó, así que va en las dependencias del efecto de abajo. `App.tsx` además
+  // lleva el idioma en la `key` de este componente, para que no quede medio lienzo en el anterior.
+  const locale = useLocale();
   // Se activa al montar (entrar en el modo) y se desactiva al desmontar (salir de él, o al
   // cambiar de tema: `App.tsx` le pone `key={temaId}` justamente para que el modo se reinicie y
   // vuelva a leer los tokens, porque los colores neutros van al DI y el DI gana a `repintar()`).
@@ -116,7 +122,7 @@ export function TokenSim({ modelador }: Props): React.JSX.Element {
       return;
     }
     return observarSimulacion(contenedor);
-  }, [modelador]);
+  }, [modelador, locale]);
 
   return (
     <p className="aviso-token-sim" role="note">

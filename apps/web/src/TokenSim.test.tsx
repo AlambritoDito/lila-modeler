@@ -25,7 +25,12 @@ import {
   traducirSimulacion,
   traducirTexto,
 } from './TokenSim';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
+import { setLocale } from './i18n';
+
+// The Spanish catalog is the one with an inventory of the module's strings (in English it is
+// empty, because the module already writes English), so this suite runs in Spanish.
+setLocale('es');
 
 /** La interfaz que el módulo monta dentro del contenedor del lienzo, tal cual la escribe. */
 function lienzoConSimulacion(): HTMLElement {
@@ -134,7 +139,7 @@ describe('«Validar rutas»: la UI del módulo en español (#264)', () => {
     }
   });
 
-  it('el aviso que distingue la animación de la simulación DES sale de strings.es.ts', () => {
+  it('el aviso que distingue la animación de la simulación DES sale del catálogo', () => {
     expect(S.tokenSim.aviso).toContain('no es simulación de eventos discretos');
   });
 });

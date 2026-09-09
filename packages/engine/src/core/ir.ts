@@ -9,6 +9,8 @@
  * segundos. Ver `docs/SEMANTICS.md` y `LILA_MODELER_ESTRUCTURA.md` § 6.
  */
 
+import { coreMessages, type Locale } from './messages/index.js';
+
 /** Tipos de nodo del perfil soportado. Toda variante de tarea se aplana a `task`. */
 export type NodeType = 'start' | 'end' | 'terminate' | 'task' | 'xor' | 'or' | 'and' | 'timer';
 
@@ -112,16 +114,19 @@ export interface IrProblem {
  * El resto del catálogo (`E-NOSOP`, `E-GATEWAY-SIN-ARISTAS`, `E-INALCANZABLE`, `E-SIN-START`,
  * `E-SIN-END`) lo añade `bpmn/validate.ts`, que reutiliza esta función: vive fuera de `core/`
  * porque necesita los elementos no soportados que descartó el parser y que el IR ya no tiene.
+ *
+ * `locale` elige el idioma de los `message`; los `code` y los `id` no dependen del idioma.
  */
-export function validateIr(ir: ProcessIR): IrProblem[] {
+export function validateIr(ir: ProcessIR, locale: Locale = 'en'): IrProblem[] {
   const problems: IrProblem[] = [];
+  const M = coreMessages(locale).codes;
 
   for (const id of Object.keys(ir.nodes)) {
     if (Object.prototype.hasOwnProperty.call(ir.flows, id)) {
       problems.push({
         code: 'E-ID-DUPLICADO',
         id,
-        message: `${id}: el id está declarado a la vez como nodo y como flujo.`,
+        message: M['E-ID-DUPLICADO'](id),
       });
     }
   }
@@ -132,7 +137,7 @@ export function validateIr(ir: ProcessIR): IrProblem[] {
         problems.push({
           code: 'E-REF-INEXISTENTE',
           id,
-          message: `${id}: el flujo entrante ${flowId} no existe en el proceso.`,
+          message: M['E-REF-INEXISTENTE/entrante'](id, flowId),
         });
       }
     }
@@ -141,7 +146,7 @@ export function validateIr(ir: ProcessIR): IrProblem[] {
         problems.push({
           code: 'E-REF-INEXISTENTE',
           id,
-          message: `${id}: el flujo saliente ${flowId} no existe en el proceso.`,
+          message: M['E-REF-INEXISTENTE/saliente'](id, flowId),
         });
       }
     }
@@ -152,14 +157,14 @@ export function validateIr(ir: ProcessIR): IrProblem[] {
       problems.push({
         code: 'E-FLUJO-COLGANTE',
         id,
-        message: `${id}: el flujo sale del nodo ${flow.from}, que no existe en el proceso.`,
+        message: M['E-FLUJO-COLGANTE/origen'](id, flow.from),
       });
     }
     if (!Object.prototype.hasOwnProperty.call(ir.nodes, flow.to)) {
       problems.push({
         code: 'E-FLUJO-COLGANTE',
         id,
-        message: `${id}: el flujo entra al nodo ${flow.to}, que no existe en el proceso.`,
+        message: M['E-FLUJO-COLGANTE/destino'](id, flow.to),
       });
     }
   }

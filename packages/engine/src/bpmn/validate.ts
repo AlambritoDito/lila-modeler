@@ -10,6 +10,8 @@
  * (R-NOSOP-1 y R-NOSOP-2); los códigos, de la § 17.
  */
 import { validateIr, type IrProblem, type ProcessIR, type SourceWarning } from '../core/ir.js';
+import { CONSTRUCTION_BY_QNAME, FALLBACK_CONSTRUCTION } from '../messages/constructions.js';
+import { messages, type Catalog, type Locale } from '../messages/index.js';
 import type { UnsupportedElement } from './parse.js';
 
 /**
@@ -35,29 +37,9 @@ export interface ValidateOptions {
   messageFlowCount?: number;
   /** `ParseResult.conditionFlowIds`; un W-COND por sequence flow. */
   conditionFlowIds?: readonly string[];
+  /** Idioma de los `message`; los `code` y los `id` no dependen del idioma (LILA-211). */
+  locale?: Locale | undefined;
 }
-
-/**
- * `{construcción}` de R-NOSOP-2, por `$type` de moddle. Catálogo cerrado: ningún otro texto es
- * válido.
- */
-const CONSTRUCTIONS: Record<string, string> = {
-  'bpmn:BoundaryEvent': 'evento adjunto a actividad (boundary event)',
-  'bpmn:IntermediateThrowEvent': 'evento intermedio de lanzamiento',
-  'bpmn:EventBasedGateway': 'gateway basado en eventos',
-  'bpmn:ComplexGateway': 'gateway complejo',
-  'bpmn:Transaction': 'subproceso transaccional',
-  'bpmn:AdHocSubProcess': 'subproceso ad-hoc',
-  // El parser solo descarta un `bpmn:subProcess` cuando es `triggeredByEvent="true"`; el
-  // embebido lo aplana (R-PLAN-1), así que aquí solo llega el subproceso de eventos.
-  'bpmn:SubProcess': 'subproceso de eventos',
-  'bpmn:ChoreographyTask': 'diagrama de coreografía',
-  'bpmn:Choreography': 'diagrama de coreografía',
-  'bpmn:GlobalChoreographyTask': 'diagrama de coreografía',
-  'bpmn:Conversation': 'diagrama de conversación',
-  'bpmn:CallConversation': 'diagrama de conversación',
-  'bpmn:SubConversation': 'diagrama de conversación',
-};
 
 /**
  * Elementos que **sí** están en el perfil (§ 2: «se leen y se preservan, no afectan a la
@@ -77,12 +59,6 @@ const NOT_A_NODE = new Set([
   'bpmn:SequenceFlow',
 ]);
 
-/**
- * Respaldo para listas `unsupported` construidas a mano por consumidores antiguos. LILA-163 hace
- * que `parseBpmn` entregue siempre la construcción concreta del catálogo cuando puede detectarla.
- */
-const FALLBACK_CONSTRUCTION = 'elemento fuera del perfil v1';
-
 /** `bpmn:BoundaryEvent` (moddle) -> `bpmn:boundaryEvent` (nombre calificado del XML, R-NOSOP-1). */
 function xmlQName(qname: string): string {
   const colon = qname.indexOf(':');
@@ -90,14 +66,17 @@ function xmlQName(qname: string): string {
   return `${qname.slice(0, colon + 1)}${local.charAt(0).toLowerCase()}${local.slice(1)}`;
 }
 
-function unsupportedProblem(el: UnsupportedElement): IrProblem {
-  const qname = xmlQName(el.qname);
-  const head = el.name === '' ? `${el.id} (${qname})` : `${el.id} (${qname}, "${el.name}")`;
-  const construction = el.construction ?? CONSTRUCTIONS[el.qname] ?? FALLBACK_CONSTRUCTION;
+function unsupportedProblem(el: UnsupportedElement, catalog: Catalog): IrProblem {
+  const construction = el.construction ?? CONSTRUCTION_BY_QNAME[el.qname] ?? FALLBACK_CONSTRUCTION;
   return {
     code: 'E-NOSOP',
     id: el.id,
-    message: `${head}: ${construction} no soportado por el simulador.`,
+    message: catalog.codes['E-NOSOP'](
+      el.id,
+      xmlQName(el.qname),
+      el.name,
+      catalog.constructions[construction],
+    ),
   };
 }
 
@@ -206,12 +185,12 @@ function classifyParseWarning(w: SourceWarning, processId: string): ParseWarning
 }
 
 /** Texto normativo de R-NOSOP-6; `w.message` es el aviso de moddle, ya aplanado a una línea. */
-function parseWarningProblem(w: SourceWarning, fallbackId: string): IrProblem {
+function parseWarningProblem(w: SourceWarning, fallbackId: string, catalog: Catalog): IrProblem {
   const id = w.elementId ?? fallbackId;
   return {
     code: 'E-PARSE-INCOMPLETO',
     id,
-    message: `${id}: el lector XML descartó contenido del modelo, que quedó incompleto: ${w.message}.`,
+    message: catalog.codes['E-PARSE-INCOMPLETO'](id, w.message),
   };
 }
 
@@ -220,34 +199,27 @@ function parseWarningNotice(
   w: SourceWarning,
   kind: Exclude<ParseWarningKind, 'perdida'>,
   fallbackId: string,
+  catalog: Catalog,
 ): ValidationWarning {
   const id = w.elementId ?? fallbackId;
   if (kind === 'otro-proceso') {
     return {
       code: 'W-PARSE',
       id,
-      message: `${id}: aviso del lector XML en ${w.processId}, otro proceso del archivo que Lila no simula: ${w.message}.`,
+      message: catalog.codes['W-PARSE/otro-proceso'](id, w.processId ?? '', w.message),
     };
   }
   if (kind === 'flujo-ausente') {
-    return {
-      code: 'W-PARSE',
-      id,
-      message: `${id}: el lector XML no encontró un flujo que este elemento declara; el grafo se construye sin él: ${w.message}.`,
-    };
+    return { code: 'W-PARSE', id, message: catalog.codes['W-PARSE/flujo-ausente'](id, w.message) };
   }
   if (kind === 'default-roto') {
     return {
       code: 'W-XOR-DEFAULT-ROTO',
       id,
-      message: `${id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: ${w.message}.`,
+      message: catalog.codes['W-XOR-DEFAULT-ROTO'](id, w.message),
     };
   }
-  return {
-    code: 'W-PARSE',
-    id,
-    message: `${id}: aviso del lector XML, sin pérdida de nodos ni flujos: ${w.message}.`,
-  };
+  return { code: 'W-PARSE', id, message: catalog.codes['W-PARSE/inofensivo'](id, w.message) };
 }
 
 /** Ids alcanzables siguiendo los flujos salientes desde cada `start`. */
@@ -277,16 +249,18 @@ function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
 export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationResult {
   const errors: IrProblem[] = [];
   const warnings: ValidationWarning[] = [];
+  const catalog = messages(opts.locale);
+  const M = catalog.codes;
 
   for (const el of opts.unsupported ?? []) {
     if (NOT_A_NODE.has(el.qname)) continue;
-    errors.push(unsupportedProblem(el));
+    errors.push(unsupportedProblem(el, catalog));
   }
 
   for (const w of ir.source.warnings) {
     const kind = classifyParseWarning(w, ir.id);
-    if (kind === 'perdida') errors.push(parseWarningProblem(w, ir.id));
-    else warnings.push(parseWarningNotice(w, kind, ir.id));
+    if (kind === 'perdida') errors.push(parseWarningProblem(w, ir.id, catalog));
+    else warnings.push(parseWarningNotice(w, kind, ir.id, catalog));
   }
 
   if ((opts.messageFlowCount ?? 0) > 0) {
@@ -294,20 +268,20 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     warnings.push({
       code: 'W-MSGFLOW',
       id: ir.id,
-      message: `${ir.id}: se ignoraron ${count} flujos de mensaje (bpmn:messageFlow).`,
+      message: M['W-MSGFLOW'](ir.id, count),
     });
   }
   for (const flowId of opts.conditionFlowIds ?? []) {
     warnings.push({
       code: 'W-COND',
       id: flowId,
-      message: `${flowId}: conditionExpression se ignora; el ramaje es probabilístico.`,
+      message: M['W-COND'](flowId),
     });
   }
 
   // Flujo colgante, id duplicado y referencia inexistente (E-FLUJO-COLGANTE, E-ID-DUPLICADO,
   // E-REF-INEXISTENTE) ya los cubre `core/`.
-  errors.push(...validateIr(ir));
+  errors.push(...validateIr(ir, opts.locale));
 
   const starts: string[] = [];
   let hasEnd = false;
@@ -322,7 +296,10 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
         errors.push({
           code: 'E-GATEWAY-SIN-ARISTAS',
           id,
-          message: `${id}: el gateway no tiene ${node.incoming.length === 0 ? 'entradas' : 'salidas'}.`,
+          message:
+            node.incoming.length === 0
+              ? M['E-GATEWAY-SIN-ARISTAS/sin-entradas'](id)
+              : M['E-GATEWAY-SIN-ARISTAS/sin-salidas'](id),
         });
       }
     }
@@ -332,14 +309,14 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     errors.push({
       code: 'E-SIN-START',
       id: ir.id,
-      message: `${ir.id}: el proceso no tiene ningún evento de inicio.`,
+      message: M['E-SIN-START'](ir.id),
     });
   }
   if (!hasEnd) {
     errors.push({
       code: 'E-SIN-END',
       id: ir.id,
-      message: `${ir.id}: el proceso no tiene ningún evento de fin ni terminate.`,
+      message: M['E-SIN-END'](ir.id),
     });
   }
 
@@ -352,7 +329,7 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
         errors.push({
           code: 'E-INALCANZABLE',
           id,
-          message: `${id}: el nodo no es alcanzable desde ningún evento de inicio.`,
+          message: M['E-INALCANZABLE'](id),
         });
       }
     }

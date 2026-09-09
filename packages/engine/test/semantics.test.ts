@@ -204,7 +204,7 @@ describe('R-DEG-3 — tareas sin processingTime (LILA-198)', () => {
     const warnings = simulate(IR_DOS_TAREAS, escenario({}), { log: false }).warnings;
 
     expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
-      'W-TAREA-SIN-TIEMPO: A, B: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.',
+      'W-TAREA-SIN-TIEMPO: A, B: the scenario declares no processingTime at all; those tasks take 0 seconds.',
     ]);
   });
 
@@ -217,7 +217,7 @@ describe('R-DEG-3 — tareas sin processingTime (LILA-198)', () => {
 
     // Aquí el aviso sí señala un olvido concreto: se conserva por tarea, con el contador de § 17.
     expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
-      'W-TAREA-SIN-TIEMPO: B: sin processingTime; dura 0 segundos. (3 veces)',
+      'W-TAREA-SIN-TIEMPO: B: no processingTime; it takes 0 seconds. (3 times)',
     ]);
   });
 });

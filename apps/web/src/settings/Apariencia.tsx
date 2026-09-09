@@ -17,10 +17,11 @@
  * llama a `applyTheme` y no hay dos fuentes de verdad del tema vivo.
  */
 import { useRef, useState } from 'react';
-import { S } from '../strings.es';
+import { useStrings } from '../i18n';
+import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
-import { duplicar, esColor, GRUPOS, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
+import { duplicar, esColor, grupos, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
 
 export interface AparienciaProps {
   /** Id del tema aplicado: `eva-01`, `papel` o `u:<n>`. */
@@ -65,6 +66,7 @@ interface EditorProps {
  * cambiar de tema o de «Restablecer», enseñando en rojo un valor que el tema activo no tiene.
  */
 function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
+  const S = useStrings();
   const [borrador, setBorrador] = useState<string | null>(null);
   return (
     <label className="token">
@@ -96,6 +98,7 @@ function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
 }
 
 function Fuente({ token, valor, editar }: EditorProps): React.JSX.Element {
+  const S = useStrings();
   // Un tema importado puede traer una familia que no está en la lista: se añade como opción en vez
   // de enseñar otra cosa (o vaciar el select y perderla al primer cambio).
   const opciones = S.apariencia.fuentes.some((f) => f.valor === valor)
@@ -116,6 +119,7 @@ function Fuente({ token, valor, editar }: EditorProps): React.JSX.Element {
  * dejaba el token en `"px"`, que no es una longitud: como en `Color`, ese estado se queda aquí.
  */
 function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
+  const S = useStrings();
   const [borrador, setBorrador] = useState<string | null>(null);
   return (
     <label className="token">
@@ -143,6 +147,7 @@ function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
 }
 
 export function Apariencia(props: AparienciaProps): React.JSX.Element {
+  const S = useStrings();
   const { densidad, tema, temaId, temas } = props;
   const [error, setError] = useState<string | null>(null);
   /** Nombre tecleado que todavía no vale (vacío o en blanco): no se persiste, se queda el anterior. */
@@ -273,7 +278,7 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         {/* La densidad sigue siendo una preferencia, no una edición del tema (LILA-113): se aplica
             encima de cualquier tema y por eso no toca el token `density` del que se está editando. */}
         <select value={densidad} onChange={(e) => props.onDensidad(e.target.value)}>
-          {S.app.densidades.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+          {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
         </select>
       </label>
 
@@ -283,7 +288,7 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         <span className="acento">{S.apariencia.muestraBoton}</span>
       </div>
 
-      {GRUPOS.map((grupo, i) => (
+      {grupos().map((grupo, i) => (
         <details key={grupo.titulo} className="grupo" open={i === 0}>
           <summary>{grupo.titulo}</summary>
           {grupo.tokens.map((token) => {

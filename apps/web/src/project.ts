@@ -3,7 +3,7 @@ import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
-import { S } from './strings.es';
+import { strings } from './i18n';
 
 export function projectStore(store: ProjectStore): ProjectSessionStore | null {
   const candidate = store as Partial<ProjectSessionStore>;
@@ -14,6 +14,7 @@ function object(value: unknown): value is Record<string, unknown> { return typeo
 function revision(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }
 /** Validación de estructura; los escenarios pueden contener borradores inválidos. */
 export function readProject(value: unknown): ProjectDocument {
+  const S = strings();
   if (!object(value) || value.version !== 1 || typeof value.id !== 'string' || typeof value.name !== 'string' || !object(value.model)
     || typeof value.model.id !== 'string' || typeof value.model.name !== 'string' || typeof value.model.xml !== 'string' || !revision(value.model.revision)
     || !object(value.scenarios) || !Object.values(value.scenarios).every(object) || !object(value.scenarioRevisions)
@@ -29,6 +30,7 @@ export function readProject(value: unknown): ProjectDocument {
   return value as unknown as ProjectDocument;
 }
 export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument> {
+  const S = strings();
   const elements: Record<string, unknown> = {};
   for (const [id, node] of Object.entries(ir.nodes)) {
     if (node.type === 'start') elements[id] = { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } };
@@ -41,6 +43,7 @@ export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument
 }
 /** Documento inicio → tarea → fin con DI; ids distintos en cada proyecto. */
 export function newModelXml(): string {
+  const S = strings();
   const suffix = crypto.randomUUID().replaceAll('-', '');
   const p = `Process_${suffix}`, a = `Start_${suffix}`, b = `Task_${suffix}`, c = `End_${suffix}`, f = `Flow_A_${suffix}`, g = `Flow_B_${suffix}`;
   return marcarExportador(`<?xml version="1.0" encoding="UTF-8"?>

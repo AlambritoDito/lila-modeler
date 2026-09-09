@@ -38,7 +38,7 @@ import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
 import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type { RunResult } from '@lila/engine';
-import { S } from './strings.es';
+import { strings } from './i18n';
 
 const PRIORITY = 1500;
 const OVERLAY_TYPE = 'lila-bottleneck';
@@ -109,9 +109,6 @@ function nivelDeRatio(ratio: number): NivelEspera {
 const SEGUNDOS: Readonly<Record<BaseTimeUnit, number>> = { day: 86_400, h: 3_600, min: 60, s: 1 };
 /** De la más gruesa a la más fina: gana la primera en la que la espera valga 1 o más. */
 const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
-/** Abreviatura de la unidad en la etiqueta; el `title` sigue usando el código del escenario. */
-const ABREVIATURA: Readonly<Record<BaseTimeUnit, string>> = S.lienzo.unidadesCortas;
-
 /**
  * Espera media en la unidad más gruesa en la que siga valiendo 1 o más, con un decimal como
  * mucho. La etiqueta vive sobre una tarea de ~100 px y `formatDuration` con la unidad del
@@ -120,10 +117,12 @@ const ABREVIATURA: Readonly<Record<BaseTimeUnit, string>> = S.lienzo.unidadesCor
  * pierde: va en el `title` de la etiqueta.
  */
 function esperaCorta(seconds: number): string {
+  const S = strings();
   const unidad = UNIDADES.find((u) => seconds >= SEGUNDOS[u]) ?? 's';
   // Redondeo a un decimal *en la unidad elegida* antes de formatear, no después.
   const paso = SEGUNDOS[unidad] / 10;
-  return `${formatDuration(Math.round(seconds / paso) * paso, unidad)} ${ABREVIATURA[unidad]}`;
+  // Abreviatura de la unidad en la etiqueta; el `title` sigue usando el código del escenario.
+  return `${formatDuration(Math.round(seconds / paso) * paso, unidad)} ${S.lienzo.unidadesCortas[unidad]}`;
 }
 
 /**
@@ -152,6 +151,7 @@ const SIN_ALTAS = 3;
  * el mapa queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada.
  */
 export function overlayModel(result: RunResult, scenario: ResolvedScenario): OverlayModel {
+  const S = strings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
 
   const entradas: [string, OverlayEntry][] = [];

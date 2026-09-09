@@ -121,6 +121,13 @@ export interface LilaBridge {
 export interface Ajustes {
   readonly tema?: string;
   readonly densidad?: string;
+  /**
+   * Language preference (LILA-210): `auto` (follow the system), `en` or `es`. It is the
+   * PREFERENCE and not the resolved language, so a machine that changes its system language keeps
+   * following it. Typed as `string` for the same reason as `tema` and `densidad`: main does not
+   * know the list of valid values, the renderer does and falls back to `auto` for anything else.
+   */
+  readonly idioma?: string;
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   readonly temas?: readonly TemaGuardado[];
 }
