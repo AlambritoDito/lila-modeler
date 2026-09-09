@@ -1,0 +1,15 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lila Modeler">
+  <!--
+    Icono de la app de escritorio (LILA-207 / #267).
+
+    Fondo: `bg.base` de Eva-01 (#12101A). Marca: el mismo pentágono macizo que
+    usa la barra superior de la app en `apps/web/src/App.tsx` ("Logo del
+    artefacto: pentágono macizo en accent.primary"), reescalado desde su
+    viewBox 24x24 a este lienzo de 1024x1024 y coloreado con `accent.primary`
+    de Papel (#EC3013, el naranja-rojo de marca) en vez del verde de Eva-01,
+    para que el icono no dependa del tema activo. Sin texto, sin degradados:
+    dos colores planos, reconocible como silueta a 16 px.
+  -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="#12101A"/>
+  <polygon points="512,192 832,434.67 717.33,832 306.67,832 192,434.67" fill="#EC3013"/>
+</svg>

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "smoke": "LILA_SMOKE=1 electron .",
     "pack:mac": "npm run build && electron-builder --mac --arm64 --dir",
-    "dist:mac": "npm run build && electron-builder --mac --arm64 && node scripts/origen.mjs"
+    "dist:mac": "npm run build && electron-builder --mac --arm64 && node scripts/origen.mjs",
+    "icons": "node -e \"console.log('Regenerar resources/icons/ (macOS, sin dependencias, LILA-207): 1) Rasteriza docs/design/icono.svg a un PNG de 1024x1024 con fondo transparente — qlmanage -t no conserva el alfa de las esquinas redondeadas de este SVG, usa Chrome headless por CDP (Page.captureScreenshot con Emulation.setDefaultBackgroundColorOverride a alfa 0, ver informe de #267) y guardalo como icon.png. 2) Con sips -z <lado> <lado> icon.png --out icon_<lado>x<lado>.png arma un icon.iconset/ (16/32/128/256/512 + sus @2x, que son el doble de lado) y corre iconutil -c icns icon.iconset -o icon.icns; borra el iconset despues. 3) node scripts/make-ico.mjs empaqueta icon.png en icon.ico (16/32/48/256).')\""
   },
   "devDependencies": {
     "electron": "44.2.0",
