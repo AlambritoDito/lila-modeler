@@ -21,6 +21,7 @@
  * intersección de calendarios de una tarea (R-CAL-4). Se entregan aquí, con sus pruebas, para
  * que LILA-041 solo tenga que cablearlas.
  */
+import { coded, coreMessages, type Locale } from './messages/index.js';
 
 /** Segundos de una semana. Es el módulo de todo el archivo. */
 export const WEEK = 604800;
@@ -99,7 +100,7 @@ function hhmmSeconds(value: string): number {
  * Ordena, descarta degenerados, une solapes y adyacencias (R-CAL-2) y construye el calendario.
  * Sin ningún intervalo abierto ⇒ `E-CAL-VACIO`.
  */
-function build(raw: readonly Interval[], offset: number): Calendar {
+function build(raw: readonly Interval[], offset: number, locale: Locale = 'en'): Calendar {
   const sorted = [...raw].sort((left, right) => left[0] - right[0] || left[1] - right[1]);
   const intervals: Interval[] = [];
 
@@ -117,7 +118,7 @@ function build(raw: readonly Interval[], offset: number): Calendar {
   }
 
   if (intervals.length === 0) {
-    throw new RangeError('E-CAL-VACIO: el calendario no tiene intervalos abiertos.');
+    throw new RangeError(coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/anonimo']()));
   }
 
   let openPerWeek = 0;
@@ -132,7 +133,7 @@ function build(raw: readonly Interval[], offset: number): Calendar {
  * `intervals: []` es `E-CAL-VACIO` (R-CAL-2): un calendario que nunca abre bloquearía la
  * simulación para siempre, así que se rechaza en vez de degradarse.
  */
-export function compileCalendar(def: CalendarDef, offset: number): Calendar {
+export function compileCalendar(def: CalendarDef, offset: number, locale: Locale = 'en'): Calendar {
   const raw: Interval[] = [];
 
   for (const { days, from, to } of def.intervals) {
@@ -147,7 +148,7 @@ export function compileCalendar(def: CalendarDef, offset: number): Calendar {
     }
   }
 
-  return build(raw, offset);
+  return build(raw, offset, locale);
 }
 
 /** Calendario 24×7: la degradación de R-DEG-2 expresada como calendario de un solo intervalo. */
@@ -186,7 +187,9 @@ export function nextOpen(cal: Calendar, t: number): number {
     return start > p ? t + (start - p) : t;
   }
   const first = cal.intervals[0];
-  if (first === undefined) throw new RangeError('E-CAL-VACIO: el calendario no tiene intervalos abiertos.');
+  if (first === undefined) {
+    throw new RangeError(coded('E-CAL-VACIO', coreMessages().codes['E-CAL-VACIO/anonimo']()));
+  }
   return t + (WEEK - p) + first[0];
 }
 
@@ -329,7 +332,11 @@ function segmentAt(schedule: CapacitySchedule, p: number): number {
  * **solapan suman** su capacidad en el solape (a diferencia de los intervalos de un mismo
  * calendario, que se unen): son dos grupos distintos de unidades del mismo rol.
  */
-export function compileCapacity(entries: readonly CapacityEntry[], offset: number): CapacitySchedule {
+export function compileCapacity(
+  entries: readonly CapacityEntry[],
+  offset: number,
+  locale: Locale = 'en',
+): CapacitySchedule {
   // Guardia de la API interna, no un error del catálogo (§ 17): un escenario con la lista vacía
   // lo rechaza antes `assertSupportedResourceScenario` con `E-REC-CAPACIDAD` y el pool citado, y
   // aquí no hay pool que citar. Llevar el código dejaba dos textos fuera del catálogo (LILA-204).
@@ -357,7 +364,11 @@ export function compileCapacity(entries: readonly CapacityEntry[], offset: numbe
   // alguno abierto: todo calendario tiene al menos un intervalo (R-CAL-2) y toda `capacity ≥ 1`.
   const filled = [...raw];
   const open = raw.findIndex((value) => value > 0);
-  if (open < 0) throw new RangeError('E-CAL-VACIO: el pool no tiene ningún tramo de capacidad abierto.');
+  if (open < 0) {
+    throw new RangeError(
+      coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/pool-sin-tramos']()),
+    );
+  }
   for (let i = starts.length - 1; i >= 0; i--) {
     if (filled[i]! > 0) continue;
     filled[i] = filled[(i + 1) % starts.length]!;

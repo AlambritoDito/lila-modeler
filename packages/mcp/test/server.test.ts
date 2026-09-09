@@ -373,7 +373,7 @@ test('run_simulation: modelo que no coincide con scenario.model es un error estr
   expect(textOf(result)).toContain('no coincide con scenario.model');
 });
 
-test('los defectos del esquema salen en español, con el mismo texto que la CLI (LILA-202)', async () => {
+test('los defectos del esquema salen con el texto del catálogo, el mismo que la CLI (LILA-202)', async () => {
   const roto = join(tmpdir(), `lila-mcp-es-${process.pid}.scenario.json`);
   writeFileSync(roto, JSON.stringify({
     version: 1, name: 'malo', model: pedidoBpmn,
@@ -388,11 +388,11 @@ test('los defectos del esquema salen en español, con el mismo texto que la CLI 
       name: 'describe_process',
       arguments: { path: pedidoBpmn, scenario: roto },
     });
-    expect(textOf(descripcion)).toContain('run.warmup: debe ser ≥ 0');
+    expect(textOf(descripcion)).toContain('run.warmup: must be ≥ 0');
 
     const corrida = await client.callTool({ name: 'run_simulation', arguments: { scenario: roto } });
     expect(corrida.isError).toBe(true);
-    expect(textOf(corrida)).toContain('run.warmup: debe ser ≥ 0');
+    expect(textOf(corrida)).toContain('run.warmup: must be ≥ 0');
     expect(textOf(corrida)).not.toMatch(/Too big|expected/i);
   } finally {
     rmSync(roto, { force: true });

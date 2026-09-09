@@ -1,44 +1,46 @@
-# Formato de resultados (`RunResult`) y event log
+# Results format (`RunResult`) and event log
 
-Fuente de verdad: `LILA_MODELER_ESTRUCTURA.md`, sección 6 ("Diseño del motor" → "Métricas (`RunResult`)" y "Event log") y sección 3 (checklist de paridad con Bizagi). Este documento detalla lo que ahí se resume: la estructura completa de `RunResult`, la fórmula o definición operativa de cada métrica, las columnas del event log con tipo y unidad, y el mapeo de nombres de columna internos a los nombres que usa Bizagi (que la CLI reutiliza al imprimir tablas).
+> Read this in: [Español](es/RESULTS_FORMAT.md)
 
-Unidades, salvo que se indique otra cosa:
+Source of truth: `LILA_MODELER_ESTRUCTURA.md`, section 6 ("Engine design" → "Metrics (`RunResult`)" and "Event log") and section 3 (the Bizagi Modeler reference-behaviour checklist). This document details what is summarized there: the complete structure of `RunResult`, the formula or operative definition of each metric, the event log columns with type and unit, and the mapping of internal column names to the ones Bizagi Modeler uses (which the CLI reuses when printing tables).
 
-- Todo tiempo se mide y almacena en **segundos** (float64). `run.baseTimeUnit` solo afecta a cómo se presentan en CLI/UI; nunca al valor almacenado.
-- Todo dinero se mide en `run.currency` (la moneda del escenario, ver `SCENARIO_FORMAT.md`).
-- Los timestamps del event log son segundos de reloj virtual desde `run.start`, salvo la variante ISO 8601 que se deriva de `run.start` solo al exportar.
+Units, unless stated otherwise:
 
-`RunResult` es la salida de `simulate(ir, scenario, opts)` (`packages/engine/src/core/run.ts`, ver sección 6 del documento de estructura). Se agrega tras correr una o más replicaciones (`scenario.run.replications`) y, cuando hay más de una, cada métrica numérica lleva además su resumen entre replicaciones (`replications`/`ci95`, ver más abajo).
+- All time is measured and stored in **seconds** (float64). `run.baseTimeUnit` only affects how they are presented in the CLI/UI; never the stored value.
+- All money is measured in `run.currency` (the scenario's currency, see `SCENARIO_FORMAT.md`).
+- Event log timestamps are virtual-clock seconds since `run.start`, except for the ISO 8601 variant, which is derived from `run.start` only when exporting.
+
+`RunResult` is the output of `simulate(ir, scenario, opts)` (`packages/engine/src/core/run.ts`, see section 6 of the structure document). It is aggregated after running one or more replications (`scenario.run.replications`) and, when there is more than one, every numeric metric also carries its cross-replication summary (`replications`/`ci95`, see below).
 
 ---
 
-## 1. Estructura general
+## 1. Overall structure
 
 ```ts
 interface RunResult {
-  elements: Record<string, ElementMetrics>;   // keyed por id BPMN del elemento
-  flows: Record<string, FlowMetrics>;         // keyed por id BPMN del sequence flow
-  resources: Record<string, ResourceMetrics>; // keyed por id del pool de recursos
-  process: ProcessMetrics;                    // agregado único, todo el proceso
-  bottlenecks: BottleneckEntry[];             // ranking, ver sección 6
-  replications?: ReplicationSummary;          // solo si scenario.run.replications > 1
-  cancelled?: true;                           // ausencia = corrida completa
-  completedReplications?: number;             // solo si cancelled = true
-  warnings: string[];                         // ver sección 8
-  log?: EventLogRow[];                        // solo en modo retenido, ver sección 7
+  elements: Record<string, ElementMetrics>;   // keyed by the element's BPMN id
+  flows: Record<string, FlowMetrics>;         // keyed by the sequence flow's BPMN id
+  resources: Record<string, ResourceMetrics>; // keyed by the resource pool's id
+  process: ProcessMetrics;                    // single aggregate, whole process
+  bottlenecks: BottleneckEntry[];             // ranking, see section 6
+  replications?: ReplicationSummary;          // only if scenario.run.replications > 1
+  cancelled?: true;                           // absence = complete run
+  completedReplications?: number;             // only if cancelled = true
+  warnings: string[];                         // see section 8
+  log?: EventLogRow[];                        // only in retained mode, see section 7
 }
 ```
 
-Todo elemento, flujo o recurso que exista en el IR aparece en el mapa correspondiente aunque su conteo sea cero (por ejemplo, una rama de XOR que nunca se tomó en una corrida corta). El `id` usado como clave es siempre el `id` BPMN — nunca el nombre visible (regla del repositorio, ver cabecera de `BACKLOG.md`).
+Every element, flow, or resource that exists in the IR appears in the corresponding map even if its count is zero (for example, an XOR branch that was never taken in a short run). The `id` used as the key is always the BPMN `id` — never the visible name (a repository-wide rule, see the header of `BACKLOG.md`).
 
-Con más de una replicación, todos los campos numéricos top-level son la **media aritmética del
-mismo campo calculado en cada replicación**. No representan la primera replicación ni un pool de
-todos los casos. `replications.kpis[path].mean` coincide con el campo top-level correspondiente en
-una corrida completa. Esta decisión se detalla en ADR-024. *(prueba: LILA-029)*
+With more than one replication, every top-level numeric field is the **arithmetic mean of that
+same field computed in each replication**. They do not represent the first replication, nor a
+pool of every case. `replications.kpis[path].mean` matches the corresponding top-level field in a
+complete run. This decision is detailed in ADR-024. *(test: LILA-029)*
 
 ---
 
-## 2. Métricas por elemento (`elements[id]`)
+## 2. Per-element metrics (`elements[id]`)
 
 ```ts
 interface ElementMetrics {
@@ -55,41 +57,41 @@ interface Stat    { min: number; max: number; mean: number; total: number }
 interface StatSd  { min: number; max: number; mean: number; sd: number; total: number }
 ```
 
-Definiciones operativas (todas se calculan sobre las instancias del elemento que **completaron** processing en la replicación, salvo que se indique otra cosa; los casos aún en curso al cortar la corrida no contribuyen a `processing`/`resourceWait`/`offHoursWait` pero sí incrementan `started`):
+Operative definitions (all computed over the element's instances that **completed** processing in the replication, unless stated otherwise; cases still in flight when the run is cut off do not contribute to `processing`/`resourceWait`/`offHoursWait` but do increment `started`):
 
-- **`started`** — número de tokens/instancias que llegaron a habilitar el elemento (evento `enabledAt` del event log, sección 7) en la replicación. Para un `task`, equivale a "Instances/Tokens started" de Bizagi.
-- **`completed`** — número de tokens/instancias que terminaron de procesarse en el elemento (evento `endedAt`). Un caso en vuelo al momento de parar la corrida cuenta en `started` pero no en `completed` (mismo criterio que Bizagi, ver sección 6 del documento de estructura: "Casos en vuelo al parar cuentan como started, no completed").
-- **`processing.{min,max,mean,total}`** — estadísticas del tiempo abierto efectivamente trabajado por el elemento, sin espera de recurso ni de calendario. Por R-CAL-8 se obtiene de cada fila como `endedAt − enabledAt − resourceWait − offHoursWait`; en ausencia de calendarios se reduce a `endedAt − startedAt`. `mean = total / completed`. Fórmula: para el conjunto `P` de duraciones de processing completadas, `min = min(P)`, `max = max(P)`, `total = Σ P`, `mean = total / |P|`. *(prueba: LILA-028)*
-- **`resourceWait.{min,max,mean,sd,total}`** — estadísticas de `startedAt − enabledAt − offHoursWait[enabledAt, startedAt]`: tiempo abierto en que la instancia esperó exclusivamente a que un recurso quedara disponible (R-REC-8). `sd` es la desviación estándar muestral (`n−1` en el denominador) del mismo conjunto. Si el elemento no requiere recursos (`resources` vacío en el escenario), toda instancia tiene `resourceWait = 0` — degradación de capacidad infinita (ADR-016 y sección 6). *(prueba: LILA-028)*
-- **`offHoursWait.{min,max,mean,sd,total}`** — estadísticas del tiempo cerrado dentro de todo el intervalo `[enabledAt, endedAt]`, incluido tanto el cierre antes de arrancar como las pausas durante el procesamiento (R-CAL-7). Se acumula por separado de `resourceWait`; si el elemento usa calendario 24×7 (default sin calendario asignado), siempre vale 0. *(prueba de agregación: LILA-028; semántica de calendario: LILA-041)*
-- **`queueLength.{mean,max}`** — longitud de la cola de instancias esperando el elemento. Cada instancia de actividad (no cada fila: una AND con dos pools aporta **una** sola vez) contribuye el intervalo **semiabierto** `[enabledAt, startedAt)`, o `[enabledAt, observedUntil)` si seguía en cola al cortar. `mean` es la integral de la longitud instantánea sobre la ventana estadística dividida entre su duración (`statisticsDuration`, es decir la corrida menos el `warmup`, ver sección 8); `max` es el máximo instantáneo. Consecuencias de que el intervalo sea semiabierto: una espera de duración cero nunca forma cola (sin recursos, `queueLength = {mean: 0, max: 0}` para todo elemento, R-DEG-1), y la instancia que sale de la cola en el mismo instante en que otra entra no se cuentan juntas. *(prueba: LILA-036)*
-- **`fixedCostTotal`** — `elements[id].fixedCost × completed` (costo fijo por token completado, definido en el escenario; ver `SCENARIO_FORMAT.md`). Se obtiene como `Σ row.elementCost`, nunca `Σ row.cost` (R-COST-4).
+- **`started`** — number of tokens/instances that reached and enabled the element (the event log's `enabledAt` event, section 7) in the replication. For a `task`, it corresponds to Bizagi Modeler's "Instances/Tokens started".
+- **`completed`** — number of tokens/instances that finished processing at the element (the `endedAt` event). A case in flight when the run stops counts toward `started` but not `completed` (the same criterion as Bizagi Modeler, see section 6 of the structure document: "Cases in flight when stopping count as started, not completed").
+- **`processing.{min,max,mean,total}`** — statistics of the open time actually worked by the element, excluding resource wait and calendar wait. By R-CAL-8 it is obtained from each row as `endedAt − enabledAt − resourceWait − offHoursWait`; in the absence of calendars it reduces to `endedAt − startedAt`. `mean = total / completed`. Formula: for the set `P` of completed processing durations, `min = min(P)`, `max = max(P)`, `total = Σ P`, `mean = total / |P|`. *(test: LILA-028)*
+- **`resourceWait.{min,max,mean,sd,total}`** — statistics of `startedAt − enabledAt − offHoursWait[enabledAt, startedAt]`: open time during which the instance waited exclusively for a resource to become available (R-REC-8). `sd` is the sample standard deviation (`n−1` in the denominator) of the same set. If the element requires no resources (empty `resources` in the scenario), every instance has `resourceWait = 0` — the infinite-capacity degradation (ADR-016 and section 6). *(test: LILA-028)*
+- **`offHoursWait.{min,max,mean,sd,total}`** — statistics of closed time within the whole `[enabledAt, endedAt]` interval, including both the closure before starting and pauses during processing (R-CAL-7). It accumulates separately from `resourceWait`; if the element uses a 24×7 calendar (the default with no calendar assigned), it is always 0. *(aggregation test: LILA-028; calendar semantics: LILA-041)*
+- **`queueLength.{mean,max}`** — length of the queue of instances waiting for the element. Each activity instance (not each row: an AND with two pools contributes **only once**) contributes the **half-open** interval `[enabledAt, startedAt)`, or `[enabledAt, observedUntil)` if it was still queued when the run was cut off. `mean` is the integral of the instantaneous length over the statistics window divided by its duration (`statisticsDuration`, i.e. the run minus `warmup`, see section 8); `max` is the instantaneous maximum. Consequences of the interval being half-open: a wait of zero duration never forms a queue (with no resources, `queueLength = {mean: 0, max: 0}` for every element, R-DEG-1), and the instance that leaves the queue at the same instant another enters are not counted together. *(test: LILA-036)*
+- **`fixedCostTotal`** — `elements[id].fixedCost × completed` (fixed cost per completed token, defined in the scenario; see `SCENARIO_FORMAT.md`). It is obtained as `Σ row.elementCost`, never `Σ row.cost` (R-COST-4).
 
-Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fuera de horario separada de espera por recurso — Bizagi ✗ / Lila ✓"); es una métrica extra de Lila.
+Bizagi Modeler does not distinguish `resourceWait` from `offHoursWait` (see section 3: "Off-hours wait kept separate from resource wait — Bizagi Modeler ✗ / Lila ✓"); it is an extra Lila metric.
 
-### Lifecycle parcial: qué entra en los agregados *(decisión de LILA-036)*
+### Partial lifecycle: what goes into the aggregates *(decision from LILA-036)*
 
-Las filas `terminated` e `inFlight` conservan en el log crudo la espera **observada** hasta
-`observedUntil` (sección 7). En los agregados el criterio es uniforme y no depende del elemento:
+`terminated` and `inFlight` rows keep, in the raw log, the wait **observed** up to
+`observedUntil` (section 7). In the aggregates the criterion is uniform and does not depend on
+the element:
 
-- Las estadísticas **por instancia** — `processing`, `resourceWait`, `offHoursWait` de esta
-  sección y `process.waitTime` de la sección 5 — agregan **solo** instancias con
-  `status = "completed"`. Una espera cortada por `terminate` o por el fin de la corrida es una
-  observación **censurada**: incluirla sesgaría la media a la baja y mezclaría dos poblaciones.
-  Se sigue así la regla que LILA-033 ya aplicaba (filas raw completas, agregado solo de
-  completadas).
-- Las **integrales de estado y los costos** — `queueLength` de esta sección, `busyTime`,
-  `utilization` y los costos de la sección 4, y `process.totalCost` de la sección 5 — **sí**
-  incluyen el lifecycle parcial: miden ocupación realmente observada dentro de la ventana, y
-  R-COST-4 exige que el costo ya incurrido por un caso en vuelo no desaparezca del total.
+- The **per-instance** statistics — this section's `processing`, `resourceWait`, `offHoursWait`,
+  and section 5's `process.waitTime` — aggregate **only** instances with `status = "completed"`.
+  A wait cut short by `terminate` or by the end of the run is a **censored** observation:
+  including it would bias the mean downward and mix two populations. This follows the rule
+  LILA-033 already applied (complete raw rows, aggregate only the completed ones).
+- The **state integrals and costs** — this section's `queueLength`, section 4's `busyTime`,
+  `utilization`, and costs, and section 5's `process.totalCost` — **do** include the partial
+  lifecycle: they measure occupancy actually observed within the window, and R-COST-4 requires
+  that cost already incurred by an in-flight case not vanish from the total.
 
-Consecuencia deliberada y probada: un elemento cuya espera es **enteramente** censurada tiene
-`resourceWait.total = 0` y por tanto **no aparece** en `bottlenecks` (sección 6), aunque su
-`queueLength` y la utilización de su pool sí lo delaten. *(prueba: LILA-036)*
+Deliberate and tested consequence: an element whose wait is **entirely** censored has
+`resourceWait.total = 0` and therefore **does not appear** in `bottlenecks` (section 6), even
+though its `queueLength` and its pool's utilization do give it away. *(test: LILA-036)*
 
 ---
 
-## 3. Métricas por flujo (`flows[id]`)
+## 3. Per-flow metrics (`flows[id]`)
 
 ```ts
 interface FlowMetrics {
@@ -97,46 +99,46 @@ interface FlowMetrics {
 }
 ```
 
-- **`count`** — número de tokens que atravesaron el sequence flow en la replicación. Es el "nivel 1" de Bizagi (Process Validation): sirve para verificar qué caminos se activaron y en qué proporción, comparable contra la probabilidad configurada en el escenario (`elements[flowId].probability`).
+- **`count`** — number of tokens that traversed the sequence flow in the replication. It is Bizagi Modeler's "level 1" (Process Validation): it lets you check which paths were activated and in what proportion, comparable against the probability configured in the scenario (`elements[flowId].probability`).
 
 ---
 
-## 4. Métricas por recurso (`resources[id]`)
+## 4. Per-resource metrics (`resources[id]`)
 
 ```ts
 interface ResourceMetrics {
-  utilization: number;   // fracción >= 0; puede superar 1, ver R-CAL-9
-  busyTime: number;      // segundos
+  utilization: number;   // fraction >= 0; can exceed 1, see R-CAL-9
+  busyTime: number;      // seconds
   fixedCost: number;
   unitCost: number;
   totalCost: number;
 }
 ```
 
-- **`busyTime`** — segundos-unidad que el pool estuvo ocupado atendiendo instancias, sumados sobre las unidades ocupadas: si `capacity = 3` y las tres unidades trabajan simultáneamente 10 s, `busyTime` acumula 30 s. Se agrega **por fila** del event log (ADR-025): cada fila **de la cohorte medida** con `resourceId` y `startedAt` no nulos aporta `resourceQuantity ×` el tiempo **abierto** de `[max(startedAt, warmup), min(endedAt ?? observedUntil, t_stop)]` según el calendario efectivo de esa actividad —el mismo con el que se calculó su `resourceCost`, de ahí que la identidad de R-COST-4 siga cuadrando—; sin calendarios ese tiempo abierto es el intervalo entero. Una unidad reservada mientras la tarea está pausada fuera de horario no acumula `busyTime` (R-CAL-6). Una fila sentinel, o una que nunca llegó a arrancar, aporta 0. Las filas de casos iniciados antes del `warmup` no aportan aunque su ocupación caiga dentro de la ventana: por R-ARR-7 esos casos existen y retrasan a los demás, pero no entran en ninguna integral (ver sección 8).
-- **`utilization`** — `busyTime / (capacity × horas disponibles según calendario del recurso durante la corrida)`. Fórmula (ADR-016, única definición que hace comparables un recurso 24×7 y uno con calendario restringido): `utilization = busyTime / (capacity × availableTime)`, donde `availableTime` es el total de segundos que el calendario del recurso estuvo abierto entre `run.start` y el fin de la corrida (o `run.start + run.duration`, lo que aplique). Si el recurso no tiene calendario asignado, `availableTime` es la duración completa de la corrida (24×7). En nivel 3 (sin calendarios, M2) `availableTime = statisticsDuration`, es decir la ventana `[warmup, t_stop]`; los calendarios de M3 solo cambian ese denominador (R-CAL-9). Es una fracción `≥ 0`, que la CLI imprime como porcentaje (columna Bizagi `Utilization %`): puede superar 1 cuando trabajo iniciado con mayor capacidad continúa después de una bajada sin apropiación. No se aplica clamp; `W-UTILIZACION-MAYOR-UNO` hace visible el caso. Con `capacity × availableTime = 0` vale 0, no `NaN`. La métrica es atribuible a la cohorte posterior al `warmup`: trabajo anterior no aporta `busyTime`, aunque siga ocupando físicamente el pool, y el denominador conserva toda la capacidad de la ventana. **Límite conocido** (QA de LILA-041, abierto para LILA-044): el denominador mira solo el calendario **del pool**, así que un pool sin calendario que solo participa en tareas cuyo calendario efectivo sí lo tiene aparece diluido contra el reloj de pared. En `examples/pedido` el pool `horno` ocupa el 99,9 % de las horas en que su tarea puede correr y la tabla imprime 27,5 %.
-- **`fixedCost`** — `resources[id].fixedCost × usos`, donde *usos* es `Σ resourceQuantity` sobre las filas que llegaron a ocupar el pool (una tarea que ocupa 2 unidades son 2 usos, R-COST-2).
-- **`unitCost`** — `costPerHour del recurso × (busyTime / 3600)` (costo por las horas efectivamente ocupadas).
-- **`totalCost`** — `fixedCost + unitCost`. Identidad verificable contra el log:
-  `Σ resources[*].totalCost = Σ row.resourceCost` sobre todas las filas de la ventana, es decir
-  `Σ fijo × usos + Σ porHora × horas ocupadas` (R-COST-4). *(prueba: LILA-036)*
+- **`busyTime`** — unit-seconds the pool spent busy serving instances, summed over the units occupied: if `capacity = 3` and all three units work simultaneously for 10 s, `busyTime` accumulates 30 s. It is aggregated **per row** of the event log (ADR-025): each row **in the measured cohort** with non-null `resourceId` and `startedAt` contributes `resourceQuantity ×` the **open** time of `[max(startedAt, warmup), min(endedAt ?? observedUntil, t_stop)]` according to that activity's effective calendar — the same one used to compute its `resourceCost`, which is why R-COST-4's identity still holds — with no calendars that open time is the whole interval. A unit reserved while the task is paused off-hours does not accumulate `busyTime` (R-CAL-6). A sentinel row, or one that never got to start, contributes 0. Rows for cases started before `warmup` contribute nothing even if their occupancy falls within the window: by R-ARR-7 those cases exist and delay the others, but they enter no integral (see section 8).
+- **`utilization`** — `busyTime / (capacity × hours available according to the resource's calendar during the run)`. Formula (ADR-016, the only definition that makes a 24×7 resource comparable to one with a restricted calendar): `utilization = busyTime / (capacity × availableTime)`, where `availableTime` is the total seconds the resource's calendar was open between `run.start` and the end of the run (or `run.start + run.duration`, whichever applies). If the resource has no calendar assigned, `availableTime` is the run's full duration (24×7). At level 3 (no calendars, M2) `availableTime = statisticsDuration`, i.e. the window `[warmup, t_stop]`; M3's calendars only change that denominator (R-CAL-9). It is a fraction `≥ 0`, which the CLI prints as a percentage (Bizagi Modeler column `Utilization %`): it can exceed 1 when work started with higher capacity continues after a drop with no preemption. No clamp is applied; `W-UTILIZACION-MAYOR-UNO` makes the case visible. With `capacity × availableTime = 0` it is 0, not `NaN`. The metric is attributable to the cohort after `warmup`: earlier work contributes no `busyTime`, even though it still physically occupies the pool, and the denominator keeps the window's full capacity. **Known limitation** (QA from LILA-041, open for LILA-044): the denominator only looks at the **pool's** calendar, so a pool with no calendar that only participates in tasks whose effective calendar does have one appears diluted against wall-clock time. In `examples/pedido` the `horno` pool is busy 99.9% of the hours its task can run, and the table prints 27.5%.
+- **`fixedCost`** — `resources[id].fixedCost × uses`, where *uses* is `Σ resourceQuantity` over the rows that came to occupy the pool (a task occupying 2 units counts as 2 uses, R-COST-2).
+- **`unitCost`** — `resource's costPerHour × (busyTime / 3600)` (cost for the hours actually occupied).
+- **`totalCost`** — `fixedCost + unitCost`. An identity verifiable against the log:
+  `Σ resources[*].totalCost = Σ row.resourceCost` over every row in the window, i.e.
+  `Σ fixed × uses + Σ perHour × busy hours` (R-COST-4). *(test: LILA-036)*
 
-Todo pool declarado en `scenario.resources` aparece en el mapa **aunque ningún elemento lo use**,
-con `utilization = 0` y `busyTime`, `fixedCost`, `unitCost` y `totalCost` en cero — es lo mismo que
-hace la tabla *Resources* de Bizagi, que lista todo recurso declarado aunque su utilización sea
-0 % (sección 3), y es lo que permite que todas las replicaciones compartan el mismo conjunto de
-claves de KPI (sección 8): si un pool ocioso desapareciera del mapa en unas replicaciones y no en
-otras, `summarizeKpis` lo rechazaría con `E-KPI-INCONSISTENTE`.
+Every pool declared in `scenario.resources` appears in the map **even if no element uses it**,
+with `utilization = 0` and `busyTime`, `fixedCost`, `unitCost`, and `totalCost` at zero — this is
+the same thing Bizagi Modeler's *Resources* table does, listing every declared resource even at
+0% utilization (section 3), and it is what lets every replication share the same set of KPI keys
+(section 8): if an idle pool disappeared from the map in some replications and not others,
+`summarizeKpis` would reject it with `E-KPI-INCONSISTENTE`.
 
-Declarar un pool ocioso **no** es el caso de degradación: R-DEG-1 habla de un escenario **sin**
-sección `resources`, y solo entonces el mapa queda `{}` y `bottlenecks` queda `[]`, exactamente
-como en M1 — la degradación no cambia la forma del JSON (prueba LILA-039). Un escenario que
-declara pools sin usarlos sí cambia `resources`, y nada más del resultado.
-*(prueba: LILA-036, LILA-034)*
+Declaring an idle pool is **not** the degradation case: R-DEG-1 refers to a scenario **without** a
+`resources` section, and only then does the map end up `{}` and `bottlenecks` end up `[]`, exactly
+as in M1 — the degradation does not change the JSON's shape (test LILA-039). A scenario that
+declares pools without using them does change `resources`, and nothing else in the result.
+*(test: LILA-036, LILA-034)*
 
 ---
 
-## 5. Métricas por proceso (`process`)
+## 5. Per-process metrics (`process`)
 
 ```ts
 interface ProcessMetrics {
@@ -156,16 +158,16 @@ interface Percentiles {
 }
 ```
 
-- **`started`** — número de casos que entraron por cualquier start event del proceso.
-- **`completed`** — número de casos que llegaron a un end event (o fueron consumidos por un `terminate`).
-- **`inFlight`** — `started − completed` al momento de cortar la corrida (casos que ni completaron ni fueron descartados).
-- **`cycleTime.*`** — estadísticas del tiempo total de vida de un caso (`caseEndedAt − caseEnabledAt`, sumando todos los elementos por los que pasó); `p50`/`p90`/`p95` son los percentiles 50, 90 y 95 empíricos (interpolación lineal sobre la muestra ordenada) del mismo conjunto de duraciones. Solo se calculan sobre casos **completados**.
-- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso, y solo sobre casos **completados**. Una fila `terminated`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada: es la regla de lifecycle parcial fijada por LILA-036 (sección 2). *(prueba: LILA-036)*
-- **`throughputPerHour`** — `completed / (duración efectiva de la corrida en horas)`, donde la duración efectiva excluye el `warmup` (ver sección 8).
-- **`costPerCase`** — media de `Σ row.cost` sobre los casos completados. Los costos de casos en vuelo sí forman parte de `totalCost`, pero no de esta media (R-COST-4). *(prueba: LILA-028)*
-- **`totalCost`** — suma de `fixedCostTotal` de todos los elementos más `totalCost` de todos los recursos (costo total del escenario en la replicación).
+- **`started`** — number of cases that entered through any start event of the process.
+- **`completed`** — number of cases that reached an end event (or were consumed by a `terminate`).
+- **`inFlight`** — `started − completed` at the moment the run was cut off (cases that neither completed nor were discarded).
+- **`cycleTime.*`** — statistics of a case's total lifetime (`caseEndedAt − caseEnabledAt`, summing every element it passed through); `p50`/`p90`/`p95` are the empirical 50th, 90th, and 95th percentiles (linear interpolation over the sorted sample) of the same set of durations. Computed only over **completed** cases.
+- **`waitTime.*`** — the same statistics and percentiles, over the sum of `resourceWait + offHoursWait` of the activities that completed processing in the case, and only over **completed** cases. A `terminated`/`inFlight` row does not enter this metric even though its raw lifecycle keeps the observed wait: this is the partial-lifecycle rule set by LILA-036 (section 2). *(test: LILA-036)*
+- **`throughputPerHour`** — `completed / (effective run duration in hours)`, where the effective duration excludes `warmup` (see section 8).
+- **`costPerCase`** — average of `Σ row.cost` over completed cases. In-flight cases' costs are part of `totalCost`, but not of this average (R-COST-4). *(test: LILA-028)*
+- **`totalCost`** — sum of `fixedCostTotal` across every element plus `totalCost` across every resource (the scenario's total cost in the replication).
 
-`cycleTime.mean` "ponderado por las probabilidades de gateways" es justamente lo que produce agregar sobre el conjunto real de casos simulados (no hace falta ponderar aparte): cada camino aparece en la muestra en proporción a cuántas veces se tomó.
+`cycleTime.mean` "weighted by gateway probabilities" is exactly what aggregating over the real set of simulated cases already produces (no separate weighting is needed): each path appears in the sample in proportion to how many times it was taken.
 
 ---
 
@@ -174,193 +176,194 @@ interface Percentiles {
 ```ts
 interface BottleneckEntry {
   elementId: string;
-  resourceWaitTotal: number;  // segundos, = elements[elementId].resourceWait.total
-  utilization: number;        // del recurso principal asignado al elemento, >= 0
+  resourceWaitTotal: number;  // seconds, = elements[elementId].resourceWait.total
+  utilization: number;        // of the main resource assigned to the element, >= 0
 }
 ```
 
-Ranking de elementos ordenado descendentemente por `elements[elementId].resourceWait.total` (el elemento donde más tiempo total se perdió esperando recurso). Desempate: mayor `utilization` primero (del recurso — o, si el elemento usa varios pools, el mayor `utilization` entre ellos); si también empata, `elementId` ascendente, para que el orden sea total y determinista. Elementos con `resourceWait.total = 0` no aparecen en el ranking. Es una métrica que Bizagi no ofrece (sección 3: "Ranking de cuellos de botella — Bizagi ✗ / Lila ✓").
+Ranking of elements sorted in descending order by `elements[elementId].resourceWait.total` (the element where the most total time was lost waiting for a resource). Tiebreak: higher `utilization` first (of the resource — or, if the element uses several pools, the highest `utilization` among them); if still tied, `elementId` ascending, so the order is total and deterministic. Elements with `resourceWait.total = 0` do not appear in the ranking. This is a metric Bizagi Modeler does not offer (section 3: "Bottleneck ranking — Bizagi Modeler ✗ / Lila ✓").
 
-Con varias replicaciones, `resourceWaitTotal` es la media incondicional: una réplica donde el
-elemento no espera aporta 0, igual que en `elements[id].resourceWait.total`. `utilization` es la
-media condicional sobre las réplicas donde el elemento sí aparece en `bottlenecks`; su ausencia no
-es una observación de utilización cero y no reduce artificialmente el valor publicado. Promediar
-así no reordena el ranking, que lo decide `resourceWaitTotal`: `utilization` solo desempata.
-*(prueba: LILA-201, sobre `examples/pedido`)*
+With multiple replications, `resourceWaitTotal` is the unconditional mean: a replication where the
+element does not wait contributes 0, the same as in `elements[id].resourceWait.total`.
+`utilization` is the conditional mean over the replications where the element does appear in
+`bottlenecks`; its absence is not an observation of zero utilization and does not artificially
+lower the published value. Averaging this way does not reorder the ranking, which is decided by
+`resourceWaitTotal`: `utilization` only breaks ties.
+*(test: LILA-201, on `examples/pedido`)*
 
-Los pools de un elemento se leen del **event log** (`resourceId` de sus filas), no del escenario:
-cada fila ya trae el pool efectivamente asignado, así que el ranking vale igual para un solo pool,
-para `selection: "and"` y para la selección `"or"` de LILA-035 sin ningún caso especial.
-*(prueba: LILA-036)*
+An element's pools are read from the **event log** (the `resourceId` of its rows), not from the
+scenario: each row already carries the pool actually assigned, so the ranking holds equally for a
+single pool, for `selection: "and"`, and for LILA-035's `"or"` selection, with no special case.
+*(test: LILA-036)*
 
 ---
 
 ## 7. Event log
 
-Filas planas, una por **asignación de pool** por instancia de actividad. Las filas de una misma
-ocurrencia se agrupan por `activityInstanceId`; una actividad sin recurso conserva una fila
-sentinel. Se emiten por streaming
-(`opts.onEvent`) para que la CLI escriba a CSV y la web pueda agregar/muestrear sin cargar todo en
-memoria (ver sección 6 del documento de estructura: hasta 6 M filas en corridas grandes).
-`opts.log` vale `true` por defecto; `log: false` suprime el callback incluso si se proporcionó
-`onEvent`, pero no cambia ninguna métrica. *(prueba: LILA-029)*
+Flat rows, one per **pool assignment** per activity instance. Rows from the same occurrence are
+grouped by `activityInstanceId`; an activity with no resource keeps a sentinel row. They are
+emitted via streaming
+(`opts.onEvent`) so the CLI can write to CSV and the web app can aggregate/sample without loading
+everything into memory (see section 6 of the structure document: up to 6M rows in large runs).
+`opts.log` is `true` by default; `log: false` suppresses the callback even if `onEvent` was
+provided, but does not change any metric. *(test: LILA-029)*
 
-### Quién se queda con las filas: los tres modos de `result.log`
+### Who ends up with the rows: `result.log`'s three modes
 
-`simulate` nunca entrega las mismas filas dos veces. Qué contiene `result.log` depende solo de las
-opciones, y en ningún caso cambia una métrica ni el orden de las filas *(prueba: LILA-037)*:
+`simulate` never delivers the same rows twice. What `result.log` contains depends only on the
+options, and in no case does it change a metric or the row order *(test: LILA-037)*:
 
-| Opciones | `onEvent` | `result.log` |
+| Options | `onEvent` | `result.log` |
 |---|---|---|
-| ninguna (`log` ausente) — **modo retenido** | no se llama | el log completo de la corrida, en orden de simulación y de replicación, incluidas las filas anteriores al `warmup` y las de la réplica parcial de una corrida cancelada |
-| `onEvent` presente — **modo streaming** | una llamada por fila | **ausente**: el consumidor ya las recibió y retenerlas duplicaría hasta 6 M de objetos |
-| `log: false` — **desactivado** | no se llama, aunque se haya pasado | **ausente** |
+| none (`log` absent) — **retained mode** | not called | the run's complete log, in simulation and replication order, including rows before `warmup` and those of the partial replication of a cancelled run |
+| `onEvent` present — **streaming mode** | one call per row | **absent**: the consumer already received them, and retaining them would duplicate up to 6M objects |
+| `log: false` — **disabled** | not called, even if it was passed | **absent** |
 
-`lila run` usa siempre uno de los dos modos sin retención: con `--csv` pasa `onEvent` y escribe
-cada fila a `log.csv` según llega; sin `--csv` pasa `log: false`, de modo que el `RunResult` de
-`--json` nunca engorda con el event log. Solo el modo retenido acota su memoria por el tamaño del
-log; los otros dos la acotan por el pico de **una** replicación.
+`lila run` always uses one of the two non-retaining modes: with `--csv` it passes `onEvent` and
+writes each row to `log.csv` as it arrives; without `--csv` it passes `log: false`, so `--json`'s
+`RunResult` never bloats with the event log. Only the retained mode bounds its memory by the log's
+size; the other two bound it by the peak of **one** replication.
 
-| Columna | Tipo | Unidad | Definición |
+| Column | Type | Unit | Definition |
 |---|---|---|---|
-| `replication` | integer | — | Índice de la replicación, `0..scenario.run.replications-1`. |
-| `caseId` | string | — | Identificador del caso (instancia de proceso), único dentro de la replicación. |
-| `activityInstanceId` | string | — | Identificador opaco y único de la ocurrencia de tarea/timer dentro de la replicación, derivado de un contador; agrupa sus asignaciones. |
-| `elementId` | string | — | `id` BPMN del elemento (nunca el nombre). |
-| `resourceId` | string \| null | — | `id` del pool efectivamente asignado; `null` en la sentinel de una actividad sin recurso o que seguía esperando. |
-| `allocationIndex` | integer \| null | — | Posición de la asignación en el array `resources` del elemento; `null` para sentinel. |
-| `resourceQuantity` | integer \| null | unidades | Cantidad ocupada del pool; `null` para el sentinel. |
-| `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
-| `enabledAt` | number | segundos desde `run.start` | Instante en que el token llegó al elemento y quedó habilitado para empezar. |
-| `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` si la actividad se cerró todavía en cola. Nunca es posterior a `observedUntil`: una concesión que cae en tiempo cerrado apunta a la siguiente apertura, y si esa apertura queda más allá del corte de la corrida la fila informa el corte, no un futuro. |
-| `endedAt` | number \| null | segundos desde `run.start` | Instante en que terminó normalmente; solo existe con `status = "completed"`. |
-| `observedUntil` | number | segundos desde `run.start` | `endedAt` al completar; instante de `terminate`, cancelación o parada para lifecycle parcial. |
-| `resourceWait` | number | segundos | Porción de la espera atribuible a falta de recurso; si `startedAt = null`, se observa hasta `observedUntil`. No incluye tiempo de calendario cerrado. |
-| `offHoursWait` | number | segundos | Tiempo cerrado en `[enabledAt, endedAt ?? observedUntil]`. Para completadas cumple `endedAt − enabledAt = resourceWait + offHoursWait + processing` (R-CAL-7/8). *(prueba de la identidad: LILA-028)* |
-| `elementCost` | number | `run.currency` | Fijo del elemento, cargado una sola vez al completar: primera asignación según el escenario o sentinel; 0 en filas adicionales/parciales. |
-| `resourceCost` | number | `run.currency` | Fijo y costo por tiempo ocupado de esta asignación; 0 si nunca arrancó. |
-| `cost` | number | `run.currency` | Identidad exacta `elementCost + resourceCost`. |
+| `replication` | integer | — | Index of the replication, `0..scenario.run.replications-1`. |
+| `caseId` | string | — | Identifier of the case (process instance), unique within the replication. |
+| `activityInstanceId` | string | — | Opaque, unique identifier of the task/timer occurrence within the replication, derived from a counter; groups its assignments. |
+| `elementId` | string | — | BPMN `id` of the element (never the name). |
+| `resourceId` | string \| null | — | `id` of the pool actually assigned; `null` in the sentinel of an activity with no resource, or one that was still waiting. |
+| `allocationIndex` | integer \| null | — | Position of the assignment in the element's `resources` array; `null` for the sentinel. |
+| `resourceQuantity` | integer \| null | units | Quantity occupied of the pool; `null` for the sentinel. |
+| `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Observable closing reason: normal end, BPMN `terminate`, or stop/cancellation. `startedAt = null` distinguishes an unassigned wait. |
+| `enabledAt` | number | seconds since `run.start` | Instant the token reached the element and became enabled to start. |
+| `startedAt` | number \| null | seconds since `run.start` | Instant processing began; `null` if the activity was closed out while still queued. Never later than `observedUntil`: a grant that falls in closed time points to the next opening, and if that opening lies beyond the run's cutoff, the row reports the cutoff, not a future instant. |
+| `endedAt` | number \| null | seconds since `run.start` | Instant it ended normally; only exists with `status = "completed"`. |
+| `observedUntil` | number | seconds since `run.start` | `endedAt` when completed; the instant of `terminate`, cancellation, or stop for a partial lifecycle. |
+| `resourceWait` | number | seconds | Portion of the wait attributable to lack of a resource; if `startedAt = null`, it is observed up to `observedUntil`. Does not include closed-calendar time. |
+| `offHoursWait` | number | seconds | Closed time in `[enabledAt, endedAt ?? observedUntil]`. For completed rows it satisfies `endedAt − enabledAt = resourceWait + offHoursWait + processing` (R-CAL-7/8). *(identity test: LILA-028)* |
+| `elementCost` | number | `run.currency` | Element's fixed cost, charged once on completion: first assignment according to the scenario, or the sentinel; 0 on additional/partial rows. |
+| `resourceCost` | number | `run.currency` | Fixed cost and busy-time cost of this assignment; 0 if it never started. |
+| `cost` | number | `run.currency` | Exact identity `elementCost + resourceCost`. |
 
-Una tarea con dos pools AND ya iniciada produce dos filas con el mismo `activityInstanceId`; si
-sigue esperando al corte produce una sentinel, no requisitos ficticios. No existe una fila con
-`resources[]`. Esto conserva CSV plano y permite reconstruir ocupación/costos. `fixedCostTotal` se
-obtiene de `Σ elementCost`: el fijo vive solo en la fila canónica de menor `allocationIndex`
-efectivamente emitida. `process.totalCost = Σ cost`; sumar `cost` para el fijo del
-elemento duplicaría recursos y está prohibido. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
+A task with two AND pools, already started, produces two rows with the same
+`activityInstanceId`; if it is still waiting at cutoff it produces a sentinel, not fictitious
+requirements. There is no row with `resources[]`. This keeps the CSV flat and lets
+occupancy/costs be reconstructed. `fixedCostTotal` is obtained from `Σ elementCost`: the fixed
+amount lives only in the canonical row with the lowest `allocationIndex` actually emitted.
+`process.totalCost = Σ cost`; summing `cost` for the element's fixed cost would double resources
+and is forbidden. *(decision: ADR-025; test: LILA-033, LILA-034,
 LILA-036, LILA-037)*
 
-`started`, `completed`, `processing`, `resourceWait`, `offHoursWait`, `waitTime` y el intervalo de
-cola que alimenta `queueLength` se agregan una vez por `(replication, activityInstanceId)`; costos
-y ocupación de pool se agregan por fila.
+`started`, `completed`, `processing`, `resourceWait`, `offHoursWait`, `waitTime`, and the queue
+interval that feeds `queueLength` are aggregated once per `(replication, activityInstanceId)`;
+costs and pool occupancy are aggregated per row.
 
 ### `log.csv`
 
-`log.csv` lleva las **17 columnas** de la tabla anterior, en ese mismo orden y con los mismos
-nombres internos (Bizagi no publica un event log, así que aquí no hay nombres de columna que
-replicar; ver sección 10). Reducir el conjunto rompería a los consumidores v1 (ADR-025).
+`log.csv` carries the **17 columns** of the previous table, in that same order and with the same
+internal names (Bizagi Modeler does not publish an event log, so there are no column names to
+replicate here; see section 10). Trimming the set would break v1 consumers (ADR-025).
 
-Al exportar (CSV de la CLI, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` se derivan además a
-timestamps ISO 8601 absolutos (`run.start + segundos`) en tres columnas **añadidas al final**,
-`enabledAtIso`/`startedAtIso`/`endedAtIso`; el CSV en bruto para procesamiento programático
-conserva los segundos relativos, que siguen siendo los valores autoritativos porque el ISO se
-redondea al milisegundo más cercano. Una columna de tiempo nula (el `startedAt` de una fila que nunca arrancó)
-deja también su celda ISO vacía, y un `run.start` ilegible vacía las tres en lugar de abortar el
-archivo. Sin `run.start` el CSV se queda en las 17 columnas.
+When exporting (the CLI's CSV, `toCsv()`), `enabledAt`/`startedAt`/`endedAt` are additionally
+derived into absolute ISO 8601 timestamps (`run.start + seconds`) in three columns **appended at
+the end**, `enabledAtIso`/`startedAtIso`/`endedAtIso`; the raw CSV for programmatic processing
+keeps the relative seconds, which remain the authoritative values because the ISO form is rounded
+to the nearest millisecond. A null time column (the `startedAt` of a row that never started) also
+leaves its ISO cell empty, and an unreadable `run.start` empties all three instead of aborting the
+file. Without `run.start` the CSV stays at the 17 columns.
 
-`lila run --csv` escribe `log.csv` **en streaming**, fila a fila desde `opts.onEvent`, con un búfer
-de 1 MiB y publicación atómica por `rename`: el archivo completo nunca está en memoria y el
-`RunResult` no retiene el log (modo streaming, arriba). *(prueba: LILA-037)*
+`lila run --csv` writes `log.csv` **in streaming**, row by row from `opts.onEvent`, with a 1 MiB
+buffer and atomic publication via `rename`: the complete file is never in memory, and `RunResult`
+does not retain the log (streaming mode, above). *(test: LILA-037)*
 
-El event log, con un mapeo trivial de columnas, es compatible con XES (IEEE 1849) y OCEL 2.0 (ver sección 6 del documento de estructura).
+The event log, with a trivial column mapping, is compatible with XES (IEEE 1849) and OCEL 2.0 (see section 6 of the structure document).
 
 ---
 
-## 8. `replications` / `ci95` y `warmup`
+## 8. `replications` / `ci95` and `warmup`
 
-Cuando `scenario.run.replications > 1`, cada KPI numérico de interés (los de `process`, y opcionalmente los de `elements`/`resources` que la CLI decida imprimir) se resume además entre replicaciones:
+When `scenario.run.replications > 1`, every numeric KPI of interest (those of `process`, and optionally those of `elements`/`resources` that the CLI decides to print) is additionally summarized across replications:
 
 ```ts
 interface ReplicationSummary {
-  count: number;                     // replicaciones completas resumidas; >= 2
-  kpis: Record<string, {             // keyed por nombre de KPI, p. ej. "process.cycleTime.mean"
+  count: number;                     // complete replications summarized; >= 2
+  kpis: Record<string, {             // keyed by KPI name, e.g. "process.cycleTime.mean"
     mean: number;
     sd: number;
-    ci95: [number, number];          // límite inferior y superior del intervalo de confianza al 95 %
+    ci95: [number, number];          // lower and upper bound of the 95% confidence interval
   }>;
 }
 ```
 
-Los segmentos dinámicos de esos nombres (ids BPMN de elementos, flujos y recursos) escapan
-`.` como `\.` antes de formar el path. Así, por ejemplo, el KPI `processing.mean` del elemento
-`Task.A` se llama `elements.Task\.A.processing.mean`, sin colisionar con otros ids válidos.
-Los ids sin punto conservan exactamente los nombres mostrados arriba. *(prueba: LILA-027)*
+The dynamic segments of those names (BPMN ids of elements, flows, and resources) escape `.` as
+`\.` before forming the path. So, for example, the KPI `processing.mean` of element `Task.A` is
+named `elements.Task\.A.processing.mean`, without colliding with other valid ids. Ids with no dot
+keep exactly the names shown above. *(test: LILA-027)*
 
-- **`mean`/`sd`** — media y desviación estándar muestral del KPI a través de las `N` replicaciones (una observación por replicación, no por caso).
-- **`ci95`** — intervalo de confianza al 95 % para la media, `mean ± t(N-1, 0.975) × sd / √N` (t de Student con `N-1` grados de libertad; con `N` grande se aproxima a `1.96 × sd/√N`). Es la métrica que Bizagi solo ofrece desde What-If (sección 3: "Replicaciones — Bizagi ✓ solo en what-if / Lila ✓ siempre, con IC 95 %"); en Lila se calcula siempre que `replications > 1`.
+- **`mean`/`sd`** — sample mean and standard deviation of the KPI across the `N` replications (one observation per replication, not per case).
+- **`ci95`** — 95% confidence interval for the mean, `mean ± t(N-1, 0.975) × sd / √N` (Student's t with `N-1` degrees of freedom; for large `N` it approximates `1.96 × sd/√N`). This is a metric Bizagi Modeler only offers from What-If onward (section 3: "Replications — Bizagi Modeler ✓ what-if only / Lila ✓ always, with a 95% CI"); in Lila it is computed whenever `replications > 1`.
 
-Si `opts.signal.aborted` detiene la corrida, el resultado lleva `cancelled: true` y
-`completedReplications`, que cuenta exclusivamente replicaciones terminadas; la ausencia de
-`cancelled` significa corrida completa. El top-level conserva el trabajo procesado: promedia las
-replicaciones completas y la parcial si existe. `replications`, cuando puede calcularse con al
-menos dos replicaciones completas, excluye siempre la parcial; con menos de dos completas se omite
-para no publicar una desviación o un IC inválidos. Una cancelación entre replicaciones no agrega
-una réplica parcial ficticia. *(prueba: LILA-029)*
+If `opts.signal.aborted` stops the run, the result carries `cancelled: true` and
+`completedReplications`, which counts exclusively finished replications; the absence of
+`cancelled` means a complete run. The top level keeps the processed work: it averages the complete
+replications and the partial one if it exists. `replications`, when it can be computed with at
+least two complete replications, always excludes the partial one; with fewer than two complete
+ones it is omitted so as not to publish an invalid deviation or CI. A cancellation between
+replications does not add a fictitious partial replication. *(test: LILA-029)*
 
-`opts.onProgress`, cuando existe, recibe primero `fraction = 0`, aun si la primera réplica no
-tiene eventos. La fracción es estrictamente monótona y una corrida completa termina en 1; una
-cancelada puede terminar antes. No se instala ningún hook por evento cuando el callback está
-ausente. *(prueba: LILA-029)*
+`opts.onProgress`, when present, first receives `fraction = 0`, even if the first replication has
+no events. The fraction is strictly monotonic, and a complete run ends at 1; a cancelled one may
+end earlier. No per-event hook is installed when the callback is absent. *(test: LILA-029)*
 
-**`warmup`**: `scenario.run.warmup` (segundos desde `run.start`) excluye de **todas** las estadísticas los casos que se **iniciaron** antes de que terminara el warmup. Esos casos siguen ocupando pools, haciendo cola y alterando cuándo arrancan los casos medidos; sus filas igual se emiten, pero la cohorte queda fuera de `process`, `elements`, `resources`, costos y de las integrales de `queueLength`/utilización. Las integrales de cohortes medidas se recortan además a `[warmup, t_stop]`. `throughputPerHour` usa como denominador la duración efectiva de la corrida excluyendo el propio warmup. *(prueba: LILA-027, LILA-033, LILA-036)*
+**`warmup`**: `scenario.run.warmup` (seconds since `run.start`) excludes from **every** statistic the cases that **started** before the warmup ended. Those cases still occupy pools, form queues, and change when the measured cases start; their rows are still emitted, but the cohort stays out of `process`, `elements`, `resources`, costs, and the `queueLength`/utilization integrals. Measured cohorts' integrals are also clipped to `[warmup, t_stop]`. `throughputPerHour` uses the run's effective duration, excluding warmup itself, as the denominator. *(test: LILA-027, LILA-033, LILA-036)*
 
 ---
 
 ## 9. `warnings[]`
 
-Lista de strings, una por condición no fatal detectada durante `resolveScenario`, `validate` o `simulate` que el usuario debe poder ver sin que la corrida se detenga. Ejemplos (no exhaustivo, ver `SEMANTICS.md` para la lista completa de reglas que generan warnings):
+A list of strings, one per non-fatal condition detected during `resolveScenario`, `validate`, or `simulate`, that the user should be able to see without the run stopping. Examples (not exhaustive, see `SEMANTICS.md` for the complete list of rules that generate warnings):
 
-- Probabilidades de un XOR/OR que no suman 1 y se normalizaron.
-- Una clave de `elements` en el escenario que no corresponde a ningún id del IR (sobra, no falta — una clave que falta es error, no warning).
-- Una referencia `lila:*Ref` colgante hacia el catálogo (ver `BPMN_EXTENSION.md`).
-- Uso de una distribución `normal`/`truncatedNormal` con probabilidad de muestrear un valor negativo mayor a 1 % (se trunca a 0, pero se avisa).
-- Utilización mayor que 1 por trabajo que continúa tras una bajada de capacidad sin apropiación (`W-UTILIZACION-MAYOR-UNO`); el valor no se trunca.
-- Un pool cuya cola crece sin estabilizarse: llega más trabajo del que puede despachar y no hay
-  estado estacionario (`W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)`,
-  uno por pool y por corrida). El aviso no cambia ninguna métrica; avisa de que el
-  `resourceWait.total` de las tareas de ese pool y su puesto en `bottlenecks` (sección 6) crecen
-  con la duración de la corrida y no son comparables con los de un pool estable. `X` es el ρ
-  estimado del propio log: la demanda atribuida al pool —solo las esperas en que **él** estuvo
-  lleno, no las que comparte por AND o por OR— entre las unidades que concedió, promediado entre
-  replicaciones. El criterio completo está en `SEMANTICS.md` § 17. *(LILA-191)*
+- Probabilities of an XOR/OR that did not add up to 1 and were normalized.
+- A key in the scenario's `elements` that does not correspond to any IR id (extra, not missing — a missing key is an error, not a warning).
+- A dangling `lila:*Ref` reference into the catalog (see `BPMN_EXTENSION.md`).
+- Use of a `normal`/`truncatedNormal` distribution with more than 1% probability of sampling a negative value (it is truncated to 0, but a warning is issued).
+- Utilization greater than 1 from work that continues after a capacity drop with no preemption (`W-UTILIZACION-MAYOR-UNO`); the value is not truncated.
+- A pool whose queue grows without stabilizing: more work arrives than it can dispatch, and there
+  is no steady state (`W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)`,
+  one per pool per run). The warning changes no metric; it warns that the `resourceWait.total` of
+  that pool's tasks and its place in `bottlenecks` (section 6) grow with the run's duration and
+  are not comparable to those of a stable pool. `X` is the ρ estimated from the log itself: the
+  demand attributed to the pool — only the waits during which **it** was full, not the ones shared
+  through AND or OR — over the units it granted, averaged across replications. The full criterion
+  is in `SEMANTICS.md` § 17. *(LILA-191)*
 
 ---
 
-## 10. Mapeo de nombres de columna: interno → Bizagi
+## 10. Column name mapping: internal → Bizagi Modeler
 
-La CLI (`lila run`) imprime las tablas de `elements` y `resources` con los **nombres de columna de Bizagi**, verificados contra la ayuda oficial (`help.bizagi.com`, niveles 1–4 y `simulation_in_bizagi.htm`; ver `investigacion-2026-09-03/02-bizagi-simulacion.md`), para que un usuario que migra desde Bizagi pueda comparar números sin traducir columnas. Bizagi usa indistintamente "Tokens" e "Instances" según la página de ayuda; se documentan ambas variantes observadas.
+The CLI (`lila run`) prints the `elements` and `resources` tables with **Bizagi Modeler's column names**, verified against its official help (`help.bizagi.com`, levels 1–4 and `simulation_in_bizagi.htm`; see `investigacion-2026-09-03/02-bizagi-simulacion.md`), so that a user migrating from Bizagi Modeler can compare numbers without translating columns. Bizagi Modeler uses "Tokens" and "Instances" interchangeably depending on the help page; both observed variants are documented.
 
-**Un solo mapa de nombres** *(LILA-201)*. Las tablas de abajo viven en el código una sola vez, en
-`COLUMN_LABELS` (`packages/engine/src/format.ts`), con la clave `${ámbito}:${ruta de la métrica}`
-—la misma partición `scope`/`metric` que produce `compare()` (sección 11)—. Lo consumen las cuatro
-superficies que enseñan resultados y ninguna redefine un nombre por su cuenta:
+**A single name map** *(LILA-201)*. The tables below live in the code exactly once, in
+`COLUMN_LABELS` (`packages/engine/src/format.ts`), keyed by `${scope}:${metric path}` — the same
+`scope`/`metric` split that `compare()` produces (section 11). It is consumed by all four
+surfaces that show results, and none of them redefines a name on its own:
 
-| Superficie | Nombre de columna | Unidad de las duraciones |
+| Surface | Column name | Duration unit |
 |---|---|---|
-| `lila run` (tablas de consola) | `columnHeader(scope, metric, unit)` | `baseTimeUnit`, con sufijo ` (min)` / ` (h)` … |
-| `lila compare` (columna *Metric*) | `columnLabel(scope, metric)` | la fila lleva la unidad; el rótulo no |
-| CSV de `csv.ts` (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`) | `columnLabel(scope, metric)` | **segundos** (sección 1), por eso el rótulo va desnudo: `Busy time`, no `Busy time (min)` |
-| `ResultsView` de la web | `columnLabel(...)` + ` (unidad)` en duraciones | `baseTimeUnit`, igual que la CLI |
+| `lila run` (console tables) | `columnHeader(scope, metric, unit)` | `baseTimeUnit`, with suffix ` (min)` / ` (h)` … |
+| `lila compare` (the *Metric* column) | `columnLabel(scope, metric)` | the row carries the unit; the label does not |
+| `csv.ts`'s CSV (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`) | `columnLabel(scope, metric)` | **seconds** (section 1), which is why the label is bare: `Busy time`, not `Busy time (min)` |
+| the web app's `ResultsView` | `columnLabel(...)` + ` (unit)` on durations | `baseTimeUnit`, same as the CLI |
 
-Es decir: el nombre es único y el sufijo de unidad lo añade solo quien convierte a `baseTimeUnit`.
-Una métrica sin nombre en el mapa (`queueLength.mean`, `offHoursWait.*`) conserva su ruta interna
-en vez de recibir un nombre inventado. *(prueba: LILA-201)*
+In other words: the name is unique, and the unit suffix is added only by whoever converts to
+`baseTimeUnit`. A metric with no name in the map (`queueLength.mean`, `offHoursWait.*`) keeps its
+internal path instead of getting a made-up name. *(test: LILA-201)*
 
-### Tabla "Process elements" (niveles 1–4)
+### "Process elements" table (levels 1–4)
 
-| Campo interno (`RunResult.elements[id]`) | Nombre de columna Bizagi |
+| Internal field (`RunResult.elements[id]`) | Bizagi Modeler column name |
 |---|---|
-| `started` | Instances started (también "Tokens started") |
-| `completed` | Instances completed (también "Tokens completed") |
+| `started` | Instances started (also "Tokens started") |
+| `completed` | Instances completed (also "Tokens completed") |
 | `processing.min` | Minimum time |
 | `processing.max` | Maximum time |
 | `processing.mean` | Average time |
@@ -372,39 +375,37 @@ en vez de recibir un nombre inventado. *(prueba: LILA-201)*
 | `resourceWait.total` | Total time (waiting for resource) |
 | `fixedCostTotal` | Total fixed cost |
 
-La consola de `lila run`, `elements.csv` y la pestaña "Elementos del proceso" de la web imprimen
-esta tabla **completa**, en este orden y con las columnas `Id`, `Name` y `Type` delante
-*(LILA-201: hasta entonces la consola se quedaba en `Total time` y perdía el grupo "waiting for
-resource" y el costo fijo, que el CSV y la web sí traían)*. `lila compare` y la vista de
-comparación no son tablas de resultados sino de KPI, y muestran su subconjunto curado (sección 11)
-con estos mismos nombres.
+`lila run`'s console, `elements.csv`, and the web app's "Process elements" tab print this table
+**in full**, in this order and with the `Id`, `Name`, and `Type` columns in front *(LILA-201: until
+then the console stopped at `Total time` and lost the "waiting for resource" group and the fixed
+cost, which the CSV and the web app did carry)*. `lila compare` and the comparison view are not
+results tables but KPI tables, and show their curated subset (section 11) with these same names.
 
-`offHoursWait`, `queueLength`, `resources[id].busyTime`, los percentiles de `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase`, `process.totalCost` y `bottlenecks` **no tienen columna equivalente en Bizagi** — son las métricas extra listadas en la sección 3 del documento de estructura ("Extras que Bizagi no da"); la CLI las imprime en tablas adicionales sin intentar nombrarlas "a la Bizagi", pero sus nombres viven en el mismo mapa para que consola, CSV y web no los escriban distinto.
+`offHoursWait`, `queueLength`, `resources[id].busyTime`, the percentiles of `process.cycleTime`/`process.waitTime`, `throughputPerHour`, `costPerCase`, `process.totalCost`, and `bottlenecks` **have no equivalent column in Bizagi Modeler** — they are the extra metrics listed in section 3 of the structure document ("Extras Bizagi Modeler does not give"); the CLI prints them in additional tables without trying to name them "the Bizagi way", but their names live in the same map so console, CSV, and web app never write them differently.
 
-### Tabla "Resources" (niveles 3–4)
+### "Resources" table (levels 3–4)
 
-| Campo interno (`RunResult.resources[id]`) | Nombre de columna Bizagi |
+| Internal field (`RunResult.resources[id]`) | Bizagi Modeler column name |
 |---|---|
 | `utilization` | Utilization (%) |
-| `busyTime` | — (sin columna en Bizagi; extra de Lila, en segundos-unidad) |
+| `busyTime` | — (no column in Bizagi Modeler; a Lila extra, in unit-seconds) |
 | `fixedCost` | Fixed cost |
 | `unitCost` | Unit cost |
 | `totalCost` | Total cost |
 
-La tabla lista **una fila por pool declarado**, también los que quedaron con 0 % de utilización
-(sección 4), igual que Bizagi.
+The table lists **one row per declared pool**, including those left at 0% utilization (section 4), just like Bizagi Modeler.
 
-### Tabla "Sequence flows" (nivel 1)
+### "Sequence flows" table (level 1)
 
-| Campo interno (`RunResult.flows[id]`) | Nombre de columna Bizagi |
+| Internal field (`RunResult.flows[id]`) | Bizagi Modeler column name |
 |---|---|
-| `count` | Instances/Tokens completed (para el sequence flow) |
+| `count` | Instances/Tokens completed (for the sequence flow) |
 
-### Tabla "Process summary" / "Proceso" (extras de Lila)
+### "Process summary" / "Process" table (Lila extras)
 
-Bizagi no publica esta tabla; los nombres son de Lila y salen del mismo mapa.
+Bizagi Modeler does not publish this table; the names are Lila's own and come from the same map.
 
-| Campo interno (`RunResult.process`) | Nombre de columna |
+| Internal field (`RunResult.process`) | Column name |
 |---|---|
 | `started` | Instances started |
 | `completed` | Instances completed |
@@ -417,86 +418,87 @@ Bizagi no publica esta tabla; los nombres son de Lila y salen del mismo mapa.
 | `costPerCase` | Cost per case |
 | `totalCost` | Total cost |
 
-`process.csv` y la pestaña "Proceso" de la web llevan las **20** columnas. La consola de `lila run`
-imprime un subconjunto —`started`, `completed`, `inFlight`, la media y los percentiles p50/p90/p95
-de `cycleTime` y de `waitTime`, `throughputPerHour`, `costPerCase` y `totalCost`— porque las 20 no
-caben legibles en una fila de terminal; los mínimos, máximos y desviaciones siguen íntegros en
-`--json` y en el CSV. *(LILA-201: antes la consola llamaba `Average cycle`, `p50` y
-`Throughput/hour` a lo que el CSV y la web ya llamaban `Cycle time average`, `Cycle time p50` y
-`Throughput per hour`, y no imprimía ni `totalCost` ni la espera.)*
+`process.csv` and the web app's "Process" tab carry all **20** columns. `lila run`'s console
+prints a subset — `started`, `completed`, `inFlight`, the mean and the p50/p90/p95 percentiles of
+`cycleTime` and `waitTime`, `throughputPerHour`, `costPerCase`, and `totalCost` — because all 20
+do not fit legibly on one terminal row; the minimums, maximums, and standard deviations remain
+intact in `--json` and in the CSV. *(LILA-201: previously the console called `Average cycle`,
+`p50`, and `Throughput/hour` what the CSV and the web app already called `Cycle time average`,
+`Cycle time p50`, and `Throughput per hour`, and printed neither `totalCost` nor the wait time.)*
 
-### Tabla "Cuellos de botella"
+### "Bottlenecks" table
 
-Ranking de la sección 6, sin equivalente en Bizagi. Columnas: `Id`, `Name`,
-`Total time (waiting for resource)` (= `elements:resourceWait.total`) y `Utilization (%)`
+The ranking from section 6, with no equivalent in Bizagi Modeler. Columns: `Id`, `Name`,
+`Total time (waiting for resource)` (= `elements:resourceWait.total`), and `Utilization (%)`
 (= `resources:utilization`).
 
-Se imprime **siempre**, también cuando el escenario no declara ni un pool: sin recursos el ranking
-está vacío por construcción (R-DEG-1) y la superficie lo dice con "Sin espera por recurso
-detectada." en vez de callar la sección. Así la consola y la tarjeta de `ResultsView` en la web
-enseñan lo mismo ante el mismo `RunResult`. *(decisión: LILA-201; prueba: `cli-run.test.ts`,
+It is printed **always**, even when the scenario declares not a single pool: with no resources the
+ranking is empty by construction (R-DEG-1), and the surface says so with "Sin espera por recurso
+detectada." instead of silencing the section. This way the console and the web app's `ResultsView`
+card show the same thing for the same `RunResult`. *(decision: LILA-201; test: `cli-run.test.ts`,
 `ResultsView.test.tsx`)*
 
-Nota de confianza: los nombres exactos arriba están marcados `[verified]` en la investigación citada salvo el desglose de "waiting for resource" en columnas separadas Min/Max/Avg/Std.Dev/Total, que la ayuda de Bizagi describe como grupo pero sin dar el texto literal de cada subcolumna — se usa el patrón `Minimum/Maximum/Average/Standard deviation/Total time` por consistencia con el grupo de `processing`. Si al reproducir el ejemplo oficial de nivel 3/4 de Bizagi (prueba de aceptación de M1, sección 7 del documento de estructura) el texto real difiere, este documento se corrige entonces sin abrir un ticket aparte.
+Confidence note: the exact names above are marked `[verified]` in the cited research, except for the breakdown of "waiting for resource" into separate Min/Max/Avg/Std.Dev/Total columns, which Bizagi Modeler's help describes as a group but without giving the literal text of each subcolumn — the pattern `Minimum/Maximum/Average/Standard deviation/Total time` is used for consistency with the `processing` group. If reproducing Bizagi Modeler's official level 3/4 example (M1's acceptance test, section 7 of the structure document) shows the real text differs, this document is then corrected without opening a separate ticket.
 
 ---
 
 ## 11. `compare(results[])` *(LILA-038)*
 
-`compare` (`packages/engine/src/core/compare.ts`) pone varios `RunResult` lado a lado para leer un
-what-if. Es una función pura de `core/`: no imprime nada — la tabla de consola es `lila compare`
-(LILA-047) y la vista de la web LILA-064.
+`compare` (`packages/engine/src/core/compare.ts`) places several `RunResult`s side by side to read
+a what-if. It is a pure function in `core/`: it prints nothing — the console table is
+`lila compare` (LILA-047), and the web view is LILA-064.
 
 ```ts
 function compare(results: readonly RunResult[]): CompareResult;
 
 interface CompareResult {
-  count: number;        // resultados comparados; el índice 0 de cada array es la base
+  count: number;        // results compared; index 0 of each array is the base
   rows: CompareRow[];
 }
 
 interface CompareRow {
-  kpi: string;                    // path idéntico al de replications.kpis (sección 8)
+  kpi: string;                    // path identical to replications.kpis (section 8)
   scope: 'elements' | 'flows' | 'resources' | 'process';
-  id: string | null;              // id BPMN sin escapar; null cuando scope = "process"
-  metric: string;                 // p. ej. "resourceWait.mean", "cycleTime.p95"
+  id: string | null;              // unescaped BPMN id; null when scope = "process"
+  metric: string;                 // e.g. "resourceWait.mean", "cycleTime.p95"
   base: number | null;
   values: (number | null)[];      // values[0] === base
   deltaAbs: (number | null)[];    // values[i] − base
   deltaRel: (number | null)[];    // (values[i] − base) / base
-  significant: boolean[];         // significant[0] siempre false
+  significant: boolean[];         // significant[0] is always false
 }
 ```
 
-- **Base**: `results[0]`. Todo delta se mide contra ella, nunca contra la columna anterior.
-- **Filas**: una por KPI numérico escalar, los mismos que aplana `numericKpis` (secciones 2–5), con
-  el mismo escape de `.` en los ids dinámicos (sección 8). `scope`/`id`/`metric` son ese path ya
-  partido, para que la CLI agrupe por elemento, recurso o proceso sin volver a implementar el
-  escape.
-- **Orden**: los KPI del resultado base en su orden de aparición (elementos, flujos, recursos,
-  proceso) y, detrás, los que solo existen en resultados posteriores —un pool nuevo en el TO-BE—,
-  en orden de resultado. Dos llamadas con la misma entrada producen `JSON.stringify` idéntico.
-- **Claves ausentes**: un KPI que no existe en algún resultado vale `null` ahí; no es un error, y su
-  `deltaAbs`/`deltaRel` también son `null`.
-- **`deltaRel` con base 0**: `null`, nunca `Infinity` ni `NaN`, para que el JSON siga siendo válido.
-- **Lista vacía**: `compare([])` lanza `RangeError` con `E-COMPARE-VACIO`. Un solo resultado sí es
-  válido: da deltas 0 y ninguna significancia.
-- **Significancia**: `significant[i]` es `true` cuando los intervalos `ci95` de la base y del
-  resultado `i` (sección 8) **no se solapan**. Dos intervalos que solo se tocan en un extremo cuentan
-  como solapados. Un resultado sin `replications` —una sola replicación, o una corrida cancelada con
-  menos de dos completas— no tiene IC: `significant` vale `false`, y los deltas siguen siendo
-  válidos, solo que sin respaldo estadístico.
-- Los deltas se leen limpios porque R-DET-3 garantiza números aleatorios comunes: cambiar la
-  capacidad de un pool no altera el stream de los elementos que no se tocaron.
+- **Base**: `results[0]`. Every delta is measured against it, never against the previous column.
+- **Rows**: one per scalar numeric KPI, the same ones `numericKpis` flattens (sections 2–5), with
+  the same `.` escaping on dynamic ids (section 8). `scope`/`id`/`metric` are that path already
+  split, so the CLI can group by element, resource, or process without reimplementing the
+  escaping.
+- **Order**: the base result's KPIs in their order of appearance (elements, flows, resources,
+  process) and, after that, the ones that only exist in later results — a pool new to the TO-BE —
+  in result order. Two calls with the same input produce an identical `JSON.stringify`.
+- **Missing keys**: a KPI that does not exist in some result is `null` there; it is not an error,
+  and its `deltaAbs`/`deltaRel` are also `null`.
+- **`deltaRel` with base 0**: `null`, never `Infinity` or `NaN`, so the JSON stays valid.
+- **Empty list**: `compare([])` throws a `RangeError` with `E-COMPARE-VACIO`. A single result is
+  valid: it gives deltas of 0 and no significance.
+- **Significance**: `significant[i]` is `true` when the base's `ci95` interval and result `i`'s
+  (section 8) **do not overlap**. Two intervals that only touch at one endpoint count as
+  overlapping. A result with no `replications` — a single replication, or a cancelled run with
+  fewer than two complete ones — has no CI: `significant` is `false`, and the deltas remain valid,
+  just without statistical backing.
+- The deltas read clean because R-DET-3 guarantees common random numbers: changing a pool's
+  capacity does not alter the stream of elements that were not touched.
 
-Aceptación (`examples/pedido`, `seed: 42`, 30 replicaciones): pasar de 2 a 3 cajeros marca
-`elements.Task_TomarPedido.resourceWait.mean` como significativa (14,94 s → 2,19 s, IC
-[14,70; 15,19] y [2,12; 2,27], disjuntos) y **no** marca `elements.Task_Preparar.resourceWait.mean`,
-cuyo cuello de botella es el pool `horno` con `capacity 1`, que el TO-BE no toca.
-*(prueba: LILA-038)*
+Acceptance (`examples/pedido`, `seed: 42`, 30 replications): going from 2 to 3 cashiers marks
+`elements.Task_TomarPedido.resourceWait.mean` as significant (14.94 s → 2.19 s, CI [14.70, 15.19]
+and [2.12, 2.27], disjoint) and does **not** mark `elements.Task_Preparar.resourceWait.mean`,
+whose bottleneck is the `horno` pool with `capacity 1`, which the TO-BE does not touch.
+*(test: LILA-038)*
 
-> Los cuatro números de arriba son los del ejemplo **sin** calendarios, que es como corría el motor
-> hasta M2. Desde LILA-041 `examples/pedido` simula su calendario `oficina` y la misma aceptación
-> da 14,97 s → 2,18 s, IC [14,57; 15,37] y [2,09; 2,27]: sigue siendo significativa y
-> `Task_Preparar` sigue sin serlo. La conclusión no cambia; los decimales sí.
-> *(prueba: LILA-041, QA)*
+> The four numbers above are from the example **without** calendars, which is how the engine ran
+> through M2. Since LILA-041 `examples/pedido` simulates its `oficina` calendar, and the same
+> acceptance test gives 14.97 s → 2.18 s, CI [14.57, 15.37] and [2.09, 2.27]: it remains
+> significant and `Task_Preparar` remains not significant. The conclusion does not change; the
+> decimals do.
+> *(test: LILA-041, QA)*

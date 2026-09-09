@@ -258,7 +258,7 @@ describe('W-RECURSO-SATURADO (LILA-191)', () => {
     const result = aggregateReplication(SATURATION_IR, run, SATURATION_SCENARIO);
 
     expect(result.warnings).toEqual([
-      'W-RECURSO-SATURADO: horno: la cola crece sin estabilizarse (λ/μ·c ≈ 4.0)',
+      'W-RECURSO-SATURADO: horno: the queue grows without settling (λ/μ·c ≈ 4.0)',
     ]);
     // Es un aviso, no una corrección: las métricas del pool son las mismas con y sin él.
     expect(result.resources.horno?.busyTime).toBe(10_000);
@@ -310,7 +310,7 @@ describe('el criterio de W-RECURSO-SATURADO es una función de las cantidades pr
 
   test('la cola estacionaria larga no avisa y la que crece sí', () => {
     expect(saturationWarning('p', SATURADA)).toBe(
-      'W-RECURSO-SATURADO: p: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: p: the queue grows without settling (λ/μ·c ≈ 2.0)',
     );
     expect(saturationWarning('p', ESTABLE)).toBeUndefined();
   });
@@ -368,7 +368,7 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     // `cocinero` comparte por AND (R-REC-4) la cola exacta de `horno` y `cajero` la de sus propias
     // tareas, pero ninguno de los dos estuvo lleno mientras esa cola esperaba: no se les atribuye.
     expect(await saturationOf('pedido/as-is.scenario.json')).toEqual([
-      'W-RECURSO-SATURADO: horno: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: horno: the queue grows without settling (λ/μ·c ≈ 2.0)',
     ]);
   }, SLOW);
 
@@ -414,7 +414,7 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     });
 
     expect(warnings).toEqual([
-      'W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 1.7)',
+      'W-RECURSO-SATURADO: servidor: the queue grows without settling (λ/μ·c ≈ 1.7)',
     ]);
   }, SLOW);
 
@@ -435,8 +435,8 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     });
 
     expect(warnings).toEqual([
-      'W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
-      'W-RECURSO-SATURADO: servidorB: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: servidor: the queue grows without settling (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: servidorB: the queue grows without settling (λ/μ·c ≈ 2.0)',
     ]);
   }, SLOW);
 
@@ -451,7 +451,7 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     });
 
     expect(warnings).toEqual([
-      'W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (λ/μ·c ≈ 2.5)',
+      'W-RECURSO-SATURADO: cajero: the queue grows without settling (λ/μ·c ≈ 2.5)',
     ]);
   }, SLOW);
 
@@ -469,12 +469,12 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     });
 
     expect(warnings).toEqual([
-      'W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: servidor: the queue grows without settling (λ/μ·c ≈ 2.0)',
     ]);
   }, SLOW);
 
   test.each([
-    [1500, ['W-RECURSO-SATURADO: servidor: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)']],
+    [1500, ['W-RECURSO-SATURADO: servidor: the queue grows without settling (λ/μ·c ≈ 2.0)']],
     [375, []],
   ])('con `capacity` múltiplo de `quantity` el umbral es el de siempre (servicio %i s)', async (mean, expected) => {
     // `capacity` 4 pedida de dos en dos son dos servidores: `used > capacity − 2` es exactamente
@@ -517,8 +517,8 @@ describe('W-RECURSO-SATURADO sobre los ejemplos reales (LILA-191)', () => {
     });
 
     expect(warnings).toEqual([
-      'W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (λ/μ·c ≈ 1.2)',
-      'W-RECURSO-SATURADO: horno: la cola crece sin estabilizarse (λ/μ·c ≈ 2.0)',
+      'W-RECURSO-SATURADO: cajero: the queue grows without settling (λ/μ·c ≈ 1.2)',
+      'W-RECURSO-SATURADO: horno: the queue grows without settling (λ/μ·c ≈ 2.0)',
     ]);
   }, SLOW);
 

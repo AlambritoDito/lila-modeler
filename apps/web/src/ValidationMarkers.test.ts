@@ -50,7 +50,7 @@ describe('problemasPorElemento (LILA-209)', () => {
 
     expect(validacion.marcadores.get('Task_Empacar')).toEqual({
       nivel: 'aviso',
-      mensajes: ['elements.Task_Empacar: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.'],
+      mensajes: ['elements.Task_Empacar: the element exists in the model and has no parameters; it takes its defaults.'],
     });
     expect(validacion.errores).toBe(0);
     // Los mismos números que la cabecera del panel de escenario: los dos leen la misma lista.
