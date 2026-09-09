@@ -6,7 +6,7 @@ No incluye `devDependencies` que no viajan en el bundle (por ejemplo `vite`, `ty
 `vitest`, `electron-builder`).
 
 Generado a mano a partir de `node_modules/<paquete>/package.json` (campo `version` y `license`) el
-2026-09-06, sobre el commit base `287e3e2`. Donde un campo faltaba se escribe «verificar» y el
+2026-09-09, sobre el commit base `5a2711d`. Donde un campo faltaba se escribe «verificar» y el
 archivo de licencia encontrado en su lugar, en vez de inventar un valor.
 
 ## Aviso obligatorio — bpmn.io
@@ -27,6 +27,19 @@ herramientas). **No quitar esa marca en ningún fork ni personalización del tem
 | react | 19.2.8 | MIT | https://github.com/facebook/react |
 | react-dom | 19.2.8 | MIT | https://github.com/facebook/react |
 | bpmn-js | 18.28.0 | MIT + cláusula de marca de agua (ver arriba; `node_modules/bpmn-js/LICENSE`) | https://github.com/bpmn-io/bpmn-js |
+| bpmn-js-token-simulation | 0.40.0 | MIT | https://github.com/bpmn-io/bpmn-js-token-simulation |
+| diagram-js-minimap | 5.4.1 | MIT | https://github.com/bpmn-io/diagram-js-minimap |
+| @fontsource/archivo | 5.3.0 | OFL-1.1 | https://fontsource.org/fonts/archivo (fuente: https://github.com/Omnibus-Type/Archivo) |
+| @fontsource/jetbrains-mono | 5.3.0 | OFL-1.1 | https://fontsource.org/fonts/jetbrains-mono (fuente: https://github.com/JetBrains/JetBrainsMono) |
+
+Titulares según el `LICENSE` de cada paquete instalado:
+
+- bpmn-js, diagram-js y bpmn-js-token-simulation: «Copyright (c) 2014-present Camunda Services GmbH».
+- diagram-js-minimap: «Copyright (c) 2017-present camunda Services GmbH».
+- @fontsource/archivo: «Copyright 2020 The Archivo Project Authors», SIL Open Font License 1.1; la
+  webfont viaja empaquetada en el bundle (`.woff2` importados desde `apps/web/src/main.tsx`).
+- @fontsource/jetbrains-mono: «Copyright 2020 The JetBrains Mono Project Authors», SIL Open Font
+  License 1.1; misma vía de empaquetado.
 
 `react`/`react-dom` declaran su repositorio como `react/react.git` en su propio `package.json`
 (dato tal cual del paquete instalado); el repositorio real y conocido del proyecto es

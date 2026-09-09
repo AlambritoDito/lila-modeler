@@ -4,7 +4,7 @@ Registro de decisiones de arquitectura de Lila Modeler. Son reversibles mientras
 
 Fuentes:
 
-- **ADR-001 a ADR-008**: corpus previo del proyecto (entonces llamado *Open Process Platform*), `open-process-platform-docs/DECISIONS.md`. Se copian aquí verbatim.
+- **ADR-001 a ADR-008**: corpus previo del proyecto (entonces llamado *Open Process Platform*), `docs/DECISIONS-corpus-previo.md`. Se copian aquí verbatim.
 - **ADR-009 a ADR-023**: `LILA_MODELER_ESTRUCTURA.md`, sección 4 ("Decisiones (ADR)"). Se copian aquí verbatim; ese documento es la fuente de verdad — ante cualquier discrepancia entre este archivo y `LILA_MODELER_ESTRUCTURA.md`, gana el documento de estructura y este archivo se corrige para reflejarlo.
 - **ADR-024 en adelante**: decisiones surgidas durante la implementación, con su ticket de prueba.
 
@@ -347,5 +347,5 @@ que lo pida. `ResourceManager` sigue sin ser API pública. *(prueba: LILA-034, L
 - `docs/BIZAGI_PARITY.md` — tabla de paridad referenciada por ADR-021.
 - `docs/BPMN_EXTENSION.md` — implementación operativa de ADR-012 y ADR-014.
 - `docs/RESULTS_FORMAT.md` — implementación operativa de la parte de calendarios/utilización de ADR-016.
-- `open-process-platform-docs/DECISIONS.md` — texto original de ADR-001 a ADR-008 (corpus previo, proyecto entonces llamado *Open Process Platform*).
+- `docs/DECISIONS-corpus-previo.md` — texto original de ADR-001 a ADR-008 (corpus previo, proyecto entonces llamado *Open Process Platform*).
 - `BACKLOG.md` — desglose en épicas y tickets por hito.

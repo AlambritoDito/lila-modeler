@@ -1,6 +1,6 @@
 # Lila Modeler — Estructura del sistema
 
-Fecha: 2026-09-03. Documento de decisión, no de investigación. La investigación previa (`open-process-platform-docs/`) fue el insumo; las verificaciones de hoy (licencias, versiones, benchmarks, qué hace Bizagi exactamente) están en `investigacion-2026-09-03/`. Aquí están las decisiones y su porqué.
+Fecha: 2026-09-03. Documento de decisión, no de investigación. La investigación previa (corpus previo, archivado fuera del repo) fue el insumo; las verificaciones de hoy (licencias, versiones, benchmarks, qué hace Bizagi exactamente) están en `investigacion-2026-09-03/`. Aquí están las decisiones y su porqué.
 
 ---
 

@@ -63,12 +63,8 @@ Todos comparten:
 
 Durante la búsqueda se encontraron muchos otros `.bpmn` con marcas Bizagi en código de GitHub
 (vía `gh api search/code`), pero se descartaron por no tener licencia verificable en el
-repositorio de origen (repos personales de estudiantes/proyectos universitarios sin archivo
-`LICENSE`, lo que legalmente es "todos los derechos reservados" y no se puede redistribuir
-aquí), por ejemplo: `rrojasda94/provecho-erp`, `chenKuer/Umise-Cat_Named_Doggie`,
-`JosephMarcell/autocodegeneration`, `genomike/modelado_y_analisis_de_software`,
-`Abdullah-57/Business-Model-Parsing-and-Analysis`, `angelo-casciani/sitcalc4bpmn`,
-`aleferrariuy/aleferrariuy`, `Wadagraprana/Testing_pm4py`, `iamlvv/BPE-be`. Se priorizó
+repositorio de origen: se descartaron repos personales sin archivo `LICENSE`, lo que legalmente
+es "todos los derechos reservados" y no se puede redistribuir aquí. Se priorizó
 `bpmn-miwg-test-suite` porque es un repositorio institucional (OMG/BPMN MIWG) con licencia
 explícita y permisiva.
 

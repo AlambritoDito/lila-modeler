@@ -18,7 +18,8 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc --build",

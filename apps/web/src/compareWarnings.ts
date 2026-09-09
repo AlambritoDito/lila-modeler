@@ -101,8 +101,8 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
 /**
  * Construye el `CompareRunMeta` de una corrida a partir de lo que ya guarda `ProjectStore`
  * (`apps/web/src/store/ProjectStore.ts`): un escenario resuelto y su `RunResult`. Pensado para A
- * en OP-13, que conecta `CompareView` al flujo real — ver la interfaz documentada en
- * `docs/plan-operativo-2026-09-06/estado/OP-05-claude.md`.
+ * en OP-13, que conecta `CompareView` al flujo real: la interfaz es `CompareRunMeta` tal como
+ * está declarada en este archivo; no hay más contrato que ese.
  */
 export function runMetaFrom(name: string, scenario: ResolvedScenario, result: RunResult): CompareRunMeta {
   return {
