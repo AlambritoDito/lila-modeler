@@ -853,9 +853,10 @@ export function validateScenario(
  *
  * Hoy solo `E-CLAVE-DESCONOCIDA`: el esquema es cerrado (`strictObject`), así que una errata como
  * `capacty: 3` la caza zod **antes** del lint contra el IR y nunca llega a `validateScenario`
- * (LILA-198). El resto conserva el mensaje que ya trae el defecto, que desde LILA-202 viene en
- * español de `parseScenario`/`erroresEnEspanol`. Para `unrecognized_keys` el texto del catálogo
- * § 17 manda sobre el del mapa (regla 7 de BACKLOG), así que esta rama lo reemplaza entero.
+ * (LILA-198). El resto conserva el mensaje que ya trae el defecto, que desde LILA-202 viene del
+ * mapa de `parseScenario` y desde LILA-211 en el idioma pedido. Para `unrecognized_keys` el texto
+ * del catálogo § 17 manda sobre el del mapa (regla 7 de BACKLOG), así que esta rama lo reemplaza
+ * entero.
  *
  * ponytail: una función de formato, no un mapa código↔defecto. Techo: si algún día otro código de
  * § 17 lo emite el esquema, aquí se añade su rama.
