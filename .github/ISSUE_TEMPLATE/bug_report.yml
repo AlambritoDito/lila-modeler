@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in the engine, CLI, MCP server, web app or desktop app doesn't behave as documented.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more reproducible the report, the faster it
+        gets fixed — a minimal `.bpmn` and scenario that trigger the issue are the single most
+        useful thing you can attach.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what surface it happened on (engine, CLI, MCP, web app, desktop app).
+      placeholder: A clear description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: bpmn-and-scenario
+    attributes:
+      label: Minimal .bpmn and scenario JSON
+      description: >
+        Paste the smallest `.bpmn` model and scenario JSON that reproduce the issue. If you can't
+        share the original files, please reduce them to a minimal case rather than omitting them.
+      render: text
+      placeholder: |
+        <!-- .bpmn contents -->
+
+        // scenario.json contents
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Command or steps to reproduce
+      description: The exact CLI command, MCP tool call, or UI steps you used.
+      placeholder: |
+        npx lila run examples/pedido/model.bpmn my.scenario.json --seed 42 --replications 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the full error message or output, if any.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The tagged version, or the commit SHA (`git rev-parse HEAD`), you're running.
+      placeholder: e.g. edda2b6
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Node.js version
+      description: Output of `node -v` and your operating system.
+      placeholder: e.g. macOS 14, Node 22.11.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
