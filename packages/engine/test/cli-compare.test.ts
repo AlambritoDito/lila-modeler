@@ -115,10 +115,10 @@ describe('lila compare (LILA-047)', () => {
       expect(second).toBe(0);
       expect(firstText).toBe(secondText);
 
-      expect(firstText).toContain('Escenarios comparados');
+      expect(firstText).toContain('Compared scenarios');
       expect(firstText).toContain('Process elements');
       expect(firstText).toContain('Resources');
-      expect(firstText).toContain('* diferencia significativa (IC95 sin solapamiento)');
+      expect(firstText).toContain('* significant difference (95% CI without overlap)');
 
       // Task_TomarPedido: la espera de recurso baja mucho y de forma significativa (TO-BE).
       const wait = rowLine(firstText, 'Task_TomarPedido', 'Average time (waiting for resource)');
@@ -141,7 +141,7 @@ describe('lila compare (LILA-047)', () => {
   test('error claro con menos de dos escenarios', async () => {
     const code = await main(['compare', fixture.model, fixture.base]);
     expect(code).toBe(1);
-    expect(output.join('\n')).toContain('al menos dos escenarios');
+    expect(output.join('\n')).toContain('at least two scenarios');
   });
 
   test('guion para un KPI ausente en la base (pool nuevo en el otro escenario)', async () => {
@@ -166,7 +166,7 @@ describe('lila compare (LILA-047)', () => {
     ]);
     expect(code).toBe(0);
     const text = output.join('\n');
-    expect(text).toContain('sin IC95 no hay marca de significancia posible');
+    expect(text).toContain('without a 95% CI there is no significance mark possible');
     expect(text).toContain('Base sin recursos');
     expect(text).toContain('Con agente');
   });
@@ -186,7 +186,32 @@ describe('lila compare (LILA-047)', () => {
 
     const code = await main(['compare', fixture.model, fixture.base, mismatch]);
     expect(code).toBe(1);
-    expect(output.join('\n')).toContain('no coincide con scenario.model');
+    expect(output.join('\n')).toContain('does not match scenario.model');
+  });
+
+  // LILA-211 parte 2: mismo compare, `--lang es`, chrome en español y avisos traducidos.
+  test('`--lang es` traduce la cabecera, la tabla de escenarios y los avisos de compare', async () => {
+    const code = await main([
+      'compare',
+      fixture.model,
+      fixture.base,
+      fixture.withResource,
+      '--replications',
+      '1',
+      '--lang',
+      'es',
+    ]);
+    expect(code).toBe(0);
+    const text = output.join('\n');
+
+    expect(text).toContain('Unidad de tiempo min (escenario base) · Utilización en %');
+    expect(text).toContain('Escenarios comparados');
+    expect(text).toContain('Base sin recursos (base)');
+    expect(text).toContain('* diferencia significativa (IC95 sin solapamiento)');
+    expect(text).toContain('Avisos:');
+    expect(text).toContain('sin IC95 no hay marca de significancia posible');
+    // Los nombres de columna Bizagi no cambian de idioma.
+    expect(text).toContain('Utilization (%)');
   });
 
   test('--json escribe el CompareResult tal cual', async () => {

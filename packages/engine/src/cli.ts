@@ -1,5 +1,14 @@
 #!/usr/bin/env node
-/** CLI `lila`: validación y simulación reproducible desde archivos. */
+/**
+ * CLI `lila`: validación y simulación reproducible desde archivos.
+ *
+ * Todo el texto sale del catálogo (`messages(locale).cli`, LILA-211). El idioma se decide una sola
+ * vez en `main()`, **antes** de los `parseArgs` de cada subcomando: `--lang` no es una opción de
+ * ninguno de ellos, se puede escribir en cualquier posición y se quita de `argv` antes de repartir
+ * (si no, `lila mcp --lang es` moriría con «no acepta argumentos»). Los nombres de columna y los
+ * títulos de las tablas estilo Bizagi no se traducen: son el contrato de paridad de
+ * `docs/BIZAGI_PARITY.md`.
+ */
 
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -46,44 +55,55 @@ import {
   isDurationMetric,
   type BaseTimeUnit,
 } from './format.js';
+import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './messages/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
 
-const USAGE = `Uso: lila validate <archivo.bpmn> [--json]
-     lila run <modelo.bpmn> <escenario.json> [--seed n] [--replications n]
-              [--json resultado.json] [--csv directorio]
-     lila compare <modelo.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                  [--json resultado.json] [--all]
-     lila mcp
+export { resolveLocale } from './locale.js';
 
-Comandos:
-  validate   Parsea el BPMN, imprime su IR y valida el modelo.
-  run        Valida modelo y escenario, simula y muestra tablas de resultados.
-  compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
-  mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
+/** Lo que `extractLang` saca de la línea de comandos: el resto de `argv` y el idioma pedido. */
+export interface ExtractedLang {
+  /** `argv` sin `--lang` ni su valor, listo para el `parseArgs` del subcomando. */
+  readonly argv: string[];
+  /** El idioma pedido, ya validado; ausente si nadie pidió ninguno. */
+  readonly lang?: Locale | undefined;
+  /**
+   * El valor rechazado, o `''` cuando `--lang` llegó sin valor. Ausente si no hubo problema:
+   * quien llama decide qué mensaje imprimir, para que esta función siga siendo pura.
+   */
+  readonly invalid?: string | undefined;
+}
 
-Opciones de validate:
-  --json     Imprime el IR y los problemas por stdout.
+/**
+ * Quita `--lang xx` / `--lang=xx` de cualquier posición de `argv` y devuelve el idioma pedido.
+ *
+ * Se ejecuta antes que `parseArgs` porque `--lang` es global, no de un subcomando: declararlo en
+ * los cuatro `parseArgs` obligaría a repetirlo y dejaría fuera a `lila mcp`, que no acepta
+ * opciones. Un `es_MX.UTF-8` o un `ES` valen (misma normalización que las variables de entorno);
+ * cualquier otra cosa se rechaza, porque aquí sí hubo una petición explícita que contestar.
+ */
+export function extractLang(argv: readonly string[]): ExtractedLang {
+  const rest: string[] = [];
+  let raw: string | undefined;
 
-Opciones de run:
-  --seed n          Sobrescribe run.seed con un entero.
-  --replications n  Sobrescribe run.replications con un entero >= 1.
-  --json archivo    Escribe el RunResult determinista como JSON.
-  --csv directorio  Escribe elements, flows, resources, process y log como CSV RFC 4180.
-                    log.csv se escribe en streaming y lleva timestamps ISO desde run.start.
+  for (let index = 0; index < argv.length; index++) {
+    const argument = argv[index]!;
+    if (argument === '--lang') {
+      raw = argv[index + 1];
+      index++; // el valor de `--lang` no es un positional del subcomando
+      if (raw === undefined) return { argv: rest, invalid: '' };
+      continue;
+    }
+    if (argument.startsWith('--lang=')) {
+      raw = argument.slice('--lang='.length);
+      continue;
+    }
+    rest.push(argument);
+  }
 
-Opciones de compare:
-  --seed n          Sobrescribe run.seed en todos los escenarios comparados.
-  --replications n  Sobrescribe run.replications en todos los escenarios comparados.
-  --json archivo    Escribe el CompareResult determinista como JSON.
-  --all             Imprime todos los KPI de compare(), no solo el subconjunto curado.
-                    El primer escenario listado es la base: los demás se comparan contra él.
-
-Opciones de mcp:
-  Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
-  directorio desde el que se lanzó. No se ejecuta a mano: lo lanza el cliente MCP.
-
-Opciones generales:
-  -h, --help Muestra esta ayuda.`;
+  if (raw === undefined) return { argv: rest };
+  const tag = raw.toLowerCase().split(/[_.@-]/)[0] ?? '';
+  return isLocale(tag) ? { argv: rest, lang: tag } : { argv: rest, invalid: raw };
+}
 
 /** Cuenta los nodos por tipo para la línea de resumen de `validate`. */
 function countByType(nodes: Record<string, { type: string }>): string {
@@ -95,15 +115,17 @@ function countByType(nodes: Record<string, { type: string }>): string {
     .join(', ');
 }
 
-function printValidationProblems({ errors, warnings }: ValidationResult): void {
-  for (const warning of warnings) console.log(`aviso  ${warning.code}  ${warning.message}`);
-  for (const error of errors) console.log(`error  ${error.code}  ${error.message}`);
+function printValidationProblems({ errors, warnings }: ValidationResult, locale: Locale): void {
+  const C = messages(locale).cli;
+  for (const warning of warnings) console.log(`${C.warningLabel()}  ${warning.code}  ${warning.message}`);
+  for (const error of errors) console.log(`${C.errorLabel()}  ${error.code}  ${error.message}`);
 }
 
-async function validateCommand(file: string, json: boolean): Promise<number> {
+async function validateCommand(file: string, json: boolean, locale: Locale): Promise<number> {
+  const C = messages(locale).cli;
   const xml = readFileSync(file, 'utf8');
   // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
-  const report = await validateBpmnXml(xml);
+  const report = await validateBpmnXml(xml, { locale });
   const { ir, ignoredProcessIds } = report;
   const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
 
@@ -112,14 +134,14 @@ async function validateCommand(file: string, json: boolean): Promise<number> {
     return validation.errors.length > 0 ? 1 : 0;
   }
 
-  console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
+  console.log(C.process(`${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`));
   if (ir.source.exporter !== '') {
-    console.log(`Exportado por ${ir.source.exporter} ${ir.source.exporterVersion}`.trimEnd());
+    console.log(C.exportedBy(ir.source.exporter, ir.source.exporterVersion).trimEnd());
   }
   console.log('');
 
   const nodeIds = Object.keys(ir.nodes);
-  console.log(`Nodos (${nodeIds.length}): ${countByType(ir.nodes)}`);
+  console.log(C.nodes(nodeIds.length, countByType(ir.nodes)));
   for (const id of nodeIds) {
     const node = ir.nodes[id];
     if (node === undefined) continue;
@@ -129,48 +151,57 @@ async function validateCommand(file: string, json: boolean): Promise<number> {
 
   const flowIds = Object.keys(ir.flows);
   console.log('');
-  console.log(`Flujos (${flowIds.length}):`);
+  console.log(C.flows(flowIds.length));
   for (const id of flowIds) {
     const flow = ir.flows[id];
     if (flow === undefined) continue;
-    const mark = flow.isDefault ? '  (por defecto)' : '';
+    const mark = flow.isDefault ? `  ${C.defaultFlow()}` : '';
     console.log(`  ${id}: ${flow.from} -> ${flow.to}${flow.name === '' ? '' : `  ${flow.name}`}${mark}`);
   }
 
   if (ignoredProcessIds.length > 0) {
     console.log('');
-    console.log(`Otros procesos del archivo, no simulados: ${ignoredProcessIds.join(', ')}`);
+    console.log(C.otherProcesses(ignoredProcessIds.join(', ')));
   }
 
   console.log('');
-  printValidationProblems(validation);
-  console.log(`${validation.errors.length} errores, ${validation.warnings.length} avisos.`);
+  printValidationProblems(validation, locale);
+  console.log(C.problemCounts(validation.errors.length, validation.warnings.length));
 
   return validation.errors.length > 0 ? 1 : 0;
 }
 
-function integerOption(name: string, raw: string | undefined, minimum?: number): number | undefined {
+function integerOption(
+  name: string,
+  raw: string | undefined,
+  locale: Locale,
+  minimum?: number,
+): number | undefined {
   if (raw === undefined) return undefined;
-  if (!/^-?\d+$/.test(raw)) throw new Error(`--${name} requiere un entero; se recibió "${raw}".`);
+  const C = messages(locale).cli;
+  if (!/^-?\d+$/.test(raw)) throw new Error(C.integerRequired(name, raw));
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || (minimum !== undefined && value < minimum)) {
-    const range = minimum === undefined ? 'un entero seguro' : `un entero >= ${minimum}`;
-    throw new Error(`--${name} requiere ${range}; se recibió "${raw}".`);
+    throw new Error(
+      minimum === undefined ? C.safeIntegerRequired(name, raw) : C.minimumIntegerRequired(name, minimum, raw),
+    );
   }
   return value;
 }
 
-function printScenarioProblems(problems: readonly ScenarioProblem[]): void {
+function printScenarioProblems(problems: readonly ScenarioProblem[], locale: Locale): void {
+  const C = messages(locale).cli;
   for (const problem of problems) {
-    console.log(`${problem.severity === 'error' ? 'error' : 'aviso'}  ${problem.code}  ${problem.message}`);
+    const label = problem.severity === 'error' ? C.errorLabel() : C.warningLabel();
+    console.log(`${label}  ${problem.code}  ${problem.message}`);
   }
 }
 
 /** Imprime los problemas del modelo y responde si hay errores que aborten el comando. */
-function modelHasErrors(validation: ValidationResult): boolean {
+function modelHasErrors(validation: ValidationResult, locale: Locale): boolean {
   if (validation.errors.length === 0) return false;
-  printValidationProblems(validation);
-  console.log(`${validation.errors.length} errores, ${validation.warnings.length} avisos.`);
+  printValidationProblems(validation, locale);
+  console.log(messages(locale).cli.problemCounts(validation.errors.length, validation.warnings.length));
   return true;
 }
 
@@ -200,14 +231,20 @@ const PROCESS_SUMMARY_COLUMNS = [
   'totalCost',
 ] as const;
 
-function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunResult): void {
+function printRunResult(
+  ir: ParsedIr,
+  scenario: ResolvedScenario,
+  result: RunResult,
+  locale: Locale,
+): void {
+  const C = messages(locale).cli;
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const currency = scenario.run.currency;
-  console.log(`Escenario ${scenario.name}`);
-  console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
+  console.log(C.scenario(scenario.name));
+  console.log(C.process(`${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`));
   console.log(
-    `Semilla ${scenario.run.seed ?? 1} · Replicaciones ${scenario.run.replications} · Unidad de tiempo ${unit}` +
-      (currency === undefined ? '' : ` · Moneda ${currency}`),
+    C.runHeader(scenario.run.seed ?? 1, scenario.run.replications, unit) +
+      (currency === undefined ? '' : ` · ${C.currency(currency)}`),
   );
 
   console.log('');
@@ -275,9 +312,9 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
   // ranking vacío es información —nadie hizo cola— y así la CLI dice lo mismo que la tarjeta de
   // `ResultsView` en la web, que nunca se ocultó.
   console.log('');
-  console.log('Cuellos de botella');
+  console.log(C.bottlenecks());
   if (result.bottlenecks.length === 0) {
-    console.log('Sin espera por recurso detectada.');
+    console.log(C.noResourceWait());
   } else {
     console.log(
       formatTable(
@@ -324,14 +361,14 @@ function printRunResult(ir: ParsedIr, scenario: ResolvedScenario, result: RunRes
 
   if (result.warnings.length > 0) {
     console.log('');
-    console.log('Avisos:');
+    console.log(C.warnings());
     for (const warning of result.warnings) console.log(`  ${warning}`);
   }
 }
 
 /** Publica cualquier valor serializable como JSON determinista; usado por `run` y `compare`. */
-function writeJson(file: string, data: unknown): void {
-  console.log(`JSON: ${writeJsonAtomic(file, data)}`);
+function writeJson(file: string, data: unknown, locale: Locale): void {
+  console.log(`JSON: ${writeJsonAtomic(file, data, locale)}`);
 }
 
 function writeCsvDirectory(
@@ -339,6 +376,7 @@ function writeCsvDirectory(
   ir: ParsedIr,
   scenario: ResolvedScenario,
   result: RunResult,
+  locale: Locale,
 ): void {
   const target = absolutePath(directory);
   mkdirSync(target, { recursive: true });
@@ -357,10 +395,10 @@ function writeCsvDirectory(
   }));
 
   // Detecta todos los conflictos antes de publicar el primero y evita un conjunto mezclado.
-  for (const entry of entries) assertReplaceableFile(entry.path);
+  for (const entry of entries) assertReplaceableFile(entry.path, locale);
   const staged: Array<(typeof entries)[number] & { file: StagedFile }> = [];
   try {
-    for (const entry of entries) staged.push({ ...entry, file: stageFile(entry.path) });
+    for (const entry of entries) staged.push({ ...entry, file: stageFile(entry.path, locale) });
     for (const entry of staged) {
       entry.file.write(entry.contents);
       entry.file.close();
@@ -389,12 +427,12 @@ interface EventLogSink {
  * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
  * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
  */
-function openEventLogSink(directory: string, startMs: number): EventLogSink {
+function openEventLogSink(directory: string, startMs: number, locale: Locale): EventLogSink {
   const targetDirectory = absolutePath(directory);
   mkdirSync(targetDirectory, { recursive: true });
   const target = resolve(targetDirectory, 'log.csv');
-  assertReplaceableFile(target);
-  const staged = stageFile(target);
+  assertReplaceableFile(target, locale);
+  const staged = stageFile(target, locale);
   let buffer = eventLogCsvHeader(startMs);
   let closed = false;
 
@@ -431,6 +469,7 @@ interface RunCommandOptions {
   replications?: number | undefined;
   json?: string | undefined;
   csv?: string | undefined;
+  locale: Locale;
 }
 
 async function runCommand(
@@ -438,41 +477,44 @@ async function runCommand(
   scenarioFile: string,
   options: RunCommandOptions,
 ): Promise<number> {
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
-  if (modelHasErrors(modelValidation)) return 1;
+  const locale = options.locale;
+  const C = messages(locale).cli;
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  if (modelHasErrors(modelValidation, locale)) return 1;
 
   const scenarioPath = absolutePath(scenarioFile);
-  const resolvedScenario = loadResolvedScenario(scenarioPath);
+  const resolvedScenario = loadResolvedScenario(scenarioPath, undefined, locale);
   if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
-    console.error(
-      `lila run: el modelo posicional (${modelPath}) no coincide con scenario.model (${resolvedScenario.model}).`,
-    );
+    console.error(C.commandError('run', C.modelMismatch(modelPath, resolvedScenario.model)));
     return 1;
   }
 
   const scenario = withRunOverrides(resolvedScenario, options);
 
-  const scenarioProblems = validateScenario(scenario, ir);
+  const scenarioProblems = validateScenario(scenario, ir, { locale });
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
-    printScenarioProblems(scenarioProblems);
+    printScenarioProblems(scenarioProblems, locale);
     return 1;
   }
 
   const logSink =
-    options.csv === undefined ? undefined : openEventLogSink(options.csv, runStartMs(scenario.run.start));
+    options.csv === undefined
+      ? undefined
+      : openEventLogSink(options.csv, runStartMs(scenario.run.start), locale);
   try {
     const simulated = simulate(ir, scenario, {
       log: logSink !== undefined,
+      locale,
       ...(logSink === undefined ? {} : { onEvent: (row: EventLogRow) => logSink.onEvent(row) }),
     });
     logSink?.close();
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
 
-    printRunResult(ir, scenario, result);
-    if (options.json !== undefined) writeJson(options.json, result);
+    printRunResult(ir, scenario, result, locale);
+    if (options.json !== undefined) writeJson(options.json, result, locale);
     if (options.csv !== undefined) {
-      writeCsvDirectory(options.csv, ir, scenario, result);
+      writeCsvDirectory(options.csv, ir, scenario, result, locale);
       logSink?.commit();
       console.log(`CSV: ${absolutePath(options.csv)}`);
     }
@@ -492,6 +534,7 @@ interface CompareCommandOptions {
   replications?: number | undefined;
   json?: string | undefined;
   all: boolean;
+  locale: Locale;
 }
 
 /**
@@ -539,8 +582,8 @@ function formatCompareCell(
   return `${valueText} (${deltaText})${significant ? '*' : ''}`;
 }
 
-function compareColumnHeader(name: string, index: number): string {
-  return index === 0 ? `${name} (base)` : name;
+function compareColumnHeader(name: string, index: number, locale: Locale): string {
+  return index === 0 ? messages(locale).cli.baseColumn(name) : name;
 }
 
 function rowLabel(ir: ParsedIr, resourceNames: Readonly<Record<string, string>>, scope: CompareScope, id: string | null): string {
@@ -556,7 +599,9 @@ function printCompareResult(
   loaded: readonly LoadedScenarioResult[],
   comparison: CompareResult,
   allRows: boolean,
+  locale: Locale,
 ): void {
+  const C = messages(locale).cli;
   const base = loaded[0]!;
   const unit = base.scenario.run.baseTimeUnit as BaseTimeUnit;
   // El nombre de un pool puede venir de cualquier escenario: el TO-BE puede estrenar un pool que
@@ -568,16 +613,16 @@ function printCompareResult(
     }
   }
 
-  console.log(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
-  console.log(`Unidad de tiempo ${unit} (escenario base) · Utilización en %`);
+  console.log(C.process(`${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`));
+  console.log(C.timeUnitHeader(unit));
   console.log('');
-  console.log('Escenarios comparados');
+  console.log(C.comparedScenarios());
   console.log(
     formatTable(
-      ['#', 'Nombre', 'Archivo', 'Semilla', 'Replicaciones'],
+      ['#', C.columnName(), C.columnFile(), C.columnSeed(), C.columnReplications()],
       loaded.map((entry, index) => [
         String(index),
-        compareColumnHeader(entry.scenario.name, index),
+        compareColumnHeader(entry.scenario.name, index, locale),
         entry.file,
         formatNumber(entry.scenario.run.seed ?? 1),
         formatNumber(entry.scenario.run.replications),
@@ -609,7 +654,7 @@ function printCompareResult(
         [
           ...(withId ? ['Id', 'Name'] : []),
           'Metric',
-          ...loaded.map((entry, index) => compareColumnHeader(entry.scenario.name, index)),
+          ...loaded.map((entry, index) => compareColumnHeader(entry.scenario.name, index, locale)),
         ],
         rows.map((row) => [
           ...(withId ? [row.id ?? '', rowLabel(ir, resourceNames, scope, row.id)] : []),
@@ -631,12 +676,12 @@ function printCompareResult(
   }
 
   console.log('');
-  console.log('* diferencia significativa (IC95 sin solapamiento)');
+  console.log(C.significantMark());
 
-  const warnings = compareWarnings(loaded, unit);
+  const warnings = compareWarnings(loaded, unit, locale);
   if (warnings.length > 0) {
     console.log('');
-    console.log('Avisos:');
+    console.log(C.warnings());
     for (const warning of warnings) console.log(`  ${warning}`);
   }
 }
@@ -646,8 +691,10 @@ async function compareCommand(
   scenarioFiles: readonly string[],
   options: CompareCommandOptions,
 ): Promise<number> {
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile);
-  if (modelHasErrors(modelValidation)) return 1;
+  const locale = options.locale;
+  const C = messages(locale).cli;
+  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  if (modelHasErrors(modelValidation, locale)) return 1;
 
   // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources` ni
   // `calendars`, que el motor simula desde LILA-033…036 y LILA-041. Ya no queda ningún aviso de
@@ -660,20 +707,19 @@ async function compareCommand(
   // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
   // simulación completa de los n − 1 anteriores.
   for (const scenarioFile of scenarioFiles) {
-    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile));
+    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile), undefined, locale);
     if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
       console.error(
-        `lila compare: el modelo posicional (${modelPath}) no coincide con scenario.model ` +
-          `(${resolvedScenario.model}) en ${scenarioFile}.`,
+        C.commandError('compare', C.modelMismatchIn(modelPath, resolvedScenario.model, scenarioFile)),
       );
       return 1;
     }
 
     const scenario = withRunOverrides(resolvedScenario, options);
-    const problems = validateScenario(scenario, ir);
+    const problems = validateScenario(scenario, ir, { locale });
     if (scenarioErrors(problems).length > 0) {
-      console.error(`lila compare: ${scenarioFile}`);
-      printScenarioProblems(problems);
+      console.error(C.commandError('compare', scenarioFile));
+      printScenarioProblems(problems, locale);
       return 1;
     }
     validated.push({ file: scenarioFile, scenario, problems });
@@ -683,42 +729,48 @@ async function compareCommand(
     file: entry.file,
     scenario: entry.scenario,
     result: resultWithBoundaryWarnings(
-      simulate(ir, entry.scenario, { log: false }),
+      simulate(ir, entry.scenario, { log: false, locale }),
       modelValidation,
       entry.problems,
     ),
   }));
 
-  const comparison = compare(loaded.map((entry) => entry.result));
-  printCompareResult(ir, loaded, comparison, options.all);
-  if (options.json !== undefined) writeJson(options.json, comparison);
+  const comparison = compare(loaded.map((entry) => entry.result), { locale });
+  printCompareResult(ir, loaded, comparison, options.all, locale);
+  if (options.json !== undefined) writeJson(options.json, comparison, locale);
   return 0;
 }
 
-function positionalError(command: 'validate' | 'run' | 'compare', expected: string): number {
-  console.error(`lila ${command}: se esperaba ${expected}.`);
+function positionalError(
+  command: 'validate' | 'run' | 'compare',
+  expected: string,
+  locale: Locale,
+): number {
+  const C = messages(locale).cli;
+  console.error(C.commandError(command, C.expectedPositionals(expected)));
   return 1;
 }
 
-async function dispatchValidate(argv: readonly string[]): Promise<number> {
+async function dispatchValidate(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
     allowPositionals: true,
   });
+  const C = messages(locale).cli;
   if (values.help === true) {
-    console.log(USAGE);
+    console.log(C.usage());
     return 0;
   }
   if (positionals.length === 0) {
-    console.error('lila validate: falta la ruta del archivo .bpmn.');
+    console.error(C.commandError('validate', C.missingBpmnPath()));
     return 1;
   }
-  if (positionals.length > 1) return positionalError('validate', 'una ruta .bpmn');
-  return validateCommand(positionals[0]!, values.json === true);
+  if (positionals.length > 1) return positionalError('validate', C.bpmnPath(), locale);
+  return validateCommand(positionals[0]!, values.json === true, locale);
 }
 
-async function dispatchRun(argv: readonly string[]): Promise<number> {
+async function dispatchRun(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
@@ -730,22 +782,22 @@ async function dispatchRun(argv: readonly string[]): Promise<number> {
     },
     allowPositionals: true,
   });
+  const C = messages(locale).cli;
   if (values.help === true) {
-    console.log(USAGE);
+    console.log(C.usage());
     return 0;
   }
-  if (positionals.length !== 2) {
-    return positionalError('run', 'las rutas <modelo.bpmn> <escenario.json>');
-  }
+  if (positionals.length !== 2) return positionalError('run', C.runPaths(), locale);
   return runCommand(positionals[0]!, positionals[1]!, {
-    seed: integerOption('seed', values.seed),
-    replications: integerOption('replications', values.replications, 1),
+    seed: integerOption('seed', values.seed, locale),
+    replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
     csv: values.csv,
+    locale,
   });
 }
 
-async function dispatchCompare(argv: readonly string[]): Promise<number> {
+async function dispatchCompare(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
@@ -757,19 +809,19 @@ async function dispatchCompare(argv: readonly string[]): Promise<number> {
     },
     allowPositionals: true,
   });
+  const C = messages(locale).cli;
   if (values.help === true) {
-    console.log(USAGE);
+    console.log(C.usage());
     return 0;
   }
-  if (positionals.length < 3) {
-    return positionalError('compare', 'un <modelo.bpmn> y al menos dos escenarios <a.json> <b.json>');
-  }
+  if (positionals.length < 3) return positionalError('compare', C.comparePaths(), locale);
   const [model, ...scenarios] = positionals;
   return compareCommand(model!, scenarios, {
-    seed: integerOption('seed', values.seed),
-    replications: integerOption('replications', values.replications, 1),
+    seed: integerOption('seed', values.seed, locale),
+    replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
     all: values.all === true,
+    locale,
   });
 }
 
@@ -781,63 +833,79 @@ async function dispatchCompare(argv: readonly string[]): Promise<number> {
  */
 const MCP_PACKAGE = '@lila/mcp';
 
-async function dispatchMcp(argv: readonly string[]): Promise<number> {
+async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: { help: { type: 'boolean', short: 'h' } },
     allowPositionals: true,
   });
+  const C = messages(locale).cli;
   if (values.help === true) {
-    console.log(USAGE);
+    console.log(C.usage());
     return 0;
   }
   if (positionals.length > 0) {
-    console.error('lila mcp: no acepta argumentos.');
+    console.error(C.commandError('mcp', C.mcpNoArguments()));
     return 1;
   }
 
-  let start: () => Promise<void>;
+  let start: (options?: { locale?: Locale }) => Promise<void>;
   try {
     ({ startStdioServer: start } = (await import(MCP_PACKAGE)) as {
-      startStdioServer: () => Promise<void>;
+      startStdioServer: (options?: { locale?: Locale }) => Promise<void>;
     });
   } catch (error) {
     // stdout es el transporte MCP: todo diagnóstico va por stderr, que es lo único que ve
     // quien registró el servidor en Claude Code.
     console.error(
-      (error as { code?: string } | null)?.code === 'ERR_MODULE_NOT_FOUND'
-        ? `lila mcp: falta el paquete ${MCP_PACKAGE}. En el repo, \`npm ci && npm run build\` desde la raíz.`
-        : `lila mcp: ${error instanceof Error ? error.message : String(error)}`,
+      C.commandError(
+        'mcp',
+        (error as { code?: string } | null)?.code === 'ERR_MODULE_NOT_FOUND'
+          ? C.mcpMissingPackage(MCP_PACKAGE)
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      ),
     );
     return 1;
   }
 
+  // El idioma que resolvió la CLI es el del servidor; cada llamada puede pedir otro con `locale`.
   // Devuelve en cuanto el transporte queda conectado; el proceso sigue vivo mientras stdin lo esté.
-  await start();
+  await start({ locale });
   return 0;
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
-  const [command, ...args] = argv;
+  // `--lang` se resuelve antes de repartir: es global, no de un subcomando (ver `extractLang`).
+  const { argv: rest, lang, invalid } = extractLang(argv);
+  const locale = resolveLocale(lang, process.env);
+  const C = messages(locale).cli;
+  if (invalid !== undefined) {
+    console.error(invalid === '' ? C.missingLangValue(LOCALE_LIST) : C.invalidLang(invalid, LOCALE_LIST));
+    return 1;
+  }
+
+  const [command, ...args] = rest;
   if (command === undefined) {
-    console.log(USAGE);
+    console.log(C.usage());
     return 1;
   }
   if (command === '--help' || command === '-h') {
-    console.log(USAGE);
+    console.log(C.usage());
     return 0;
   }
 
   try {
-    if (command === 'validate') return await dispatchValidate(args);
-    if (command === 'run') return await dispatchRun(args);
-    if (command === 'compare') return await dispatchCompare(args);
-    if (command === 'mcp') return await dispatchMcp(args);
-    console.error(`lila: comando desconocido "${command}".`);
-    console.error(USAGE);
+    if (command === 'validate') return await dispatchValidate(args, locale);
+    if (command === 'run') return await dispatchRun(args, locale);
+    if (command === 'compare') return await dispatchCompare(args, locale);
+    if (command === 'mcp') return await dispatchMcp(args, locale);
+    console.error(C.unknownCommand(command));
+    console.error(C.usage());
     return 1;
   } catch (error) {
-    console.error(`lila ${command}: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(C.commandError(command, error instanceof Error ? error.message : String(error)));
     return 1;
   }
 }

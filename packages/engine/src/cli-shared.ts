@@ -9,6 +9,10 @@
  * Vive fuera de `core/`: usa `node:fs`/`node:path` y depende de `bpmn/` y `scenario.ts`, fuera
  * del núcleo puro. Extraído tal cual de `cli.ts` (LILA-054), sin cambiar su comportamiento: la
  * CLI ahora importa de aquí en vez de definirlo localmente.
+ *
+ * LILA-211 (parte 2): todo texto sale del catálogo (`messages(locale).cli`) y cada entrada acepta
+ * un `locale` opcional que por defecto es inglés, el idioma base del proyecto. La CLI le pasa el
+ * que resolvió de `--lang`/`LILA_LANG`/`LANG`; las tools MCP, el suyo.
  */
 import {
   closeSync,
@@ -28,6 +32,7 @@ import { parseBpmn } from './bpmn/parse.js';
 import { validate, type ValidationResult } from './bpmn/validate.js';
 import type { RunResult } from './core/result.js';
 import type { BaseTimeUnit } from './format.js';
+import { messages, type Locale } from './messages/index.js';
 import {
   resolveExtends,
   parseScenario,
@@ -51,11 +56,13 @@ export function comparablePath(file: string): string {
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
-export function readJsonFile(file: string): unknown {
+export function readJsonFile(file: string, locale: Locale = 'en'): unknown {
   try {
     return JSON.parse(readFileSync(file, 'utf8')) as unknown;
   } catch (error) {
-    if (error instanceof SyntaxError) throw new Error(`${file}: JSON inválido: ${error.message}`);
+    if (error instanceof SyntaxError) {
+      throw new Error(messages(locale).cli.invalidJson(file, error.message));
+    }
     throw error;
   }
 }
@@ -66,14 +73,20 @@ export function readJsonFile(file: string): unknown {
  * `compare_scenarios` con `scenario` inline): `file` es entonces una ruta virtual anclada al cwd
  * del proceso, y su `extends` (si lo tiene) sigue resolviéndose contra archivos reales.
  */
-export function loadResolvedScenario(file: string, read: ScenarioReader = readJsonFile): ResolvedScenario {
-  const raw = resolveExtends(file, read);
-  const parsed = parseScenario(raw);
+export function loadResolvedScenario(
+  file: string,
+  read?: ScenarioReader,
+  locale: Locale = 'en',
+): ResolvedScenario {
+  const C = messages(locale).cli;
+  const raw = resolveExtends(file, read ?? ((path) => readJsonFile(path, locale)));
+  const parsed = parseScenario(raw, { locale });
   if (!parsed.success) {
-    throw new Error(`${file}: escenario inválido:\n${schemaIssueLines(parsed.error.issues).join('\n')}`);
+    const lines = schemaIssueLines(parsed.error.issues, { locale }).join('\n');
+    throw new Error(`${file}: ${C.invalidScenarioLabel()}\n${lines}`);
   }
-  if (parsed.data.model === undefined) throw new Error(`${file}: el escenario resuelto no declara model.`);
-  if (parsed.data.run === undefined) throw new Error(`${file}: el escenario resuelto no declara run.`);
+  if (parsed.data.model === undefined) throw new Error(C.missingModel(file));
+  if (parsed.data.run === undefined) throw new Error(C.missingRun(file));
   return parsed.data as ResolvedScenario;
 }
 
@@ -97,6 +110,7 @@ export type ParsedIr = Awaited<ReturnType<typeof parseBpmn>>['ir'];
 /** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
 export async function loadValidatedModel(
   modelFile: string,
+  locale: Locale = 'en',
 ): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
   const path = absolutePath(modelFile);
   const parsed = await parseBpmn(readFileSync(path, 'utf8'));
@@ -104,6 +118,7 @@ export async function loadValidatedModel(
     unsupported: parsed.unsupported,
     messageFlowCount: parsed.messageFlowCount,
     conditionFlowIds: parsed.conditionFlowIds,
+    locale,
   });
   return { path, ir: parsed.ir, validation };
 }
@@ -138,32 +153,32 @@ export interface LoadedScenarioResult {
  * usa siempre la del base— y semillas distintas —se pierden los números aleatorios comunes de
  * R-DET-3, sobre los que descansa la lectura limpia de los deltas (RESULTS_FORMAT.md § 11)—.
  */
-export function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: BaseTimeUnit): string[] {
+export function compareWarnings(
+  loaded: readonly LoadedScenarioResult[],
+  unit: BaseTimeUnit,
+  locale: Locale = 'en',
+): string[] {
+  const C = messages(locale).cli;
   const lines: string[] = [];
   const label = (entry: LoadedScenarioResult): string => `"${entry.scenario.name}"`;
 
   const otherUnits = loaded.filter((entry) => entry.scenario.run.baseTimeUnit !== unit);
   if (otherUnits.length > 0) {
     lines.push(
-      `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
-        `Declaran otra: ${otherUnits.map((entry) => `${label(entry)} (${entry.scenario.run.baseTimeUnit})`).join(', ')}.`,
+      C.mixedTimeUnit(
+        unit,
+        otherUnits
+          .map((entry) => `${label(entry)} (${entry.scenario.run.baseTimeUnit})`)
+          .join(', '),
+      ),
     );
   }
 
   const seeds = new Set(loaded.map((entry) => entry.scenario.run.seed ?? 1));
-  if (seeds.size > 1) {
-    lines.push(
-      `los escenarios corren con semillas distintas (${[...seeds].join(', ')}): se pierden los números ` +
-        'aleatorios comunes (R-DET-3) y los deltas mezclan el efecto del cambio con el del muestreo. ' +
-        'Usa --seed para forzar la misma semilla en todos.',
-    );
-  }
+  if (seeds.size > 1) lines.push(C.differentSeeds([...seeds].join(', ')));
 
   for (const entry of loaded.filter((entry) => entry.result.replications === undefined)) {
-    lines.push(
-      `${label(entry)} corrió sin al menos dos replicaciones completas; sin IC95 no hay marca de ` +
-        'significancia posible para ese escenario.',
-    );
+    lines.push(C.fewReplications(label(entry)));
   }
 
   // Los avisos del motor llegan uno por replicación (W-JOIN-BLOQUEADO cita un conteo distinto en
@@ -179,7 +194,7 @@ export function compareWarnings(loaded: readonly LoadedScenarioResult[], unit: B
       else group.count++;
     }
     for (const { first, count } of byCode.values()) {
-      const more = count > 1 ? ` (+${count - 1} aviso${count === 2 ? '' : 's'} más con el mismo código)` : '';
+      const more = count > 1 ? ` ${C.moreWarnings(count - 1)}` : '';
       lines.push(`${label(entry)} ${first}${more}`);
     }
   }
@@ -205,7 +220,7 @@ let temporarySequence = 0;
  * Exportado además de `writeJsonAtomic`: `lila run --csv` publica varios archivos (`elements.csv`,
  * `log.csv`, ...) con la misma técnica, uno por uno, no como un único JSON.
  */
-export function stageFile(target: string): StagedFile {
+export function stageFile(target: string, locale: Locale = 'en'): StagedFile {
   let temporary = '';
   let descriptor: number | undefined;
   for (;;) {
@@ -228,7 +243,9 @@ export function stageFile(target: string): StagedFile {
   return {
     target,
     write(contents) {
-      if (descriptor === undefined) throw new Error(`archivo temporal ya cerrado: ${temporary}`);
+      if (descriptor === undefined) {
+        throw new Error(messages(locale).cli.temporaryFileClosed(temporary));
+      }
       // `writeFileSync(fd, ...)` completa todo el buffer; un único `writeSync` puede ser parcial.
       writeFileSync(descriptor, contents, 'utf8');
     },
@@ -252,9 +269,9 @@ export function stageFile(target: string): StagedFile {
   };
 }
 
-export function assertReplaceableFile(target: string): void {
+export function assertReplaceableFile(target: string, locale: Locale = 'en'): void {
   if (existsSync(target) && lstatSync(target).isDirectory()) {
-    throw new Error(`no se puede escribir ${target}: existe un directorio con ese nombre.`);
+    throw new Error(messages(locale).cli.cannotWrite(target));
   }
 }
 
@@ -263,11 +280,11 @@ export function assertReplaceableFile(target: string): void {
  * Usado por `lila run --json`/`lila compare --json` y por `saveTo` de las tools MCP: mismos bytes,
  * misma publicación atómica.
  */
-export function writeJsonAtomic(file: string, data: unknown): string {
+export function writeJsonAtomic(file: string, data: unknown, locale: Locale = 'en'): string {
   const target = absolutePath(file);
   mkdirSync(dirname(target), { recursive: true });
-  assertReplaceableFile(target);
-  const staged = stageFile(target);
+  assertReplaceableFile(target, locale);
+  const staged = stageFile(target, locale);
   try {
     staged.write(`${JSON.stringify(data, null, 2)}\n`);
     staged.commit();
