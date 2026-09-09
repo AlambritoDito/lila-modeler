@@ -135,6 +135,22 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   `<nombre>.scenario.json` por cada escenario (por ejemplo `as-is.scenario.json`,
   `to-be.scenario.json`), `lila-project.json` (metadatos: id, nombre, revisiones) y una subcarpeta
   `runs/` con una corrida guardada por archivo.
+- **Un `.bpmn` con otro nombre dentro de la carpeta se guarda como diagrama suelto**: el
+  manifiesto (`lila-project.json`) describe **solo** `model.bpmn` — su nombre y su revisión. Si
+  abres `ventas.bpmn` (doble clic) en una carpeta que ya es un proyecto Lila, `⌘S` escribe ese
+  `ventas.bpmn` y nada más: `model.bpmn`, los escenarios y el manifiesto se quedan byte a byte como
+  estaban, y las corridas no se guardan. La barra inferior lo avisa mientras ese diagrama está
+  abierto — «Diagrama suelto: los escenarios no se guardan hasta «Guardar como»» —, igual que con un
+  `.bpmn` suelto en `~/Descargas`: es el mismo modo de guardado. Al reabrir la carpeta desde
+  recientes vuelve a verse el proyecto de `model.bpmn`, no el otro diagrama. Para convertir
+  `ventas.bpmn` en un proyecto propio, usa **Guardar como** hacia una carpeta nueva: ahí el XML pasa
+  a ser el `model.bpmn` de ese proyecto nuevo (**Guardar como** siempre escribe `model.bpmn`; pedirle
+  otro nombre de archivo se rechaza con `E-DESTINO-INVALIDO`, porque dejaría una carpeta sin
+  manifiesto que ya no se podría reabrir).
+- **`Model.bpmn` (con mayúsculas) no se abre**: se rechaza con `E-ARGUMENTO` y el mensaje pide
+  renombrarlo. En Mac el disco no distingue mayúsculas, así que ese archivo **es** el `model.bpmn`
+  del proyecto, pero la app lo tomaría por «otro diagrama» y guardaría a medias (el modelo sí, el
+  manifiesto y los escenarios no).
 - **Un escenario con JSON roto no impide abrir el proyecto**: ese archivo se excluye y queda
   anotado en `problems`; el resto del proyecto (modelo y los demás escenarios) se abre con
   normalidad. Esto sí se muestra en la interfaz: `App.tsx` lee `doc.problems` al activar el

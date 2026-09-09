@@ -538,8 +538,11 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     await writeProjectFolder(dir, documentoBase()); // proyecto de verdad: manifiesto + model.bpmn.
     await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
 
+    // `loose` = «lo abierto no es el `model.bpmn` de la carpeta», haya manifiesto o no (LILA-206,
+    // P1 del QA): antes esto era `false` aquí y la UI no sabía que iba a guardar en modo
+    // `diagramOnly`.
     const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
-    expect(loose).toBe(false); // hay `lila-project.json`: sigue siendo un proyecto Lila.
+    expect(loose).toBe(true);
 
     const editado = `${XML_VENTAS}<!-- editado -->`;
     await writeProjectFolder(
@@ -550,9 +553,52 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
 
     expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(editado);
     expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(XML_MINIMO);
-    // Es un proyecto: el resto se guarda igual que siempre, solo cambia a qué `.bpmn` va el XML.
-    expect(await readFile(join(dir, 'lila-project.json'), 'utf8')).toContain('"ventas.bpmn"');
+    // El manifiesto describe solo `model.bpmn` (LILA-206): guardar `ventas.bpmn` no lo reescribe.
+    expect(await readFile(join(dir, 'lila-project.json'), 'utf8')).not.toContain('"ventas.bpmn"');
     expect(await readFile(join(dir, 'as-is.scenario.json'), 'utf8')).toContain('AS-IS');
+  });
+
+  it('(a bis) guardar ventas.bpmn deja el manifiesto y model.bpmn byte a byte iguales (LILA-206)', async () => {
+    // Proyecto de verdad: manifiesto + model.bpmn + escenario. El manifiesto nombra `model.bpmn`,
+    // que es lo que la UI enseña al reabrir la carpeta desde recientes.
+    const base = documentoBase({ model: { id: 'Process_1', name: 'model.bpmn', xml: XML_MINIMO, revision: 3 } });
+    await writeProjectFolder(dir, base);
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const manifiestoAntes = await readFile(join(dir, 'lila-project.json'));
+    const modeloAntes = await readFile(join(dir, 'model.bpmn'));
+    const escenarioAntes = await readFile(join(dir, 'as-is.scenario.json'));
+
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(document.model.name).toBe('ventas.bpmn'); // así llega el documento desde la UI.
+
+    const editado = `${XML_VENTAS}<!-- editado -->`;
+    await writeProjectFolder(
+      dir,
+      { ...document, model: { ...document.model, xml: editado, revision: document.model.revision + 1 } },
+      { modelFile: 'ventas.bpmn' },
+    );
+
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(editado);
+    expect((await readFile(join(dir, 'lila-project.json'))).equals(manifiestoAntes)).toBe(true);
+    expect((await readFile(join(dir, 'model.bpmn'))).equals(modeloAntes)).toBe(true);
+    expect((await readFile(join(dir, 'as-is.scenario.json'))).equals(escenarioAntes)).toBe(true);
+
+    // Reabrir la carpeta como proyecto sigue enseñando `model.bpmn` y su revisión de siempre, no
+    // «ventas.bpmn» encima del contenido de `model.bpmn` (hallazgo de la ronda 3 del QA de #256).
+    const reabierto = await readProjectFolder(dir);
+    expect(reabierto.document.model.name).toBe('model.bpmn');
+    expect(reabierto.document.model.revision).toBe(base.model.revision);
+    expect(reabierto.document.model.xml).toBe(XML_MINIMO);
+  });
+
+  it('el guardado normal sigue viendo E-CAMBIO-EXTERNO sobre lila-project.json (LILA-206)', async () => {
+    await writeProjectFolder(dir, documentoBase());
+    await readProjectFolder(dir);
+    await writeFile(join(dir, 'lila-project.json'), '{"version":1,"tocado":"por otro"}\n', 'utf8');
+
+    const error = await captureError(() => writeProjectFolder(dir, documentoBase({ name: 'Pedido v2' })));
+    expect((error as ProjectIOError).code).toBe('E-CAMBIO-EXTERNO');
+    expect((error as ProjectIOError).message).toContain('lila-project.json');
   });
 
   it('ventas.bpmn cambiado en disco desde que se abrió: E-CAMBIO-EXTERNO, sin escribir nada', async () => {
@@ -593,6 +639,53 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     // Ni manifiesto, ni `model.bpmn`, ni escenarios, ni `runs/`: la carpeta del usuario no se
     // convierte en un proyecto por pulsar ⌘S sobre un `.bpmn` que estaba ahí suelto.
     expect(await readdir(dir)).toEqual(['ventas.bpmn']);
+  });
+
+  it('(P1) ventas.bpmn DENTRO de un proyecto Lila es diagrama suelto; model.bpmn no (LILA-206)', async () => {
+    // Regresión del P1 del QA: con `loose: false` la UI no manda `diagramOnly`, no pinta el pie
+    // «Diagrama suelto…» y da por «Guardado» un documento cuyos escenarios y corridas no se
+    // escribieron. El manifiesto presente NO cambia la respuesta.
+    await writeProjectFolder(dir, documentoBase());
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+
+    expect((await readProjectFolder(dir, 'ventas.bpmn')).loose).toBe(true);
+    expect((await readProjectFolder(dir)).loose).toBe(false);
+    expect((await readProjectFolder(dir, 'model.bpmn')).loose).toBe(false);
+  });
+
+  it('(P2) «Guardar como» con un modelFile que no es model.bpmn: E-DESTINO-INVALIDO y carpeta intacta (LILA-206)', async () => {
+    // Dejaría una carpeta con un solo `.bpmn`, sin manifiesto ni `model.bpmn`: imposible de reabrir
+    // como proyecto. La UI no lo manda hoy, pero `projectIO` es la capa de contrato.
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const destino = await mkdtemp(join(tmpdir(), 'lila-projectIO-destino-'));
+    try {
+      const error = await captureError(() =>
+        writeProjectFolder(destino, document, { saveAs: true, modelFile: 'ventas.bpmn' }),
+      );
+      expect((error as ProjectIOError).code).toBe('E-DESTINO-INVALIDO');
+      expect(await readdir(destino)).toEqual([]);
+    } finally {
+      await rm(destino, { recursive: true, force: true });
+    }
+  });
+
+  it('(P2 bis) «Guardar como» con diagramOnly: E-DESTINO-INVALIDO y carpeta intacta (QA ronda 2, LILA-206)', async () => {
+    // La otra mitad del contrato de «Guardar como»: sin este guardia el destino se quedaba con un
+    // `model.bpmn` a secas —sin manifiesto, sin escenarios, sin `runs/`—, o sea el usuario perdía
+    // en silencio todo lo que no es el XML en la acción que sirve para colocar el diagrama suelto.
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const destino = await mkdtemp(join(tmpdir(), 'lila-projectIO-destino-'));
+    try {
+      const error = await captureError(() =>
+        writeProjectFolder(destino, { ...document, scenarios: documentoBase().scenarios }, { saveAs: true, diagramOnly: true }),
+      );
+      expect((error as ProjectIOError).code).toBe('E-DESTINO-INVALIDO');
+      expect(await readdir(destino)).toEqual([]);
+    } finally {
+      await rm(destino, { recursive: true, force: true });
+    }
   });
 
   it('un model.bpmn puesto a mano (carpeta sin manifiesto) NO es un diagrama suelto', async () => {

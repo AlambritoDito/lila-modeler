@@ -314,11 +314,16 @@ export async function readProjectFolder(
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
   };
-  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA): un `.bpmn` que no es el `model.bpmn` de un
-  // proyecto y cuya carpeta tampoco tiene manifiesto — el caso normal del doble clic en
-  // `~/Descargas`. Guardar ahí no debe sembrar la carpeta del usuario con un proyecto entero; lo
-  // decide la LECTURA (cómo estaba la carpeta al abrir) y lo obedece `writeProjectFolder`.
-  const loose = modelFile !== MODEL_FILE && !(await pathExists(join(dir, MANIFEST_FILE)));
+  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA; corregido en LILA-206, P1 del QA): CUALQUIER
+  // `.bpmn` abierto que no sea el `model.bpmn` de la carpeta — el doble clic en `~/Descargas`, y
+  // también el doble clic en `ventas.bpmn` DENTRO de un proyecto Lila. En los dos casos guardar
+  // escribe solo ese archivo (`diagramOnly`), así que la condición tiene que ser exactamente la
+  // misma que decide `diagramOnly` en `writeProjectFolder`: si aquí se exigía además que la carpeta
+  // no tuviera manifiesto, `ventas.bpmn` dentro de un proyecto llegaba a la UI con `loose: false`,
+  // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
+  // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
+  // archivo se abrió) y lo obedece `writeProjectFolder`.
+  const loose = modelFile !== MODEL_FILE;
   return { document, problems, loose };
 }
 
@@ -363,14 +368,17 @@ export interface WriteProjectOptions {
    * un proyecto abierto por otro `.bpmn` de la misma carpeta (doble clic en `ventas.bpmn`) guarda
    * en ESE archivo, no en el `model.bpmn` de al lado, que se quedaría con el diagrama equivocado.
    * `main.ts` valida que sea un nombre plano `.bpmn` dentro de `dir` antes de llegar aquí.
+   * Un `modelFile` distinto de `model.bpmn` implica `diagramOnly` (LILA-206): el manifiesto
+   * describe solo el `model.bpmn`, así que no se reescribe por guardar otro diagrama al lado.
    */
   readonly modelFile?: string;
   /**
-   * `true` cuando lo abierto es un diagrama suelto (`readProjectFolder(...).loose`): un `.bpmn` en
-   * una carpeta que no es un proyecto Lila. Entonces se escribe SOLO ese `.bpmn` — ni manifiesto,
-   * ni escenarios, ni corridas: un guardado normal no puede sembrar `~/Descargas` con cuatro
-   * archivos que el usuario no pidió. «Guardar como» crea el proyecto completo en la carpeta que
-   * el usuario elija (ahí `saveAs: true` y sin `diagramOnly`).
+   * `true` cuando lo abierto es un diagrama suelto (`readProjectFolder(...).loose`): un `.bpmn`
+   * distinto del `model.bpmn` de su carpeta, sea esa carpeta un proyecto Lila o no. Entonces se
+   * escribe SOLO ese `.bpmn` — ni manifiesto, ni escenarios, ni corridas: un guardado normal no
+   * puede sembrar `~/Descargas` con cuatro archivos que el usuario no pidió, ni pisar el manifiesto
+   * del proyecto de al lado. «Guardar como» crea el proyecto completo en la carpeta que el usuario
+   * elija (ahí `saveAs: true` y sin `diagramOnly`).
    */
   readonly diagramOnly?: boolean;
 }
@@ -646,8 +654,9 @@ async function commitWithRollback(
 }
 
 /**
- * Escribe el documento completo — o solo el `.bpmn`, si `options.diagramOnly` (ver
- * `WriteProjectOptions`); el XML va a `options.modelFile` (por defecto `model.bpmn`). Antes de
+ * Escribe el documento completo — o solo el `.bpmn`, si `options.diagramOnly` o si
+ * `options.modelFile` no es `model.bpmn` (ver `WriteProjectOptions` y LILA-206); el XML va a
+ * `options.modelFile` (por defecto `model.bpmn`). Antes de
  * tocar el disco: (a) si `options.saveAs`, verifica que la
  * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) salvo
  * `options.overwrite`, rechaza si el modelo/manifiesto/algún escenario cambió en disco desde la
@@ -668,12 +677,42 @@ export async function writeProjectFolder(
   options: WriteProjectOptions = {},
   fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
+  const modelFile = options.modelFile ?? MODEL_FILE;
   if (options.saveAs === true) {
+    // «Guardar como» crea un proyecto COMPLETO en la carpeta elegida, y un proyecto solo se reabre
+    // por su `model.bpmn` + manifiesto. Con otro `modelFile` el `diagramOnly` implícito de abajo
+    // dejaría ahí un único `.bpmn` suelto, sin manifiesto ni `model.bpmn`: una carpeta que ya no se
+    // puede abrir como proyecto (LILA-206, P2 del QA). La UI no lo manda hoy
+    // (`DesktopStore.saveProject` no reenvía `modelFile` hacia un destino nuevo); esto lo fija en la
+    // capa de contrato en vez de dejarlo a que el llamador se acuerde.
+    if (modelFile !== MODEL_FILE) {
+      throw new ProjectIOError(
+        'E-DESTINO-INVALIDO',
+        `"Guardar como" escribe el modelo en "${MODEL_FILE}"; no puede crear el proyecto en "${modelFile}".`,
+      );
+    }
+    // La otra mitad del mismo contrato (QA ronda 2 de LILA-206): con `diagramOnly` explícito, un
+    // «Guardar como» dejaría en la carpeta elegida SOLO el `model.bpmn` — sin manifiesto, sin
+    // escenarios y sin `runs/` —, y el usuario perdería en silencio, en la acción que sirve
+    // justamente para colocar el diagrama suelto, todo lo que no es el XML. La UI tampoco lo manda
+    // (`DesktopStore.saveProject` no reenvía `diagramOnly` hacia un destino nuevo).
+    if (options.diagramOnly === true) {
+      throw new ProjectIOError(
+        'E-DESTINO-INVALIDO',
+        '"Guardar como" crea el proyecto completo; no puede escribir solo el diagrama en la carpeta elegida.',
+      );
+    }
     await assertFolderNotOccupied(dir, document.id);
   }
-
-  const modelFile = options.modelFile ?? MODEL_FILE;
-  const diagramOnly = options.diagramOnly === true;
+  // ponytail: el manifiesto describe UN solo diagrama, el `model.bpmn` de la carpeta (LILA-206,
+  // #266). Así que guardar otro `.bpmn` de la misma carpeta —doble clic en `ventas.bpmn` dentro de
+  // un proyecto Lila— escribe SOLO ese archivo: reescribir el manifiesto dejaba
+  // `manifest.model.name = "ventas.bpmn"` y la revisión avanzada sobre un `model.bpmn` que nadie
+  // tocó, y al reabrir la UI enseñaba «ventas.bpmn» encima del contenido de `model.bpmn`. El techo
+  // es ese: un diagrama por manifiesto. Listar varios diagramas (y sus revisiones) es otro ticket.
+  // Defensivo en la capa de disco a propósito: el llamador (`main.ts` → `writeProject`) manda
+  // `diagramOnly` según el `loose` de la lectura, que aquí es `false` (la carpeta SÍ es proyecto).
+  const diagramOnly = options.diagramOnly === true || modelFile !== MODEL_FILE;
   const runsDir = join(dir, RUNS_DIR);
   const runWrites: PendingWrite[] = [];
 

@@ -25,7 +25,7 @@ import { decideClose, type CloseChoice } from './closeGuard.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { menuTemplate } from './menu.js';
-import { findBpmnArg, isBpmnPath } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isMiscasedModelFile } from './openPath.js';
 import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
@@ -139,6 +139,14 @@ function requireBpmnName(dir: string, value: unknown): string | undefined {
   if (typeof value !== 'string' || !isBpmnPath(value)) {
     throw new Error(
       `E-ARGUMENTO: "file" debe ser un nombre de archivo .bpmn (recibido: ${JSON.stringify(value)}).`,
+    );
+  }
+  // `Model.bpmn` no: solo se diferencia de `model.bpmn` en las mayúsculas, y aguas abajo
+  // `projectIO` lo trataría como «otro diagrama» (`diagramOnly`) cuando en macOS y Windows es el
+  // MISMO archivo — ver `isMiscasedModelFile` (LILA-206, P3 del QA).
+  if (isMiscasedModelFile(value)) {
+    throw new Error(
+      `E-ARGUMENTO: "${value}" solo se diferencia de "model.bpmn" en las mayúsculas; renómbralo antes de abrirlo (en macOS y Windows serían el mismo archivo y se guardaría a medias).`,
     );
   }
   // El sufijo ya está comprobado arriba, e insensible a mayúsculas (`Ventas.BPMN` es válido);
