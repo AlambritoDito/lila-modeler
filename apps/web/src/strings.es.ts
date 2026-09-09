@@ -206,7 +206,6 @@ export const S = {
     eliminar: 'Eliminar',
     integrado: 'Integrados',
     delUsuario: 'Míos',
-    vistaPrevia: 'Vista previa',
     muestraTexto: 'Texto sobre superficie',
     muestraSecundario: 'Texto secundario',
     muestraBoton: 'Acento',

@@ -58,23 +58,48 @@ export function validarTema(dato: unknown): Theme {
 }
 
 /**
- * Lo guardado, quedándose solo con los temas que siguen siendo válidos. Tolerante a propósito, como
- * `recents` en escritorio: un tema que un `estado.json` editado a mano dejó roto se descarta solo
- * él, y perder un tema es aceptable donde no arrancar no lo es.
+ * `true` si el valor es el que ese token acepta. Las mismas tres reglas que `validarTema`, sin
+ * mensaje: aquí se usan donde no hay a quién enseñárselo (el saneo) o donde el propio control ya
+ * lo dice (el editor de tokens).
+ */
+export function valorValido(token: string, valor: unknown): valor is string {
+  if (typeof valor !== 'string') return false;
+  if (COLORES.has(token) && !HEX.test(valor)) return false;
+  if (token === 'density' && !DENSIDADES.has(valor)) return false;
+  return true;
+}
+
+/** Los tokens conocidos que valen, en el orden de `TOKEN_NAMES`; el que no vale cae al `respaldo`. */
+function tokensSanos(dato: unknown, respaldo: Record<string, string>): Record<string, string> {
+  const tokens: Record<string, string> = {};
+  for (const token of TOKEN_NAMES) {
+    const valor: unknown = esObjeto(dato) ? dato[token] : undefined;
+    const bueno = valorValido(token, valor) ? valor : respaldo[token];
+    if (bueno !== undefined) tokens[token] = bueno;
+  }
+  return tokens;
+}
+
+/**
+ * Lo guardado, **reparado token a token**. Antes se descartaba el tema entero al primer valor que
+ * no validara, y eso convertía cualquier edición dejada a medias —un hex tecleado hasta `#12`— en
+ * la pérdida silenciosa de los 40 tokens al recargar (QA de #277). Ahora el token roto vuelve al
+ * `origen` del tema y, si ahí tampoco vale, se cae de la lista: un token ausente es legal y lo
+ * pinta el valor por defecto de `tokens.css` (Eva-01), que es lo que promete `docs/THEMES.md`.
+ *
+ * Lo único que se descarta es el tema que no se puede reconstruir: sin `id` del usuario o sin
+ * `name`, porque no habría cómo elegirlo en la lista.
  */
 export function saneaTemas(dato: unknown): TemaGuardado[] {
   if (!Array.isArray(dato)) return [];
-  return (dato as unknown[]).filter((t): t is TemaGuardado => {
-    if (!esObjeto(t) || typeof t.id !== 'string' || !esDelUsuario(t.id)) return false;
-    try {
-      validarTema(t.tema);
-      // `origen` es solo el mapa de tokens: se valida con las mismas reglas prestándole un nombre.
-      validarTema({ name: '·', tokens: t.origen });
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  const temas: TemaGuardado[] = [];
+  for (const t of dato as unknown[]) {
+    if (!esObjeto(t) || typeof t.id !== 'string' || !esDelUsuario(t.id)) continue;
+    if (!esObjeto(t.tema) || typeof t.tema.name !== 'string' || t.tema.name.trim() === '') continue;
+    const origen = tokensSanos(t.origen, {});
+    temas.push({ id: t.id, tema: { name: t.tema.name, tokens: tokensSanos(t.tema.tokens, origen) }, origen });
+  }
+  return temas;
 }
 
 export const temaDe = (id: string, temas: readonly TemaGuardado[]): TemaGuardado | undefined =>

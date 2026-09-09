@@ -27,7 +27,8 @@ import type { Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bri
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
-import { applyTheme, type Theme } from './theme/applyTheme';
+import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
+import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
 import { S } from './strings.es';
@@ -100,7 +101,12 @@ async function preferencias(): Promise<Ajustes> {
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
-    const temas: unknown = JSON.parse(localStorage.getItem('lila.temas') ?? 'null');
+    //
+    // Su `try` es aparte del de las otras dos preferencias (QA de #277): `lila.temas` es lo único
+    // que pasa por `JSON.parse`, y un valor corrupto ahí se llevaba por delante el tema elegido y
+    // la densidad, que son texto y no pueden romperse.
+    let temas: unknown = null;
+    try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
@@ -128,6 +134,19 @@ function recordar(ajustes: Ajustes): void {
 function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
   return validas.includes(valor as T) ? (valor as T) : porDefecto;
 }
+/**
+ * Aplica el tema y borra las variables en línea que el anterior dejó puestas y este no trae. Sin
+ * eso, `docs/THEMES.md` mentía: un tema parcial (legal, y lo que sale de «Importar») heredaba en
+ * silencio los tokens del que estuviera puesto, así que el mismo archivo se veía distinto según lo
+ * que hubiera antes. Se borra **después** de escribir, no antes, para no perder la otra garantía
+ * de `applyTheme`: un tema malo lanza sin tocar nada y deja el anterior intacto.
+ */
+function aplicarTema(t: Theme): void {
+  applyTheme(t);
+  const raiz = document.documentElement;
+  for (const token of TOKEN_NAMES) if (t.tokens[token] === undefined) raiz.style.removeProperty(tokenToCssVar(token));
+}
+
 async function cargarTema(id: TemaId): Promise<Theme> {
   const r = await fetch(`./${id}.json`);
   if (!r.ok) throw new Error(S.app.errorTemaHttp(r.status));
@@ -521,7 +540,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setDensidad(valido(guardadas.densidad, DENSIDADES, 'normal'));
       try {
         const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
-        applyTheme(t);
+        aplicarTema(t);
         setTema(t);
       } catch (e: unknown) {
         // Un tema roto no puede dejar la app en blanco: se avisa y se sigue con Eva-01, que
@@ -552,7 +571,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     try {
       const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : await cargarTema(id as TemaId);
       if (t === undefined) return;
-      applyTheme(t);
+      aplicarTema(t);
       // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
       // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
       modelador?.repintar();
@@ -802,7 +821,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
-        <form method="dialog">
+        {/* Enter dentro de un campo de texto enviaba el formulario, o sea cerraba el diálogo en
+            mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
+            con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
+        <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
           <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
           <h3>{S.app.apariencia}</h3>
           <Apariencia

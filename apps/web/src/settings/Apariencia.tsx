@@ -20,7 +20,7 @@ import { useRef, useState } from 'react';
 import { S } from '../strings.es';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
-import { duplicar, esColor, GRUPOS, temaDe, validarTema, type TemaGuardado } from '../theme/temas';
+import { duplicar, esColor, GRUPOS, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
 
 export interface AparienciaProps {
   /** Id del tema aplicado: `eva-01`, `papel` o `u:<n>`. */
@@ -54,8 +54,16 @@ interface EditorProps {
   readonly editar: (token: TokenName, valor: string) => void;
 }
 
-/** Un token de color: selector nativo y hex a la par, editables los dos. */
+/**
+ * Un token de color: selector nativo y hex a la par, editables los dos.
+ *
+ * **Lo tecleado a medias no sale del control.** Escribir un hex pasa por `#`, `#1`, `#12`… y
+ * ninguno de esos es un color: aplicarlos pintaría la app de nada y persistirlos dejaba en disco un
+ * tema que al releerlo había que reparar (QA de #277). El borrador vive aquí, el campo lo enseña
+ * marcado como inválido, y solo el valor bueno llama a `editar`.
+ */
 function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
+  const [borrador, setBorrador] = useState<string | null>(null);
   return (
     <label className="token">
       <code>{token}</code>
@@ -65,14 +73,20 @@ function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
         type="color"
         aria-label={S.apariencia.color(token)}
         value={valor.slice(0, 7)}
-        onChange={(e) => editar(token, e.target.value + valor.slice(7))}
+        onChange={(e) => { setBorrador(null); editar(token, e.target.value + valor.slice(7)); }}
       />
       <input
         type="text"
         aria-label={S.apariencia.hex(token)}
-        value={valor}
+        value={borrador ?? valor}
+        aria-invalid={borrador !== null}
+        className={borrador === null ? undefined : 'invalido'}
         spellCheck={false}
-        onChange={(e) => editar(token, e.target.value)}
+        onChange={(e) => {
+          const nuevo = e.target.value;
+          if (valorValido(token, nuevo)) { setBorrador(null); editar(token, nuevo); }
+          else setBorrador(nuevo);
+        }}
       />
     </label>
   );
@@ -94,8 +108,12 @@ function Fuente({ token, valor, editar }: EditorProps): React.JSX.Element {
   );
 }
 
-/** `font.size.base` en píxeles; el token guarda la longitud CSS completa (`13px`). */
+/**
+ * `font.size.base` en píxeles; el token guarda la longitud CSS completa (`13px`). Vaciar el campo
+ * dejaba el token en `"px"`, que no es una longitud: como en `Color`, ese estado se queda aquí.
+ */
 function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
+  const [borrador, setBorrador] = useState<string | null>(null);
   return (
     <label className="token">
       <code>{token}</code>
@@ -104,8 +122,14 @@ function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
         min={9}
         max={32}
         aria-label={S.apariencia.tamanoBase}
-        value={Number.parseFloat(valor === '' ? '13' : valor)}
-        onChange={(e) => editar(token, `${e.target.value}px`)}
+        aria-invalid={borrador !== null}
+        className={borrador === null ? undefined : 'invalido'}
+        value={borrador ?? Number.parseFloat(valor === '' ? '13' : valor)}
+        onChange={(e) => {
+          const nuevo = e.target.value;
+          if (nuevo !== '' && Number.isFinite(Number(nuevo))) { setBorrador(null); editar(token, `${nuevo}px`); }
+          else setBorrador(nuevo);
+        }}
       />
     </label>
   );
@@ -114,6 +138,8 @@ function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
 export function Apariencia(props: AparienciaProps): React.JSX.Element {
   const { densidad, tema, temaId, temas } = props;
   const [error, setError] = useState<string | null>(null);
+  /** Nombre tecleado que todavía no vale (vacío o en blanco): no se persiste, se queda el anterior. */
+  const [borradorNombre, setBorradorNombre] = useState<string | null>(null);
   // El `<input type="file">` no se resetea solo: sin esto, importar dos veces el mismo archivo
   // (tras corregirlo) no dispara `change` porque el valor no ha cambiado.
   const archivo = useRef<HTMLInputElement>(null);
@@ -197,7 +223,19 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
       {activo !== undefined && (
         <label className="campo">
           {S.apariencia.nombre}
-          <input type="text" value={activo.tema.name} onChange={(e) => renombrar(e.target.value)} />
+          <input
+            type="text"
+            value={borradorNombre ?? activo.tema.name}
+            aria-invalid={borradorNombre !== null}
+            className={borradorNombre === null ? undefined : 'invalido'}
+            onChange={(e) => {
+              const nuevo = e.target.value;
+              // Un tema sin rótulo no se puede elegir en la lista: mientras el campo esté vacío se
+              // conserva el nombre anterior y no se guarda nada.
+              if (nuevo.trim() === '') setBorradorNombre(nuevo);
+              else { setBorradorNombre(null); renombrar(nuevo); }
+            }}
+          />
         </label>
       )}
 

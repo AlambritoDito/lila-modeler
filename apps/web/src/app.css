@@ -1288,6 +1288,9 @@ body {
 .ajustes .token input, .ajustes .token select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
 .ajustes .token input[type='color'] { background: var(--bg-surface); block-size: 24px; border: 1px solid var(--border-strong); cursor: pointer; inline-size: 34px; padding: 1px; }
 .ajustes .token input[type='text'] { font-family: var(--font-mono); }
+/* Lo tecleado a medias (`#12`, el nombre vacío) no se aplica ni se guarda (QA de #277): el campo
+   lo dice con el token de error y el tema sigue con el valor bueno. */
+.ajustes input.invalido { border: 1px solid var(--status-error); }
 .boton.icono { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-muted); display: grid; flex: none; height: 30px; line-height: 1; padding: 0; place-items: center; width: 30px; }
 .boton.icono:hover:enabled { color: var(--fg-primary); }
 .boton.icono:disabled { color: var(--fg-disabled); }
