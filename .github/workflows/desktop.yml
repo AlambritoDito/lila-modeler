@@ -4,6 +4,10 @@ name: Desktop
 # ver #109/E19). Se dispara manualmente, en ramas codex/** (sin publicar, para no
 # cargar cada PR de main con una compilación de instaladores) y en tags v* (publica
 # un GitHub Release en borrador con los tres instaladores para que Brito lo revise).
+# Cortar una release: `git tag v0.0.1 && git push origin v0.0.1`. El Release queda en
+# BORRADOR: hay que publicarlo a mano desde la web. Ojo: la versión del nombre de los
+# instaladores sale de `apps/desktop/package.json` (hoy 0.0.1), no del tag — súbela ahí
+# antes de etiquetar o dos tags distintos producirán ficheros con el mismo nombre.
 on:
   workflow_dispatch:
   push:
