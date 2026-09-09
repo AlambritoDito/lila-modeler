@@ -10,6 +10,8 @@ const OPEN = `<?xml version="1.0" encoding="UTF-8"?>
 function errorsOf(xml: string): Promise<string[]> {
   return parseBpmn(xml).then((parsed) =>
     validate(parsed.ir, {
+      // El texto normativo de § 3 es el español (LILA-211).
+      locale: 'es',
       unsupported: parsed.unsupported,
       messageFlowCount: parsed.messageFlowCount,
       conditionFlowIds: parsed.conditionFlowIds,
@@ -131,6 +133,8 @@ test('W-MSGFLOW se agrega entre collaborations y W-COND conserva un aviso por fl
   expect(parsed.conditionFlowIds).toEqual(['Flow_A', 'Flow_B']);
   expect(
     validate(parsed.ir, {
+      // El texto normativo de § 3 es el español (LILA-211).
+      locale: 'es',
       unsupported: parsed.unsupported,
       messageFlowCount: parsed.messageFlowCount,
       conditionFlowIds: parsed.conditionFlowIds,
