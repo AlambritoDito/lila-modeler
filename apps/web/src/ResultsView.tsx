@@ -36,6 +36,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
+import { S } from './strings.es';
 
 export interface ResultsViewProps {
   ir: ProcessIR;
@@ -203,7 +204,7 @@ export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvC
             style={exportButtonStyle}
             onClick={() => downloadCsv(csvFilename, csvContents)}
           >
-            Exportar CSV
+            {S.resultados.exportarCsv}
           </button>
         )}
       </div>
@@ -318,8 +319,8 @@ function resourceRows(result: RunResult, names: Readonly<Record<string, string>>
 /** Columnas Id/Name comunes a Elementos, Flujos y Recursos (docs/RESULTS_FORMAT.md §10). */
 function idNameColumns<Row extends { id: string; name: string }>(): ColumnDef<Row>[] {
   return [
-    { display: (row) => row.id, header: 'Id', key: 'id', sortValue: (row) => row.id },
-    { display: (row) => row.name, header: 'Name', key: 'name', sortValue: (row) => row.name },
+    { display: (row) => row.id, header: S.resultados.columnas.id, key: 'id', sortValue: (row) => row.id },
+    { display: (row) => row.name, header: S.resultados.columnas.name, key: 'name', sortValue: (row) => row.name },
   ];
 }
 
@@ -346,7 +347,7 @@ function durationColumn<Row>(
 ): ColumnDef<Row> {
   return {
     display: (row) => formatDuration(get(row), unit),
-    header: `${columnLabel(scope, key)} (${unit})`,
+    header: S.resultados.columnaConUnidad(columnLabel(scope, key), unit),
     key,
     numeric: true,
     sortValue: get,
@@ -357,7 +358,7 @@ function durationColumn<Row>(
 function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
   return [
     ...idNameColumns<ElementRow>(),
-    { display: (row) => row.type, header: 'Type', key: 'type', sortValue: (row) => row.type },
+    { display: (row) => row.type, header: S.resultados.columnas.type, key: 'type', sortValue: (row) => row.type },
     numberColumn('elements', 'started', (row) => row.metrics.started),
     numberColumn('elements', 'completed', (row) => row.metrics.completed),
     durationColumn('elements', 'processing.min', unit, (row) => row.metrics.processing.min),
@@ -377,8 +378,8 @@ function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
 function flowColumns(): ColumnDef<FlowRow>[] {
   return [
     ...idNameColumns<FlowRow>(),
-    { display: (row) => row.from, header: 'From', key: 'from', sortValue: (row) => row.from },
-    { display: (row) => row.to, header: 'To', key: 'to', sortValue: (row) => row.to },
+    { display: (row) => row.from, header: S.resultados.columnas.from, key: 'from', sortValue: (row) => row.from },
+    { display: (row) => row.to, header: S.resultados.columnas.to, key: 'to', sortValue: (row) => row.to },
     numberColumn('flows', 'count', (row) => row.metrics.count),
   ];
 }
@@ -441,18 +442,19 @@ function BottleneckCard({
 }): ReactNode {
   return (
     <section style={sectionStyle}>
-      <h2 style={h2Style}>Cuellos de botella</h2>
+      <h2 style={h2Style}>{S.resultados.cuellos}</h2>
       {bottlenecks.length === 0 ? (
-        <p style={{ color: 'var(--fg-muted)' }}>Sin espera por recurso detectada.</p>
+        <p style={{ color: 'var(--fg-muted)' }}>{S.resultados.sinCuellos}</p>
       ) : (
         <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
           {bottlenecks.map((entry) => (
             <li key={entry.elementId} style={{ color: 'var(--fg-primary)', marginBottom: 4 }}>
               <strong>{ir.nodes[entry.elementId]?.name ?? entry.elementId}</strong>
-              {' — espera total '}
-              {formatDuration(entry.resourceWaitTotal, unit)} {unit}
-              {', utilización '}
-              {formatNumber(entry.utilization * 100)}%
+              {S.resultados.cuelloDetalle(
+                formatDuration(entry.resourceWaitTotal, unit),
+                unit,
+                formatNumber(entry.utilization * 100),
+              )}
             </li>
           ))}
         </ol>
@@ -469,12 +471,7 @@ const TABS = ['elements', 'resources', 'process', 'flows'] as const;
 type Tab = (typeof TABS)[number];
 
 /** Rótulos de sección en español; CompareView (LILA-063) los reutiliza para no inventar otros. */
-export const TAB_LABELS: Readonly<Record<Tab, string>> = {
-  elements: 'Elementos del proceso',
-  flows: 'Flujos',
-  process: 'Proceso',
-  resources: 'Recursos',
-};
+export const TAB_LABELS: Readonly<Record<Tab, string>> = S.resultados.secciones;
 
 const tabBarStyle: CSSProperties = { display: 'flex', gap: 4, marginBottom: 12 };
 
@@ -518,9 +515,13 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 12px' }}>
-        Escenario {scenario.name} · semilla {scenario.run.seed ?? 1} · replicaciones{' '}
-        {scenario.run.replications} · unidad de tiempo {unit}
-        {scenario.run.currency === undefined ? '' : ` · moneda ${scenario.run.currency}`}
+        {S.resultados.cabecera(
+          scenario.name,
+          scenario.run.seed ?? 1,
+          scenario.run.replications,
+          unit,
+          scenario.run.currency,
+        )}
       </p>
 
       <BottleneckCard bottlenecks={result.bottlenecks} ir={ir} unit={unit} />
@@ -581,7 +582,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
 
       {result.warnings.length > 0 && (
         <section style={sectionStyle}>
-          <h2 style={h2Style}>Avisos</h2>
+          <h2 style={h2Style}>{S.resultados.avisos}</h2>
           <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
             {result.warnings.map((warning) => (
               <li key={warning}>{warning}</li>

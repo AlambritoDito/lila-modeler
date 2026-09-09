@@ -14,6 +14,7 @@
  *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
  */
 import { Fragment, useRef } from 'react';
+import { S } from './strings.es';
 
 /** Orden canónico del formato; es también el orden en el que sale `days`. */
 export const DIAS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
@@ -148,7 +149,7 @@ export function CalendarEditor({
     <div
       className="calendario"
       role="group"
-      aria-label="Horario semanal: días por horas"
+      aria-label={S.calendario.rejilla}
       onPointerUp={() => {
         sentido.current = null;
         trazo.current = null;
@@ -178,7 +179,7 @@ export function CalendarEditor({
                 type="button"
                 className={abierta ? 'hora abierta' : 'hora'}
                 aria-pressed={abierta}
-                aria-label={`${nombre} ${hhmm(hora)}`}
+                aria-label={S.calendario.celda(nombre, hhmm(hora))}
                 onPointerDown={() => {
                   sentido.current = !abierta;
                   trazo.current = new Set(celdas);

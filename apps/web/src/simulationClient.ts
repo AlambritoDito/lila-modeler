@@ -13,6 +13,7 @@
  */
 import type { ProcessIR, RunResult, EventLogRow, SimScenario, SimulationProgress } from '@lila/engine';
 import type { DoneResponse, WorkerRequest, WorkerResponse } from './worker.js';
+import { S } from './strings.es';
 
 export interface RunInWorkerOptions {
   onProgress?: ((progress: SimulationProgress) => void) | undefined;
@@ -24,7 +25,7 @@ export interface RunInWorkerOptions {
 export type RunInWorkerResult = Pick<DoneResponse, 'result' | 'logSample'>;
 
 function abortError(): DOMException {
-  return new DOMException('La simulación se canceló.', 'AbortError');
+  return new DOMException(S.simulacion.cancelada, 'AbortError');
 }
 
 function createWorker(): Worker {

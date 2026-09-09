@@ -9,6 +9,7 @@
  */
 import { useEffect } from 'react';
 import type { Modelador } from './Modeler';
+import { S } from './strings.es';
 
 interface Props {
   modelador: Modelador | null;
@@ -24,8 +25,7 @@ export function TokenSim({ modelador }: Props): React.JSX.Element {
 
   return (
     <p className="aviso-token-sim" role="note">
-      Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni
-      produce resultados.
+      {S.tokenSim.aviso}
     </p>
   );
 }

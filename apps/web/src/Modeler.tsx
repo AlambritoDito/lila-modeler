@@ -42,6 +42,7 @@ import {
   type ImportacionPreparada,
   type OpcionesExportacion,
 } from './modelerXml';
+import { S } from './strings.es';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -93,7 +94,13 @@ export interface Servicios {
     createShape(atributos: { type: string; eventDefinitionType?: string | undefined; isExpanded?: boolean | undefined }): unknown;
     createParticipantShape(): unknown;
   };
-  canvas: { viewbox(): Rectangulo; getRootElement(): unknown; scrollToElement(figura: unknown): void };
+  canvas: {
+    viewbox(): Rectangulo;
+    getRootElement(): unknown;
+    scrollToElement(figura: unknown): void;
+    /** Contenedor del lienzo; ahí dentro monta su UI `bpmn-js-token-simulation` (#264). */
+    getContainer(): HTMLElement;
+  };
   /** `activate` abre la edición del nombre de la figura recién creada. */
   directEditing: { activate(figura: unknown): void };
   /** Para saber sobre qué elemento cae el punto donde se inserta (`Paleta.tsx`). */
@@ -253,7 +260,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       const rotularMinimapa = ({ open }: { open: boolean }): void => {
         suyo
           .querySelector('.djs-minimap .toggle')
-          ?.setAttribute('title', open ? 'Plegar minimapa' : 'Desplegar minimapa');
+          ?.setAttribute('title', open ? S.lienzo.plegarMinimapa : S.lienzo.desplegarMinimapa);
       };
       modeler.on('minimap.toggle', rotularMinimapa);
       for (const suscripcion of suscripciones) {
@@ -329,7 +336,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     const api: Modelador = {
       abrir,
       exportar: async (opciones) => {
-        if (activo === null) throw new Error('El modelador todavía no tiene un BPMN abierto.');
+        if (activo === null) throw new Error(S.lienzo.errorSinBpmn);
         autorizarExportacion(perdidas, opciones);
         const xml = (await activo.saveXML({ format: true })).xml ?? '';
         return finalizarExportacion(xml, originalIds);
@@ -353,7 +360,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         else canvas.zoom(Math.min(4, Math.max(0.2, canvas.zoom() * factor)));
       },
       get servicios(): Servicios {
-        if (activo === null) throw new Error('El modelador todavía no tiene un BPMN abierto.');
+        if (activo === null) throw new Error(S.lienzo.errorSinBpmn);
         return {
           modeling: activo.get<Servicios['modeling']>('modeling'),
           bpmnFactory: activo.get<BpmnFactory>('bpmnFactory'),

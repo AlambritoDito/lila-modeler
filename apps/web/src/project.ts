@@ -3,6 +3,7 @@ import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
+import { S } from './strings.es';
 
 export function projectStore(store: ProjectStore): ProjectSessionStore | null {
   const candidate = store as Partial<ProjectSessionStore>;
@@ -16,14 +17,14 @@ export function readProject(value: unknown): ProjectDocument {
   if (!object(value) || value.version !== 1 || typeof value.id !== 'string' || typeof value.name !== 'string' || !object(value.model)
     || typeof value.model.id !== 'string' || typeof value.model.name !== 'string' || typeof value.model.xml !== 'string' || !revision(value.model.revision)
     || !object(value.scenarios) || !Object.values(value.scenarios).every(object) || !object(value.scenarioRevisions)
-    || !Object.values(value.scenarioRevisions).every(revision) || !Array.isArray(value.runs)) throw new Error('Documento de proyecto inválido o versión no soportada.');
-  if (value.problems !== undefined && (!Array.isArray(value.problems) || !value.problems.every((p) => object(p) && typeof p.file === 'string' && typeof p.message === 'string'))) throw new Error('Diagnóstico de proyecto inválido.');
+    || !Object.values(value.scenarioRevisions).every(revision) || !Array.isArray(value.runs)) throw new Error(S.proyecto.errorDocumento);
+  if (value.problems !== undefined && (!Array.isArray(value.problems) || !value.problems.every((p) => object(p) && typeof p.file === 'string' && typeof p.message === 'string'))) throw new Error(S.proyecto.errorDiagnostico);
   for (const run of value.runs) {
     if (!object(run) || typeof run.id !== 'string' || typeof run.scenarioName !== 'string' || !object(run.inputs)
       || !revision(run.inputs.modelRevision) || !revision(run.inputs.scenarioRevision) || typeof run.inputs.xml !== 'string' || !object(run.inputs.scenario)
-      || !runResultSchema.safeParse(run.result).success) throw new Error('Corrida guardada inválida.');
+      || !runResultSchema.safeParse(run.result).success) throw new Error(S.proyecto.errorCorrida);
     const scenario = ScenarioSchema.safeParse(run.inputs.scenario);
-    if (!scenario.success || scenario.data.model === undefined || scenario.data.run === undefined) throw new Error('Las entradas de la corrida guardada son inválidas.');
+    if (!scenario.success || scenario.data.model === undefined || scenario.data.run === undefined) throw new Error(S.proyecto.errorEntradasCorrida);
   }
   return value as unknown as ProjectDocument;
 }
@@ -34,8 +35,8 @@ export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument
     if (node.type === 'task') elements[id] = { processingTime: { type: 'constant', value: 60 } };
   }
   return {
-    'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn', run: { start: '2026-09-07T08:00:00Z', duration: 3600, warmup: 0, replications: 3, seed: 42, baseTimeUnit: 'min', currency: 'MXN' }, elements },
-    'to-be.scenario.json': { version: 1, name: 'TO-BE', extends: 'as-is.scenario.json' },
+    'as-is.scenario.json': { version: 1, name: S.proyecto.escenarioAsIs, model: 'model.bpmn', run: { start: '2026-09-07T08:00:00Z', duration: 3600, warmup: 0, replications: 3, seed: 42, baseTimeUnit: 'min', currency: 'MXN' }, elements },
+    'to-be.scenario.json': { version: 1, name: S.proyecto.escenarioToBe, extends: 'as-is.scenario.json' },
   };
 }
 /** Documento inicio → tarea → fin con DI; ids distintos en cada proyecto. */
@@ -44,10 +45,10 @@ export function newModelXml(): string {
   const p = `Process_${suffix}`, a = `Start_${suffix}`, b = `Task_${suffix}`, c = `End_${suffix}`, f = `Flow_A_${suffix}`, g = `Flow_B_${suffix}`;
   return marcarExportador(`<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${suffix}" targetNamespace="https://lila-modeler.org/bpmn">
-<bpmn:process id="${p}" name="Mi proceso" isExecutable="false">
-<bpmn:startEvent id="${a}" name="Inicio"><bpmn:outgoing>${f}</bpmn:outgoing></bpmn:startEvent>
-<bpmn:task id="${b}" name="Actividad"><bpmn:incoming>${f}</bpmn:incoming><bpmn:outgoing>${g}</bpmn:outgoing></bpmn:task>
-<bpmn:endEvent id="${c}" name="Fin"><bpmn:incoming>${g}</bpmn:incoming></bpmn:endEvent>
+<bpmn:process id="${p}" name="${S.proyecto.procesoNuevo}" isExecutable="false">
+<bpmn:startEvent id="${a}" name="${S.proyecto.inicio}"><bpmn:outgoing>${f}</bpmn:outgoing></bpmn:startEvent>
+<bpmn:task id="${b}" name="${S.proyecto.actividad}"><bpmn:incoming>${f}</bpmn:incoming><bpmn:outgoing>${g}</bpmn:outgoing></bpmn:task>
+<bpmn:endEvent id="${c}" name="${S.proyecto.fin}"><bpmn:incoming>${g}</bpmn:incoming></bpmn:endEvent>
 <bpmn:sequenceFlow id="${f}" sourceRef="${a}" targetRef="${b}"/><bpmn:sequenceFlow id="${g}" sourceRef="${b}" targetRef="${c}"/>
 </bpmn:process><bpmndi:BPMNDiagram id="Diagram_${suffix}"><bpmndi:BPMNPlane id="Plane_${suffix}" bpmnElement="${p}">
 <bpmndi:BPMNShape id="ShapeA_${suffix}" bpmnElement="${a}"><dc:Bounds x="160" y="180" width="36" height="36"/></bpmndi:BPMNShape>

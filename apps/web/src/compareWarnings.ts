@@ -14,6 +14,7 @@
 import type { BaseTimeUnit } from '@lila/engine/format';
 import type { RunResult } from '@lila/engine';
 import type { ResolvedScenario } from '@lila/engine/schema';
+import { S } from './strings.es';
 
 /**
  * Metadatos de una corrida comparada, en el mismo orden que `scenarioNames`/`comparison` de
@@ -43,7 +44,7 @@ export interface CompareWarningsResult {
   unitsMixed: boolean;
 }
 
-const NO_CURRENCY = 'sin moneda';
+const NO_CURRENCY = S.comparar.sinMoneda;
 
 /**
  * `run.replications` tiene default en `RunSchema` (1) y `run.seed` lo aplica el motor (`?? 1`,
@@ -70,34 +71,28 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
   const currencyLabels = distinct(runs.map((run) => run.currency ?? NO_CURRENCY));
   const costsComparable = currencyLabels.length <= 1;
   if (!costsComparable) {
-    warnings.push(
-      `Costos en monedas distintas (${currencyLabels.join(' vs ')}): no se comparan sin conversión.`,
-    );
+    warnings.push(S.comparar.avisoMonedas(currencyLabels));
   }
 
   const units = distinct(runs.map((run) => run.baseTimeUnit).filter((unit): unit is BaseTimeUnit => unit !== undefined));
   const unitsMixed = units.length > 1;
   if (unitsMixed) {
-    warnings.push(
-      `Unidades de tiempo distintas entre corridas (${units.join(' vs ')}): cada valor se muestra con la unidad de su propia corrida.`,
-    );
+    warnings.push(S.comparar.avisoUnidades(units));
   }
 
   const significanceAvailable = runs.every((run) => effectiveReplications(run) >= 2);
   if (!significanceAvailable) {
-    warnings.push('Sin intervalos de confianza: hacen falta ≥ 2 réplicas para hablar de significancia.');
+    warnings.push(S.comparar.avisoSignificancia);
   }
 
   const seeds = distinct(runs.map(effectiveSeed));
   if (seeds.length > 1) {
-    warnings.push(
-      `Semillas distintas entre corridas (${seeds.join(' vs ')}): las corridas no comparten la misma secuencia aleatoria.`,
-    );
+    warnings.push(S.comparar.avisoSemillas(seeds));
   }
 
   const replications = distinct(runs.map(effectiveReplications));
   if (replications.length > 1) {
-    warnings.push(`Número de réplicas distinto entre corridas (${replications.join(' vs ')}).`);
+    warnings.push(S.comparar.avisoReplicas(replications));
   }
 
   return { costsComparable, significanceAvailable, unitsMixed, warnings };

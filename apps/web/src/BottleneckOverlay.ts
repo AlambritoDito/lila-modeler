@@ -38,6 +38,7 @@ import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
 import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type { RunResult } from '@lila/engine';
+import { S } from './strings.es';
 
 const PRIORITY = 1500;
 const OVERLAY_TYPE = 'lila-bottleneck';
@@ -109,7 +110,7 @@ const SEGUNDOS: Readonly<Record<BaseTimeUnit, number>> = { day: 86_400, h: 3_600
 /** De la más gruesa a la más fina: gana la primera en la que la espera valga 1 o más. */
 const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
 /** Abreviatura de la unidad en la etiqueta; el `title` sigue usando el código del escenario. */
-const ABREVIATURA: Readonly<Record<BaseTimeUnit, string>> = { day: 'd', h: 'h', min: 'min', s: 's' };
+const ABREVIATURA: Readonly<Record<BaseTimeUnit, string>> = S.lienzo.unidadesCortas;
 
 /**
  * Espera media en la unidad más gruesa en la que siga valiendo 1 o más, con un decimal como
@@ -167,13 +168,15 @@ export function overlayModel(result: RunResult, scenario: ResolvedScenario): Ove
     entradas.push([
       entrada.elementId,
       {
-        etiqueta: `${esperaCorta(metrics.resourceWait.mean)} · ${Math.round(entrada.utilization * 100)}%`,
+        etiqueta: S.lienzo.cuelloEtiqueta(esperaCorta(metrics.resourceWait.mean), Math.round(entrada.utilization * 100)),
         nivel: nivelDeRatio(ratio),
         principal: rango === 0,
         rango,
-        titulo:
-          `espera media ${formatDuration(metrics.resourceWait.mean, unit)} ${unit}` +
-          ` · utilización ${formatNumber(entrada.utilization * 100)}%`,
+        titulo: S.lienzo.cuelloTitulo(
+          formatDuration(metrics.resourceWait.mean, unit),
+          unit,
+          formatNumber(entrada.utilization * 100),
+        ),
       },
     ]);
   }

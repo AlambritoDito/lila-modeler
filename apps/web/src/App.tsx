@@ -4,8 +4,8 @@
  * disposición es la del brief `prompts/claude-design-ui.md`; los colores salen todos de los
  * tokens de LILA-112, sin un solo hex aquí.
  *
- * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066 y sacarlos ahora solo
- * movería el problema de sitio.
+ * Ni un solo literal de UI aquí: todo el texto que se lee en pantalla sale de `strings.es.ts`
+ * (LILA-066), que es también lo que vigila `strings.test.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseBpmn } from '@lila/engine/bpmn';
@@ -28,6 +28,7 @@ import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
+import { S } from './strings.es';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -58,18 +59,18 @@ type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readon
 function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
-  return nombre === undefined || nombre === '' || nombre === id ? id : `${nombre} (${id})`;
+  return nombre === undefined || nombre === '' || nombre === id ? id : S.app.nombreDeCuello(nombre, id);
 }
 
-const MODOS = ['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas'] as const;
-const PESTANAS = ['Propiedades', 'Documentación', 'Simulación'] as const;
+const MODOS = S.app.modos;
+const PESTANAS = S.app.pestanas;
 
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
-const TEMAS = { 'eva-01': 'Eva-01', papel: 'Papel' } as const;
+const TEMAS = S.app.temas;
 type TemaId = keyof typeof TEMAS;
 const TEMA_IDS = Object.keys(TEMAS) as TemaId[];
-const DENSIDADES = ['compacta', 'normal', 'comoda'] as const;
-type Densidad = (typeof DENSIDADES)[number];
+const DENSIDADES = S.app.densidades.map((d) => d.id);
+type Densidad = (typeof S.app.densidades)[number]['id'];
 
 /** Preferencias de apariencia. localStorage vale igual en el navegador y bajo `lila://` en Electron. */
 function preferencia<T extends string>(clave: string, validas: readonly T[], porDefecto: T): T {
@@ -83,7 +84,7 @@ function recordar(clave: string, valor: string): void {
 }
 async function cargarTema(id: TemaId): Promise<Theme> {
   const r = await fetch(`./${id}.json`);
-  if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
+  if (!r.ok) throw new Error(S.app.errorTemaHttp(r.status));
   return r.json() as Promise<Theme>;
 }
 
@@ -99,7 +100,7 @@ function atajo(tecla: string, soloDesktop = false): string {
   if (soloDesktop && !DESKTOP) return '';
   const shift = tecla.startsWith('⇧');
   const letra = shift ? tecla.slice(1) : tecla;
-  return MAC ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`;
+  return S.app.atajo(letra, shift, MAC);
 }
 
 /**
@@ -139,7 +140,7 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
   try {
     return { error: null, resuelto: resolveExtends(archivo, (ruta) => {
       const encontrado = escenarios[ruta];
-      if (encontrado === undefined) throw new Error(`escenario desconocido: ${ruta}`);
+      if (encontrado === undefined) throw new Error(S.app.errorEscenarioDesconocido(ruta));
       return encontrado;
     }) };
   } catch (e) {
@@ -156,13 +157,8 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
 function semillaEscenario(archivo: string, escenarios: Escenarios): string {
   try {
     const run = resolveExtends(archivo, (p) => escenarios[p] ?? {})['run'] as { seed?: unknown } | undefined;
-    return run?.seed === undefined ? '—' : String(run.seed);
-  } catch { return '—'; }
-}
-
-/** «1 error» / «2 errores»: el artefacto escribe el singular, no «1 errores». */
-function plural(n: number, singular: string, plural_: string): string {
-  return `${n} ${n === 1 ? singular : plural_}`;
+    return run?.seed === undefined ? S.app.sinValor : String(run.seed);
+  } catch { return S.app.sinValor; }
 }
 
 /** Fase de la simulación, para lo que enseña el panel derecho. */
@@ -183,7 +179,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   });
   const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
   const [projectId, setProjectId] = useState('demo-pedido');
-  const [projectName, setProjectName] = useState('Pedido de ejemplo');
+  const [projectName, setProjectName] = useState<string>(S.app.proyectoDemo);
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
   const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
   /** Diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto (LILA-072). */
@@ -303,11 +299,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   async function snapshot(): Promise<ProjectDocument> {
-    if (modelador === null) throw new Error('El modelador todavía no está listo.');
+    if (modelador === null) throw new Error(S.app.errorModeladorNoListo);
     const atRevision = revisionRef.current;
     // `guardar()` ya obtuvo el sí del usuario si había pérdida; aquí no se decide nada.
     const xml = await modelador.exportar({ aceptarPerdida: true });
-    if (atRevision !== revisionRef.current) throw new Error('El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.');
+    if (atRevision !== revisionRef.current) throw new Error(S.app.errorModeloCambio);
     const parsed = await parseBpmn(xml);
     return { version: 1, id: projectId, name: projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
@@ -340,13 +336,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return false;
     const doc = readProject(raw);
     const parsed = await parseBpmn(doc.model.xml);
-    if (expectedToken !== tokenRef.current) throw new Error('El proyecto cambió mientras se abría el archivo. Conservamos tus cambios; vuelve a abrirlo.');
+    if (expectedToken !== tokenRef.current) throw new Error(S.app.errorProyectoCambio);
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
     setProjectProblems(doc.problems ?? []);
     setSuelto(doc.loose === true);
-    if (doc.problems?.length) setIoError(doc.problems.map((p) => `${p.file}: ${p.message}`).join(' · '));
+    if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
     // una carpeta con el modelo puesto a mano— arranca con el AS-IS por defecto, el mismo de
@@ -374,14 +370,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
         if (doc) await activate(doc, true, beforeToken);
-        else if (doc === null) setIoError('Ese proyecto ya no está en su carpeta; se quitó de recientes.');
+        else if (doc === null) setIoError(S.app.errorRecienteAusente);
         return;
       }
       const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
       if (data === null) return;
       const parsed = await parseBpmn(data.xml);
       await modelador.comprobar?.(data.xml);
-      const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? 'Mi proyecto' : data.name.replace(/\.(bpmn|xml)$/i, ''),
+      const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? S.app.proyectoNuevo : data.name.replace(/\.(bpmn|xml)$/i, ''),
         model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
       const created = await adapter.createProject(doc);
@@ -544,7 +540,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // silencio o pisaría la acción pendiente (hallazgos 4 y 5): mejor decirlo — el banner se pinta
     // también dentro del diálogo.
     if (ioLock.current || pendingAction !== null) {
-      setIoError(`No se abrió "${ruta.file}": hay otra operación en curso. Vuelve a abrirlo cuando termine.`);
+      setIoError(S.app.errorAbrirOcupado(String(ruta.file)));
       return;
     }
     void projectAction({ recent: ruta.dir, file: ruta.file });
@@ -619,25 +615,25 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   return (
     <div className="app" data-densidad={densidad}>
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
-        <h2 id="reemplazo-titulo">Cambios sin guardar</h2>
-        <p>Guarda los cambios de {projectName} antes de continuar, o descártalos.</p>
+        <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
+        <p>{S.app.reemplazoTexto(projectName)}</p>
         {ioError && <p role="alert">{ioError}</p>}
         <div className="acciones">
           <button className="boton primario" disabled={ioBusy} onClick={() => void (async () => {
             const next = pendingAction;
             if (await guardar()) { setPendingAction(null); await projectAction(next, true); }
-          })()}>Guardar y continuar</button>
-          <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>Descartar</button>
-          <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>Cancelar</button>
+          })()}>{S.app.guardarYContinuar}</button>
+          <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>{S.app.descartar}</button>
+          <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
       {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>
-        <h2 id="perdida-titulo">{perdidasAlExportar.length === 1 ? 'Se perderá' : 'Se perderán'} {plural(perdidasAlExportar.length, 'referencia que el archivo original ya tenía rota', 'referencias que el archivo original ya tenía rotas')}</h2>
-        <p>El editor solo puede escribir lo que pudo leer, así que el .bpmn {confirmarPerdida === 'Guardar' ? 'guardado' : 'descargado'} no las llevará:</p>
+        <h2 id="perdida-titulo">{S.app.perdidaTitulo(perdidasAlExportar.length)}</h2>
+        <p>{S.app.perdidaTexto(confirmarPerdida === 'Guardar')}</p>
         <ul>{perdidasAlExportar.map((perdida) => <li key={perdida}>{perdida}</li>)}</ul>
         <div className="acciones">
-          <button className="boton primario" type="button" onClick={() => responderPerdida(true)}>{confirmarPerdida} igualmente</button>
-          <button className="boton" type="button" onClick={() => responderPerdida(false)}>Cancelar</button>
+          <button className="boton primario" type="button" onClick={() => responderPerdida(true)}>{S.app.perdidaConfirmar(S.app.perdidaVerbo[confirmarPerdida])}</button>
+          <button className="boton" type="button" onClick={() => responderPerdida(false)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
       <header className="barra">
@@ -646,7 +642,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <svg className="logo" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,0 24,9.1 19.7,24 4.3,24 0,9.1" /></svg>
           <div>
             <div className="proyecto">{projectName}</div>
-            <div className="archivo">{archivo} · {dirty ? 'Sin guardar' : 'Guardado'}</div>
+            <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>
           </div>
         </div>
         <nav className="modos">
@@ -670,15 +666,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             ponytail: no se cierra al hacer clic fuera; techo: si molesta, un `onBlur` en el
             summary (o `popover` cuando Electron suba de Chromium). */}
         {!DESKTOP && <details className="menu-archivo" onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
-          <summary>Archivo</summary>
+          <summary>{S.app.menuArchivo}</summary>
           <div onClick={(e) => { (e.currentTarget.parentElement as HTMLDetailsElement).open = false; }}>
-            <button type="button" title={`Nuevo proyecto${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>Nuevo</button>
-            <button type="button" title={`Abrir proyecto${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>Abrir</button>
-            <button type="button" title={`Guardar proyecto${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>Guardar</button>
-            <button type="button" title={`Guardar como${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>Guardar como</button>
+            <button type="button" title={`${S.app.tituloNuevo}${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
+            <button type="button" title={`${S.app.tituloAbrir}${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
+            <button type="button" title={`${S.app.tituloGuardar}${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
+            <button type="button" title={`${S.app.tituloGuardarComo}${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
             {bpmnFilesEnabled && <>
-              <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>Abrir .bpmn</button>
-              <button type="button" onClick={() => void exportar()}>Exportar .bpmn</button>
+              <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
+              <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
             </>}
           </div>
         </details>}
@@ -687,14 +683,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             porque el artefacto fija su sitio y su ancho, no para que funcione todavía. */}
         <div className="buscador">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
-          <input type="search" readOnly aria-label="Buscar actividad" placeholder="Buscar actividad…" title="La búsqueda y la paleta de comandos llegan en LILA-066" />
+          <input type="search" readOnly aria-label={S.app.buscar} placeholder={S.app.buscarPista} title={S.app.buscarPendiente} />
           <kbd>⌘K</kbd>
         </div>
         <div className="iconos">
-          <button type="button" className="boton icono" aria-label="Deshacer" title="Deshacer" disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>
+          <button type="button" className="boton icono" aria-label={S.app.deshacer} title={S.app.deshacer} disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15.5-6.4L3 13" /></svg>
           </button>
-          <button type="button" className="boton icono" aria-label="Rehacer" title="Rehacer" disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>
+          <button type="button" className="boton icono" aria-label={S.app.rehacer} title={S.app.rehacer} disabled={ioBusy || !modelador?.rehacer} onClick={() => modelador?.rehacer?.()}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 15.5-6.4L21 13" /></svg>
           </button>
         </div>
@@ -704,42 +700,40 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <>
             <div className="progreso">
               <div className="progreso-cifras">
-                <span>{sim.progreso === null ? 'Preparando…' : `Replicación ${sim.progreso.replication + 1} de ${sim.progreso.totalReplications}`}</span>
-                {sim.progreso !== null && <span className="por-ciento">{Math.round(sim.progreso.fraction * 100)} %</span>}
+                <span>{sim.progreso === null ? S.app.preparando : S.app.replicacion(sim.progreso.replication + 1, sim.progreso.totalReplications)}</span>
+                {sim.progreso !== null && <span className="por-ciento">{S.app.porCiento(Math.round(sim.progreso.fraction * 100))}</span>}
               </div>
               <div className="progreso-pista"><div style={{ width: `${Math.round((sim.progreso?.fraction ?? 0) * 100)}%` }} /></div>
             </div>
-            <button type="button" className="boton cancelar" onClick={cancelarCorrida}>Cancelar</button>
+            <button type="button" className="boton cancelar" onClick={cancelarCorrida}>{S.app.cancelar}</button>
           </>
         ) : (
           <button type="button" className="boton primario ejecutar" disabled={modelador === null} onClick={() => void simular()}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
-            Ejecutar simulación
+            {S.app.ejecutar}
           </button>
         )}
-        <button type="button" className="boton icono" title={`Ajustes${atajo(',', true)}`} aria-label="Ajustes" onClick={() => ejecutar('ajustes')}>⚙</button>
+        <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo(',', true)}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
         <form method="dialog">
-          <h2 id="ajustes-titulo">Ajustes</h2>
-          <h3>Apariencia</h3>
+          <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+          <h3>{S.app.apariencia}</h3>
           <label className="campo">
-            Tema
+            {S.app.tema}
             <select value={temaId} onChange={(e) => void cambiarTema(e.target.value as TemaId)}>
               {TEMA_IDS.map((id) => <option key={id} value={id}>{TEMAS[id]}</option>)}
             </select>
           </label>
           <label className="campo">
-            Densidad
+            {S.app.densidad}
             <select value={densidad} onChange={(e) => setDensidad(e.target.value as Densidad)}>
-              <option value="compacta">Compacta</option>
-              <option value="normal">Normal</option>
-              <option value="comoda">Cómoda</option>
+              {S.app.densidades.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
             </select>
           </label>
-          <p className="vacio">Tipografía: {(tema?.tokens?.['font.ui'] ?? 'Archivo').split(',')[0]}. Editar cada color e importar o exportar temas llega en LILA-114.</p>
-          <div className="acciones"><button className="boton primario">Cerrar</button></div>
+          <p className="vacio">{S.app.tipografia((tema?.tokens?.['font.ui'] ?? S.app.tipografiaPorDefecto).split(',')[0]!)}</p>
+          <div className="acciones"><button className="boton primario">{S.app.cerrar}</button></div>
         </form>
       </dialog>
 
@@ -766,9 +760,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {/* Controles de zoom (LILA-208). Van sobre la marca de agua, no encima: el `bottom` de
             `.zoom` en `app.css` deja libres sus 15 px inferiores derechos. */}
         <div className="zoom">
-          <button type="button" className="boton icono" aria-label="Acercar" title="Acercar" disabled={modelador === null} onClick={() => modelador?.zoom(1.2)}>+</button>
-          <button type="button" className="boton icono" aria-label="Alejar" title="Alejar" disabled={modelador === null} onClick={() => modelador?.zoom(1 / 1.2)}>−</button>
-          <button type="button" className="boton icono" aria-label="Ajustar a pantalla" title="Ajustar a pantalla" disabled={modelador === null} onClick={() => modelador?.ajustar()}>
+          <button type="button" className="boton icono" aria-label={S.app.acercar} title={S.app.acercar} disabled={modelador === null} onClick={() => modelador?.zoom(1.2)}>+</button>
+          <button type="button" className="boton icono" aria-label={S.app.alejar} title={S.app.alejar} disabled={modelador === null} onClick={() => modelador?.zoom(1 / 1.2)}>−</button>
+          <button type="button" className="boton icono" aria-label={S.app.ajustarPantalla} title={S.app.ajustarPantalla} disabled={modelador === null} onClick={() => modelador?.ajustar()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
         </div>
@@ -778,15 +772,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (
-            <button type="button" className="chip error" title="Ir al primer elemento con problemas" disabled={validacion.primero === null}
+            <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
               onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{validacion.errores} {validacion.errores === 1 ? 'error' : 'errores'}
+              <span className="punto" />{S.app.errores(validacion.errores)}
             </button>
           )}
           {validacion.avisos > 0 && (
-            <button type="button" className="chip" title="Ir al primer elemento con problemas" disabled={validacion.primero === null}
+            <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
               onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{validacion.avisos} {validacion.avisos === 1 ? 'aviso' : 'avisos'}
+              <span className="punto" />{S.app.avisos(validacion.avisos)}
             </button>
           )}
         </div>
@@ -796,11 +790,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <section className="zona-resultados">
           {corrida !== null && ir !== null
             ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
-            : <p>Simula la revisión actual para ver resultados. {runs.length > 0 && 'No hay corrida actual para el escenario seleccionado.'}</p>}
+            : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}
       {modo === 'Comparar' && <section className="zona-resultados">
-        <label>Escenario base <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
+        <label>{S.app.escenarioBase} <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
           {Object.keys(escenarios).map((name) => <option key={name} value={name}>{etiquetaEscenario(name, escenarios)}</option>)}
         </select></label>
         {comparable && ir !== null
@@ -808,8 +802,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
-          : <p>Simula el escenario base y al menos otro escenario de la revisión actual para comparar.</p>}
-        {ordered.map((run) => <p key={run.id}>{etiquetaEscenario(run.scenarioName, escenarios)} · revisión {run.inputs.modelRevision}/{run.inputs.scenarioRevision} · semilla {String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1)} · {String((run.inputs.scenario.run as Record<string, unknown>).currency ?? '')}</p>)}
+          : <p>{S.app.sinComparacion}</p>}
+        {ordered.map((run) => <p key={run.id}>{S.app.corridaResumen(
+          etiquetaEscenario(run.scenarioName, escenarios),
+          run.inputs.modelRevision,
+          run.inputs.scenarioRevision,
+          String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1),
+          String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
+        )}</p>)}
       </section>}
       <aside className="panel" inert={ioBusy}>
         <nav className="pestanas">
@@ -829,7 +829,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {pestana === 'Simulación' ? (
           <div className="simulacion">
             <label className="campo">
-              Escenario
+              {S.app.escenario}
               <select
                 value={escenarioId}
                 onChange={(e) => {
@@ -855,7 +855,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 primaria de la app es una sola y está siempre a la vista. */}
             {sim.tipo === 'error' && (
               <p role="alert" className="error">
-                No se pudo simular: {sim.mensaje}
+                {S.app.errorSimular(sim.mensaje)}
               </p>
             )}
             <label className="campo interruptor">
@@ -866,13 +866,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                   setVerCuellos(e.target.checked);
                 }}
               />
-              Cuellos de botella
+              {S.app.verCuellos}
             </label>
             <p className="vacio">
               {corrida === null
-                ? 'Simula para ver los cuellos de botella sobre el diagrama.'
+                ? S.app.cuellosSinCorrida
                 : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
-                  'Ningún elemento esperó por un recurso en esta corrida.')}
+                  S.app.cuellosSinEspera)}
             </p>
             <ScenarioPanel
               archivo={escenarioId}
@@ -911,22 +911,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             `projectAction('new')`, que ya trae la guardia de cambios sin guardar. */}
         <span className="pestana activa">
           {archivo}
-          <button type="button" className="cerrar" aria-label={`Cerrar ${archivo}`} title="Cerrar diagrama" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>✕</button>
+          <button type="button" className="cerrar" aria-label={S.app.cerrarArchivo(archivo)} title={S.app.cerrarDiagrama} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>✕</button>
         </span>
-        <button type="button" className="boton icono" aria-label="Nuevo diagrama" title="Nuevo diagrama" disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>+</button>
+        <button type="button" className="boton icono" aria-label={S.app.nuevoDiagrama} title={S.app.nuevoDiagrama} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>+</button>
       </nav>
 
       {/* Barra de estado del artefacto: validación, escenario y semilla a la izquierda; densidad
           y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
           descolocar esa retícula. Los conteos son los mismos que los chips del lienzo (#241). */}
       <footer className="estado">
-        <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{plural(validacion.errores, 'error', 'errores')}</span>
-        <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{plural(validacion.avisos, 'aviso', 'avisos')}</span>
+        <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{S.app.errores(validacion.errores)}</span>
+        <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />
-        <span>Escenario <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
-        <span>Semilla {semillaEscenario(escenarioId, escenarios)}</span>
+        <span>{S.app.escenario} <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
+        <span>{S.app.semilla(semillaEscenario(escenarioId, escenarios))}</span>
         <span className="hueco" />
-        <span>Densidad {densidad === 'comoda' ? 'cómoda' : densidad}</span>
+        <span>{S.app.densidadEstado(S.app.densidadNombre(densidad))}</span>
         <button
           type="button"
           className="enlace"
@@ -934,35 +934,27 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             modelador?.ajustar();
           }}
         >
-          Zoom {Math.round(estado.zoom * 100)} % · ajustar
+          {S.app.zoom(Math.round(estado.zoom * 100))}
         </button>
         {suelto && (
-          <span className="aviso">
-            Diagrama suelto: los escenarios no se guardan hasta «Guardar como»
-          </span>
+          <span className="aviso">{S.app.diagramaSuelto}</span>
         )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">
-            {plural(perdidasAlExportar.length, 'elemento o referencia', 'elementos o referencias')}{' '}
-            {perdidasAlExportar.length === 1 ? 'se perderá' : 'se perderán'} al exportar:{' '}
-            {perdidasAlExportar.join(' · ')}
+            {S.app.perdidaAlExportar(perdidasAlExportar.length, perdidasAlExportar.join(' · '))}
           </span>
         )}
         {estado.avisos - estado.perdidas.length > 0 && (
           <span role="alert" className="aviso">
-            {plural(estado.avisos - estado.perdidas.length, 'aviso', 'avisos')} al importar; revisa el diagnóstico antes de simular o exportar
+            {S.app.avisosAlImportar(estado.avisos - estado.perdidas.length)}
           </span>
         )}
         {estado.error !== null && (
-          <span role="alert" className="error">
-            No se pudo abrir el diagrama: {estado.error}
-          </span>
+          <span role="alert" className="error">{S.app.errorAbrirDiagrama(estado.error)}</span>
         )}
         {avisoTema !== null && (
-          <span role="alert" className="error">
-            No se pudo cargar el tema: {avisoTema}
-          </span>
+          <span role="alert" className="error">{S.app.errorTema(avisoTema)}</span>
         )}
       </footer>
     </div>
