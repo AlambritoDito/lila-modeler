@@ -18,6 +18,7 @@
  */
 import { useRef, useState } from 'react';
 import { S } from '../strings.es';
+import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
 import { duplicar, esColor, GRUPOS, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
@@ -273,7 +274,7 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         {/* La densidad sigue siendo una preferencia, no una edición del tema (LILA-113): se aplica
             encima de cualquier tema y por eso no toca el token `density` del que se está editando. */}
         <select value={densidad} onChange={(e) => props.onDensidad(e.target.value)}>
-          {S.app.densidades.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+          {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
         </select>
       </label>
 

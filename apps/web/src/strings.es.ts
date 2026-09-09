@@ -37,19 +37,25 @@ export const S = {
    * Shell de la app (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
-    /** Modos de la barra superior. El texto es también el identificador del modo activo. */
-    modos: ['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas'],
-    /** Pestañas del panel derecho; igual que los modos, el texto identifica la pestaña. */
-    pestanas: ['Propiedades', 'Documentación', 'Simulación'],
+    /** Rótulo de cada modo de la barra superior; el id lo fija `ids.ts` (`MODO_IDS`). */
+    modos: {
+      modelar: 'Modelar',
+      simular: 'Simular',
+      resultados: 'Resultados',
+      comparar: 'Comparar',
+      rutas: 'Validar rutas',
+    },
+    /** Rótulo de cada pestaña del panel derecho; el id lo fija `ids.ts` (`PESTANA_IDS`). */
+    pestanas: {
+      propiedades: 'Propiedades',
+      documentacion: 'Documentación',
+      simulacion: 'Simulación',
+    },
 
     /** Nombre visible de cada tema integrado (`src/theme/themes/*.json`). */
     temas: { 'eva-01': 'Eva-01', papel: 'Papel' },
-    /** Nombre visible de cada densidad; `id` es el valor que se guarda en `localStorage`. */
-    densidades: [
-      { id: 'compacta', nombre: 'Compacta' },
-      { id: 'normal', nombre: 'Normal' },
-      { id: 'comoda', nombre: 'Cómoda' },
-    ],
+    /** Nombre visible de cada densidad; el id (`ids.ts`) es lo que se guarda en `localStorage`. */
+    densidades: { compacta: 'Compacta', normal: 'Normal', comoda: 'Cómoda' },
     /** El mismo nombre en minúscula, para la barra de estado («Densidad cómoda»). */
     densidadNombre: (id: string): string => (id === 'comoda' ? 'cómoda' : id),
 
@@ -107,7 +113,7 @@ export const S = {
     descartar: 'Descartar',
 
     /** Diálogo de pérdida al exportar o guardar (LILA-192). */
-    perdidaVerbo: { Exportar: 'Exportar', Guardar: 'Guardar' },
+    perdidaVerbo: { exportar: 'Exportar', guardar: 'Guardar' },
     perdidaTitulo: (n: number): string =>
       `${n === 1 ? 'Se perderá' : 'Se perderán'} ${n} ${
         n === 1

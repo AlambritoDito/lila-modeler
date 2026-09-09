@@ -17,6 +17,7 @@
  * misma para importar y para releer lo guardado.
  */
 import { S } from '../strings.es';
+import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from './applyTheme';
 import { COLOR_TOKEN_NAMES, TOKEN_NAMES, type TokenName } from './tokens';
 // Solo el tipo (se borra al compilar): la forma de lo persistido es parte del contrato del puente.
@@ -28,7 +29,7 @@ export type { TemaGuardado };
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const CONOCIDOS: ReadonlySet<string> = new Set(TOKEN_NAMES);
 const COLORES: ReadonlySet<string> = new Set(COLOR_TOKEN_NAMES);
-const DENSIDADES: ReadonlySet<string> = new Set(S.app.densidades.map((d) => d.id));
+const DENSIDADES: ReadonlySet<string> = new Set(DENSIDAD_IDS);
 
 /** Prefijo de los ids de tema del usuario; los integrados son `eva-01` y `papel`. */
 const PREFIJO = 'u:';

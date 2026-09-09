@@ -22,6 +22,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Modelador } from './Modeler';
 import { S } from './strings.es';
+import type { PestanaId } from './ids';
 
 /* ------------------------------------------------------------------ *
  * Modelo: lo mínimo de bpmn-js que hace falta para leer y escribir.
@@ -271,7 +272,7 @@ export function nombreDeTipo(tipo: string): string {
 interface Props {
   /** `null` mientras el lienzo no ha terminado de montarse. */
   modelador: Modelador | null;
-  pestana: 'Propiedades' | 'Documentación';
+  pestana: Exclude<PestanaId, 'simulacion'>;
 }
 
 export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Element {
@@ -317,7 +318,7 @@ export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Eleme
     );
   }
 
-  return pestana === 'Propiedades' ? (
+  return pestana === 'propiedades' ? (
     <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
   ) : (
     <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
