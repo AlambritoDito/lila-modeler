@@ -589,6 +589,12 @@ export const en = {
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
   lienzo: {
+    /**
+     * Caption of the minimap header, painted by `app.css` as `content: attr(data-titulo)`: a
+     * pseudo-element cannot read a catalog, so `Modeler.tsx` writes the text on the element and
+     * the stylesheet only draws it (uppercased by `text-transform`).
+     */
+    minimapa: 'Minimap',
     plegarMinimapa: 'Collapse minimap',
     desplegarMinimapa: 'Expand minimap',
     errorSinBpmn: 'The modeler has no BPMN open yet.',
@@ -618,8 +624,9 @@ export const en = {
      * `bpmn-js-token-simulation@0.40.0` writes its UI with literal strings in the HTML: it does
      * not go through bpmn-js's `translate` service, so translating it means substituting the
      * texts in the canvas DOM (`traducirSimulacion` in `TokenSim.tsx`). The module already writes
-     * English, so in this catalog the map is **empty**: the substitution is the identity and the
-     * `MutationObserver` has nothing to do.
+     * English, so in this catalog the map is **empty**: no entry matches, nothing is rewritten,
+     * and the text the module wrote is the text that stays. The `MutationObserver` still runs —
+     * it is what would translate a node the module adds later — it simply finds nothing to change.
      */
     traducciones: {} as Readonly<Record<string, string>>,
     /** `title="Set animation speed = Slow"`: the prefix is translated, the speed looked up above. */

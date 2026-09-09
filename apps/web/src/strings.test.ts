@@ -1,5 +1,7 @@
 /**
- * Prueba de aceptación de LILA-066: «no hay literales de UI fuera de `strings.es.ts`».
+ * Prueba de aceptación de LILA-066, puesta al día en LILA-210: «no hay literales de UI fuera de
+ * los catálogos». Los catálogos son dos —`strings.en.ts`, la lengua base, y `strings.es.ts`, su
+ * traducción—, y el segundo bloque de este archivo comprueba además que dicen lo mismo.
  *
  * Relee el código fuente de `apps/web/src` con el parser de TypeScript —no con una expresión
  * regular sobre el texto— y falla si encuentra texto de usuario escrito a mano en un componente:
@@ -151,7 +153,7 @@ function literalesDeUi(ruta: string): Hallazgo[] {
   return literalesEn(readFileSync(ruta, 'utf8'), ruta.slice(RAIZ.length));
 }
 
-describe('LILA-066 · los textos de la UI viven en strings.es.ts', () => {
+describe('LILA-066 · los textos de la UI viven en los catálogos', () => {
   it('barre los archivos de la app y ninguno más', () => {
     const archivos = fuentes(RAIZ).map((r) => r.slice(RAIZ.length));
     // Si esto falla es que el barrido dejó de mirar donde tiene que mirar (o miró de más).

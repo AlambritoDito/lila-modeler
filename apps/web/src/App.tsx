@@ -510,7 +510,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
     },
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems],
+    // El idioma va en las dependencias aunque no se lea aquí (LILA-210): `escenarioResuelto`
+    // llama a `strings()` por dentro y este `useMemo` guarda el texto que devolvió, así que sin
+    // esto un `extends` roto seguiría contándose en el idioma en el que se resolvió.
+    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los

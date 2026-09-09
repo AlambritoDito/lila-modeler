@@ -578,6 +578,7 @@ export const es: Strings = {
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
   lienzo: {
+    minimapa: 'Minimapa',
     plegarMinimapa: 'Plegar minimapa',
     desplegarMinimapa: 'Desplegar minimapa',
     errorSinBpmn: 'El modelador todavía no tiene un BPMN abierto.',

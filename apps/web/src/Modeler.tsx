@@ -47,6 +47,7 @@ import {
   type OpcionesExportacion,
 } from './modelerXml';
 import { strings, useLocale } from './i18n';
+import { rotularMinimapa } from './minimapa';
 // Los colores del diagrama durante «Validar rutas» (#264). Van en `TokenSim.tsx` con el resto de
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
@@ -214,17 +215,13 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
   const contenedor = useRef<HTMLDivElement>(null);
   const locale = useLocale();
 
-  // El `title` del minimapa lo escribe bpmn-js cada vez que se pliega o se abre, y nada más: al
-  // cambiar de idioma no hay evento que lo repinte, así que se reescribe aquí sobre el minimapa
-  // que ya está montado. El lienzo NO se remonta por cambiar de idioma (eso se llevaría la pila
-  // de deshacer), igual que no lo hace por cambiar de tema (LILA-113).
+  // El rótulo y el `title` del minimapa los escribe bpmn-js cada vez que se pliega o se abre, y
+  // nada más: al cambiar de idioma no hay evento que los repinte, así que se reescriben aquí
+  // sobre el minimapa que ya está montado. El lienzo NO se remonta por cambiar de idioma (eso se
+  // llevaría la pila de deshacer), igual que no lo hace por cambiar de tema (LILA-113).
   useEffect(() => {
     const minimapa = contenedor.current?.querySelector('.djs-minimap');
-    const abierto = minimapa?.classList.contains('open') === true;
-    const S = strings();
-    minimapa
-      ?.querySelector('.toggle')
-      ?.setAttribute('title', abierto ? S.lienzo.plegarMinimapa : S.lienzo.desplegarMinimapa);
+    rotularMinimapa(minimapa?.querySelector('.toggle'), minimapa?.classList.contains('open') === true);
   }, [locale]);
 
   useEffect(() => {
@@ -297,22 +294,20 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         const elegidos = evento.newSelection;
         onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
       });
-      // El minimapa reescribe el `title` de su cabecera en inglés («Close minimap») cada vez que
-      // se pliega o se abre. El texto visible ya sale de `app.css`; el tooltip es la única cadena
-      // suya que queda a la vista, así que se traduce aquí en vez de montar un `translate` propio.
-      // Se busca dentro del contenedor de ESTE modelador, no del de React: al abrir un archivo
-      // el anterior sigue montado hasta que se destruye, y su minimapa saldría antes.
+      // El minimapa reescribe el rótulo y el `title` de su cabecera en inglés («Close minimap»)
+      // cada vez que se pliega o se abre, así que se vuelven a poner desde el catálogo en vez de
+      // montar un servicio `translate` propio. Se busca dentro del contenedor de ESTE modelador,
+      // no del de React: al abrir un archivo el anterior sigue montado hasta que se destruye, y
+      // su minimapa saldría antes.
       const suyo = modeler.get<Canvas>('canvas').getContainer();
-      const rotularMinimapa = ({ open }: { open: boolean }): void => {
-        suyo
-          .querySelector('.djs-minimap .toggle')
-          ?.setAttribute('title', open ? strings().lienzo.plegarMinimapa : strings().lienzo.desplegarMinimapa);
+      const alPlegar = ({ open }: { open: boolean }): void => {
+        rotularMinimapa(suyo.querySelector('.djs-minimap .toggle'), open);
       };
-      modeler.on('minimap.toggle', rotularMinimapa);
+      modeler.on('minimap.toggle', alPlegar);
       for (const suscripcion of suscripciones) {
         modeler.on(suscripcion.eventos, suscripcion.escuchar);
       }
-      rotularMinimapa({ open: suyo.querySelector('.djs-minimap')?.classList.contains('open') === true });
+      alPlegar({ open: suyo.querySelector('.djs-minimap')?.classList.contains('open') === true });
     };
 
     const crearCandidato = (): { modeler: Modeler; staging: HTMLDivElement } => {

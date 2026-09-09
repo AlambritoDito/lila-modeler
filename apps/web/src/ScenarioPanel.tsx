@@ -1056,7 +1056,11 @@ export function ScenarioPanel({
       if (encontrado === undefined) throw new Error(S.escenario.errorEscenarioDesconocido(ruta));
       return encontrado;
     },
-    [escenarios],
+    // `S` va en las dependencias porque el lector lo captura (LILA-210): `herencia` guarda el
+    // mensaje que este lector lanzó, así que sin esto un `extends` roto se quedaría con el error
+    // escrito en el idioma que hubiera al montar el panel. `useStrings()` devuelve un catálogo
+    // distinto por idioma, así que la identidad solo cambia cuando el idioma cambia.
+    [escenarios, S],
   );
 
   /**

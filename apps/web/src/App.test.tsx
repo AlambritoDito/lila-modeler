@@ -479,6 +479,8 @@ it('sin nada guardado arranca en el idioma del sistema (LILA-210)', async () => 
 
 it('cambiar de idioma repinta SIN remontar el lienzo y lo recuerda (LILA-210)', async () => {
   const montajesAntes = mocks.montajes;
+  const validacionesAntes = mocks.validacion.mock.calls.length;
+  const cuellosAntes = mocks.cuellos.mock.calls.length;
   expect(container.textContent).toContain(T.app.modos.rutas);
   const select = selectIdioma();
   await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -489,6 +491,10 @@ it('cambiar de idioma repinta SIN remontar el lienzo y lo recuerda (LILA-210)', 
   // …y el lienzo sigue siendo el mismo: la pila de deshacer y la selección no se pierden por
   // cambiar de idioma, que es justo el punto (el mismo trato que el tema en LILA-113).
   expect(mocks.montajes).toBe(montajesAntes);
+  // Lo que se escribe SOBRE el lienzo no lo repinta React, así que sus efectos tienen que volver
+  // a correr: los discos de validación y el overlay de cuellos se vuelven a aplicar (QA de #301).
+  expect(mocks.validacion.mock.calls.length).toBeGreaterThan(validacionesAntes);
+  expect(mocks.cuellos.mock.calls.length).toBeGreaterThan(cuellosAntes);
   // Se guarda la PREFERENCIA, que aquí coincide con el idioma porque se eligió a mano.
   expect(localStorage.getItem('lila.idioma')).toBe('es');
 });
