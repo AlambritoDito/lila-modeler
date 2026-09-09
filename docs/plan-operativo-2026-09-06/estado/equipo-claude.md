@@ -108,3 +108,18 @@ Incidencias: el CI de GitHub no arranca ningún job desde 9ca47ad («recent acco
 Trampas nuevas: `npm run typecheck | tail; echo $?` devuelve el código de `tail` (dos rebases pasaron con una clave `cuellos` duplicada en los mocks de `App.test.tsx`, que #260 y #261 añadieron cada uno y git fusionó sin conflicto; vitest no lo ve, tsc sí; arreglado en 6254d60): usar `npm run typecheck; echo EXIT=$?`. macOS no tiene `timeout` (`perl -e 'alarm N; exec @ARGV'`). Los rebases que tocan `App.test.tsx` chocan siempre en el objeto `mocks` y en `vi.mock('./Modeler')`: conservar ambos lados. El smoke `npm run smoke -w @lila/desktop` y la app empaquetada con `LILA_SMOKE=1` no cuelgan al orquestador; la espera de 3 s del smoke (`main.ts:740`) hay que restarla al medir arranque. Un Sonnet de higiene lanzó su propio sub-agente y solo informó a medias: relanzar acotado.
 
 Queda: #66 `strings.es.ts` (solo, sin nada de `apps/web` en paralelo), #143/#144 Apariencia, #263, #264, #266, #267, #73 (Releases por tag, icono, firma), y las decisiones de Brito: fast-forward de `main` a `codex/ui-artefacto` (cierra #209, #215, #221, #222, #227, #229, #230, #234, #235; solo #223 quedaría por rebasar), facturación de GitHub Actions, #164, #48/#67/#51/#68/#69/#77.
+
+## Sesión 11 (2026-09-08, orquestador Claude, base `codex/ui-artefacto` fe03592)
+
+`main` sigue en 3a58ecb (Brito no hizo el fast-forward) y el CI de GitHub sigue sin arrancar por facturación, así que se trabaja como en la sesión 10: base `codex/ui-artefacto`, PR con `--base codex/ui-artefacto`, compuerta de mezcla = suite completa local (trabajador + QA) + `QA: OK`. Reparto (una rama y un worktree por ticket, QA adversarial cruzado por PR):
+
+| Rama | Ticket | Agente | Qué |
+|---|---|---|---|
+| `lila-263-proto-deepmerge` | #263 | Opus | `deepMerge` ignora `__proto__`/`constructor`/`prototype`; tests por `extends` y por `patch_scenario` |
+| `lila-66-strings-es` | #66 (+#264 si cabe) | Opus | `strings.es.ts`, sin literales de UI fuera; solo en `apps/web` mientras esté abierto |
+| `lila-266-manifiesto` | #266 | Opus | el manifiesto describe solo `model.bpmn`; guardar otro `.bpmn` no lo reescribe |
+| `lila-267-icono` | #267 | Sonnet | SVG en `docs/design`, `icns`/`ico`/PNG, `electron-builder.yml` (único que lo toca) |
+| `lila-264-token-sim-es` | #264 | Sonnet | después de #66 si no lo absorbe: token-simulation en español y colores del tema |
+| — | #73, épicas #115/#117–#123, #164 | Sonnet | higiene solo lectura |
+
+Orden de mezcla: 263 → 66 → 264 → 266 → 267. No se toca: #143/#144 (sin confirmación de Brito), #69 (sin autorización), #48/#67/#51/#68/#77, #164, E12–E19, `main`.
