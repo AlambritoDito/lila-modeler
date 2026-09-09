@@ -31,8 +31,21 @@ import { describe, expect, it } from 'vitest';
 /** `apps/web/src`, resuelto desde este archivo: el test no depende del `cwd` de vitest. */
 const RAIZ = fileURLToPath(new URL('.', import.meta.url));
 
-/** Atributos JSX cuyo valor lee una persona (o su lector de pantalla). */
-const ATRIBUTOS_DE_TEXTO = new Set(['label', 'title', 'placeholder', 'aria-label', 'alt']);
+/**
+ * Atributos JSX cuyo valor lee una persona (o su lector de pantalla). `etiqueta` y `ayuda` son
+ * los nombres que usan los componentes propios (`Campo`, `PestanaConAyuda`) para lo mismo que
+ * `label`: si no estuvieran aquí, el rótulo de un campo podría escribirse a mano sin que el
+ * guardia se enterase (QA de #271).
+ */
+const ATRIBUTOS_DE_TEXTO = new Set([
+  'alt',
+  'aria-label',
+  'ayuda',
+  'etiqueta',
+  'label',
+  'placeholder',
+  'title',
+]);
 
 /**
  * Una cadena cuenta como texto de usuario a partir de tres letras seguidas. Por debajo de ese
@@ -48,6 +61,11 @@ const TEXTO_DE_USUARIO = /\p{Letter}{3,}/u;
 const PERMITIDAS = new Map<string, string>([
   // Marca de bpmn.io: es un nombre propio y su presencia la exige la licencia del editor.
   ['bpmn.io', 'nombre propio'],
+  // Claves del JSON Schema del escenario: son el nombre del campo en el archivo, no una etiqueta.
+  // Su ortografía la manda `docs/SCENARIO_FORMAT.md` (cabecera de `strings.es.ts`).
+  ['calendars', 'clave del esquema'],
+  ['intervals', 'clave del esquema'],
+  ['resources', 'clave del esquema'],
 ]);
 
 function fuentes(directorio: string, salida: string[] = []): string[] {
@@ -68,22 +86,28 @@ function fuentes(directorio: string, salida: string[] = []): string[] {
   return salida;
 }
 
+/** `{texto}` como hijo de un elemento JSX, no como valor de un atributo (`title={texto}`). */
+function esHijoJsx(nodo: ts.JsxExpression): boolean {
+  const padre = nodo.parent;
+  return ts.isJsxElement(padre) || ts.isJsxFragment(padre);
+}
+
 interface Hallazgo {
   archivo: string;
   linea: number;
   texto: string;
 }
 
-function literalesDeUi(ruta: string): Hallazgo[] {
-  const codigo = readFileSync(ruta, 'utf8');
-  const fuente = ts.createSourceFile(ruta, codigo, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+/** El detector, sobre código en memoria: es el que usan tanto el barrido como la sonda. */
+function literalesEn(codigo: string, nombre: string): Hallazgo[] {
+  const fuente = ts.createSourceFile(nombre, codigo, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const hallazgos: Hallazgo[] = [];
 
   const anotar = (nodo: ts.Node, bruto: string): void => {
     const texto = bruto.replace(/\s+/gu, ' ').trim();
     if (!TEXTO_DE_USUARIO.test(texto) || PERMITIDAS.has(texto)) return;
     hallazgos.push({
-      archivo: ruta.slice(RAIZ.length),
+      archivo: nombre,
       linea: fuente.getLineAndCharacterOfPosition(nodo.getStart(fuente)).line + 1,
       texto,
     });
@@ -92,6 +116,18 @@ function literalesDeUi(ruta: string): Hallazgo[] {
   const visitar = (nodo: ts.Node): void => {
     if (ts.isJsxText(nodo)) {
       anotar(nodo, nodo.text);
+    }
+    // Un hijo entre llaves también se lee en pantalla: `<b>{'Sin tipo'}</b>` y
+    // `<p>{`Corrida ${n}`}</p>` pintan texto igual que `ts.isJsxText`. Solo se miran los hijos:
+    // el mismo nodo como valor de atributo lo cubre la rama de abajo, y ahí un `${…}` con
+    // trozos de `S` es lo normal (QA de #271).
+    if (ts.isJsxExpression(nodo) && nodo.expression !== undefined && esHijoJsx(nodo)) {
+      const dentro = nodo.expression;
+      if (ts.isStringLiteral(dentro) || ts.isNoSubstitutionTemplateLiteral(dentro)) {
+        anotar(dentro, dentro.text);
+      } else if (ts.isTemplateExpression(dentro)) {
+        anotar(dentro, dentro.head.text + dentro.templateSpans.map((t) => t.literal.text).join(' '));
+      }
     }
     // `aria-label` no es un identificador válido de TS: llega como nombre con guion, así que el
     // nombre del atributo se lee de la fuente y no de `node.name.text`.
@@ -106,6 +142,10 @@ function literalesDeUi(ruta: string): Hallazgo[] {
 
   visitar(fuente);
   return hallazgos;
+}
+
+function literalesDeUi(ruta: string): Hallazgo[] {
+  return literalesEn(readFileSync(ruta, 'utf8'), ruta.slice(RAIZ.length));
 }
 
 describe('LILA-066 · los textos de la UI viven en strings.es.ts', () => {
@@ -131,37 +171,26 @@ describe('LILA-066 · los textos de la UI viven en strings.es.ts', () => {
   it('detecta un literal recién puesto, en el texto y en los atributos', () => {
     // El detector se ejercita sobre fuente sintética, no sobre un archivo real: así la prueba de
     // que el guardia muerde no exige ensuciar un componente ni depende de que siga ensuciado.
-    const sonda = (codigo: string): Hallazgo[] => {
-      const fuente = ts.createSourceFile('sonda.tsx', codigo, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      const encontrados: Hallazgo[] = [];
-      const visitar = (nodo: ts.Node): void => {
-        if (ts.isJsxText(nodo) && TEXTO_DE_USUARIO.test(nodo.text)) {
-          encontrados.push({ archivo: 'sonda.tsx', linea: 1, texto: nodo.text.trim() });
-        }
-        if (ts.isJsxAttribute(nodo) && nodo.initializer !== undefined) {
-          const nombre = nodo.name.getText(fuente);
-          if (
-            ATRIBUTOS_DE_TEXTO.has(nombre) &&
-            ts.isStringLiteral(nodo.initializer) &&
-            TEXTO_DE_USUARIO.test(nodo.initializer.text)
-          ) {
-            encontrados.push({ archivo: 'sonda.tsx', linea: 1, texto: nodo.initializer.text });
-          }
-        }
-        ts.forEachChild(nodo, visitar);
-      };
-      visitar(fuente);
-      return encontrados;
-    };
+    // Y es `literalesEn` —el mismo que barre la app—, no una copia suya: una copia solo prueba
+    // que la copia muerde (QA de #271).
+    const sonda = (codigo: string): string[] =>
+      literalesEn(codigo, 'sonda.tsx').map((h) => h.texto);
 
-    expect(sonda('const x = <p>Guardar cambios</p>;').map((h) => h.texto)).toEqual([
-      'Guardar cambios',
-    ]);
-    expect(sonda('const x = <button title="Cerrar diagrama">+</button>;').map((h) => h.texto)).toEqual([
+    expect(sonda('const x = <p>Guardar cambios</p>;')).toEqual(['Guardar cambios']);
+    expect(sonda('const x = <button title="Cerrar diagrama">+</button>;')).toEqual([
       'Cerrar diagrama',
+    ]);
+    // Un hijo entre llaves se lee en pantalla igual que el texto suelto.
+    expect(sonda("const x = <b>{'Texto suelto'}</b>;")).toEqual(['Texto suelto']);
+    expect(sonda('const x = <p>{`Corrida numero ${n}`}</p>;')).toEqual(['Corrida numero']);
+    // Y el rótulo de un campo, aunque la prop se llame en español.
+    expect(sonda('const x = <Campo etiqueta="Nombre del proceso" />;')).toEqual([
+      'Nombre del proceso',
     ]);
     // Y no muerde lo que no es texto: símbolos, expresiones y genéricos de TypeScript.
     expect(sonda('const x = <button aria-label={S.app.cerrar}>✕</button>;')).toEqual([]);
+    expect(sonda('const x = <p>{S.app.nuevo}{\' \'}·{\' \'}{n}</p>;')).toEqual([]);
+    expect(sonda('const x = <Campo etiqueta="intervals" />;')).toEqual([]);
     expect(sonda("const c = modeler.get<Canvas>('canvas');")).toEqual([]);
   });
 });
