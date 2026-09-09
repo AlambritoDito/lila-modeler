@@ -306,7 +306,7 @@ it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el 
   const papel = { name: 'Papel', tokens: { 'bg.base': '#F4F1EC' } };
   const montajesAntes = mocks.montajes;
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => papel } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(fetch).toHaveBeenLastCalledWith('./papel.json');
   expect(applyTheme).toHaveBeenLastCalledWith(papel);
@@ -328,7 +328,7 @@ it('aplicar un tema parcial borra las variables del anterior (docs/THEMES.md)', 
   raiz.style.setProperty('--bg-base', '#F3F2F2');
   raiz.style.setProperty('--accent-primary', '#EC3013');
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   // `applyTheme` es un mock aquí: lo que se mide es que el token que el tema nuevo NO trae ya no
   // está en línea, que es justo lo que lo devuelve al `:root` de `tokens.css` (Eva-01).
@@ -342,7 +342,7 @@ it('un tema que lanza no borra las variables del anterior (QA ronda 2 de #277)',
   raiz.style.setProperty('--bg-base', '#F3F2F2');
   vi.mocked(applyTheme).mockImplementationOnce(() => { throw new Error('Tema "Malo": el token "x" no existe en Lila Modeler.'); });
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Malo', tokens: {} }) } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(raiz.style.getPropertyValue('--bg-base')).toBe('#F3F2F2');
   expect(container.textContent).toContain('no existe en Lila Modeler');
@@ -356,7 +356,7 @@ it('el lienzo se repinta DESPUÉS del barrido, no antes (QA ronda 2 de #277)', a
   let alRepintar = 'sin llamar';
   mocks.repintar.mockImplementationOnce(() => { alRepintar = raiz.style.getPropertyValue('--bg-base'); });
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(alRepintar).toBe('');
 });
@@ -415,7 +415,7 @@ it('con puente (escritorio) las preferencias salen y entran por userData, no por
   // Solo la densidad al arrancar (su efecto la reescribe tal cual); el tema, al cambiarlo.
   expect(escrito).toEqual([{ densidad: 'comoda' }]);
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Eva-01', tokens: {} }) } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'eva-01'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(escrito).toContainEqual({ tema: 'eva-01' });
   expect(localStorage.getItem('lila.tema')).toBe('centinela');
@@ -441,6 +441,16 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
 });
 /** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
 const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
+/**
+ * El selector de tema dentro del diálogo de Ajustes. Va por su `.campo`: el primer `<select>` del
+ * diálogo es el del idioma, que se pinta encima de Apariencia (LILA-210).
+ */
+const selectTema = (): HTMLSelectElement =>
+  container.querySelector<HTMLSelectElement>('dialog.ajustes .campo:not(.idioma) select')!;
+/** El selector de idioma del mismo diálogo. */
+const selectIdioma = (): HTMLSelectElement =>
+  container.querySelector<HTMLSelectElement>('dialog.ajustes .idioma select')!;
+
 /** El campo hex de un token dentro del diálogo de Ajustes. */
 const hexDe = (token: string) =>
   container.querySelector<HTMLInputElement>(`dialog.ajustes input[aria-label="${T.apariencia.hex(token)}"]`)!;
@@ -455,7 +465,7 @@ it('un tema del usuario sobrevive a recargar y se aplica sin fetch (LILA-114)', 
   // Ni una petición: el tema del usuario sale del almacén, no de `themes/*.json`.
   expect(fetch).not.toHaveBeenCalled();
   expect(applyTheme).toHaveBeenLastCalledWith(temaMio.tema);
-  expect(container.querySelector<HTMLSelectElement>('dialog.ajustes select')!.value).toBe('u:1');
+  expect(selectTema().value).toBe('u:1');
 });
 
 it('editar un token guarda la lista donde toca en cada modalidad (LILA-114)', async () => {
@@ -751,7 +761,7 @@ it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)',
   await click(T.app.modos.rutas);
   mocks.simulacionTokens.mockClear();
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Papel', tokens: {} }) } as Response);
-  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  const select = selectTema();
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
 });

@@ -31,7 +31,7 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
-import { strings, useStrings } from './i18n';
+import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import type { Strings } from './strings.types';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
@@ -96,6 +96,7 @@ async function preferencias(): Promise<Ajustes> {
   try {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
+    const idioma = localStorage.getItem('lila.idioma');
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -108,6 +109,7 @@ async function preferencias(): Promise<Ajustes> {
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
+      ...(idioma === null ? {} : { idioma }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
     };
   } catch { return {}; }
@@ -125,6 +127,7 @@ function recordar(ajustes: Ajustes): void {
   try {
     if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
+    if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
@@ -294,6 +297,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /**
+   * Preferencia de idioma (LILA-210): `auto` sigue al sistema. Se guarda la preferencia y no el
+   * idioma resuelto, y el idioma vivo lo lleva `i18n.ts` —de ahí `useLocale()`, que es lo que
+   * pone al día lo que se pinta fuera de React y lo que va en la `key` de `TokenSim`—.
+   */
+  const [idioma, setIdioma] = useState<Preferencia>('auto');
+  const locale = useLocale();
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
@@ -477,8 +487,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
   // rutas» (LILA-065) se apaga: la animación de tokens no convive con la tinta de cuellos.
   useEffect(() => {
+    // El idioma está en las dependencias porque la etiqueta del overlay se escribe en el lienzo,
+    // fuera de React: sin esto se quedaría en el idioma en el que se pintó (LILA-210).
     modelador?.cuellos(corrida, modo !== 'rutas' && verCuellos);
-  }, [modelador, corrida, verCuellos, modo]);
+  }, [modelador, corrida, verCuellos, modo, locale]);
 
   /**
    * Errores y avisos de ahora mismo (LILA-209): el lint del escenario activo —la misma lista
@@ -491,6 +503,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
       // delante de los problemas del delta sin resolver.
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
+      // Los mensajes de `problemasEscenario` son del motor (zod y `validateScenario`) y se
+      // enseñan tal cual; el idioma del motor se enchufa en #280.
       const problemas = problemasEscenario(resuelto, ir);
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
@@ -505,8 +519,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // `Modelador.validacion` es idempotente. En «Validar rutas» (LILA-065) se apaga: los discos de
   // validación no se pintan sobre la animación de tokens.
   useEffect(() => {
+    // Mismo motivo que el overlay para llevar el idioma: el `title` del disco lo escribe
+    // `ValidationMarkers` sobre el DOM del lienzo. Los mensajes de dentro son del motor y siguen
+    // llegando en el idioma que el motor emite hasta que #280 le pase el idioma.
     modelador?.validacion(modo === 'rutas' ? null : validacion);
-  }, [modelador, validacion, modo]);
+  }, [modelador, validacion, modo, locale]);
 
   useEffect(() => {
     if (modelador === null) return;
@@ -541,6 +558,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
+      // mano— cae en `auto`, que es arrancar en el idioma del sistema.
+      const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
+      setIdioma(preferido);
+      setLocale(preferido);
       try {
         const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
         aplicarTema(t);
@@ -587,6 +609,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * Cambiar de idioma no recarga nada: `setLocale` avisa a todos los componentes suscritos con
+   * `useStrings()` y el árbol se repinta con el catálogo nuevo. El lienzo no se remonta (la pila
+   * de deshacer y la selección siguen ahí); lo imperativo —el `title` del minimapa, la animación
+   * de tokens, el overlay de cuellos— lo rehacen sus efectos con el idioma en las dependencias.
+   */
+  function cambiarIdioma(preferido: Preferencia): void {
+    setIdioma(preferido);
+    setLocale(preferido);
+    recordar({ idioma: preferido });
   }
 
   /**
@@ -829,6 +863,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
         <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
           <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+          {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
+              toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
+              se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
+              elegir el propio a quien no entiende el que está puesto. */}
+          <h3>{S.app.idioma}</h3>
+          <label className="campo idioma">
+            <select aria-label={S.app.idioma} value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
+              <option value="auto">{S.app.idiomaAuto}</option>
+              {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
+            </select>
+          </label>
           <h3>{S.app.apariencia}</h3>
           <Apariencia
             temaId={temaId}
@@ -880,9 +925,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           —texto invisible—. Remontar `TokenSim` apaga y vuelve a encender el modo, que es donde
           el módulo relee los tokens (QA de #275). No basta con `temaId`: editar un token del tema
           activo no cambia el id (LILA-114), así que la `key` lleva además los dos tokens que el
-          modo congela en el DI (QA de #277). */}
+          modo congela en el DI (QA de #277). Y el idioma (LILA-210): el módulo escribe su interfaz
+          una sola vez al encenderse, así que sin remontar quedaba medio lienzo en el anterior. */}
       {modo === 'rutas' && (
-        <TokenSim key={`${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
+        <TokenSim key={`${locale}|${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
       )}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">

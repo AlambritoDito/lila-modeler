@@ -25,6 +25,12 @@ import {
 /** ponytail: tope por defecto de filas retenidas de la primera replicación (docs/RESULTS_FORMAT.md §7). */
 export const DEFAULT_LOG_SAMPLE_LIMIT = 10_000;
 
+/**
+ * El worker no conoce el idioma de la app a propósito: `@lila/engine` es lo único que importa
+ * (`worker.bundle.test.ts` vigila que no entren ni el catálogo ni `i18n.ts` en sus 100 KB), y los
+ * mensajes que devuelve son los del motor. Cuando #280 le pase el idioma al motor, `RunRequest`
+ * ganará un `locale` y el cliente lo mandará; hasta entonces no hay nada que traducir aquí.
+ */
 export interface RunRequest {
   type: 'run';
   ir: ProcessIR;

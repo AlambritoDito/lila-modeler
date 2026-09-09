@@ -28,9 +28,11 @@ import { es } from './strings.es';
 import type { Strings } from './strings.types';
 
 /** The languages the app ships with. `en` is the base catalog; `es` is a translation of it. */
-export type Locale = 'en' | 'es';
-/** What Settings stores: a language, or «follow the system». */
-export type Preferencia = 'auto' | Locale;
+export const LOCALES = ['en', 'es'] as const;
+export type Locale = (typeof LOCALES)[number];
+/** What Settings stores: a language, or «follow the system». `auto` is the default. */
+export const PREFERENCIAS = ['auto', ...LOCALES] as const;
+export type Preferencia = (typeof PREFERENCIAS)[number];
 
 const CATALOGOS: Readonly<Record<Locale, Strings>> = { en, es };
 

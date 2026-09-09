@@ -283,6 +283,9 @@ export interface Problema {
  * Si el esquema no pasa, `validateScenario` no puede correr (necesita un `Scenario` parseado):
  * salen los defectos de zod, que son los mismos que imprime `loadResolvedScenario`. Sin IR
  * —el diagrama todavía no se ha parseado— solo se valida el esquema.
+ *
+ * Estos mensajes son del motor y se enseñan tal cual: el lint en vivo del panel seguirá en el
+ * idioma que emita el motor hasta que #280 le pase el idioma activo.
  */
 export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Problema[] {
   const parsed = parseScenario(resuelto);
