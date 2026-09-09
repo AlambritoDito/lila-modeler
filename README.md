@@ -178,8 +178,10 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
 - **Perfil BPMN soportado**: start/end (none y terminate), timer, tareas (todas las variantes),
   call activity, subproceso embebido, XOR/OR/AND, lanes y pools. Lo que queda fuera produce un
   error de validación explícito, no un fallo silencioso (`docs/SEMANTICS.md` §§1–3).
-- **Sin publicación en npm todavía**: no hay `npx @lila/engine` ni paquete instalable fuera del
-  repo; se usa clonando y compilando como arriba.
+- **Publicación en npm**: `@lila/engine` se publica con un tag `vX.Y.Z` sobre `main`
+  (`.github/workflows/release.yml` comprueba que el tag coincida con la versión del paquete,
+  compila, corre los tests y hace `npm publish --provenance`). Hasta el primer tag no hay
+  `npx @lila/engine` fuera del repo; se usa clonando y compilando como arriba.
 - **Sin demo online todavía**: la app web solo corre local (`npm run dev -w @lila/web`) o desde el
   `.dmg` de la beta de escritorio.
 - **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
