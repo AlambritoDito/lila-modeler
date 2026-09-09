@@ -28,8 +28,10 @@
  * What is **not** here, on purpose:
  *
  * - Engine messages (`packages/engine`): catalog § 17 of `docs/SEMANTICS.md` rules, and the web
- *   shows them exactly as they arrive so the same error does not get two spellings. Wiring the
- *   locale into the engine is #280.
+ *   shows them exactly as they arrive so the same error does not get two spellings. Since #280
+ *   the engine is *asked* for them in the active locale (`{ locale }` on `validate`,
+ *   `validateScenario`, `parseScenario`, `simulate`, `compare`), so «as they arrive» and «in the
+ *   user's language» are the same thing — but they are still not written here.
  * - The Bizagi result column names (`Id`, `Name`, `Type`, `From`, `To`, `Metric`): they live in
  *   `S.resultados.columnas` so they are read from here, but `docs/BIZAGI_PARITY.md` (rule 4 of
  *   `BACKLOG.md`) rules their value and they are **identical in every language**.

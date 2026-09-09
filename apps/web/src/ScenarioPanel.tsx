@@ -41,7 +41,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
-import { strings, useStrings } from './i18n';
+import { getLocale, strings, useLocale, useStrings, type Locale } from './i18n';
 
 /* ------------------------------------------------------------------ *
  * JSON Schema: el subconjunto que produce `z.toJSONSchema` para el escenario
@@ -284,11 +284,17 @@ export interface Problema {
  * salen los defectos de zod, que son los mismos que imprime `loadResolvedScenario`. Sin IR
  * —el diagrama todavía no se ha parseado— solo se valida el esquema.
  *
- * Estos mensajes son del motor y se enseñan tal cual: el lint en vivo del panel seguirá en el
- * idioma que emita el motor hasta que #280 le pase el idioma activo.
+ * These messages are the engine's and are shown verbatim; since #280 the engine is asked for
+ * them in `locale`, which defaults to the app's active language, so the live lint of the panel
+ * finally speaks the language the rest of the UI speaks. A component passes it explicitly, read
+ * with `useLocale()`, so the `useMemo` that caches this list recomputes on a language change.
  */
-export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Problema[] {
-  const parsed = parseScenario(resuelto);
+export function problemasEscenario(
+  resuelto: unknown,
+  ir: ProcessIR | null,
+  locale: Locale = getLocale(),
+): Problema[] {
+  const parsed = parseScenario(resuelto, { locale });
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
       ruta: rutaTexto(issue.path as Ruta),
@@ -297,7 +303,7 @@ export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Pro
     }));
   }
   if (ir === null) return [];
-  return validateScenario(parsed.data, ir).map((problema) => ({
+  return validateScenario(parsed.data, ir, { locale }).map((problema) => ({
     ruta: problema.path,
     mensaje: problema.message,
     severidad: problema.severity,
@@ -1048,6 +1054,9 @@ export function ScenarioPanel({
   onSeleccionar,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
+  // The engine takes the language as a value, not as a catalog: `useLocale()` is what makes the
+  // memoised lint below recompute when the app switches language.
+  const locale = useLocale();
   const delta = escenarios[archivo] ?? {};
 
   const lector = useMemo<ScenarioReader>(
@@ -1091,13 +1100,15 @@ export function ScenarioPanel({
   }, [archivo, delta, lector]);
 
   const problemas = useMemo(() => {
-    const propios = problemasEscenario(resuelto, ir);
+    const propios = problemasEscenario(resuelto, ir, locale);
     if (herencia.error === null) return propios;
     return [
       { ruta: 'extends', mensaje: herencia.error, severidad: 'error' as const },
       ...propios,
     ];
-  }, [resuelto, ir, herencia.error]);
+    // `locale` is a dependency because the messages cached here are the engine's: without it the
+    // list would keep the language it was linted in until the scenario or the IR changed.
+  }, [resuelto, ir, herencia.error, locale]);
   const indice = useMemo(() => porRuta(problemas), [problemas]);
   const errores = problemas.filter((p) => p.severidad === 'error').length;
   const avisos = problemas.length - errores;
