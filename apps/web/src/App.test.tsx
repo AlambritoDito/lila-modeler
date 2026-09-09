@@ -422,6 +422,29 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   expect(pie.textContent).not.toContain('Diagrama suelto');
 });
 
+it.each([
+  ['escenario editado', 'escenario', 'Sin guardar'],
+  ['solo el XML editado', 'modelo', 'Guardado'],
+] as const)('diagrama suelto, %s: guardar solo limpia el indicador de lo escrito (LILA-208)', async (_caso, que, esperado) => {
+  // Un guardado normal en modo suelto escribe SOLO el `.bpmn`: el escenario editado sigue sin
+  // estar en disco, así que el indicador NO puede quedarse en «Guardado» (y la guardia de cierre
+  // sale del mismo token).
+  const suelto = { ...proyecto('p13', 'Suelto'), loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  expect(container.textContent).toContain('Guardado');
+
+  // El `onCambio` del panel de escenario solo existe con su pestaña montada.
+  await click('Simulación');
+  await act(async () => { if (que === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
+  expect(container.textContent).toContain('Sin guardar');
+  await act(async () => { puente.menu('guardar'); });
+  expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: false });
+  expect(container.textContent).toContain(esperado);
+  expect(session.setDirty).toHaveBeenLastCalledWith(esperado === 'Sin guardar');
+});
+
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
   mocks.retrasarLienzo = true;
   const abrirReciente = vi.fn().mockResolvedValue(proyecto('p8', 'Tardío'));

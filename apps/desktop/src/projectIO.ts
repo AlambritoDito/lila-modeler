@@ -14,6 +14,7 @@
  */
 import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import { isMiscasedModelFile } from './openPath.js';
 import { isSymlink } from './safePaths.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
 
@@ -251,6 +252,26 @@ async function readRuns(dir: string, problems: ProjectProblem[]): Promise<Stored
 }
 
 /**
+ * `Model.bpmn`/`MODEL.BPMN` DENTRO de una carpeta que ya es un proyecto Lila: se rechaza
+ * (LILA-206 P3, acotado en LILA-208). `readProjectFolder`/`writeProjectFolder` comparan el nombre
+ * con `model.bpmn` usando `===`, así que ahí `Model.bpmn` cuenta como «otro diagrama» y se guarda
+ * en modo `diagramOnly`; en macOS y Windows es EL MISMO archivo, así que se sobrescribiría el
+ * `model.bpmn` del proyecto dejando el manifiesto con la revisión vieja y sin escribir escenarios
+ * ni corridas, en silencio. Normalizar a `model.bpmn` no vale: en Linux son dos archivos distintos
+ * y se pisaría el modelo del proyecto con otro diagrama. Sin manifiesto al lado no hay proyecto que
+ * romper —un `Model.bpmn` en `~/Descargas` es un diagrama suelto legítimo— y se abre y se guarda
+ * como cualquier otro `.bpmn` (LILA-208, hallazgo 3 del QA de #268).
+ */
+async function assertNotMiscasedInProject(dir: string, modelFile: string): Promise<void> {
+  if (!isMiscasedModelFile(modelFile)) return;
+  if (!(await pathExists(join(dir, MANIFEST_FILE)))) return;
+  throw new ProjectIOError(
+    'E-ARGUMENTO',
+    `"${modelFile}" solo se diferencia de "model.bpmn" en las mayúsculas; renómbralo antes de abrirlo (en macOS y Windows serían el mismo archivo y se guardaría a medias).`,
+  );
+}
+
+/**
  * Lee una carpeta de proyecto. Tolerante: un `*.scenario.json` o `runs/*.result.json` roto, o un
  * `lila-project.json` roto/ausente/symlink, no aborta la lectura — se excluye y queda en
  * `problems` (`lila-project.json` ausente es el único caso silencioso: es el estado normal de
@@ -269,6 +290,7 @@ export async function readProjectFolder(
   dir: string,
   modelFile: string = MODEL_FILE,
 ): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[]; loose: boolean }> {
+  await assertNotMiscasedInProject(dir, modelFile);
   const modelPath = join(dir, modelFile);
   // `lstat` antes de leer (OP-14, revisión de A, issue #71: "lectura de model.bpmn sigue
   // symlinks"): a diferencia de un `*.scenario.json` (que se puede excluir y seguir abriendo el
@@ -298,9 +320,26 @@ export async function readProjectFolder(
   const scenarios = await readScenarios(dir, problems);
   const runs = await readRuns(dir, problems);
 
+  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA; corregido en LILA-206, P1 del QA): CUALQUIER
+  // `.bpmn` abierto que no sea el `model.bpmn` de la carpeta — el doble clic en `~/Descargas`, y
+  // también el doble clic en `ventas.bpmn` DENTRO de un proyecto Lila. En los dos casos guardar
+  // escribe solo ese archivo (`diagramOnly`), así que la condición tiene que ser exactamente la
+  // misma que decide `diagramOnly` en `writeProjectFolder`: si aquí se exigía además que la carpeta
+  // no tuviera manifiesto, `ventas.bpmn` dentro de un proyecto llegaba a la UI con `loose: false`,
+  // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
+  // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
+  // archivo se abrió) y lo obedece `writeProjectFolder`.
+  const loose = modelFile !== MODEL_FILE;
+
   const document: ProjectDocument = {
     version: 1,
-    id: manifest.id,
+    // Un diagrama suelto NO es el proyecto de la carpeta, aunque comparta carpeta con él
+    // (LILA-208, hallazgo 1 del QA de #268): con `manifest.id` aquí, un «Guardar como» sobre esa
+    // MISMA carpeta pasaba por `assertFolderNotOccupied` («manifiesto del mismo documentId es
+    // válido») y pisaba `model.bpmn` y el manifiesto con el diagrama suelto. Con identidad propia
+    // cae en el `E-CARPETA-OCUPADA` de siempre, y «Guardar como» a otra carpeta sigue igual (en
+    // `~/Descargas` el manifiesto ya venía reconstruido, con un id inventado en cada lectura).
+    id: loose ? crypto.randomUUID() : manifest.id,
     name: manifest.name,
     // El nombre del manifiesto solo vale para el `model.bpmn` del proyecto; si se pidió otro
     // `.bpmn`, el nombre honesto es el del archivo abierto (LILA-072).
@@ -314,16 +353,6 @@ export async function readProjectFolder(
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
   };
-  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA; corregido en LILA-206, P1 del QA): CUALQUIER
-  // `.bpmn` abierto que no sea el `model.bpmn` de la carpeta — el doble clic en `~/Descargas`, y
-  // también el doble clic en `ventas.bpmn` DENTRO de un proyecto Lila. En los dos casos guardar
-  // escribe solo ese archivo (`diagramOnly`), así que la condición tiene que ser exactamente la
-  // misma que decide `diagramOnly` en `writeProjectFolder`: si aquí se exigía además que la carpeta
-  // no tuviera manifiesto, `ventas.bpmn` dentro de un proyecto llegaba a la UI con `loose: false`,
-  // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
-  // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
-  // archivo se abrió) y lo obedece `writeProjectFolder`.
-  const loose = modelFile !== MODEL_FILE;
   return { document, problems, loose };
 }
 
@@ -678,6 +707,7 @@ export async function writeProjectFolder(
   fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
   const modelFile = options.modelFile ?? MODEL_FILE;
+  await assertNotMiscasedInProject(dir, modelFile);
   if (options.saveAs === true) {
     // «Guardar como» crea un proyecto COMPLETO en la carpeta elegida, y un proyecto solo se reabre
     // por su `model.bpmn` + manifiesto. Con otro `modelFile` el `diagramOnly` implícito de abajo

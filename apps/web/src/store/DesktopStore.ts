@@ -145,6 +145,14 @@ export class DesktopStore implements ProjectSessionStore {
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
+      // «Guardar como» de un diagrama suelto sobre la carpeta que YA es su proyecto (LILA-208):
+      // el destino no es nuevo, es el `model.bpmn` de al lado. La capa de disco ya lo rechaza
+      // (`E-CARPETA-OCUPADA`, id propio del suelto); aquí se dice en cristiano y antes de tocar
+      // nada. Decisión del ticket: rechazar, no pedir confirmación — el usuario tiene la carpeta
+      // ahí mismo para elegir otra y el diagrama suelto no se pierde.
+      if (explicitSaveAs && this.activeLoose && chosen === this.activeDir) {
+        throw new Error(S.almacen.errorMismaCarpeta);
+      }
       dir = chosen;
     } else {
       isNewDestination = false;

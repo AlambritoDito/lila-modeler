@@ -319,7 +319,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     ioLock.current = true; setIoBusy(true); setIoError(null);
     try {
       const doc = await snapshot();
-      const token = changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
+      // Un guardado normal en modo suelto escribe SOLO el `.bpmn` (`diagramOnly`, LILA-206): los
+      // escenarios y las corridas siguen sin estar en disco. El token guardado avanza entonces
+      // únicamente en la revisión del modelo y conserva los escenarios/corridas que SÍ estaban
+      // guardados; con el token completo, editar un escenario y pulsar ⌘S dejaba el pie en
+      // «Guardado» y la guardia de cierre dejaba salir sin escribirlo (LILA-208, hallazgo 2 del QA).
+      const previo: readonly [string, number, Record<string, number>, string[]] | null =
+        suelto && !saveAs && savedToken !== '' ? JSON.parse(savedToken) : null;
+      const token = previo === null
+        ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id))
+        : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
       const saved = await adapter.saveProject(doc, { saveAs });
       if (saved === null) return false;
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.

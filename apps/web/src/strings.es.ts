@@ -170,7 +170,7 @@ export const S = {
     sinValor: '—',
     densidadEstado: (nombre: string): string => `Densidad ${nombre}`,
     zoom: (porCiento: number): string => `Zoom ${porCiento} % · ajustar`,
-    diagramaSuelto: 'Diagrama suelto: los escenarios no se guardan hasta «Guardar como»',
+    diagramaSuelto: 'Diagrama suelto: los escenarios y las corridas no se guardan hasta «Guardar como»',
     perdidaAlExportar: (n: number, lista: string): string =>
       `${n} ${n === 1 ? 'elemento o referencia' : 'elementos o referencias'} ${
         n === 1 ? 'se perderá' : 'se perderán'
@@ -625,6 +625,9 @@ export const S = {
     errorProyectoDistinto:
       'E-PROYECTO-DISTINTO: el documento a guardar no es el proyecto activo; usa "Guardar como" ' +
       'para escribirlo en una carpeta nueva.',
+    /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
+    errorMismaCarpeta:
+      'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
   },
 
   simulacion: {

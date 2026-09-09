@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
+import { S } from '../strings.es';
 import type { ProjectDocument } from './ProjectStore';
 
 const XML_MINIMO = '<?xml version="1.0"?><definitions xmlns="http://example.org"/>';
@@ -473,6 +474,19 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     // Y el guardado siguiente ya es el de un proyecto normal en la carpeta elegida.
     await store.saveProject(documentoBase({ name: 'v3' }));
     expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/elegida', options: { saveAs: false, overwrite: false } });
+  });
+
+  it('«Guardar como» de un suelto sobre la MISMA carpeta: rechaza con mensaje y no escribe (LILA-208)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    bridge.queueChooseFolder('/carpeta/pedido');
+
+    await store.openRecent('/carpeta/pedido', 'ventas.bpmn');
+    await expect(store.saveProject(documentoBase(), { saveAs: true })).rejects.toThrow(
+      S.almacen.errorMismaCarpeta,
+    );
+    expect(bridge.writes).toEqual([]);
   });
 
   it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {
