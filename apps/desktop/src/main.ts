@@ -20,7 +20,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } fr
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { OpenPathRequest, Recent } from './bridge.js';
+import type { Ajustes, OpenPathRequest, Recent } from './bridge.js';
 import { decideClose, type CloseChoice } from './closeGuard.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
@@ -32,8 +32,10 @@ import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths
 import {
   addRecent,
   fitsAnyDisplay,
+  parseAjustes,
   readSessionState,
   removeRecent,
+  withAjustes,
   withWindowBounds,
   writeSessionState,
   type SessionState,
@@ -288,7 +290,7 @@ function guardedOn(
 // -- Estado de sesión: ventana + recientes (OP-14, incremento 2) -------------------------------
 // Un único objeto en memoria, releído al arrancar y reescrito (entero, atómico) cada vez que
 // cambia algo — la app es de una sola ventana/proceso, así que no hace falta más que eso.
-let sessionState: SessionState = { version: 1, window: null, recents: [] };
+let sessionState: SessionState = { version: 1, window: null, recents: [], ajustes: {} };
 const sessionStatePath = path.join(app.getPath('userData'), 'estado.json');
 
 async function persistSessionState(): Promise<void> {
@@ -414,6 +416,19 @@ function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   guardedHandle(win, 'lila:listRecents', async (): Promise<readonly Recent[]> => sessionState.recents);
+
+  // Apariencia (LILA-113): el renderer lee al arrancar y escribe cada vez que el usuario cambia
+  // tema o densidad. `parseAjustes` descarta lo que no sea texto en una clave conocida, así que
+  // por aquí no entra nada raro en `estado.json` aunque el renderer se equivoque.
+  guardedHandle(win, 'lila:readSettings', async (): Promise<Ajustes> => sessionState.ajustes);
+
+  guardedHandle(win, 'lila:writeSettings', async (_event, value: unknown): Promise<void> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error('E-ARGUMENTO: "ajustes" debe ser un objeto.');
+    }
+    sessionState = withAjustes(sessionState, parseAjustes(value));
+    await persistSessionState();
+  });
 
   guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown, fileArg: unknown) => {
     if (typeof dirArg !== 'string' || dirArg.length === 0) {

@@ -100,6 +100,27 @@ export interface LilaBridge {
    * menú (`menu.ts`), no en el renderer: así el atajo no se dispara dos veces en Windows/Linux.
    */
   onMenu(cb: (action: MenuAction) => void): () => void;
+
+  /**
+   * Preferencias de apariencia (LILA-113). Viven en `<userData>/estado.json`, junto a la ventana
+   * y los recientes, y no en el `localStorage` del renderer: la configuración de una app de
+   * escritorio se espera en la carpeta de usuario —copiable entre máquinas y borrable sin abrir
+   * la app—, no dentro del perfil de Chromium.
+   */
+  readSettings(): Promise<Ajustes>;
+  /** FUSIONA con lo guardado: mandar solo `{ tema }` no borra la densidad. */
+  writeSettings(ajustes: Ajustes): Promise<void>;
+}
+
+/**
+ * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`
+ * escrito por una versión anterior no las trae, y el renderer manda una sola cuando cambia una
+ * sola. Son texto libre a propósito —este contrato no conoce la lista de temas ni de densidades—:
+ * quien las lee (`App.tsx`) descarta el valor que ya no exista y sigue con el de fábrica.
+ */
+export interface Ajustes {
+  readonly tema?: string;
+  readonly densidad?: string;
 }
 
 /** Lo que el menú nativo puede pedirle al shell. `openRecent` lleva la carpeta de `listRecents()`. */
