@@ -1,5 +1,7 @@
 # Investigación del 2026-09-03
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 Material de apoyo de `../LILA_MODELER_ESTRUCTURA.md`. Seis informes de investigación verificados con búsqueda web, lectura de repositorios/licencias/especificaciones y benchmarks locales, más las tres propuestas de arquitectura que se compararon antes de sintetizar la estructura final.
 
 Informes:
