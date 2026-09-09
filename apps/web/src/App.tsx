@@ -848,13 +848,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
           simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
-      {/* `key={temaId}`: los colores neutros del modo se escriben en el DI al activarlo
+      {/* La `key`: los colores neutros del modo se escriben en el DI al activarlo
           (`ColoresNeutrosDelTema`), y el DI gana a los colores por defecto que repinta
           `repintar()`. Como el lienzo ya no se remonta al cambiar de tema, sin esta `key` el
           diagrama se quedaba con los colores del tema anterior y la etiqueta con los del nuevo
           —texto invisible—. Remontar `TokenSim` apaga y vuelve a encender el modo, que es donde
-          el módulo relee los tokens (QA de #275). */}
-      {modo === 'Validar rutas' && <TokenSim key={temaId} modelador={modelador} />}
+          el módulo relee los tokens (QA de #275). No basta con `temaId`: editar un token del tema
+          activo no cambia el id (LILA-114), así que la `key` lleva además los dos tokens que el
+          modo congela en el DI (QA de #277). */}
+      {modo === 'Validar rutas' && (
+        <TokenSim key={`${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
+      )}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (

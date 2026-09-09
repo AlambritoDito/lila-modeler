@@ -677,6 +677,26 @@ it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)',
   expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
 });
 
+it('editar un token de diagrama con «Validar rutas» encendido reinicia el modo (QA #277)', async () => {
+  // Con un tema del usuario ya activo, editar un token NO cambia `temaId`: si la `key` de
+  // `TokenSim` fuera solo el id, el modo no se reiniciaría y el diagrama se quedaría con el
+  // relleno viejo, porque `ColoresNeutrosDelTema` lo escribió en el DI al activar el modo y el DI
+  // gana a `repintar()` (medido por CDP: `fill` en línea `rgb(31,26,54)` con `--diagram-fill`
+  // ya en `#FFFFFF`).
+  localStorage.setItem('lila.tema', 'u:1');
+  localStorage.setItem('lila.temas', JSON.stringify([temaMio]));
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await click('Validar rutas');
+  mocks.simulacionTokens.mockClear();
+  // Un token que el modo no congela en el DI no reinicia nada: no hay por qué cortar la animación.
+  teclear(hexDe('accent.primary'), '#00FFAA');
+  expect(mocks.simulacionTokens).not.toHaveBeenCalled();
+  teclear(hexDe('diagram.fill'), '#FFFFFF');
+  expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
+});
+
 it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de validación', async () => {
   await act(async () => {
     mocks.problemas = [{ ruta: 'elements.Task_1', mensaje: 'sin parámetros', severidad: 'warning' }];

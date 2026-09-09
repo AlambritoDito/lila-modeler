@@ -57,7 +57,8 @@ se escribe. Hasta ahora era `localStorage` en las dos modalidades, con el argume
 aislamiento sino el sitio: ese almacén está dentro del perfil de Chromium de la app, no se ve desde
 fuera, no se copia a otra máquina y se va con los datos del sitio. `writeSettings` **fusiona**
 (mandar solo `{ tema }` no borra la densidad) y `main.ts` pasa lo que llega por `parseAjustes`, que
-descarta cualquier clave o valor que no sea uno de los dos textos esperados. Leer es asíncrono —en
+descarta cualquier clave o valor que no tenga la forma esperada (los dos textos, y desde LILA-114
+la lista `temas`). Leer es asíncrono —en
 escritorio es IPC—, así que `temaId` y `densidad` arrancan de fábrica y el primer efecto los pisa:
 es el mismo instante en el que `tema` deja de ser `undefined`, y el lienzo no se monta hasta
 entonces.
@@ -138,5 +139,6 @@ español que se lee en el diálogo. Es la misma función para importar y para re
 volver a pedir el integrado ni confiar en que su JSON siga igual, y funciona igual para un tema
 importado, que no tiene integrado detrás—. `id` y `origen` son de la app: no salen en el archivo
 exportado ni se esperan en el importado. En escritorio, `parseAjustes` descarta las entradas que no
-tengan forma de tema (`sessionState.ts`) y el renderer vuelve a validarlas con `validarTema`; un
+tengan forma de tema (`sessionState.ts`, con un tope de `MAX_TEMAS` = 50 entradas: esto es la
+configuración de la app, no una galería) y el renderer vuelve a validarlas con `validarTema`; un
 tema que un `estado.json` editado a mano dejó roto se cae solo él, como una entrada de recientes.
