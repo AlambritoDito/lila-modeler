@@ -18,6 +18,56 @@ const TYPES: Record<string, string> = {
   undefined: 'nothing',
 };
 
+/** Node types of the IR in prose, for the summary of `describe_process`. */
+const NODE_TYPES: Record<string, string> = {
+  start: 'start',
+  end: 'end',
+  terminate: 'terminate',
+  task: 'task',
+  xor: 'XOR gateway',
+  or: 'OR gateway',
+  and: 'AND gateway',
+  timer: 'timer',
+};
+
+const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]
+       lila run <model.bpmn> <scenario.json> [--seed n] [--replications n]
+                [--json result.json] [--csv directory]
+       lila compare <model.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
+                    [--json result.json] [--all]
+       lila mcp
+
+Commands:
+  validate   Parses the BPMN, prints its IR and validates the model.
+  run        Validates model and scenario, simulates and shows the result tables.
+  compare    Simulates two or more scenarios on the same model and compares them side by side.
+  mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
+
+validate options:
+  --json     Prints the IR and the problems on stdout.
+
+run options:
+  --seed n          Overrides run.seed with an integer.
+  --replications n  Overrides run.replications with an integer >= 1.
+  --json file       Writes the deterministic RunResult as JSON.
+  --csv directory   Writes elements, flows, resources, process and log as RFC 4180 CSV.
+                    log.csv is written streaming and carries ISO timestamps from run.start.
+
+compare options:
+  --seed n          Overrides run.seed in every compared scenario.
+  --replications n  Overrides run.replications in every compared scenario.
+  --json file       Writes the deterministic CompareResult as JSON.
+  --all             Prints every KPI of compare(), not just the curated subset.
+                    The first scenario listed is the base: the rest are compared against it.
+
+mcp options:
+  None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
+  directory it was launched from. Not run by hand: the MCP client launches it.
+
+General options:
+  --lang en|es  Language of the output. Default: LILA_LANG, then LANG; English if neither.
+  -h, --help    Shows this help.`;
+
 export const en: Catalog = {
   codes: {
     ...coreEn.codes,
@@ -131,5 +181,110 @@ export const en: Catalog = {
     intervalTo: () => 'to must be "HH:MM" ("24:00" is accepted)',
     intervalOrder: () =>
       'R13: to > from is required; a night window is declared as two intervals',
+  },
+  cli: {
+    usage: () => EN_USAGE,
+
+    process: (subject) => `Process ${subject}`,
+    exportedBy: (exporter, version) => `Exported by ${exporter} ${version}`,
+    nodes: (count, byType) => `Nodes (${count}): ${byType}`,
+    flows: (count) => `Flows (${count}):`,
+    defaultFlow: () => '(default)',
+    otherProcesses: (ids) => `Other processes in the file, not simulated: ${ids}`,
+    problemCounts: (errors, warnings) => `${errors} errors, ${warnings} warnings.`,
+    errorLabel: () => 'error',
+    warningLabel: () => 'warning',
+
+    scenario: (name) => `Scenario ${name}`,
+    runHeader: (seed, replications, unit) =>
+      `Seed ${seed} · Replications ${replications} · Time unit ${unit}`,
+    currency: (currency) => `Currency ${currency}`,
+    bottlenecks: () => 'Bottlenecks',
+    noResourceWait: () => 'No wait for a resource detected.',
+    warnings: () => 'Warnings:',
+
+    comparedScenarios: () => 'Compared scenarios',
+    timeUnitHeader: (unit) => `Time unit ${unit} (base scenario) · Utilization in %`,
+    columnName: () => 'Name',
+    columnFile: () => 'File',
+    columnSeed: () => 'Seed',
+    columnReplications: () => 'Replications',
+    baseColumn: (name) => `${name} (base)`,
+    significantMark: () => '* significant difference (95% CI without overlap)',
+
+    mixedTimeUnit: (unit, others) =>
+      `the scenarios do not share baseTimeUnit; the whole table uses ${unit}, the one of the base ` +
+      `scenario. Declaring another one: ${others}.`,
+    differentSeeds: (seeds) =>
+      `the scenarios run with different seeds (${seeds}): the common random numbers (R-DET-3) are ` +
+      'lost and the deltas mix the effect of the change with the one of the sampling. ' +
+      'Use --seed to force the same seed on all of them.',
+    fewReplications: (label) =>
+      `${label} ran without at least two complete replications; without a 95% CI there is no ` +
+      'significance mark possible for that scenario.',
+    moreWarnings: (count) =>
+      count === 1
+        ? '(+1 more warning with the same code)'
+        : `(+${count} more warnings with the same code)`,
+
+    invalidJson: (file, detail) => `${file}: invalid JSON: ${detail}`,
+    invalidScenarioLabel: () => 'invalid scenario:',
+    missingModel: (file) => `${file}: the resolved scenario does not declare model.`,
+    missingRun: (file) => `${file}: the resolved scenario does not declare run.`,
+    temporaryFileClosed: (file) => `temporary file already closed: ${file}`,
+    cannotWrite: (target) => `cannot write ${target}: a directory with that name exists.`,
+
+    commandError: (command, body) => `lila ${command}: ${body}`,
+    unknownCommand: (command) => `lila: unknown command "${command}".`,
+    integerRequired: (option, raw) => `--${option} requires an integer; got "${raw}".`,
+    safeIntegerRequired: (option, raw) => `--${option} requires a safe integer; got "${raw}".`,
+    minimumIntegerRequired: (option, minimum, raw) =>
+      `--${option} requires an integer >= ${minimum}; got "${raw}".`,
+    expectedPositionals: (expected) => `expected ${expected}.`,
+    bpmnPath: () => 'one .bpmn path',
+    runPaths: () => 'the paths <model.bpmn> <scenario.json>',
+    comparePaths: () => 'a <model.bpmn> and at least two scenarios <a.json> <b.json>',
+    missingBpmnPath: () => 'the path of the .bpmn file is missing.',
+    modelMismatch: (modelPath, scenarioModel) =>
+      `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
+    modelMismatchIn: (modelPath, scenarioModel, file) =>
+      `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}) in ${file}.`,
+    mcpNoArguments: () => 'it takes no arguments.',
+    mcpMissingPackage: (packageName) =>
+      `the package ${packageName} is missing. In the repo, \`npm ci && npm run build\` from the root.`,
+    invalidLang: (value, accepted) => `lila: --lang only accepts: ${accepted}; got "${value}".`,
+    missingLangValue: (accepted) => `lila: --lang requires a value: ${accepted}.`,
+  },
+  mcp: {
+    nodeType: (type) => NODE_TYPES[type] ?? type,
+    nodes: (count) => `Nodes (${count}):`,
+    gateways: () => 'Gateways and their outgoing flows:',
+    lanes: () => 'Lanes:',
+    embeddedSubprocesses: () => 'Embedded subprocesses (flattened):',
+    validation: (counts) => `Validation: ${counts}.`,
+    validationWithErrors: (counts) =>
+      `Validation: ${counts}. The model CANNOT be simulated; use validate_bpmn for the detail.`,
+    errorCount: (count) => `${count} ${count === 1 ? 'error' : 'errors'}`,
+    warningCount: (count) => `${count} ${count === 1 ? 'warning' : 'warnings'}`,
+    referencedResources: () => 'Referenced resources:',
+    referencedResourcesNone: () =>
+      'Referenced resources: (no scenario, or the scenario references no resources)',
+    referencedResourcesUnreadable: (detail) =>
+      `Referenced resources: the scenario could not be read: ${detail}`,
+
+    fileMissing: (file) => `the file ${file} does not exist.`,
+    bothPathAndXml: () => 'pass `path` or `xml`, not both.',
+    pathOrXml: () => 'pass `path` or `xml`.',
+    modelMismatch: (modelPath, scenarioModel) =>
+      `the model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
+    modelInvalid: (detail) => `the model does not pass validation: ${detail}`,
+    scenarioInvalid: (detail) => `invalid scenario: ${detail}`,
+    atLeastTwoScenarios: () => 'at least two scenarios are needed.',
+    patchNotAnObject: () => 'the patch did not produce a scenario object.',
+    invalidAfterPatchLabel: () => 'invalid scenario after the patch:',
+    patchedMissingModel: () => 'the resulting scenario does not declare model.',
+    patchedMissingRun: () => 'the resulting scenario does not declare run.',
+    patchedName: (name) => `${name} (patched)`,
+    inlineScenario: () => 'inline scenario',
   },
 };

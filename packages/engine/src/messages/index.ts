@@ -6,7 +6,9 @@
  * anything outside `core/`) with the namespaces that live outside it: the model validator, the
  * scenario lint and the zod texts. `docs/SEMANTICS.md` stays normative for the Spanish texts.
  *
- * PR-2 of LILA-211 adds the `cli` and `mcp` namespaces here.
+ * PR-2 of LILA-211 adds the `cli` and `mcp` namespaces (the chrome of the CLI and of the MCP
+ * server) and re-exports `resolveLocale`, the single rule that turns `--lang`/`LILA_LANG`/`LANG`
+ * into a `Locale`.
  */
 import { coreMessages } from '../core/messages/index.js';
 import { en } from './en.js';
@@ -15,14 +17,17 @@ import type { Catalog, Locale, ProblemCode } from './types.js';
 
 export type {
   Catalog,
+  CliMessages,
   CodeMessages,
   CodeOf,
   Constructions,
   Locale,
+  McpMessages,
   OuterCodeMessages,
   ProblemCode,
   ZodMessages,
 } from './types.js';
+export { LOCALES, LOCALE_LIST, isLocale, resolveLocale } from '../locale.js';
 export type { CoreCatalog, CoreChrome, CoreCodeMessages } from '../core/messages/index.js';
 export { coded, coreMessages } from '../core/messages/index.js';
 export {
