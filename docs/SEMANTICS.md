@@ -93,54 +93,73 @@ definida; todo lo demás cae en la sección 3 de este documento.
 ADR-021: todo lo que no está en la sección 2 produce **error de validación explícito**, nunca un
 fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el simulador”).
 
-- **R-NOSOP-1 — Plantilla exacta del mensaje.** Sin nombre:
+- **R-NOSOP-1 — Plantilla exacta del mensaje.** Desde LILA-211 el motor habla dos idiomas: el
+  inglés es el idioma por defecto y el español una traducción. Los dos textos son normativos, cada
+  uno para su idioma. Sin nombre, en `en` y en `es`:
+
+  ```
+  {id} ({qname}): {construction} not supported by the simulator.
+  ```
 
   ```
   {id} ({qname}): {construcción} no soportado por el simulador.
   ```
 
-  Con nombre (`name` no vacío):
+  Con nombre (`name` no vacío), en `en` y en `es`:
+
+  ```
+  {id} ({qname}, "{name}"): {construction} not supported by the simulator.
+  ```
 
   ```
   {id} ({qname}, "{name}"): {construcción} no soportado por el simulador.
   ```
 
   `{qname}` es el nombre calificado BPMN (`bpmn:boundaryEvent`). `{construcción}` es exactamente el
-  texto de la tabla siguiente. El código del error es `E-NOSOP`. *(prueba: LILA-021, LILA-163)*
+  texto de la tabla siguiente, en la columna del idioma. El código del error es `E-NOSOP`.
+  *(prueba: LILA-021, LILA-163, LILA-211)*
 
-- **R-NOSOP-2 — Catálogo cerrado de `{construcción}`.** Ningún otro texto es válido:
+- **R-NOSOP-2 — Catálogo cerrado de `{construcción}`.** Ningún otro texto es válido. El `id` es
+  el que viaja como dato en `ParseResult.unsupported[].construction` (LILA-211); el texto que se
+  enseña sale del catálogo del idioma:
 
-| Construcción detectada | `{construcción}` (texto exacto) |
-|---|---|
-| `bpmn:boundaryEvent` (cualquier disparador) | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` en cualquier evento | `evento de mensaje` |
-| `signalEventDefinition` | `evento de señal` |
-| `linkEventDefinition` | `evento de enlace` |
-| `errorEventDefinition` | `evento de error` |
-| `escalationEventDefinition` | `evento de escalamiento` |
-| `compensateEventDefinition` | `evento de compensación` |
-| `conditionalEventDefinition` | `evento condicional` |
-| `cancelEventDefinition` | `evento de cancelación` |
-| `multipleEventDefinition` / `parallelMultipleEventDefinition` | `evento con disparadores múltiples` |
-| `bpmn:intermediateThrowEvent` (sin disparador o con cualquiera) | `evento intermedio de lanzamiento` |
-| `bpmn:eventBasedGateway` | `gateway basado en eventos` |
-| `bpmn:complexGateway` | `gateway complejo` |
-| `multiInstanceLoopCharacteristics` | `marcador de multi-instancia` |
-| `standardLoopCharacteristics` | `marcador de bucle en la actividad` |
-| `bpmn:transaction` | `subproceso transaccional` |
-| `bpmn:adHocSubProcess` | `subproceso ad-hoc` |
-| `bpmn:subProcess` con `triggeredByEvent="true"` | `subproceso de eventos` |
-| `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `diagrama de coreografía` |
-| `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `diagrama de conversación` |
-| `startQuantity` distinto de 1 | `atributo startQuantity distinto de 1` |
-| `completionQuantity` distinto de 1 | `atributo completionQuantity distinto de 1` |
-| `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `evento de fin con ese disparador` |
-| `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `evento de inicio con ese disparador` |
+| Construcción detectada | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
+|---|---|---|---|
+| `bpmn:boundaryEvent` (cualquier disparador) | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `messageEventDefinition` en cualquier evento | `messageEvent` | `message event` | `evento de mensaje` |
+| `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
+| `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
+| `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
+| `escalationEventDefinition` | `escalationEvent` | `escalation event` | `evento de escalamiento` |
+| `compensateEventDefinition` | `compensationEvent` | `compensation event` | `evento de compensación` |
+| `conditionalEventDefinition` | `conditionalEvent` | `conditional event` | `evento condicional` |
+| `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
+| `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
+| `bpmn:intermediateThrowEvent` (sin disparador o con cualquiera) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
+| `bpmn:eventBasedGateway` | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
+| `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
+| `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
+| `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
+| `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
+| `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
+| `bpmn:subProcess` con `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
+| `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `choreographyDiagram` | `choreography diagram` | `diagrama de coreografía` |
+| `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
+| `startQuantity` distinto de 1 | `startQuantity` | `startQuantity attribute other than 1` | `atributo startQuantity distinto de 1` |
+| `completionQuantity` distinto de 1 | `completionQuantity` | `completionQuantity attribute other than 1` | `atributo completionQuantity distinto de 1` |
+| `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
+| `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
   El detalle que distingue cada fila del catálogo se conserva desde el parser; los fixtures que
-  verifican el texto exacto de las 24 filas son parte de LILA-163.
+  verifican el texto exacto de las 24 filas son parte de LILA-163. La fila 25 del catálogo,
+  `outOfProfile` (`element outside the v1 profile` / `elemento fuera del perfil v1`), no la produce
+  el parser: es el respaldo para las listas `unsupported` construidas a mano.
 
-  Ejemplo literal del mensaje que emite `validate(ir)`:
+  Ejemplo literal del mensaje que emite `validate(ir)`, en `en` y en `es`:
+
+  ```
+  Boundary_3a1f (bpmn:boundaryEvent, "Vence el plazo"): event attached to an activity (boundary event) not supported by the simulator.
+  ```
 
   ```
   Boundary_3a1f (bpmn:boundaryEvent, "Vence el plazo"): evento adjunto a actividad (boundary event) no soportado por el simulador.
@@ -167,7 +186,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     (`unparsable content … nested error: illegal ID <X>` / `duplicate ID <X>`) y que sería nodo o
     flujo según el perfil de la sección 2, o una referencia sin resolver sobre una propiedad de
     topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`, `bpmn:flowNodeRef`).
-    Texto exacto:
+    Texto exacto, en `en` y en `es`:
+
+    ```
+    {id}: the XML reader discarded model content, which was left incomplete: {aviso}.
+    ```
 
     ```
     {id}: el lector XML descartó contenido del modelo, que quedó incompleto: {aviso}.
@@ -183,7 +206,12 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     `bpmn:association`, `bpmn:group`, `bpmn:documentation`, `bpmn:extensionElements`,
     `bpmn:laneSet`, `bpmn:lane`), aunque sea por id ilegal o duplicado: ninguno es nodo ni flujo
     del grafo de tokens, así que perderlos no quita ni un nodo ni un flujo (de `bpmn:lane` el IR
-    solo se queda el nombre en `Node.lane`, que la CLI usa para mostrar). Texto exacto:
+    solo se queda el nombre en `Node.lane`, que la CLI usa para mostrar). Texto exacto, en `en` y
+    en `es`:
+
+    ```
+    {id}: XML reader notice, with no loss of nodes or flows: {aviso}.
+    ```
 
     ```
     {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.
@@ -193,7 +221,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     `bpmn:incoming` o `bpmn:outgoing` no descarta nada por sí misma — el elemento nombra un flujo
     que no está en el modelo cargado, y el IR deriva `incoming`/`outgoing` de los flujos que sí
     existen. Si ese flujo se perdió, el error lo emite el aviso que lo descartó, no este. Texto
-    exacto:
+    exacto, en `en` y en `es`:
+
+    ```
+    {id}: the XML reader did not find a flow this element declares; the graph is built without it: {aviso}.
+    ```
 
     ```
     {id}: el lector XML no encontró un flujo que este elemento declara; el grafo se construye sin él: {aviso}.
@@ -202,7 +234,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   - **Aviso `W-PARSE`, aviso de otro proceso**: los avisos son del archivo entero y el IR es de
     **un** proceso (los demás viajan en `ParseResult.ignoredProcessIds`). Lo que se descartó en
     otro `bpmn:process` no deja incompleto el que se simula, así que nunca aborta y el aviso dice
-    de qué proceso viene. Texto exacto:
+    de qué proceso viene. Texto exacto, en `en` y en `es`:
+
+    ```
+    {id}: XML reader notice in {proceso}, another process of the file that Lila does not simulate: {aviso}.
+    ```
 
     ```
     {id}: aviso del lector XML en {proceso}, otro proceso del archivo que Lila no simula: {aviso}.
@@ -210,7 +246,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
   - **Aviso `W-XOR-DEFAULT-ROTO`**: un `bpmn:default` que apunta a un flujo inexistente no
     descarta nada del grafo; solo se pierde la marca `isDefault`, y la sección 6 (R-XOR-1/R-XOR-2)
-    reparte igual sin ella. Texto exacto:
+    reparte igual sin ella. Texto exacto, en `en` y en `es`:
+
+    ```
+    {id}: the declared default flow does not exist; the isDefault mark is ignored and the split follows the rules of a XOR without a default: {aviso}.
+    ```
 
     ```
     {id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: {aviso}.
@@ -799,6 +839,15 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
 
 ## 17. Catálogo de errores y avisos
 
+Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idioma
+(`packages/engine/src/messages/`, con el subconjunto que necesita `core/` en
+`packages/engine/src/core/messages/`). El **inglés** es el idioma por defecto y el **español** una
+traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
+los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
+Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
+código: los 57 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+`es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
+
 Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 
 | Código | Cuándo |
@@ -830,7 +879,15 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
 Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts` para el lint,
-`packages/engine/src/core/sim.ts` para el guardia de `core/`, que no puede importar el validador):
+`packages/engine/src/core/sim.ts` para el guardia de `core/`, que no puede importar el validador),
+en `en` y en `es`:
+
+```
+resources.<pool>.capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+E-REC-CAPACIDAD: <pool>: capacity must declare at least one slice.
+E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
+```
 
 ```
 resources.<pool>.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
@@ -871,6 +928,10 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
 del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool
 y por corrida:
+
+```
+W-RECURSO-SATURADO: <poolId>: the queue grows without settling (λ/μ·c ≈ X)
+```
 
 ```
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
@@ -918,6 +979,32 @@ con los de un pool estable. *(prueba: LILA-191)*
 `W-TAREA-SIN-TIEMPO` es la excepción a la línea por elemento: cuando el escenario no declara
 **ningún** `processingTime`, el aviso es uno solo y lista los ids de todas las tareas (R-DEG-3,
 LILA-198).
+
+### Guardias internos
+
+Once códigos del catálogo **no** están en las tablas de arriba porque no son defectos que un
+modelo o un escenario puedan producir: son guardias de la API interna de `core/`, que solo saltan
+cuando quien llama construye la entrada a mano y rompe un invariante. Señalan un error de
+programación del consumidor, no algo que el usuario pueda corregir en su modelo, y por eso no
+entran en la tabla de errores del usuario ni en la lista de avisos. Son:
+
+| Código | Guardia |
+|---|---|
+| `E-REF-INEXISTENTE` | un nodo declara un flujo entrante o saliente que no está en el IR (`core/ir.ts`) |
+| `E-REC-LIBERACION` | se libera una solicitud que no tiene asignación activa (`core/resources.ts`) |
+| `E-REC-SOLICITUD-DUPLICADA` | se registra dos veces el mismo id de solicitud (`core/resources.ts`) |
+| `E-REC-SIN-ASIGNACION` | una solicitud concedida se quedó sin pool (`core/resources.ts`) |
+| `E-REC-ESTADO` | uso negativo en un pool (`core/resources.ts`) |
+| `E-REPLICACIONES-INSUFICIENTES` | menos de 2 valores o replicaciones para el IC 95 % (`core/replications.ts`) |
+| `E-REPLICACIONES-VACIAS` | no hay resultados que agregar (`core/replications.ts`) |
+| `E-KPI-INCONSISTENTE` | dos replicaciones con distinto conjunto de KPI (`core/replications.ts`) |
+| `E-KPI-NO-FINITO` | un KPI de una replicación no es finito (`core/replications.ts`) |
+| `E-AGREGADO-NO-NUMERICO` | la estructura de métricas no es promediable (`core/replications.ts`) |
+| `E-COMPARE-VACIO` | `compare()` sin ningún resultado (`core/compare.ts`) |
+
+La lista vive también en el código, en `INTERNAL_CODES` (`packages/engine/src/messages/index.ts`),
+y un test comprueba que esos once son exactamente los códigos del catálogo que esta sección no
+documenta como públicos (LILA-211).
 
 Los códigos de este catálogo son los que emite el código de hoy, con dos salvedades declaradas:
 `E-REC-CAPACIDAD`, que el lint estático no emite (párrafo de arriba, LILA-164), y el par
