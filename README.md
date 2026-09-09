@@ -149,8 +149,11 @@ Hay una beta de `apps/desktop` (Electron, **solo macOS arm64, sin firmar ni nota
 empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se distribuye dentro del
 repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
 en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
-intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. Todavía no hay
-Releases de GitHub con el `.dmg` listo para descargar, ni icono propio de la app (issue #72).
+intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
+como editor de `.bpmn`: doble clic sobre un archivo (o un arranque en frío con él) lo abre en el
+editor; si el archivo no está dentro de una carpeta de proyecto Lila, se guarda solo ese `.bpmn`
+hasta que se use «Guardar como». Todavía no hay Releases de GitHub con el `.dmg` listo para
+descargar, ni icono propio de la app (issue #267).
 
 Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
 en [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
