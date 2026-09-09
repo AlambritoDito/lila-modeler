@@ -384,7 +384,7 @@ test('modo (b): el error no cita el archivo de saveTo, que ni existe ni se va a 
   });
   expect(result.isError).toBe(true);
   expect(textOf(result)).not.toContain(saveTo);
-  expect(textOf(result)).toContain('escenario inválido tras el patch');
+  expect(textOf(result)).toContain('invalid scenario after the patch');
   expect(existsSync(saveTo)).toBe(false);
 });
 
