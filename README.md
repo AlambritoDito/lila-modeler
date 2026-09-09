@@ -152,8 +152,9 @@ en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS
 intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
 como editor de `.bpmn`: doble clic sobre un archivo (o un arranque en frío con él) lo abre en el
 editor; si el archivo no está dentro de una carpeta de proyecto Lila, se guarda solo ese `.bpmn`
-hasta que se use «Guardar como». Todavía no hay Releases de GitHub con el `.dmg` listo para
-descargar, ni icono propio de la app (issue #267).
+hasta que se use «Guardar como». Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
+dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
+deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 
 Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
 en [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
