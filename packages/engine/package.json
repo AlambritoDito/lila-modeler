@@ -1,7 +1,7 @@
 {
   "name": "@lila/engine",
   "version": "0.0.0",
-  "description": "Motor de simulación DES para BPMN",
+  "description": "Discrete-event simulation engine for BPMN processes, inspired by the simulation workflow of Bizagi Modeler and validated against public examples",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

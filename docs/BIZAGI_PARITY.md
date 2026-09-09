@@ -1,17 +1,21 @@
-# Checklist de paridad con Bizagi
+# Reference behaviour checklist (Bizagi Modeler public docs)
 
-Fuente: `LILA_MODELER_ESTRUCTURA.md`, sección 3 ("Checklist de paridad con Bizagi"). Esta tabla es una copia de esa sección con una columna `Estado` añadida para seguimiento de implementación; el contenido de las columnas `Capacidad`/`Bizagi`/`Lila`/`Hito` es el mismo que en el documento de estructura, que sigue siendo la fuente de verdad — ante cualquier discrepancia entre este archivo y `LILA_MODELER_ESTRUCTURA.md`, gana el documento de estructura y este archivo se corrige para reflejarlo, nunca al revés.
+Fuente: `LILA_MODELER_ESTRUCTURA.md`, sección 3 ("Checklist de comportamiento de referencia con Bizagi"). Esta tabla es una copia de esa sección con una columna `Estado` añadida para seguimiento de implementación; el contenido de las columnas `Capacidad`/`Bizagi`/`Lila`/`Hito` es el mismo que en el documento de estructura, que sigue siendo la fuente de verdad — ante cualquier discrepancia entre este archivo y `LILA_MODELER_ESTRUCTURA.md`, gana el documento de estructura y este archivo se corrige para reflejarlo, nunca al revés.
 
-Fuente de la comparación original: ayuda oficial de Bizagi (niveles 1–4, escenarios, elementos no soportados), verificada el 2026-09-03. Bizagi no expone "4 niveles" en el motor: son qué parámetros están rellenos. Lila no reproduce los niveles como concepto de producto; el motor degrada: sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7.
+Fuente de la comparación original: ayuda oficial de Bizagi (niveles 1–4, escenarios, elementos no soportados), verificada el 2026-09-03. Bizagi no expone "4 niveles" en el motor: son qué parámetros están rellenos. Lila no reproduce los niveles como concepto de producto; el motor degrada: sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7. Bizagi Modeler se cita aquí solo como referencia técnica e inspiración: este documento no plantea paridad de producto ni una alternativa comercial, solo un criterio interno de validación numérica (#289).
 
 `Estado` refleja el estado de implementación en el repositorio, no el de este documento. Se actualiza fila por fila conforme cada capacidad queda implementada y probada (ver la prueba de aceptación del hito correspondiente en la sección 7 de `LILA_MODELER_ESTRUCTURA.md`), y lleva entre paréntesis los tickets que la cierran.
 
-La paridad **numérica** contra las corridas publicadas por Bizagi se comprueba en
-`packages/engine/test/bizagi-parity.test.ts` (LILA-044), que simula los cuatro ejemplos de
-`examples/bizagi-levels` y compara cada número que `expected.json` cita de la página oficial con
-tolerancia ±5 %. Lo que hoy no cuadra está en la sección **Diferencias documentadas** del final,
-con su causa y su número: ninguna de esas diferencias se ha cerrado ajustando un parámetro del
-escenario publicado.
+El comportamiento de referencia **numérico**, es decir la validación contra las corridas
+publicadas por Bizagi Modeler, se comprueba en `packages/engine/test/bizagi-parity.test.ts`
+(LILA-044), que simula los cuatro ejemplos de `examples/bizagi-levels` y compara cada número que
+`expected.json` cita de la página oficial con tolerancia ±5 %. Lo que hoy no cuadra está en la
+sección **Diferencias documentadas** del final, con su causa y su número: ninguna de esas
+diferencias se ha cerrado ajustando un parámetro del escenario publicado.
+
+Este archivo es una referencia técnica interna y conserva su nombre histórico
+(`BIZAGI_PARITY.md`, `bizagi-parity.test.ts`) por continuidad con el código y los tickets que lo
+citan; no implica una promesa pública de paridad con Bizagi Modeler.
 
 | Capacidad | Bizagi | Lila | Hito | Estado |
 |---|---|---|---|---|
