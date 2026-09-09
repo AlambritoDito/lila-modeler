@@ -25,7 +25,7 @@ import type Modeler from 'bpmn-js/lib/Modeler';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { Problema } from './ScenarioPanel';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 const TIPO = 'lila-validacion';
 

@@ -21,7 +21,7 @@
  */
 import { useEffect, useReducer, useState } from 'react';
 import type { Modelador } from './Modeler';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 import type { PestanaId } from './ids';
 
 /* ------------------------------------------------------------------ *

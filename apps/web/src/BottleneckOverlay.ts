@@ -38,7 +38,7 @@ import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
 import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type { RunResult } from '@lila/engine';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 const PRIORITY = 1500;
 const OVERLAY_TYPE = 'lila-bottleneck';

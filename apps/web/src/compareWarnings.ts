@@ -14,7 +14,7 @@
 import type { BaseTimeUnit } from '@lila/engine/format';
 import type { RunResult } from '@lila/engine';
 import type { ResolvedScenario } from '@lila/engine/schema';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /**
  * Metadatos de una corrida comparada, en el mismo orden que `scenarioNames`/`comparison` de

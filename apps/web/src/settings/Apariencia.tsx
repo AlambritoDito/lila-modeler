@@ -17,7 +17,7 @@
  * llama a `applyTheme` y no hay dos fuentes de verdad del tema vivo.
  */
 import { useRef, useState } from 'react';
-import { S } from '../strings.es';
+import { es as S } from '../strings.es';
 import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';

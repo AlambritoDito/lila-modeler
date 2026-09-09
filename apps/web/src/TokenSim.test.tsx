@@ -25,7 +25,7 @@ import {
   traducirSimulacion,
   traducirTexto,
 } from './TokenSim';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /** La interfaz que el módulo monta dentro del contenedor del lienzo, tal cual la escribe. */
 function lienzoConSimulacion(): HTMLElement {

@@ -13,7 +13,7 @@
  */
 import type { ProcessIR, RunResult, EventLogRow, SimScenario, SimulationProgress } from '@lila/engine';
 import type { DoneResponse, WorkerRequest, WorkerResponse } from './worker.js';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 export interface RunInWorkerOptions {
   onProgress?: ((progress: SimulationProgress) => void) | undefined;

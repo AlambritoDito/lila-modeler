@@ -1,6 +1,6 @@
 import { validateBpmnXml } from '@lila/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /** La misma frontera de validación que CLI, antes de crear un Worker. */
 export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn') {

@@ -41,7 +41,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /* ------------------------------------------------------------------ *
  * JSON Schema: el subconjunto que produce `z.toJSONSchema` para el escenario

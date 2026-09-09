@@ -36,7 +36,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 export interface ResultsViewProps {
   ir: ProcessIR;

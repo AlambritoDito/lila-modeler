@@ -14,7 +14,7 @@
  *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
  */
 import { Fragment, useRef } from 'react';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /** Orden canónico del formato; es también el orden en el que sale `days`. */
 export const DIAS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;

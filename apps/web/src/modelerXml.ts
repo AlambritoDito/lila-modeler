@@ -1,5 +1,5 @@
 import { marcarExportador, sanitizeXmlIds } from '@lila/engine/bpmn';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
 const XML_ATTR_NOMBRADO = /\s([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;

@@ -34,7 +34,7 @@ import {
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 

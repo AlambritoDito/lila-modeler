@@ -12,7 +12,7 @@ import { ScenarioSchema, type ResolvedScenario } from '@lila/engine/schema';
 import type { ProcessIR, RunResult, SimulationProgress } from '@lila/engine';
 import { runInWorker } from './simulationClient.js';
 import { ResultsView } from './ResultsView.js';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 import './theme/tokens.css';
 
 // ponytail: `?raw`/JSON directo del repo en vez de copiarlos a `public/` (LILA-142/#59 no dejó

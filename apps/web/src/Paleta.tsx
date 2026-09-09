@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import type { Servicios } from './Modeler';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 /** Una figura de la paleta: lo que hace falta para pintarla y para crearla. */
 export interface Figura {

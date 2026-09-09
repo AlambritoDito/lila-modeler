@@ -18,7 +18,7 @@ import type { BaseTimeUnit } from '@lila/engine/format';
 import { compare, type CompareResult, type ProcessIR, type RunResult, type SimulationProgress } from '@lila/engine';
 import { runInWorker } from './simulationClient.js';
 import { CompareView } from './CompareView.js';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 import './theme/tokens.css';
 
 // ponytail: mismos JSON directos del repo que results-demo.tsx (LILA-142 no dejó ejemplos

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
-import { S } from '../strings.es';
+import { es as S } from '../strings.es';
 import type { ProjectDocument } from './ProjectStore';
 
 const XML_MINIMO = '<?xml version="1.0"?><definitions xmlns="http://example.org"/>';

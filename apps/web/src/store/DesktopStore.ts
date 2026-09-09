@@ -20,7 +20,7 @@ import type {
   ScenarioDocument,
   StoredRun,
 } from './ProjectStore';
-import { S } from '../strings.es';
+import { es as S } from '../strings.es';
 
 type ProjectProblem = LilaProjectDocument['problems'][number];
 

@@ -16,7 +16,7 @@
  * pero deja la app medio pintada sin decir por qué. `validarTema` es esa segunda regla, y es la
  * misma para importar y para releer lo guardado.
  */
-import { S } from '../strings.es';
+import { es as S } from '../strings.es';
 import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from './applyTheme';
 import { COLOR_TOKEN_NAMES, TOKEN_NAMES, type TokenName } from './tokens';

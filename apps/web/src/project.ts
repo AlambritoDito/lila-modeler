@@ -3,7 +3,7 @@ import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
 import { runResultSchema } from '@lila/engine/result-schema';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 export function projectStore(store: ProjectStore): ProjectSessionStore | null {
   const candidate = store as Partial<ProjectSessionStore>;

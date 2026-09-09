@@ -23,7 +23,7 @@
  */
 import { useEffect } from 'react';
 import type { Modelador } from './Modeler';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 
 interface Props {
   modelador: Modelador | null;

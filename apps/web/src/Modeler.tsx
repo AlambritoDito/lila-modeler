@@ -46,7 +46,7 @@ import {
   type ImportacionPreparada,
   type OpcionesExportacion,
 } from './modelerXml';
-import { S } from './strings.es';
+import { es as S } from './strings.es';
 // Los colores del diagrama durante «Validar rutas» (#264). Van en `TokenSim.tsx` con el resto de
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
