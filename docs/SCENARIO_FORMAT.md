@@ -217,6 +217,7 @@ Los defectos del **esquema** (los que caza zod antes de R3–R16: tipo equivocad
 - **Cadenas permitidas**: A `extends` B `extends` C. Se resuelve de la raíz hacia abajo (C, luego B, luego A).
 - **Ciclos rechazados**: cualquier ciclo en la cadena es error, citando los archivos implicados.
 - **Rutas relativas al archivo del hijo**, no al directorio de trabajo. `model` también se resuelve relativo al archivo donde está escrito.
+- **`__proto__`, `constructor` y `prototype` se ignoran**: en JavaScript no son claves normales (escriben en el prototipo del objeto), así que la fusión las salta en cualquier objeto y a cualquier profundidad, sin avisar. Ningún campo del § 2 se llama así; dentro de un array las caza el esquema como `E-CLAVE-DESCONOCIDA` (LILA-204).
 - La validación (§ 5) se aplica **al escenario resuelto**, no a cada archivo por separado: por eso un delta puede no traer `model` ni `run`.
 
 ---
