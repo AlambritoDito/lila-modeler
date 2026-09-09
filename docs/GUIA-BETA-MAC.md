@@ -152,15 +152,17 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   abres `ventas.bpmn` (doble clic) en una carpeta que ya es un proyecto Lila, `⌘S` escribe ese
   `ventas.bpmn` y nada más: `model.bpmn`, los escenarios y el manifiesto se quedan byte a byte como
   estaban, y las corridas no se guardan. La barra inferior lo avisa mientras ese diagrama está
-  abierto — «Diagrama suelto: los escenarios y las corridas no se guardan hasta «Guardar como»» —, igual que con un
-  `.bpmn` suelto en `~/Descargas`: es el mismo modo de guardado. Al reabrir la carpeta desde
-  recientes vuelve a verse el proyecto de `model.bpmn`, no el otro diagrama. Para convertir
+  abierto — «Diagrama suelto: los escenarios y las corridas no se guardan hasta «Guardar como»» —,
+  igual que con un `.bpmn` suelto en `~/Descargas`: es el mismo modo de guardado. Al reabrir la
+  carpeta desde recientes vuelve a verse el proyecto de `model.bpmn`, no el otro diagrama. Para convertir
   `ventas.bpmn` en un proyecto propio, usa **Guardar como** hacia una carpeta nueva: ahí el XML pasa
   a ser el `model.bpmn` de ese proyecto nuevo (**Guardar como** siempre escribe `model.bpmn`; pedirle
   otro nombre de archivo se rechaza con `E-DESTINO-INVALIDO`, porque dejaría una carpeta sin
   manifiesto que ya no se podría reabrir). Elegir la MISMA carpeta del proyecto se rechaza con un
   aviso («esta carpeta ya tiene su `model.bpmn`»): ahí «Guardar como» pisaría el modelo del proyecto
-  con el diagrama suelto.
+  con el diagrama suelto. Un `.bpmn` suelto que **no** está dentro de un proyecto —el de
+  `~/Descargas`— sí puede convertirse en proyecto en su propia carpeta: no hay `model.bpmn` ni
+  manifiesto que pisar y el proyecto se crea al lado, dejando el `.bpmn` original como estaba.
 - **`Model.bpmn` (con mayúsculas) no se abre DENTRO de una carpeta de proyecto**: si al lado hay un
   `lila-project.json`, se rechaza con `E-ARGUMENTO` y el mensaje pide renombrarlo. En Mac el disco no
   distingue mayúsculas, así que ahí ese archivo **es** el `model.bpmn` del proyecto, pero la app lo

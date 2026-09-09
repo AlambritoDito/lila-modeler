@@ -64,7 +64,8 @@ export class DesktopStore implements ProjectSessionStore {
    * `model.bpmn`, que es también lo que dejan «Nuevo», «Abrir…» y «Guardar como».
    */
   private activeModelFile: string | undefined = undefined;
-  /** `true` si el proyecto activo es un diagrama suelto (carpeta sin `lila-project.json`). */
+  /** `true` si el proyecto activo es un diagrama suelto: un `.bpmn` que no es el `model.bpmn` de
+   *  su carpeta, sea esa carpeta un proyecto Lila o no (LILA-206). */
   private activeLoose = false;
 
   constructor(bridge: LilaBridge = requireWindowLila()) {
@@ -145,14 +146,6 @@ export class DesktopStore implements ProjectSessionStore {
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
-      // «Guardar como» de un diagrama suelto sobre la carpeta que YA es su proyecto (LILA-208):
-      // el destino no es nuevo, es el `model.bpmn` de al lado. La capa de disco ya lo rechaza
-      // (`E-CARPETA-OCUPADA`, id propio del suelto); aquí se dice en cristiano y antes de tocar
-      // nada. Decisión del ticket: rechazar, no pedir confirmación — el usuario tiene la carpeta
-      // ahí mismo para elegir otra y el diagrama suelto no se pierde.
-      if (explicitSaveAs && this.activeLoose && chosen === this.activeDir) {
-        throw new Error(S.almacen.errorMismaCarpeta);
-      }
       dir = chosen;
     } else {
       isNewDestination = false;
@@ -165,12 +158,27 @@ export class DesktopStore implements ProjectSessionStore {
     // diagrama de ventas y dejaba `ventas.bpmn` con la versión vieja. Un "destino nuevo"
     // («Guardar como», o el primer guardado) es siempre un proyecto completo con su `model.bpmn`,
     // así que ahí no se reenvía ni el archivo ni lo de "diagrama suelto".
-    await this.bridge.writeProject(dir, document, {
-      saveAs: isNewDestination,
-      overwrite: options?.overwrite === true,
-      ...(isNewDestination || this.activeModelFile === undefined ? {} : { modelFile: this.activeModelFile }),
-      ...(isNewDestination || !this.activeLoose ? {} : { diagramOnly: true }),
-    });
+    const sobreSuPropiaCarpeta = explicitSaveAs && this.activeLoose && dir === this.activeDir;
+    try {
+      await this.bridge.writeProject(dir, document, {
+        saveAs: isNewDestination,
+        overwrite: options?.overwrite === true,
+        ...(isNewDestination || this.activeModelFile === undefined ? {} : { modelFile: this.activeModelFile }),
+        ...(isNewDestination || !this.activeLoose ? {} : { diagramOnly: true }),
+      });
+    } catch (error) {
+      // «Guardar como» de un diagrama suelto sobre su MISMA carpeta (LILA-208). Si esa carpeta ya
+      // es un proyecto Lila, la capa de disco lo rechaza con `E-CARPETA-OCUPADA` (el suelto lleva
+      // id propio, ver `readProjectFolder`) y aquí solo se traduce a algo entendible. Decisión del
+      // ticket: rechazar, no pedir confirmación — la carpeta está ahí mismo para elegir otra.
+      // Quién decide es el disco y no esta clase: un suelto en `~/Descargas` SÍ puede convertirse
+      // en proyecto en su propia carpeta (QA ronda 3, `projectIO.test.ts`), y desde aquí no se
+      // sabe si hay manifiesto al lado (QA de LILA-208).
+      if (sobreSuPropiaCarpeta && (error instanceof Error) && error.message.includes('E-CARPETA-OCUPADA')) {
+        throw new Error(S.almacen.errorMismaCarpeta);
+      }
+      throw error;
+    }
     this.activeDir = dir;
     this.activeDocument = document;
     if (isNewDestination) {

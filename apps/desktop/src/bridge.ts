@@ -25,10 +25,10 @@ export const LILA_PLATFORM = 'desktop';
 export interface LilaProjectDocument extends ProjectDocument {
   readonly problems: readonly ProjectProblem[];
   /**
-   * `true` si lo abierto es un diagrama suelto (LILA-072): un `.bpmn` que no es el `model.bpmn` de
-   * la carpeta y cuya carpeta no tiene `lila-project.json`. El renderer lo dice en el pie y lo
-   * devuelve como `options.diagramOnly` al guardar, para que un ⌘S no siembre la carpeta del
-   * usuario con un proyecto entero.
+   * `true` si lo abierto es un diagrama suelto (LILA-072): CUALQUIER `.bpmn` que no sea el
+   * `model.bpmn` de su carpeta, sea esa carpeta un proyecto Lila o no (LILA-206). El renderer lo
+   * dice en el pie y lo devuelve como `options.diagramOnly` al guardar, para que un ⌘S no siembre
+   * la carpeta del usuario con un proyecto entero.
    */
   readonly loose?: boolean;
 }

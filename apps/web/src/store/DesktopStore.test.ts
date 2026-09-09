@@ -476,17 +476,37 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/elegida', options: { saveAs: false, overwrite: false } });
   });
 
-  it('«Guardar como» de un suelto sobre la MISMA carpeta: rechaza con mensaje y no escribe (LILA-208)', async () => {
+  it('«Guardar como» de un suelto sobre la carpeta que ya es su proyecto: E-CARPETA-OCUPADA en cristiano (LILA-208)', async () => {
     const bridge = new FakeBridge();
     const store = new DesktopStore(bridge);
     bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
     bridge.queueChooseFolder('/carpeta/pedido');
+    // Quien decide es el disco: aquí solo se traduce su rechazo (ver `projectIO.test.ts`, donde el
+    // mismo caso se comprueba byte a byte sobre una carpeta real).
+    bridge.writeProject = async () => {
+      throw new Error('E-CARPETA-OCUPADA: La carpeta ya contiene el proyecto "otro".');
+    };
 
     await store.openRecent('/carpeta/pedido', 'ventas.bpmn');
     await expect(store.saveProject(documentoBase(), { saveAs: true })).rejects.toThrow(
       S.almacen.errorMismaCarpeta,
     );
-    expect(bridge.writes).toEqual([]);
+  });
+
+  it('«Guardar como» de un suelto de ~/Descargas sobre su MISMA carpeta: sigue creando el proyecto al lado (QA de LILA-208)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    bridge.queueChooseFolder('/descargas');
+
+    // Sin manifiesto ni `model.bpmn` al lado, la carpeta no está ocupada: es el camino que la guía
+    // le enseña al usuario para convertir un `.bpmn` suelto en proyecto sin moverlo de sitio.
+    await store.openRecent('/descargas', 'ventas.bpmn');
+    await store.saveProject(documentoBase(), { saveAs: true });
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/descargas', options: { saveAs: true } });
+    // «Guardar como» crea el proyecto completo: ni `modelFile` ni `diagramOnly` viajan al disco.
+    expect(bridge.writes.at(-1)!.options).not.toHaveProperty('modelFile');
+    expect(bridge.writes.at(-1)!.options).not.toHaveProperty('diagramOnly');
   });
 
   it('openRecent: la carpeta ya no existe (bridge devuelve null), no lanza', async () => {

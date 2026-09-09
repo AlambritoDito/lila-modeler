@@ -415,6 +415,8 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   await remontar();
   const pie = container.querySelector('.estado')!;
   expect(pie.textContent).toContain('Diagrama suelto');
+  // El aviso nombra las dos cosas que un ⌘S en modo suelto NO escribe (LILA-208, aceptación 2).
+  expect(pie.textContent).toContain('los escenarios y las corridas no se guardan');
   expect(pie.textContent).toContain('Guardar como');
 
   await act(async () => { puente.menu('guardarComo'); });
@@ -431,6 +433,9 @@ it.each([
   // sale del mismo token).
   const suelto = { ...proyecto('p13', 'Suelto'), loose: true };
   (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  let pedirGuardado!: () => Promise<boolean>;
+  (session as unknown as { onSaveRequested: unknown }).onSaveRequested =
+    (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; };
   const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
   await remontar();
   expect(container.textContent).toContain('Guardado');
@@ -443,6 +448,13 @@ it.each([
   expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: false });
   expect(container.textContent).toContain(esperado);
   expect(session.setDirty).toHaveBeenLastCalledWith(esperado === 'Sin guardar');
+
+  // La guardia de cierre (`onSaveRequested` → `closeGuard`) sale del MISMO token: con el escenario
+  // todavía sin escribir, «Guardar» en el diálogo nativo devuelve `false` y la ventana no se
+  // cierra, en vez de irse llevándose el escenario editado (QA de LILA-208).
+  let cerrar: boolean | null = null;
+  await act(async () => { cerrar = await pedirGuardado(); });
+  expect(cerrar).toBe(esperado === 'Guardado');
 });
 
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
