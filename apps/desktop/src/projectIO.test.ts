@@ -538,8 +538,11 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     await writeProjectFolder(dir, documentoBase()); // proyecto de verdad: manifiesto + model.bpmn.
     await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
 
+    // `loose` = «lo abierto no es el `model.bpmn` de la carpeta», haya manifiesto o no (LILA-206,
+    // P1 del QA): antes esto era `false` aquí y la UI no sabía que iba a guardar en modo
+    // `diagramOnly`.
     const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
-    expect(loose).toBe(false); // hay `lila-project.json`: sigue siendo un proyecto Lila.
+    expect(loose).toBe(true);
 
     const editado = `${XML_VENTAS}<!-- editado -->`;
     await writeProjectFolder(
@@ -636,6 +639,35 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     // Ni manifiesto, ni `model.bpmn`, ni escenarios, ni `runs/`: la carpeta del usuario no se
     // convierte en un proyecto por pulsar ⌘S sobre un `.bpmn` que estaba ahí suelto.
     expect(await readdir(dir)).toEqual(['ventas.bpmn']);
+  });
+
+  it('(P1) ventas.bpmn DENTRO de un proyecto Lila es diagrama suelto; model.bpmn no (LILA-206)', async () => {
+    // Regresión del P1 del QA: con `loose: false` la UI no manda `diagramOnly`, no pinta el pie
+    // «Diagrama suelto…» y da por «Guardado» un documento cuyos escenarios y corridas no se
+    // escribieron. El manifiesto presente NO cambia la respuesta.
+    await writeProjectFolder(dir, documentoBase());
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+
+    expect((await readProjectFolder(dir, 'ventas.bpmn')).loose).toBe(true);
+    expect((await readProjectFolder(dir)).loose).toBe(false);
+    expect((await readProjectFolder(dir, 'model.bpmn')).loose).toBe(false);
+  });
+
+  it('(P2) «Guardar como» con un modelFile que no es model.bpmn: E-DESTINO-INVALIDO y carpeta intacta (LILA-206)', async () => {
+    // Dejaría una carpeta con un solo `.bpmn`, sin manifiesto ni `model.bpmn`: imposible de reabrir
+    // como proyecto. La UI no lo manda hoy, pero `projectIO` es la capa de contrato.
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const destino = await mkdtemp(join(tmpdir(), 'lila-projectIO-destino-'));
+    try {
+      const error = await captureError(() =>
+        writeProjectFolder(destino, document, { saveAs: true, modelFile: 'ventas.bpmn' }),
+      );
+      expect((error as ProjectIOError).code).toBe('E-DESTINO-INVALIDO');
+      expect(await readdir(destino)).toEqual([]);
+    } finally {
+      await rm(destino, { recursive: true, force: true });
+    }
   });
 
   it('un model.bpmn puesto a mano (carpeta sin manifiesto) NO es un diagrama suelto', async () => {

@@ -314,11 +314,16 @@ export async function readProjectFolder(
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
   };
-  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA): un `.bpmn` que no es el `model.bpmn` de un
-  // proyecto y cuya carpeta tampoco tiene manifiesto — el caso normal del doble clic en
-  // `~/Descargas`. Guardar ahí no debe sembrar la carpeta del usuario con un proyecto entero; lo
-  // decide la LECTURA (cómo estaba la carpeta al abrir) y lo obedece `writeProjectFolder`.
-  const loose = modelFile !== MODEL_FILE && !(await pathExists(join(dir, MANIFEST_FILE)));
+  // «Diagrama suelto» (LILA-072, hallazgo 7 del QA; corregido en LILA-206, P1 del QA): CUALQUIER
+  // `.bpmn` abierto que no sea el `model.bpmn` de la carpeta — el doble clic en `~/Descargas`, y
+  // también el doble clic en `ventas.bpmn` DENTRO de un proyecto Lila. En los dos casos guardar
+  // escribe solo ese archivo (`diagramOnly`), así que la condición tiene que ser exactamente la
+  // misma que decide `diagramOnly` en `writeProjectFolder`: si aquí se exigía además que la carpeta
+  // no tuviera manifiesto, `ventas.bpmn` dentro de un proyecto llegaba a la UI con `loose: false`,
+  // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
+  // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
+  // archivo se abrió) y lo obedece `writeProjectFolder`.
+  const loose = modelFile !== MODEL_FILE;
   return { document, problems, loose };
 }
 
@@ -368,11 +373,12 @@ export interface WriteProjectOptions {
    */
   readonly modelFile?: string;
   /**
-   * `true` cuando lo abierto es un diagrama suelto (`readProjectFolder(...).loose`): un `.bpmn` en
-   * una carpeta que no es un proyecto Lila. Entonces se escribe SOLO ese `.bpmn` — ni manifiesto,
-   * ni escenarios, ni corridas: un guardado normal no puede sembrar `~/Descargas` con cuatro
-   * archivos que el usuario no pidió. «Guardar como» crea el proyecto completo en la carpeta que
-   * el usuario elija (ahí `saveAs: true` y sin `diagramOnly`).
+   * `true` cuando lo abierto es un diagrama suelto (`readProjectFolder(...).loose`): un `.bpmn`
+   * distinto del `model.bpmn` de su carpeta, sea esa carpeta un proyecto Lila o no. Entonces se
+   * escribe SOLO ese `.bpmn` — ni manifiesto, ni escenarios, ni corridas: un guardado normal no
+   * puede sembrar `~/Descargas` con cuatro archivos que el usuario no pidió, ni pisar el manifiesto
+   * del proyecto de al lado. «Guardar como» crea el proyecto completo en la carpeta que el usuario
+   * elija (ahí `saveAs: true` y sin `diagramOnly`).
    */
   readonly diagramOnly?: boolean;
 }
@@ -671,11 +677,22 @@ export async function writeProjectFolder(
   options: WriteProjectOptions = {},
   fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
+  const modelFile = options.modelFile ?? MODEL_FILE;
   if (options.saveAs === true) {
+    // «Guardar como» crea un proyecto COMPLETO en la carpeta elegida, y un proyecto solo se reabre
+    // por su `model.bpmn` + manifiesto. Con otro `modelFile` el `diagramOnly` implícito de abajo
+    // dejaría ahí un único `.bpmn` suelto, sin manifiesto ni `model.bpmn`: una carpeta que ya no se
+    // puede abrir como proyecto (LILA-206, P2 del QA). La UI no lo manda hoy
+    // (`DesktopStore.saveProject` no reenvía `modelFile` hacia un destino nuevo); esto lo fija en la
+    // capa de contrato en vez de dejarlo a que el llamador se acuerde.
+    if (modelFile !== MODEL_FILE) {
+      throw new ProjectIOError(
+        'E-DESTINO-INVALIDO',
+        `"Guardar como" escribe el modelo en "${MODEL_FILE}"; no puede crear el proyecto en "${modelFile}".`,
+      );
+    }
     await assertFolderNotOccupied(dir, document.id);
   }
-
-  const modelFile = options.modelFile ?? MODEL_FILE;
   // ponytail: el manifiesto describe UN solo diagrama, el `model.bpmn` de la carpeta (LILA-206,
   // #266). Así que guardar otro `.bpmn` de la misma carpeta —doble clic en `ventas.bpmn` dentro de
   // un proyecto Lila— escribe SOLO ese archivo: reescribir el manifiesto dejaba
