@@ -19,7 +19,7 @@
 // clásica de `require`, no con `import`/`export` de ES — ese es justamente el punto de este
 // archivo (ver comentario de arriba).
 import electron = require('electron');
-import type { LilaBridge, MenuAction, OpenPathRequest, Recent, WriteProjectOptions } from './bridge.js';
+import type { Ajustes, LilaBridge, MenuAction, OpenPathRequest, Recent, WriteProjectOptions } from './bridge.js';
 
 const { contextBridge, ipcRenderer } = electron;
 
@@ -53,6 +53,8 @@ const lila = {
     ipcRenderer.on('lila:open-path', listener);
     return () => ipcRenderer.removeListener('lila:open-path', listener);
   },
+  readSettings: () => ipcRenderer.invoke('lila:readSettings') as Promise<Ajustes>,
+  writeSettings: (ajustes: Ajustes) => ipcRenderer.invoke('lila:writeSettings', ajustes) as Promise<void>,
   onMenu: (cb: (action: MenuAction) => void) => {
     const listener = (_event: unknown, action: MenuAction) => cb(action);
     ipcRenderer.on('lila:menu', listener);

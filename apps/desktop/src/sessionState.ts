@@ -7,6 +7,9 @@
  */
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+// Solo el tipo (se borra al compilar): `Ajustes` es parte del contrato del puente, así que se
+// define una vez en `bridge.ts` y aquí se reusa en vez de duplicar la forma.
+import type { Ajustes } from './bridge.js';
 
 export interface WindowBounds {
   readonly x: number;
@@ -25,12 +28,14 @@ export interface SessionState {
   readonly version: 1;
   readonly window: WindowBounds | null;
   readonly recents: readonly RecentEntry[];
+  /** Preferencias de apariencia del renderer (LILA-113). `{}` mientras el usuario no toque nada. */
+  readonly ajustes: Ajustes;
 }
 
 export const MAX_RECENTS = 10;
 
 export function defaultSessionState(): SessionState {
-  return { version: 1, window: null, recents: [] };
+  return { version: 1, window: null, recents: [], ajustes: {} };
 }
 
 function isNotFound(error: unknown): boolean {
@@ -57,6 +62,20 @@ function isRecentEntry(value: unknown): value is RecentEntry {
 }
 
 /**
+ * Saneado de las preferencias de apariencia: se queda solo con las claves conocidas y solo si su
+ * valor es texto. Mismo criterio que `recents` —descartar lo inválido en vez de tirarlo todo—, y
+ * misma función para lo que llega de disco y para lo que llega por IPC (`lila:writeSettings`), que
+ * es igual de ajeno: el renderer no es de fiar por ser el nuestro.
+ */
+export function parseAjustes(value: unknown): Ajustes {
+  if (!isPlainObject(value)) return {};
+  const ajustes: { tema?: string; densidad?: string } = {};
+  if (typeof value.tema === 'string') ajustes.tema = value.tema;
+  if (typeof value.densidad === 'string') ajustes.densidad = value.densidad;
+  return ajustes;
+}
+
+/**
  * Lee el estado de `path`. Tolerante: archivo ausente, JSON roto, o forma inválida devuelven el
  * estado por defecto en vez de lanzar — perder la sesión anterior es aceptable, romper el arranque
  * de la app no. Una `recents` con algunas entradas inválidas se sanea (se descartan solo esas),
@@ -75,7 +94,7 @@ export async function readSessionState(path: string): Promise<SessionState> {
     if (!isPlainObject(parsed)) return defaultSessionState();
     const window = isWindowBounds(parsed.window) ? parsed.window : null;
     const recents = Array.isArray(parsed.recents) ? parsed.recents.filter(isRecentEntry).slice(0, MAX_RECENTS) : [];
-    return { version: 1, window, recents };
+    return { version: 1, window, recents, ajustes: parseAjustes(parsed.ajustes) };
   } catch {
     return defaultSessionState();
   }
@@ -111,6 +130,14 @@ export function withWindowBounds(state: SessionState, bounds: WindowBounds | nul
 export function addRecent(state: SessionState, entry: RecentEntry): SessionState {
   const sinDuplicado = state.recents.filter((r) => r.dir !== entry.dir);
   return { ...state, recents: [entry, ...sinDuplicado].slice(0, MAX_RECENTS) };
+}
+
+/**
+ * Nuevo estado con `ajustes` FUSIONADO sobre el guardado (LILA-113): el renderer manda solo la
+ * preferencia que acaba de cambiar, y reemplazar el objeto entero borraría la otra.
+ */
+export function withAjustes(state: SessionState, ajustes: Ajustes): SessionState {
+  return { ...state, ajustes: { ...state.ajustes, ...ajustes } };
 }
 
 /** Nuevo estado sin la entrada de `dir` (carpeta que ya no existe, ver `openRecent` en `main.ts`). */

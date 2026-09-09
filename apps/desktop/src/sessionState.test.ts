@@ -6,8 +6,10 @@ import {
   addRecent,
   defaultSessionState,
   fitsAnyDisplay,
+  parseAjustes,
   readSessionState,
   removeRecent,
+  withAjustes,
   withWindowBounds,
   writeSessionState,
   type SessionState,
@@ -74,6 +76,7 @@ describe('writeSessionState / readSessionState — ida y vuelta', () => {
       version: 1,
       window: { x: 10, y: 20, width: 1024, height: 768 },
       recents: [{ dir: '/proyecto', name: 'Pedido', openedAt: '2026-01-01T00:00:00.000Z' }],
+      ajustes: { tema: 'papel', densidad: 'compacta' },
     };
     await writeSessionState(statePath, state);
     await expect(readSessionState(statePath)).resolves.toEqual(state);
@@ -154,5 +157,50 @@ describe('fitsAnyDisplay', () => {
 
   it('false con la lista de pantallas vacía', () => {
     expect(fitsAnyDisplay({ x: 0, y: 0, width: 800, height: 600 }, [])).toBe(false);
+  });
+});
+
+describe('ajustes de apariencia (LILA-113)', () => {
+  it('ida y vuelta por disco: tema y densidad sobreviven a escribir y releer', async () => {
+    const state = withAjustes(defaultSessionState(), { tema: 'papel', densidad: 'compacta' });
+    await writeSessionState(statePath, state);
+    await expect(readSessionState(statePath)).resolves.toEqual(state);
+  });
+
+  it('un estado.json de una versión anterior (sin "ajustes") se lee como {}', async () => {
+    await writeFile(statePath, JSON.stringify({ version: 1, window: null, recents: [] }), 'utf8');
+    await expect(readSessionState(statePath)).resolves.toEqual(defaultSessionState());
+  });
+
+  it('valores inválidos se ignoran uno a uno, sin tirar los buenos', async () => {
+    await writeFile(
+      statePath,
+      JSON.stringify({ version: 1, ajustes: { tema: 'papel', densidad: 7, otra: 'x' } }),
+      'utf8',
+    );
+    const leido = await readSessionState(statePath);
+    expect(leido.ajustes).toEqual({ tema: 'papel' });
+  });
+
+  it('"ajustes" con una forma imposible (array, texto, null) se lee como {}', () => {
+    expect(parseAjustes([1, 2])).toEqual({});
+    expect(parseAjustes('papel')).toEqual({});
+    expect(parseAjustes(null)).toEqual({});
+  });
+
+  it('withAjustes fusiona: guardar solo el tema no borra la densidad', () => {
+    const conDensidad = withAjustes(defaultSessionState(), { densidad: 'comoda' });
+    expect(withAjustes(conDensidad, { tema: 'papel' }).ajustes).toEqual({ densidad: 'comoda', tema: 'papel' });
+  });
+
+  it('withAjustes no toca la ventana ni los recientes', () => {
+    const base = addRecent(withWindowBounds(defaultSessionState(), { x: 1, y: 2, width: 3, height: 4 }), {
+      dir: '/p',
+      name: 'Pedido',
+      openedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const conAjustes = withAjustes(base, { tema: 'papel' });
+    expect(conAjustes.window).toEqual(base.window);
+    expect(conAjustes.recents).toEqual(base.recents);
   });
 });

@@ -21,7 +21,9 @@ export function tokenToCssVar(name: string): string {
 
 /**
  * Escribe cada token del tema como variable CSS en `root`. Función pura sobre
- * el DOM: no toca estado global ni React (el `ThemeProvider` es LILA-113).
+ * el DOM: no toca estado global ni React. No hay `ThemeProvider` (LILA-113
+ * decidió que sobra un contexto para esto); quien cambia de tema llama a esto y
+ * luego a `Modelador.repintar()`, ver `docs/THEMES.md`.
  *
  * Falla con un mensaje claro si el tema trae una clave que no es un token del
  * brief o un valor que no es cadena: los temas llegan de un JSON de disco o de

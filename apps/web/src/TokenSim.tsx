@@ -97,7 +97,8 @@ export function observarSimulacion(raiz: HTMLElement): () => void {
 
 export function TokenSim({ modelador }: Props): React.JSX.Element {
   // Se activa al montar (entrar en el modo) y se desactiva al desmontar (salir de él, o al
-  // remontar el lienzo por un cambio de tema, que trae un `Modelador` nuevo).
+  // cambiar de tema: `App.tsx` le pone `key={temaId}` justamente para que el modo se reinicie y
+  // vuelva a leer los tokens, porque los colores neutros van al DI y el DI gana a `repintar()`).
   useEffect(() => {
     modelador?.simulacionTokens(true);
     return () => modelador?.simulacionTokens(false);

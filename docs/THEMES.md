@@ -44,12 +44,43 @@ que cambiar un valor del JSON y recargar cambia la UI sin recompilar.
 ## Elegir tema (LILA-113, versión mínima)
 
 `App.tsx` conoce los temas integrados por id (`eva-01`, `papel`), pide `./<id>.json` y lo pasa a
-`applyTheme`. La elección se guarda en `localStorage['lila.tema']` y la densidad en
-`localStorage['lila.densidad']` (`compacta` / `normal` / `comoda`), que la app escribe encima del
-token `density` del tema y expone como `data-densidad` en `.app` para el CSS. localStorage vale
-igual en el navegador y en Electron (el protocolo `lila://` es un esquema estándar con origen
-propio), así que no hay un almacén distinto por plataforma. No hay `ThemeProvider`: con dos temas y
-un `useState` sobra un contexto. Cambiar de tema vuelve a montar el lienzo de bpmn-js con el XML
-actual porque `Modeler.tsx` fija los colores de las figuras al construir el modelador; el coste es
-perder la pila de deshacer. LILA-114 (editor de tokens, validación de un JSON importado,
-exportar) amplía este documento.
+`applyTheme`. La densidad (`compacta` / `normal` / `comoda`) se escribe encima del token `density`
+del tema y sale como `data-densidad` en `.app` para el CSS. No hay `ThemeProvider`: con dos temas y
+un `useState` sobra un contexto.
+
+**Dónde se guarda la elección.** En el navegador, en `localStorage['lila.tema']` y
+`localStorage['lila.densidad']`. En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el
+puente (`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), donde ya viven
+la ventana y los recientes. Son excluyentes: si `window.lila` existe, el `localStorage` ni se lee ni
+se escribe. Hasta ahora era `localStorage` en las dos modalidades, con el argumento —cierto— de que
+`lila://` es un esquema con origen propio y por tanto tiene su propio almacén; lo que falla no es el
+aislamiento sino el sitio: ese almacén está dentro del perfil de Chromium de la app, no se ve desde
+fuera, no se copia a otra máquina y se va con los datos del sitio. `writeSettings` **fusiona**
+(mandar solo `{ tema }` no borra la densidad) y `main.ts` pasa lo que llega por `parseAjustes`, que
+descarta cualquier clave o valor que no sea uno de los dos textos esperados. Leer es asíncrono —en
+escritorio es IPC—, así que `temaId` y `densidad` arrancan de fábrica y el primer efecto los pisa:
+es el mismo instante en el que `tema` deja de ser `undefined`, y el lienzo no se monta hasta
+entonces.
+
+**Cambiar de tema en caliente.** `cambiarTema` aplica el JSON y llama a `Modelador.repintar()`. El
+lienzo **no** se remonta —antes cambiaba la `key` de `<Lienzo>`, y eso se llevaba por delante la
+pila de deshacer y la selección—. `repintar()` reconstruye el `bpmnRenderer` porque bpmn-js copia
+`defaultFillColor`/`defaultStrokeColor`/`defaultLabelColor` a variables locales de su constructor y
+no ofrece ni setter ni evento para cambiarlas: se vuelve a ejecutar ese constructor sobre la misma
+instancia (con un `eventBus` mudo, para no apilar oyentes de `render.shape`) y después se dispara
+`elements.changed`, que es la vía normal de diagram-js para redibujar. No pasa por el
+`commandStack`, así que ni ensucia el documento ni añade un paso al deshacer, y los colores que un
+elemento traiga en su DI siguen mandando sobre los del tema.
+
+Esa última regla tiene una consecuencia en «Validar rutas»: los colores neutros del modo
+(`ColoresNeutrosDelTema`, `TokenSim.tsx`) se escriben en el DI al activarlo, o sea que ganan a lo
+que repinte `repintar()`. El módulo relee los tokens en cada activación y no en cada repintado, así
+que `App.tsx` monta `<TokenSim key={temaId}>`: cambiar de tema con el modo encendido lo apaga y lo
+vuelve a encender, y así el diagrama sale con el tema de ahora. Sin esa `key` el diagrama se
+quedaba con el relleno del tema anterior y la etiqueta con el color del nuevo.
+
+**`font.size.base`** se cablea en `body` (`app.css`) y de ahí lo hereda todo lo que no fija su
+propio tamaño. A propósito no está en `html`: las medidas en `rem` del CSS se resolverían contra el
+token y los diálogos encogerían al bajar la letra.
+
+LILA-114 (editor de tokens, validación de un JSON importado, exportar) amplía este documento.

@@ -4,7 +4,7 @@
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
 import { describe, expect, it } from 'vitest';
-import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
+import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import { S } from '../strings.es';
 import type { ProjectDocument } from './ProjectStore';
@@ -107,6 +107,17 @@ class FakeBridge implements LilaBridge {
 
   onMenu(): () => void {
     return () => {};
+  }
+
+  /** Apariencia (LILA-113): no la usa `DesktopStore` —la lee `App.tsx`—, pero está en el contrato. */
+  ajustes: Ajustes = {};
+
+  async readSettings(): Promise<Ajustes> {
+    return this.ajustes;
+  }
+
+  async writeSettings(ajustes: Ajustes): Promise<void> {
+    this.ajustes = { ...this.ajustes, ...ajustes };
   }
 
   triggerOpenPath(path: OpenPathRequest): void {

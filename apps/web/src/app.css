@@ -15,6 +15,12 @@ body {
   margin: 0;
 }
 
+/* `--font-size-base` se cablea aquí, y solo aquí (LILA-113): todo lo que no fija su propio tamaño
+   —diálogos, campos, selectores y los `em` de las tablas— hereda de `body`, así que cambiar el
+   token cambia el tamaño de la letra de la app. En `html` NO: las cuatro medidas en `rem` de este
+   archivo (anchos mínimos de diálogo y de panel) pasarían a resolverse contra el token y la caja
+   encogería al bajar la letra, que es lo contrario de lo que se pide. ponytail: si algún día tienen
+   que escalar, esas cuatro medidas pasan a `em` y entonces sí se mueve el `font-size` a `html`. */
 body {
   background: var(--bg-base);
   color: var(--fg-primary);

@@ -7,6 +7,9 @@
  * pueden crecer sin repartir bpmn-js por toda la aplicación.
  */
 import Modeler from 'bpmn-js/lib/Modeler';
+// Se importa como VALOR, no solo como tipo: `repintar()` vuelve a ejecutar este constructor sobre
+// el renderer vivo para cambiar de tema sin remontar el lienzo (LILA-113; el porqué, allí abajo).
+import BpmnRenderer from 'bpmn-js/lib/draw/BpmnRenderer';
 // Minimapa del lienzo (LILA-208). Es un módulo de diagram-js: se monta solo dentro del
 // contenedor del canvas y viaja con él en `attachTo`, así que el shell no lo dibuja ni lo
 // conoce. Su CSS se importa aquí y se viste con tokens en `app.css` (bloque «minimapa»).
@@ -21,6 +24,7 @@ import type BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import type Modeling from 'bpmn-js/lib/features/modeling/Modeling';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type EventBus from 'diagram-js/lib/core/EventBus';
 import type CommandStack from 'diagram-js/lib/command/CommandStack';
 import type Selection from 'diagram-js/lib/features/selection/Selection';
 import { useEffect, useRef } from 'react';
@@ -152,6 +156,12 @@ export interface Modelador {
    * ya importado; el shell la enciende al entrar en «Validar rutas» y la apaga al salir.
    */
   simulacionTokens(activa: boolean): void;
+  /**
+   * Vuelve a leer los tokens del tema y redibuja las figuras (LILA-113). El shell la llama después
+   * de `applyTheme`; no toca el modelo, así que la pila de deshacer y la selección siguen donde
+   * estaban —que es justamente lo que se perdía cuando cambiar de tema remontaba el lienzo—.
+   */
+  repintar(): void;
   /** Superficie opcional para que el shell añada controles básicos sin importar diagram-js. */
   deshacer?(): void;
   rehacer?(): void;
@@ -179,6 +189,27 @@ function token(nombre: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
 }
 
+/**
+ * Los tres colores por defecto de las figuras, leídos de los tokens de AHORA MISMO. bpmn-js dibuja
+ * negro sobre blanco; el lienzo de Lila es el que diga el tema. Son «por defecto» en el sentido de
+ * bpmn-js: un elemento con color propio en su DI sigue mandando sobre ellos.
+ */
+function coloresDelDiagrama(): { defaultFillColor: string; defaultStrokeColor: string; defaultLabelColor: string } {
+  return {
+    defaultFillColor: token('--diagram-fill'),
+    defaultStrokeColor: token('--diagram-stroke'),
+    defaultLabelColor: token('--diagram-label'),
+  };
+}
+
+/**
+ * `eventBus` que no registra nada, para la reconstrucción del renderer en `repintar()`: el
+ * constructor de bpmn-js llama a `BaseRenderer`, que se suscribe a `render.shape`/`render.connection`.
+ * Los oyentes de la primera construcción ya apuntan a esa misma instancia y siguen valiendo, así
+ * que dejarle un bus mudo evita apilar una copia de cada uno en cada cambio de tema.
+ */
+const BUS_MUDO = { on: () => {} } as unknown as EventBus;
+
 export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): React.JSX.Element {
   const contenedor = useRef<HTMLDivElement>(null);
 
@@ -196,14 +227,8 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
-      // bpmn-js dibuja negro sobre blanco; el lienzo de Lila es oscuro. Los tres colores se
-      // leen de los tokens una sola vez, al montar: hacerlos reactivos al cambio de tema en
-      // caliente es LILA-113.
-      bpmnRenderer: {
-        defaultFillColor: token('--diagram-fill'),
-        defaultStrokeColor: token('--diagram-stroke'),
-        defaultLabelColor: token('--diagram-label'),
-      },
+      // Colores del tema al montar; el cambio en caliente lo hace `repintar()` (LILA-113).
+      bpmnRenderer: coloresDelDiagrama(),
       // Sin `keyboard.bindTo`: en bpmn-js 18 (diagram-js 15) esa opción ya no existe y solo
       // imprime «unsupported configuration <keyboard.bindTo>» en consola. El teclado se engancha
       // solo al SVG del lienzo en `canvas.init`, así que los atajos responden cuando el lienzo
@@ -398,6 +423,33 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       simulacionTokens: (activa) => {
         if (activo !== null) activo.get<{ toggleMode(activa: boolean): void }>('toggleMode').toggleMode(activa);
+      },
+      repintar: () => {
+        if (activo === null) return;
+        // bpmn-js copia `defaultFillColor`/`defaultStrokeColor`/`defaultLabelColor` a variables
+        // locales del constructor de `BpmnRenderer` (`node_modules/bpmn-js/lib/draw/BpmnRenderer.js`,
+        // ~línea 123): no hay ni setter ni evento para cambiarlas después, y la config que didi le
+        // inyectó ya no se vuelve a mirar. Volver a ejecutar ese constructor sobre la MISMA
+        // instancia reescribe esas variables y su `this.handlers`, que es exactamente lo que hace
+        // falta; el resto del injector no se entera de nada porque el objeto no cambia.
+        // ponytail: si algún día bpmn-js expone los colores por servicio, esto es una línea menos.
+        const renderer = activo.get<BpmnRenderer>('bpmnRenderer');
+        BpmnRenderer.call(
+          renderer,
+          coloresDelDiagrama(),
+          BUS_MUDO,
+          activo.get('styles'),
+          activo.get('pathMap'),
+          activo.get<Canvas>('canvas'),
+          activo.get('textRenderer'),
+        );
+        // `elements.changed` es la vía normal de diagram-js para "vuelve a dibujar esto"
+        // (`ChangeSupport` -> `graphicsFactory.update`). No pasa por el `commandStack`, así que no
+        // ensucia el documento ni añade un paso al deshacer. Sin la raíz: `update` la ignora.
+        const registro = activo.get<ElementRegistry>('elementRegistry');
+        activo.get<EventBus>('eventBus').fire('elements.changed', {
+          elements: registro.filter((el) => el.parent != null),
+        });
       },
       deshacer: () => {
         const commands = activo?.get<CommandStack>('commandStack');
