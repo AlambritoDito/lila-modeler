@@ -734,6 +734,57 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(XML_VENTAS);
   });
 
+  it('(LILA-208) «Guardar como» del suelto sobre la carpeta del PROYECTO: E-CARPETA-OCUPADA, nada se toca', async () => {
+    await writeProjectFolder(dir, documentoBase());
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const modeloAntes = await readFile(join(dir, 'model.bpmn'), 'utf8');
+    const manifiestoAntes = await readFile(join(dir, 'lila-project.json'), 'utf8');
+    const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(loose).toBe(true);
+    // El suelto no es el proyecto de la carpeta: id propio, no el del manifiesto.
+    expect(document.id).not.toBe(documentoBase().id);
+
+    const error = await captureError(() =>
+      writeProjectFolder(dir, { ...document, model: { ...document.model, xml: `${XML_VENTAS}<!-- editado -->` } }, { saveAs: true }),
+    );
+    expect((error as ProjectIOError).code).toBe('E-CARPETA-OCUPADA');
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(modeloAntes);
+    expect(await readFile(join(dir, 'lila-project.json'), 'utf8')).toBe(manifiestoAntes);
+    expect(await readFile(join(dir, 'ventas.bpmn'), 'utf8')).toBe(XML_VENTAS);
+  });
+
+  it('(LILA-208) Model.bpmn SIN manifiesto al lado: se abre como suelto y guarda solo ese archivo', async () => {
+    await writeFile(join(dir, 'Model.bpmn'), XML_VENTAS, 'utf8');
+    const { document, loose } = await readProjectFolder(dir, 'Model.bpmn');
+    expect(loose).toBe(true);
+    const editado = `${XML_VENTAS}<!-- editado -->`;
+    await writeProjectFolder(
+      dir,
+      { ...document, model: { ...document.model, xml: editado }, scenarios: documentoBase().scenarios },
+      { modelFile: 'Model.bpmn', diagramOnly: true },
+    );
+    expect(await readdir(dir)).toEqual(['Model.bpmn']);
+    expect(await readFile(join(dir, 'Model.bpmn'), 'utf8')).toBe(editado);
+  });
+
+  it('(LILA-208) Model.bpmn DENTRO de un proyecto: E-ARGUMENTO en lectura y en escritura, carpeta intacta', async () => {
+    // Sin crear `Model.bpmn`: en macOS/Windows SERÍA `model.bpmn` (de eso va la guardia), así que
+    // el test se queda en el nombre pedido, que es lo único que se compara entre plataformas.
+    await writeProjectFolder(dir, documentoBase());
+    const antes = await readdir(dir);
+
+    const alLeer = await captureError(() => readProjectFolder(dir, 'Model.bpmn'));
+    expect((alLeer as ProjectIOError).code).toBe('E-ARGUMENTO');
+    expect((alLeer as ProjectIOError).message).toContain('solo se diferencia de "model.bpmn" en las mayúsculas');
+
+    const alEscribir = await captureError(() =>
+      writeProjectFolder(dir, documentoBase(), { modelFile: 'Model.bpmn', diagramOnly: true }),
+    );
+    expect((alEscribir as ProjectIOError).code).toBe('E-ARGUMENTO');
+    expect((await readdir(dir)).sort()).toEqual(antes.sort());
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(XML_MINIMO);
+  });
+
   it('hasProjectModel: true solo si hay un model.bpmn que reabrir (hallazgo 9 del QA)', async () => {
     await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
     expect(await hasProjectModel(dir)).toBe(false);

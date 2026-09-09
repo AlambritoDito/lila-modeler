@@ -415,11 +415,46 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   await remontar();
   const pie = container.querySelector('.estado')!;
   expect(pie.textContent).toContain('Diagrama suelto');
+  // El aviso nombra las dos cosas que un ⌘S en modo suelto NO escribe (LILA-208, aceptación 2).
+  expect(pie.textContent).toContain('los escenarios y las corridas no se guardan');
   expect(pie.textContent).toContain('Guardar como');
 
   await act(async () => { puente.menu('guardarComo'); });
   expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: true });
   expect(pie.textContent).not.toContain('Diagrama suelto');
+});
+
+it.each([
+  ['escenario editado', 'escenario', 'Sin guardar'],
+  ['solo el XML editado', 'modelo', 'Guardado'],
+] as const)('diagrama suelto, %s: guardar solo limpia el indicador de lo escrito (LILA-208)', async (_caso, que, esperado) => {
+  // Un guardado normal en modo suelto escribe SOLO el `.bpmn`: el escenario editado sigue sin
+  // estar en disco, así que el indicador NO puede quedarse en «Guardado» (y la guardia de cierre
+  // sale del mismo token).
+  const suelto = { ...proyecto('p13', 'Suelto'), loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  let pedirGuardado!: () => Promise<boolean>;
+  (session as unknown as { onSaveRequested: unknown }).onSaveRequested =
+    (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; };
+  const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  expect(container.textContent).toContain('Guardado');
+
+  // El `onCambio` del panel de escenario solo existe con su pestaña montada.
+  await click('Simulación');
+  await act(async () => { if (que === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
+  expect(container.textContent).toContain('Sin guardar');
+  await act(async () => { puente.menu('guardar'); });
+  expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: false });
+  expect(container.textContent).toContain(esperado);
+  expect(session.setDirty).toHaveBeenLastCalledWith(esperado === 'Sin guardar');
+
+  // La guardia de cierre (`onSaveRequested` → `closeGuard`) sale del MISMO token: con el escenario
+  // todavía sin escribir, «Guardar» en el diálogo nativo devuelve `false` y la ventana no se
+  // cierra, en vez de irse llevándose el escenario editado (QA de LILA-208).
+  let cerrar: boolean | null = null;
+  await act(async () => { cerrar = await pedirGuardado(); });
+  expect(cerrar).toBe(esperado === 'Guardado');
 });
 
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
