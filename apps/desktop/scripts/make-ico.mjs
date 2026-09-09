@@ -6,8 +6,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ICONS_DIR = new URL('../resources/icons/', import.meta.url).pathname;
+// fileURLToPath y no URL.pathname: el checkout de trabajo puede tener espacios
+// ("…/Lila Modeler/") y pathname los deja en %20, con lo que sips no encuentra el PNG.
+const ICONS_DIR = fileURLToPath(new URL('../resources/icons/', import.meta.url));
 const SRC = join(ICONS_DIR, 'icon.png');
 const SIZES = [16, 32, 48, 256];
 
