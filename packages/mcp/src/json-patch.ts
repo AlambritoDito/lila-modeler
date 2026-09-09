@@ -54,9 +54,9 @@ function parsePointer(pointer: string): string[] {
  * `extends`, dejando en disco un archivo con una clave que el motor ignora. Se rechaza igual que
  * el segmento: aquí el patch es una orden explícita del agente, no un archivo heredado.
  */
-function assertValueSinClavesDeProtitipo(value: unknown, path: string): void {
+function assertValueSinClavesDePrototipo(value: unknown, path: string): void {
   if (Array.isArray(value)) {
-    for (const item of value) assertValueSinClavesDeProtitipo(item, path);
+    for (const item of value) assertValueSinClavesDePrototipo(item, path);
     return;
   }
   if (!isPlainObject(value)) return;
@@ -64,7 +64,7 @@ function assertValueSinClavesDeProtitipo(value: unknown, path: string): void {
     if (FORBIDDEN_SEGMENTS.has(key)) {
       throw new Error(`json patch: clave prohibida "${key}" en el value de ${path}: escribiría en el prototipo del objeto.`);
     }
-    assertValueSinClavesDeProtitipo(nested, path);
+    assertValueSinClavesDePrototipo(nested, path);
   }
 }
 
@@ -107,7 +107,7 @@ export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): 
     if (op.op !== 'remove' && op.value === undefined) {
       throw new Error(`json patch: la operación "${op.op}" requiere "value" (${op.path}).`);
     }
-    if (op.op !== 'remove') assertValueSinClavesDeProtitipo(op.value, op.path);
+    if (op.op !== 'remove') assertValueSinClavesDePrototipo(op.value, op.path);
     const segments = parsePointer(op.path);
 
     if (op.op === 'test') {

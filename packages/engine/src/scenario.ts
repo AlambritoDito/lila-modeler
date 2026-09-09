@@ -878,7 +878,9 @@ const CLAVES_DE_PROTOTIPO = new Set(['__proto__', 'constructor', 'prototype']);
  * - `null`: **borra** la clave del resultado.
  * - Cualquier otra cosa, arrays incluidos, **reemplaza entera** (§ 6: es la única semántica
  *   predecible para una lista sin claves).
- * - `__proto__`, `constructor` y `prototype` se ignoran a cualquier profundidad (LILA-204).
+ * - `__proto__`, `constructor` y `prototype` se ignoran en cualquier objeto, a cualquier
+ *   profundidad (LILA-204). Dentro de un array no: un array se reemplaza entero sin mirarlo, y una
+ *   clave así en un elemento suyo la caza el esquema (`strictObject`) con `E-CLAVE-DESCONOCIDA`.
  *
  * ponytail: se ignoran **en silencio** en vez de emitir `E-CLAVE-DESCONOCIDA` (§ 17, R-RES-4).
  * El filtro corre en la fusión, antes del esquema, y `resolveExtends` hoy solo lanza por ciclos y
@@ -897,6 +899,9 @@ function deepMerge(
     const previous = out[key];
     if (value === null) delete out[key];
     else if (isPlainObject(previous) && isPlainObject(value)) out[key] = deepMerge(previous, value);
+    // Objeto que el padre no trae: también se filtra, o `run: {"__proto__": …}` sobre un padre sin
+    // `run` entraba entero por referencia y el resuelto se quedaba con la clave propia.
+    else if (isPlainObject(value)) out[key] = deepMerge({}, value);
     else out[key] = value;
   }
   return out;
