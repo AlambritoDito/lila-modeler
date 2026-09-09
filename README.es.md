@@ -127,6 +127,14 @@ de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
 
 ## App web
 
+**Pruébala en el navegador**: <https://alambritodito.github.io/lila-modeler/> — la app entera, con
+el proceso `examples/pedido` ya cargado. Guarda el proyecto en el almacenamiento local de la
+pestaña y abre y guarda archivos como descargas normales; no se sube nada a ningún sitio. (El
+enlace empieza a funcionar cuando se habilite GitHub Pages en el repositorio; lo publica
+`.github/workflows/pages.yml`.)
+
+Para correrla en local:
+
 ```bash
 npm run dev -w @lila/web    # compila el motor si hace falta + arranca Vite en http://localhost:5173
 ```
@@ -183,8 +191,6 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
   error de validación explícito, no un fallo silencioso (`docs/SEMANTICS.md` §§1–3).
 - **Sin publicación en npm todavía**: no hay `npx @lila/engine` ni paquete instalable fuera del
   repo; se usa clonando y compilando como arriba.
-- **Sin demo online todavía**: la app web solo corre local (`npm run dev -w @lila/web`) o desde el
-  `.dmg` de la beta de escritorio.
 - **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
   están configurados en `apps/desktop/electron-builder.yml`, y el workflow `Desktop`
   (`.github/workflows/desktop.yml`, manual, en PR que tocan `apps/desktop` o en tags `v*`) compila los tres como

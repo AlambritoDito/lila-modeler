@@ -130,6 +130,14 @@ lists every option. The scenario format is in `docs/SCENARIO_FORMAT.md`, the res
 
 ## Web app
 
+**Try it in the browser**: <https://alambritodito.github.io/lila-modeler/> — the whole app, with
+the `examples/pedido` process already loaded. It keeps the project in the tab's local storage and
+opens and saves files as ordinary downloads; nothing is uploaded anywhere. (The link starts working
+once GitHub Pages is enabled for the repository; it is published by
+`.github/workflows/pages.yml`.)
+
+To run it locally instead:
+
 ```bash
 npm run dev -w @lila/web    # builds the engine if needed + starts Vite on http://localhost:5173
 ```
@@ -190,8 +198,6 @@ all I/O goes against the disk of the server process) are in [`docs/MCP.md`](docs
   explicit validation error, not a silent failure (`docs/SEMANTICS.md` §§1–3).
 - **Not published to npm yet**: there is no `npx @lila/engine` and no package installable outside
   the repo; you use it by cloning and building as above.
-- **No online demo yet**: the web app only runs locally (`npm run dev -w @lila/web`) or from the
-  desktop beta's `.dmg`.
 - **Only the macOS arm64 beta (`dmg`) is tested**. Windows (`nsis`) and Linux (`AppImage`) are
   configured in `apps/desktop/electron-builder.yml`, and the `Desktop` workflow
   (`.github/workflows/desktop.yml`, manual, on PRs that touch `apps/desktop` or on `v*` tags) builds
