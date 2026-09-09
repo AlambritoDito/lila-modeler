@@ -53,14 +53,14 @@ npx lila validate examples/pedido/model.bpmn
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Exportado por Lila Modeler examples (hand-written) 0.0.0
+Process Process_Restaurante (Restaurante)
+Exported by Lila Modeler examples (hand-written) 0.0.0
 
-Nodos (11): and 2, end 2, start 1, task 4, timer 1, xor 1
+Nodes (11): and 2, end 2, start 1, task 4, timer 1, xor 1
   start     StartEvent_Pedido  Pedido recibido
   ...
-aviso  W-MSGFLOW  Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
-0 errores, 1 avisos.
+warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
+0 errors, 1 warnings.
 ```
 
 **2. Simular el escenario AS-IS** (tablas de resultados estilo Bizagi + JSON + CSV):
@@ -73,22 +73,22 @@ npx lila run \
 ```
 
 ```
-Escenario AS-IS
-Proceso Process_Restaurante (Restaurante)
-Semilla 42 · Replicaciones 3 · Unidad de tiempo min · Moneda MXN
+Scenario AS-IS
+Process Process_Restaurante (Restaurante)
+Seed 42 · Replications 3 · Time unit min · Currency MXN
 
 Process elements
 Id                  Name                Type   Instances started  Instances completed  ...
 StartEvent_Pedido   Pedido recibido     start  2975               2975                 ...
 ...
 
-Cuellos de botella
+Bottlenecks
 Id                Name               Total time (waiting for resource) (min)  Utilization (%)
 Task_Preparar     Preparar alimento  4514389.476272                           34.297909
 Task_TomarPedido  Tomar pedido       698.32272                                41.234838
 
-Avisos:
-  W-MSGFLOW: Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
+Warnings:
+  W-MSGFLOW: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
   ...
 JSON: /ruta/al/repo/out/result.json
 CSV: /ruta/al/repo/out/csv
@@ -104,14 +104,14 @@ npx lila compare \
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Unidad de tiempo min (escenario base) · Utilización en %
+Process Process_Restaurante (Restaurante)
+Time unit min (base scenario) · Utilization in %
 
-Escenarios comparados
-#  Nombre           Archivo                                        Semilla  Replicaciones
--  ---------------  ---------------------------------------------  -------  -------------
-0  AS-IS (base)     examples/pedido/as-is.scenario.json            42       3
-1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42       3
+Compared scenarios
+#  Name             File                                           Seed  Replications
+-  ---------------  ---------------------------------------------  ----  ------------
+0  AS-IS (base)     examples/pedido/as-is.scenario.json            42    3
+1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42    3
 
 Process elements
 Id                Name              Metric                               AS-IS (base)  TO-BE 3 cajeros
@@ -119,6 +119,9 @@ Id                Name              Metric                               AS-IS (
 Task_TomarPedido  Tomar pedido      Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
 ...
 ```
+
+La salida sale en inglés por defecto; con `--lang es` (en cualquier posición), `LILA_LANG=es` o
+un `LANG` español, la misma corrida se imprime en español.
 
 `--json` funciona igual en `run` y en `compare`; `--csv` solo en `run`. `--help` en cualquier
 subcomando lista todas las opciones. El formato de escenario está en
