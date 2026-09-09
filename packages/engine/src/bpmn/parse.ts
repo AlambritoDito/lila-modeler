@@ -12,6 +12,7 @@ import { BpmnModdle, type ModdleElement, type ModdleWarning } from 'bpmn-moddle'
 import lila from './lila.moddle.json' with { type: 'json' };
 import { newId, sanitizeXmlIds } from './ids.js';
 import type { Flow, Node, NodeType, ProcessIR, SourceWarning } from '../core/ir.js';
+import type { ConstructionId } from '../messages/constructions.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
 const TASK_TYPES = new Set([
@@ -41,55 +42,34 @@ function hasEventDefinition(el: ModdleElement, type: string): boolean {
   return eventDefinitionsOf(el).some((definition) => definition.$type === type);
 }
 
-/** Textos normativos de `docs/SEMANTICS.md` R-NOSOP-2. */
-export type UnsupportedConstruction =
-  | 'evento adjunto a actividad (boundary event)'
-  | 'evento de mensaje'
-  | 'evento de señal'
-  | 'evento de enlace'
-  | 'evento de error'
-  | 'evento de escalamiento'
-  | 'evento de compensación'
-  | 'evento condicional'
-  | 'evento de cancelación'
-  | 'evento con disparadores múltiples'
-  | 'evento intermedio de lanzamiento'
-  | 'gateway basado en eventos'
-  | 'gateway complejo'
-  | 'marcador de multi-instancia'
-  | 'marcador de bucle en la actividad'
-  | 'subproceso transaccional'
-  | 'subproceso ad-hoc'
-  | 'subproceso de eventos'
-  | 'diagrama de coreografía'
-  | 'diagrama de conversación'
-  | 'atributo startQuantity distinto de 1'
-  | 'atributo completionQuantity distinto de 1'
-  | 'evento de fin con ese disparador'
-  | 'evento de inicio con ese disparador';
+/**
+ * Fila del catálogo cerrado de `docs/SEMANTICS.md` R-NOSOP-2. Desde LILA-211 es un **id**
+ * neutro; el texto que se enseña sale de `messages(locale).constructions`.
+ */
+export type UnsupportedConstruction = ConstructionId;
 
 const EVENT_DEFINITION_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
-  'bpmn:MessageEventDefinition': 'evento de mensaje',
-  'bpmn:SignalEventDefinition': 'evento de señal',
-  'bpmn:LinkEventDefinition': 'evento de enlace',
-  'bpmn:ErrorEventDefinition': 'evento de error',
-  'bpmn:EscalationEventDefinition': 'evento de escalamiento',
-  'bpmn:CompensateEventDefinition': 'evento de compensación',
-  'bpmn:ConditionalEventDefinition': 'evento condicional',
-  'bpmn:CancelEventDefinition': 'evento de cancelación',
+  'bpmn:MessageEventDefinition': 'messageEvent',
+  'bpmn:SignalEventDefinition': 'signalEvent',
+  'bpmn:LinkEventDefinition': 'linkEvent',
+  'bpmn:ErrorEventDefinition': 'errorEvent',
+  'bpmn:EscalationEventDefinition': 'escalationEvent',
+  'bpmn:CompensateEventDefinition': 'compensationEvent',
+  'bpmn:ConditionalEventDefinition': 'conditionalEvent',
+  'bpmn:CancelEventDefinition': 'cancelEvent',
 };
 
 const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
-  'bpmn:EventBasedGateway': 'gateway basado en eventos',
-  'bpmn:ComplexGateway': 'gateway complejo',
-  'bpmn:Transaction': 'subproceso transaccional',
-  'bpmn:AdHocSubProcess': 'subproceso ad-hoc',
-  'bpmn:ChoreographyTask': 'diagrama de coreografía',
-  'bpmn:Choreography': 'diagrama de coreografía',
-  'bpmn:GlobalChoreographyTask': 'diagrama de coreografía',
-  'bpmn:Conversation': 'diagrama de conversación',
-  'bpmn:CallConversation': 'diagrama de conversación',
-  'bpmn:SubConversation': 'diagrama de conversación',
+  'bpmn:EventBasedGateway': 'eventBasedGateway',
+  'bpmn:ComplexGateway': 'complexGateway',
+  'bpmn:Transaction': 'transactionSubProcess',
+  'bpmn:AdHocSubProcess': 'adHocSubProcess',
+  'bpmn:ChoreographyTask': 'choreographyDiagram',
+  'bpmn:Choreography': 'choreographyDiagram',
+  'bpmn:GlobalChoreographyTask': 'choreographyDiagram',
+  'bpmn:Conversation': 'conversationDiagram',
+  'bpmn:CallConversation': 'conversationDiagram',
+  'bpmn:SubConversation': 'conversationDiagram',
 };
 
 /**
@@ -98,12 +78,12 @@ const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
  * después, los disparadores concretos ganan a los diagnósticos genéricos de start/end.
  */
 function unsupportedConstruction(el: ModdleElement): UnsupportedConstruction | undefined {
-  if (el.$type === 'bpmn:BoundaryEvent') return 'evento adjunto a actividad (boundary event)';
-  if (el.$type === 'bpmn:IntermediateThrowEvent') return 'evento intermedio de lanzamiento';
+  if (el.$type === 'bpmn:BoundaryEvent') return 'boundaryEvent';
+  if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
 
   const definitions = eventDefinitionsOf(el);
   if (el.parallelMultiple === true || definitions.length > 1) {
-    return 'evento con disparadores múltiples';
+    return 'multipleTriggerEvent';
   }
   for (const definition of definitions) {
     const construction = EVENT_DEFINITION_CONSTRUCTIONS[definition.$type];
@@ -114,33 +94,33 @@ function unsupportedConstruction(el: ModdleElement): UnsupportedConstruction | u
   if (byType !== undefined) return byType;
 
   if (el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics') {
-    return 'marcador de multi-instancia';
+    return 'multiInstanceMarker';
   }
   if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
-    return 'marcador de bucle en la actividad';
+    return 'loopMarker';
   }
   if (el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true) {
-    return 'subproceso de eventos';
+    return 'eventSubProcess';
   }
   if (el.startQuantity !== undefined && el.startQuantity !== 1) {
-    return 'atributo startQuantity distinto de 1';
+    return 'startQuantity';
   }
   if (el.completionQuantity !== undefined && el.completionQuantity !== 1) {
-    return 'atributo completionQuantity distinto de 1';
+    return 'completionQuantity';
   }
   if (
     el.$type === 'bpmn:EndEvent' &&
     definitions.length > 0 &&
     !hasEventDefinition(el, 'bpmn:TerminateEventDefinition')
   ) {
-    return 'evento de fin con ese disparador';
+    return 'endEventTrigger';
   }
   if (
     el.$type === 'bpmn:StartEvent' &&
     definitions.length > 0 &&
     !hasEventDefinition(el, 'bpmn:TimerEventDefinition')
   ) {
-    return 'evento de inicio con ese disparador';
+    return 'startEventTrigger';
   }
   return undefined;
 }

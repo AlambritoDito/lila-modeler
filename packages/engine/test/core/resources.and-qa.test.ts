@@ -472,7 +472,7 @@ describe('QA LILA-034 · integración DES', () => {
       },
     };
     expect(() => runReplication(linearIr(), scenario, 0, { onEvent: (row) => events.push(row) })).toThrow(
-      'E-REC-DESCONOCIDO: Task: el pool fantasma no existe.',
+      'E-REC-DESCONOCIDO: Task: the pool fantasma does not exist.',
     );
     expect(events).toEqual([]);
     expect(() => simulate(linearIr(), scenario, { onProgress: (p) => progress.push(p) })).toThrow(
@@ -498,11 +498,11 @@ describe('QA LILA-034 · integración DES', () => {
       [withResources({ bad: { capacity: 0 } }, [{ ref: 'bad' }]), 'E-REC-CAPACIDAD: bad'],
       [
         withResources({ a: { capacity: 2 } }, [{ ref: 'a' }, { ref: 'a' }]),
-        'E-REC-DUPLICADO: Task: el pool a aparece más de una vez.',
+        'E-REC-DUPLICADO: Task: the pool a appears more than once.',
       ],
       [
         withResources({ a: { capacity: 1 }, b: { capacity: 3 } }, [{ ref: 'b', quantity: 2 }, { ref: 'a', quantity: 5 }]),
-        'E-REC-CANTIDAD: Task: quantity 5 excede capacity 1 de a.',
+        'E-REC-CANTIDAD: Task: quantity 5 exceeds capacity 1 of a.',
       ],
     ];
     for (const [scenario, message] of cases) {

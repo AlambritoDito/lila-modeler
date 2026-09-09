@@ -94,7 +94,7 @@ describe('utilización atribuible a la cohorte y capacidad no apropiativa (LILA-
     expect(result.resources.agente!.utilization).toBeCloseTo(4 / 3, 12);
     expect(result.resources.agente!.utilization).toBeGreaterThan(1);
     expect(result.warnings).toContain(
-      'W-UTILIZACION-MAYOR-UNO: agente: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.',
+      'W-UTILIZACION-MAYOR-UNO: agente: the measured occupancy exceeds the integrated available capacity; this can happen when crossing a capacity drop without preemption.',
     );
   });
 });

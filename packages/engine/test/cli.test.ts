@@ -42,7 +42,7 @@ test('validate sobre un modelo con boundary event sale con 1 y cita el id', asyn
 
   expect(code).toBe(1);
   expect(text).toContain('E-NOSOP');
-  expect(text).toContain('no soportado por el simulador');
+  expect(text).toContain('not supported by the simulator');
 });
 
 test('--json imprime JSON parseable con ir, errores y avisos', async () => {
@@ -64,8 +64,8 @@ test('--json imprime JSON parseable con ir, errores y avisos', async () => {
 test('propaga W-MSGFLOW y cada W-COND en salida humana y JSON', async () => {
   expect(await main(['validate', warningsFixture])).toBe(0);
   const human = out.join('\n');
-  expect(human).toContain('aviso  W-MSGFLOW  Process_Warnings: se ignoraron 2 flujos de mensaje');
-  expect(human).toContain('aviso  W-COND  Flow_Condition: conditionExpression se ignora');
+  expect(human).toContain('aviso  W-MSGFLOW  Process_Warnings: 2 message flows');
+  expect(human).toContain('aviso  W-COND  Flow_Condition: conditionExpression is ignored');
   expect(human).toContain('0 errores, 2 avisos.');
 
   out = [];
@@ -103,11 +103,11 @@ test('validate sobre un export que pierde elementos sale con 1 e imprime E-PARSE
 
   expect(code).toBe(1);
   expect(text).toContain(
-    'error  E-PARSE-INCOMPLETO  Task_Revisar: el lector XML descartó contenido del modelo, que quedó incompleto:',
+    'error  E-PARSE-INCOMPLETO  Task_Revisar: the XML reader discarded model content, which was left incomplete:',
   );
   expect(text).toContain('duplicate ID <Task_Revisar>');
   expect(text).toContain(
-    'aviso  W-PARSE  Process_Incompleto: aviso del lector XML, sin pérdida de nodos ni flujos:',
+    'aviso  W-PARSE  Process_Incompleto: XML reader notice, with no loss of nodes or flows:',
   );
 });
 

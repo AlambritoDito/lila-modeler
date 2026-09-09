@@ -25,7 +25,7 @@ ${body}
 
 async function validar(xml: string): Promise<ReturnType<typeof validate>> {
   const parsed = await parseBpmn(xml);
-  return validate(parsed.ir, { unsupported: parsed.unsupported });
+  return validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 }
 
 /**
@@ -90,7 +90,7 @@ test.each([
   expect(parsed.ir.source.warnings).toEqual([]);
   expect(Object.keys(parsed.ir.nodes)).toEqual([saneado, 'End_1']);
   expect(parsed.ir.source.originalIds[saneado]).toBe(crudo);
-  expect(validate(parsed.ir, { unsupported: parsed.unsupported }).errors).toEqual([]);
+  expect(validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' }).errors).toEqual([]);
 });
 
 // El mensaje crudo de moddle trae saltos de línea y tabuladores ("detected\n\tline: ..."): la
@@ -105,17 +105,21 @@ test('el aviso de moddle llega aplanado a una sola línea (LILA-185)', async () 
 });
 
 /**
- * Las plantillas normativas de R-NOSOP-6, tal como están en el documento y en su orden. La guarda
- * de longitud es para que ganar o perder una plantilla falle diciendo qué pasó, no con el diff
- * opaco de una desestructuración por posición.
+ * Las plantillas normativas de R-NOSOP-6, tal como están en el documento y en su orden. Desde
+ * LILA-211 cada una aparece dos veces, primero en `en` y después en `es`; este archivo valida con
+ * `locale: 'es'`, así que se queda con las impares. La guarda de longitud es para que ganar o
+ * perder una plantilla falle diciendo qué pasó, no con el diff opaco de una desestructuración por
+ * posición.
  */
 function plantillasDeSemantics(): string[] {
   const doc = readFileSync(`${repo}docs/SEMANTICS.md`, 'utf8');
   const desde = doc.indexOf('- **R-NOSOP-6');
   const seccion = doc.slice(desde, doc.indexOf('\n---', desde));
-  const plantillas = [...seccion.matchAll(/^\s*(\{id\}: .*)$/gm)].map((m) => m[1] as string);
-  expect(plantillas, 'R-NOSOP-6 tiene 5 textos normativos en docs/SEMANTICS.md').toHaveLength(5);
-  return plantillas;
+  const ambos = [...seccion.matchAll(/^\s*(\{id\}: .*)$/gm)].map((m) => m[1] as string);
+  expect(ambos, 'R-NOSOP-6 tiene 5 textos normativos por idioma en docs/SEMANTICS.md').toHaveLength(
+    10,
+  );
+  return ambos.filter((_, index) => index % 2 === 1);
 }
 
 // El texto de los dos códigos es normativo: si alguien lo cambia en el código sin tocar el
@@ -128,7 +132,7 @@ test('el texto de E-PARSE-INCOMPLETO y W-PARSE es el de SEMANTICS R-NOSOP-6 (LIL
   const parsed = await parseBpmn(
     readFileSync(`${repo}packages/engine/test/fixtures/parse-incompleto.bpmn`, 'utf8'),
   );
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
   const rellenar = (plantilla: string, id: string, aviso: string): string =>
     plantilla.replace('{id}', id).replace('{aviso}', aviso);
 
@@ -167,7 +171,7 @@ test('un id duplicado entre elementos que el perfil no simula no es error (LILA-
     <bpmn:dataObject id="Datos_1" />
     <bpmn:dataObject id="Datos_1" />`);
   const parsed = await parseBpmn(xml);
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(errors).toEqual([]);
   expect(warnings).toEqual([
@@ -193,7 +197,7 @@ test('una referencia rota en bpmn:incoming avisa del flujo ausente (LILA-196)', 
     <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1" />
     <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="End_1" />`);
   const parsed = await parseBpmn(xml);
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(errors).toEqual([]);
   expect(warnings).toEqual([
@@ -219,7 +223,7 @@ test('un bpmn:default hacia un flujo inexistente emite W-XOR-DEFAULT-ROTO (LILA-
     <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Gw_1" />
     <bpmn:sequenceFlow id="Flow_2" sourceRef="Gw_1" targetRef="End_1" />`);
   const parsed = await parseBpmn(xml);
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(errors).toEqual([]);
   expect(warnings).toEqual([
@@ -252,7 +256,7 @@ test('un id duplicado en un proceso que Lila no simula no aborta y cita el proce
   </bpmn:process>
 </bpmn:definitions>`;
   const parsed = await parseBpmn(xml);
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(parsed.ir.id).toBe('Process_1');
   expect(parsed.ignoredProcessIds).toEqual(['Process_2']);
@@ -330,7 +334,7 @@ test.each([
   ['minificado', minificar],
 ])('un flujo perdido del proceso simulado aborta con el XML %s (LILA-196)', async (_caso, forma) => {
   const parsed = await parseBpmn(forma(dosProcesos({ enSim: FLUJO_DUPLICADO })));
-  const { errors } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(parsed.ir.id).toBe('Process_Sim');
   expect(errors.filter((e) => e.code === 'E-PARSE-INCOMPLETO')).toMatchObject([{ id: 'Flow_4' }]);
@@ -360,7 +364,7 @@ test.each([
   '%s no despista al localizador: la pérdida del simulado sigue abortando (LILA-196)',
   async (_caso, ruido) => {
     const parsed = await parseBpmn(dosProcesos({ enSim: `${ruido}${FLUJO_DUPLICADO}` }));
-    const { errors } = validate(parsed.ir, { unsupported: parsed.unsupported });
+    const { errors } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
     expect(parsed.ir.id).toBe('Process_Sim');
     expect(errors.filter((e) => e.code === 'E-PARSE-INCOMPLETO')).toMatchObject([{ id: 'Flow_4' }]);
@@ -392,7 +396,7 @@ test.each([
   'un id duplicado del pool ignorado no aborta y cita el pool, %s (LILA-196)',
   async (_caso, xml) => {
     const parsed = await parseBpmn(xml);
-    const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+    const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
     expect(parsed.ir.id).toBe('Process_Sim');
     expect(errors).toEqual([]);
@@ -433,7 +437,7 @@ test.each([
   </bpmn:process>
 </bpmn:definitions>`;
   const parsed = await parseBpmn(xml);
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, locale: 'es' });
 
   expect(errors.filter((e) => e.code === 'E-PARSE-INCOMPLETO')).toEqual([]);
   expect(warnings.filter((w) => w.code === 'W-PARSE')).toEqual([

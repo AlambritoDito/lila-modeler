@@ -1,8 +1,10 @@
-# Extensión BPMN `lila:` y política de ids
+# `lila:` BPMN extension and id policy
 
-Fuente de verdad: `LILA_MODELER_ESTRUCTURA.md`, sección 4 (ADR-012 "Identidad de elemento y de proceso", ADR-013 "Dónde vive cada dato", ADR-014 "Un solo namespace de extensión, definido una sola vez") y sección 5 (ruta de `lila.moddle.json` en el repositorio). Este documento es la referencia operativa para implementar el parser/serializador (`packages/engine/src/bpmn/parse.ts`) y el descriptor moddle (`packages/engine/src/bpmn/lila.moddle.json`); no repite el razonamiento de las ADR, lo aplica.
+> Read this in: [Español](es/BPMN_EXTENSION.md)
 
-Este documento se apega a ADR-012 y ADR-014; cualquier discrepancia entre este archivo y esas ADR la resuelve `LILA_MODELER_ESTRUCTURA.md` y se corrige aquí.
+Source of truth: `LILA_MODELER_ESTRUCTURA.md`, section 4 (ADR-012 "Element and process identity", ADR-013 "Where each piece of data lives", ADR-014 "A single extension namespace, defined once") and section 5 (the path to `lila.moddle.json` in the repository). This document is the operative reference for implementing the parser/serializer (`packages/engine/src/bpmn/parse.ts`) and the moddle descriptor (`packages/engine/src/bpmn/lila.moddle.json`); it does not repeat the ADRs' reasoning, it applies it.
+
+This document adheres to ADR-012 and ADR-014; any discrepancy between this file and those ADRs is resolved by `LILA_MODELER_ESTRUCTURA.md`, and this file is corrected accordingly.
 
 ---
 
@@ -12,27 +14,27 @@ Este documento se apega a ADR-012 y ADR-014; cualquier discrepancia entre este a
 xmlns:lila="https://lila-modeler.org/schema/bpmn/1"
 ```
 
-Decidido en ADR-014. El IRI **no necesita resolver** (no hay nada publicado en esa URL) — solo debe ser estable y no cambiar antes de M4. El sufijo `/1` es la versión del namespace, no la versión del proceso: crece de forma **aditiva** (se agregan elementos nuevos; nunca se quita ni se resignifica uno existente) mientras el namespace siga siendo `/1`. Un cambio incompatible requeriría `/2` — no se anticipa antes de M4.
+Decided in ADR-014. The IRI **does not need to resolve** (nothing is published at that URL) — it only needs to be stable and not change before M4. The `/1` suffix is the namespace's version, not the process's: it grows **additively** (new elements are added; an existing one is never removed or repurposed) as long as the namespace stays `/1`. An incompatible change would require `/2` — not anticipated before M4.
 
-El namespace se declara **una sola vez**, en `bpmn:definitions`, y se usa igual en:
+The namespace is declared **exactly once**, in `bpmn:definitions`, and is used the same way in:
 
-- el editor (`apps/web`, vía `BpmnModeler({ moddleExtensions: { lila } })`),
-- la CLI y el motor (`packages/engine`),
-- cualquier servidor futuro (`packages/server`, M6).
+- the editor (`apps/web`, via `BpmnModeler({ moddleExtensions: { lila } })`),
+- the CLI and the engine (`packages/engine`),
+- any future server (`packages/server`, M6).
 
-Los tres leen el mismo descriptor: `packages/engine/src/bpmn/lila.moddle.json` (sección 5 del documento de estructura). No existe una segunda copia del descriptor en ninguna otra parte del repositorio.
+All three read the same descriptor: `packages/engine/src/bpmn/lila.moddle.json` (section 5 of the structure document). There is no second copy of the descriptor anywhere else in the repository.
 
 ### Round-trip
 
-bpmn-moddle preserva namespaces desconocidos al hacer `saveXML` tras `importXML` (verificado con archivos reales de BPSim, qbp y Bizagi — ver `investigacion-2026-09-03/02-bizagi-simulacion.md` y `03-editor-bpmn.md`). Esto es lo que permite que `lila:*` sobreviva a una herramienta que no lo conoce (round-trip por Camunda Modeler, Signavio, ADORIS, etc.) sin que esa herramienta necesite el descriptor. Ese comportamiento se prueba en M4 contra herramientas reales; si alguna no preserva namespaces ajenos, el plan B es un sidecar `annotations.json` keyed por `id` de elemento con el mismo vocabulario (mismos nombres de campo que los elementos `lila:*`), fuera del `.bpmn`.
+bpmn-moddle preserves unknown namespaces when doing `saveXML` after `importXML` (verified with real BPSim, qbp, and Bizagi Modeler files — see `investigacion-2026-09-03/02-bizagi-simulacion.md` and `03-editor-bpmn.md`). This is what lets `lila:*` survive a tool that does not know it (a round trip through Camunda Modeler, Signavio, ADORIS, etc.) without that tool needing the descriptor. That behavior is tested in M4 against real tools; if one does not preserve foreign namespaces, plan B is an `annotations.json` sidecar keyed by element `id` with the same vocabulary (the same field names as the `lila:*` elements), outside the `.bpmn`.
 
 ---
 
-## 2. Elementos v1
+## 2. v1 elements
 
-Todos los elementos de la extensión son **elementos XML hijos**, nunca atributos del elemento BPMN que documentan — la única excepción es que cada elemento `lila:*` sí puede tener sus propios atributos (p. ej. `lila:responsibility` tiene los atributos `type` y `roleRef`). La razón de usar elementos y no atributos en el punto de inserción es permitir **listas**: un `bpmn:task` puede tener varios `lila:systemRef` (usa más de un sistema), varios `lila:input`/`lila:output`, etc. Un atributo XML no puede repetirse en el mismo nodo.
+Every extension element is a **child XML element**, never an attribute of the BPMN element it documents — the one exception is that each `lila:*` element can have its own attributes (e.g. `lila:responsibility` has the attributes `type` and `roleRef`). The reason for using elements rather than attributes at the insertion point is to allow **lists**: a `bpmn:task` can have several `lila:systemRef` (it uses more than one system), several `lila:input`/`lila:output`, and so on. An XML attribute cannot repeat on the same node.
 
-Todos (salvo `versionTag`, ver más abajo) van dentro de `bpmn:extensionElements` del elemento BPMN que documentan (tarea, evento, gateway, lane, o el propio `bpmn:process`):
+All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` of the BPMN element they document (task, event, gateway, lane, or `bpmn:process` itself):
 
 ```xml
 <bpmn:task id="Task_7f3k2q1" name="Revisar solicitud">
@@ -49,21 +51,21 @@ Todos (salvo `versionTag`, ver más abajo) van dentro de `bpmn:extensionElements
 </bpmn:task>
 ```
 
-| Elemento | Atributos | Qué documenta | Apunta a |
+| Element | Attributes | What it documents | Points to |
 |---|---|---|---|
-| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | Matriz RACI del elemento: una fila por combinación responsable/rol. Un elemento puede tener varios `lila:responsibility` (varios roles, o el mismo rol con distinto `type` no tiene sentido pero no se valida como error — es warning). | `roleRef` → id en el catálogo de roles (`catalog.json`, ver ADR-013). |
-| `lila:systemRef` | `ref` | Sistema/aplicación que interviene en el elemento. | id en el catálogo de sistemas. |
-| `lila:documentRef` | `ref` | Documento asociado al elemento (entrada, salida o solo referencia general). | id en el catálogo de documentos. |
-| `lila:riskRef` | `ref` | Riesgo asociado al elemento. | id en el catálogo de riesgos. |
-| `lila:controlRef` | `ref` | Control asociado al elemento (mitiga un riesgo). | id en el catálogo de controles. |
-| `lila:kpiRef` | `ref` | Indicador que mide el elemento. | id en el catálogo de KPIs. |
-| `lila:input` | `ref` | Documento/dato que el elemento consume. Subconjunto semántico de `documentRef` con dirección explícita; puede coexistir con `documentRef` para el mismo id. | id en el catálogo de documentos. |
-| `lila:output` | `ref` | Documento/dato que el elemento produce. | id en el catálogo de documentos. |
-| `lila:versionTag` | `value` | Ver sección 4 (clave de proceso). Único elemento que **no** cuelga de un elemento de flujo — cuelga de `bpmn:process`. | — (valor libre, no referencia catálogo). |
+| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`, which doesn't make sense but is not validated as an error — it's a warning). | `roleRef` → id in the role catalog (`catalog.json`, see ADR-013). |
+| `lila:systemRef` | `ref` | System/application involved in the element. | id in the system catalog. |
+| `lila:documentRef` | `ref` | Document associated with the element (input, output, or just a general reference). | id in the document catalog. |
+| `lila:riskRef` | `ref` | Risk associated with the element. | id in the risk catalog. |
+| `lila:controlRef` | `ref` | Control associated with the element (mitigates a risk). | id in the control catalog. |
+| `lila:kpiRef` | `ref` | Indicator that measures the element. | id in the KPI catalog. |
+| `lila:input` | `ref` | Document/data the element consumes. A semantic subset of `documentRef` with explicit direction; can coexist with `documentRef` for the same id. | id in the document catalog. |
+| `lila:output` | `ref` | Document/data the element produces. | id in the document catalog. |
+| `lila:versionTag` | `value` | See section 4 (process key). The only element that does **not** hang off a flow element — it hangs off `bpmn:process`. | — (free-form value, no catalog reference). |
 
-Todas las referencias (`roleRef`, y los `ref` de `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) apuntan a ids del catálogo (`catalog.json`, fuera del `.bpmn` — ADR-013). Una referencia colgante (id que no existe en el catálogo) es un **warning de lint**, no un error de validación — el catálogo puede completarse después del diagrama.
+All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) point to ids in the catalog (`catalog.json`, outside the `.bpmn` — ADR-013). A dangling reference (an id that does not exist in the catalog) is a **lint warning**, not a validation error — the catalog can be filled in after the diagram.
 
-`versionTag` va como hijo de `bpmn:extensionElements` de `bpmn:process` (no de `bpmn:definitions` ni de una tarea):
+`versionTag` goes as a child of `bpmn:process`'s `bpmn:extensionElements` (not of `bpmn:definitions` nor of a task):
 
 ```xml
 <bpmn:process id="credito-solicitud" isExecutable="false">
@@ -74,43 +76,43 @@ Todas las referencias (`roleRef`, y los `ref` de `systemRef`/`documentRef`/`risk
 </bpmn:process>
 ```
 
-Patrón calcado de `zeebe:versionTag` (Camunda 8), citado como precedente en ADR-012.
+A pattern copied from `zeebe:versionTag` (Camunda 8), cited as precedent in ADR-012.
 
-### Qué NO es v1
+### What is NOT v1
 
-Los parámetros de simulación (`processingTime`, `resources`, `interTriggerTimer`, etc.) **no** son parte de esta extensión — viven en `*.scenario.json`, separados del `.bpmn` (ADR-007, ADR-013; formato completo en `SCENARIO_FORMAT.md`). `lila:` documenta el proceso (RACI, sistemas, documentos, riesgos, controles, KPIs, versión); no lo parametriza para simular.
+Simulation parameters (`processingTime`, `resources`, `interTriggerTimer`, etc.) are **not** part of this extension — they live in `*.scenario.json`, separate from the `.bpmn` (ADR-007, ADR-013; full format in `SCENARIO_FORMAT.md`). `lila:` documents the process (RACI, systems, documents, risks, controls, KPIs, version); it does not parameterize it for simulation.
 
 ---
 
-## 3. Política de ids (ADR-012)
+## 3. Id policy (ADR-012)
 
-### Id de elemento
+### Element id
 
-- El id de cada elemento BPMN (`bpmn:task@id`, `bpmn:sequenceFlow@id`, etc.) es la **única clave** para colgar datos de negocio o de simulación. Nunca el nombre visible (`name`).
-- Formato: **NCName** válido (XML `Name` sin `:`), generado por Lila como `<PrefijoPorTipo>_<sufijo aleatorio>`, p. ej. `Task_7f3k2q1`, `Gateway_a91nc0x`, `Flow_k2m8p1q`. El sufijo aleatorio evita colisiones sin necesitar un contador centralizado.
-- Prefijo por tipo (no exhaustivo, crece con el IR): `Start_`, `End_`, `Task_`, `Gateway_` (XOR/OR/AND comparten prefijo; el tipo exacto vive en el IR, no en el id), `Timer_`, `Flow_`, `SubProcess_`.
-- **Nunca se regenera** un id existente al importar, exportar o renombrar el elemento (renombrar cambia `name`, no `id`). Regenerar el id rompería cualquier referencia externa: entradas de `*.scenario.json` keyed por id, filas de event log, referencias de catálogo.
-- **Se genera un id nuevo** al copiar/pegar un elemento — un elemento copiado es una entidad distinta y no debe arrastrar los datos (`lila:*`, escenario) del original bajo el mismo id.
-- **Sanitización reversible para ids ajenos no-NCName**: algunas herramientas (Bizagi entre ellas) pueden emitir ids que no son NCName válidos. Al importar, Lila sanitiza esos ids a NCName y guarda el mapa `idSanitizado → idOriginal` en `ir.source.originalIds` (ver la forma de `ProcessIR` en la sección 6 del documento de estructura), de modo que un re-export pueda restaurar el id original si la herramienta de destino lo necesita. La sanitización es determinista (mismo id ajeno → mismo id sanitizado) para que reimportar el mismo archivo no genere ids distintos cada vez.
+- The id of every BPMN element (`bpmn:task@id`, `bpmn:sequenceFlow@id`, etc.) is the **only key** for attaching business or simulation data. Never the visible name (`name`).
+- Format: a valid **NCName** (an XML `Name` without `:`), generated by Lila as `<TypePrefix>_<random suffix>`, e.g. `Task_7f3k2q1`, `Gateway_a91nc0x`, `Flow_k2m8p1q`. The random suffix avoids collisions without needing a centralized counter.
+- Prefix per type (not exhaustive, grows with the IR): `Start_`, `End_`, `Task_`, `Gateway_` (XOR/OR/AND share a prefix; the exact type lives in the IR, not in the id), `Timer_`, `Flow_`, `SubProcess_`.
+- An existing id is **never regenerated** on import, export, or rename (renaming changes `name`, not `id`). Regenerating the id would break any external reference: `*.scenario.json` entries keyed by id, event log rows, catalog references.
+- **A new id is generated** when copying/pasting an element — a copied element is a distinct entity and must not carry the original's data (`lila:*`, scenario) under the same id.
+- **Reversible sanitization for foreign non-NCName ids**: some tools (Bizagi Modeler among them) can emit ids that are not valid NCNames. On import, Lila sanitizes those ids to NCName and stores the `sanitizedId → originalId` map in `ir.source.originalIds` (see `ProcessIR`'s shape in section 6 of the structure document), so a re-export can restore the original id if the destination tool needs it. Sanitization is deterministic (the same foreign id → the same sanitized id), so reimporting the same file does not generate different ids every time.
 
-El editor aplica el mismo `sanitizeXmlIds` del motor antes de entregar el documento a bpmn-js y
-conserva el mapa por instancia de modelador. Al exportar, restaura en una sola pasada tanto las
-declaraciones como las referencias (`sourceRef`, `targetRef`, `default`, `bpmnElement` y referencias
-textuales), incluidas las de BPMNDI. La apertura se prepara en una instancia candidata y solo
-reemplaza el lienzo activo cuando la importación completa termina; un XML mal formado o sin diagrama
-renderizable no sustituye el XML, selección, servicios ni historial anteriores. Si el lector reportó
-una pérdida semántica —por ejemplo, una referencia topológica rota— la exportación exige una decisión
-visible con el detalle del aviso, porque el árbol serializado ya no puede reconstruir ese contenido.
+The editor applies the engine's same `sanitizeXmlIds` before handing the document to bpmn-js and
+keeps the map per modeler instance. On export, it restores in a single pass both the declarations
+and the references (`sourceRef`, `targetRef`, `default`, `bpmnElement`, and textual references),
+including BPMNDI's. Opening is prepared on a candidate instance and only replaces the active canvas
+once the import fully completes; a malformed XML or one with no renderable diagram does not replace
+the previous XML, selection, services, or history. If the reader reported a semantic loss — for
+example, a broken topological reference — export requires a visible decision with the warning's
+detail, because the serialized tree can no longer reconstruct that content.
 
-### Id de proceso
+### Process id
 
-- Clave lógica de un proceso: **`bpmn:process@id` (slug ASCII) + `lila:versionTag`**. Ejemplo: `credito-solicitud` + `1.3.0`. Es la clave que identifica "el mismo proceso, versión X" a través de reimportaciones y ediciones — no es solo `process@id`, porque dos versiones del mismo proceso de negocio pueden (y en general deben) coexistir como archivos o commits distintos con el mismo `process@id`.
-- `bpmn:process@id` se genera igual que cualquier otro id de elemento (NCName; ver arriba) pero se recomienda un slug ASCII legible (`credito-solicitud`, no `Process_7f3k2q1`) porque además de clave técnica funciona como nombre de carpeta/archivo en el layout de proyecto.
-- `lila:versionTag` es una cadena libre (semver recomendado, `1.3.0`, pero no forzado por el esquema — un usuario puede versionar como `v2`, `2026-Q3`, etc.). Ausente por defecto; su ausencia no es error.
+- A process's logical key: **`bpmn:process@id` (ASCII slug) + `lila:versionTag`**. Example: `credito-solicitud` + `1.3.0`. This is the key that identifies "the same process, version X" across reimports and edits — it is not just `process@id`, because two versions of the same business process can (and generally should) coexist as distinct files or commits with the same `process@id`.
+- `bpmn:process@id` is generated just like any other element id (NCName; see above), but a readable ASCII slug is recommended (`credito-solicitud`, not `Process_7f3k2q1`) because, besides being a technical key, it also works as a folder/file name in the project layout.
+- `lila:versionTag` is a free-form string (semver is recommended, `1.3.0`, but not enforced by the schema — a user can version as `v2`, `2026-Q3`, etc.). Absent by default; its absence is not an error.
 
 ### `exporter` / `exporterVersion`
 
-Todo `.bpmn` que Lila escribe declara, en `bpmn:definitions`:
+Every `.bpmn` that Lila writes declares, in `bpmn:definitions`:
 
 ```xml
 <bpmn:definitions
@@ -121,13 +123,13 @@ Todo `.bpmn` que Lila escribe declara, en `bpmn:definitions`:
     ...>
 ```
 
-`exporterVersion` es la versión de paquete de `@lila/engine` que generó el archivo (siempre la del motor, también cuando quien guarda es la app web: los dos atributos los escribe un único helper, `marcarExportador` en `packages/engine/src/bpmn/ids.ts`) — sirve para diagnosticar diferencias de comportamiento entre versiones del motor, igual que hacen bpmn-js y Camunda Modeler con sus propios `exporter`/`exporterVersion`. Bizagi, por comparación, **no** declara estos atributos en su export (verificado en 5 archivos reales — ver `investigacion-2026-09-03/02-bizagi-simulacion.md`), lo que hace imposible saber qué versión de Bizagi Modeler generó un archivo dado; Lila evita ese problema desde el día uno.
+`exporterVersion` is the `@lila/engine` package version that generated the file (always the engine's, even when it is the web app that saves it: a single helper writes both attributes, `marcarExportador` in `packages/engine/src/bpmn/ids.ts`) — it is used to diagnose behavior differences between engine versions, the same way bpmn-js and Camunda Modeler do with their own `exporter`/`exporterVersion`. Bizagi Modeler, by comparison, does **not** declare these attributes in its export (verified in 5 real files — see `investigacion-2026-09-03/02-bizagi-simulacion.md`), which makes it impossible to know which version of Bizagi Modeler generated a given file; Lila avoids that problem from day one.
 
 ---
 
-## 4. Descriptor moddle (ejemplo)
+## 4. Moddle descriptor (example)
 
-Vive en `packages/engine/src/bpmn/lila.moddle.json` (única definición — sección 5 del documento de estructura). Forma que tendrá (ejemplo v1, sujeto a los ajustes menores que exija bpmn-moddle en implementación):
+Lives in `packages/engine/src/bpmn/lila.moddle.json` (the single definition — section 5 of the structure document). The shape it will have (v1 example, subject to the minor adjustments bpmn-moddle may require during implementation):
 
 ```json
 {
@@ -215,17 +217,17 @@ Vive en `packages/engine/src/bpmn/lila.moddle.json` (única definición — secc
 }
 ```
 
-Notas de implementación (no normativas, se resuelven en el ticket que crea el archivo real):
+Implementation notes (not normative, resolved in the ticket that creates the real file):
 
-- `meta.allowedIn` documenta la intención (todos menos `VersionTag` van en el `extensionElements` de un elemento de flujo; `VersionTag` en el de `bpmn:process`); bpmn-moddle no valida `allowedIn` en tiempo de parseo — la validación real de "quién puede contener qué" la hace `packages/engine/src/bpmn/validate.ts`.
-- No se usan `associations` porque ninguno de estos tipos necesita sustituir o extender un tipo BPMN existente; todos son elementos nuevos que cuelgan de `bpmn:extensionElements`, que ya acepta cualquier `values[]` de un namespace declarado.
-- Todas las propiedades son `isAttr: true` (atributos del elemento `lila:*`, no hijos propios) — mantiene cada elemento en una sola línea XML y es suficiente para v1 porque ninguno necesita texto libre ni anidamiento.
+- `meta.allowedIn` documents the intent (everything except `VersionTag` goes in a flow element's `extensionElements`; `VersionTag` in `bpmn:process`'s); bpmn-moddle does not validate `allowedIn` at parse time — the real validation of "who can contain what" is done by `packages/engine/src/bpmn/validate.ts`.
+- `associations` are not used because none of these types need to replace or extend an existing BPMN type; they are all new elements that hang off `bpmn:extensionElements`, which already accepts any `values[]` from a declared namespace.
+- Every property is `isAttr: true` (attributes of the `lila:*` element, not its own children) — this keeps each element on a single line of XML and is enough for v1 because none of them needs free text or nesting.
 
 ---
 
-## 5. Fragmento de ejemplo completo
+## 5. Complete example fragment
 
-`bpmn:extensionElements` de una tarea con responsabilidad RACI, referencias de catálogo y versión de proceso:
+`bpmn:extensionElements` of a task with RACI responsibility, catalog references, and process version:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -270,55 +272,57 @@ Notas de implementación (no normativas, se resuelven en el ticket que crea el a
 </bpmn:definitions>
 ```
 
-Correspondencia con el catálogo referenciado (`catalog.json`, fuera de este documento — ver `SCENARIO_FORMAT.md`/`LILA_MODELER_ESTRUCTURA.md` sección 5 para su ubicación): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada` y `kpi-tiempo-revision` son ids que deben existir ahí; si no existen, `validate(ir)` emite un warning de referencia colgante por cada uno, no un error.
+Correspondence with the referenced catalog (`catalog.json`, outside this document — see `SCENARIO_FORMAT.md`/`LILA_MODELER_ESTRUCTURA.md` section 5 for its location): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada`, and `kpi-tiempo-revision` are ids that must exist there; if they don't, `validate(ir)` emits a dangling-reference warning for each one, not an error.
 
 ---
 
-## 6. Consistencia con las ADR
+## 6. Consistency with the ADRs
 
-- **ADR-012** (identidad de elemento y de proceso): implementado en la sección 3 de este documento — NCName con prefijo por tipo, nunca regenerado, nuevo al copiar, sanitización reversible, clave de proceso = `process@id` + `versionTag`, `exporter`/`exporterVersion` en `definitions`.
-- **ADR-014** (namespace único, definido una sola vez): implementado en las secciones 1, 2 y 4 — un solo IRI, un solo descriptor compartido por editor/CLI/servidor, elementos (no atributos en el punto de inserción) para permitir listas, crecimiento aditivo, plan de verificación de round-trip en M4 con fallback a `annotations.json`.
+- **ADR-012** (element and process identity): implemented in section 3 of this document — NCName with a type prefix, never regenerated, new on copy, reversible sanitization, process key = `process@id` + `versionTag`, `exporter`/`exporterVersion` in `definitions`.
+- **ADR-014** (a single namespace, defined once): implemented in sections 1, 2, and 4 — a single IRI, a single descriptor shared by editor/CLI/server, elements (not attributes at the insertion point) to allow lists, additive growth, a round-trip verification plan in M4 with a fallback to `annotations.json`.
 
-Si en el futuro alguna decisión de este documento entra en conflicto con una ADR nueva o revisada, gana la ADR y este documento se actualiza para reflejarla (nunca al revés).
+If in the future some decision in this document conflicts with a new or revised ADR, the ADR wins and this document is updated to reflect it (never the other way around).
 
 ---
 
-## 7. Round-trip en la app web
+## 7. Round-trip in the web app
 
-La app web abre un `.bpmn` con bpmn-js y lo vuelve a escribir con `saveXML`, es decir con
-bpmn-moddle serializando **el árbol que bpmn-moddle pudo leer**. Eso fija exactamente qué
-sobrevive a abrir-y-exportar (LILA-192, `apps/web/src/modelerXml.ts`):
+The web app opens a `.bpmn` with bpmn-js and writes it back out with `saveXML`, i.e. with
+bpmn-moddle serializing **the tree bpmn-moddle was able to read**. That fixes exactly what
+survives an open-and-export round trip (LILA-192, `apps/web/src/modelerXml.ts`):
 
-**Se conserva**
+**Preserved**
 
-- Los ids originales del archivo, incluidos los que no son NCName. Al importar se sanean de
-  forma reversible (sección 3) y al exportar se restauran uno a uno, en atributos, en texto y en
-  las referencias del BPMNDI, con las comillas y las entidades del original.
-- Los elementos `lila:` de este documento y las extensiones ajenas (`bizagi:` y compañía): el
-  descriptor `lila` va en `moddleExtensions` y el resto viaja como contenido genérico.
-- El diagrama (`bpmndi`), la documentación, los nombres y la topología.
-- `exporter`/`exporterVersion` en `definitions`, que los reescribe siempre `marcarExportador`.
+- The file's original ids, including the ones that are not NCName. On import they are reversibly
+  sanitized (section 3), and on export they are restored one by one, in attributes, in text, and
+  in BPMNDI's references, with the original's quoting and entities.
+- This document's `lila:` elements and foreign extensions (`bizagi:` and the like): the `lila`
+  descriptor goes in `moddleExtensions`, and the rest travels as generic content.
+- The diagram (`bpmndi`), the documentation, the names, and the topology.
+- `exporter`/`exporterVersion` in `definitions`, which `marcarExportador` always rewrites.
 
-**No se conserva**
+**Not preserved**
 
-- Las referencias por id que apuntan a un elemento que el archivo nunca declara —`messageRef`,
-  `dataStoreRef`, `categoryValueRef`, `dataObjectRef`—: bpmn-moddle no las resuelve, no llegan al árbol y el
-  archivo exportado ya no las lleva. Los fixtures de `examples/bizagi-exports` son un caso real.
-- Lo que el import descarta con un aviso de contenido no parseable o de referencia de topología
-  sin resolver: si no entró en el modelo, no puede salir en el XML.
+- Id references that point to an element the file never declares — `messageRef`,
+  `dataStoreRef`, `categoryValueRef`, `dataObjectRef` —: bpmn-moddle does not resolve them, they
+  never reach the tree, and the exported file no longer carries them. The fixtures in
+  `examples/bizagi-exports` are a real case.
+- Whatever import discards with a warning about unparseable content or an unresolved topological
+  reference: if it never entered the model, it cannot come back out in the XML.
 
-**Cómo se avisa** (nunca en silencio, que era la queja de LILA-192)
+**How it is reported** (never silently, which was LILA-192's complaint)
 
-- La barra de estado enseña la lista completa como **error** —no como aviso—, con los ids:
-  «N elementos o referencias se perderán al exportar: …» (LILA-193).
-- Todo lo que escribe un .bpmn con pérdida pasa antes por el mismo diálogo, con esa misma lista
-  y dos salidas: «Exportar .bpmn» ofrece «Exportar igualmente»/«Cancelar» y guardar el proyecto
-  ofrece «Guardar igualmente»/«Cancelar». Cancelar no descarga ni escribe nada en disco.
-- `autorizarExportacion` corta con un error cualquier exportación con pérdida que no traiga
-  `aceptarPerdida`, es decir el sí explícito de ese diálogo: el XML que alimenta a la simulación
-  —que el usuario no ve— nunca lo trae, y el snapshot de guardar solo lo trae después del sí.
-- En Electron, cancelar el diálogo al guardar devuelve «no se guardó» al cierre de la ventana,
-  así que el cierre se cancela y no se pierde nada.
+- The status bar shows the complete list as an **error** — not a warning —, with the ids:
+  «N elementos o referencias se perderán al exportar: …» (N elements or references will be lost
+  on export: …) (LILA-193).
+- Everything that writes a `.bpmn` with loss first passes through the same dialog, with that same
+  list and two ways out: «Exportar .bpmn» (Export .bpmn) offers «Exportar igualmente»/«Cancelar»
+  (Export anyway / Cancel), and saving the project offers «Guardar igualmente»/«Cancelar»
+  (Save anyway / Cancel). Cancel neither downloads nor writes anything to disk.
+- `autorizarExportacion` cuts off with an error any lossy export that does not carry
+  `aceptarPerdida`, i.e. that dialog's explicit yes: the XML that feeds the simulation — which
+  the user never sees — never carries it, and the save snapshot only carries it after the yes.
+- On Electron, canceling the dialog while saving returns «no se guardó» (not saved) to the
+  window-close handler, so the close is cancelled and nothing is lost.
 
-Nada de esto reescribe el serializador: la fidelidad byte a byte con el archivo de origen no es
-una promesa de la app, y conservar atributos rotos exigiría un serializador propio.
+None of this rewrites the serializer: byte-for-byte fidelity with the source file is not a promise the app makes, and preserving broken attributes would require a serializer of its own.

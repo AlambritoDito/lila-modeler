@@ -6,6 +6,7 @@
  */
 
 import type { ProcessIR } from './ir.js';
+import { coded, coreMessages, type Locale } from './messages/index.js';
 import { aggregateReplication, saturationWarning, type PoolLoad } from './metrics.js';
 import { summarizeRunResults } from './replications.js';
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
@@ -40,6 +41,12 @@ export interface SimulateOptions {
    * Por defecto el log está habilitado (sección 7 de docs/RESULTS_FORMAT.md).
    */
   log?: boolean | undefined;
+  /**
+   * Idioma de los avisos y de los errores del preflight (LILA-211). Es una cadena, no un objeto,
+   * para que `SimulateOptions` siga siendo serializable y pueda cruzar el Web Worker por
+   * `postMessage`; se resuelve una sola vez al entrar en cada replicación.
+   */
+  locale?: Locale | undefined;
 }
 
 function mean(values: readonly number[]): number {
@@ -49,16 +56,18 @@ function mean(values: readonly number[]): number {
 }
 
 /** Promedia recursivamente una estructura estable compuesta solo por objetos y números. */
-function meanShape<T>(values: readonly T[]): T {
+function meanShape<T>(values: readonly T[], locale: Locale = 'en'): T {
   const first = values[0];
   if (typeof first === 'number') return mean(values as readonly number[]) as T;
   if (first === null || typeof first !== 'object' || Array.isArray(first)) {
-    throw new TypeError('E-AGREGADO-NO-NUMERICO: la estructura de métricas no es promediable.');
+    throw new TypeError(
+      coded('E-AGREGADO-NO-NUMERICO', coreMessages(locale).codes['E-AGREGADO-NO-NUMERICO']()),
+    );
   }
 
   const output: Record<string, unknown> = {};
   for (const key of Object.keys(first)) {
-    output[key] = meanShape(values.map((value) => (value as Record<string, unknown>)[key]));
+    output[key] = meanShape(values.map((value) => (value as Record<string, unknown>)[key]), locale);
   }
   return output as T;
 }
@@ -100,16 +109,20 @@ function meanBottlenecks(results: readonly RunResult[]): BottleneckEntry[] {
 }
 
 /** Los campos top-level multi-réplica son medias de la misma ruta en cada replicación. */
-function meanRunResults(results: readonly RunResult[]): RunResult {
-  if (results.length === 0) throw new RangeError('E-REPLICACIONES-VACIAS: no hay resultados que agregar.');
+function meanRunResults(results: readonly RunResult[], locale: Locale = 'en'): RunResult {
+  if (results.length === 0) {
+    throw new RangeError(
+      coded('E-REPLICACIONES-VACIAS', coreMessages(locale).codes['E-REPLICACIONES-VACIAS']()),
+    );
+  }
   const warnings = new Set<string>();
   for (const result of results) for (const warning of result.warnings) warnings.add(warning);
 
   return {
-    elements: meanShape(results.map((result) => result.elements)),
-    flows: meanShape(results.map((result) => result.flows)),
-    resources: meanShape(results.map((result) => result.resources)),
-    process: meanShape(results.map((result) => result.process)),
+    elements: meanShape(results.map((result) => result.elements), locale),
+    flows: meanShape(results.map((result) => result.flows), locale),
+    resources: meanShape(results.map((result) => result.resources), locale),
+    process: meanShape(results.map((result) => result.process), locale),
     bottlenecks: meanBottlenecks(results),
     warnings: [...warnings],
   };
@@ -121,7 +134,10 @@ function meanRunResults(results: readonly RunResult[]): RunResult {
  * réplica no serviría: bastaría con que una sola cruzara el umbral por azar (con ρ = 0,8 y 30
  * réplicas, unas cinco lo hacen) para que el aviso saliera en la corrida entera.
  */
-function saturationWarnings(loads: readonly Map<string, PoolLoad>[]): string[] {
+function saturationWarnings(
+  loads: readonly Map<string, PoolLoad>[],
+  locale: Locale | undefined,
+): string[] {
   const warnings: string[] = [];
   if (loads.length === 0) return warnings;
   for (const poolId of loads[0]!.keys()) {
@@ -140,7 +156,7 @@ function saturationWarnings(loads: readonly Map<string, PoolLoad>[]): string[] {
     total.capacity /= loads.length;
     total.firstHalf /= loads.length;
     total.secondHalf /= loads.length;
-    const warning = saturationWarning(poolId, total);
+    const warning = saturationWarning(poolId, total, locale);
     if (warning !== undefined) warnings.push(warning);
   }
   return warnings;
@@ -153,8 +169,9 @@ function saturationWarnings(loads: readonly Map<string, PoolLoad>[]): string[] {
 export function simulate(ir: ProcessIR, scenario: SimScenario, options: SimulateOptions = {}): RunResult {
   // El preflight precede incluso al progreso inicial: un input no soportado no puede dejar
   // callbacks observables antes de lanzar el error estable.
-  assertSupportedResourceScenario(scenario);
-  assertSupportedCalendarScenario(scenario);
+  const locale = options.locale;
+  assertSupportedResourceScenario(scenario, locale);
+  assertSupportedCalendarScenario(scenario, locale);
   // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
   // nadie más se hizo cargo de las filas. Con `onEvent` el consumidor ya las recibe una a una —la
   // CLI las escribe directas a `log.csv`— y retenerlas otra vez duplicaría hasta 6 M de objetos.
@@ -193,6 +210,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
       signal: options.signal,
       log: options.log,
       onEvent: options.onEvent,
+      locale,
       onStep:
         options.onProgress === undefined
           ? undefined
@@ -214,7 +232,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     // `ReplicationRun` entero queda libre al cerrarla, así que el pico es el de una replicación.
     if (log !== undefined) for (const row of run.rows) log.push(row);
     const load = new Map<string, PoolLoad>();
-    const result = aggregateReplication(ir, run, scenario, load);
+    const result = aggregateReplication(ir, run, scenario, load, locale);
 
     if (run.cancelled === true) {
       partial = result;
@@ -237,10 +255,10 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   // El top-level cancelado conserva todo el trabajo observable, incluida la réplica parcial.
   // El IC, en cambio, se calcula más abajo solo con `completed`.
   const included = partial === undefined ? completed : [...completed, partial];
-  const result = included.length === 1 ? included[0]! : meanRunResults(included);
-  for (const warning of saturationWarnings(loads)) result.warnings.push(warning);
+  const result = included.length === 1 ? included[0]! : meanRunResults(included, locale);
+  for (const warning of saturationWarnings(loads, locale)) result.warnings.push(warning);
 
-  if (completed.length > 1) result.replications = summarizeRunResults(completed);
+  if (completed.length > 1) result.replications = summarizeRunResults(completed, locale);
   if (cancelled) {
     result.cancelled = true;
     result.completedReplications = completed.length;
