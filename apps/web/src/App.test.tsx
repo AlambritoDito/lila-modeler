@@ -12,6 +12,9 @@ import { applyTheme } from './theme/applyTheme';
 // clicks and reads come from the base catalog instead of being written by hand: a literal here
 // would only pin which language the catalog happens to be in.
 import { en as T } from './strings.en';
+// The Spanish catalog is only read by the language tests (LILA-210): what they assert is
+// that the app switched catalogs, and the only honest way to say that is with the other one.
+import { es as ES } from './strings.es';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
@@ -406,9 +409,10 @@ it('con puente (escritorio) las preferencias salen y entran por userData, no por
   const escrito: unknown[] = [];
   // localStorage dice otra cosa a propósito: con puente no se lee ni se escribe.
   localStorage.setItem('lila.tema', 'centinela');
+  localStorage.setItem('lila.idioma', 'centinela');
   vi.stubGlobal('lila', {
     pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
-    readSettings: async () => ({ tema: 'papel', densidad: 'comoda' }),
+    readSettings: async () => ({ tema: 'papel', densidad: 'comoda', idioma: 'es' }),
     writeSettings: async (a: unknown) => { escrito.push(a); },
   });
   await act(async () => root.unmount());
@@ -423,6 +427,14 @@ it('con puente (escritorio) las preferencias salen y entran por userData, no por
   await act(async () => { select.value = 'eva-01'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(escrito).toContainEqual({ tema: 'eva-01' });
   expect(localStorage.getItem('lila.tema')).toBe('centinela');
+  // El idioma viaja por el mismo camino (LILA-210): lo que dice el puente es lo que se aplica —la
+  // app arranca en español aunque jsdom hable `en-US`— y lo que se cambia vuelve al puente.
+  expect(container.textContent).toContain(ES.app.modos.simular);
+  expect(document.documentElement.lang).toBe('es');
+  const idioma = selectIdioma();
+  await act(async () => { idioma.value = 'en'; idioma.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(escrito).toContainEqual({ idioma: 'en' });
+  expect(localStorage.getItem('lila.idioma')).toBe('centinela');
 });
 it('un puente sin readSettings (preload viejo) arranca igual, con lienzo (QA #275)', async () => {
   // `preferencias()` no puede rechazar: el efecto que la llama no recoge el rechazo, así que la app
@@ -443,6 +455,74 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
   expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
 });
+
+// ---------- idioma (LILA-210) ----------
+
+it('sin nada guardado arranca en el idioma del sistema (LILA-210)', async () => {
+  // `navigator.language` es de solo lectura y vive en el prototipo: se tapa con una propiedad
+  // propia y se quita al terminar, que es como el resto de la suite vuelve a ver «en-US».
+  Object.defineProperty(navigator, 'language', { value: 'es-MX', configurable: true });
+  try {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App store={session} />));
+    expect(container.textContent).toContain(ES.app.modos.simular);
+    expect(container.textContent).not.toContain(T.app.modos.rutas);
+    expect(document.documentElement.lang).toBe('es');
+    // Y sin escribir nada: seguir al sistema es la preferencia de fábrica, no una elección.
+    expect(localStorage.getItem('lila.idioma')).toBeNull();
+    expect(selectIdioma().value).toBe('auto');
+  } finally {
+    delete (navigator as { language?: string }).language;
+  }
+});
+
+it('cambiar de idioma repinta SIN remontar el lienzo y lo recuerda (LILA-210)', async () => {
+  const montajesAntes = mocks.montajes;
+  expect(container.textContent).toContain(T.app.modos.rutas);
+  const select = selectIdioma();
+  await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // El árbol entero se repinta con el catálogo nuevo…
+  expect(container.textContent).toContain(ES.app.modos.rutas);
+  expect(container.textContent).not.toContain(T.app.modos.rutas);
+  expect(document.documentElement.lang).toBe('es');
+  // …y el lienzo sigue siendo el mismo: la pila de deshacer y la selección no se pierden por
+  // cambiar de idioma, que es justo el punto (el mismo trato que el tema en LILA-113).
+  expect(mocks.montajes).toBe(montajesAntes);
+  // Se guarda la PREFERENCIA, que aquí coincide con el idioma porque se eligió a mano.
+  expect(localStorage.getItem('lila.idioma')).toBe('es');
+});
+
+it('volver a «auto» devuelve el idioma al sistema (LILA-210)', async () => {
+  const select = selectIdioma();
+  await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await act(async () => { select.value = 'auto'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // jsdom habla `en-US`, así que seguir al sistema es volver al catálogo base.
+  expect(container.textContent).toContain(T.app.modos.rutas);
+  expect(localStorage.getItem('lila.idioma')).toBe('auto');
+});
+
+it('un idioma guardado que no existe cae en «auto» sin romper nada (LILA-210)', async () => {
+  // De una versión anterior, o de un `estado.json` tocado a mano: `fr` no es un catálogo que la
+  // app tenga, y arrancar tiene que seguir arrancando.
+  localStorage.setItem('lila.idioma', 'fr');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.textContent).toContain(T.app.modos.rutas);
+  expect(document.documentElement.lang).toBe('en');
+  expect(selectIdioma().value).toBe('auto');
+});
+
+it('el idioma guardado manda sobre el del sistema (LILA-210)', async () => {
+  localStorage.setItem('lila.idioma', 'es');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.textContent).toContain(ES.app.modos.rutas);
+  expect(selectIdioma().value).toBe('es');
+});
+
 /** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
 const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
 /**

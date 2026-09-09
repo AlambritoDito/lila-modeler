@@ -15,7 +15,7 @@
  *
  * Fuera del barrido, y por qué:
  *
- * - `strings.es.ts`: es el catálogo, ahí es donde tienen que estar.
+ * - `strings.en.ts` y `strings.es.ts`: son los catálogos, ahí es donde tienen que estar.
  * - `*.test.ts` / `*.test.tsx`: un test puede escribir el texto que espera, y varios lo hacen
  *   porque así se lee mejor qué está comprobando.
  * - `*-demo.tsx`: `results.html` y `compare.html` son páginas de desarrollo que `vite.config.ts`
@@ -27,6 +27,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { en } from './strings.en';
+import { es } from './strings.es';
 
 /** `apps/web/src`, resuelto desde este archivo: el test no depende del `cwd` de vitest. */
 const RAIZ = fileURLToPath(new URL('.', import.meta.url));
@@ -78,6 +80,7 @@ function fuentes(directorio: string, salida: string[] = []): string[] {
       !/\.test\.tsx?$/.test(entrada) &&
       !/\.d\.ts$/.test(entrada) &&
       !/-demo\.tsx$/.test(entrada) &&
+      entrada !== 'strings.en.ts' &&
       entrada !== 'strings.es.ts'
     ) {
       salida.push(ruta);
@@ -155,6 +158,10 @@ describe('LILA-066 · los textos de la UI viven en strings.es.ts', () => {
     expect(archivos).toContain('App.tsx');
     expect(archivos).toContain('ScenarioPanel.tsx');
     expect(archivos).toContain('store/DesktopStore.ts');
+    // `ids.ts` (LILA-210) is code, not a catalog: the guard has to keep looking at it, or a label
+    // could come back in disguised as an id.
+    expect(archivos).toContain('ids.ts');
+    expect(archivos).not.toContain('strings.en.ts');
     expect(archivos).not.toContain('strings.es.ts');
     expect(archivos.filter((a) => a.includes('.test.'))).toEqual([]);
     expect(archivos.filter((a) => a.endsWith('-demo.tsx'))).toEqual([]);
@@ -192,5 +199,73 @@ describe('LILA-066 · los textos de la UI viven en strings.es.ts', () => {
     expect(sonda('const x = <p>{S.app.nuevo}{\' \'}·{\' \'}{n}</p>;')).toEqual([]);
     expect(sonda('const x = <Campo etiqueta="intervals" />;')).toEqual([]);
     expect(sonda("const c = modeler.get<Canvas>('canvas');")).toEqual([]);
+  });
+});
+
+/**
+ * Second guard of LILA-210: the two catalogs have to be the *same* catalog in two languages.
+ *
+ * `tsc` already refuses a translation that forgets a key or invents one — `strings.es.ts` is
+ * annotated with `Strings`, which is derived from `strings.en.ts`. What the type cannot see is
+ * exactly what breaks at runtime: an entry typed `Record<string, string>` (whose keys are free by
+ * construction), and a function whose arity drifted because the translation dropped a parameter it
+ * did not need. So the same comparison is done here by walking both objects.
+ */
+const describir = (valor: unknown, camino: string, salida: Map<string, string>): Map<string, string> => {
+  if (EXCEPCIONES.has(camino)) {
+    salida.set(camino, 'excepción');
+    return salida;
+  }
+  if (typeof valor === 'function') {
+    // The parameters are part of the contract: `replicacion(actual, total)` takes two numbers in
+    // every language, and a translation that ignores one still has to accept it.
+    salida.set(camino, `función/${(valor as (...args: unknown[]) => unknown).length}`);
+  } else if (Array.isArray(valor)) {
+    salida.set(camino, `lista/${valor.length}`);
+    valor.forEach((item, i) => describir(item, `${camino}[${i}]`, salida));
+  } else if (valor !== null && typeof valor === 'object') {
+    salida.set(camino, 'objeto');
+    for (const [clave, dentro] of Object.entries(valor)) {
+      describir(dentro, camino === '' ? clave : `${camino}.${clave}`, salida);
+    }
+  } else {
+    salida.set(camino, typeof valor);
+  }
+  return salida;
+};
+
+/**
+ * The only entries whose *shape* is allowed to differ between languages, each with its reason.
+ * Their content is asserted one by one below, so an exception is not a hole in the guard.
+ */
+const EXCEPCIONES = new Map<string, string>([
+  [
+    'tokenSim.traducciones',
+    // The inventory of strings `bpmn-js-token-simulation` writes into the canvas in English. In
+    // the base language there is nothing to translate, so it is empty by construction.
+    'inventario de cadenas del módulo, vacío en la lengua base',
+  ],
+]);
+
+describe('LILA-210 · los dos catálogos tienen las mismas claves', () => {
+  it('cada clave existe en ambos, con la misma clase de valor y la misma aridad', () => {
+    const base = describir(en, '', new Map());
+    const traduccion = describir(es, '', new Map());
+    // Two directions, and each failure names the paths: the ones the translation is missing, and
+    // the ones it invented or gave a different kind of value.
+    expect([...traduccion.keys()].filter((k) => !base.has(k))).toEqual([]);
+    expect([...base.keys()].filter((k) => !traduccion.has(k))).toEqual([]);
+    expect([...base].filter(([k, v]) => traduccion.get(k) !== v).map(([k, v]) => `${k}: ${v} ≠ ${traduccion.get(k)}`)).toEqual([]);
+  });
+
+  it('cada excepción está donde dice estar y es la que dice ser', () => {
+    // `tokenSim.traducciones` is the one entry whose shape differs: empty in English — the module
+    // already writes English — and the actual inventory in Spanish. Both halves are checked, so
+    // an exception that stopped being true (a Spanish catalog that lost its inventory) fails here.
+    expect([...EXCEPCIONES.keys()]).toEqual(['tokenSim.traducciones']);
+    expect(en.tokenSim.traducciones).toEqual({});
+    expect(Object.keys(es.tokenSim.traducciones).length).toBeGreaterThan(0);
+    // And what it translates is what the module writes: the key is the English text.
+    expect(es.tokenSim.traducciones['Reset Simulation']).toBeTypeOf('string');
   });
 });
