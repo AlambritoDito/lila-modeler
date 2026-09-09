@@ -1,5 +1,7 @@
 # Lila Modeler — propuesta "Ecosystem first": motor Python sobre SimPy, editor bpmn-js, formatos del ecosistema (Prosimos JSON, qbp, BPSim, XES/OCEL) en los bordes
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 **Ángulo**: Ecosystem first: reutilizar al máximo el ecosistema open source de BPM, simulación y process mining (SimPy, bpmn-js/bpmn-moddle, Prosimos/Simod como formato y oráculo, BPSim/qbp como adaptadores, pm4py aislado por licencia), escribir solo la capa BPMN que nadie ofrece con licencia permisiva, y optimizar para que la fase de process mining (descubrir escenarios AS-IS desde logs) sea barata. Se declara honestamente el costo: dos runtimes (Python + TypeScript), y el modo "navegador sin backend" es más pesado (Pyodide) y llega después del CLI y del servidor local.
 
 ## Resumen

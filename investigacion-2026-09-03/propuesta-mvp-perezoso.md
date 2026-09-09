@@ -1,5 +1,7 @@
 # Lila Modeler — propuesta "MVP perezoso": un solo lenguaje, un solo runtime, cero servidores
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 **Ángulo**: Lazy MVP first: el camino más corto y creíble a un simulador con paridad Bizagi (niveles 1–4) que un estudiante o analista pueda usar en un mes, en macOS/Linux/navegador, con las costuras mínimas para que la plataforma de Process Intelligence se monte encima sin reescribir nada.
 
 ## Resumen

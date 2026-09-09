@@ -1,5 +1,7 @@
 # Lila Modeler — propuesta "Dominio primero": un archivo canónico, tres contratos JSON, un motor propio
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 **Ángulo**: Domain first. Fijar con cuidado las siete cosas caras de cambiar (identidad de elemento, identidad y versión de proceso, namespace de extensión, modelo de escenario, contrato del motor y de resultados, layout de archivos, forma de las operaciones que exponen CLI/REST/MCP) y hacer todo lo demás de la manera más barata posible. El simulador es el módulo #1; los módulos #2..#N se enganchan a esos contratos, no al código del simulador.
 
 ## Resumen

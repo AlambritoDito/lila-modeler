@@ -1,5 +1,7 @@
 # Qué hace exactamente la simulación de Bizagi Modeler (niveles, parámetros, salidas, persistencia, estado 2026, limitaciones) y checklist de paridad para Lila Modeler
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación

@@ -1,5 +1,7 @@
 # Architecture Decision Log
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](./) and [`README.md`](../README.md).
+
 Este documento registra decisiones actuales. Son reversibles mientras el proyecto esté en etapa temprana.
 
 ---
