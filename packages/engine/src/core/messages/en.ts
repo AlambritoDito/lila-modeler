@@ -32,7 +32,7 @@ export const coreEn: CoreCatalog = {
     'E-CAL-VACIO/sin-intervalos': (name) => `${name}: the calendar has no open intervals.`,
     'E-CAL-VACIO/anonimo': () => 'the calendar has no open intervals.',
     'E-CAL-VACIO/interseccion': (elementId) =>
-      `${elementId}: the intersection of the calendars of the task is empty.`,
+      `${elementId}: the intersection of the task's calendars is empty.`,
     'E-CAL-VACIO/pool-sin-tramos': () => 'the pool has no open capacity slice.',
     'E-CAL-DESCONOCIDO': (subject, calendar) => `${subject}: the calendar ${calendar} does not exist.`,
 

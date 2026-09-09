@@ -996,10 +996,10 @@ entran en la tabla de errores del usuario ni en la lista de avisos. Son:
 | `E-REC-SIN-ASIGNACION` | una solicitud concedida se quedó sin pool (`core/resources.ts`) |
 | `E-REC-ESTADO` | uso negativo en un pool (`core/resources.ts`) |
 | `E-REPLICACIONES-INSUFICIENTES` | menos de 2 valores o replicaciones para el IC 95 % (`core/replications.ts`) |
-| `E-REPLICACIONES-VACIAS` | no hay resultados que agregar (`core/replications.ts`) |
+| `E-REPLICACIONES-VACIAS` | no hay resultados que agregar (`core/run.ts`, `meanRunResults`) |
 | `E-KPI-INCONSISTENTE` | dos replicaciones con distinto conjunto de KPI (`core/replications.ts`) |
 | `E-KPI-NO-FINITO` | un KPI de una replicación no es finito (`core/replications.ts`) |
-| `E-AGREGADO-NO-NUMERICO` | la estructura de métricas no es promediable (`core/replications.ts`) |
+| `E-AGREGADO-NO-NUMERICO` | la estructura de métricas no es promediable (`core/run.ts`, `meanShape`) |
 | `E-COMPARE-VACIO` | `compare()` sin ningún resultado (`core/compare.ts`) |
 
 La lista vive también en el código, en `INTERNAL_CODES` (`packages/engine/src/messages/index.ts`),

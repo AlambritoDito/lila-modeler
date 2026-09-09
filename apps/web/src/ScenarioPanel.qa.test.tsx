@@ -461,6 +461,6 @@ describe('campos numéricos', () => {
     expect(run['seed']).toBe('abc');
     expect('warmup' in run).toBe(false);
     // Y se marca, sin bloquear la escritura, con el texto del catálogo (LILA-202, LILA-211).
-    expect(document.body.textContent).toContain('must be a number, not a text');
+    expect(document.body.textContent).toContain('must be a number, not a string');
   });
 });

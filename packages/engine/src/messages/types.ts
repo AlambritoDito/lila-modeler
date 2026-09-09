@@ -71,7 +71,7 @@ export type Constructions = Record<ConstructionId, string>;
  * a key set reads the same in both locales.
  */
 export interface ZodMessages {
-  /** zod type name, e.g. `string` -> `a text`. Unknown names come back unchanged. */
+  /** zod type name, e.g. `string` -> `a string`. Unknown names come back unchanged. */
   typeName: (name: string) => string;
   /** Unit of a size bound, by container: `string` counts characters, everything else elements. */
   units: (origin: string, amount: number | bigint) => string;

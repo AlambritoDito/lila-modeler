@@ -89,7 +89,15 @@ export function zodErrorMap(locale: Locale = 'en'): z.core.$ZodErrorMap {
 }
 
 /**
- * @deprecated Usa `zodErrorMap('es')`. Se conserva porque es público por `@lila/engine/schema`.
+ * @deprecated Usa `parseScenario(raw, { locale: 'es' })`, o
+ * `scenarioSchema('es').safeParse(raw, { error: zodErrorMap('es') })` si necesitas el esquema
+ * suelto. Se conserva porque es público por `@lila/engine/schema`.
+ *
+ * Cuidado: desde LILA-211 el mapa de errores **por sí solo ya no basta** para tener el escenario
+ * en español. Zod no consulta el mapa para los `message:` que viven dentro del esquema (`refine`,
+ * `regex`, `min`: R8, R11, R13, `E-CAL-VACIO`…), así que aplicarlo sobre el `ScenarioSchema` del
+ * idioma por defecto deja esos defectos en inglés. Hay que construir el esquema en el idioma —que
+ * es justo lo que hacen las dos formas de arriba—.
  */
 export const erroresEnEspanol: z.core.$ZodErrorMap = zodErrorMap('es');
 

@@ -57,6 +57,3 @@ export const INTERNAL_CODES: ReadonlySet<ProblemCode> = new Set<ProblemCode>([
   'E-REPLICACIONES-INSUFICIENTES',
   'E-REPLICACIONES-VACIAS',
 ]);
-
-/** Every locale the catalog ships, in a stable order. */
-export const LOCALES: readonly Locale[] = ['en', 'es'];

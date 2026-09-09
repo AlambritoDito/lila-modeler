@@ -14,7 +14,7 @@ const TYPES: Record<string, string> = {
   number: 'a number',
   object: 'an object',
   record: 'an object',
-  string: 'a text',
+  string: 'a string',
   undefined: 'nothing',
 };
 
