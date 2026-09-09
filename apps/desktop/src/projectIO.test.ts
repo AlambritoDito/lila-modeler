@@ -670,6 +670,24 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     }
   });
 
+  it('(P2 bis) «Guardar como» con diagramOnly: E-DESTINO-INVALIDO y carpeta intacta (QA ronda 2, LILA-206)', async () => {
+    // La otra mitad del contrato de «Guardar como»: sin este guardia el destino se quedaba con un
+    // `model.bpmn` a secas —sin manifiesto, sin escenarios, sin `runs/`—, o sea el usuario perdía
+    // en silencio todo lo que no es el XML en la acción que sirve para colocar el diagrama suelto.
+    await writeFile(join(dir, 'ventas.bpmn'), XML_VENTAS, 'utf8');
+    const { document } = await readProjectFolder(dir, 'ventas.bpmn');
+    const destino = await mkdtemp(join(tmpdir(), 'lila-projectIO-destino-'));
+    try {
+      const error = await captureError(() =>
+        writeProjectFolder(destino, { ...document, scenarios: documentoBase().scenarios }, { saveAs: true, diagramOnly: true }),
+      );
+      expect((error as ProjectIOError).code).toBe('E-DESTINO-INVALIDO');
+      expect(await readdir(destino)).toEqual([]);
+    } finally {
+      await rm(destino, { recursive: true, force: true });
+    }
+  });
+
   it('un model.bpmn puesto a mano (carpeta sin manifiesto) NO es un diagrama suelto', async () => {
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
     const { loose } = await readProjectFolder(dir);

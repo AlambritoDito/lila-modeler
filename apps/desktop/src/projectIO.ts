@@ -691,6 +691,17 @@ export async function writeProjectFolder(
         `"Guardar como" escribe el modelo en "${MODEL_FILE}"; no puede crear el proyecto en "${modelFile}".`,
       );
     }
+    // La otra mitad del mismo contrato (QA ronda 2 de LILA-206): con `diagramOnly` explícito, un
+    // «Guardar como» dejaría en la carpeta elegida SOLO el `model.bpmn` — sin manifiesto, sin
+    // escenarios y sin `runs/` —, y el usuario perdería en silencio, en la acción que sirve
+    // justamente para colocar el diagrama suelto, todo lo que no es el XML. La UI tampoco lo manda
+    // (`DesktopStore.saveProject` no reenvía `diagramOnly` hacia un destino nuevo).
+    if (options.diagramOnly === true) {
+      throw new ProjectIOError(
+        'E-DESTINO-INVALIDO',
+        '"Guardar como" crea el proyecto completo; no puede escribir solo el diagrama en la carpeta elegida.',
+      );
+    }
     await assertFolderNotOccupied(dir, document.id);
   }
   // ponytail: el manifiesto describe UN solo diagrama, el `model.bpmn` de la carpeta (LILA-206,
