@@ -160,14 +160,14 @@ test('devuelve los elementos fuera del perfil en orden de documento, sin formate
       id: 'Boundary_1',
       qname: 'bpmn:BoundaryEvent',
       name: 'Vence el plazo',
-      construction: 'evento adjunto a actividad (boundary event)',
+      construction: 'boundaryEvent',
     },
     { id: 'Flow_Boundary', qname: 'bpmn:SequenceFlow', name: '' },
     {
       id: 'Gateway_Eventos',
       qname: 'bpmn:EventBasedGateway',
       name: '',
-      construction: 'gateway basado en eventos',
+      construction: 'eventBasedGateway',
     },
   ]);
   // El IR queda estructuralmente sano: ni el elemento ni su flujo entran.

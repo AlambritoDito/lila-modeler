@@ -257,7 +257,7 @@ describe('QA LILA-186 · ataque 7: `triggerCount` en un timer intermedio', () =>
         code: 'E-CAMPO-NO-APLICA',
         path: 'elements.T.triggerCount',
         severity: 'error',
-        message: 'elements.T.triggerCount: solo se admite en un evento de inicio.',
+        message: 'elements.T.triggerCount: only accepted on a start event.',
       },
     ]);
   });
@@ -324,7 +324,7 @@ describe('QA LILA-186 · ataque 8: avisos del lint y del motor', () => {
       elements: { A: { processingTime: { type: 'constant', value: 60 } } },
     });
     expect(mudo.warnings).toEqual([
-      'W-START-SIN-LLEGADAS: Start: el start no declara interTriggerTimer ni triggerCount y no genera casos.',
+      'W-START-SIN-LLEGADAS: Start: the start declares neither interTriggerTimer nor triggerCount and generates no cases.',
     ]);
   });
 });

@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseBpmn, validate } from '../../src/bpmn/index.js';
-import { simulate } from '../../src/index.js';
+import { simulate, type Locale } from '../../src/index.js';
 import {
   ScenarioSchema,
   scenarioErrors,
@@ -100,34 +100,48 @@ export function loadPedidoScenario(seed: number): ResolvedScenario {
   };
 }
 
+/** Idioma de la corrida; el golden versionado es el del idioma por defecto (LILA-211). */
+export interface GoldenOptions {
+  locale?: Locale | undefined;
+}
+
 /** Valida y ejecuta una variante del ejemplo sin materializar el event log. */
-export async function renderPedidoScenario(scenario: ResolvedScenario): Promise<string> {
+export async function renderPedidoScenario(
+  scenario: ResolvedScenario,
+  options: GoldenOptions = {},
+): Promise<string> {
   const xml = readFileSync(resolve(EXAMPLE_DIR, scenario.model), 'utf8');
   const parsedBpmn = await parseBpmn(xml);
-  const modelValidation = validate(parsedBpmn.ir, { unsupported: parsedBpmn.unsupported });
+  const modelValidation = validate(parsedBpmn.ir, {
+    unsupported: parsedBpmn.unsupported,
+    locale: options.locale,
+  });
   if (modelValidation.errors.length > 0) {
     throw new Error(`examples/pedido/model.bpmn inválido: ${canonicalJson(modelValidation.errors)}`);
   }
 
-  const errors = scenarioErrors(validateScenario(scenario, parsedBpmn.ir));
+  const errors = scenarioErrors(validateScenario(scenario, parsedBpmn.ir, { locale: options.locale }));
   if (errors.length > 0) {
     throw new Error(`examples/pedido/as-is.scenario.json inválido: ${canonicalJson(errors)}`);
   }
 
-  return canonicalJson(simulate(parsedBpmn.ir, scenario, { log: false }));
+  return canonicalJson(simulate(parsedBpmn.ir, scenario, { log: false, locale: options.locale }));
 }
 
 /**
  * Golden de M1: ejecuta el ejemplo real después de retirar explícitamente las capas que M1 todavía
  * no interpretaba. Así el mismo oráculo permanece válido al introducir ResourceManager en M2.
  */
-export async function renderPedidoGolden(seed: number): Promise<string> {
-  return renderPedidoScenario(withoutResourcesAndCalendars(loadPedidoScenario(seed)));
+export async function renderPedidoGolden(seed: number, options: GoldenOptions = {}): Promise<string> {
+  return renderPedidoScenario(withoutResourcesAndCalendars(loadPedidoScenario(seed)), options);
 }
 
 /** Golden de nivel 3: el ejemplo real con recursos y sin la capa de calendarios. */
-export async function renderPedidoNivel3Golden(seed: number): Promise<string> {
-  return renderPedidoScenario(withoutCalendars(loadPedidoScenario(seed)));
+export async function renderPedidoNivel3Golden(
+  seed: number,
+  options: GoldenOptions = {},
+): Promise<string> {
+  return renderPedidoScenario(withoutCalendars(loadPedidoScenario(seed)), options);
 }
 
 /**

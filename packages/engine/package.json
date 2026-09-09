@@ -11,6 +11,7 @@
     "./bpmn": "./dist/bpmn/index.js",
     "./bpmn/lila.moddle.json": "./dist/bpmn/lila.moddle.json",
     "./schema": "./dist/scenario.js",
+    "./messages": "./dist/messages/index.js",
     "./cli-shared": "./dist/cli-shared.js",
     "./result-schema": "./dist/result.schema.js",
     "./csv": "./dist/csv.js",

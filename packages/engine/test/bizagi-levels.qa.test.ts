@@ -127,7 +127,7 @@ test('LILA-198: el nivel 1 avisa una sola vez de las tareas sin tiempo, y avisa 
 
   const warnings = simulate(ir, scenario, { log: false }).warnings;
   expect(warnings.filter((warning) => warning.startsWith('W-TAREA-SIN-TIEMPO'))).toEqual([
-    `W-TAREA-SIN-TIEMPO: ${tareas.join(', ')}: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.`,
+    `W-TAREA-SIN-TIEMPO: ${tareas.join(', ')}: the scenario declares no processingTime at all; those tasks take 0 seconds.`,
   ]);
 
   const aviso = validateScenario(scenario, ir).find((problema) => problema.code === 'W-SIN-SEED');
