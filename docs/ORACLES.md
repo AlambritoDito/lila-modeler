@@ -79,7 +79,7 @@ when sampling. Approximating it with another family (a truncated normal with mat
 variance, for example) would compare two different laws and turn any discrepancy into noise that
 cannot be attributed. The uniform distribution over the same `[min, max]` is sampled
 **identically** by both engines (Lila `{"type":"uniform","min":a,"max":b}`; Prosimos
-`st.uniform.rvs(loc=a, scale=b-a)`), so the comparison measures tail semantics and metric
+`st.uniform.rvs(loc=a, scale=b-a)`), so the comparison measures queue semantics and metric
 accounting, which is what matters.
 
 Other equivalences from the conversion, all in `tools/oracles/to_prosimos.py`:
