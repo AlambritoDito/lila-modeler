@@ -51,6 +51,8 @@ npx lila validate examples/pedido/model.bpmn
 
 ```
 Proceso Process_Restaurante (Restaurante)
+Exportado por Lila Modeler examples (hand-written) 0.0.0
+
 Nodos (11): and 2, end 2, start 1, task 4, timer 1, xor 1
   start     StartEvent_Pedido  Pedido recibido
   ...
@@ -85,8 +87,8 @@ Task_TomarPedido  Tomar pedido       698.32272                                41
 Avisos:
   W-MSGFLOW: Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
   ...
-JSON: out/result.json
-CSV: out/csv
+JSON: /ruta/al/repo/out/result.json
+CSV: /ruta/al/repo/out/csv
 ```
 
 **3. Comparar AS-IS contra TO-BE** (un cajero más) lado a lado:
@@ -99,6 +101,9 @@ npx lila compare \
 ```
 
 ```
+Proceso Process_Restaurante (Restaurante)
+Unidad de tiempo min (escenario base) · Utilización en %
+
 Escenarios comparados
 #  Nombre           Archivo                                        Semilla  Replicaciones
 -  ---------------  ---------------------------------------------  -------  -------------
@@ -107,14 +112,15 @@ Escenarios comparados
 
 Process elements
 Id                Name              Metric                               AS-IS (base)  TO-BE 3 cajeros
+...
 Task_TomarPedido  Tomar pedido      Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
 ...
 ```
 
-`--json`/`--csv` funcionan igual en `run` y en `compare`; `--help` en cualquier subcomando lista
-todas las opciones. El formato de escenario está en `docs/SCENARIO_FORMAT.md`, el de resultados en
-`docs/RESULTS_FORMAT.md`, y el mapeo de nombres de columna contra Bizagi en
-`docs/BIZAGI_PARITY.md`.
+`--json` funciona igual en `run` y en `compare`; `--csv` solo en `run`. `--help` en cualquier
+subcomando lista todas las opciones. El formato de escenario está en
+`docs/SCENARIO_FORMAT.md`, el de resultados en `docs/RESULTS_FORMAT.md`, y el mapeo de nombres
+de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
 
 ## App web
 
@@ -144,7 +150,7 @@ empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se dist
 repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
 en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
 intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. Todavía no hay
-Releases de GitHub con el `.dmg` listo para descargar, ni icono propio de la app (issue #76).
+Releases de GitHub con el `.dmg` listo para descargar, ni icono propio de la app (issue #72).
 
 Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
 en [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
@@ -172,8 +178,10 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
   repo; se usa clonando y compilando como arriba.
 - **Sin demo online todavía**: la app web solo corre local (`npm run dev -w @lila/web`) o desde el
   `.dmg` de la beta de escritorio.
-- La beta de escritorio solo compila para macOS arm64 (ver arriba); Windows y Linux están
-  configurados en `electron-builder.yml` pero no se han compilado ni probado.
+- **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
+  están configurados en `apps/desktop/electron-builder.yml`, y el workflow `Desktop`
+  (`.github/workflows/desktop.yml`, manual o al empujar a `codex/**`) compila los tres como
+  artefactos de CI, pero no se han probado ni se distribuyen.
 
 ## Estructura del repo
 
