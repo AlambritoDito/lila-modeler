@@ -56,9 +56,13 @@ export function traducirTexto(texto: string): string | undefined {
  * marcado real del módulo sin montar bpmn-js.
  */
 export function traducirSimulacion(raiz: HTMLElement): void {
-  for (const elemento of raiz.querySelectorAll<HTMLElement>('[title]')) {
-    const traducido = traducirTexto(elemento.title);
-    if (traducido !== undefined) elemento.title = traducido;
+  // `aria-label` se lee igual que `title` —lo lleva el botón de cerrar el registro— y los dos se
+  // tocan como atributo: en un `<svg>` la propiedad `.title` ni siquiera existe (QA de #271).
+  for (const atributo of ['title', 'aria-label']) {
+    for (const elemento of raiz.querySelectorAll(`[${atributo}]`)) {
+      const traducido = traducirTexto(elemento.getAttribute(atributo) ?? '');
+      if (traducido !== undefined) elemento.setAttribute(atributo, traducido);
+    }
   }
   const textos = raiz.ownerDocument.createTreeWalker(raiz, NodeFilter.SHOW_TEXT);
   for (let nodo = textos.nextNode(); nodo !== null; nodo = textos.nextNode()) {
@@ -80,7 +84,7 @@ export function observarSimulacion(raiz: HTMLElement): () => void {
     traducirSimulacion(raiz);
   });
   observador.observe(raiz, {
-    attributeFilter: ['title'],
+    attributeFilter: ['title', 'aria-label'],
     attributes: true,
     characterData: true,
     childList: true,

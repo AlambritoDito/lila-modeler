@@ -31,7 +31,7 @@ function lienzoConSimulacion(): HTMLElement {
       <button class="bts-entry" data-speed="0.5" title="Set animation speed = Slow"></button>
     </div>
     <div class="bts-log">
-      <div class="bts-header">Simulation Log</div>
+      <div class="bts-header">Simulation Log<button class="bts-close" aria-label="Close"></button></div>
       <p class="bts-entry placeholder">No Entries</p>
     </div>
     <div class="bts-context-pad-container">
@@ -69,11 +69,31 @@ describe('«Validar rutas»: la UI del módulo en español (#264)', () => {
     expect(lienzo.querySelector('.placeholder')?.textContent).toBe(
       S.tokenSim.traducciones['No Entries'],
     );
-    // Ni un solo texto en inglés a la vista, y ningún `title` sin traducir.
+    // El botón de cerrar el registro solo tiene `aria-label`: sin él, un lector de pantalla
+    // seguiría diciendo «Close» (QA de #271).
+    expect(lienzo.querySelector('.bts-close')?.getAttribute('aria-label')).toBe(
+      S.tokenSim.traducciones['Close'],
+    );
+    // Ni un solo texto en inglés a la vista, y ningún `title` ni `aria-label` sin traducir.
     expect(lienzo.textContent).not.toMatch(/Token Simulation|Simulation Log|No Entries/);
-    for (const boton of lienzo.querySelectorAll<HTMLElement>('[title]')) {
-      expect(traducirTexto(boton.title)).toBeUndefined();
+    for (const nodo of lienzo.querySelectorAll('[title], [aria-label]')) {
+      expect(traducirTexto(nodo.getAttribute('title') ?? '')).toBeUndefined();
+      expect(traducirTexto(nodo.getAttribute('aria-label') ?? '')).toBeUndefined();
     }
+  });
+
+  it('traduce las entradas que el registro compone al vuelo (#271)', () => {
+    const lienzo = lienzoConSimulacion();
+    // `Log.js` compone «Process started» y «Process finished» en cada corrida: son la primera y
+    // la última línea del registro, y el QA de #271 las vio en inglés en el navegador.
+    for (const texto of ['Process started', 'Process finished', 'Task']) {
+      lienzo.querySelector('.bts-log')?.appendChild(entradaDeRegistro(texto));
+    }
+    traducirSimulacion(lienzo);
+    expect(lienzo.textContent).not.toMatch(/Process (started|finished)/);
+    expect(lienzo.textContent).toContain(S.tokenSim.traducciones['Process started']);
+    expect(lienzo.textContent).toContain(S.tokenSim.traducciones['Process finished']);
+    expect(lienzo.textContent).toContain(S.tokenSim.traducciones['Task']);
   });
 
   it('deja en paz lo que no es suyo y se puede repetir sin cambiar nada', () => {

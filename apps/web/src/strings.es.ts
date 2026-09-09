@@ -562,6 +562,16 @@ export const S = {
       'Found unsupported elements': 'Hay elementos que la animación no admite',
       'Not supported': 'No admitido',
       Finished: 'Terminada',
+      Close: 'Cerrar',
+      // Entradas que `Log.js` compone al vuelo: son la primera y la última de cada corrida, y
+      // sin ellas el registro abre en inglés (QA de #271). Un subproceso **con nombre** compone
+      // `<nombre> finished`, y ese se queda como está: la clave sería el nombre del modelo.
+      'Process started': 'Proceso iniciado',
+      'Process finished': 'Proceso terminado',
+      'Process canceled': 'Proceso cancelado',
+      'SubProcess started': 'Subproceso iniciado',
+      'SubProcess finished': 'Subproceso terminado',
+      'SubProcess canceled': 'Subproceso cancelado',
       Slow: 'Lenta',
       Normal: 'Normal',
       Fast: 'Rápida',
@@ -580,6 +590,7 @@ export const S = {
       'Receive Task': 'Tarea de recepción',
       'Business Rule Task': 'Tarea de regla de negocio',
       'Call Activity': 'Actividad de llamada',
+      Task: 'Tarea',
     } as Record<string, string>,
     /** `title="Set animation speed = Slow"`: el prefijo se traduce y la velocidad se busca arriba. */
     prefijoVelocidad: 'Set animation speed = ',
