@@ -135,6 +135,14 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   `<nombre>.scenario.json` por cada escenario (por ejemplo `as-is.scenario.json`,
   `to-be.scenario.json`), `lila-project.json` (metadatos: id, nombre, revisiones) y una subcarpeta
   `runs/` con una corrida guardada por archivo.
+- **Un `.bpmn` con otro nombre dentro de la carpeta se guarda como diagrama suelto**: el
+  manifiesto (`lila-project.json`) describe **solo** `model.bpmn` — su nombre y su revisión. Si
+  abres `ventas.bpmn` (doble clic) en una carpeta que ya es un proyecto Lila, `⌘S` escribe ese
+  `ventas.bpmn` y nada más: `model.bpmn`, los escenarios y el manifiesto se quedan byte a byte como
+  estaban, y las corridas no se guardan. Al reabrir la carpeta desde recientes vuelve a verse el
+  proyecto de `model.bpmn`, no el otro diagrama. Para convertir `ventas.bpmn` en un proyecto propio,
+  usa **Guardar como** hacia una carpeta nueva: ahí el XML pasa a ser el `model.bpmn` de ese
+  proyecto nuevo.
 - **Un escenario con JSON roto no impide abrir el proyecto**: ese archivo se excluye y queda
   anotado en `problems`; el resto del proyecto (modelo y los demás escenarios) se abre con
   normalidad. Esto sí se muestra en la interfaz: `App.tsx` lee `doc.problems` al activar el

@@ -363,6 +363,8 @@ export interface WriteProjectOptions {
    * un proyecto abierto por otro `.bpmn` de la misma carpeta (doble clic en `ventas.bpmn`) guarda
    * en ESE archivo, no en el `model.bpmn` de al lado, que se quedaría con el diagrama equivocado.
    * `main.ts` valida que sea un nombre plano `.bpmn` dentro de `dir` antes de llegar aquí.
+   * Un `modelFile` distinto de `model.bpmn` implica `diagramOnly` (LILA-206): el manifiesto
+   * describe solo el `model.bpmn`, así que no se reescribe por guardar otro diagrama al lado.
    */
   readonly modelFile?: string;
   /**
@@ -646,8 +648,9 @@ async function commitWithRollback(
 }
 
 /**
- * Escribe el documento completo — o solo el `.bpmn`, si `options.diagramOnly` (ver
- * `WriteProjectOptions`); el XML va a `options.modelFile` (por defecto `model.bpmn`). Antes de
+ * Escribe el documento completo — o solo el `.bpmn`, si `options.diagramOnly` o si
+ * `options.modelFile` no es `model.bpmn` (ver `WriteProjectOptions` y LILA-206); el XML va a
+ * `options.modelFile` (por defecto `model.bpmn`). Antes de
  * tocar el disco: (a) si `options.saveAs`, verifica que la
  * carpeta no esté ocupada por otro proyecto (`assertFolderNotOccupied`); (b) salvo
  * `options.overwrite`, rechaza si el modelo/manifiesto/algún escenario cambió en disco desde la
@@ -673,7 +676,15 @@ export async function writeProjectFolder(
   }
 
   const modelFile = options.modelFile ?? MODEL_FILE;
-  const diagramOnly = options.diagramOnly === true;
+  // ponytail: el manifiesto describe UN solo diagrama, el `model.bpmn` de la carpeta (LILA-206,
+  // #266). Así que guardar otro `.bpmn` de la misma carpeta —doble clic en `ventas.bpmn` dentro de
+  // un proyecto Lila— escribe SOLO ese archivo: reescribir el manifiesto dejaba
+  // `manifest.model.name = "ventas.bpmn"` y la revisión avanzada sobre un `model.bpmn` que nadie
+  // tocó, y al reabrir la UI enseñaba «ventas.bpmn» encima del contenido de `model.bpmn`. El techo
+  // es ese: un diagrama por manifiesto. Listar varios diagramas (y sus revisiones) es otro ticket.
+  // Defensivo en la capa de disco a propósito: el llamador (`main.ts` → `writeProject`) manda
+  // `diagramOnly` según el `loose` de la lectura, que aquí es `false` (la carpeta SÍ es proyecto).
+  const diagramOnly = options.diagramOnly === true || modelFile !== MODEL_FILE;
   const runsDir = join(dir, RUNS_DIR);
   const runWrites: PendingWrite[] = [];
 
