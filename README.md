@@ -211,7 +211,8 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
 
 ## Licencia
 
-Apache-2.0. Ver [`LICENSE`](LICENSE).
+Apache-2.0. Ver [`LICENSE`](LICENSE). `examples/bizagi-exports/` es CC BY 3.0 del BPMN MIWG (ver su
+README); el resto del repo, Apache-2.0. Titular: Perfer Process (`NOTICE`).
 
 El editor de la app web usa [bpmn-js](https://github.com/bpmn-io/bpmn-js) (MIT + cláusula de marca
 de agua): su licencia exige que la marca **"Powered by bpmn.io"** quede visible en el lienzo, y
