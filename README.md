@@ -149,7 +149,7 @@ Spanish today; English is coming in #279 and #280):
   results.
 
 Details of each mode, the literal interface strings and current limitations are in
-[`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) (written for the desktop beta, but it describes the
+[`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) (written for the desktop beta, but it describes the
 same web app).
 
 ## Desktop beta (macOS)
@@ -167,7 +167,7 @@ installers (`.dmg`, `.exe`, `.AppImage`) and leaves them in a GitHub Release **a
 published by hand.
 
 The full guide — requirements, a usage walkthrough, how to rebuild the `.dmg`, known limitations —
-is in [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
+is in [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md).
 
 ## MCP in 3 lines
 
@@ -217,7 +217,7 @@ The pages under `docs/` are still written in Spanish; they are being translated 
   Modeler's public documentation (validation against public examples), by level.
 - [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
 - [`docs/MCP.md`](docs/MCP.md) — the MCP server, its five tools and how to register it.
-- [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) — the desktop beta.
+- [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
 - [`docs/THEMES.md`](docs/THEMES.md) — the web app's theme format.
 - `LILA_MODELER_ESTRUCTURA.md` — decisions (ADRs), engine design, milestones.
 - `BACKLOG.md` — work breakdown; the tickets live in GitHub Issues (`LILA-nnn` = `#nnn`).
