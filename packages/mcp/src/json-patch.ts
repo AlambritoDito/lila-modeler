@@ -47,6 +47,27 @@ function parsePointer(pointer: string): string[] {
     });
 }
 
+/**
+ * El puntero ya no puede nombrar esas claves, pero el `value` de un `add`/`replace` es JSON del
+ * cliente y `JSON.parse('{"__proto__":{…}}')` **sí** crea una clave propia: se escribía tal cual
+ * en el escenario guardado y `deepMerge` (LILA-204) se la comía en silencio al resolver el
+ * `extends`, dejando en disco un archivo con una clave que el motor ignora. Se rechaza igual que
+ * el segmento: aquí el patch es una orden explícita del agente, no un archivo heredado.
+ */
+function assertValueSinClavesDeProtitipo(value: unknown, path: string): void {
+  if (Array.isArray(value)) {
+    for (const item of value) assertValueSinClavesDeProtitipo(item, path);
+    return;
+  }
+  if (!isPlainObject(value)) return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (FORBIDDEN_SEGMENTS.has(key)) {
+      throw new Error(`json patch: clave prohibida "${key}" en el value de ${path}: escribiría en el prototipo del objeto.`);
+    }
+    assertValueSinClavesDeProtitipo(nested, path);
+  }
+}
+
 function child(container: unknown, key: string): unknown {
   if (Array.isArray(container)) return container[Number(key)];
   if (isPlainObject(container)) return container[key];
@@ -86,6 +107,7 @@ export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): 
     if (op.op !== 'remove' && op.value === undefined) {
       throw new Error(`json patch: la operación "${op.op}" requiere "value" (${op.path}).`);
     }
+    if (op.op !== 'remove') assertValueSinClavesDeProtitipo(op.value, op.path);
     const segments = parsePointer(op.path);
 
     if (op.op === 'test') {

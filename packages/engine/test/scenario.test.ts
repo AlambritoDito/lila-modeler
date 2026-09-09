@@ -7,9 +7,11 @@ import { loadResolvedScenario } from '../src/cli-shared.js';
 import {
   ScenarioSchema,
   parseScenario,
+  resolveExtends,
   scenarioErrors,
   toJsonSchema,
   validateScenario,
+  type ScenarioReader,
 } from '../src/scenario.js';
 import { unsupportedKeywords, validateJsonSchema } from './mini-json-schema.js';
 import { AS_IS, TO_BE, clone, pedidoIr } from './pedido.fixtures.js';
@@ -411,5 +413,44 @@ describe('mensajes del esquema en español (LILA-202)', () => {
     expect(() => loadResolvedScenario('as-is.scenario.json', () => roto)).toThrow(
       'run.warmup: debe ser ≥ 0',
     );
+  });
+});
+
+describe('claves de prototipo en la herencia (LILA-204)', () => {
+  // JSON.parse, **no** un literal de objeto: `{ __proto__: … }` escrito a mano no crea una clave
+  // propia (escribe en el prototipo del propio literal) y el test no probaría nada.
+  const PADRE =
+    '{"version":1,"name":"padre","model":"model.bpmn","run":{"start":"2026-01-01T08:00:00Z","duration":3600}}';
+  const HIJO =
+    '{"extends":"padre.scenario.json","__proto__":{"x":1},"constructor":{"prototype":{"y":1}},"prototype":{"z":1},"run":{"__proto__":{"x":1}}}';
+
+  const read: ScenarioReader = (path) =>
+    JSON.parse(path === 'padre.scenario.json' ? PADRE : HIJO) as unknown;
+
+  test('resolveExtends ignora __proto__, constructor y prototype a cualquier profundidad', () => {
+    const resolved = resolveExtends('hijo.scenario.json', read);
+
+    expect(({} as Record<string, unknown>)['x']).toBeUndefined();
+    expect(({} as Record<string, unknown>)['y']).toBeUndefined();
+    expect(Object.getPrototypeOf(resolved)).toBe(Object.prototype);
+    expect(resolved['x']).toBeUndefined();
+    for (const key of ['__proto__', 'constructor', 'prototype']) {
+      expect(Object.hasOwn(resolved, key), key).toBe(false);
+    }
+
+    const run = resolved['run'] as Record<string, unknown>;
+    expect(Object.getPrototypeOf(run)).toBe(Object.prototype);
+    expect(run['x']).toBeUndefined();
+    expect(run['duration']).toBe(3600); // el resto del padre sí se hereda.
+  });
+
+  test('el escenario malicioso carga y valida como si esas claves no estuvieran', () => {
+    const scenario = loadResolvedScenario('hijo.scenario.json', read);
+
+    expect(({} as Record<string, unknown>)['x']).toBeUndefined();
+    expect(({} as Record<string, unknown>)['y']).toBeUndefined();
+    expect((scenario as unknown as Record<string, unknown>)['x']).toBeUndefined();
+    expect(Object.hasOwn(scenario, 'constructor')).toBe(false);
+    expect(scenario.name).toBe('padre');
   });
 });

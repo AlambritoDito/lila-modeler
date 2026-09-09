@@ -93,6 +93,28 @@ test('los segmentos constructor y prototype también se rechazan', async () => {
   }
 });
 
+test('un value con __proto__ dentro se rechaza y no deja un escenario contaminado en disco (LILA-204)', async () => {
+  const path = copyAsIs();
+  const saveTo = join(scratch, 'hijo.scenario.json');
+  // `JSON.parse`, no un literal: `{ __proto__: … }` escrito a mano no crea una clave propia y el
+  // patch no llevaría nada. Así es como llega de verdad, parseado del JSON-RPC del agente.
+  const value = JSON.parse('{"capacity":3,"__proto__":{"pwnedValue":1}}') as unknown;
+
+  for (const args of [
+    { scenario: path, patch: [{ op: 'replace', path: '/resources/cajero', value }] },
+    { scenario: path, saveTo, patch: [{ op: 'replace', path: '/resources/cajero', value }] },
+    { scenario: path, patch: [{ op: 'add', path: '/resources/nuevo', value: [value] }] },
+  ]) {
+    const result = await patch(args);
+    expect(result.isError, JSON.stringify(args['saveTo'] ?? 'en sitio')).toBe(true);
+    expect(textOf(result)).toContain('prototipo');
+  }
+
+  expect(existsSync(saveTo)).toBe(false);
+  expect((({}) as Record<string, unknown>)['pwnedValue']).toBeUndefined();
+  expect(Object.hasOwn(JSON.parse(readFileSync(path, 'utf8')) as object, '__proto__')).toBe(false);
+});
+
 /* ------------------------------------------------------------------ *
  * JSON Patch RFC 6902
  * ------------------------------------------------------------------ */
