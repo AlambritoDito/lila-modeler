@@ -157,6 +157,39 @@ it('exportar e importar reproduce el tema exacto', async () => {
   expect(JSON.parse(await blobs[1]!.text())).toEqual(JSON.parse(exportado));
 });
 
+it('exportar e importar reproduce byte a byte un tema del usuario editado', async () => {
+  // La ida y vuelta del ticket es la del tema que la persona acaba de tocar, no la del integrado:
+  // un token de cada control (hex, selector de color con alfa, número, familia) y el nombre.
+  const blobs: Blob[] = [];
+  vi.stubGlobal('URL', Object.assign(URL, {
+    createObjectURL: (b: Blob) => { blobs.push(b); return 'blob:tema'; },
+    revokeObjectURL: () => {},
+  }));
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+  teclear(porEtiqueta('Hex de accent.primary'), '#00FFAA');
+  teclear(porEtiqueta('Color de shadow'), '#112233');
+  teclear(porEtiqueta('Tamaño base (px)'), '19');
+  act(() => {
+    const familia = container.querySelector<HTMLSelectElement>('.token select')!;
+    familia.value = 'system-ui, sans-serif';
+    familia.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  teclear(container.querySelector<HTMLInputElement>('.campo input[type="text"]')!, 'Mi tema');
+
+  await act(async () => boton('Exportar').click());
+  const exportado = await blobs[0]!.text();
+  expect(JSON.parse(exportado)).toEqual({
+    name: 'Mi tema',
+    tokens: { ...EVA.tokens, 'accent.primary': '#00FFAA', shadow: '#11223399', 'font.size.base': '19px', 'font.ui': 'system-ui, sans-serif' },
+  });
+  // Byte a byte, no solo `toEqual`: mismo orden de claves y mismo formato, así que el archivo que
+  // el usuario vuelve a exportar es idéntico al que importó.
+  await importar(exportado);
+  await act(async () => boton('Exportar').click());
+  expect(await blobs[1]!.text()).toBe(exportado);
+});
+
 it('un JSON inválido se rechaza con mensaje y sin aplicar nada', async () => {
   const antes = variable('--accent-primary');
   await importar('{ "name": "Malo", "tokens": { "accent.primary": "azul" } }');
@@ -170,6 +203,42 @@ it('un JSON inválido se rechaza con mensaje y sin aplicar nada', async () => {
   expect(container.querySelector('[role="alert"]')?.textContent).toContain('JSON válido');
   expect(guardado).toEqual([]);
   expect(variable('--accent-primary')).toBe(antes);
+});
+
+it.each([
+  // Un array es JSON válido y no es un tema; `{ name }` sin `tokens`, tampoco.
+  ['[]', 'no es un tema'],
+  ['{ "name": "X" }', 'no es un tema'],
+  ['{ "tokens": {} }', 'no tiene nombre'],
+  // El nombre vacío deja el tema sin rótulo en la lista: se rechaza en la puerta.
+  ['{ "name": "", "tokens": {} }', 'no tiene nombre'],
+  ['{ "name": "   ", "tokens": {} }', 'no tiene nombre'],
+  // Colores que CSS ignoraría en silencio dejando la app a medio pintar.
+  ['{ "name": "X", "tokens": { "accent.primary": "#GGGGGG" } }', 'no es un hex'],
+  ['{ "name": "X", "tokens": { "accent.primary": "rgb(1,2,3)" } }', 'no es un hex'],
+  ['{ "name": "X", "tokens": { "accent.primary": 16711680 } }', 'no tiene un valor de texto'],
+  ['{ "name": "X", "tokens": { "density": "enorme" } }', 'La densidad'],
+  // `__proto__` es una clave propia al salir de `JSON.parse`: se cae por no ser un token, y de
+  // paso queda fijado que no llega a escribirse en ningún objeto.
+  ['{ "name": "X", "tokens": { "__proto__": "#FFFFFF" } }', 'no existe en Lila Modeler'],
+])('%s se rechaza con mensaje en español y sin tocar :root', async (json, esperado) => {
+  const antes = variable('--accent-primary');
+  await importar(json);
+  const alerta = container.querySelector('[role="alert"]')?.textContent ?? '';
+  expect(alerta).toContain('No se importó el tema.');
+  expect(alerta).toContain(esperado);
+  expect(guardado).toEqual([]);
+  expect(variable('--accent-primary')).toBe(antes);
+  expect(({} as { contaminado?: string }).contaminado).toBeUndefined();
+});
+
+it('un tema con menos tokens es válido y el hex de tres dígitos también', async () => {
+  // `docs/THEMES.md`: un tema puede traer solo los tokens que cambia, y `#rgb` es un color.
+  await importar('{ "name": "Cian", "tokens": { "accent.primary": "#0cf" } }');
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(guardado).toHaveLength(1);
+  expect(guardado[0]!.tema).toEqual({ name: 'Cian', tokens: { 'accent.primary': '#0cf' } });
+  expect(variable('--accent-primary')).toBe('#0cf');
 });
 
 it('restablecer devuelve el tema del usuario a su origen', () => {
