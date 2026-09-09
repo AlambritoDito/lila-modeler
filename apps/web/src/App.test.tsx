@@ -102,7 +102,11 @@ beforeEach(async () => {
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.abrir.mockResolvedValue(true);
   mocks.worker.mockResolvedValue(done);
-  mocks.exportXml.mockResolvedValue(newModelXml());
+  // El reparseo diferido de `App.tsx` (150 ms tras montar) sustituye `ir` por el del XML
+  // exportado. Para que ese XML nombre la misma tarea que el `ir` falso de `gate` —y el test no
+  // dependa de terminar antes del temporizador— la tarea del modelo nuevo pasa a ser
+  // `Task_Preparar` («Preparar alimento»); ver `ir` arriba.
+  mocks.exportXml.mockResolvedValue(newModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar').replace(/(<bpmn:task id="Task_Preparar" name=")[^"]*/, '$1Preparar alimento'));
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
   mocks.crearFigura.mockImplementation((figura: object) => figura);
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn(), putProcess: vi.fn(async () => {}) } as unknown as ProjectSessionStore;

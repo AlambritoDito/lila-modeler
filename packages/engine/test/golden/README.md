@@ -1,5 +1,7 @@
 # Golden de `examples/pedido`
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../../../../docs/) and [`README.md`](../../../../README.md).
+
 `pedido.seed-42.json` es el `RunResult` completo y legible del escenario AS-IS con seed 42. No es
 un snapshot interno de Vitest: se revisa como JSON normal y el test compara sus bytes exactos.
 
