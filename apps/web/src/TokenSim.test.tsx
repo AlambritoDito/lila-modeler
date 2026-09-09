@@ -8,16 +8,22 @@
  * si el módulo cambia sus plantillas, esta prueba sigue verde y el aviso llega por el mapa de
  * `strings.es.ts`, que es donde está escrito de qué versión se habla.
  */
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { Injector } from 'didi';
+import { beforeEach, describe, expect, it } from 'vitest';
+// Los dos módulos de la librería que `moduloColoresDelTema` sustituye. Se importan de verdad (no
+// se copian sus nombres) para que la prueba se entere si el módulo los renombra.
+import NeutralElementColorsModule from 'bpmn-js-token-simulation/lib/features/neutral-element-colors';
+import SimulationStylesModule from 'bpmn-js-token-simulation/lib/features/simulation-styles';
 
-import { observarSimulacion, traducirSimulacion, traducirTexto } from './TokenSim';
+import {
+  ColoresNeutrosDelTema,
+  EstilosDelTema,
+  moduloColoresDelTema,
+  observarSimulacion,
+  traducirSimulacion,
+  traducirTexto,
+} from './TokenSim';
 import { S } from './strings.es';
-
-const AQUI = dirname(fileURLToPath(import.meta.url));
-const appCss = readFileSync(resolve(AQUI, 'app.css'), 'utf8');
 
 /** La interfaz que el módulo monta dentro del contenedor del lienzo, tal cual la escribe. */
 function lienzoConSimulacion(): HTMLElement {
@@ -132,27 +138,127 @@ describe('«Validar rutas»: la UI del módulo en español (#264)', () => {
 });
 
 describe('«Validar rutas»: el diagrama conserva los colores del tema (#264)', () => {
-  it('deshace el repintado neutro de NeutralElementColors con los tokens del tema', () => {
-    // Los dos únicos valores que escribe el módulo sobre TODAS las figuras.
-    expect(appCss).toContain('.lienzo .bjs-container.simulation .djs-visual [fill="#fff"]');
-    expect(appCss).toContain('.lienzo .bjs-container.simulation .djs-visual [stroke="#212121"]');
-    const reglas = appCss.match(/\.lienzo \.bjs-container\.simulation[^{]*\{[^}]*\}/g) ?? [];
-    expect(reglas.length).toBeGreaterThanOrEqual(3);
-    expect(reglas.join('\n')).toContain('var(--diagram-fill)');
-    expect(reglas.join('\n')).toContain('var(--diagram-stroke)');
-    expect(reglas.join('\n')).toContain('var(--diagram-label)');
-    // Ningún color a pelo: si el tema cambia, esto cambia con él.
-    for (const regla of reglas) {
-      expect(regla.split('{')[1]).not.toMatch(/#[0-9a-f]{3,6}/i);
+  /** Los tokens que `applyTheme` escribiría en `documentElement` al cargar Eva-01. */
+  function conTema(tokens: Record<string, string>): void {
+    for (const [nombre, valor] of Object.entries(tokens)) {
+      document.documentElement.style.setProperty(nombre, valor);
     }
+  }
+
+  /** Dobles de los tres servicios de bpmn-js que usa `ColoresNeutrosDelTema`. */
+  function inyectorDePrueba(): {
+    activar: () => void;
+    pintados: Array<{ elemento: object; id: string; colores: { fill?: string; stroke?: string } }>;
+    injector: Injector;
+  } {
+    const escuchas: Array<(evento: { active: boolean }) => void> = [];
+    const pintados: Array<{ elemento: object; id: string; colores: { fill?: string; stroke?: string } }> = [];
+    const elementos = [{ id: 'Tarea_1' }, { id: 'Flujo_1' }];
+    const dobles = {
+      eventBus: ['value', {
+        // `EventBus.on` admite `(evento, fn)` y `(evento, prioridad, fn)`.
+        on: (evento: string, ...resto: unknown[]) => {
+          const escuchar = resto.at(-1);
+          if (evento === 'tokenSimulation.toggleMode' && typeof escuchar === 'function') {
+            escuchas.push(escuchar as (e: { active: boolean }) => void);
+          }
+        },
+      }],
+      elementRegistry: ['value', { forEach: (visita: (e: object) => void) => elementos.forEach(visita) }],
+      elementColors: ['value', {
+        add: (elemento: object, id: string, colores: { fill?: string; stroke?: string }) => {
+          pintados.push({ elemento, id, colores });
+        },
+      }],
+    };
+    // Mismo orden que `Modeler.tsx`: los módulos de la librería primero y el nuestro después,
+    // que es lo que hace que gane. Los dobles van al final porque `neutral-element-colors`
+    // arrastra por `__depends__` el `elementColors` de verdad, y aquí lo que se quiere observar
+    // son las llamadas a `add` (el servicio real escribe en el DI del modelo, que no existe).
+    const injector = new Injector([
+      NeutralElementColorsModule as never,
+      SimulationStylesModule as never,
+      moduloColoresDelTema as never,
+      dobles as never,
+    ]);
+    return {
+      injector,
+      pintados,
+      activar: () => {
+        injector.get('neutralElementColors');
+        for (const escuchar of escuchas) escuchar({ active: true });
+      },
+    };
+  }
+
+  beforeEach(() => {
+    document.documentElement.removeAttribute('style');
   });
 
-  it('no toca los colores con los que la propia animación marca el flujo o el error', () => {
-    // El verde del flujo elegido y el rojo del elemento no admitido llevan otro valor que `#fff`
-    // y `#212121`; si alguien ampliara el selector a `.djs-visual *` se los llevaría por delante.
-    const reglas = appCss.match(/\.lienzo \.bjs-container\.simulation[^{]*\{[^}]*\}/g) ?? [];
-    for (const regla of reglas) {
-      expect(regla).toMatch(/\[(?:fill|stroke)="#(?:fff|212121)"\]/);
+  it('sustituye los dos servicios de color del módulo, no los complementa', () => {
+    // Si el módulo renombrara `neutralElementColors` o `simulationStyles`, o si alguien pusiera
+    // `moduloColoresDelTema` ANTES en `additionalModules`, aquí saldría la clase de la librería.
+    const { injector, activar } = inyectorDePrueba();
+    activar();
+    expect(injector.get('simulationStyles')).toBeInstanceOf(EstilosDelTema);
+    expect(injector.get('neutralElementColors')).toBeInstanceOf(ColoresNeutrosDelTema);
+  });
+
+  it('pinta las figuras con los tokens del tema y no con el blanco y negro del módulo', () => {
+    conTema({ '--diagram-fill': '#1F1A36', '--diagram-stroke': '#D9D2F0' });
+    const { pintados, activar } = inyectorDePrueba();
+    activar();
+
+    expect(pintados).toHaveLength(2);
+    for (const { id, colores } of pintados) {
+      // Mismo id que el servicio original: las compuertas siguen pintando encima (prioridad 2000).
+      expect(id).toBe('neutral-element-colors');
+      expect(colores).toEqual({ fill: '#1F1A36', stroke: '#D9D2F0' });
     }
+    // Los dos valores del bug: figura blanca con borde casi negro sobre el lienzo oscuro.
+    expect(pintados.map((p) => p.colores.fill)).not.toContain('#fff');
+    expect(pintados.map((p) => p.colores.stroke)).not.toContain('#212121');
+  });
+
+  it('no pinta nada al salir del modo (de eso se encarga el `elementColors` del módulo)', () => {
+    conTema({ '--diagram-fill': '#FFFFFF', '--diagram-stroke': '#201E1D' });
+    const escuchas: Array<(e: { active: boolean }) => void> = [];
+    const pintados: object[] = [];
+    new ColoresNeutrosDelTema(
+      { on: (_evento, escuchar) => escuchas.push(escuchar) },
+      { forEach: (visita) => visita({ id: 'Tarea_1' }) },
+      { add: (elemento) => pintados.push(elemento) },
+    );
+    for (const escuchar of escuchas) escuchar({ active: false });
+    expect(pintados).toEqual([]);
+  });
+
+  it('traduce a tokens del tema los dos colores con los que se marca la salida de una compuerta', () => {
+    conTema({ '--diagram-selected': '#9EF01A', '--diagram-connection': '#B9B0DA' });
+    const estilos = new EstilosDelTema();
+    // `ExclusiveGatewaySettings.js` / `InclusiveGatewaySettings.js`: elegido y descartado.
+    expect(estilos.get('--token-simulation-grey-darken-30')).toBe('#9EF01A');
+    expect(estilos.get('--token-simulation-grey-lighten-56')).toBe('#B9B0DA');
+  });
+
+  it('deja pasar los colores propios de la animación', () => {
+    conTema({ '--token-simulation-green-base-44': '#10D070' });
+    // El verde de los ámbitos (`ShowScopes`) y el del contador de tokens no son el diagrama
+    // repintado: se leen de `:root` tal cual, como haría el `SimulationStyles` original.
+    expect(new EstilosDelTema().get('--token-simulation-green-base-44')).toBe('#10D070');
+  });
+
+  it('lee el tema en cada activación: un tema nuevo pinta con colores nuevos', () => {
+    // El lienzo se remonta al cambiar de tema (`<Lienzo key={temaId}>` en `App.tsx`), pero aun
+    // así nada aquí cachea: leer `getComputedStyle` en cada activación es lo que hace que Papel
+    // pinte en blanco sobre negro y Eva-01 al revés.
+    conTema({ '--diagram-fill': '#1F1A36', '--diagram-stroke': '#D9D2F0' });
+    const primero = inyectorDePrueba();
+    primero.activar();
+    conTema({ '--diagram-fill': '#FFFFFF', '--diagram-stroke': '#201E1D' });
+    const segundo = inyectorDePrueba();
+    segundo.activar();
+    expect(primero.pintados[0]?.colores).toEqual({ fill: '#1F1A36', stroke: '#D9D2F0' });
+    expect(segundo.pintados[0]?.colores).toEqual({ fill: '#FFFFFF', stroke: '#201E1D' });
   });
 });

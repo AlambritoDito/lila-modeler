@@ -43,6 +43,10 @@ import {
   type OpcionesExportacion,
 } from './modelerXml';
 import { S } from './strings.es';
+// Los colores del diagrama durante «Validar rutas» (#264). Van en `TokenSim.tsx` con el resto de
+// lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
+// servicios (ver `moduloColoresDelTema`).
+import { moduloColoresDelTema } from './TokenSim';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -185,7 +189,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     const opciones = {
       // La extensión `lila:` sobrevive a abrir y exportar sin que el modelador la entienda.
       moddleExtensions: { lila },
-      additionalModules: [minimapModule, tokenSimulationModule],
+      // `moduloColoresDelTema` va DETRÁS de `tokenSimulationModule` a propósito: en didi la
+      // última definición de un servicio gana, y así la animación pinta el diagrama con los
+      // tokens del tema en vez de en blanco y negro (#264).
+      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },

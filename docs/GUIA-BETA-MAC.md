@@ -115,9 +115,13 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
   (`traducirSimulacion` en `apps/web/src/TokenSim.tsx`, con el inventario en `strings.es.ts`): si
   algún día se actualiza el módulo y cambia un rótulo, ese rótulo volverá a verse en inglés, nunca
   roto.
-- El diagrama **conserva los colores del tema** durante la animación (#264). El módulo lo repinta
-  en blanco y negro mientras dura el modo; `app.css` deshace exactamente ese repintado y deja
-  intactos el verde del flujo elegido y el rojo de un elemento que la animación no admite.
+- El diagrama **conserva los colores del tema** durante la animación (#264). De fábrica el módulo
+  lo repinta en blanco y negro mientras dura el modo, pensado para un lienzo blanco; Lila
+  sustituye dos de sus servicios (`moduloColoresDelTema` en `apps/web/src/TokenSim.tsx`) para que
+  pinte con los tokens del tema. La salida elegida de una compuerta se marca con el color de
+  selección del tema (lima en Eva-01, rojo en Papel) y la descartada con el de una conexión
+  normal; los marcadores propios de la animación —el verde de los ámbitos, el contador de
+  tokens— se quedan como vienen.
 
 ### Guardar y recuperar
 

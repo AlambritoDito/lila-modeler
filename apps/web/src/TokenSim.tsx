@@ -123,3 +123,90 @@ export function TokenSim({ modelador }: Props): React.JSX.Element {
     </p>
   );
 }
+
+/* ---------- colores del diagrama durante la animación (LILA-205 / #264) ---------- */
+
+/**
+ * Valor de un token de diseño ya resuelto a color por el navegador. Es el mismo lector que usa
+ * `Modeler.tsx` para los colores por defecto del renderizador; se repite aquí (dos líneas) para
+ * que este archivo —y su prueba— no tengan que importar bpmn-js.
+ */
+function token(nombre: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+}
+
+/** Lo mínimo que este módulo necesita de los servicios de bpmn-js. */
+interface EventBus { on(evento: string, escuchar: (evento: { active: boolean }) => void): void }
+interface RegistroDeElementos { forEach(visita: (elemento: object) => void): void }
+interface ColoresDeElemento {
+  add(elemento: object, id: string, colores: { fill?: string; stroke?: string }): void;
+}
+
+/** `TOGGLE_MODE_EVENT` de `bpmn-js-token-simulation/lib/util/EventHelper`. */
+const EVENTO_MODO = 'tokenSimulation.toggleMode';
+
+/**
+ * Colores con los que la animación marca la salida de una compuerta, traducidos a tokens del
+ * tema. El módulo los lee por `simulationStyles.get()` de `:root`, y sus valores de fábrica
+ * —`#212121` para el flujo elegido y `#909090` para el descartado— son de un lienzo blanco: en
+ * Eva-01 el flujo elegido quedaba en negro sobre `#17132A`, invisible.
+ *
+ * El elegido pasa al color de «lo seleccionado» del tema (lima en Eva-01, rojo en Papel) y el
+ * descartado al color normal de una conexión, que es exactamente la distinción que el módulo
+ * quiere hacer. Los demás colores del módulo —el verde de los ámbitos, el blanco del contador de
+ * tokens— se dejan pasar tal cual: son marcadores propios de la animación con su propio
+ * contraste, no el diagrama repintado.
+ */
+const COLORES_DE_FLUJO: Record<string, string> = {
+  '--token-simulation-grey-darken-30': '--diagram-selected',
+  '--token-simulation-grey-lighten-56': '--diagram-connection',
+};
+
+/** Sustituye a `simulationStyles`; sin caché, para que un tema nuevo se lea de verdad. */
+export class EstilosDelTema {
+  static $inject: string[] = [];
+
+  get(propiedad: string): string {
+    return token(COLORES_DE_FLUJO[propiedad] ?? propiedad);
+  }
+}
+
+/**
+ * Sustituye a `NeutralElementColors`, que repinta TODAS las figuras en `#fff` sobre `#212121`
+ * mientras dura el modo y las devuelve a su color al salir. Sobre el lienzo oscuro de Eva-01 eso
+ * era un diagrama que se cambiaba de piel al entrar en «Validar rutas», con el nombre de la tarea
+ * ilegible encima de una figura blanca (contraste medido 1,15:1).
+ *
+ * Se sustituye el servicio y no se pelea con CSS porque el módulo no pinta con atributos de
+ * presentación: `elementColors` escribe los colores en el DI y bpmn-js@18 los emite como
+ * `style=` en línea, contra el que solo ganaría un `!important` sobre `.djs-visual`, que se
+ * llevaría por delante también los colores propios de la animación (QA de #271).
+ *
+ * Mismo id y misma prioridad por defecto (1000) que el servicio original: las compuertas siguen
+ * pintando su flujo elegido por encima, con prioridad 2000.
+ */
+export class ColoresNeutrosDelTema {
+  static $inject = ['eventBus', 'elementRegistry', 'elementColors'];
+
+  constructor(eventBus: EventBus, registro: RegistroDeElementos, colores: ColoresDeElemento) {
+    eventBus.on(EVENTO_MODO, ({ active }) => {
+      if (!active) return;
+      // Se leen al activar el modo, no al construir: es el mismo momento en el que el módulo
+      // original decidía sus colores.
+      const delTema = { fill: token('--diagram-fill'), stroke: token('--diagram-stroke') };
+      registro.forEach((elemento) => {
+        colores.add(elemento, 'neutral-element-colors', delTema);
+      });
+    });
+  }
+}
+
+/**
+ * Módulo de didi que `Modeler.tsx` registra DESPUÉS de `bpmn-js-token-simulation`: las dos claves
+ * son las que usa el módulo, y en didi gana la última definición, así que estas dos clases
+ * sustituyen a las suyas sin tocar `node_modules` ni el resto de la animación.
+ */
+export const moduloColoresDelTema: Record<string, ['type', unknown]> = {
+  neutralElementColors: ['type', ColoresNeutrosDelTema],
+  simulationStyles: ['type', EstilosDelTema],
+};

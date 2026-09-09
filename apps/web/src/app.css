@@ -1210,22 +1210,11 @@ body {
    alguien lo pulsa sin que React se entere. */
 .lienzo .bts-toggle-mode { display: none; }
 
-/* Colores del diagrama durante la animación (LILA-205 / #264).
-
-   `NeutralElementColors` del módulo repinta TODAS las figuras en `#fff` sobre `#212121` mientras
-   dura el modo, y las devuelve a su color al salir. Sobre el lienzo oscuro de Eva-01 eso es un
-   diagrama que se cambia de piel al entrar en «Validar rutas», y con la etiqueta clara del tema
-   encima de una figura blanca el nombre de la tarea deja de leerse.
-
-   Se le devuelven los colores del tema atacando exactamente los dos valores que escribe —`#fff`
-   y `#212121`— y ninguno más: los verdes y rojos con los que la propia animación marca el flujo
-   elegido de una compuerta o un elemento no admitido llevan otro valor y sobreviven intactos. Es
-   CSS y no JavaScript porque una propiedad CSS gana siempre al atributo de presentación que
-   escribe bpmn-js, sin pelearse con sus repintados ni con el `elementColors` del módulo. */
-.lienzo .bjs-container.simulation .djs-visual [fill="#fff"] { fill: var(--diagram-fill); }
-.lienzo .bjs-container.simulation .djs-visual [stroke="#212121"] { stroke: var(--diagram-stroke); }
-.lienzo .bjs-container.simulation .djs-visual text[fill="#212121"],
-.lienzo .bjs-container.simulation .djs-visual text[fill="#212121"] tspan { fill: var(--diagram-label); }
+/* Los colores del diagrama durante el modo NO se arreglan aquí: `bpmn-js-token-simulation`
+   repinta las figuras por el DI del modelo y bpmn-js@18 los emite como `style=` en línea, que
+   ningún selector de este archivo alcanza sin un `!important` sobre `.djs-visual` que también
+   se llevaría los colores propios de la animación. Se sustituyen dos servicios del módulo por
+   los tokens del tema: `moduloColoresDelTema` en `TokenSim.tsx` (LILA-205 / #264). */
 
 .aviso-token-sim {
   position: absolute;
