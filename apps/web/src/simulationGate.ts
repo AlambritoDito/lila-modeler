@@ -1,9 +1,10 @@
 import { validateBpmnXml } from '@lila/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
-import { es as S } from './strings.es';
+import { strings } from './i18n';
 
 /** La misma frontera de validación que CLI, antes de crear un Worker. */
 export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn') {
+  const S = strings();
   const model = await validateBpmnXml(xml);
   // `parseScenario` en vez de `ScenarioSchema.parse`: un `ZodError` sin capturar llega a la barra
   // de estado como su volcado JSON en inglés (LILA-202). Aquí sale la misma lista que en la CLI.

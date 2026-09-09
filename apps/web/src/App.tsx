@@ -31,7 +31,8 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
-import { es as S } from './strings.es';
+import { strings, useStrings } from './i18n';
+import type { Strings } from './strings.types';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -61,15 +62,16 @@ type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readon
  * porque sigue siendo la única clave (regla 5 de BACKLOG.md). `undefined` = no hubo cuellos.
  */
 function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
+  const S = strings();
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
   return nombre === undefined || nombre === '' || nombre === id ? id : S.app.nombreDeCuello(nombre, id);
 }
 
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
-const TEMAS = S.app.temas;
-type TemaId = keyof typeof TEMAS;
-const TEMA_IDS = Object.keys(TEMAS) as TemaId[];
+type TemaId = keyof Strings['app']['temas'];
+/** Sus ids son los mismos en todos los idiomas —lo garantiza `Strings`—; su rótulo, no. */
+const temaIds = (): TemaId[] => Object.keys(strings().app.temas) as TemaId[];
 
 /**
  * Preferencias de apariencia (LILA-113). Con puente van a `<userData>/estado.json`
@@ -144,6 +146,7 @@ function aplicarTema(t: Theme): void {
 }
 
 async function cargarTema(id: TemaId): Promise<Theme> {
+  const S = strings();
   const r = await fetch(`./${id}.json`);
   if (!r.ok) throw new Error(S.app.errorTemaHttp(r.status));
   return r.json() as Promise<Theme>;
@@ -158,6 +161,7 @@ async function cargarTema(id: TemaId): Promise<Theme> {
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
 function atajo(tecla: string, soloDesktop = false): string {
+  const S = strings();
   if (soloDesktop && !DESKTOP) return '';
   const shift = tecla.startsWith('⇧');
   const letra = shift ? tecla.slice(1) : tecla;
@@ -198,6 +202,7 @@ function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
  * dejar los chips en blanco escondería el resto de los problemas.
  */
 function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto: unknown; error: string | null } {
+  const S = strings();
   try {
     return { error: null, resuelto: resolveExtends(archivo, (ruta) => {
       const encontrado = escenarios[ruta];
@@ -216,6 +221,7 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
  * escenario está a medio editar y no resuelve, la barra enseña «—» en vez de romperse.
  */
 function semillaEscenario(archivo: string, escenarios: Escenarios): string {
+  const S = strings();
   try {
     const run = resolveExtends(archivo, (p) => escenarios[p] ?? {})['run'] as { seed?: unknown } | undefined;
     return run?.seed === undefined ? S.app.sinValor : String(run.seed);
@@ -229,6 +235,7 @@ type EstadoSim =
   | { tipo: 'error'; mensaje: string };
 
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
+  const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -531,7 +538,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
       // (o a Eva-01), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, TEMA_IDS, 'eva-01');
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
       try {

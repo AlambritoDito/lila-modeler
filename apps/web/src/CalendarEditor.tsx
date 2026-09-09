@@ -14,7 +14,7 @@
  *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
  */
 import { Fragment, useRef } from 'react';
-import { es as S } from './strings.es';
+import { useStrings } from './i18n';
 
 /** Orden canónico del formato; es también el orden en el que sale `days`. */
 export const DIAS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
@@ -124,6 +124,7 @@ export function CalendarEditor({
   intervals: readonly Intervalo[];
   onCambio: (intervals: Intervalo[]) => void;
 }): React.JSX.Element {
+  const S = useStrings();
   const celdas = aCeldas(intervals);
   /** Sentido del trazo en curso: `true` abre, `false` cierra, `null` no hay trazo. */
   const sentido = useRef<boolean | null>(null);

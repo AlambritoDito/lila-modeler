@@ -6,7 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
-import { es as S } from '../strings.es';
+import { en as S } from '../strings.en';
+import { setLocale } from '../i18n';
+
+// English is the base language (LILA-210); it is set here so the message does not depend on the
+// machine's locale.
+setLocale('en');
 import type { ProjectDocument } from './ProjectStore';
 
 const XML_MINIMO = '<?xml version="1.0"?><definitions xmlns="http://example.org"/>';

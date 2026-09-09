@@ -8,6 +8,10 @@ import { newModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App } from './App';
 import { applyTheme } from './theme/applyTheme';
+// The app boots in English (jsdom's `navigator.language` is `en-US`), so the texts this suite
+// clicks and reads come from the base catalog instead of being written by hand: a literal here
+// would only pin which language the catalog happens to be in.
+import { en as T } from './strings.en';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
@@ -105,53 +109,53 @@ beforeEach(async () => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   // Modo «Simular»: deja abierta la pestaña Simulación del panel derecho.
-  await click('Simular');
+  await click(T.app.modos.simular);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
 it('valida antes del Worker y abre Resultados con avisos preservados', async () => {
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
   expect(container.textContent).toContain('Modelo montado');
 });
 it('un error de validación impide iniciar Worker', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   expect(mocks.worker).not.toHaveBeenCalled();
   expect(container.textContent).toContain('E-NOSOP: Task_1');
 });
 it('cancelar durante preparación no crea Worker ni queda Simulando', async () => {
   const gate = deferred<{ ir: typeof ir; scenario: typeof scenario; warnings: string[] }>();
   mocks.gate.mockReturnValueOnce(gate.promise);
-  await click('Ejecutar simulación'); await click('Cancelar');
+  await click(T.app.ejecutar); await click(T.app.cancelar);
   await act(async () => gate.resolve({ ir, scenario, warnings: [] }));
   expect(mocks.worker).not.toHaveBeenCalled();
   // La barra vuelve a la acción primaria: ni progreso ni botón de cancelar (#237).
-  expect(container.textContent).not.toContain('Replicación');
-  expect(container.textContent).toContain('Ejecutar simulación');
+  expect(container.querySelector('.progreso')).toBeNull();
+  expect(container.textContent).toContain(T.app.ejecutar);
 });
 it.each(['modelo', 'escenario'])('editar %s aborta y descarta resultado y progreso tardíos', async (kind) => {
   const run = deferred<typeof done>(); mocks.worker.mockReturnValueOnce(run.promise);
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal; onProgress: (progress: unknown) => void };
   await act(async () => { if (kind === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
   expect(options.signal.aborted).toBe(true);
   await act(async () => { options.onProgress({ fraction: 1, replication: 1 }); run.resolve(done); });
   expect(container.textContent).not.toContain('Resultado actual');
-  expect(container.textContent).not.toContain('Replicación');
+  expect(container.querySelector('.progreso')).toBeNull();
 });
 it('desmontar termina la corrida activa', async () => {
-  mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click('Ejecutar simulación');
+  mocks.worker.mockReturnValueOnce(new Promise(() => {})); await click(T.app.ejecutar);
   const options = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
 });
 
 // #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo.
-it.each([['Task_Preparar', 'Preparar alimento (Task_Preparar)'], ['Task_Anonima', 'Task_Anonima']])(
+it.each([['Task_Preparar', T.app.nombreDeCuello('Preparar alimento', 'Task_Preparar')], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
-    await click('Ejecutar simulación');
+    await click(T.app.ejecutar);
     expect(container.textContent).toContain(texto);
   },
 );
@@ -159,7 +163,7 @@ it.each([['Task_Preparar', 'Preparar alimento (Task_Preparar)'], ['Task_Anonima'
 // #226 punto 6: el interruptor «Cuellos de botella» no tenía prueba.
 it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar', async () => {
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
   expect(ultimoOverlay()[1]).toBe(true);
 
@@ -182,8 +186,12 @@ it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar
  * corrida y su interruptor tienen que seguir intactos, que es lo que fija esta prueba.
  */
 it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', async () => {
+  // El reparseo con retardo del arranque (150 ms) reescribe `ir` cuando termina, y con el `ir`
+  // del XML de mentira el cuello se queda sin nombre. Se le espera ANTES de simular: si no,
+  // llegaba en mitad de las aserciones y el test fallaba solo bajo carga.
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   const pintadas = mocks.cuellos.mock.calls.length;
 
   const xml = newModelXml(); const parsed = await parseBpmn(xml);
@@ -191,11 +199,11 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
   vi.mocked(session.openProject).mockResolvedValueOnce(doc);
   mocks.abrir.mockResolvedValueOnce(false);
   // Simular deja el proyecto sin guardar: abrir pasa antes por la guardia de cambios.
-  await click('Abrir'); await click('Descartar');
+  await click(T.app.abrir); await click(T.app.descartar);
 
   expect(mocks.abrir).toHaveBeenCalledOnce();
-  expect(container.textContent).toContain('Pedido de ejemplo');
-  expect(container.textContent).toContain('Preparar alimento (Task_Preparar)');
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+  expect(container.textContent).toContain(T.app.nombreDeCuello('Preparar alimento', 'Task_Preparar'));
   // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
   expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
@@ -204,89 +212,89 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
 it('guardar cancelado mantiene cambios pendientes', async () => {
   await act(async () => mocks.changed());
   vi.mocked(session.saveProject).mockResolvedValueOnce(null);
-  await click('Guardar');
-  expect(container.textContent).toContain('Sin guardar');
+  await click(T.app.guardar);
+  expect(container.textContent).toContain(T.app.sinGuardar);
 });
 it('editar mientras se guarda conserva dirty y no confirma cierre limpio', async () => {
   await act(async () => mocks.changed());
   const pending = deferred<ProjectDocument | null>();
   vi.mocked(session.saveProject).mockReturnValueOnce(pending.promise);
-  await click('Guardar');
+  await click(T.app.guardar);
   const snapshot = vi.mocked(session.saveProject).mock.calls[0]![0];
   await act(async () => mocks.scenarioChange());
   await act(async () => pending.resolve(snapshot));
-  expect(container.textContent).toContain('Sin guardar');
+  expect(container.textContent).toContain(T.app.sinGuardar);
   expect(session.setDirty).toHaveBeenLastCalledWith(true);
 });
 it('abrir cancelado conserva proyecto y escenarios', async () => {
-  await click('Abrir');
-  expect(container.textContent).toContain('Pedido de ejemplo');
+  await click(T.app.abrir);
+  expect(container.textContent).toContain(T.app.proyectoDemo);
 });
 it('nuevo proyecto reemplaza escenarios del ejemplo por ids propios', async () => {
-  await click('Nuevo');
+  await click(T.app.nuevo);
   expect(session.createProject).toHaveBeenCalledOnce();
   const doc = vi.mocked(session.createProject).mock.calls[0]![0];
   expect(doc.model.id).toMatch(/^Process_/);
   expect(JSON.stringify(doc.scenarios)).not.toContain('cajero');
   expect(Object.keys(doc.scenarios)).toHaveLength(2);
-  expect(container.textContent).toContain('Mi proyecto');
+  expect(container.textContent).toContain(T.app.proyectoNuevo);
 });
 
 it('editar durante la exportación impide guardar un XML con revisión incorrecta', async () => {
   const pending = deferred<string>(); mocks.exportXml.mockReturnValueOnce(pending.promise);
-  await click('Guardar');
+  await click(T.app.guardar);
   await act(async () => mocks.changed());
   await act(async () => pending.resolve(newModelXml()));
   expect(session.saveProject).not.toHaveBeenCalled();
-  expect(container.textContent).toContain('El modelo cambió durante el guardado');
-  expect(container.textContent).toContain('Sin guardar');
+  expect(container.textContent).toContain(T.app.errorModeloCambio);
+  expect(container.textContent).toContain(T.app.sinGuardar);
 });
 it('editar durante apertura conserva el proyecto activo y sus cambios', async () => {
   const xml = newModelXml(); const parsed = await parseBpmn(xml);
   const doc: ProjectDocument = { version: 1, id: 'new', name: 'Otra carpeta', model: { id: parsed.ir.id, name: 'model.bpmn', xml, revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
   const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
-  await click('Abrir');
+  await click(T.app.abrir);
   await act(async () => mocks.changed());
   await act(async () => pending.resolve(doc));
-  expect(container.textContent).toContain('Pedido de ejemplo');
-  expect(container.textContent).toContain('Conservamos tus cambios');
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+  expect(container.textContent).toContain(T.app.errorProyectoCambio);
 });
 
 it('cancelar reemplazo conserva dirty y no abre otro proyecto', async () => {
   await act(async () => mocks.changed());
-  await click('Abrir');
+  await click(T.app.abrir);
   expect(container.querySelector('dialog')?.open).toBe(true);
-  await click('Cancelar');
+  await click(T.app.cancelar);
   expect(session.openProject).not.toHaveBeenCalled();
-  expect(container.textContent).toContain('Sin guardar');
+  expect(container.textContent).toContain(T.app.sinGuardar);
 });
 it.each(['cancelado', 'fallido'])('guardar %s detiene reemplazo y conserva modelo', async (kind) => {
   await act(async () => mocks.changed());
   if (kind === 'cancelado') vi.mocked(session.saveProject).mockResolvedValueOnce(null);
   else vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-PERMISO'));
-  await click('Nuevo'); await click('Guardar y continuar');
+  await click(T.app.nuevo); await click(T.app.guardarYContinuar);
   expect(session.createProject).not.toHaveBeenCalled();
   expect(container.querySelector('dialog')?.open).toBe(true);
-  expect(container.textContent).toContain('Sin guardar');
+  expect(container.textContent).toContain(T.app.sinGuardar);
 });
 it('guarda el proyecto actual antes de reemplazarlo', async () => {
   await act(async () => mocks.changed());
-  await click('Nuevo'); await click('Guardar y continuar');
+  await click(T.app.nuevo); await click(T.app.guardarYContinuar);
   expect(session.saveProject).toHaveBeenCalledOnce();
   expect(session.createProject).toHaveBeenCalledOnce();
   expect(vi.mocked(session.saveProject).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(session.createProject).mock.invocationCallOrder[0]!);
-  expect(container.textContent).toContain('Mi proyecto');
+  expect(container.textContent).toContain(T.app.proyectoNuevo);
 });
 it('descartar permite reemplazar sin guardar', async () => {
   await act(async () => mocks.changed());
-  await click('Nuevo'); await click('Descartar');
+  await click(T.app.nuevo); await click(T.app.descartar);
   expect(session.saveProject).not.toHaveBeenCalled();
   expect(session.createProject).toHaveBeenCalledOnce();
 });
 
 it('bloquea interacción con edición durante apertura y la restaura al cancelar', async () => {
   const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
-  await click('Abrir');
+  await click(T.app.abrir);
   expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(true);
   expect(container.querySelector('.panel')?.hasAttribute('inert')).toBe(true);
   await act(async () => pending.resolve(null));
@@ -434,7 +442,8 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
 /** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
 const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
 /** El campo hex de un token dentro del diálogo de Ajustes. */
-const hexDe = (token: string) => container.querySelector<HTMLInputElement>(`dialog.ajustes input[aria-label="Hex de ${token}"]`)!;
+const hexDe = (token: string) =>
+  container.querySelector<HTMLInputElement>(`dialog.ajustes input[aria-label="${T.apariencia.hex(token)}"]`)!;
 
 it('un tema del usuario sobrevive a recargar y se aplica sin fetch (LILA-114)', async () => {
   localStorage.setItem('lila.tema', 'u:1');
@@ -571,7 +580,7 @@ it('un .bpmn suelto (carpeta sin escenarios) abre con el AS-IS por defecto y sin
   await remontar();
   expect(container.textContent).toContain('Suelto');
   const pie = container.querySelector('.estado')!;
-  expect(pie.textContent).toContain('0 errores'); // sin AS-IS por defecto sería «escenario desconocido».
+  expect(pie.textContent).toContain(T.app.errores(0)); // sin AS-IS por defecto sería «escenario desconocido».
   expect(pie.textContent).toContain('AS-IS');
 });
 
@@ -581,19 +590,19 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
   await remontar();
   const pie = container.querySelector('.estado')!;
-  expect(pie.textContent).toContain('Diagrama suelto');
+  expect(pie.textContent).toContain(T.app.diagramaSuelto);
   // El aviso nombra las dos cosas que un ⌘S en modo suelto NO escribe (LILA-208, aceptación 2).
-  expect(pie.textContent).toContain('los escenarios y las corridas no se guardan');
-  expect(pie.textContent).toContain('Guardar como');
+  expect(T.app.diagramaSuelto).toContain('scenarios and runs are not saved');
+  expect(T.app.diagramaSuelto).toContain(T.app.guardarComo);
 
   await act(async () => { puente.menu('guardarComo'); });
   expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: true });
-  expect(pie.textContent).not.toContain('Diagrama suelto');
+  expect(pie.textContent).not.toContain(T.app.diagramaSuelto);
 });
 
 it.each([
-  ['escenario editado', 'escenario', 'Sin guardar'],
-  ['solo el XML editado', 'modelo', 'Guardado'],
+  ['escenario editado', 'escenario', T.app.sinGuardar],
+  ['solo el XML editado', 'modelo', T.app.guardado],
 ] as const)('diagrama suelto, %s: guardar solo limpia el indicador de lo escrito (LILA-208)', async (_caso, que, esperado) => {
   // Un guardado normal en modo suelto escribe SOLO el `.bpmn`: el escenario editado sigue sin
   // estar en disco, así que el indicador NO puede quedarse en «Guardado» (y la guardia de cierre
@@ -605,23 +614,23 @@ it.each([
     (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; };
   const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
   await remontar();
-  expect(container.textContent).toContain('Guardado');
+  expect(container.textContent).toContain(T.app.guardado);
 
   // El `onCambio` del panel de escenario solo existe con su pestaña montada.
-  await click('Simulación');
+  await click(T.app.pestanas.simulacion);
   await act(async () => { if (que === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
-  expect(container.textContent).toContain('Sin guardar');
+  expect(container.textContent).toContain(T.app.sinGuardar);
   await act(async () => { puente.menu('guardar'); });
   expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: false });
   expect(container.textContent).toContain(esperado);
-  expect(session.setDirty).toHaveBeenLastCalledWith(esperado === 'Sin guardar');
+  expect(session.setDirty).toHaveBeenLastCalledWith(esperado === T.app.sinGuardar);
 
   // La guardia de cierre (`onSaveRequested` → `closeGuard`) sale del MISMO token: con el escenario
   // todavía sin escribir, «Guardar» en el diálogo nativo devuelve `false` y la ventana no se
   // cierra, en vez de irse llevándose el escenario editado (QA de LILA-208).
   let cerrar: boolean | null = null;
   await act(async () => { cerrar = await pedirGuardado(); });
-  expect(cerrar).toBe(esperado === 'Guardado');
+  expect(cerrar).toBe(esperado === T.app.guardado);
 });
 
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
@@ -647,7 +656,7 @@ it('una ruta que llega con una E/S en curso avisa en vez de descartarse', async 
   await act(async () => { puente.menu('guardar'); }); // toma `ioLock` y no lo suelta.
   await act(async () => { puente.emitir({ dir: '/p/cuatro', file: 'ventas.bpmn' }); });
   expect(abrirReciente).not.toHaveBeenCalled();
-  expect(container.textContent).toContain('No se abrió "ventas.bpmn"');
+  expect(container.textContent).toContain(T.app.errorAbrirOcupado('ventas.bpmn'));
   await act(async () => { guardado.resolve(null); });
 });
 
@@ -656,11 +665,11 @@ it('una ruta que llega con el diálogo de cambios sin guardar abierto no pisa la
   const puente = puenteConRutas(null);
   await remontar();
   await act(async () => mocks.changed());
-  await click('Nuevo'); // deja `pendingAction = 'new'` con el diálogo abierto.
+  await click(T.app.nuevo); // deja `pendingAction = 'new'` con el diálogo abierto.
   await act(async () => { puente.emitir({ dir: '/p/cinco', file: 'ventas.bpmn' }); });
-  expect(container.textContent).toContain('No se abrió "ventas.bpmn"');
+  expect(container.textContent).toContain(T.app.errorAbrirOcupado('ventas.bpmn'));
   // «Descartar» sigue haciendo lo que el usuario pidió (Nuevo), no la ruta que llegó en medio.
-  await click('Descartar');
+  await click(T.app.descartar);
   expect(session.createProject).toHaveBeenCalledOnce();
   expect((session as unknown as { openRecent: ReturnType<typeof vi.fn> }).openRecent).not.toHaveBeenCalled();
 });
@@ -676,23 +685,23 @@ it('desmontar da de baja la suscripción a onOpenPath', async () => {
 // ---------- lienzo: zoom, minimapa y pestañas de diagrama (LILA-208) ----------
 
 it('los botones del lienzo acercan, alejan y ajustan el zoom', async () => {
-  await act(async () => porEtiqueta('Acercar').click());
+  await act(async () => porEtiqueta(T.app.acercar).click());
   expect(mocks.zoom).toHaveBeenLastCalledWith(1.2);
-  await act(async () => porEtiqueta('Alejar').click());
+  await act(async () => porEtiqueta(T.app.alejar).click());
   expect(mocks.zoom).toHaveBeenLastCalledWith(1 / 1.2);
   expect(mocks.ajustar).not.toHaveBeenCalled();
-  await act(async () => porEtiqueta('Ajustar a pantalla').click());
+  await act(async () => porEtiqueta(T.app.ajustarPantalla).click());
   expect(mocks.ajustar).toHaveBeenCalledOnce();
 });
 it('cerrar la pestaña del diagrama y «+» abren un proyecto nuevo', async () => {
-  await act(async () => porEtiqueta('Cerrar model.bpmn').click());
+  await act(async () => porEtiqueta(T.app.cerrarArchivo('model.bpmn')).click());
   expect(session.createProject).toHaveBeenCalledOnce();
-  await act(async () => porEtiqueta('Nuevo diagrama').click());
+  await act(async () => porEtiqueta(T.app.nuevoDiagrama).click());
   expect(session.createProject).toHaveBeenCalledTimes(2);
 });
 it('cerrar la pestaña con cambios sin guardar pasa por la guardia', async () => {
   await act(async () => mocks.changed());
-  await act(async () => porEtiqueta('Cerrar model.bpmn').click());
+  await act(async () => porEtiqueta(T.app.cerrarArchivo('model.bpmn')).click());
   expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
   expect(session.createProject).not.toHaveBeenCalled();
 });
@@ -706,12 +715,12 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
     mocks.scenarioChange();
   });
   const chips = [...container.querySelectorAll('.chips-validacion .chip')].map((c) => c.textContent);
-  expect(chips).toEqual(['1 error', '1 aviso']);
+  expect(chips).toEqual([T.app.errores(1), T.app.avisos(1)]);
   // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
   const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
   expect([...validacion.marcadores.keys()]).toEqual(['Task_1']);
 
-  await click('1 aviso');
+  await click(T.app.avisos(1));
   expect(mocks.seleccionar).toHaveBeenCalledWith('Task_1');
 });
 
@@ -723,17 +732,15 @@ it('sin problemas no hay chips', () => {
 
 it('«Validar rutas» aparece junto a los demás modos y avisa de que no es la simulación DES', async () => {
   const modos = [...container.querySelectorAll('.modos .modo')].map((b) => b.textContent);
-  expect(modos).toEqual(['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas']);
-  await click('Validar rutas');
-  expect(container.textContent).toContain(
-    'Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni produce resultados.',
-  );
+  expect(modos).toEqual(Object.values(T.app.modos));
+  await click(T.app.modos.rutas);
+  expect(container.textContent).toContain(T.tokenSim.aviso);
 });
 
 it('entrar en «Validar rutas» activa la animación de tokens y salir la desactiva', async () => {
-  await click('Validar rutas');
+  await click(T.app.modos.rutas);
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
-  await click('Modelar');
+  await click(T.app.modos.modelar);
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
 });
 
@@ -741,7 +748,7 @@ it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)',
   // Los colores neutros del modo se escriben en el DI y el DI gana a lo que repinte `repintar()`:
   // sin apagar y volver a encender, el diagrama se queda con el relleno del tema anterior y la
   // etiqueta con el color del nuevo (medido: `#1F1A36` bajo texto `#201E1D`, contraste 1,0:1).
-  await click('Validar rutas');
+  await click(T.app.modos.rutas);
   mocks.simulacionTokens.mockClear();
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Papel', tokens: {} }) } as Response);
   const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
@@ -760,7 +767,7 @@ it('editar un token de diagrama con «Validar rutas» encendido reinicia el modo
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  await click('Validar rutas');
+  await click(T.app.modos.rutas);
   mocks.simulacionTokens.mockClear();
   // Un token que el modo no congela en el DI no reinicia nada: no hay por qué cortar la animación.
   teclear(hexDe('accent.primary'), '#00FFAA');
@@ -776,42 +783,42 @@ it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de
   });
   mocks.validacion.mockClear();
   mocks.cuellos.mockClear();
-  await click('Validar rutas');
+  await click(T.app.modos.rutas);
   expect(mocks.validacion).toHaveBeenLastCalledWith(null);
   expect(mocks.cuellos).toHaveBeenLastCalledWith(null, false);
-  await click('Modelar');
+  await click(T.app.modos.modelar);
   expect(mocks.validacion).toHaveBeenLastCalledWith(expect.objectContaining({ marcadores: expect.anything() }));
 });
 
 // --- Barra superior y barra de estado como el artboard 01 (#237) ---
 
 it('la barra tiene una sola acción primaria y corre el escenario desde cualquier modo', async () => {
-  await click('Modelar');
+  await click(T.app.modos.modelar);
   expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual');
 });
 it('mientras simula, la barra enseña la replicación, el porcentaje y CANCELAR', async () => {
   mocks.worker.mockReturnValueOnce(new Promise(() => {}));
-  await click('Ejecutar simulación');
+  await click(T.app.ejecutar);
   const { onProgress } = mocks.worker.mock.calls[0]![2] as { onProgress: (p: unknown) => void };
   await act(async () => { onProgress({ replication: 2, totalReplications: 10, fraction: 0.31 }); });
   const barra = container.querySelector('.barra')!;
-  expect(barra.textContent).toContain('Replicación 3 de 10');
-  expect(barra.textContent).toContain('31 %');
-  expect(barra.textContent).not.toContain('Ejecutar simulación');
-  await click('Cancelar');
-  expect(barra.textContent).toContain('Ejecutar simulación');
+  expect(barra.textContent).toContain(T.app.replicacion(3, 10));
+  expect(barra.textContent).toContain(T.app.porCiento(31));
+  expect(barra.textContent).not.toContain(T.app.ejecutar);
+  await click(T.app.cancelar);
+  expect(barra.textContent).toContain(T.app.ejecutar);
 });
 it('las acciones de proyecto viven en el desplegable Archivo, no sueltas en la barra', async () => {
   const menu = container.querySelector('.menu-archivo')!;
   const acciones = [...menu.querySelectorAll('button')].map((b) => b.textContent);
-  expect(acciones).toEqual(expect.arrayContaining(['Nuevo', 'Abrir', 'Guardar', 'Guardar como']));
+  expect(acciones).toEqual(expect.arrayContaining([T.app.nuevo, T.app.abrir, T.app.guardar, T.app.guardarComo]));
   const sueltos = [...container.querySelectorAll('.barra > .boton')].map((b) => b.textContent);
-  expect(sueltos).not.toContain('Guardar');
+  expect(sueltos).not.toContain(T.app.guardar);
   // El desplegable se cierra al elegir: `<details>` no lo hace solo.
-  await click('Guardar');
+  await click(T.app.guardar);
   expect((menu as HTMLDetailsElement).open).toBe(false);
   // …y con `Esc`, que `<details>` tampoco trae de serie (#237 [QA]).
   await act(async () => { (menu as HTMLDetailsElement).open = true; });
@@ -820,15 +827,15 @@ it('las acciones de proyecto viven en el desplegable Archivo, no sueltas en la b
 });
 it('el pie lleva errores, avisos, escenario y semilla heredada del escenario activo', async () => {
   const pie = container.querySelector('.estado')!;
-  expect(pie.textContent).toContain('0 errores');
-  expect(pie.textContent).toContain('0 avisos');
-  expect(pie.textContent).toContain('Escenario');
+  expect(pie.textContent).toContain(T.app.errores(0));
+  expect(pie.textContent).toContain(T.app.avisos(0));
+  expect(pie.textContent).toContain(T.app.escenario);
   expect(pie.textContent).toContain('AS-IS');
-  expect(pie.textContent).toContain('Semilla 42');
+  expect(pie.textContent).toContain(T.app.semilla('42'));
   const select = container.querySelector<HTMLSelectElement>('.simulacion select')!;
   await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(pie.textContent).toContain('TO-BE 3 cajeros');
-  expect(pie.textContent).toContain('Semilla 42');
+  expect(pie.textContent).toContain(T.app.semilla('42'));
 });
 
 /** El setter nativo + el evento `input` es lo que React traduce a `onChange`. */
@@ -843,7 +850,7 @@ function teclear(campo: HTMLInputElement, texto: string): void {
 const figuras = (): HTMLButtonElement[] => [...container.querySelectorAll<HTMLButtonElement>('.paleta .figura')];
 
 it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se compacta', async () => {
-  const tarea = figuras().find((b) => b.title === 'Tarea de usuario');
+  const tarea = figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario);
   expect(tarea).toBeDefined();
   // `Enter` sobre un ítem es la activación por defecto del `<button>`; jsdom no la ejecuta
   // (no implementa el comportamiento de activación del teclado), así que se comprueba que el
@@ -856,19 +863,20 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(mocks.crearFigura).toHaveBeenCalledWith({ type: 'bpmn:UserTask', eventDefinitionType: undefined, isExpanded: undefined, id: 'Figura_nueva' }, { x: 500, y: 250 }, 'raiz');
   expect(mocks.editarNombre).toHaveBeenCalledOnce();
 
-  // El filtro deja solo las coincidencias, sin acentos ni mayúsculas, y se lleva los grupos vacíos.
+  // El filtro deja solo las coincidencias, sin mayúsculas, y se lleva los grupos vacíos. Que
+  // tampoco mire los acentos se prueba en `Paleta.test.ts`, donde el catálogo sí los tiene.
   const filtro = container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!;
-  teclear(filtro, 'anotacion');
-  expect(figuras().map((b) => b.title)).toEqual(['Anotación']);
-  expect([...container.querySelectorAll('.paleta summary')].map((s) => s.textContent)).toEqual(['Artefactos']);
+  teclear(filtro, 'annotation');
+  expect(figuras().map((b) => b.title)).toEqual([T.paleta.figuras.anotacion]);
+  expect([...container.querySelectorAll('.paleta summary')].map((s) => s.textContent)).toEqual([T.paleta.grupos.artefactos]);
   teclear(filtro, '');
   expect(figuras().length).toBeGreaterThan(15);
 
   // Modo compacto: se va el campo de filtro y los nombres, pero cada ítem conserva su tooltip.
-  await act(async () => { porEtiqueta('Modo compacto').click(); });
+  await act(async () => { porEtiqueta(T.paleta.modoCompacto).click(); });
   expect(container.querySelector('.paleta.compacta')).not.toBeNull();
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
-  expect(figuras().find((b) => b.title === 'Tarea de usuario')).toBeDefined();
+  expect(figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario)).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
 });
 
@@ -892,17 +900,17 @@ it('la pérdida al importar se ve como error con los ids, y el resto sigue siend
   const pie = container.querySelector('.estado')!;
   const alerta = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('error'))!;
   expect(alerta).toBeDefined();
-  expect(alerta.textContent).toContain('3 elementos o referencias se perderán al exportar');
+  expect(alerta.textContent).toContain(T.app.perdidaAlExportar(3, ''));
   expect(alerta.textContent).toContain('Message_1373655174960');
   expect(alerta.textContent).toContain('DS1373655174514');
   expect(alerta.textContent).toContain('Flow_inexistente');
   // De los 3 avisos del import, 1 implicaba pérdida y ya se cuenta arriba: quedan 2.
   const aviso = [...pie.querySelectorAll('[role="alert"]')].find((s) => s.classList.contains('aviso'))!;
-  expect(aviso.textContent).toContain('2 avisos al importar');
+  expect(aviso.textContent).toContain(T.app.avisosAlImportar(2));
 });
 
 it('sin pérdida, exportar descarga directamente y no abre ningún diálogo', async () => {
-  await click('Exportar .bpmn');
+  await click(T.app.exportarBpmn);
   expect(dialogoPerdida()).toBeNull();
   expect(session.putProcess).toHaveBeenCalledOnce();
 });
@@ -910,27 +918,27 @@ it('sin pérdida, exportar descarga directamente y no abre ningún diálogo', as
 it('con pérdida, exportar pide confirmación: cancelar no descarga y aceptar sí', async () => {
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
 
-  await click('Exportar .bpmn');
+  await click(T.app.exportarBpmn);
   const dialogo = dialogoPerdida()!;
   expect(dialogo).not.toBeNull();
-  expect(dialogo.textContent).toContain('Se perderán 3 referencias que el archivo original ya tenía rotas');
+  expect(dialogo.textContent).toContain(T.app.perdidaTitulo(3));
   expect([...dialogo.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
     'unresolved reference <Flow_inexistente>', 'Message_1373655174960', 'DS1373655174514',
   ]);
   expect(session.putProcess).not.toHaveBeenCalled();
 
-  await act(async () => { [...dialogo.querySelectorAll('button')].find((b) => b.textContent === 'Cancelar')!.click(); });
+  await act(async () => { [...dialogo.querySelectorAll('button')].find((b) => b.textContent === T.app.cancelar)!.click(); });
   expect(dialogoPerdida()).toBeNull();
   expect(session.putProcess).not.toHaveBeenCalled();
 
-  await click('Exportar .bpmn');
-  await act(async () => { [...dialogoPerdida()!.querySelectorAll('button')].find((b) => b.textContent === 'Exportar igualmente')!.click(); });
+  await click(T.app.exportarBpmn);
+  await act(async () => { [...dialogoPerdida()!.querySelectorAll('button')].find((b) => b.textContent === T.app.perdidaConfirmar(T.app.perdidaVerbo.exportar))!.click(); });
   expect(session.putProcess).toHaveBeenCalledOnce();
   expect(dialogoPerdida()).toBeNull();
 });
 
 it('sin pérdida, guardar escribe directamente y no abre ningún diálogo', async () => {
-  await click('Guardar');
+  await click(T.app.guardar);
   expect(dialogoPerdida()).toBeNull();
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
@@ -940,20 +948,22 @@ it('sin pérdida, guardar escribe directamente y no abre ningún diálogo', asyn
 it('con pérdida, guardar pide la misma confirmación: cancelar no escribe nada y aceptar guarda una vez', async () => {
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
 
-  await click('Guardar');
+  await click(T.app.guardar);
   const dialogo = dialogoPerdida()!;
   expect(dialogo).not.toBeNull();
-  expect([...dialogo.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Guardar igualmente', 'Cancelar']);
+  expect([...dialogo.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+    T.app.perdidaConfirmar(T.app.perdidaVerbo.guardar), T.app.cancelar,
+  ]);
   expect(session.saveProject).not.toHaveBeenCalled();
 
-  await act(async () => { enDialogo(dialogo, 'Cancelar').click(); });
+  await act(async () => { enDialogo(dialogo, T.app.cancelar).click(); });
   expect(dialogoPerdida()).toBeNull();
   expect(session.saveProject).not.toHaveBeenCalled();
 
   // El atajo llega al mismo sitio que el botón: `guardar()` es el único camino al disco.
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true })); });
   expect(dialogoPerdida()).not.toBeNull();
-  await act(async () => { enDialogo(dialogoPerdida()!, 'Guardar igualmente').click(); });
+  await act(async () => { enDialogo(dialogoPerdida()!, T.app.perdidaConfirmar(T.app.perdidaVerbo.guardar)).click(); });
   expect(session.saveProject).toHaveBeenCalledOnce();
   expect(dialogoPerdida()).toBeNull();
 });
@@ -962,8 +972,8 @@ it('con pérdida, guardar pide la misma confirmación: cancelar no escribe nada 
 // diálogo se ve —la ventana sigue abierta—, y cancelar devuelve `false`, que `closeGuard` lee
 // como «no se guardó» y le hace cancelar el cierre: nada se escribe y nada se queda colgado.
 it.each([
-  ['Cancelar', false, 0],
-  ['Guardar igualmente', true, 1],
+  [T.app.cancelar, false, 0],
+  [T.app.perdidaConfirmar(T.app.perdidaVerbo.guardar), true, 1],
 ] as const)('cerrar con pérdida espera el diálogo; «%s» devuelve %s al puente', async (accion, esperado, guardados) => {
   let pedirGuardado!: () => Promise<boolean>;
   await act(async () => root.unmount());
@@ -1005,7 +1015,7 @@ it('Escape en el diálogo de pérdida resuelve la espera con «cancelar» y no e
 // menú nativo. Abrir o crear un proyecto mientras espera cambiaría el documento por debajo.
 it('con el diálogo de pérdida abierto, Cmd+O y Cmd+N no tocan el proyecto', async () => {
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
-  await click('Guardar');
+  await click(T.app.guardar);
   expect(dialogoPerdida()).not.toBeNull();
 
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
@@ -1014,7 +1024,7 @@ it('con el diálogo de pérdida abierto, Cmd+O y Cmd+N no tocan el proyecto', as
   expect(dialogoPerdida()).not.toBeNull();
 
   // Contestado el diálogo, la puerta se abre otra vez.
-  await act(async () => { enDialogo(dialogoPerdida()!, 'Cancelar').click(); });
+  await act(async () => { enDialogo(dialogoPerdida()!, T.app.cancelar).click(); });
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true })); });
   expect(session.openProject).toHaveBeenCalledOnce();
 });
@@ -1023,8 +1033,8 @@ it('con el diálogo de pérdida abierto, Cmd+O y Cmd+N no tocan el proyecto', as
 it('el aviso de pérdida concuerda en singular', async () => {
   await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 4, avisos: 1, error: null, perdidas: [], refsRotas: ['Message_1'] }); });
   const pie = container.querySelector('.estado')!;
-  expect(pie.textContent).toContain('1 elemento o referencia se perderá al exportar: Message_1');
-  expect(pie.textContent).toContain('1 aviso al importar');
-  await click('Exportar .bpmn');
-  expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe('Se perderá 1 referencia que el archivo original ya tenía rota');
+  expect(pie.textContent).toContain(T.app.perdidaAlExportar(1, 'Message_1'));
+  expect(pie.textContent).toContain(T.app.avisosAlImportar(1));
+  await click(T.app.exportarBpmn);
+  expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe(T.app.perdidaTitulo(1));
 });

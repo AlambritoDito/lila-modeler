@@ -28,13 +28,13 @@ import {
 import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
 import {
   DataTable,
-  TAB_LABELS,
+  tabLabels,
   h2Style,
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
-import { es as S } from './strings.es';
+import { strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 
@@ -113,6 +113,7 @@ function formatMoney(value: number, currency: string | undefined): string {
 
 /** Igual que `formatCompareValue` de `lila compare`: guion para `null`, % para utilización. */
 function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit, currency?: string): string {
+  const S = strings();
   if (value === null) return S.comparar.sinValor;
   if (isCostMetric(metric)) return formatMoney(value, currency);
   if (isDurationMetric(metric)) return formatDuration(value, unit);
@@ -131,17 +132,16 @@ interface ColumnContext {
   currency: string | undefined;
 }
 
-const NOT_COMPARABLE = S.comparar.noComparable;
-
 /** Texto completo de una celda no base: valor y delta relativo, como `lila compare` en la CLI. */
 function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsComparable: boolean): string {
+  const S = strings();
   const value = row.values[index] ?? null;
   const valueText = formatCellValue(row.metric, value, ctx.unit, ctx.currency);
   if (index === 0 || value === null) return valueText;
   // Costos en monedas distintas (o una corrida sin moneda): `deltaAbs`/`deltaRel` restan números
   // crudos sin saber que representan divisas distintas (compare() no conoce `run.currency`), así
   // que ese delta no se imprime como si fuera dinero real (OP-05, issue #210).
-  if (isCostMetric(row.metric) && !costsComparable) return S.comparar.celdaConDelta(valueText, NOT_COMPARABLE);
+  if (isCostMetric(row.metric) && !costsComparable) return S.comparar.celdaConDelta(valueText, S.comparar.noComparable);
   const deltaRel = row.deltaRel[index] ?? null;
   return S.comparar.celdaConDelta(
     valueText,
@@ -196,8 +196,6 @@ function rowName(
  * Columnas: Id/Name (salvo Proceso), Metric, y una por escenario visible.
  * ------------------------------------------------------------------ */
 
-const SIGNIFICANT_LABEL = S.comparar.marcaSignificativa;
-
 const highlightStyle: CSSProperties = { background: 'var(--bg-hover)' };
 
 const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', fontWeight: 700 };
@@ -208,6 +206,7 @@ const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', 
  * `meta` (no se pasó `runs`) se comporta exactamente como antes: solo "(base)" en la columna 0.
  */
 function columnHeader(name: string, index: number, meta: CompareRunMeta | undefined): string {
+  const S = strings();
   const tags = [
     index === 0 ? S.comparar.etiquetaBase : null,
     meta?.currency ?? null,
@@ -227,6 +226,7 @@ function scenarioColumn(
   costsComparable: boolean,
   significanceAvailable: boolean,
 ): ColumnDef<CompareRow> {
+  const S = strings();
   return {
     display: (row): ReactNode => {
       const text = cellText(row, index, ctx, costsComparable);
@@ -242,7 +242,7 @@ function scenarioColumn(
           {text}
           {/* `title` solo lo anuncian algunos lectores de pantalla; `role="img"` + `aria-label`
               convierten el asterisco en una imagen con texto alternativo, que sí se lee. */}
-          <span aria-label={SIGNIFICANT_LABEL} role="img" style={significantMarkStyle} title={SIGNIFICANT_LABEL}>
+          <span aria-label={S.comparar.marcaSignificativa} role="img" style={significantMarkStyle} title={S.comparar.marcaSignificativa}>
             {' '}
             {S.comparar.asterisco}
           </span>
@@ -275,6 +275,7 @@ export function compareColumns(
   costsComparable = true,
   significanceAvailable = true,
 ): ColumnDef<CompareRow>[] {
+  const S = strings();
   const idColumns: ColumnDef<CompareRow>[] =
     scope === 'process'
       ? []
@@ -356,6 +357,7 @@ export function CompareView({
   resourceNames = {},
   runs,
 }: CompareViewProps): ReactNode {
+  const S = useStrings();
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
   // shell puede recomparar con uno más sin remontar la vista) nace visible en vez de quedar
   // atrapado fuera de un array de booleanos que se quedó corto.
@@ -458,7 +460,7 @@ export function CompareView({
             )}
             rowKey={(row) => row.kpi}
             rows={rows}
-            title={TAB_LABELS[scope]}
+            title={tabLabels()[scope]}
           />
         );
       })}

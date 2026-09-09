@@ -18,7 +18,7 @@ import type { BaseTimeUnit } from '@lila/engine/format';
 import { compare, type CompareResult, type ProcessIR, type RunResult, type SimulationProgress } from '@lila/engine';
 import { runInWorker } from './simulationClient.js';
 import { CompareView } from './CompareView.js';
-import { es as S } from './strings.es';
+import { strings } from './i18n';
 import './theme/tokens.css';
 
 // ponytail: mismos JSON directos del repo que results-demo.tsx (LILA-142 no dejó ejemplos
@@ -73,6 +73,7 @@ type Status =
   | { kind: 'error'; message: string };
 
 function CompareDemo() {
+  const S = strings();
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
   useEffect(() => {

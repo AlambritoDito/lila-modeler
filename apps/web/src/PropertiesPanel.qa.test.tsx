@@ -41,6 +41,11 @@ import {
   type ElementoModdle,
   type Escritor,
 } from './PropertiesPanel.js';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 // React 19 exige declararlo para usar `act` fuera de @testing-library (que el repo no trae).
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

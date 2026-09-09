@@ -20,11 +20,12 @@ import type {
   ScenarioDocument,
   StoredRun,
 } from './ProjectStore';
-import { es as S } from '../strings.es';
+import { strings } from '../i18n';
 
 type ProjectProblem = LilaProjectDocument['problems'][number];
 
 function requireWindowLila(): LilaBridge {
+  const S = strings();
   if (typeof window === 'undefined' || window.lila === undefined) {
     throw new Error(S.almacen.errorSinBridge);
   }
@@ -127,7 +128,7 @@ export class DesktopStore implements ProjectSessionStore {
     // si no lo es, el llamador tiene un documento obsoleto en memoria y hay que decírselo antes de
     // tocar disco, no escribirlo silenciosamente encima de la carpeta abierta.
     if (!explicitSaveAs && this.activeDocument !== null && document.id !== this.activeDocument.id) {
-      throw new Error(S.almacen.errorProyectoDistinto);
+      throw new Error(strings().almacen.errorProyectoDistinto);
     }
     let dir = this.activeDir;
     // "Destino nuevo" (OP-14, revisión de A: P0 "nuevo proyecto sobre carpeta ocupada aún
@@ -175,7 +176,7 @@ export class DesktopStore implements ProjectSessionStore {
       // en proyecto en su propia carpeta (QA ronda 3, `projectIO.test.ts`), y desde aquí no se
       // sabe si hay manifiesto al lado (QA de LILA-208).
       if (sobreSuPropiaCarpeta && (error instanceof Error) && error.message.includes('E-CARPETA-OCUPADA')) {
-        throw new Error(S.almacen.errorMismaCarpeta);
+        throw new Error(strings().almacen.errorMismaCarpeta);
       }
       throw error;
     }

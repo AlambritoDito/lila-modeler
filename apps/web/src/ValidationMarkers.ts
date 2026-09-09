@@ -25,12 +25,9 @@ import type Modeler from 'bpmn-js/lib/Modeler';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { Problema } from './ScenarioPanel';
-import { es as S } from './strings.es';
+import { strings } from './i18n';
 
 const TIPO = 'lila-validacion';
-
-/** Acciones que recuerda el tooltip, como en el artboard `docs/design/01-modelar-1440.png`. */
-const ACCIONES = S.lienzo.marcadorAcciones;
 
 /**
  * `elements.<id>`, `elements.<id>.processingTime`, `elements.<id>.resources[0].ref`: la ruta de
@@ -111,10 +108,12 @@ export function problemasPorElemento(
  * tooltip propio en la UI (ticket aparte), este `title` se cambia por él sin tocar nada más.
  */
 function disco(marcador: MarcadorValidacion): HTMLElement {
+  const S = strings();
   const div = document.createElement('div');
   div.className = `lila-validacion lila-validacion-${marcador.nivel}`;
   div.textContent = S.lienzo.marcadorSimbolo;
-  div.title = S.lienzo.marcadorTitulo(marcador.mensajes, ACCIONES);
+  // Las acciones que recuerda el tooltip, como en el artboard `docs/design/01-modelar-1440.png`.
+  div.title = S.lienzo.marcadorTitulo(marcador.mensajes, S.lienzo.marcadorAcciones);
   return div;
 }
 

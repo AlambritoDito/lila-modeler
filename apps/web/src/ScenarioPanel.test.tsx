@@ -38,6 +38,11 @@ import {
   ScenarioPanel,
 } from './ScenarioPanel.js';
 import { DIAS, aCeldas, aIntervals, celda, type Intervalo } from './CalendarEditor.js';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');

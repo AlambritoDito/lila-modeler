@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import type { Servicios } from './Modeler';
-import { es as S } from './strings.es';
+import { strings, useStrings } from './i18n';
 
 /** Una figura de la paleta: lo que hace falta para pintarla y para crearla. */
 export interface Figura {
@@ -39,55 +39,58 @@ interface Grupo {
  * ponytail: los carriles no están porque se añaden desde el context pad de un pool, que es donde
  * bpmn-js sabe dónde meterlos; techo: si hiciera falta, un ítem que llame a `modeling.addLane`.
  */
-export const GRUPOS: readonly Grupo[] = [
-  {
-    nombre: S.paleta.grupos.eventos,
-    figuras: [
-      { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.inicio, icono: 'start-event-none' },
-      { tipo: 'bpmn:IntermediateThrowEvent', nombre: S.paleta.figuras.intermedio, icono: 'intermediate-event-none' },
-      { tipo: 'bpmn:EndEvent', nombre: S.paleta.figuras.fin, icono: 'end-event-none' },
-      { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.mensaje, icono: 'start-event-message', eventDefinitionType: 'bpmn:MessageEventDefinition' },
-      { tipo: 'bpmn:IntermediateCatchEvent', nombre: S.paleta.figuras.temporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: 'bpmn:TimerEventDefinition' },
-    ],
-  },
-  {
-    nombre: S.paleta.grupos.actividades,
-    figuras: [
-      { tipo: 'bpmn:Task', nombre: S.paleta.figuras.tarea, icono: 'task' },
-      { tipo: 'bpmn:UserTask', nombre: S.paleta.figuras.tareaUsuario, icono: 'user-task' },
-      { tipo: 'bpmn:ServiceTask', nombre: S.paleta.figuras.tareaServicio, icono: 'service-task' },
-      { tipo: 'bpmn:SubProcess', nombre: S.paleta.figuras.subproceso, icono: 'subprocess-expanded', isExpanded: true },
-      { tipo: 'bpmn:CallActivity', nombre: S.paleta.figuras.actividadLlamada, icono: 'call-activity' },
-    ],
-  },
-  {
-    nombre: S.paleta.grupos.compuertas,
-    figuras: [
-      { tipo: 'bpmn:ExclusiveGateway', nombre: S.paleta.figuras.exclusiva, icono: 'gateway-xor' },
-      { tipo: 'bpmn:ParallelGateway', nombre: S.paleta.figuras.paralela, icono: 'gateway-parallel' },
-      { tipo: 'bpmn:InclusiveGateway', nombre: S.paleta.figuras.inclusiva, icono: 'gateway-or' },
-      { tipo: 'bpmn:EventBasedGateway', nombre: S.paleta.figuras.basadaEnEventos, icono: 'gateway-eventbased' },
-    ],
-  },
-  {
-    nombre: S.paleta.grupos.datos,
-    figuras: [
-      { tipo: 'bpmn:DataObjectReference', nombre: S.paleta.figuras.objetoDeDatos, icono: 'data-object' },
-      { tipo: 'bpmn:DataStoreReference', nombre: S.paleta.figuras.almacenDeDatos, icono: 'data-store' },
-    ],
-  },
-  {
-    nombre: S.paleta.grupos.artefactos,
-    figuras: [
-      { tipo: 'bpmn:TextAnnotation', nombre: S.paleta.figuras.anotacion, icono: 'text-annotation' },
-      { tipo: 'bpmn:Group', nombre: S.paleta.figuras.grupo, icono: 'group' },
-    ],
-  },
-  {
-    nombre: S.paleta.grupos.poolsYCarriles,
-    figuras: [{ tipo: 'bpmn:Participant', nombre: S.paleta.figuras.pool, icono: 'participant' }],
-  },
-];
+export function gruposDeFiguras(): readonly Grupo[] {
+  const S = strings();
+  return [
+    {
+      nombre: S.paleta.grupos.eventos,
+      figuras: [
+        { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.inicio, icono: 'start-event-none' },
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: S.paleta.figuras.intermedio, icono: 'intermediate-event-none' },
+        { tipo: 'bpmn:EndEvent', nombre: S.paleta.figuras.fin, icono: 'end-event-none' },
+        { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.mensaje, icono: 'start-event-message', eventDefinitionType: 'bpmn:MessageEventDefinition' },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: S.paleta.figuras.temporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: 'bpmn:TimerEventDefinition' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.actividades,
+      figuras: [
+        { tipo: 'bpmn:Task', nombre: S.paleta.figuras.tarea, icono: 'task' },
+        { tipo: 'bpmn:UserTask', nombre: S.paleta.figuras.tareaUsuario, icono: 'user-task' },
+        { tipo: 'bpmn:ServiceTask', nombre: S.paleta.figuras.tareaServicio, icono: 'service-task' },
+        { tipo: 'bpmn:SubProcess', nombre: S.paleta.figuras.subproceso, icono: 'subprocess-expanded', isExpanded: true },
+        { tipo: 'bpmn:CallActivity', nombre: S.paleta.figuras.actividadLlamada, icono: 'call-activity' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.compuertas,
+      figuras: [
+        { tipo: 'bpmn:ExclusiveGateway', nombre: S.paleta.figuras.exclusiva, icono: 'gateway-xor' },
+        { tipo: 'bpmn:ParallelGateway', nombre: S.paleta.figuras.paralela, icono: 'gateway-parallel' },
+        { tipo: 'bpmn:InclusiveGateway', nombre: S.paleta.figuras.inclusiva, icono: 'gateway-or' },
+        { tipo: 'bpmn:EventBasedGateway', nombre: S.paleta.figuras.basadaEnEventos, icono: 'gateway-eventbased' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.datos,
+      figuras: [
+        { tipo: 'bpmn:DataObjectReference', nombre: S.paleta.figuras.objetoDeDatos, icono: 'data-object' },
+        { tipo: 'bpmn:DataStoreReference', nombre: S.paleta.figuras.almacenDeDatos, icono: 'data-store' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.artefactos,
+      figuras: [
+        { tipo: 'bpmn:TextAnnotation', nombre: S.paleta.figuras.anotacion, icono: 'text-annotation' },
+        { tipo: 'bpmn:Group', nombre: S.paleta.figuras.grupo, icono: 'group' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.poolsYCarriles,
+      figuras: [{ tipo: 'bpmn:Participant', nombre: S.paleta.figuras.pool, icono: 'participant' }],
+    },
+  ];
+}
 
 /** Compara sin acentos ni mayúsculas: «anotacion» encuentra «Anotación». */
 function normalizar(texto: string): string {
@@ -183,11 +186,12 @@ interface Props {
 const CLAVE = 'lila.paleta';
 
 export function Paleta({ servicios }: Props): React.JSX.Element {
+  const S = useStrings();
   const [filtro, setFiltro] = useState('');
   const [compacta, setCompacta] = useState(() => {
     try { return localStorage.getItem(CLAVE) === 'compacta'; } catch { return false; }
   });
-  const grupos = filtrar(GRUPOS, filtro);
+  const grupos = filtrar(gruposDeFiguras(), filtro);
 
   function cambiarCompacta(): void {
     setCompacta((antes) => {

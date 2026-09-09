@@ -46,7 +46,7 @@ import {
   type ImportacionPreparada,
   type OpcionesExportacion,
 } from './modelerXml';
-import { es as S } from './strings.es';
+import { strings, useLocale } from './i18n';
 // Los colores del diagrama durante «Validar rutas» (#264). Van en `TokenSim.tsx` con el resto de
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
@@ -212,6 +212,20 @@ const BUS_MUDO = { on: () => {} } as unknown as EventBus;
 
 export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): React.JSX.Element {
   const contenedor = useRef<HTMLDivElement>(null);
+  const locale = useLocale();
+
+  // El `title` del minimapa lo escribe bpmn-js cada vez que se pliega o se abre, y nada más: al
+  // cambiar de idioma no hay evento que lo repinte, así que se reescribe aquí sobre el minimapa
+  // que ya está montado. El lienzo NO se remonta por cambiar de idioma (eso se llevaría la pila
+  // de deshacer), igual que no lo hace por cambiar de tema (LILA-113).
+  useEffect(() => {
+    const minimapa = contenedor.current?.querySelector('.djs-minimap');
+    const abierto = minimapa?.classList.contains('open') === true;
+    const S = strings();
+    minimapa
+      ?.querySelector('.toggle')
+      ?.setAttribute('title', abierto ? S.lienzo.plegarMinimapa : S.lienzo.desplegarMinimapa);
+  }, [locale]);
 
   useEffect(() => {
     const container = contenedor.current;
@@ -292,7 +306,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       const rotularMinimapa = ({ open }: { open: boolean }): void => {
         suyo
           .querySelector('.djs-minimap .toggle')
-          ?.setAttribute('title', open ? S.lienzo.plegarMinimapa : S.lienzo.desplegarMinimapa);
+          ?.setAttribute('title', open ? strings().lienzo.plegarMinimapa : strings().lienzo.desplegarMinimapa);
       };
       modeler.on('minimap.toggle', rotularMinimapa);
       for (const suscripcion of suscripciones) {
@@ -368,7 +382,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     const api: Modelador = {
       abrir,
       exportar: async (opciones) => {
-        if (activo === null) throw new Error(S.lienzo.errorSinBpmn);
+        if (activo === null) throw new Error(strings().lienzo.errorSinBpmn);
         autorizarExportacion(perdidas, opciones);
         const xml = (await activo.saveXML({ format: true })).xml ?? '';
         return finalizarExportacion(xml, originalIds);
@@ -392,7 +406,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         else canvas.zoom(Math.min(4, Math.max(0.2, canvas.zoom() * factor)));
       },
       get servicios(): Servicios {
-        if (activo === null) throw new Error(S.lienzo.errorSinBpmn);
+        if (activo === null) throw new Error(strings().lienzo.errorSinBpmn);
         return {
           modeling: activo.get<Servicios['modeling']>('modeling'),
           bpmnFactory: activo.get<BpmnFactory>('bpmnFactory'),

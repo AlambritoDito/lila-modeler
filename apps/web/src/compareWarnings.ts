@@ -14,7 +14,7 @@
 import type { BaseTimeUnit } from '@lila/engine/format';
 import type { RunResult } from '@lila/engine';
 import type { ResolvedScenario } from '@lila/engine/schema';
-import { es as S } from './strings.es';
+import { strings } from './i18n';
 
 /**
  * Metadatos de una corrida comparada, en el mismo orden que `scenarioNames`/`comparison` de
@@ -44,8 +44,6 @@ export interface CompareWarningsResult {
   unitsMixed: boolean;
 }
 
-const NO_CURRENCY = S.comparar.sinMoneda;
-
 /**
  * `run.replications` tiene default en `RunSchema` (1) y `run.seed` lo aplica el motor (`?? 1`,
  * R-DEG-4): una corrida sin el campo declarado en sus metadatos de comparación se trata como si
@@ -66,9 +64,10 @@ function distinct<T>(values: readonly T[]): T[] {
 }
 
 export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarningsResult {
+  const S = strings();
   const warnings: string[] = [];
 
-  const currencyLabels = distinct(runs.map((run) => run.currency ?? NO_CURRENCY));
+  const currencyLabels = distinct(runs.map((run) => run.currency ?? S.comparar.sinMoneda));
   const costsComparable = currencyLabels.length <= 1;
   if (!costsComparable) {
     warnings.push(S.comparar.avisoMonedas(currencyLabels));
