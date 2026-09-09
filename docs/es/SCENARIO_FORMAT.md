@@ -1,5 +1,7 @@
 # Formato de escenario v1
 
+> Leer en: [English](../SCENARIO_FORMAT.md)
+
 Fuente de verdad: `LILA_MODELER_ESTRUCTURA.md`, sección 6 ("Formato de escenario v1") y ADR-015. Este documento es la especificación normativa de `*.scenario.json`; cuando difiera del documento de estructura, manda el documento de estructura y este archivo se corrige.
 
 Ticket: LILA-004 (E0 · M0). Se escribe **antes** del motor. Lo implementan `packages/engine/src/scenario.ts` (zod + JSON Schema) y `resolveScenario()`.
