@@ -9,7 +9,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 // Solo el tipo (se borra al compilar): `Ajustes` es parte del contrato del puente, así que se
 // define una vez en `bridge.ts` y aquí se reusa en vez de duplicar la forma.
-import type { Ajustes } from './bridge.js';
+import type { Ajustes, TemaGuardado } from './bridge.js';
 
 export interface WindowBounds {
   readonly x: number;
@@ -69,10 +69,31 @@ function isRecentEntry(value: unknown): value is RecentEntry {
  */
 export function parseAjustes(value: unknown): Ajustes {
   if (!isPlainObject(value)) return {};
-  const ajustes: { tema?: string; densidad?: string } = {};
+  const ajustes: { tema?: string; densidad?: string; temas?: readonly TemaGuardado[] } = {};
   if (typeof value.tema === 'string') ajustes.tema = value.tema;
   if (typeof value.densidad === 'string') ajustes.densidad = value.densidad;
+  if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
   return ajustes;
+}
+
+/** Tope de temas de usuario en disco (LILA-114): esto es la configuración de la app, no una galería. */
+export const MAX_TEMAS = 50;
+
+/** Un mapa de token a texto. Qué nombres de token son válidos lo decide el renderer, no main. */
+function isMapaDeTexto(value: unknown): value is { readonly [token: string]: string } {
+  return isPlainObject(value) && Object.values(value).every((v) => typeof v === 'string');
+}
+
+/**
+ * Forma de un tema del usuario (LILA-114). Mismo criterio que `isRecentEntry`: se descarta la
+ * entrada inválida, no la lista entera. El catálogo de tokens vive en `apps/web/src/theme/tokens.ts`
+ * y lo vuelve a comprobar el renderer sobre lo que sale de aquí (`theme/temas.ts`), que es quien
+ * puede enseñar el error; main solo evita guardar algo que no tenga forma de tema.
+ */
+function isTemaGuardado(value: unknown): value is TemaGuardado {
+  if (!isPlainObject(value)) return false;
+  if (typeof value.id !== 'string' || !isMapaDeTexto(value.origen)) return false;
+  return isPlainObject(value.tema) && typeof value.tema.name === 'string' && isMapaDeTexto(value.tema.tokens);
 }
 
 /**

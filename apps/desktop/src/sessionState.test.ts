@@ -188,6 +188,20 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes(null)).toEqual({});
   });
 
+  it('los temas del usuario se sanean uno a uno y lo que no tiene forma de tema se cae (LILA-114)', () => {
+    const bueno = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: {} };
+    const temas = [
+      bueno,
+      { id: 'u:2', tema: { name: 'Sin tokens' }, origen: {} },
+      { id: 'u:3', tema: { name: 'Valor no textual', tokens: { 'accent.primary': 3 } }, origen: {} },
+      { tema: { name: 'Sin id', tokens: {} }, origen: {} },
+      'papel',
+    ];
+    expect(parseAjustes({ tema: 'u:1', temas })).toEqual({ tema: 'u:1', temas: [bueno] });
+    // Qué nombres de token existen lo decide el renderer, no main: aquí solo se mira la forma.
+    expect(parseAjustes({ temas: 'ninguno' })).toEqual({});
+  });
+
   it('withAjustes fusiona: guardar solo el tema no borra la densidad', () => {
     const conDensidad = withAjustes(defaultSessionState(), { densidad: 'comoda' });
     expect(withAjustes(conDensidad, { tema: 'papel' }).ajustes).toEqual({ densidad: 'comoda', tema: 'papel' });

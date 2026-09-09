@@ -125,10 +125,6 @@ export const S = {
     tema: 'Tema',
     densidad: 'Densidad',
     cerrar: 'Cerrar',
-    tipografia: (fuente: string): string =>
-      `Tipografía: ${fuente}. Editar cada color e importar o exportar temas llega en LILA-114.`,
-    /** Nombre de la tipografía cuando el tema no declara `font.ui`. */
-    tipografiaPorDefecto: 'Archivo',
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',
@@ -194,6 +190,69 @@ export const S = {
       `No se abrió "${archivo}": hay otra operación en curso. Vuelve a abrirlo cuando termine.`,
     errorEscenarioDesconocido: (ruta: string): string => `escenario desconocido: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Ajustes → Apariencia (`settings/Apariencia.tsx`, LILA-114)
+   * ------------------------------------------------------------------ */
+  apariencia: {
+    nombre: 'Nombre del tema',
+    /** Un tema integrado no se edita: la primera edición cae sobre esta copia. */
+    copia: (nombre: string): string => `${nombre} (copia)`,
+    duplicar: 'Duplicar',
+    restablecer: 'Restablecer',
+    exportar: 'Exportar',
+    importar: 'Importar',
+    eliminar: 'Eliminar',
+    integrado: 'Integrados',
+    delUsuario: 'Míos',
+    muestraTexto: 'Texto sobre superficie',
+    muestraSecundario: 'Texto secundario',
+    muestraBoton: 'Acento',
+
+    /**
+     * Rótulo de cada grupo del editor, por prefijo del token. Son los mismos grupos con los que
+     * `theme/tokens.ts` lista los 40 tokens; el orden lo manda esa lista, no este objeto.
+     */
+    grupos: {
+      bg: 'Base',
+      border: 'Base',
+      shadow: 'Base',
+      fg: 'Texto',
+      accent: 'Acentos',
+      status: 'Estados',
+      canvas: 'Lienzo y diagrama',
+      diagram: 'Lienzo y diagrama',
+      sim: 'Simulación',
+      font: 'Tipografía',
+      density: 'Tipografía',
+    } as Record<string, string>,
+    color: (token: string): string => `Color de ${token}`,
+    hex: (token: string): string => `Hex de ${token}`,
+    tamanoBase: 'Tamaño base (px)',
+    /**
+     * Familias que la app trae empaquetadas (`#238`), más «Sistema» para no depender de ninguna.
+     * `valor` es el valor del token tal cual: una lista de familias CSS con su respaldo.
+     * ponytail: no hay editor de fuentes ni carga de familias del sistema; techo: si hace falta,
+     * un `<datalist>` con `queryLocalFonts()` donde el navegador lo permita.
+     */
+    fuentes: [
+      { nombre: 'Archivo', valor: 'Archivo, Inter, system-ui, sans-serif' },
+      { nombre: 'JetBrains Mono', valor: "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace" },
+      { nombre: 'Sistema', valor: 'system-ui, sans-serif' },
+    ],
+
+    /** Errores de importar un JSON ajeno; se leen dentro del diálogo, sin aplicar nada. */
+    errorImportar: (mensaje: string): string => `No se importó el tema. ${mensaje}`,
+    errorJson: 'El archivo no es JSON válido.',
+    errorForma: 'El archivo no es un tema de Lila Modeler: se esperaba { "name": …, "tokens": { … } }.',
+    errorNombre: 'El tema no tiene nombre ("name").',
+    errorToken: (token: string): string => `El token "${token}" no existe en Lila Modeler.`,
+    errorValor: (token: string): string => `El token "${token}" no tiene un valor de texto.`,
+    errorHex: (token: string, valor: string): string =>
+      `El token "${token}" es un color y "${valor}" no es un hex (#rgb, #rrggbb o #rrggbbaa).`,
+    errorDensidad: (valor: string): string =>
+      `La densidad "${valor}" no existe: usa compacta, normal o comoda.`,
   },
 
   /* ------------------------------------------------------------------ *

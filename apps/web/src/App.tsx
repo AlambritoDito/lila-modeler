@@ -27,7 +27,10 @@ import type { Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bri
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
-import { applyTheme, type Theme } from './theme/applyTheme';
+import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
+import { TOKEN_NAMES } from './theme/tokens';
+import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
+import { Apariencia } from './settings/Apariencia';
 import { S } from './strings.es';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -95,7 +98,20 @@ async function preferencias(): Promise<Ajustes> {
   try {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
-    return { ...(tema === null ? {} : { tema }), ...(densidad === null ? {} : { densidad }) };
+    // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
+    // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
+    // salga de cualquiera de los dos sitios, que son igual de ajenos.
+    //
+    // Su `try` es aparte del de las otras dos preferencias (QA de #277): `lila.temas` es lo único
+    // que pasa por `JSON.parse`, y un valor corrupto ahí se llevaba por delante el tema elegido y
+    // la densidad, que son texto y no pueden romperse.
+    let temas: unknown = null;
+    try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    return {
+      ...(tema === null ? {} : { tema }),
+      ...(densidad === null ? {} : { densidad }),
+      ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+    };
   } catch { return {}; }
 }
 /** Guarda solo lo que cambia; el puente fusiona con lo que ya hubiera (ver `bridge.ts`). */
@@ -111,12 +127,26 @@ function recordar(ajustes: Ajustes): void {
   try {
     if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
+    if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
 function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
   return validas.includes(valor as T) ? (valor as T) : porDefecto;
 }
+/**
+ * Aplica el tema y borra las variables en línea que el anterior dejó puestas y este no trae. Sin
+ * eso, `docs/THEMES.md` mentía: un tema parcial (legal, y lo que sale de «Importar») heredaba en
+ * silencio los tokens del que estuviera puesto, así que el mismo archivo se veía distinto según lo
+ * que hubiera antes. Se borra **después** de escribir, no antes, para no perder la otra garantía
+ * de `applyTheme`: un tema malo lanza sin tocar nada y deja el anterior intacto.
+ */
+function aplicarTema(t: Theme): void {
+  applyTheme(t);
+  const raiz = document.documentElement;
+  for (const token of TOKEN_NAMES) if (t.tokens[token] === undefined) raiz.style.removeProperty(tokenToCssVar(token));
+}
+
 async function cargarTema(id: TemaId): Promise<Theme> {
   const r = await fetch(`./${id}.json`);
   if (!r.ok) throw new Error(S.app.errorTemaHttp(r.status));
@@ -257,7 +287,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
-  const [temaId, setTemaId] = useState<TemaId>('eva-01');
+  const [temaId, setTemaId] = useState<string>('eva-01');
+  /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
+  const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
@@ -499,12 +531,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   useEffect(() => {
     void preferencias().then(async (guardadas) => {
-      const id = valido(guardadas.tema, TEMA_IDS, 'eva-01');
+      const mios = saneaTemas(guardadas.temas);
+      setTemas(mios);
+      // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
+      // (o a Eva-01), igual que con un id de tema borrado.
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, TEMA_IDS, 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDADES, 'normal'));
       try {
-        const t = await cargarTema(id);
-        applyTheme(t);
+        const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
+        aplicarTema(t);
         setTema(t);
       } catch (e: unknown) {
         // Un tema roto no puede dejar la app en blanco: se avisa y se sigue con Eva-01, que
@@ -526,21 +562,39 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (tema !== undefined) recordar({ densidad });
   }, [densidad, tema]);
 
-  async function cambiarTema(id: TemaId): Promise<void> {
-    if (id === temaId) return;
+  /**
+   * Único punto donde se aplica un tema: el integrado se pide por `fetch` y el del usuario sale de
+   * `lista` (LILA-114), que se pasa a mano porque quien acaba de editarla todavía no la ve en el
+   * estado de React.
+   */
+  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
     try {
-      const t = await cargarTema(id);
-      applyTheme(t);
+      const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : await cargarTema(id as TemaId);
+      if (t === undefined) return;
+      aplicarTema(t);
       // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
       // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
       modelador?.repintar();
       setTema(t);
-      setTemaId(id);
       setAvisoTema(null);
-      recordar({ tema: id });
+      if (id !== temaId) {
+        setTemaId(id);
+        recordar({ tema: id });
+      }
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * Lo que Apariencia devuelve: la lista nueva de temas del usuario y cuál queda activo. Guardar y
+   * aplicar en la misma llamada es lo que hace que editar un token sea la vista previa —la app
+   * entera se repinta— sin que el editor tenga que conocer `applyTheme`.
+   */
+  function guardarTemas(lista: readonly TemaGuardado[], seleccion: string = temaId): void {
+    setTemas(lista);
+    recordar({ temas: lista });
+    void seleccionarTema(seleccion, lista);
   }
 
   /**
@@ -767,22 +821,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
-        <form method="dialog">
+        {/* Enter dentro de un campo de texto enviaba el formulario, o sea cerraba el diálogo en
+            mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
+            con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
+        <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
           <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
           <h3>{S.app.apariencia}</h3>
-          <label className="campo">
-            {S.app.tema}
-            <select value={temaId} onChange={(e) => void cambiarTema(e.target.value as TemaId)}>
-              {TEMA_IDS.map((id) => <option key={id} value={id}>{TEMAS[id]}</option>)}
-            </select>
-          </label>
-          <label className="campo">
-            {S.app.densidad}
-            <select value={densidad} onChange={(e) => setDensidad(e.target.value as Densidad)}>
-              {S.app.densidades.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-            </select>
-          </label>
-          <p className="vacio">{S.app.tipografia((tema?.tokens?.['font.ui'] ?? S.app.tipografiaPorDefecto).split(',')[0]!)}</p>
+          <Apariencia
+            temaId={temaId}
+            tema={tema ?? null}
+            temas={temas}
+            densidad={densidad}
+            onDensidad={(d) => setDensidad(d as Densidad)}
+            onTemas={guardarTemas}
+            onSeleccionar={(id) => void seleccionarTema(id)}
+          />
           <div className="acciones"><button className="boton primario">{S.app.cerrar}</button></div>
         </form>
       </dialog>
@@ -817,13 +870,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
           simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
-      {/* `key={temaId}`: los colores neutros del modo se escriben en el DI al activarlo
+      {/* La `key`: los colores neutros del modo se escriben en el DI al activarlo
           (`ColoresNeutrosDelTema`), y el DI gana a los colores por defecto que repinta
           `repintar()`. Como el lienzo ya no se remonta al cambiar de tema, sin esta `key` el
           diagrama se quedaba con los colores del tema anterior y la etiqueta con los del nuevo
           —texto invisible—. Remontar `TokenSim` apaga y vuelve a encender el modo, que es donde
-          el módulo relee los tokens (QA de #275). */}
-      {modo === 'Validar rutas' && <TokenSim key={temaId} modelador={modelador} />}
+          el módulo relee los tokens (QA de #275). No basta con `temaId`: editar un token del tema
+          activo no cambia el id (LILA-114), así que la `key` lleva además los dos tokens que el
+          modo congela en el DI (QA de #277). */}
+      {modo === 'Validar rutas' && (
+        <TokenSim key={`${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
+      )}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
           {validacion.errores > 0 && (

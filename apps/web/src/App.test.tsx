@@ -32,7 +32,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   publicarEstado: (_estado: unknown) => {} }));
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
-vi.mock('./theme/applyTheme', () => ({ applyTheme: vi.fn() }));
+// Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
+// `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
+vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
 vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
@@ -92,7 +94,7 @@ beforeEach(async () => {
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test' }) }));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.abrir.mockResolvedValue(true);
   mocks.worker.mockResolvedValue(done);
@@ -309,6 +311,76 @@ it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el 
   // El tema ya no se anuncia en la barra de estado (#237): se ve y se cambia en Ajustes.
   expect(select.value).toBe('papel');
 });
+it('aplicar un tema parcial borra las variables del anterior (docs/THEMES.md)', async () => {
+  // `docs/THEMES.md` promete que un token ausente se queda con el valor por defecto de
+  // `tokens.css`. No era verdad en cuanto se había aplicado otro tema: `applyTheme` escribe en
+  // línea sobre `:root` y no borra, así que un tema parcial —lo que sale de «Importar»— heredaba
+  // en silencio los tokens del anterior y se veía distinto según lo que hubiera antes (QA de #277).
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  raiz.style.setProperty('--accent-primary', '#EC3013');
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // `applyTheme` es un mock aquí: lo que se mide es que el token que el tema nuevo NO trae ya no
+  // está en línea, que es justo lo que lo devuelve al `:root` de `tokens.css` (Eva-01).
+  expect(raiz.style.getPropertyValue('--bg-base')).toBe('');
+  raiz.style.removeProperty('--accent-primary');
+});
+it('un tema que lanza no borra las variables del anterior (QA ronda 2 de #277)', async () => {
+  // Es la razón de que `aplicarTema` borre DESPUÉS de escribir y no antes: la garantía de
+  // `applyTheme` es que un tema malo deja el anterior intacto, y barrer primero la perdía.
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  vi.mocked(applyTheme).mockImplementationOnce(() => { throw new Error('Tema "Malo": el token "x" no existe en Lila Modeler.'); });
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Malo', tokens: {} }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(raiz.style.getPropertyValue('--bg-base')).toBe('#F3F2F2');
+  expect(container.textContent).toContain('no existe en Lila Modeler');
+  raiz.style.removeProperty('--bg-base');
+});
+it('el lienzo se repinta DESPUÉS del barrido, no antes (QA ronda 2 de #277)', async () => {
+  // `repintar()` relee los tokens del `:root`: si corriera antes del barrido, el diagrama se
+  // quedaría con los colores del tema anterior hasta el siguiente repintado.
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  let alRepintar = 'sin llamar';
+  mocks.repintar.mockImplementationOnce(() => { alRepintar = raiz.style.getPropertyValue('--bg-base'); });
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(alRepintar).toBe('');
+});
+it('un `lila.temas` ilegible no se lleva por delante el tema ni la densidad (QA de #277)', async () => {
+  localStorage.setItem('lila.tema', 'papel');
+  localStorage.setItem('lila.densidad', 'compacta');
+  localStorage.setItem('lila.temas', '{esto no es JSON');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
+  // La lista ilegible se pierde sola: el selector solo trae los integrados.
+  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+});
+it('Enter en un campo de texto de Ajustes no cierra el diálogo (QA de #277)', async () => {
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(dialog.open).toBe(true);
+  // El `<form method="dialog">` enviaba —o sea cerraba— al pulsar Enter en mitad de teclear un hex.
+  // jsdom no implementa el envío implícito, así que lo que se mide es el `preventDefault`, que es
+  // exactamente lo que en el navegador impide ese envío.
+  const enHex = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => { hexDe('accent.primary').dispatchEvent(enHex); });
+  expect(enHex.defaultPrevented).toBe(true);
+  expect(dialog.open).toBe(true);
+  // Y el botón «Cerrar» sigue cerrando con Enter: ahí el objetivo no es un `<input>`.
+  const cerrar = [...container.querySelectorAll('dialog.ajustes button')].at(-1)!;
+  const enBoton = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  await act(async () => { cerrar.dispatchEvent(enBoton); });
+  expect(enBoton.defaultPrevented).toBe(false);
+});
 it('arranca con el tema recordado y la densidad como atributo', async () => {
   localStorage.setItem('lila.tema', 'papel'); localStorage.setItem('lila.densidad', 'compacta');
   await act(async () => root.unmount());
@@ -359,6 +431,48 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
   expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
 });
+/** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
+const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
+/** El campo hex de un token dentro del diálogo de Ajustes. */
+const hexDe = (token: string) => container.querySelector<HTMLInputElement>(`dialog.ajustes input[aria-label="Hex de ${token}"]`)!;
+
+it('un tema del usuario sobrevive a recargar y se aplica sin fetch (LILA-114)', async () => {
+  localStorage.setItem('lila.tema', 'u:1');
+  localStorage.setItem('lila.temas', JSON.stringify([temaMio]));
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  vi.mocked(fetch).mockClear();
+  await act(async () => root.render(<App store={session} />));
+  // Ni una petición: el tema del usuario sale del almacén, no de `themes/*.json`.
+  expect(fetch).not.toHaveBeenCalled();
+  expect(applyTheme).toHaveBeenLastCalledWith(temaMio.tema);
+  expect(container.querySelector<HTMLSelectElement>('dialog.ajustes select')!.value).toBe('u:1');
+});
+
+it('editar un token guarda la lista donde toca en cada modalidad (LILA-114)', async () => {
+  // Web: la lista va a `localStorage`, junto al tema elegido.
+  teclear(hexDe('accent.primary'), '#00FF00');
+  const guardado = JSON.parse(localStorage.getItem('lila.temas')!) as (typeof temaMio)[];
+  expect(guardado).toHaveLength(1);
+  expect(guardado[0]!.tema.tokens['accent.primary']).toBe('#00FF00');
+  expect(localStorage.getItem('lila.tema')).toBe(guardado[0]!.id);
+
+  // Escritorio: la misma lista sale y entra por el puente, y el `localStorage` ni se mira.
+  const escrito: { temas?: unknown }[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ tema: 'u:1', temas: [temaMio] }),
+    writeSettings: async (a: { temas?: unknown }) => { escrito.push(a); },
+  });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(applyTheme).toHaveBeenLastCalledWith(temaMio.tema);
+  teclear(hexDe('accent.primary'), '#0000FF');
+  // `toContainEqual` y no la última llamada: el efecto de la densidad escribe la suya después.
+  expect(escrito).toContainEqual({ temas: [{ ...temaMio, tema: { ...temaMio.tema, tokens: { 'accent.primary': '#0000FF' } } }] });
+});
+
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); });
@@ -632,6 +746,26 @@ it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)',
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Papel', tokens: {} }) } as Response);
   const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
   await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
+});
+
+it('editar un token de diagrama con «Validar rutas» encendido reinicia el modo (QA #277)', async () => {
+  // Con un tema del usuario ya activo, editar un token NO cambia `temaId`: si la `key` de
+  // `TokenSim` fuera solo el id, el modo no se reiniciaría y el diagrama se quedaría con el
+  // relleno viejo, porque `ColoresNeutrosDelTema` lo escribió en el DI al activar el modo y el DI
+  // gana a `repintar()` (medido por CDP: `fill` en línea `rgb(31,26,54)` con `--diagram-fill`
+  // ya en `#FFFFFF`).
+  localStorage.setItem('lila.tema', 'u:1');
+  localStorage.setItem('lila.temas', JSON.stringify([temaMio]));
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await click('Validar rutas');
+  mocks.simulacionTokens.mockClear();
+  // Un token que el modo no congela en el DI no reinicia nada: no hay por qué cortar la animación.
+  teclear(hexDe('accent.primary'), '#00FFAA');
+  expect(mocks.simulacionTokens).not.toHaveBeenCalled();
+  teclear(hexDe('diagram.fill'), '#FFFFFF');
   expect(mocks.simulacionTokens.mock.calls.map(([activa]) => activa)).toEqual([false, true]);
 });
 

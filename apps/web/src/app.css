@@ -1266,6 +1266,31 @@ body {
 .ajustes .campo { margin-bottom: 10px; }
 .ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
 .ajustes .acciones { justify-content: flex-end; margin-top: 16px; }
+
+/* Editor de temas (LILA-114). El diálogo puede crecer mucho —40 tokens en siete grupos—, así que
+   se acota a la altura de la ventana y desplaza dentro; los grupos son `<details>` y solo el
+   primero viene abierto. Ni un color literal aquí: todo sale de los tokens, incluidos los del
+   propio editor, que por eso se repinta a la vez que la app cuando se cambia uno. */
+.ajustes { max-height: 82vh; overflow: auto; }
+.ajustes .campo input[type='text'] { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; width: 100%; }
+.ajustes .acciones.temas { justify-content: flex-start; margin: 12px 0; }
+/* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
+   y es el que abre el selector nativo (y el que un test acciona). */
+.ajustes .acciones.temas .boton { display: inline-flex; }
+.ajustes .acciones.temas input[type='file'] { display: none; }
+.ajustes .muestras { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); display: flex; gap: 12px; margin: 12px 0; padding: 10px; }
+.ajustes .muestras .apagado { color: var(--fg-muted); }
+.ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }
+.ajustes .grupo { border-top: 1px solid var(--border); padding: 6px 0; }
+.ajustes .grupo > summary { color: var(--fg-muted); cursor: pointer; font-weight: 600; padding: 4px 0; }
+.ajustes .token { align-items: center; display: grid; gap: 8px; grid-template-columns: 1fr auto minmax(6rem, 10rem); margin: 4px 0; }
+.ajustes .token code { color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.ajustes .token input, .ajustes .token select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
+.ajustes .token input[type='color'] { background: var(--bg-surface); block-size: 24px; border: 1px solid var(--border-strong); cursor: pointer; inline-size: 34px; padding: 1px; }
+.ajustes .token input[type='text'] { font-family: var(--font-mono); }
+/* Lo tecleado a medias (`#12`, el nombre vacío) no se aplica ni se guarda (QA de #277): el campo
+   lo dice con el token de error y el tema sigue con el valor bueno. */
+.ajustes input.invalido { border: 1px solid var(--status-error); }
 .boton.icono { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-muted); display: grid; flex: none; height: 30px; line-height: 1; padding: 0; place-items: center; width: 30px; }
 .boton.icono:hover:enabled { color: var(--fg-primary); }
 .boton.icono:disabled { color: var(--fg-disabled); }
