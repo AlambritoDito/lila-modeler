@@ -1,4 +1,4 @@
-appId: net.perfer.lila-modeler
+appId: com.perferprocess.lila-modeler
 productName: Lila Modeler
 directories:
   output: release
