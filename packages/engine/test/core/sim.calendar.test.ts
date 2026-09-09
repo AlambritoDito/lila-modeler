@@ -743,6 +743,6 @@ describe('capacidad por intervalos (LILA-164, R-CAL-11)', () => {
       elements: { ...scenario.elements, Tarea: { ...scenario.elements!.Tarea, resources: [{ ref: 'enfermera', quantity }] } },
     });
     expect(() => runReplication(ir, conCantidad(3))).not.toThrow();
-    expect(() => runReplication(ir, conCantidad(4))).toThrow(/E-REC-CANTIDAD.*excede capacity 3/);
+    expect(() => runReplication(ir, conCantidad(4))).toThrow(/E-REC-CANTIDAD.*exceeds capacity 3/);
   });
 });

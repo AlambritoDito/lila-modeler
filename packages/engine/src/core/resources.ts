@@ -1,6 +1,7 @@
 /** Gestor determinista de pools, FIFO, adquisición AND atómica y selección OR (LILA-033/034/035). */
 
 import { Heap } from './heap.js';
+import { coded, coreMessages, type CoreCodeMessages, type Locale } from './messages/index.js';
 
 export interface ResourcePoolDefinition {
   /** Tope de la semana: es contra este valor —no contra el del instante— que se valida `quantity`. */
@@ -131,6 +132,7 @@ function assertPositiveInteger(value: number, message: string): void {
  * El scheduler inspecciona cabezas de clase, nunca recorre todos los casos en espera.
  */
 export class ResourceManager {
+  readonly #messages: CoreCodeMessages;
   readonly #pools = new Map<string, PoolState>();
   readonly #classes = new Map<string, RequestClass>();
   readonly #requests = new Map<string, RequestState>();
@@ -138,9 +140,13 @@ export class ResourceManager {
   #nextSeq = 0;
   #headInspections = 0;
 
-  constructor(definitions: Readonly<Record<string, ResourcePoolDefinition>>) {
+  constructor(definitions: Readonly<Record<string, ResourcePoolDefinition>>, locale: Locale = 'en') {
+    this.#messages = coreMessages(locale).codes;
     for (const [poolId, definition] of Object.entries(definitions)) {
-      assertPositiveInteger(definition.capacity, `E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+      assertPositiveInteger(
+        definition.capacity,
+        coded('E-REC-CAPACIDAD', this.#messages['E-REC-CAPACIDAD/entero'](poolId)),
+      );
       this.#pools.set(poolId, {
         capacity: definition.capacity,
         capacityAt: definition.capacityAt,
@@ -175,7 +181,9 @@ export class ResourceManager {
     const allocations: ResourceAllocation[] = [];
     for (const id of ids) {
       const state = this.#requests.get(id);
-      if (state?.status !== 'active') throw new Error(`E-REC-LIBERACION: ${id} no tiene una asignación activa.`);
+      if (state?.status !== 'active') {
+        throw new Error(coded('E-REC-LIBERACION', this.#messages['E-REC-LIBERACION'](id)));
+      }
       allocations.push(state.allocation);
     }
 
@@ -214,7 +222,9 @@ export class ResourceManager {
     const dirty = new Set<string>();
     for (const poolId of poolIds) {
       const pool = this.#pools.get(poolId);
-      if (pool === undefined) throw new Error(`E-REC-DESCONOCIDO: el pool ${poolId} no existe.`);
+      if (pool === undefined) {
+        throw new Error(coded('E-REC-DESCONOCIDO', this.#messages['E-REC-DESCONOCIDO/pool'](poolId)));
+      }
       for (const classKey of pool.classes) dirty.add(classKey);
     }
     return this.#drain(dirty, at);
@@ -222,7 +232,9 @@ export class ResourceManager {
 
   used(poolId: string): number {
     const pool = this.#pools.get(poolId);
-    if (pool === undefined) throw new Error(`E-REC-DESCONOCIDO: el pool ${poolId} no existe.`);
+    if (pool === undefined) {
+      throw new Error(coded('E-REC-DESCONOCIDO', this.#messages['E-REC-DESCONOCIDO/pool'](poolId)));
+    }
     return pool.used;
   }
 
@@ -242,17 +254,47 @@ export class ResourceManager {
   }
 
   #validate(request: ResourceRequest): void {
-    if (this.#requests.has(request.id)) throw new Error(`E-REC-SOLICITUD-DUPLICADA: ya existe la solicitud ${request.id}.`);
-    if (request.requirements.length === 0) throw new Error(`E-REC-SIN-ASIGNACION: ${request.id}: falta un pool.`);
+    if (this.#requests.has(request.id)) {
+      throw new Error(
+        coded('E-REC-SOLICITUD-DUPLICADA', this.#messages['E-REC-SOLICITUD-DUPLICADA'](request.id)),
+      );
+    }
+    if (request.requirements.length === 0) {
+      throw new Error(coded('E-REC-SIN-ASIGNACION', this.#messages['E-REC-SIN-ASIGNACION'](request.id)));
+    }
     const seen = new Set<string>();
     for (const requirement of request.requirements) {
-      if (seen.has(requirement.poolId)) throw new Error(`E-REC-DUPLICADO: ${request.id}: el pool ${requirement.poolId} aparece más de una vez.`);
+      if (seen.has(requirement.poolId)) {
+        throw new Error(
+          coded('E-REC-DUPLICADO', this.#messages['E-REC-DUPLICADO/pool'](request.id, requirement.poolId)),
+        );
+      }
       seen.add(requirement.poolId);
       const pool = this.#pools.get(requirement.poolId);
-      if (pool === undefined) throw new Error(`E-REC-DESCONOCIDO: ${request.id}: el pool ${requirement.poolId} no existe.`);
-      assertPositiveInteger(requirement.quantity, `E-REC-CANTIDAD: ${request.id}: quantity de ${requirement.poolId} debe ser un entero mayor o igual que 1.`);
+      if (pool === undefined) {
+        throw new Error(
+          coded(
+            'E-REC-DESCONOCIDO',
+            this.#messages['E-REC-DESCONOCIDO/en-elemento'](request.id, requirement.poolId),
+          ),
+        );
+      }
+      assertPositiveInteger(
+        requirement.quantity,
+        coded('E-REC-CANTIDAD', this.#messages['E-REC-CANTIDAD/entero'](request.id, requirement.poolId)),
+      );
       if (requirement.quantity > pool.capacity) {
-        throw new RangeError(`E-REC-CANTIDAD: ${request.id}: quantity ${requirement.quantity} excede capacity ${pool.capacity} de ${requirement.poolId}.`);
+        throw new RangeError(
+          coded(
+            'E-REC-CANTIDAD',
+            this.#messages['E-REC-CANTIDAD/excede'](
+              request.id,
+              requirement.quantity,
+              pool.capacity,
+              requirement.poolId,
+            ),
+          ),
+        );
       }
     }
   }
@@ -295,7 +337,9 @@ export class ResourceManager {
     for (const assignment of allocation.assignments) {
       const pool = this.#pools.get(assignment.poolId)!;
       pool.used -= assignment.quantity;
-      if (pool.used < 0) throw new Error(`E-REC-ESTADO: uso negativo en ${assignment.poolId}.`);
+      if (pool.used < 0) {
+        throw new Error(coded('E-REC-ESTADO', this.#messages['E-REC-ESTADO'](assignment.poolId)));
+      }
     }
   }
 

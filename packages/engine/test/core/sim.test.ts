@@ -322,7 +322,7 @@ describe('triggerCount sin interTriggerTimer = N llegadas en t = 0 (R-ARR-1)', (
     });
     expect(run.cases).toHaveLength(0);
     expect(run.warnings).toContain(
-      'W-START-SIN-LLEGADAS: Start: el start no declara interTriggerTimer ni triggerCount y no genera casos.',
+      'W-START-SIN-LLEGADAS: Start: the start declares neither interTriggerTimer nor triggerCount and generates no cases.',
     );
   });
 });
