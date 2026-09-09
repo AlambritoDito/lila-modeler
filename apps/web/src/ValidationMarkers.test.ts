@@ -25,6 +25,11 @@ import type ModelerType from 'bpmn-js/lib/Modeler';
 
 import { problemasEscenario, type Problema } from './ScenarioPanel';
 import { problemasPorElemento, sincronizarMarcadores, type Validacion } from './ValidationMarkers';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLE_DIR = resolve(HERE, '../../../examples/pedido');

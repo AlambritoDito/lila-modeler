@@ -25,6 +25,12 @@ import {
 /** ponytail: tope por defecto de filas retenidas de la primera replicación (docs/RESULTS_FORMAT.md §7). */
 export const DEFAULT_LOG_SAMPLE_LIMIT = 10_000;
 
+/**
+ * El worker no conoce el idioma de la app a propósito: aquí no se importa ni el catálogo ni
+ * `i18n.ts` —lo que sale de este archivo son los mensajes del motor, y `worker.bundle.test.ts`
+ * vigila que el bundle siga cabiendo en 100 KB—. Si #280 acaba pasándole el idioma al motor, este
+ * es el sitio donde `RunRequest` ganaría un `locale`; hasta entonces no hay nada que traducir.
+ */
 export interface RunRequest {
   type: 'run';
   ir: ProcessIR;

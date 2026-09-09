@@ -1,5 +1,5 @@
 import { marcarExportador, sanitizeXmlIds } from '@lila/engine/bpmn';
-import { S } from './strings.es';
+import { strings } from './i18n';
 
 const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
 const XML_ATTR_NOMBRADO = /\s([A-Za-z_][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
@@ -146,6 +146,7 @@ export function autorizarExportacion(
   perdidas: readonly string[],
   opciones: OpcionesExportacion = {},
 ): void {
+  const S = strings();
   if (perdidas.length === 0 || opciones.aceptarPerdida === true) return;
   const detalle = perdidas.map((warning) => `• ${warning}`).join('\n');
   throw new Error(S.simulacion.errorExportacionBloqueada(detalle));

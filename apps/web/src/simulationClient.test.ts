@@ -8,6 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInWorker } from './simulationClient.js';
 import type { WorkerRequest, WorkerResponse } from './worker.js';
 import type { ProcessIR, SimScenario } from '@lila/engine';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const IR = { id: 'P', elements: {}, flows: {} } as unknown as ProcessIR;
 const SCENARIO = { model: 'm.bpmn', run: { seed: 1 } } as unknown as SimScenario;

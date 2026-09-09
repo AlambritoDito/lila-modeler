@@ -3,6 +3,11 @@ import { describe, expect, test } from 'vitest';
 import { compareWarnings, runMetaFrom, type CompareRunMeta } from './compareWarnings.js';
 import type { ResolvedScenario } from '@lila/engine/schema';
 import type { RunResult } from '@lila/engine';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 function run(overrides: Partial<CompareRunMeta> = {}): CompareRunMeta {
   return { name: 'AS-IS', ...overrides };

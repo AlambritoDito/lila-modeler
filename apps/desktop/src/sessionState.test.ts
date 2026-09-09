@@ -182,6 +182,28 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(leido.ajustes).toEqual({ tema: 'papel' });
   });
 
+  it('el idioma pasa la lista blanca, y lo que no es texto se cae (LILA-210)', () => {
+    // Main no sabe qué idiomas existen —lo sabe el renderer, que cae en `auto` si no reconoce lo
+    // guardado—, así que aquí solo se mira que sea un texto, igual que con el tema y la densidad.
+    expect(parseAjustes({ idioma: 'es' })).toEqual({ idioma: 'es' });
+    expect(parseAjustes({ idioma: 'auto' })).toEqual({ idioma: 'auto' });
+    expect(parseAjustes({ idioma: 'fr' })).toEqual({ idioma: 'fr' });
+    expect(parseAjustes({ idioma: 7 })).toEqual({});
+    expect(parseAjustes({ idioma: null })).toEqual({});
+    expect(parseAjustes({ idioma: ['es'] })).toEqual({});
+    // Y convive con los demás ajustes sin pisarlos.
+    expect(parseAjustes({ tema: 'papel', densidad: 'comoda', idioma: 'en' })).toEqual({
+      tema: 'papel',
+      densidad: 'comoda',
+      idioma: 'en',
+    });
+  });
+
+  it('withAjustes fusiona el idioma como cualquier otra preferencia (LILA-210)', () => {
+    const conIdioma = withAjustes(defaultSessionState(), { idioma: 'es' });
+    expect(withAjustes(conIdioma, { tema: 'papel' }).ajustes).toEqual({ idioma: 'es', tema: 'papel' });
+  });
+
   it('"ajustes" con una forma imposible (array, texto, null) se lee como {}', () => {
     expect(parseAjustes([1, 2])).toEqual({});
     expect(parseAjustes('papel')).toEqual({});
