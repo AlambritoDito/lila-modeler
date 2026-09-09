@@ -135,9 +135,12 @@ Los controles:
   `App.tsx` le hace `preventDefault` cuando el objetivo es un `<input>`.
 - **Lo tecleado a medias no sale del control.** Un hex pasa por `#`, `#1`, `#12`… y ninguno de esos
   es un color; el nombre pasa por el vacío y el tamaño base por el campo sin número (que dejaba el
-  token en `"px"`). Esos valores se quedan en el estado del propio campo —que los enseña marcados
-  con `--status-error`— y no se aplican ni se guardan: solo un valor válido llama a `onTemas`, y
-  hasta que lo haya sigue mandando el último bueno.
+  token en `"px"`) o fuera del rango 9–32 px, donde `-5px` y `0px` son longitudes que CSS descarta
+  en silencio. Esos valores se quedan en el estado del propio campo —que los enseña marcados con
+  `--status-error`— y no se aplican ni se guardan: solo un valor válido llama a `onTemas`, y hasta
+  que lo haya sigue mandando el último bueno. **Al salir del campo el valor a medias se descarta** y
+  vuelve el último bueno: si no, seguía en pantalla después de cambiar de tema, de «Restablecer» o
+  de cerrar y reabrir Ajustes, enseñando en rojo un valor que el tema activo no tiene.
 
 **Qué valida `validarTema` y por qué no basta `applyTheme`.** `applyTheme` comprueba lo que le
 impide escribir CSS sano: clave conocida y valor de texto. Un archivo elegido por el usuario puede

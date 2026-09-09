@@ -60,7 +60,9 @@ interface EditorProps {
  * **Lo tecleado a medias no sale del control.** Escribir un hex pasa por `#`, `#1`, `#12`… y
  * ninguno de esos es un color: aplicarlos pintaría la app de nada y persistirlos dejaba en disco un
  * tema que al releerlo había que reparar (QA de #277). El borrador vive aquí, el campo lo enseña
- * marcado como inválido, y solo el valor bueno llama a `editar`.
+ * marcado como inválido, y solo el valor bueno llama a `editar`. **Al salir del campo el borrador
+ * se descarta** y vuelve el último valor bueno (QA ronda 2): si no, seguía en pantalla después de
+ * cambiar de tema o de «Restablecer», enseñando en rojo un valor que el tema activo no tiene.
  */
 function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
   const [borrador, setBorrador] = useState<string | null>(null);
@@ -87,6 +89,7 @@ function Color({ token, valor, editar }: EditorProps): React.JSX.Element {
           if (valorValido(token, nuevo)) { setBorrador(null); editar(token, nuevo); }
           else setBorrador(nuevo);
         }}
+        onBlur={() => setBorrador(null)}
       />
     </label>
   );
@@ -127,9 +130,13 @@ function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
         value={borrador ?? Number.parseFloat(valor === '' ? '13' : valor)}
         onChange={(e) => {
           const nuevo = e.target.value;
-          if (nuevo !== '' && Number.isFinite(Number(nuevo))) { setBorrador(null); editar(token, `${nuevo}px`); }
+          // El rango del control es el que vale: `-5px` o `0px` son longitudes que CSS descarta en
+          // silencio, y `min`/`max` no impiden teclearlas (QA ronda 2 de #277).
+          const n = Number(nuevo);
+          if (nuevo !== '' && Number.isFinite(n) && n >= 9 && n <= 32) { setBorrador(null); editar(token, `${nuevo}px`); }
           else setBorrador(nuevo);
         }}
+        onBlur={() => setBorrador(null)}
       />
     </label>
   );
@@ -235,6 +242,7 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
               if (nuevo.trim() === '') setBorradorNombre(nuevo);
               else { setBorradorNombre(null); renombrar(nuevo); }
             }}
+            onBlur={() => setBorradorNombre(null)}
           />
         </label>
       )}

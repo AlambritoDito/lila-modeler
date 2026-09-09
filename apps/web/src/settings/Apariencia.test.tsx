@@ -82,6 +82,10 @@ function teclear(campo: HTMLInputElement, texto: string): void {
     campo.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+/** Sacar el foco del campo: React traduce el `focusout` nativo en `onBlur`. */
+function salir(campo: HTMLElement): void {
+  act(() => { campo.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+}
 /** Empuja un archivo por el `<input type="file">`, que jsdom no deja rellenar de otra manera. */
 async function importar(contenido: string): Promise<void> {
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -296,4 +300,53 @@ it('el nombre vacío no se persiste: se conserva el anterior hasta que vuelva a 
   expect(guardado[0]!.tema.name).toBe('Eva-01 (copia)');
   teclear(nombre(), 'Mío');
   expect(guardado[0]!.tema.name).toBe('Mío');
+});
+
+/**
+ * Salir del campo descarta el borrador (QA ronda 2 de #277). Sin esto el valor a medias seguía en
+ * pantalla, en rojo, después de cambiar de tema o de «Restablecer»: el campo enseñaba `#12` con
+ * Papel puesto, que tiene `#EC3013`, y no había forma de volver a ver el valor bueno salvo teclear
+ * otro válido encima.
+ */
+it('salir del campo devuelve el hex al último valor bueno', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#12');
+  expect(porEtiqueta('Hex de accent.primary').value).toBe('#12');
+  salir(porEtiqueta('Hex de accent.primary'));
+  expect(porEtiqueta('Hex de accent.primary').value).toBe('#9EF01A');
+  expect(porEtiqueta('Hex de accent.primary').getAttribute('aria-invalid')).toBe('false');
+  expect(guardado).toEqual([]);
+});
+
+it('cambiar de tema no arrastra el borrador del anterior', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#GGGGGG');
+  // Para llegar al selector hay que salir del campo: es lo que hace el navegador y lo que descarta
+  // el borrador.
+  salir(porEtiqueta('Hex de accent.primary'));
+  act(() => {
+    const select = selectTema();
+    select.value = 'papel';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(porEtiqueta('Hex de accent.primary').value).toBe(PAPEL.tokens['accent.primary']);
+  expect(porEtiqueta('Hex de accent.primary').getAttribute('aria-invalid')).toBe('false');
+});
+
+it('salir del campo del nombre devuelve el nombre bueno', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#123456');
+  const nombre = (): HTMLInputElement => container.querySelector<HTMLInputElement>('.campo input[type="text"]')!;
+  teclear(nombre(), '');
+  salir(nombre());
+  expect(nombre().value).toBe('Eva-01 (copia)');
+  expect(nombre().getAttribute('aria-invalid')).toBe('false');
+});
+
+/**
+ * `min`/`max` del control no impiden teclear: `-5px` y `0px` son longitudes que CSS descarta en
+ * silencio, así que se persistía un token que no pinta nada (QA ronda 2 de #277).
+ */
+it.each(['-5', '0', '999'])('el tamaño base fuera de rango (%s) no se aplica ni se guarda', (fuera) => {
+  teclear(porEtiqueta('Tamaño base (px)'), fuera);
+  expect(porEtiqueta('Tamaño base (px)').getAttribute('aria-invalid')).toBe('true');
+  expect(variable('--font-size-base')).toBe('13px');
+  expect(guardado).toEqual([]);
 });
