@@ -327,6 +327,43 @@ it('aplicar un tema parcial borra las variables del anterior (docs/THEMES.md)', 
   expect(raiz.style.getPropertyValue('--bg-base')).toBe('');
   raiz.style.removeProperty('--accent-primary');
 });
+it('un tema que lanza no borra las variables del anterior (QA ronda 2 de #277)', async () => {
+  // Es la razón de que `aplicarTema` borre DESPUÉS de escribir y no antes: la garantía de
+  // `applyTheme` es que un tema malo deja el anterior intacto, y barrer primero la perdía.
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  vi.mocked(applyTheme).mockImplementationOnce(() => { throw new Error('Tema "Malo": el token "x" no existe en Lila Modeler.'); });
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Malo', tokens: {} }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(raiz.style.getPropertyValue('--bg-base')).toBe('#F3F2F2');
+  expect(container.textContent).toContain('no existe en Lila Modeler');
+  raiz.style.removeProperty('--bg-base');
+});
+it('el lienzo se repinta DESPUÉS del barrido, no antes (QA ronda 2 de #277)', async () => {
+  // `repintar()` relee los tokens del `:root`: si corriera antes del barrido, el diagrama se
+  // quedaría con los colores del tema anterior hasta el siguiente repintado.
+  const raiz = document.documentElement;
+  raiz.style.setProperty('--bg-base', '#F3F2F2');
+  let alRepintar = 'sin llamar';
+  mocks.repintar.mockImplementationOnce(() => { alRepintar = raiz.style.getPropertyValue('--bg-base'); });
+  vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Cian', tokens: { 'accent.primary': '#00E5FF' } }) } as Response);
+  const select = container.querySelector<HTMLSelectElement>('dialog.ajustes select')!;
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(alRepintar).toBe('');
+});
+it('un `lila.temas` ilegible no se lleva por delante el tema ni la densidad (QA de #277)', async () => {
+  localStorage.setItem('lila.tema', 'papel');
+  localStorage.setItem('lila.densidad', 'compacta');
+  localStorage.setItem('lila.temas', '{esto no es JSON');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
+  // La lista ilegible se pierde sola: el selector solo trae los integrados.
+  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+});
 it('Enter en un campo de texto de Ajustes no cierra el diálogo (QA de #277)', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });

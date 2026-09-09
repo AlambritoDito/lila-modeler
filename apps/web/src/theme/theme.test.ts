@@ -169,14 +169,32 @@ describe('saneaTemas', () => {
 
   it('sin origen válido el token se cae, y ausente lo pinta el default de tokens.css (Eva-01)', () => {
     const [t] = saneaTemas(guardado({ 'accent.primary': 'azul', 'density': 'enorme' }, {}));
+    // El tema TIENE que seguir ahí: sin esta línea la prueba pasaba igual descartándolo entero,
+    // que es justo lo que se está arreglando (QA ronda 2 de #277).
+    expect(t?.tema.name).toBe('Mío');
     expect(t?.tema.tokens['accent.primary']).toBeUndefined();
     expect(t?.tema.tokens['density']).toBeUndefined();
   });
 
   it('un token que no existe no entra, ni desde el tema ni desde el origen', () => {
     const [t] = saneaTemas(guardado({ 'foo.bar': '#FFFFFF' }, { 'foo.bar': '#FFFFFF' }));
+    expect(t?.tema.name).toBe('Mío');
     expect(t?.tema.tokens['foo.bar']).toBeUndefined();
     expect(t?.origen['foo.bar']).toBeUndefined();
+  });
+
+  it('39 tokens rotos y uno bueno: sobrevive el bueno, no se descarta el tema', () => {
+    const tokens: Record<string, unknown> = {};
+    for (const n of TOKEN_NAMES) tokens[n] = 42;
+    tokens['bg.base'] = '#010203';
+    const [t] = saneaTemas(guardado(tokens, {}));
+    expect(t?.tema.tokens).toEqual({ 'bg.base': '#010203' });
+  });
+
+  it('el `origen` roto tampoco descarta el tema: se queda sin respaldo', () => {
+    const [t] = saneaTemas(guardado({ 'bg.base': '#010203', 'accent.primary': '#12' }, 'no soy un objeto'));
+    expect(t?.origen).toEqual({});
+    expect(t?.tema.tokens).toEqual({ 'bg.base': '#010203' });
   });
 
   it.each([
