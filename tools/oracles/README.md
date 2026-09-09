@@ -1,5 +1,7 @@
 # tools/oracles — validación numérica del motor
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../../docs/) and [`README.md`](../../README.md).
+
 Scripts sin dependencias en `core/` que sirven de oráculo independiente para verificar que
 `simulate()` mide lo que dice medir (`docs/RESULTS_FORMAT.md`). Ninguno se ejecuta en `npm test`
 normal.

@@ -1,5 +1,7 @@
 # Estado 2026 de motores open source de simulación BPMN y tooling DES (Prosimos, Simod, Scylla, BIMP/QBP, Apromore, bpmn-js-token-simulation, bpmn-engine, Camunda/Zeebe, AgentSimulator, DeepSimulator, RIMS, prosit, casymda, bpmn-os, miroboard, SimPy, salabim, Ciw, DES en JS/TS, DES en Rust/WASM, BPSim, Bizagi como referencia)
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación

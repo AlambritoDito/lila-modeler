@@ -1,5 +1,7 @@
 # Editor BPMN para la UI web de Lila Modeler: bpmn-js (licencia bpmn.io, watermark, actividad 2026, extensibilidad, rendimiento, tipos) frente a alternativas (KIE bpmn-editor/React Flow, diagram-js solo, bpmn-visualization, LogicFlow, Camunda Web Modeler, editores Apache/EPL/GPL, Rust/Tauri)
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación
