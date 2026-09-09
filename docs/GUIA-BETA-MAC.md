@@ -39,8 +39,8 @@ que carga `eva-01.json` al vuelo.
 ## Recorrido de uso
 
 La barra superior tiene cinco modos: **Modelar**, **Simular**, **Resultados**, **Comparar** y
-**Validar rutas**. Los textos de abajo son literales de la interfaz (`apps/web/src/App.tsx`), no
-paráfrasis.
+**Validar rutas**. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
+`apps/web/src/strings.es.ts`), no paráfrasis.
 
 ### Modelar
 
@@ -105,11 +105,23 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
   produce resultados.» Sirve para ver a ojo por dónde pasan las rutas, no para medir.
 - Mientras el modo está activo no se pintan el overlay de cuellos de botella ni los marcadores de
   validación, y el diagrama no se puede editar; al volver a **Modelar** todo vuelve a su sitio.
-- Los controles son los del propio módulo de bpmn.io y **están en inglés** (LILA-065): la paleta de
-  la izquierda del lienzo («Play/Pause Simulation», «Reset Simulation», «Toggle Simulation Log»),
-  los botones que aparecen sobre las figuras («Trigger Event» para arrancar desde un evento de
-  inicio, «Add pause point» para parar en una actividad y avanzar paso a paso, «Set Sequence Flow»
-  para elegir la salida de una compuerta) y los avisos del registro.
+- Los controles son los del propio módulo de bpmn.io, y desde LILA-205 (#264) **salen en español**:
+  la paleta de la izquierda del lienzo («Reproducir o pausar la simulación», «Reiniciar
+  simulación», «Registro de la simulación»), los botones que aparecen sobre las figuras («Disparar
+  evento» para arrancar desde un evento de inicio, «Añadir punto de pausa» para parar en una
+  actividad y avanzar paso a paso, «Elegir el flujo de salida» para la salida de una compuerta) y
+  los avisos del registro. El módulo no usa el servicio `translate` de bpmn-js —lleva sus textos
+  escritos dentro del HTML—, así que la traducción se hace sustituyéndolos en el lienzo
+  (`traducirSimulacion` en `apps/web/src/TokenSim.tsx`, con el inventario en `strings.es.ts`): si
+  algún día se actualiza el módulo y cambia un rótulo, ese rótulo volverá a verse en inglés, nunca
+  roto.
+- El diagrama **conserva los colores del tema** durante la animación (#264). De fábrica el módulo
+  lo repinta en blanco y negro mientras dura el modo, pensado para un lienzo blanco; Lila
+  sustituye dos de sus servicios (`moduloColoresDelTema` en `apps/web/src/TokenSim.tsx`) para que
+  pinte con los tokens del tema. La salida elegida de una compuerta se marca con el color de
+  selección del tema (lima en Eva-01, rojo en Papel) y la descartada con el de una conexión
+  normal; los marcadores propios de la animación —el verde de los ámbitos, el contador de
+  tokens— se quedan como vienen.
 
 ### Guardar y recuperar
 

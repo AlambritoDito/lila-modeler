@@ -1,5 +1,6 @@
 import { validateBpmnXml } from '@lila/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
+import { S } from './strings.es';
 
 /** La misma frontera de validación que CLI, antes de crear un Worker. */
 export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn') {
@@ -8,13 +9,13 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   // de estado como su volcado JSON en inglés (LILA-202). Aquí sale la misma lista que en la CLI.
   const parsed = parseScenario(resolveExtends(file, (path) => {
     const raw = scenarios[path];
-    if (raw === undefined) throw new Error(`Escenario desconocido: ${path}`);
+    if (raw === undefined) throw new Error(S.simulacion.errorEscenarioDesconocido(path));
     return raw;
   }));
   if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || '$'}: ${i.message}`).join('\n'));
   const scenario = parsed.data;
-  if (scenario.model === undefined || scenario.run === undefined) throw new Error('Falta model o run en el escenario resuelto.');
-  if (scenario.model !== expectedModel) throw new Error(`El escenario apunta a ${scenario.model}, pero el modelo activo es ${expectedModel}.`);
+  if (scenario.model === undefined || scenario.run === undefined) throw new Error(S.simulacion.errorFaltaModelORun);
+  if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
   const problems = validateScenario(scenario, model.ir);
   const errors = [
     ...model.errors.map((p) => `${p.code}: ${p.id}: ${p.message}`),

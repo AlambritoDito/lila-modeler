@@ -25,11 +25,12 @@ import type Modeler from 'bpmn-js/lib/Modeler';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { Problema } from './ScenarioPanel';
+import { S } from './strings.es';
 
 const TIPO = 'lila-validacion';
 
 /** Acciones que recuerda el tooltip, como en el artboard `docs/design/01-modelar-1440.png`. */
-const ACCIONES = 'F2 renombrar · ⇥ propiedades';
+const ACCIONES = S.lienzo.marcadorAcciones;
 
 /**
  * `elements.<id>`, `elements.<id>.processingTime`, `elements.<id>.resources[0].ref`: la ruta de
@@ -112,8 +113,8 @@ export function problemasPorElemento(
 function disco(marcador: MarcadorValidacion): HTMLElement {
   const div = document.createElement('div');
   div.className = `lila-validacion lila-validacion-${marcador.nivel}`;
-  div.textContent = '!';
-  div.title = `${marcador.mensajes.join('\n')}\n${ACCIONES}`;
+  div.textContent = S.lienzo.marcadorSimbolo;
+  div.title = S.lienzo.marcadorTitulo(marcador.mensajes, ACCIONES);
   return div;
 }
 

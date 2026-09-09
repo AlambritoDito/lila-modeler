@@ -14,3 +14,14 @@ declare module 'bpmn-js-token-simulation' {
   export default tokenSimulationModule;
 }
 declare module 'bpmn-js-token-simulation/assets/css/bpmn-js-token-simulation.css';
+// Los dos módulos internos que `moduloColoresDelTema` sustituye (#264). Solo los importa
+// `TokenSim.test.tsx`, y solo para comprobar contra la librería de verdad que las claves de los
+// servicios siguen llamándose así.
+declare module 'bpmn-js-token-simulation/lib/features/neutral-element-colors' {
+  const neutralElementColorsModule: Record<string, unknown>;
+  export default neutralElementColorsModule;
+}
+declare module 'bpmn-js-token-simulation/lib/features/simulation-styles' {
+  const simulationStylesModule: Record<string, unknown>;
+  export default simulationStylesModule;
+}

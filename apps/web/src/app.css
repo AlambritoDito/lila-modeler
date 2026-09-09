@@ -1210,6 +1210,12 @@ body {
    alguien lo pulsa sin que React se entere. */
 .lienzo .bts-toggle-mode { display: none; }
 
+/* Los colores del diagrama durante el modo NO se arreglan aquí: `bpmn-js-token-simulation`
+   repinta las figuras por el DI del modelo y bpmn-js@18 los emite como `style=` en línea, que
+   ningún selector de este archivo alcanza sin un `!important` sobre `.djs-visual` que también
+   se llevaría los colores propios de la animación. Se sustituyen dos servicios del módulo por
+   los tokens del tema: `moduloColoresDelTema` en `TokenSim.tsx` (LILA-205 / #264). */
+
 .aviso-token-sim {
   position: absolute;
   right: 14px;

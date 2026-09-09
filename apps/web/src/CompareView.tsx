@@ -34,6 +34,7 @@ import {
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
+import { S } from './strings.es';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 
@@ -112,10 +113,10 @@ function formatMoney(value: number, currency: string | undefined): string {
 
 /** Igual que `formatCompareValue` de `lila compare`: guion para `null`, % para utilización. */
 function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit, currency?: string): string {
-  if (value === null) return '-';
+  if (value === null) return S.comparar.sinValor;
   if (isCostMetric(metric)) return formatMoney(value, currency);
   if (isDurationMetric(metric)) return formatDuration(value, unit);
-  if (metric === 'utilization') return `${formatNumber(value * 100)}%`;
+  if (metric === 'utilization') return S.comparar.porCiento(formatNumber(value * 100));
   return formatNumber(value);
 }
 
@@ -130,7 +131,7 @@ interface ColumnContext {
   currency: string | undefined;
 }
 
-const NOT_COMPARABLE = 'no comparable';
+const NOT_COMPARABLE = S.comparar.noComparable;
 
 /** Texto completo de una celda no base: valor y delta relativo, como `lila compare` en la CLI. */
 function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsComparable: boolean): string {
@@ -140,9 +141,12 @@ function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsCompa
   // Costos en monedas distintas (o una corrida sin moneda): `deltaAbs`/`deltaRel` restan números
   // crudos sin saber que representan divisas distintas (compare() no conoce `run.currency`), así
   // que ese delta no se imprime como si fuera dinero real (OP-05, issue #210).
-  if (isCostMetric(row.metric) && !costsComparable) return `${valueText} (${NOT_COMPARABLE})`;
+  if (isCostMetric(row.metric) && !costsComparable) return S.comparar.celdaConDelta(valueText, NOT_COMPARABLE);
   const deltaRel = row.deltaRel[index] ?? null;
-  return `${valueText} (${deltaRel === null ? '-' : formatSignedPercent(deltaRel)})`;
+  return S.comparar.celdaConDelta(
+    valueText,
+    deltaRel === null ? S.comparar.sinValor : formatSignedPercent(deltaRel),
+  );
 }
 
 /**
@@ -192,7 +196,7 @@ function rowName(
  * Columnas: Id/Name (salvo Proceso), Metric, y una por escenario visible.
  * ------------------------------------------------------------------ */
 
-const SIGNIFICANT_LABEL = 'Diferencia significativa (IC95 disjuntos)';
+const SIGNIFICANT_LABEL = S.comparar.marcaSignificativa;
 
 const highlightStyle: CSSProperties = { background: 'var(--bg-hover)' };
 
@@ -205,13 +209,13 @@ const significantMarkStyle: CSSProperties = { color: 'var(--accent-secondary)', 
  */
 function columnHeader(name: string, index: number, meta: CompareRunMeta | undefined): string {
   const tags = [
-    index === 0 ? 'base' : null,
+    index === 0 ? S.comparar.etiquetaBase : null,
     meta?.currency ?? null,
-    meta?.seed === undefined ? null : `semilla ${meta.seed}`,
-    meta?.replications === undefined ? null : `${meta.replications} réplicas`,
-    meta?.baseTimeUnit === undefined ? null : `unidad ${meta.baseTimeUnit}`,
+    meta?.seed === undefined ? null : S.comparar.metaSemilla(meta.seed),
+    meta?.replications === undefined ? null : S.comparar.metaReplicas(meta.replications),
+    meta?.baseTimeUnit === undefined ? null : S.comparar.metaUnidad(meta.baseTimeUnit),
   ].filter((tag): tag is string => tag !== null);
-  return tags.length === 0 ? name : `${name} (${tags.join(' · ')})`;
+  return S.comparar.columnaConMeta(name, tags);
 }
 
 function scenarioColumn(
@@ -240,7 +244,7 @@ function scenarioColumn(
               convierten el asterisco en una imagen con texto alternativo, que sí se lee. */}
           <span aria-label={SIGNIFICANT_LABEL} role="img" style={significantMarkStyle} title={SIGNIFICANT_LABEL}>
             {' '}
-            *
+            {S.comparar.asterisco}
           </span>
         </>
       );
@@ -275,17 +279,17 @@ export function compareColumns(
     scope === 'process'
       ? []
       : [
-          { display: (row) => row.id ?? '', header: 'Id', key: 'id', sortValue: (row) => row.id ?? '' },
+          { display: (row) => row.id ?? '', header: S.resultados.columnas.id, key: 'id', sortValue: (row) => row.id ?? '' },
           {
             display: (row) => rowName(ir, resourceNames, scope, row.id),
-            header: 'Name',
+            header: S.resultados.columnas.name,
             key: 'name',
             sortValue: (row) => rowName(ir, resourceNames, scope, row.id),
           },
         ];
   const metricColumn: ColumnDef<CompareRow> = {
     display: (row) => compareMetricLabel(row.scope, row.metric),
-    header: 'Metric',
+    header: S.resultados.columnas.metric,
     key: 'metric',
     // Por la etiqueta mostrada y no por el path interno: ordenar por "Metric" tiene que dar el
     // orden alfabético que el usuario ve ("Average time" está bajo `processing.mean`), igual que
@@ -378,7 +382,7 @@ export function CompareView({
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 12px' }}>
-        Unidad de tiempo {baseTimeUnit} (escenario base) · Utilización en %
+        {S.comparar.cabecera(baseTimeUnit)}
       </p>
 
       <div style={selectorRowStyle}>
@@ -391,14 +395,14 @@ export function CompareView({
               onChange={() => toggle(index)}
               type="checkbox"
             />
-            {index === 0 ? `${name} (base)` : name}
+            {index === 0 ? S.comparar.base(name) : name}
           </label>
         ))}
       </div>
 
       <label style={toggleAllStyle}>
         <input checked={showAll} onChange={() => setShowAll((current) => !current)} type="checkbox" />
-        Mostrar todos los KPI
+        {S.comparar.mostrarTodos}
       </label>
 
       {/*
@@ -408,7 +412,7 @@ export function CompareView({
        */}
       {showWarningsPanel && (
         <section style={sectionStyle}>
-          <h2 style={h2Style}>Avisos</h2>
+          <h2 style={h2Style}>{S.comparar.avisos}</h2>
           {globalWarnings.warnings.length > 0 && (
             <ul style={warningListStyle}>
               {globalWarnings.warnings.map((warning) => (
@@ -422,7 +426,7 @@ export function CompareView({
             return (
               <div key={index}>
                 <h3 style={{ ...h2Style, fontSize: 13, margin: '12px 0 0' }}>
-                  {index === 0 ? `${run.name} (base)` : run.name}
+                  {index === 0 ? S.comparar.base(run.name) : run.name}
                 </h3>
                 <ul style={warningListStyle}>
                   {warnings.map((warning) => (
@@ -460,16 +464,15 @@ export function CompareView({
       })}
 
       <section style={sectionStyle}>
-        <h2 style={h2Style}>Significancia</h2>
+        <h2 style={h2Style}>{S.comparar.significancia}</h2>
         {!significanceAvailable && (
           <p style={{ color: 'var(--status-warning)', margin: '8px 0 0' }}>
-            Sin intervalos de confianza en esta comparación: hacen falta al menos 2 réplicas en
-            cada corrida, así que ningún marcador de significancia se muestra abajo.
+            {S.comparar.sinSignificancia}
           </p>
         )}
         <p style={{ color: 'var(--fg-muted)', margin: '8px 0 0' }}>
-          <span style={significantMarkStyle}>*</span> diferencia significativa (IC95 sin
-          solapamiento). Las celdas resaltadas son las que cambiaron contra la base.
+          <span style={significantMarkStyle}>{S.comparar.asterisco}</span>
+          {S.comparar.leyenda}
         </p>
       </section>
     </div>

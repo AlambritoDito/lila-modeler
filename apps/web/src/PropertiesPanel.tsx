@@ -21,6 +21,7 @@
  */
 import { useEffect, useReducer, useState } from 'react';
 import type { Modelador } from './Modeler';
+import { S } from './strings.es';
 
 /* ------------------------------------------------------------------ *
  * Modelo: lo mínimo de bpmn-js que hace falta para leer y escribir.
@@ -248,60 +249,15 @@ export function escribirVersionTag(
  * ------------------------------------------------------------------ */
 
 /** Tipos RACI de `lila:responsibility` (`docs/BPMN_EXTENSION.md` § 2). */
-export const RACI = [
-  ['R', 'R · Responsable'],
-  ['A', 'A · Aprueba'],
-  ['C', 'C · Consultado'],
-  ['I', 'I · Informado'],
-] as const;
+export const RACI = S.propiedades.raci;
 
 /**
  * Los `lila:*Ref` que son una referencia suelta al catálogo, con su etiqueta y el texto de
  * ayuda del campo. El selector desde el catálogo es LILA-093; aquí el id se escribe a mano.
  */
-export const REFERENCIAS = [
-  ['lila:SystemRef', 'Sistemas', 'id del sistema'],
-  ['lila:DocumentRef', 'Documentos', 'id del documento'],
-  ['lila:RiskRef', 'Riesgos', 'id del riesgo'],
-  ['lila:ControlRef', 'Controles', 'id del control'],
-  ['lila:KpiRef', 'KPIs', 'id del indicador'],
-  ['lila:Input', 'Entradas', 'id de la entrada'],
-  ['lila:Output', 'Salidas', 'id de la salida'],
-] as const;
+export const REFERENCIAS = S.propiedades.referencias;
 
-const NOMBRES_DE_TIPO: Record<string, string> = {
-  'bpmn:Task': 'Tarea',
-  'bpmn:UserTask': 'Tarea de usuario',
-  'bpmn:ManualTask': 'Tarea manual',
-  'bpmn:ServiceTask': 'Tarea de servicio',
-  'bpmn:ScriptTask': 'Tarea de script',
-  'bpmn:SendTask': 'Tarea de envío',
-  'bpmn:ReceiveTask': 'Tarea de recepción',
-  'bpmn:BusinessRuleTask': 'Tarea de regla de negocio',
-  'bpmn:CallActivity': 'Actividad de llamada',
-  'bpmn:SubProcess': 'Subproceso',
-  'bpmn:StartEvent': 'Evento de inicio',
-  'bpmn:EndEvent': 'Evento de fin',
-  'bpmn:IntermediateCatchEvent': 'Evento intermedio de captura',
-  'bpmn:IntermediateThrowEvent': 'Evento intermedio de lanzamiento',
-  'bpmn:BoundaryEvent': 'Evento de borde',
-  'bpmn:ExclusiveGateway': 'Compuerta exclusiva (XOR)',
-  'bpmn:ParallelGateway': 'Compuerta paralela (AND)',
-  'bpmn:InclusiveGateway': 'Compuerta inclusiva (OR)',
-  'bpmn:EventBasedGateway': 'Compuerta basada en eventos',
-  'bpmn:ComplexGateway': 'Compuerta compleja',
-  'bpmn:SequenceFlow': 'Flujo de secuencia',
-  'bpmn:MessageFlow': 'Flujo de mensaje',
-  'bpmn:Association': 'Asociación',
-  'bpmn:DataObjectReference': 'Objeto de datos',
-  'bpmn:DataStoreReference': 'Almacén de datos',
-  'bpmn:TextAnnotation': 'Anotación de texto',
-  'bpmn:Group': 'Grupo',
-  'bpmn:Participant': 'Pool',
-  'bpmn:Lane': 'Carril',
-  'bpmn:Process': 'Proceso',
-  'bpmn:Collaboration': 'Colaboración',
-};
+const NOMBRES_DE_TIPO: Record<string, string> = S.propiedades.tipos;
 
 /** Nombre legible en español del `$type`; si no está en la tabla, el tipo sin el prefijo. */
 export function nombreDeTipo(tipo: string): string {
@@ -355,9 +311,8 @@ export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Eleme
     return (
       <p className="vacio">
         {seleccion.length > 1
-          ? `${seleccion.length} elementos seleccionados: las acciones sobre varios a la vez` +
-            ' todavía no están. Selecciona uno solo para editarlo.'
-          : 'Selecciona un elemento del lienzo para ver sus propiedades.'}
+          ? S.propiedades.variosSeleccionados(seleccion.length)
+          : S.propiedades.sinSeleccion}
       </p>
     );
   }
@@ -388,9 +343,9 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
     <div className="campos">
       {esAnotacion ? (
         <label className="campo">
-          <span>Texto de la anotación</span>
+          <span>{S.propiedades.textoAnotacion}</span>
           <textarea
-            aria-label="Texto de la anotación"
+            aria-label={S.propiedades.textoAnotacion}
             rows={4}
             value={bo.text ?? ''}
             onChange={(e) => {
@@ -401,12 +356,12 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
         </label>
       ) : (
         <label className="campo">
-          <span>Nombre</span>
+          <span>{S.propiedades.nombre}</span>
           <input
             type="text"
             value={bo.name ?? ''}
             disabled={!admiteNombre}
-            placeholder={admiteNombre ? 'Sin nombre' : 'Este tipo no tiene nombre'}
+            placeholder={admiteNombre ? S.propiedades.sinNombre : S.propiedades.tipoSinNombre}
             onChange={(e) => {
               // ponytail: una entrada del `commandStack` por pulsación, así que Cmd+Z deshace
               // letra a letra. Es lo que hace el panel de bpmn-js. Agrupar las pulsaciones
@@ -420,10 +375,10 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
 
       {proceso !== undefined && proceso !== elemento && (
         <label className="campo">
-          <span>Nombre del proceso</span>
+          <span>{S.propiedades.nombreProceso}</span>
           <input
             type="text"
-            aria-label="Nombre del proceso"
+            aria-label={S.propiedades.nombreProceso}
             value={proceso.businessObject.name ?? ''}
             onChange={(e) => {
               escribirNombre(escritor, proceso, e.target.value);
@@ -434,12 +389,12 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
       )}
 
       <div className="campo">
-        <span>Tipo</span>
+        <span>{S.propiedades.tipo}</span>
         <output>{nombreDeTipo(elemento.type)}</output>
       </div>
 
       <div className="campo">
-        <span>Id</span>
+        <span>{S.propiedades.id}</span>
         <div className="fila">
           <output className="mono">{elemento.id}</output>
           <button
@@ -462,7 +417,7 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
                 .catch(() => undefined);
             }}
           >
-            {copiado ? 'Copiado' : 'Copiar'}
+            {copiado ? S.propiedades.copiado : S.propiedades.copiar}
           </button>
         </div>
       </div>
@@ -478,11 +433,11 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
   return (
     <div className="campos">
       <label className="campo">
-        <span>{proceso === undefined ? 'Descripción' : 'Descripción del proceso'}</span>
+        <span>{proceso === undefined ? S.propiedades.descripcion : S.propiedades.descripcionProceso}</span>
         <textarea
           rows={5}
           value={leerDocumentacion(documentado)}
-          placeholder="Para qué sirve este elemento"
+          placeholder={S.propiedades.descripcionPista}
           onChange={(e) => {
             escribirDocumentacion(escritor, documentado, e.target.value);
             refrescar();
@@ -492,12 +447,12 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
 
       {proceso !== undefined && (
         <label className="campo">
-          <span>Versión del proceso</span>
+          <span>{S.propiedades.versionProceso}</span>
           <input
             type="text"
-            aria-label="Versión del proceso"
+            aria-label={S.propiedades.versionProceso}
             value={leerVersionTag(proceso)}
-            placeholder="1.0.0"
+            placeholder={S.propiedades.versionPista}
             onChange={(e) => {
               escribirVersionTag(escritor, proceso, e.target.value);
               refrescar();
@@ -507,7 +462,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
       )}
 
       <section className="grupo">
-        <h3>Responsabilidades</h3>
+        <h3>{S.propiedades.responsabilidades}</h3>
         {responsabilidades.map((responsabilidad, i) => {
           // `type` es cadena libre en el esquema y no se valida al importar
           // (`docs/BPMN_EXTENSION.md` § 2): un archivo ajeno puede traer una responsabilidad sin
@@ -521,7 +476,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
           return (
             <div className="fila" key={i}>
               <select
-                aria-label={`Tipo de responsabilidad ${i + 1}`}
+                aria-label={S.propiedades.tipoResponsabilidad(i + 1)}
                 value={tipo}
                 onChange={(e) => {
                   editarExtension(escritor, elemento, responsabilidad, { type: e.target.value });
@@ -530,7 +485,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
               >
                 {!esRaci && (
                   <option value={tipo} disabled>
-                    {tipo === '' ? 'Sin tipo' : `${tipo} · no es RACI`}
+                    {tipo === '' ? S.propiedades.sinTipo : S.propiedades.noEsRaci(tipo)}
                   </option>
                 )}
                 {RACI.map(([valor, etiqueta]) => (
@@ -541,8 +496,8 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
               </select>
               <input
                 type="text"
-                aria-label={`Rol ${i + 1}`}
-                placeholder="id del rol"
+                aria-label={S.propiedades.rol(i + 1)}
+                placeholder={S.propiedades.rolPista}
                 value={responsabilidad.roleRef ?? ''}
                 onChange={(e) => {
                   editarExtension(escritor, elemento, responsabilidad, { roleRef: e.target.value });
@@ -552,14 +507,14 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
               <button
                 type="button"
                 className="quitar"
-                title="Quitar responsabilidad"
-                aria-label={`Quitar responsabilidad ${i + 1}`}
+                title={S.propiedades.quitarResponsabilidad}
+                aria-label={S.propiedades.quitarResponsabilidadN(i + 1)}
                 onClick={() => {
                   quitarExtension(escritor, elemento, responsabilidad);
                   refrescar();
                 }}
               >
-                ×
+                {S.propiedades.cruz}
               </button>
             </div>
           );
@@ -572,7 +527,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
             refrescar();
           }}
         >
-          + Añadir responsabilidad
+          {S.propiedades.anadirResponsabilidad}
         </button>
       </section>
 
@@ -608,7 +563,7 @@ function ListaDeReferencias({
         <div className="fila" key={i}>
           <input
             type="text"
-            aria-label={`${etiqueta} ${i + 1}`}
+            aria-label={S.propiedades.referenciaN(etiqueta, i + 1)}
             placeholder={ayuda}
             value={referencia.ref ?? ''}
             onChange={(e) => {
@@ -619,27 +574,27 @@ function ListaDeReferencias({
           <button
             type="button"
             className="quitar"
-            title={`Quitar de ${etiqueta.toLowerCase()}`}
-            aria-label={`Quitar de ${etiqueta.toLowerCase()} ${i + 1}`}
+            title={S.propiedades.quitarDe(etiqueta)}
+            aria-label={S.propiedades.quitarDeN(etiqueta, i + 1)}
             onClick={() => {
               quitarExtension(escritor, elemento, referencia);
               refrescar();
             }}
           >
-            ×
+            {S.propiedades.cruz}
           </button>
         </div>
       ))}
       <button
         type="button"
         className="anadir"
-        aria-label={`Añadir a ${etiqueta}`}
+        aria-label={S.propiedades.anadirA(etiqueta)}
         onClick={() => {
           anadirExtension(escritor, elemento, tipo, { ref: '' });
           refrescar();
         }}
       >
-        + Añadir
+        {S.propiedades.anadir}
       </button>
     </section>
   );

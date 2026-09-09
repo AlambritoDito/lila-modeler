@@ -20,12 +20,13 @@ import type {
   ScenarioDocument,
   StoredRun,
 } from './ProjectStore';
+import { S } from '../strings.es';
 
 type ProjectProblem = LilaProjectDocument['problems'][number];
 
 function requireWindowLila(): LilaBridge {
   if (typeof window === 'undefined' || window.lila === undefined) {
-    throw new Error('DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?');
+    throw new Error(S.almacen.errorSinBridge);
   }
   return window.lila;
 }
@@ -125,9 +126,7 @@ export class DesktopStore implements ProjectSessionStore {
     // si no lo es, el llamador tiene un documento obsoleto en memoria y hay que decírselo antes de
     // tocar disco, no escribirlo silenciosamente encima de la carpeta abierta.
     if (!explicitSaveAs && this.activeDocument !== null && document.id !== this.activeDocument.id) {
-      throw new Error(
-        'E-PROYECTO-DISTINTO: el documento a guardar no es el proyecto activo; usa "Guardar como" para escribirlo en una carpeta nueva.',
-      );
+      throw new Error(S.almacen.errorProyectoDistinto);
     }
     let dir = this.activeDir;
     // "Destino nuevo" (OP-14, revisión de A: P0 "nuevo proyecto sobre carpeta ocupada aún

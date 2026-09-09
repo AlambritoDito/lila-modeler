@@ -13,6 +13,7 @@
  */
 import { useState } from 'react';
 import type { Servicios } from './Modeler';
+import { S } from './strings.es';
 
 /** Una figura de la paleta: lo que hace falta para pintarla y para crearla. */
 export interface Figura {
@@ -40,51 +41,51 @@ interface Grupo {
  */
 export const GRUPOS: readonly Grupo[] = [
   {
-    nombre: 'Eventos',
+    nombre: S.paleta.grupos.eventos,
     figuras: [
-      { tipo: 'bpmn:StartEvent', nombre: 'Inicio', icono: 'start-event-none' },
-      { tipo: 'bpmn:IntermediateThrowEvent', nombre: 'Intermedio', icono: 'intermediate-event-none' },
-      { tipo: 'bpmn:EndEvent', nombre: 'Fin', icono: 'end-event-none' },
-      { tipo: 'bpmn:StartEvent', nombre: 'Mensaje', icono: 'start-event-message', eventDefinitionType: 'bpmn:MessageEventDefinition' },
-      { tipo: 'bpmn:IntermediateCatchEvent', nombre: 'Temporizador', icono: 'intermediate-event-catch-timer', eventDefinitionType: 'bpmn:TimerEventDefinition' },
+      { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.inicio, icono: 'start-event-none' },
+      { tipo: 'bpmn:IntermediateThrowEvent', nombre: S.paleta.figuras.intermedio, icono: 'intermediate-event-none' },
+      { tipo: 'bpmn:EndEvent', nombre: S.paleta.figuras.fin, icono: 'end-event-none' },
+      { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.mensaje, icono: 'start-event-message', eventDefinitionType: 'bpmn:MessageEventDefinition' },
+      { tipo: 'bpmn:IntermediateCatchEvent', nombre: S.paleta.figuras.temporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: 'bpmn:TimerEventDefinition' },
     ],
   },
   {
-    nombre: 'Actividades',
+    nombre: S.paleta.grupos.actividades,
     figuras: [
-      { tipo: 'bpmn:Task', nombre: 'Tarea', icono: 'task' },
-      { tipo: 'bpmn:UserTask', nombre: 'Tarea de usuario', icono: 'user-task' },
-      { tipo: 'bpmn:ServiceTask', nombre: 'Tarea de servicio', icono: 'service-task' },
-      { tipo: 'bpmn:SubProcess', nombre: 'Subproceso', icono: 'subprocess-expanded', isExpanded: true },
-      { tipo: 'bpmn:CallActivity', nombre: 'Actividad de llamada', icono: 'call-activity' },
+      { tipo: 'bpmn:Task', nombre: S.paleta.figuras.tarea, icono: 'task' },
+      { tipo: 'bpmn:UserTask', nombre: S.paleta.figuras.tareaUsuario, icono: 'user-task' },
+      { tipo: 'bpmn:ServiceTask', nombre: S.paleta.figuras.tareaServicio, icono: 'service-task' },
+      { tipo: 'bpmn:SubProcess', nombre: S.paleta.figuras.subproceso, icono: 'subprocess-expanded', isExpanded: true },
+      { tipo: 'bpmn:CallActivity', nombre: S.paleta.figuras.actividadLlamada, icono: 'call-activity' },
     ],
   },
   {
-    nombre: 'Compuertas',
+    nombre: S.paleta.grupos.compuertas,
     figuras: [
-      { tipo: 'bpmn:ExclusiveGateway', nombre: 'Exclusiva', icono: 'gateway-xor' },
-      { tipo: 'bpmn:ParallelGateway', nombre: 'Paralela', icono: 'gateway-parallel' },
-      { tipo: 'bpmn:InclusiveGateway', nombre: 'Inclusiva', icono: 'gateway-or' },
-      { tipo: 'bpmn:EventBasedGateway', nombre: 'Basada en eventos', icono: 'gateway-eventbased' },
+      { tipo: 'bpmn:ExclusiveGateway', nombre: S.paleta.figuras.exclusiva, icono: 'gateway-xor' },
+      { tipo: 'bpmn:ParallelGateway', nombre: S.paleta.figuras.paralela, icono: 'gateway-parallel' },
+      { tipo: 'bpmn:InclusiveGateway', nombre: S.paleta.figuras.inclusiva, icono: 'gateway-or' },
+      { tipo: 'bpmn:EventBasedGateway', nombre: S.paleta.figuras.basadaEnEventos, icono: 'gateway-eventbased' },
     ],
   },
   {
-    nombre: 'Datos',
+    nombre: S.paleta.grupos.datos,
     figuras: [
-      { tipo: 'bpmn:DataObjectReference', nombre: 'Objeto de datos', icono: 'data-object' },
-      { tipo: 'bpmn:DataStoreReference', nombre: 'Almacén de datos', icono: 'data-store' },
+      { tipo: 'bpmn:DataObjectReference', nombre: S.paleta.figuras.objetoDeDatos, icono: 'data-object' },
+      { tipo: 'bpmn:DataStoreReference', nombre: S.paleta.figuras.almacenDeDatos, icono: 'data-store' },
     ],
   },
   {
-    nombre: 'Artefactos',
+    nombre: S.paleta.grupos.artefactos,
     figuras: [
-      { tipo: 'bpmn:TextAnnotation', nombre: 'Anotación', icono: 'text-annotation' },
-      { tipo: 'bpmn:Group', nombre: 'Grupo', icono: 'group' },
+      { tipo: 'bpmn:TextAnnotation', nombre: S.paleta.figuras.anotacion, icono: 'text-annotation' },
+      { tipo: 'bpmn:Group', nombre: S.paleta.figuras.grupo, icono: 'group' },
     ],
   },
   {
-    nombre: 'Pools y carriles',
-    figuras: [{ tipo: 'bpmn:Participant', nombre: 'Pool', icono: 'participant' }],
+    nombre: S.paleta.grupos.poolsYCarriles,
+    figuras: [{ tipo: 'bpmn:Participant', nombre: S.paleta.figuras.pool, icono: 'participant' }],
   },
 ];
 
@@ -202,10 +203,10 @@ export function Paleta({ servicios }: Props): React.JSX.Element {
         {!compacta && (
           <label>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
-            <input type="search" value={filtro} placeholder="Filtrar figuras" aria-label="Filtrar figuras" onChange={(e) => setFiltro(e.target.value)} />
+            <input type="search" value={filtro} placeholder={S.paleta.filtrar} aria-label={S.paleta.filtrar} onChange={(e) => setFiltro(e.target.value)} />
           </label>
         )}
-        <button type="button" className="boton icono" aria-pressed={compacta} title={compacta ? 'Salir del modo compacto' : 'Modo compacto (solo iconos)'} aria-label="Modo compacto" onClick={cambiarCompacta}>
+        <button type="button" className="boton icono" aria-pressed={compacta} title={compacta ? S.paleta.salirCompacto : S.paleta.entrarCompacto} aria-label={S.paleta.modoCompacto} onClick={cambiarCompacta}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
         </button>
       </div>
@@ -230,14 +231,14 @@ export function Paleta({ servicios }: Props): React.JSX.Element {
               >
                 <span className={`bpmn-icon-${figura.icono}`} aria-hidden="true" />
                 <span className="nombre">{figura.nombre}</span>
-                <span className="pista" aria-hidden="true">arrastrar</span>
+                <span className="pista" aria-hidden="true">{S.paleta.arrastrar}</span>
               </button>
             ))}
           </details>
         ))}
-        {grupos.length === 0 && <p className="vacio">Ninguna figura coincide con «{filtro}».</p>}
+        {grupos.length === 0 && <p className="vacio">{S.paleta.sinCoincidencias(filtro)}</p>}
       </div>
-      <footer>Arrastra al lienzo o pulsa <span>Enter</span> para insertar</footer>
+      <footer>{S.paleta.piePrefijo}<span>{S.paleta.pieTecla}</span>{S.paleta.pieSufijo}</footer>
     </div>
   );
 }

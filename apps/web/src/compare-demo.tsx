@@ -18,6 +18,7 @@ import type { BaseTimeUnit } from '@lila/engine/format';
 import { compare, type CompareResult, type ProcessIR, type RunResult, type SimulationProgress } from '@lila/engine';
 import { runInWorker } from './simulationClient.js';
 import { CompareView } from './CompareView.js';
+import { S } from './strings.es';
 import './theme/tokens.css';
 
 // ponytail: mismos JSON directos del repo que results-demo.tsx (LILA-142 no dejó ejemplos
@@ -132,9 +133,9 @@ function CompareDemo() {
         padding: 24,
       }}
     >
-      <h1 style={{ fontSize: 20, margin: '0 0 16px' }}>Lila Modeler · Comparar (demo LILA-063)</h1>
+      <h1 style={{ fontSize: 20, margin: '0 0 16px' }}>{S.demos.tituloComparar}</h1>
 
-      {status.kind === 'loading' && <p>Cargando examples/pedido…</p>}
+      {status.kind === 'loading' && <p>{S.demos.cargando}</p>}
       {status.kind === 'running' && (
         <p>
           Simulando {status.label}…{' '}

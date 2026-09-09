@@ -12,6 +12,7 @@ import { ScenarioSchema, type ResolvedScenario } from '@lila/engine/schema';
 import type { ProcessIR, RunResult, SimulationProgress } from '@lila/engine';
 import { runInWorker } from './simulationClient.js';
 import { ResultsView } from './ResultsView.js';
+import { S } from './strings.es';
 import './theme/tokens.css';
 
 // ponytail: `?raw`/JSON directo del repo en vez de copiarlos a `public/` (LILA-142/#59 no dejó
@@ -73,9 +74,9 @@ function ResultsDemo() {
         padding: 24,
       }}
     >
-      <h1 style={{ fontSize: 20, margin: '0 0 16px' }}>Lila Modeler · Resultados (demo LILA-062)</h1>
+      <h1 style={{ fontSize: 20, margin: '0 0 16px' }}>{S.demos.tituloResultados}</h1>
 
-      {status.kind === 'loading' && <p>Cargando examples/pedido…</p>}
+      {status.kind === 'loading' && <p>{S.demos.cargando}</p>}
       {status.kind === 'running' && (
         <p>
           Simulando…{' '}

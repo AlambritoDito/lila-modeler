@@ -41,6 +41,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+import { S } from './strings.es';
 
 /* ------------------------------------------------------------------ *
  * JSON Schema: el subconjunto que produce `z.toJSONSchema` para el escenario
@@ -146,14 +147,7 @@ export function indiceVariante(valor: unknown, vars: readonly EsquemaJson[]): nu
   return -1;
 }
 
-const TIPOS_ES: Readonly<Record<string, string>> = {
-  string: 'texto',
-  number: 'número',
-  integer: 'número entero',
-  boolean: 'sí/no',
-  object: 'objeto',
-  array: 'lista',
-};
+const TIPOS_ES: Readonly<Record<string, string>> = S.escenario.tiposJson;
 
 /** Etiqueta de una variante: su discriminador si lo tiene, y si no, su tipo JSON en español. */
 export function etiquetaVariante(variante: EsquemaJson, indice: number): string {
@@ -162,7 +156,7 @@ export function etiquetaVariante(variante: EsquemaJson, indice: number): string 
   );
   if (discriminador !== undefined) return String(discriminador.const);
   if (variante.type !== undefined) return TIPOS_ES[variante.type] ?? variante.type;
-  return `opción ${indice + 1}`;
+  return S.escenario.opcionN(indice + 1);
 }
 
 /** Valor mínimo que satisface `esquema`: lo que se escribe al elegir una variante o añadir. */
@@ -333,8 +327,8 @@ export function duplicarEscenario(
   // padre en `escenarios/escenarios/x` y la cadena se rompe en cuanto hay carpetas.
   const vecino = archivo.slice(archivo.lastIndexOf('/') + 1);
   return {
-    archivo: `${base} (copia).scenario.json`,
-    escenario: { version: 1, name: `${nombre} (copia)`, extends: vecino },
+    archivo: `${base}${S.escenario.sufijoCopia}.scenario.json`,
+    escenario: { version: 1, name: `${nombre}${S.escenario.sufijoCopia}`, extends: vecino },
   };
 }
 
@@ -454,8 +448,8 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
       <span className="etiqueta">{etiqueta}</span>
       <span className={`estado estado-${estado}`}>
         {estado === 'eliminado'
-          ? 'eliminado (null)'
-          : `${estado}: ${JSON.stringify(valorMostrado)}`}
+          ? S.escenario.eliminadoNull
+          : S.escenario.estadoReservado(estado, JSON.stringify(valorMostrado))}
       </span>
       {estado === 'eliminado' ? (
         <button
@@ -465,7 +459,7 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
             ctx.restaurar?.(ruta);
           }}
         >
-          Restaurar heredado
+          {S.escenario.restaurarHeredado}
         </button>
       ) : (
         <button
@@ -475,7 +469,7 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
             ctx.quitar(ruta);
           }}
         >
-          {definidoEnPadre ? 'Quitar heredado' : 'Quitar'}
+          {definidoEnPadre ? S.escenario.quitarHeredado : S.escenario.quitar}
         </button>
       )}
       <Problemas ruta={ruta} ctx={ctx} />
@@ -527,7 +521,7 @@ function CampoCapacidadRecurso({
 
   return (
     <div className="campo-schema">
-      <label htmlFor={idVariante}>capacity</label>
+      <label htmlFor={idVariante}>{S.escenario.claves.capacity}</label>
       <select
         id={idVariante}
         value={porTurno ? 'turno' : 'fija'}
@@ -536,8 +530,8 @@ function CampoCapacidadRecurso({
           else if (indiceTurno >= 0) ctx.editar(ruta, valorVacio(vars[indiceTurno]!));
         }}
       >
-        <option value="fija">Fija</option>
-        <option value="turno">Por turno</option>
+        <option value="fija">{S.escenario.capacidadFija}</option>
+        <option value="turno">{S.escenario.capacidadPorTurno}</option>
       </select>
       <Problemas ruta={ruta} ctx={ctx} />
       {porTurno ? (
@@ -556,19 +550,19 @@ function CampoCapacidadRecurso({
             return (
               <fieldset key={i} className="entrada">
                 <legend>
-                  tramo {i + 1}
+                  {S.escenario.tramo(i + 1)}
                   <button
                     type="button"
                     className="enlace"
-                    aria-label={`quitar tramo ${i + 1}`}
+                    aria-label={S.escenario.quitarTramo(i + 1)}
                     onClick={() => {
                       ctx.quitar(rutaTramo);
                     }}
                   >
-                    quitar
+                    {S.escenario.quitarElemento}
                   </button>
                 </legend>
-                <label htmlFor={idCalendar}>calendar</label>
+                <label htmlFor={idCalendar}>{S.escenario.claves.calendar}</label>
                 <select
                   id={idCalendar}
                   value={typeof calendarElegido === 'string' ? calendarElegido : ''}
@@ -576,14 +570,14 @@ function CampoCapacidadRecurso({
                     ctx.editar(rutaCalendar, e.target.value);
                   }}
                 >
-                  <option value="">(sin definir)</option>
+                  <option value="">{S.escenario.sinDefinir}</option>
                   {opciones.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>
                   ))}
                 </select>
-                <label htmlFor={idCapacidad}>capacity</label>
+                <label htmlFor={idCapacidad}>{S.escenario.claves.capacity}</label>
                 <EntradaNumero
                   valor={leer(ctx.resuelto, rutaCapacidad)}
                   ruta={rutaCapacidad}
@@ -602,7 +596,7 @@ function CampoCapacidadRecurso({
               ctx.editar([...ruta, (valor as unknown[]).length], valorVacio(esquemaItem));
             }}
           >
-            Añadir tramo
+            {S.escenario.anadirTramo}
           </button>
           <Problemas ruta={ruta} ctx={ctx} />
         </div>
@@ -649,9 +643,9 @@ function CampoIntervalos({
   const enRejilla = rejilla && !conMinutos;
   return (
     <div className="campo-schema">
-      <span className="etiqueta">intervals</span>
+      <span className="etiqueta">{S.escenario.claves.intervals}</span>
       {conMinutos ? (
-        <p className="aviso">este calendario tiene franjas de minutos; edítalo como lista</p>
+        <p className="aviso">{S.escenario.calendarioConMinutos}</p>
       ) : (
         <button
           type="button"
@@ -660,7 +654,7 @@ function CampoIntervalos({
             setRejilla(!rejilla);
           }}
         >
-          {enRejilla ? 'Editar como lista' : 'Editar como rejilla'}
+          {enRejilla ? S.escenario.editarComoLista : S.escenario.editarComoRejilla}
         </button>
       )}
       {enRejilla ? (
@@ -730,7 +724,7 @@ function AnadirClave({
     <div className="anadir">
       <input
         type="text"
-        aria-label="clave nueva"
+        aria-label={S.escenario.claveNueva}
         aria-invalid={repetida ? true : undefined}
         value={clave}
         onChange={(e) => {
@@ -747,11 +741,11 @@ function AnadirClave({
           setClave('');
         }}
       >
-        Añadir
+        {S.escenario.anadir}
       </button>
       {repetida && (
         <p role="alert" className="error">
-          {clave.trim()} ya existe; edítalo abajo o usa otro id.
+          {S.escenario.claveRepetida(clave.trim())}
         </p>
       )}
     </div>
@@ -816,7 +810,7 @@ export function Campo({
             else ctx.editar(ruta, valorVacio(vars[nuevo]!));
           }}
         >
-          <option value="-1">(sin definir)</option>
+          <option value="-1">{S.escenario.sinDefinir}</option>
           {vars.map((variante, i) => (
             <option key={i} value={String(i)}>
               {etiquetaVariante(variante, i)}
@@ -857,7 +851,7 @@ export function Campo({
             else ctx.editar(ruta, e.target.value);
           }}
         >
-          <option value="">(sin definir)</option>
+          <option value="">{S.escenario.sinDefinir}</option>
           {esquema.enum.map((opcion) => (
             <option key={String(opcion)} value={String(opcion)}>
               {String(opcion)}
@@ -881,12 +875,12 @@ export function Campo({
               <button
                 type="button"
                 className="enlace"
-                aria-label={`quitar ${clave}`}
+                aria-label={S.escenario.quitarClave(clave)}
                 onClick={() => {
                   ctx.quitar([...ruta, clave]);
                 }}
               >
-                quitar
+                {S.escenario.quitarElemento}
               </button>
             </legend>
             <Propiedades esquema={entrada} ruta={[...ruta, clave]} ctx={ctx} />
@@ -918,7 +912,7 @@ export function Campo({
               <Campo
                 esquema={items}
                 ruta={[...ruta, i]}
-                etiqueta={`${etiqueta} ${i + 1}`}
+                etiqueta={S.escenario.itemNumerado(etiqueta, i + 1)}
                 requerido
                 ctx={ctx}
               />
@@ -926,12 +920,12 @@ export function Campo({
             <button
               type="button"
               className="enlace"
-              aria-label={`quitar ${etiqueta} ${i + 1}`}
+              aria-label={S.escenario.quitarItem(etiqueta, i + 1)}
               onClick={() => {
                 ctx.quitar([...ruta, i]);
               }}
             >
-              quitar
+              {S.escenario.quitarElemento}
             </button>
             <Problemas ruta={[...ruta, i]} ctx={ctx} />
           </div>
@@ -943,7 +937,7 @@ export function Campo({
             ctx.editar([...ruta, lista.length], valorVacio(items));
           }}
         >
-          Añadir {etiqueta}
+          {S.escenario.anadirEtiqueta(etiqueta)}
         </button>
         <Problemas ruta={ruta} ctx={ctx} />
       </div>
@@ -1050,7 +1044,7 @@ export function ScenarioPanel({
   const lector = useMemo<ScenarioReader>(
     () => (ruta) => {
       const encontrado = escenarios[ruta];
-      if (encontrado === undefined) throw new Error(`escenario desconocido: ${ruta}`);
+      if (encontrado === undefined) throw new Error(S.escenario.errorEscenarioDesconocido(ruta));
       return encontrado;
     },
     [escenarios],
@@ -1175,11 +1169,10 @@ export function ScenarioPanel({
       <div className="escenario-cabecera">
         <strong>{typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo}</strong>
         <span className={errores > 0 ? 'error' : 'aviso'}>
-          {errores} {errores === 1 ? 'error' : 'errores'} · {avisos}{' '}
-          {avisos === 1 ? 'aviso' : 'avisos'}
+          {S.escenario.conteo(errores, avisos)}
         </span>
         <button type="button" className="boton" onClick={onGuardar}>
-          Guardar
+          {S.escenario.guardar}
         </button>
         <button
           type="button"
@@ -1189,25 +1182,25 @@ export function ScenarioPanel({
             onDuplicar(copia.archivo, copia.escenario);
           }}
         >
-          Duplicar
+          {S.escenario.duplicar}
         </button>
       </div>
 
       {heredaDe !== null && (
         <p className="vacio">
-          Hereda de {heredaDe}: se muestran los valores resueltos y se edita solo el delta.
+          {S.escenario.hereda(heredaDe)}
         </p>
       )}
       <Problemas ruta={['extends']} ctx={ctx} />
 
       <details open>
-        <summary>Corrida</summary>
+        <summary>{S.escenario.seccionCorrida}</summary>
         <Propiedades esquema={esquemaDe('run')} ruta={['run']} ctx={ctx} />
         <Problemas ruta={['run']} ctx={ctx} />
       </details>
 
       <details>
-        <summary>Calendarios</summary>
+        <summary>{S.escenario.seccionCalendarios}</summary>
         <Campo
           esquema={esquemaDe('calendars')}
           ruta={['calendars']}
@@ -1218,7 +1211,7 @@ export function ScenarioPanel({
       </details>
 
       <details>
-        <summary>Recursos</summary>
+        <summary>{S.escenario.seccionRecursos}</summary>
         <Campo
           esquema={esquemaDe('resources')}
           ruta={['resources']}
@@ -1229,7 +1222,7 @@ export function ScenarioPanel({
       </details>
 
       <details open>
-        <summary>Elemento seleccionado</summary>
+        <summary>{S.escenario.seccionElemento}</summary>
         {idSeleccionado === null ? (
           <ul className="ids">
             {Object.keys(elementos).map((id) => (
@@ -1251,7 +1244,8 @@ export function ScenarioPanel({
           <>
             <p className="vacio">
               {idSeleccionado}
-              {nombreElemento(idSeleccionado) !== null && ` (${nombreElemento(idSeleccionado)})`}
+              {nombreElemento(idSeleccionado) !== null &&
+                S.escenario.nombreEntreParentesis(nombreElemento(idSeleccionado)!)}
             </p>
             <Propiedades
               esquema={esquemaEntrada(esquemaDe('elements'))}
@@ -1265,9 +1259,7 @@ export function ScenarioPanel({
 
       {problemas.length > 0 && (
         <details>
-          <summary>
-            Validación ({errores} {errores === 1 ? 'error' : 'errores'})
-          </summary>
+          <summary>{S.escenario.seccionValidacion(errores)}</summary>
           <ul className="ids">
             {problemas.map((problema, i) => (
               <li key={i} className={problema.severidad === 'error' ? 'error' : 'aviso'}>
