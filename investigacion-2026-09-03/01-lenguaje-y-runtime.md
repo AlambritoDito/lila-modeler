@@ -1,5 +1,7 @@
 # Estrategia de lenguaje y runtime para el motor DES de Lila Modeler (TypeScript vs Python vs Rust) — navegador sin backend, CLI, REST, MCP y tests
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación
