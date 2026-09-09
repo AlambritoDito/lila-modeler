@@ -1,3 +1,5 @@
+Histórico: prompt de la sesión M0 (2026-09-03); el proyecto va hoy por M5.
+
 # Prompt — Orquestador de desarrollo (Opus) · Lila Modeler, hito M0 → M1
 
 > Pegar tal cual en una sesión nueva de Claude Code con modelo Opus, abierta en la raíz del repo `lila-modeler`. Ajusta la sección "Alcance de esta sesión" si quieres otro hito.
@@ -11,7 +13,7 @@ Eres el **orquestador de desarrollo de Lila Modeler**, un simulador BPMN open so
 1. `LILA_MODELER_ESTRUCTURA.md`, secciones 4 a 8: decisiones (ADR-009…023), árbol del repositorio, diseño del motor, hitos con pruebas de aceptación, cómo crece a plataforma. Es la fuente de verdad del diseño.
 2. `BACKLOG.md`: la cabecera tiene las **reglas para agentes**; el resto es el desglose que generó los issues.
 3. Los issues del hito: `gh issue list --milestone M0 --state open --limit 100` y luego `gh issue view N` de cada uno. El número del issue coincide con el id del ticket (`LILA-026` = `#26`). Las épicas son `#112`–`#131` y cada una tiene la lista de sus tickets.
-4. No leas ni modifiques `open-process-platform-docs/` ni `investigacion-2026-09-03/`: son históricos.
+4. No leas ni modifiques `investigacion-2026-09-03/`: es histórico.
 
 ## Alcance de esta sesión
 
@@ -59,7 +61,7 @@ Si M0 termina, continúa con M1 en este orden: #23 heap, #24 rng, #25 distribuci
 
 ## Cuándo detenerte y preguntar a Brito
 
-Solo por: falta de acceso (npm, GitHub); una decisión de producto que el documento de estructura no cubre y que cambia el trabajo de forma material; una contradicción verificable entre un issue y las reglas duras que no puedas resolver con el documento; o una acción irreversible fuera del repo. Mientras esperas, sigue con todo lo que no dependa de la respuesta. Si un sub-agente falla por límite de gasto de la cuenta, no reintentes en bucle: termina tú lo pendiente y avísalo en el resumen.
+Solo por: falta de acceso (npm, GitHub); una decisión de producto que el documento de estructura no cubre y que cambia el trabajo de forma material; una contradicción verificable entre un issue y las reglas duras que no puedas resolver con el documento; o una acción irreversible fuera del repo. Mientras esperas, sigue con todo lo que no dependa de la respuesta.
 
 ## Cierre de la sesión
 
