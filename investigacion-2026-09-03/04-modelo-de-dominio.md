@@ -1,5 +1,7 @@
 # Modelo de dominio y fronteras de módulos de una plataforma de Process Intelligence, aprendidos de ADONIS, Signavio, Apromore, Camunda Web Modeler, ARIS, Bizagi, Bonita, Flowable y Modelio, más los estándares (BPMN 2.0 extensiones, BPSim, DMN, CMMN, XPDL, XES, OCEL 2.0), para definir identidad/versionado/namespace/layout mínimos del MVP de Lila Modeler sin forzar una reescritura.
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación

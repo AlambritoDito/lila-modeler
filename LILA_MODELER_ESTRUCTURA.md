@@ -1,5 +1,7 @@
 # Lila Modeler — Estructura del sistema
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](docs/) and [`README.md`](README.md).
+
 Fecha: 2026-09-03. Documento de decisión, no de investigación. La investigación previa (corpus previo, archivado fuera del repo) fue el insumo; las verificaciones de hoy (licencias, versiones, benchmarks, qué hace Bizagi exactamente) están en `investigacion-2026-09-03/`. Aquí están las decisiones y su porqué.
 
 ---

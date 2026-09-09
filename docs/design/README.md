@@ -1,5 +1,7 @@
 # Diseño de la interfaz
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../) and [`README.md`](../../README.md).
+
 Fuente visual: el proyecto de **Claude Design** de Lila Modeler, archivo
 `Lila Modeler.dc.html` (diez artboards en un mismo lienzo, tabla de tokens con
 los dos temas, inventario de componentes y notas de React al final).

@@ -1,5 +1,7 @@
 # Representación e intercambio de los parámetros de simulación (el "escenario"): BPSim 2.0 vs qbp/BIMP embebido vs Prosimos JSON vs Bizagi/Signavio/Camunda, y cómo round-tripea bpmn-moddle. Recomendación para Lila Modeler: JSON de escenario separado del .bpmn, con adaptadores de importación/exportación.
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación
