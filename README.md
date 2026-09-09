@@ -246,6 +246,9 @@ project, not affiliated with or endorsed by Bizagi.
 
 ## How to contribute
 
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide (setup, checks, PR process) and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for the project's code of conduct.
+
 Before touching the engine, read `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` and
 `docs/RESULTS_FORMAT.md`. Repo rules (header of `BACKLOG.md`):
 

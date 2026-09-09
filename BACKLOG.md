@@ -1,5 +1,7 @@
 # Lila Modeler — Backlog (épicas y tickets)
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](docs/) and [`README.md`](README.md).
+
 Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño, hitos). Aquí está el trabajo desglosado para que agentes y personas sepan qué hacer, en qué orden y cuándo está terminado.
 
 **Dónde se gestiona**: en GitHub Issues del repo privado `AlambritoDito/lila-modeler`. El número de issue coincide con el id del ticket (`LILA-026` = `#26`); las 20 épicas son los issues `#112`–`#131` con su lista de tareas; los hitos M0–M6 son milestones. Este archivo es la fuente que generó los issues; si cambia el alcance, se edita aquí y se actualiza el issue, no al revés.
@@ -14,6 +16,7 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
   el posicionamiento público del proyecto: de cara afuera Bizagi es referencia e inspiración
   (#289).
 - **Cuándo arranca la UI**: la épica E9 puede correr como workstream paralelo a M2/M3 en cuanto cierre M1 (`simulate` y `lila run` existen), empezando por LILA-112 (importar el diseño) y LILA-057 (shell con bpmn-js). Resultados, comparar y overlay (LILA-062…064) esperan a M2; el panel de escenario (LILA-061) conviene después de M3; Electron (E10) al final.
+- **Regla de idioma** (decisión de Brito, 2026-09-09, épica E20 #283): el código nuevo, los commits y la documentación pública van en inglés; el español es la primera traducción, un archivo por idioma. Los identificadores y comentarios existentes no se renombran. Este archivo y `LILA_MODELER_ESTRUCTURA.md` son documentos de trabajo y se quedan en español.
 
 ---
 
