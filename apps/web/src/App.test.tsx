@@ -359,6 +359,48 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
   expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
 });
+/** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
+const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
+/** El campo hex de un token dentro del diálogo de Ajustes. */
+const hexDe = (token: string) => container.querySelector<HTMLInputElement>(`dialog.ajustes input[aria-label="Hex de ${token}"]`)!;
+
+it('un tema del usuario sobrevive a recargar y se aplica sin fetch (LILA-114)', async () => {
+  localStorage.setItem('lila.tema', 'u:1');
+  localStorage.setItem('lila.temas', JSON.stringify([temaMio]));
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  vi.mocked(fetch).mockClear();
+  await act(async () => root.render(<App store={session} />));
+  // Ni una petición: el tema del usuario sale del almacén, no de `themes/*.json`.
+  expect(fetch).not.toHaveBeenCalled();
+  expect(applyTheme).toHaveBeenLastCalledWith(temaMio.tema);
+  expect(container.querySelector<HTMLSelectElement>('dialog.ajustes select')!.value).toBe('u:1');
+});
+
+it('editar un token guarda la lista donde toca en cada modalidad (LILA-114)', async () => {
+  // Web: la lista va a `localStorage`, junto al tema elegido.
+  teclear(hexDe('accent.primary'), '#00FF00');
+  const guardado = JSON.parse(localStorage.getItem('lila.temas')!) as (typeof temaMio)[];
+  expect(guardado).toHaveLength(1);
+  expect(guardado[0]!.tema.tokens['accent.primary']).toBe('#00FF00');
+  expect(localStorage.getItem('lila.tema')).toBe(guardado[0]!.id);
+
+  // Escritorio: la misma lista sale y entra por el puente, y el `localStorage` ni se mira.
+  const escrito: { temas?: unknown }[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ tema: 'u:1', temas: [temaMio] }),
+    writeSettings: async (a: { temas?: unknown }) => { escrito.push(a); },
+  });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(applyTheme).toHaveBeenLastCalledWith(temaMio.tema);
+  teclear(hexDe('accent.primary'), '#0000FF');
+  // `toContainEqual` y no la última llamada: el efecto de la densidad escribe la suya después.
+  expect(escrito).toContainEqual({ temas: [{ ...temaMio, tema: { ...temaMio.tema, tokens: { 'accent.primary': '#0000FF' } } }] });
+});
+
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); });

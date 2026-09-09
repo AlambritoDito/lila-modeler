@@ -83,4 +83,60 @@ quedaba con el relleno del tema anterior y la etiqueta con el color del nuevo.
 propio tamaño. A propósito no está en `html`: las medidas en `rem` del CSS se resolverían contra el
 token y los diálogos encogerían al bajar la letra.
 
-LILA-114 (editor de tokens, validación de un JSON importado, exportar) amplía este documento.
+## Ajustes → Apariencia (LILA-114)
+
+`apps/web/src/settings/Apariencia.tsx` es el contenido del diálogo de Ajustes; el `<dialog>` y su
+apertura (⚙, ⌘, y el menú nativo) se quedan en `App.tsx`, que sigue siendo **el único** que llama a
+`applyTheme` y a `Modelador.repintar()`. El componente no aplica ni persiste nada: construye la
+lista nueva de temas del usuario y dice cuál queda activo (`onTemas(lista, seleccion)`), y de ahí
+sale la vista previa —cada cambio válido repinta la app entera, diálogo incluido—. El recuadro de
+muestras (texto, texto apagado, acento) es solo el atajo para no tener que mirar detrás del diálogo.
+
+Los controles:
+
+- **Lista de temas**: los integrados (Eva-01, Papel) y los del usuario, en un `<optgroup>` cada
+  grupo. Elegir uno lo aplica en caliente; los integrados se piden por `fetch`, los del usuario
+  salen del almacén y no piden nada.
+- **Duplicar**: copia el tema activo como tema del usuario, con el nombre editable al lado.
+- **Editor de tokens**, agrupado igual que `TOKEN_NAMES` (Base, Texto, Acentos, Estados, Lienzo y
+  diagrama, Simulación, Tipografía), un `<details>` por grupo. Los colores llevan
+  `<input type="color">` y el hex a la par, editables los dos; `type="color"` solo entiende
+  `#rrggbb`, así que al elegir se le vuelve a pegar el alfa que el token tuviera (`shadow`).
+  `font.ui`/`font.mono`/`font.diagram` son un `<select>` con las familias que la app empaqueta
+  (Archivo, JetBrains Mono) más «Sistema»; `font.size.base`, un número en píxeles.
+- **Editar un tema integrado no lo modifica**: la primera edición sobre Eva-01 crea «Eva-01 (copia)»
+  y sigue sobre ella. Se prefirió a un aviso «duplica primero» porque el cambio que el usuario pidió
+  ocurre igual y el nombre del tema, que cambia delante de sus ojos, ya cuenta lo que ha pasado.
+- **La densidad sigue siendo una preferencia, no una edición del tema** (LILA-113): se aplica encima
+  de cualquier tema, así que el control de arriba no toca el token `density` del tema que se edita;
+  el token viaja en el JSON exportado tal y como venga del tema de origen.
+- **Restablecer**: devuelve el tema del usuario a los tokens con los que nació y el integrado a su
+  JSON (se vuelve a pedir).
+- **Exportar**: descarga `{ name, tokens }` —exactamente el formato de arriba, sin `id` ni nada de
+  la app— con un `<a download>` y un Blob. En Electron funciona igual: no hay `will-download` que lo
+  intercepte y la CSP de `lila://` no gobierna las descargas, así que Chromium lo guarda por el
+  camino normal.
+- **Importar**: un `<input type="file" accept=".json">`. El JSON se valida entero antes de tocar
+  nada (`validarTema`, `apps/web/src/theme/temas.ts`); si algo falla, el mensaje sale dentro del
+  diálogo y no se aplica ni se guarda nada. Si vale, entra como tema del usuario y se aplica.
+- **Eliminar** quita el tema del usuario activo y vuelve a Eva-01.
+
+**Qué valida `validarTema` y por qué no basta `applyTheme`.** `applyTheme` comprueba lo que le
+impide escribir CSS sano: clave conocida y valor de texto. Un archivo elegido por el usuario puede
+además traer un color que no es un color (`"azul"`) o una densidad inventada: CSS ignora en silencio
+el valor inválido y la app se queda a medio pintar sin decir por qué. `validarTema` añade esas dos
+reglas —hex `#rgb`/`#rrggbb`/`#rrggbbaa` en los tokens de color, `density` entre las tres
+conocidas—, **normaliza** el tema a `{ name, tokens }` (lo que el archivo traiga de más no entra ni
+vuelve a salir, y por eso exportar → importar → exportar da el mismo archivo) y lanza el mensaje en
+español que se lee en el diálogo. Es la misma función para importar y para releer lo guardado.
+
+**Dónde se guardan los temas del usuario.** En el mismo sitio que el resto de la apariencia
+(LILA-113) y con la misma forma en las dos modalidades: `ajustes.temas` de
+`<userData>/estado.json` en escritorio, `localStorage['lila.temas']` en la web. Cada entrada es
+`{ id, tema: { name, tokens }, origen }`: `id` es `u:<n>` (los integrados son `eva-01` y `papel`) y
+`origen` son los tokens de partida, que es lo único que necesita «Restablecer» —no hace falta
+volver a pedir el integrado ni confiar en que su JSON siga igual, y funciona igual para un tema
+importado, que no tiene integrado detrás—. `id` y `origen` son de la app: no salen en el archivo
+exportado ni se esperan en el importado. En escritorio, `parseAjustes` descarta las entradas que no
+tengan forma de tema (`sessionState.ts`) y el renderer vuelve a validarlas con `validarTema`; un
+tema que un `estado.json` editado a mano dejó roto se cae solo él, como una entrada de recientes.

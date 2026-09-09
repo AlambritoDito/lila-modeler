@@ -28,6 +28,8 @@ import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
 import { applyTheme, type Theme } from './theme/applyTheme';
+import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
+import { Apariencia } from './settings/Apariencia';
 import { S } from './strings.es';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -95,7 +97,15 @@ async function preferencias(): Promise<Ajustes> {
   try {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
-    return { ...(tema === null ? {} : { tema }), ...(densidad === null ? {} : { densidad }) };
+    // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
+    // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
+    // salga de cualquiera de los dos sitios, que son igual de ajenos.
+    const temas: unknown = JSON.parse(localStorage.getItem('lila.temas') ?? 'null');
+    return {
+      ...(tema === null ? {} : { tema }),
+      ...(densidad === null ? {} : { densidad }),
+      ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+    };
   } catch { return {}; }
 }
 /** Guarda solo lo que cambia; el puente fusiona con lo que ya hubiera (ver `bridge.ts`). */
@@ -111,6 +121,7 @@ function recordar(ajustes: Ajustes): void {
   try {
     if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
+    if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
@@ -257,7 +268,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
-  const [temaId, setTemaId] = useState<TemaId>('eva-01');
+  const [temaId, setTemaId] = useState<string>('eva-01');
+  /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
+  const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
@@ -499,11 +512,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   useEffect(() => {
     void preferencias().then(async (guardadas) => {
-      const id = valido(guardadas.tema, TEMA_IDS, 'eva-01');
+      const mios = saneaTemas(guardadas.temas);
+      setTemas(mios);
+      // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
+      // (o a Eva-01), igual que con un id de tema borrado.
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, TEMA_IDS, 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDADES, 'normal'));
       try {
-        const t = await cargarTema(id);
+        const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
         applyTheme(t);
         setTema(t);
       } catch (e: unknown) {
@@ -526,21 +543,39 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (tema !== undefined) recordar({ densidad });
   }, [densidad, tema]);
 
-  async function cambiarTema(id: TemaId): Promise<void> {
-    if (id === temaId) return;
+  /**
+   * Único punto donde se aplica un tema: el integrado se pide por `fetch` y el del usuario sale de
+   * `lista` (LILA-114), que se pasa a mano porque quien acaba de editarla todavía no la ve en el
+   * estado de React.
+   */
+  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
     try {
-      const t = await cargarTema(id);
+      const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : await cargarTema(id as TemaId);
+      if (t === undefined) return;
       applyTheme(t);
       // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
       // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
       modelador?.repintar();
       setTema(t);
-      setTemaId(id);
       setAvisoTema(null);
-      recordar({ tema: id });
+      if (id !== temaId) {
+        setTemaId(id);
+        recordar({ tema: id });
+      }
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * Lo que Apariencia devuelve: la lista nueva de temas del usuario y cuál queda activo. Guardar y
+   * aplicar en la misma llamada es lo que hace que editar un token sea la vista previa —la app
+   * entera se repinta— sin que el editor tenga que conocer `applyTheme`.
+   */
+  function guardarTemas(lista: readonly TemaGuardado[], seleccion: string = temaId): void {
+    setTemas(lista);
+    recordar({ temas: lista });
+    void seleccionarTema(seleccion, lista);
   }
 
   /**
@@ -770,19 +805,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <form method="dialog">
           <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
           <h3>{S.app.apariencia}</h3>
-          <label className="campo">
-            {S.app.tema}
-            <select value={temaId} onChange={(e) => void cambiarTema(e.target.value as TemaId)}>
-              {TEMA_IDS.map((id) => <option key={id} value={id}>{TEMAS[id]}</option>)}
-            </select>
-          </label>
-          <label className="campo">
-            {S.app.densidad}
-            <select value={densidad} onChange={(e) => setDensidad(e.target.value as Densidad)}>
-              {S.app.densidades.map((d) => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-            </select>
-          </label>
-          <p className="vacio">{S.app.tipografia((tema?.tokens?.['font.ui'] ?? S.app.tipografiaPorDefecto).split(',')[0]!)}</p>
+          <Apariencia
+            temaId={temaId}
+            tema={tema ?? null}
+            temas={temas}
+            densidad={densidad}
+            onDensidad={(d) => setDensidad(d as Densidad)}
+            onTemas={guardarTemas}
+            onSeleccionar={(id) => void seleccionarTema(id)}
+          />
           <div className="acciones"><button className="boton primario">{S.app.cerrar}</button></div>
         </form>
       </dialog>

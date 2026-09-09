@@ -121,6 +121,24 @@ export interface LilaBridge {
 export interface Ajustes {
   readonly tema?: string;
   readonly densidad?: string;
+  /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
+  readonly temas?: readonly TemaGuardado[];
+}
+
+/**
+ * Un tema del usuario tal y como se guarda (LILA-114). `tema` es exactamente lo que se exporta e
+ * importa (`{ name, tokens }`, `docs/THEMES.md`); `origen` son los tokens con los que nació —la
+ * copia del integrado que se duplicó, o el JSON importado— y es lo único que necesita
+ * «Restablecer»: guardarlos cuesta unos cientos de bytes por tema y ahorra volver a pedir el
+ * integrado por `fetch` y depender de que su JSON no haya cambiado desde entonces.
+ *
+ * Este contrato no conoce la lista de tokens válidos, igual que no conoce la de temas: los valores
+ * son texto y quien los lee (`theme/temas.ts`) descarta el tema que ya no valide.
+ */
+export interface TemaGuardado {
+  readonly id: string;
+  readonly tema: { readonly name: string; readonly tokens: { readonly [token: string]: string } };
+  readonly origen: { readonly [token: string]: string };
 }
 
 /** Lo que el menú nativo puede pedirle al shell. `openRecent` lleva la carpeta de `listRecents()`. */
