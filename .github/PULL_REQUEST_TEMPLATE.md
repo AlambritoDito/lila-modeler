@@ -10,9 +10,12 @@ Closes #
 
 - [ ] Tests added or updated, and `npm test` is green.
 - [ ] `npm run typecheck > /dev/null 2>&1; echo EXIT=$?` prints `EXIT=0`.
-- [ ] `apps/web/src/strings.en.ts` and `strings.es.ts` are in sync (if UI text changed).
-- [ ] Docs updated in English, with the Spanish translation in `docs/es/` or `README.es.md` if
-      applicable.
+- [ ] If UI text changed: the per-language catalogs under `apps/web/src/` (`strings.*.ts`) are in
+      sync (same keys).
+- [ ] Docs updated in English (Spanish translation in `docs/es/` or `README.es.md` when
+      applicable).
 - [ ] No change to `E-*`/`W-*` codes, rule ids (e.g. `R-XOR-1`) or result column names — or, if
       there is one, it's called out explicitly above and justified.
 - [ ] Commit messages are in English.
+- [ ] CI is green.
+- [ ] Adversarial QA posted `QA: OK` on this PR.

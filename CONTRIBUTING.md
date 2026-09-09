@@ -70,12 +70,12 @@ codebase are not renamed just to translate them.
 
 Translations are **one plain file per language**, with no i18n library:
 
-- The web app's UI text lives in `apps/web/src/strings.en.ts` and `apps/web/src/strings.es.ts`
-  (the English catalog is being introduced by #279/#280; today only the Spanish one exists). Both
-  files must declare the same keys — a test enforces it — so a new UI string has to be added to
-  both files in the same change.
-- Engine messages will live the same way, one file per language under the catalogs at
-  `packages/engine/src/messages/` (`en.ts`, `es.ts`), once #280 lands.
+- UI text lives in one catalog file per language under `apps/web/src/` (`strings.en.ts` as the base
+  and `strings.es.ts` as the translation, introduced by #279, which also adds a test that both
+  catalogs have the same keys) — so a new UI string has to be added to both files in the same
+  change.
+- Engine, CLI and MCP messages will follow the same convention, one catalog file per language,
+  once #280 lands.
 
 `BACKLOG.md` and `LILA_MODELER_ESTRUCTURA.md` are working documents for this project's own team and
 are kept in Spanish; they are not part of the English-first rule above.
