@@ -2,8 +2,9 @@
 
 Read this in: [Español](README.es.md)
 
-An open source (Apache-2.0) discrete-event simulation (DES) engine for BPMN processes, with feature
-parity against Bizagi Modeler and its level 1–4 simulator. The project is an npm monorepo:
+An open source (Apache-2.0) discrete-event simulation (DES) engine for BPMN processes, inspired by
+the simulation workflow of tools such as Bizagi Modeler; results are validated against publicly
+documented examples. The project is an npm monorepo:
 
 - **Engine + CLI** (`packages/engine`, package `@lila/engine`) — parses `.bpmn`, validates the model
   and simulates a scenario. Its core (`packages/engine/src/core/`) has no dependencies: it runs the
@@ -212,7 +213,8 @@ The pages under `docs/` are still written in Spanish; they are being translated 
 - [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — supported BPMN profile and the engine's exact semantics.
 - [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the JSON scenario format.
 - [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — the result format and the CSVs.
-- [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — Bizagi parity checklist by level.
+- [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist against Bizagi
+  Modeler's public documentation (validation against public examples), by level.
 - [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
 - [`docs/MCP.md`](docs/MCP.md) — the MCP server, its five tools and how to register it.
 - [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) — the desktop beta.
@@ -239,6 +241,9 @@ is React (MIT) and the desktop beta packages Electron. The full inventory of run
 with the version and license of each one, is in
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
+Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is an independent open-source
+project, not affiliated with or endorsed by Bizagi.
+
 ## How to contribute
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide (setup, checks, PR process) and
@@ -250,7 +255,8 @@ Before touching the engine, read `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` 
 1. `packages/engine/src/core/` imports nothing from outside `core/` (not `bpmn-moddle`, not
    `node:*`, not React).
 2. No ticket/PR closes without its acceptance test green.
-3. Result column names are Bizagi's (`docs/BIZAGI_PARITY.md`).
+3. Result column names follow Bizagi Modeler's public result tables so results can be compared
+   with published examples (`docs/BIZAGI_PARITY.md`).
 4. All times in seconds, money in `run.currency`.
 5. The BPMN `id` is the only key; the name never disambiguates.
 
