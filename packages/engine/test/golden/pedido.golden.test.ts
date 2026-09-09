@@ -27,4 +27,20 @@ describe('golden determinista de examples/pedido (LILA-030)', () => {
 
     expect(seed43).not.toBe(expected);
   });
+
+  /**
+   * LILA-211: el idioma es una capa de presentación. Cambiar `locale` solo puede mover
+   * `warnings[]`; cualquier número, clave u orden que se moviera sería una regresión del motor.
+   */
+  test('el idioma solo cambia `warnings`', async () => {
+    const enJson: Record<string, unknown> = JSON.parse(readFileSync(PEDIDO_GOLDEN_PATH, 'utf8'));
+    const esJson: Record<string, unknown> = JSON.parse(await renderPedidoGolden(42, { locale: 'es' }));
+
+    expect((esJson['warnings'] as string[]).length).toBe((enJson['warnings'] as string[]).length);
+
+    delete enJson['warnings'];
+    delete esJson['warnings'];
+    expect(esJson).toEqual(enJson);
+    expect(Object.keys(esJson)).toEqual(Object.keys(enJson));
+  }, 60_000);
 });

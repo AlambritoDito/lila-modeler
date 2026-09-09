@@ -10,6 +10,7 @@
  * así que consumen exactamente 2 uniformes por muestra (R-DET-4).
  */
 
+import { coreMessages, type Locale } from './messages/index.js';
 import type { Rng } from './rng.js';
 
 /** Punto de la empírica discreta `user`. */
@@ -196,14 +197,15 @@ function erf(x: number): number {
  * `W-NORMAL-NEGATIVA` si una `normal` tiene `P(x < 0) > 1 %` (se trunca a >= 0 al muestrear) y
  * `W-USER-NORMALIZADA` si las probabilidades de una `user` no suman 1.
  */
-export function checkDistribution(dist: Distribution): DistributionWarning[] {
+export function checkDistribution(dist: Distribution, locale: Locale = 'en'): DistributionWarning[] {
+  const M = coreMessages(locale).codes;
   if (dist.type === 'normal' && dist.sd > 0) {
     const pNegative = 0.5 * (1 + erf(-dist.mean / (dist.sd * Math.SQRT2)));
     if (pNegative > 0.01) {
       return [
         {
           code: 'W-NORMAL-NEGATIVA',
-          message: `normal(mean=${dist.mean}, sd=${dist.sd}): P(x < 0) = ${(pNegative * 100).toFixed(1)} % > 1 %; las muestras negativas se truncan a 0.`,
+          message: M['W-NORMAL-NEGATIVA'](dist.mean, dist.sd, (pNegative * 100).toFixed(1)),
         },
       ];
     }
@@ -214,7 +216,7 @@ export function checkDistribution(dist: Distribution): DistributionWarning[] {
       return [
         {
           code: 'W-USER-NORMALIZADA',
-          message: `user: las probabilidades suman ${total} en vez de 1; se normalizan.`,
+          message: M['W-USER-NORMALIZADA'](total),
         },
       ];
     }

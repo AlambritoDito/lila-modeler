@@ -8,15 +8,20 @@
  */
 
 import type { ProcessIR } from './ir.js';
+import { coded, coreMessages, type Locale } from './messages/index.js';
 import type { KpiSummary, ReplicationSummary, RunResult } from './result.js';
 import { runReplication, type ReplicationRun, type SimScenario } from './sim.js';
 
 /** Ejecuta todas las replicaciones desde estado vacío, en orden 0..R-1. */
-export function runReplications(ir: ProcessIR, scenario: SimScenario): ReplicationRun[] {
+export function runReplications(
+  ir: ProcessIR,
+  scenario: SimScenario,
+  locale: Locale = 'en',
+): ReplicationRun[] {
   const count = scenario.run.replications ?? 1;
   const runs: ReplicationRun[] = [];
   for (let replication = 0; replication < count; replication++) {
-    runs.push(runReplication(ir, scenario, replication));
+    runs.push(runReplication(ir, scenario, replication, { locale }));
   }
   return runs;
 }
@@ -85,9 +90,14 @@ function studentT975(df: number): number {
 }
 
 /** Resume una serie con media, sd muestral e IC 95 % de Student. */
-export function summarizeKpi(values: readonly number[]): KpiSummary {
+export function summarizeKpi(values: readonly number[], locale: Locale = 'en'): KpiSummary {
   if (values.length < 2) {
-    throw new RangeError('E-REPLICACIONES-INSUFICIENTES: se requieren al menos 2 valores para calcular el IC 95 %.');
+    throw new RangeError(
+      coded(
+        'E-REPLICACIONES-INSUFICIENTES',
+        coreMessages(locale).codes['E-REPLICACIONES-INSUFICIENTES/valores'](),
+      ),
+    );
   }
   let total = 0;
   for (const value of values) total += value;
@@ -101,9 +111,15 @@ export function summarizeKpi(values: readonly number[]): KpiSummary {
  * Agrega mapas planos de KPI. Todos deben contener exactamente las mismas claves finitas:
  * una discrepancia suele indicar que una replicación se agregó con otro contrato.
  */
-export function summarizeKpis(replicationKpis: readonly Readonly<Record<string, number>>[]): ReplicationSummary {
+export function summarizeKpis(
+  replicationKpis: readonly Readonly<Record<string, number>>[],
+  locale: Locale = 'en',
+): ReplicationSummary {
+  const M = coreMessages(locale).codes;
   if (replicationKpis.length < 2) {
-    throw new RangeError('E-REPLICACIONES-INSUFICIENTES: se requieren al menos 2 replicaciones para calcular el IC 95 %.');
+    throw new RangeError(
+      coded('E-REPLICACIONES-INSUFICIENTES', M['E-REPLICACIONES-INSUFICIENTES/replicaciones']()),
+    );
   }
   const keys = Object.keys(replicationKpis[0] ?? {});
   const expected = new Set(keys);
@@ -113,16 +129,16 @@ export function summarizeKpis(replicationKpis: readonly Readonly<Record<string, 
     const record = replicationKpis[index]!;
     const recordKeys = Object.keys(record);
     if (recordKeys.length !== keys.length || recordKeys.some((key) => !expected.has(key))) {
-      throw new Error(`E-KPI-INCONSISTENTE: la replicación ${index} no contiene el mismo conjunto de KPI.`);
+      throw new Error(coded('E-KPI-INCONSISTENTE', M['E-KPI-INCONSISTENTE'](index)));
     }
     for (const key of keys) {
       if (!Number.isFinite(record[key])) {
-        throw new Error(`E-KPI-NO-FINITO: la replicación ${index}, KPI ${key}, no es un número finito.`);
+        throw new Error(coded('E-KPI-NO-FINITO', M['E-KPI-NO-FINITO'](index, key)));
       }
     }
   }
 
-  for (const key of keys) kpis[key] = summarizeKpi(replicationKpis.map((record) => record[key]!));
+  for (const key of keys) kpis[key] = summarizeKpi(replicationKpis.map((record) => record[key]!), locale);
   return { count: replicationKpis.length, kpis };
 }
 
@@ -158,6 +174,9 @@ export function numericKpis(result: RunResult): Record<string, number> {
 }
 
 /** Compone el resumen entre resultados ya agregados por LILA-028. */
-export function summarizeRunResults(results: readonly RunResult[]): ReplicationSummary {
-  return summarizeKpis(results.map(numericKpis));
+export function summarizeRunResults(
+  results: readonly RunResult[],
+  locale: Locale = 'en',
+): ReplicationSummary {
+  return summarizeKpis(results.map(numericKpis), locale);
 }

@@ -36,6 +36,7 @@ import {
 import { sample, type Distribution } from './distributions.js';
 import { Heap } from './heap.js';
 import type { ProcessIR, Node } from './ir.js';
+import { coded, coreMessages, type CoreCodeMessages, type Locale } from './messages/index.js';
 import type { EventLogRow } from './result.js';
 import {
   ResourceManager,
@@ -206,6 +207,12 @@ export interface ReplicationOptions {
   onStep?: ((simulatedTime: number) => void) | undefined;
   /** `false` suprime el stream externo; las filas internas siguen alimentando métricas. */
   log?: boolean | undefined;
+  /**
+   * Idioma de los avisos y de los errores del preflight (LILA-211). Viaja como cadena para que
+   * `SimulateOptions` siga siendo serializable y pueda cruzar el Web Worker por `postMessage`;
+   * se resuelve **una sola vez** al entrar, nunca dentro del bucle de eventos.
+   */
+  locale?: Locale | undefined;
 }
 
 /**
@@ -217,7 +224,8 @@ export interface ReplicationOptions {
  * Se exporta solo desde el módulo interno para que `simulate` y `runReplication` compartan
  * exactamente el mismo guard; no forma parte del barrel de `@lila/engine`.
  */
-export function assertSupportedResourceScenario(scenario: SimScenario): void {
+export function assertSupportedResourceScenario(scenario: SimScenario, locale: Locale = 'en'): void {
+  const M = coreMessages(locale).codes;
   const pools = scenario.resources ?? {};
   const bounds = new Map<string, number>();
   for (const [poolId, pool] of Object.entries(pools)) {
@@ -225,15 +233,15 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
     // pool ya está en cada tramo y declarar los dos deja sin definir cuál manda.
     if (typeof pool.capacity !== 'number' && pool.calendar !== undefined) {
       throw new RangeError(
-        `E-CAPACIDAD-Y-CALENDARIO: ${poolId}: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.`,
+        coded('E-CAPACIDAD-Y-CALENDARIO', M['E-CAPACIDAD-Y-CALENDARIO'](poolId)),
       );
     }
     if (typeof pool.capacity !== 'number' && pool.capacity.length === 0) {
-      throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe declarar al menos un tramo.`);
+      throw new RangeError(coded('E-REC-CAPACIDAD', M['E-REC-CAPACIDAD/sin-tramos'](poolId)));
     }
     for (const slice of capacitySlices(pool)) {
       if (!Number.isInteger(slice.capacity) || slice.capacity < 1) {
-        throw new RangeError(`E-REC-CAPACIDAD: ${poolId}: capacity debe ser un entero mayor o igual que 1.`);
+        throw new RangeError(coded('E-REC-CAPACIDAD', M['E-REC-CAPACIDAD/entero'](poolId)));
       }
     }
     bounds.set(poolId, poolCapacityBound(pool, scenario.calendars ?? {}));
@@ -244,24 +252,22 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
     for (const use of uses) {
       const pool = pools[use.ref];
       if (pool === undefined) {
-        throw new Error(`E-REC-DESCONOCIDO: ${elementId}: el pool ${use.ref} no existe.`);
+        throw new Error(coded('E-REC-DESCONOCIDO', M['E-REC-DESCONOCIDO/en-elemento'](elementId, use.ref)));
       }
       if (seen.has(use.ref)) {
-        throw new Error(`E-REC-DUPLICADO: ${elementId}: el pool ${use.ref} aparece más de una vez.`);
+        throw new Error(coded('E-REC-DUPLICADO', M['E-REC-DUPLICADO/pool'](elementId, use.ref)));
       }
       seen.add(use.ref);
       const quantity = use.quantity ?? 1;
       if (!Number.isInteger(quantity) || quantity < 1) {
-        throw new RangeError(
-          `E-REC-CANTIDAD: ${elementId}: quantity de ${use.ref} debe ser un entero mayor o igual que 1.`,
-        );
+        throw new RangeError(coded('E-REC-CANTIDAD', M['E-REC-CANTIDAD/entero'](elementId, use.ref)));
       }
       // R-CAL-11: con capacidad variable el tope es el máximo de la semana; una `quantity` mayor
       // no cabe nunca, en ningún turno.
       const bound = bounds.get(use.ref)!;
       if (quantity > bound) {
         throw new RangeError(
-          `E-REC-CANTIDAD: ${elementId}: quantity ${quantity} excede capacity ${bound} de ${use.ref}.`,
+          coded('E-REC-CANTIDAD', M['E-REC-CANTIDAD/excede'](elementId, quantity, bound, use.ref)),
         );
       }
     }
@@ -277,7 +283,10 @@ export function assertSupportedResourceScenario(scenario: SimScenario): void {
  * toma literalmente el camino de M2: `undefined` es 24×7 y no se llama a ninguna primitiva de
  * calendario, que es lo que hace posible la igualdad bit a bit de R-DEG-2.
  */
-export function compileCalendars(scenario: SimScenario): Map<string, Calendar> {
+export function compileCalendars(
+  scenario: SimScenario,
+  locale: Locale = 'en',
+): Map<string, Calendar> {
   const compiled = new Map<string, Calendar>();
   const defs = Object.entries(scenario.calendars ?? {});
   if (defs.length === 0) return compiled;
@@ -286,9 +295,11 @@ export function compileCalendars(scenario: SimScenario): Map<string, Calendar> {
   const offset = scenario.run.start === undefined ? 0 : weekOffsetSeconds(scenario.run.start);
   for (const [name, def] of defs) {
     if (def.intervals.length === 0) {
-      throw new RangeError(`E-CAL-VACIO: ${name}: el calendario no tiene intervalos abiertos.`);
+      throw new RangeError(
+        coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/sin-intervalos'](name)),
+      );
     }
-    compiled.set(name, compileCalendar(def, offset));
+    compiled.set(name, compileCalendar(def, offset, locale));
   }
   return compiled;
 }
@@ -328,6 +339,7 @@ export function activityCalendar(
   calendars: ReadonlyMap<string, Calendar>,
   elementId: string,
   poolIds: readonly string[],
+  locale: Locale = 'en',
 ): Calendar | undefined {
   if (calendars.size === 0) return undefined;
   const own = scenario.elements?.[elementId]?.calendar;
@@ -343,7 +355,7 @@ export function activityCalendar(
       result = intersect(result, pool);
     } catch {
       throw new RangeError(
-        `E-CAL-VACIO: ${elementId}: la intersección de los calendarios de la tarea es vacía.`,
+        coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/interseccion'](elementId)),
       );
     }
   }
@@ -358,21 +370,29 @@ export function activityCalendar(
  * `validateScenario` reporta `E-REF-DESCONOCIDA` para lo mismo (R9 de SCENARIO_FORMAT), pero
  * `core/` no importa el validador zod y tiene que defenderse solo.
  */
-export function assertSupportedCalendarScenario(scenario: SimScenario): Map<string, Calendar> {
-  const calendars = compileCalendars(scenario);
+export function assertSupportedCalendarScenario(
+  scenario: SimScenario,
+  locale: Locale = 'en',
+): Map<string, Calendar> {
+  const M = coreMessages(locale).codes;
+  const calendars = compileCalendars(scenario, locale);
 
   for (const [poolId, pool] of Object.entries(scenario.resources ?? {})) {
     // R-CAL-11: se comprueban los calendarios de todos los tramos, que en la forma numérica es
     // exactamente el `calendar` del pool.
     for (const slice of capacitySlices(pool)) {
       if (slice.calendar !== undefined && !calendars.has(slice.calendar)) {
-        throw new Error(`E-CAL-DESCONOCIDO: resources.${poolId}: el calendario ${slice.calendar} no existe.`);
+        throw new Error(
+          coded('E-CAL-DESCONOCIDO', M['E-CAL-DESCONOCIDO'](`resources.${poolId}`, slice.calendar)),
+        );
       }
     }
   }
   for (const [elementId, element] of Object.entries(scenario.elements ?? {})) {
     if (element.calendar !== undefined && !calendars.has(element.calendar)) {
-      throw new Error(`E-CAL-DESCONOCIDO: ${elementId}: el calendario ${element.calendar} no existe.`);
+      throw new Error(
+        coded('E-CAL-DESCONOCIDO', M['E-CAL-DESCONOCIDO'](elementId, element.calendar)),
+      );
     }
   }
   if (calendars.size === 0) return calendars;
@@ -381,8 +401,11 @@ export function assertSupportedCalendarScenario(scenario: SimScenario): Map<stri
     const uses = element.resources ?? [];
     // R-CAL-4: en OR cada alternativa se comprueba por separado (una tarea puede arrancar por
     // cualquiera de ellas); en AND y sin recursos, la única combinación posible.
-    if (element.selection === 'or') for (const use of uses) activityCalendar(scenario, calendars, elementId, [use.ref]);
-    else activityCalendar(scenario, calendars, elementId, uses.map((use) => use.ref));
+    if (element.selection === 'or') {
+      for (const use of uses) activityCalendar(scenario, calendars, elementId, [use.ref], locale);
+    } else {
+      activityCalendar(scenario, calendars, elementId, uses.map((use) => use.ref), locale);
+    }
   }
   return calendars;
 }
@@ -472,6 +495,11 @@ export function runReplication(
   options: ReplicationOptions = {},
 ): ReplicationRun {
   const spec = scenario.elements ?? {};
+  // El catálogo se resuelve aquí y se pasa a los helpers: nada de esto ocurre en el camino
+  // caliente del bucle de eventos (LILA-211).
+  const locale = options.locale;
+  const M: CoreCodeMessages = coreMessages(locale).codes;
+  const chrome = coreMessages(locale).chrome;
   // Función (en vez de acceso inline) porque los callbacks pueden activar la señal entre checks.
   const isAborted = (): boolean => options.signal?.aborted === true;
   // R-ARR-3: sin `run.duration` la corrida termina cuando se vacía el heap. Que no haya ni
@@ -481,9 +509,9 @@ export function runReplication(
   const warmup = scenario.run.warmup ?? 0;
 
   // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
-  assertSupportedResourceScenario(scenario);
+  assertSupportedResourceScenario(scenario, locale);
   // R-CAL-4 / R-CAL-10: compilado una sola vez por replicación. Vacío ⇒ 24×7 en todas partes.
-  const calendars = assertSupportedCalendarScenario(scenario);
+  const calendars = assertSupportedCalendarScenario(scenario, locale);
 
   // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
   // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.
@@ -494,7 +522,7 @@ export function runReplication(
   const calendarFor = (nodeId: string, poolIds: readonly string[]): Calendar | undefined => {
     const key = poolIds.length === 0 ? nodeId : `${nodeId}\u0000${poolIds.join('\u0000')}`;
     if (calendarCache.has(key)) return calendarCache.get(key);
-    const calendar = activityCalendar(scenario, calendars, nodeId, poolIds);
+    const calendar = activityCalendar(scenario, calendars, nodeId, poolIds, locale);
     calendarCache.set(key, calendar);
     return calendar;
   };
@@ -525,10 +553,7 @@ export function runReplication(
     ? Object.keys(ir.nodes).filter((nodeId) => ir.nodes[nodeId]!.type === 'task')
     : [];
   if (tareasSinTiempo.length > 0) {
-    warn(
-      `W-TAREA-SIN-TIEMPO: ${tareasSinTiempo.join(', ')}: el escenario no declara ningún ` +
-        'processingTime; esas tareas duran 0 segundos.',
-    );
+    warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/ninguno'](tareasSinTiempo.join(', '))));
   }
 
   const flows: Record<string, number> = {};
@@ -554,6 +579,7 @@ export function runReplication(
             capacity: slice.capacity,
           })),
           capacityOffset,
+          locale,
         )
       : undefined;
     if (schedule === undefined || schedule.constant !== undefined) {
@@ -563,7 +589,7 @@ export function runReplication(
     capacitySchedules.set(poolId, schedule);
     poolDefinitions[poolId] = { capacity: schedule.max, capacityAt: (t) => capacityAt(schedule, t) };
   }
-  const resourceManager = new ResourceManager(poolDefinitions);
+  const resourceManager = new ResourceManager(poolDefinitions, locale);
   const activities = new Map<string, ActivityState>();
   let nextActivityInstanceId = 1;
 
@@ -719,9 +745,13 @@ export function runReplication(
     const share = missing === outs.length ? 1 / outs.length : Math.max(0, 1 - declaredSum) / missing;
     if (missing >= 2 && missing < outs.length) {
       warn(
-        `W-XOR-RESIDUO-COMPARTIDO: ${gatewayId}: el residuo se reparte entre ${outs
-          .filter((_, i) => declared[i] === undefined)
-          .join(', ')}.`,
+        coded(
+          'W-XOR-RESIDUO-COMPARTIDO',
+          M['W-XOR-RESIDUO-COMPARTIDO'](
+            gatewayId,
+            outs.filter((_, i) => declared[i] === undefined).join(', '),
+          ),
+        ),
       );
     }
     const weights = declared.map((p) => p ?? share);
@@ -730,7 +760,7 @@ export function runReplication(
     // `E-XOR-SUMA-CERO` (lo caza la validación); aquí no se normaliza para no producir NaN y
     // el sorteo cae en el descarte de R-XOR-7.
     if (total > 0 && Math.abs(total - 1) > 1e-9) {
-      warn(`W-XOR-NORMALIZADA: ${gatewayId}: las probabilidades sumaban ${total}; se normalizan.`);
+      warn(coded('W-XOR-NORMALIZADA', M['W-XOR-NORMALIZADA'](gatewayId, total)));
       for (let i = 0; i < weights.length; i++) weights[i] = weights[i]! / total;
     }
     xorCache.set(gatewayId, weights);
@@ -744,7 +774,7 @@ export function runReplication(
     const declared = outs.map((flowId) => spec[flowId]?.probability);
     // R-OR-2: una salida sin `probability` vale 1; un OR sin ninguna se comporta como un AND fork.
     if (declared.every((p) => p === undefined)) {
-      warn(`W-OR-SIN-PROBABILIDAD: ${gatewayId}: ninguna salida declara probability; todas valen 1.`);
+      warn(coded('W-OR-SIN-PROBABILIDAD', M['W-OR-SIN-PROBABILIDAD'](gatewayId)));
     }
     const weights = declared.map((p) => p ?? 1);
     orCache.set(gatewayId, weights);
@@ -772,7 +802,7 @@ export function runReplication(
     const active: string[] = [];
     for (let i = 0; i < outs.length; i++) if (rng.next() < weights[i]!) active.push(outs[i]!);
     if (active.length > 0) return active;
-    warn(`W-OR-VACIO: ${gatewayId}: ningún sorteo activó una salida.`);
+    warn(coded('W-OR-VACIO', M['W-OR-VACIO'](gatewayId)));
     let pick = outs.findIndex((flowId) => ir.flows[flowId]?.isDefault === true);
     if (pick < 0) {
       pick = 0;
@@ -822,9 +852,7 @@ export function runReplication(
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
     if (node.type !== 'start') continue;
     if (arrivalTimer(nodeId) === undefined) {
-      warn(
-        `W-START-SIN-LLEGADAS: ${nodeId}: el start no declara interTriggerTimer ni triggerCount y no genera casos.`,
-      );
+      warn(coded('W-START-SIN-LLEGADAS', M['W-START-SIN-LLEGADAS'](nodeId)));
       continue;
     }
     emitted.set(nodeId, 0);
@@ -840,7 +868,7 @@ export function runReplication(
     if (node.type !== 'and') continue;
     for (const flowId of node.outgoing) {
       if (spec[flowId]?.probability !== undefined) {
-        warn(`W-PROB-IGNORADA: ${flowId}: sale de un gateway paralelo (${nodeId}); probability se ignora.`);
+        warn(coded('W-PROB-IGNORADA', M['W-PROB-IGNORADA'](flowId, nodeId)));
       }
     }
   }
@@ -974,9 +1002,9 @@ export function runReplication(
         const dist = spec[next.nodeId]?.processingTime;
         if (dist === undefined) {
           if (node.type === 'timer') {
-            warn(`W-TIMER-SIN-TIEMPO: ${next.nodeId}: sin processingTime; retarda 0 segundos.`);
+            warn(coded('W-TIMER-SIN-TIEMPO', M['W-TIMER-SIN-TIEMPO'](next.nodeId)));
           } else if (tareasSinTiempo.length === 0) {
-            warn(`W-TAREA-SIN-TIEMPO: ${next.nodeId}: sin processingTime; dura 0 segundos.`);
+            warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/elemento'](next.nodeId)));
           }
         }
         const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
@@ -1074,7 +1102,7 @@ export function runReplication(
           const activation = marks[marks.length - 1];
           if (activation === undefined) {
             // R-OR-6: sin marca activa el join es pass-through (mezcla).
-            warn(`W-OR-JOIN-SIN-FORK: ${next.nodeId}: llegó un token sin marca de fork; se comporta como mezcla.`);
+            warn(coded('W-OR-JOIN-SIN-FORK', M['W-OR-JOIN-SIN-FORK'](next.nodeId)));
           } else {
             // R-OR-5: el join espera los `k` tokens que activó el fork emparejado, contando
             // por la marca más reciente. R-OR-7: la clave incluye el `activationId`, así que
@@ -1161,7 +1189,7 @@ export function runReplication(
   for (const nodeId of Object.keys(ir.nodes)) {
     const affected = blocked.get(nodeId);
     if (affected !== undefined) {
-      warn(`W-JOIN-BLOQUEADO: ${nodeId}: ${affected} casos quedaron con tokens esperando en el join.`);
+      warn(coded('W-JOIN-BLOQUEADO', M['W-JOIN-BLOQUEADO'](nodeId, affected)));
     }
   }
 
@@ -1180,7 +1208,9 @@ export function runReplication(
     rows,
     flows,
     elements,
-    warnings: [...warningCounts].map(([message, count]) => (count > 1 ? `${message} (${count} veces)` : message)),
+    warnings: [...warningCounts].map(([message, count]) =>
+      count > 1 ? chrome.repeated(message, count) : message,
+    ),
     ...(cancelled ? { cancelled: true as const } : {}),
   };
 }
