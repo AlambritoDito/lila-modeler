@@ -29,7 +29,14 @@ salen los tres comportamientos de `applyTheme` ante un tema imperfecto:
 
 - **Token ausente**: no es error. Se queda con el valor por defecto de
   `tokens.css`, así que un tema parcial (`{ "accent.primary": "#00FFAA" }`) es
-  legal y solo cambia lo que trae.
+  legal y solo cambia lo que trae. Para que eso sea verdad **también cuando ya
+  había otro tema puesto**, quien aplica un tema borra después las variables en
+  línea que el anterior dejó y este no trae (`aplicarTema` en `App.tsx`): sin ese
+  barrido, `applyTheme` solo escribe y nunca borra, así que un tema parcial
+  heredaba en silencio los tokens del anterior y el mismo archivo se veía
+  distinto según lo que hubiera antes. Se borra después de escribir, no antes,
+  para no perder la otra garantía: un tema malo lanza sin tocar nada y deja el
+  anterior intacto.
 - **Clave desconocida**: `Error`. Escribirla dejaría una variable basura
   (`--foo-bar`) que ningún componente lee y que nadie llegaría a ver.
 - **Valor que no es texto** (número, `null`, objeto): `Error`. Escribirlo dejaría
@@ -121,6 +128,16 @@ Los controles:
   nada (`validarTema`, `apps/web/src/theme/temas.ts`); si algo falla, el mensaje sale dentro del
   diálogo y no se aplica ni se guarda nada. Si vale, entra como tema del usuario y se aplica.
 - **Eliminar** quita el tema del usuario activo y vuelve a Eva-01.
+- **Cerrar el diálogo no deshace nada.** El botón «Cerrar» y la tecla Escape hacen lo mismo: lo
+  editado ya está aplicado y ya está guardado desde la pulsación que lo cambió, porque el editor no
+  tiene «Aceptar». Para volver atrás está «Restablecer». Enter dentro de un campo de texto **no**
+  cierra: el `<form method="dialog">` lo enviaría en mitad de teclear un hex o un nombre, así que
+  `App.tsx` le hace `preventDefault` cuando el objetivo es un `<input>`.
+- **Lo tecleado a medias no sale del control.** Un hex pasa por `#`, `#1`, `#12`… y ninguno de esos
+  es un color; el nombre pasa por el vacío y el tamaño base por el campo sin número (que dejaba el
+  token en `"px"`). Esos valores se quedan en el estado del propio campo —que los enseña marcados
+  con `--status-error`— y no se aplican ni se guardan: solo un valor válido llama a `onTemas`, y
+  hasta que lo haya sigue mandando el último bueno.
 
 **Qué valida `validarTema` y por qué no basta `applyTheme`.** `applyTheme` comprueba lo que le
 impide escribir CSS sano: clave conocida y valor de texto. Un archivo elegido por el usuario puede
@@ -141,4 +158,8 @@ importado, que no tiene integrado detrás—. `id` y `origen` son de la app: no 
 exportado ni se esperan en el importado. En escritorio, `parseAjustes` descarta las entradas que no
 tengan forma de tema (`sessionState.ts`, con un tope de `MAX_TEMAS` = 50 entradas: esto es la
 configuración de la app, no una galería) y el renderer vuelve a validarlas con `validarTema`; un
-tema que un `estado.json` editado a mano dejó roto se cae solo él, como una entrada de recientes.
+tema que un `estado.json` editado a mano dejó roto **se repara token a token** (`saneaTemas`): el
+valor que no vale cae al `origen` del tema y, si ahí tampoco vale, se cae de la lista y lo pinta el
+valor por defecto de `tokens.css`. Solo se descarta el tema entero cuando no hay cómo reconstruirlo
+—sin `id` de usuario o sin `name`—. Descartarlo al primer token roto, que es lo que hacía antes,
+convertía cualquier edición dejada a medias en la pérdida silenciosa de los otros 39 al recargar.
