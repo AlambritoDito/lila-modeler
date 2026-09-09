@@ -1,3 +1,5 @@
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 Histórico: prompt de la sesión M0 (2026-09-03); el proyecto va hoy por M5.
 
 # Prompt — Orquestador de desarrollo (Opus) · Lila Modeler, hito M0 → M1

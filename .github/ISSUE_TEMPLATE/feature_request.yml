@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest an improvement or a new capability for the engine, CLI, MCP server, web app or desktop app.
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Framing it as a problem first, rather than jumping straight to a
+        proposed solution, makes it much easier to evaluate.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what's stopping you today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to see, in as much or as little detail as you have.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve the problem, including workarounds you're already using.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: surface
+    attributes:
+      label: Which surface does this affect?
+      description: Select all that apply.
+      options:
+        - label: Engine (`packages/engine`, simulation semantics)
+        - label: CLI (`lila` command)
+        - label: MCP server (`packages/mcp`, `lila mcp`)
+        - label: Web app (`apps/web`)
+        - label: Desktop app (`apps/desktop`)
