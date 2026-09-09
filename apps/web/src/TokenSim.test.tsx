@@ -8,6 +8,8 @@
  * si el módulo cambia sus plantillas, esta prueba sigue verde y el aviso llega por el mapa de
  * `strings.es.ts`, que es donde está escrito de qué versión se habla.
  */
+import { readFileSync } from 'node:fs';
+
 import { Injector } from 'didi';
 import { beforeEach, describe, expect, it } from 'vitest';
 // Los dos módulos de la librería que `moduloColoresDelTema` sustituye. Se importan de verdad (no
@@ -260,5 +262,25 @@ describe('«Validar rutas»: el diagrama conserva los colores del tema (#264)', 
     segundo.activar();
     expect(primero.pintados[0]?.colores).toEqual({ fill: '#1F1A36', stroke: '#D9D2F0' });
     expect(segundo.pintados[0]?.colores).toEqual({ fill: '#FFFFFF', stroke: '#201E1D' });
+  });
+
+  it('el lienzo de verdad lo registra, y detrás del módulo de la librería (#264)', () => {
+    // Las pruebas de arriba montan su propio inyector: seguirían verdes con el módulo sin
+    // registrar. Este guardia mira `Modeler.tsx`, que es lo único que hace que esto llegue al
+    // navegador: si alguien quita `moduloColoresDelTema` de `additionalModules`, lo adelanta al
+    // módulo de la librería (en didi gana la última definición) o abre una segunda lista que
+    // vuelva a registrar `neutralElementColors`, el diagrama se repinta en blanco y negro otra vez.
+    // La ruta va en una variable, como en `app.css.test.ts`: si se escribe literal dentro del
+    // `new URL(...)`, el plugin de assets de Vite la reescribe a una URL http que `readFileSync`
+    // rechaza.
+    const ruta = './Modeler.tsx';
+    const fuente = readFileSync(new URL(ruta, import.meta.url), 'utf8');
+    const listas = fuente.match(/additionalModules:\s*\[[^\]]*\]/g) ?? [];
+    expect(listas).toHaveLength(1);
+    const modulos = listas[0]!.replace(/^[^[]*\[|\]$/g, '').split(',').map((m) => m.trim()).filter(Boolean);
+    expect(modulos).toContain('moduloColoresDelTema');
+    expect(modulos.indexOf('moduloColoresDelTema')).toBeGreaterThan(modulos.indexOf('tokenSimulationModule'));
+    // Y las dos claves que sustituye siguen siendo las que el módulo de la librería declara.
+    expect(Object.keys(moduloColoresDelTema).sort()).toEqual(['neutralElementColors', 'simulationStyles']);
   });
 });
