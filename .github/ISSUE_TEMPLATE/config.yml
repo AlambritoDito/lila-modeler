@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing guide
+    url: https://github.com/AlambritoDito/lila-modeler/blob/main/CONTRIBUTING.md
+    about: Requirements, setup, checks and the PR process.
+  - name: Documentation
+    url: https://github.com/AlambritoDito/lila-modeler/tree/main/docs
+    about: The engine's contracts and guides (semantics, scenario format, results format, MCP, ...).
