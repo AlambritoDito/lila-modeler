@@ -865,12 +865,29 @@ export function resolveScenarioPath(base: string, ref: string): string {
 }
 
 /**
+ * Claves que en JavaScript no crean una clave propia sino que escriben en el prototipo (LILA-204).
+ * `JSON.parse('{"__proto__":{…}}')` **sí** crea la clave propia, así que un escenario hijo o un
+ * `patch_scenario` podían colarlas hasta el `out[key] = value` de `deepMerge`.
+ */
+const CLAVES_DE_PROTOTIPO = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
  * Merge profundo del hijo sobre el padre.
  *
  * - Objeto sobre objeto: se fusiona clave a clave.
  * - `null`: **borra** la clave del resultado.
  * - Cualquier otra cosa, arrays incluidos, **reemplaza entera** (§ 6: es la única semántica
  *   predecible para una lista sin claves).
+ * - `__proto__`, `constructor` y `prototype` se ignoran en cualquier objeto, a cualquier
+ *   profundidad (LILA-204). Dentro de un array no: un array se reemplaza entero sin mirarlo, y una
+ *   clave así en un elemento suyo la caza el esquema (`strictObject`) con `E-CLAVE-DESCONOCIDA`.
+ *
+ * ponytail: se ignoran **en silencio** en vez de emitir `E-CLAVE-DESCONOCIDA` (§ 17, R-RES-4).
+ * El filtro corre en la fusión, antes del esquema, y `resolveExtends` hoy solo lanza por ciclos y
+ * rutas: devolver defectos desde aquí obligaría a cambiarle la firma a la única función que la web,
+ * la CLI y el MCP comparten. El techo es que una errata `"constructor": …` se pierde sin aviso;
+ * ningún escenario legítimo tiene esas claves (`docs/SCENARIO_FORMAT.md` § 2). Si algún día hace
+ * falta avisar, el sitio es el validador, con el escenario **sin** fusionar.
  */
 function deepMerge(
   parent: Record<string, unknown>,
@@ -878,9 +895,13 @@ function deepMerge(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...parent };
   for (const [key, value] of Object.entries(child)) {
+    if (CLAVES_DE_PROTOTIPO.has(key)) continue;
     const previous = out[key];
     if (value === null) delete out[key];
     else if (isPlainObject(previous) && isPlainObject(value)) out[key] = deepMerge(previous, value);
+    // Objeto que el padre no trae: también se filtra, o `run: {"__proto__": …}` sobre un padre sin
+    // `run` entraba entero por referencia y el resuelto se quedaba con la clave propia.
+    else if (isPlainObject(value)) out[key] = deepMerge({}, value);
     else out[key] = value;
   }
   return out;

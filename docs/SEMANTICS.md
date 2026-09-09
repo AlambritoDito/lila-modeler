@@ -747,7 +747,9 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
   por `extends`) **no** dispara el error. *(prueba: LILA-013, LILA-014)*
 - **R-RES-4 — Campos desconocidos.** Una clave no reconocida por el esquema y que no está en la
   lista de reservados es error de esquema `E-CLAVE-DESCONOCIDA` (el esquema es cerrado): protege
-  contra erratas silenciosas del tipo `capacty: 3`. *(prueba: LILA-013, LILA-198)*
+  contra erratas silenciosas del tipo `capacty: 3`. Única excepción: `__proto__`, `constructor` y
+  `prototype`, que la fusión de `extends` descarta antes del esquema y por tanto en silencio
+  (`SCENARIO_FORMAT.md` § 6). *(prueba: LILA-013, LILA-198; excepción: LILA-204)*
 
 ---
 
