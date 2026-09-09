@@ -14,6 +14,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { applyTheme, type Theme } from '../theme/applyTheme';
 import { esDelUsuario, temaDe, type TemaGuardado } from '../theme/temas';
 import { Apariencia } from './Apariencia';
+import { setLocale } from '../i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 /**
  * Temas integrados de mentira. Un tema puede ser parcial (`docs/THEMES.md`), así que con cinco

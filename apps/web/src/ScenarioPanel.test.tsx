@@ -38,6 +38,13 @@ import {
   ScenarioPanel,
 } from './ScenarioPanel.js';
 import { DIAS, aCeldas, aIntervals, celda, type Intervalo } from './CalendarEditor.js';
+import { setLocale } from './i18n';
+import { en } from './strings.en';
+import { es } from './strings.es';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
@@ -622,6 +629,33 @@ describe('capacidad de recursos: Fija y Por turno', () => {
 /* ------------------------------------------------------------------ *
  * 7 — OP-11: campos reservados heredados, eliminación explícita con null
  * ------------------------------------------------------------------ */
+
+/**
+ * QA of #301 (LILA-210): the chain error is cached in a `useMemo`, and the message it caches is
+ * built from the catalog. If the language is not among the dependencies, a broken `extends` keeps
+ * saying it in whichever language the panel happened to mount with.
+ */
+it('el fallo de la cadena `extends` cambia de idioma con la app (LILA-210)', () => {
+  const hijo: Json = { version: 1, name: 'Huérfano', extends: 'no-existe.scenario.json' };
+  // Esta suite fija el español; aquí se arranca en la lengua base para poder ver el cambio.
+  setLocale('en');
+  try {
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto(), 'hijo.scenario.json': hijo }}
+        archivoInicial="hijo.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    expect(document.body.textContent).toContain(en.escenario.errorEscenarioDesconocido('no-existe.scenario.json'));
+    act(() => setLocale('es'));
+    expect(document.body.textContent).toContain(es.escenario.errorEscenarioDesconocido('no-existe.scenario.json'));
+    expect(document.body.textContent).not.toContain(en.escenario.errorEscenarioDesconocido('no-existe.scenario.json'));
+  } finally {
+    setLocale('es');
+  }
+});
 
 describe('campos reservados: quitar heredado', () => {
   it('«Quitar heredado» escribe priority: null y el escenario resuelto valida sin el campo', () => {

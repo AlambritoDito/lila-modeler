@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { prepareSimulation } from './simulationGate';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 const xml = readFileSync('examples/pedido/model.bpmn', 'utf8');
 const raw = JSON.parse(readFileSync('examples/pedido/as-is.scenario.json', 'utf8')) as Record<string, unknown>;
 it('resuelve y valida el escenario real antes de simular', async () => {

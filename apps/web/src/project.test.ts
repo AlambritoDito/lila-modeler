@@ -4,6 +4,11 @@ import { parseBpmn } from '@lila/engine/bpmn';
 import { defaultScenarios, newModelXml, nextScenarioRevisions, readProject } from './project';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument } from './store/ProjectStore';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 it('modelo propio → dos escenarios → simular → snapshot JSON → reabrir → comparar', async () => {
   const xml = newModelXml(); const { ir } = await parseBpmn(xml); const scenarios = defaultScenarios(ir);
   const runs = await Promise.all(Object.keys(scenarios).map(async (name) => {

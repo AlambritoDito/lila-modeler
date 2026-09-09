@@ -28,6 +28,11 @@ import {
 } from '@lila/engine/schema';
 
 import { ScenarioPanel, duplicarEscenario } from './ScenarioPanel.js';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
