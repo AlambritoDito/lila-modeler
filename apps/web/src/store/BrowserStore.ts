@@ -210,8 +210,10 @@ export class BrowserStore implements ProjectSessionStore {
 
   async saveProject(document: ProjectDocument): Promise<ProjectDocument> {
     const snapshot = structuredClone(readProject(document));
-    this.project = snapshot;
     descargar(JSON.stringify(snapshot, null, 2), `${snapshot.name}.lila.json`, 'application/json');
+    // Commit only after the download was initiated successfully. Keep the returned document
+    // separate so callers cannot mutate the last explicit save through a shared reference.
+    this.project = structuredClone(snapshot);
     // Saving also flushes the mirror. Normally it is already up to date — every mutation writes
     // it — but if an earlier write hit the quota and the tab has since freed room, an explicit
     // save is the moment to try again.
