@@ -1,0 +1,87 @@
+{
+  "$schema": "https://lila-modeler.org/schema/scenario/1.json",
+  "version": 1,
+  "name": "AS-IS",
+  "description": "Current operation: 3 account executives, 2 credit analysts, 1 production operator",
+  "model": "model.bpmn",
+  "run": {
+    "start": "2026-09-07T08:00:00-06:00",
+    "duration": 28800,
+    "warmup": 0,
+    "replications": 30,
+    "seed": 42,
+    "serviceLevel": 1800,
+    "baseTimeUnit": "min",
+    "currency": "MXN"
+  },
+  "calendars": {
+    "tienda": { "intervals": [{ "days": ["MON", "TUE", "WED", "THU", "FRI"], "from": "08:00", "to": "16:00" }] }
+  },
+  "resources": {
+    "executive": { "name": "Account Executive", "type": "role", "capacity": 3, "costPerHour": 100, "calendar": "tienda" },
+    "analyst": { "name": "Credit Analyst", "type": "role", "capacity": 2, "costPerHour": 120, "calendar": "tienda" },
+    "operator": { "name": "Production Operator", "type": "role", "capacity": 1, "costPerHour": 80, "calendar": "tienda" }
+  },
+  "elements": {
+    "StartEvent_Application": {
+      "interTriggerTimer": { "type": "exponential", "mean": 360 },
+      "calendar": "tienda"
+    },
+    "Task_FillApplication": {
+      "processingTime": { "type": "constant", "value": 300 },
+      "resources": [{ "ref": "executive", "quantity": 1 }]
+    },
+    "Task_CopyId": {
+      "processingTime": { "type": "constant", "value": 120 },
+      "resources": [{ "ref": "executive", "quantity": 1 }]
+    },
+    "Task_CheckBureau": {
+      "processingTime": { "type": "constant", "value": 60 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Flow_BureauBad": { "probability": 0.4 },
+    "Flow_BureauGood": { "probability": 0.6 },
+    "Task_DenyBureau": {
+      "processingTime": { "type": "constant", "value": 120 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Task_InformBureauDenial": {
+      "processingTime": { "type": "constant", "value": 60 },
+      "resources": [{ "ref": "executive", "quantity": 1 }]
+    },
+    "Task_AssessDebt": {
+      "processingTime": { "type": "constant", "value": 1200 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Flow_DebtNotEligible": { "probability": 0.3 },
+    "Flow_DebtEligible": { "probability": 0.7 },
+    "Task_DenyDebt": {
+      "processingTime": { "type": "constant", "value": 120 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Task_InformDebtDenial": {
+      "processingTime": { "type": "constant", "value": 60 },
+      "resources": [{ "ref": "executive", "quantity": 1 }]
+    },
+    "Task_OpenAccount": {
+      "processingTime": { "type": "constant", "value": 180 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Task_ComputePaymentCapacity": {
+      "processingTime": { "type": "constant", "value": 120 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Task_AssignCreditLimit": {
+      "processingTime": { "type": "constant", "value": 60 },
+      "resources": [{ "ref": "analyst", "quantity": 1 }]
+    },
+    "Task_PrintCard": {
+      "processingTime": { "type": "constant", "value": 600 },
+      "resources": [{ "ref": "operator", "quantity": 1 }]
+    },
+    "Task_DeliverCard": {
+      "processingTime": { "type": "constant", "value": 300 },
+      "resources": [{ "ref": "executive", "quantity": 1 }]
+    }
+  }
+}
