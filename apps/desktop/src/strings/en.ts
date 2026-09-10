@@ -27,7 +27,7 @@ export const en = {
     archivo: 'File',
     nuevoProyecto: 'New project',
     abrirProyecto: 'Open project…',
-    abrirReciente: 'Open Recent',
+    abrirReciente: 'Open recent',
     guardarProyecto: 'Save project',
     guardarComo: 'Save as…',
   },
