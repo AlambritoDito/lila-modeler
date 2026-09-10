@@ -1,8 +1,12 @@
 # GitHub Pages demo
 
-The prepared public address is `https://alambritodito.github.io/lila-modeler/`.
-The landing page lives at that root and links to the app at `app/`. Publication is not enabled
-by adding the workflow: the deployment job requires a separate owner-controlled switch.
+The live public address is `https://alambritodito.github.io/lila-modeler/`.
+The landing page lives at that root and links to the app at `app/`. The owner authorized the first
+publication on 2026-09-10. [Deployment](https://github.com/AlambritoDito/lila-modeler/actions/runs/34485464026)
+succeeded for main `be0f695`; the public landing and editor returned HTTP 200. Real browser
+acceptance passed: editing, both seed-42/30-replication simulations, comparison, explicit saving,
+reload, discard of unsaved edits and reopening the downloaded project. English and Eva-01 remain
+the defaults. Automatic publishing is still disabled; subsequent releases use manual dispatch.
 
 ## Build and preview
 
@@ -21,9 +25,9 @@ Reload restores that saved model, draft scenarios, revisions and simulation resu
 changes are not autosaved. Storage failure does not prevent downloading; keep the download
 as a portable backup. Clearing browser data removes the local copy.
 
-## First publication (owner action)
+## Publish an update (owner action)
 
-1. In repository Settings → Pages, choose GitHub Actions as the source.
+1. Repository Settings → Pages is configured to use GitHub Actions.
 2. Review the Pages workflow's uploaded artifact and the model/simulate/compare/save/reload flow.
 3. Run the Pages workflow from `main` with **publish** selected.
 4. To publish future pushes automatically, set repository variable `PAGES_PUBLISH_ENABLED=true`.

@@ -66,10 +66,13 @@ Source maps still reference unpublished sources, as in the existing package.
 
 ## Owner decisions and remaining acceptance
 
-- **#67 stays open.** Pages artifacts and local browser acceptance are verified, but the public URL
-  is not. The Pages API returned 404 and repository publication variables were empty during this
-  block. No Pages activation or first deployment was performed. The owner must authorize/configure
-  the first publication, then verify opening the example, simulation and comparison at the live URL.
+- **#67 acceptance completed after owner authorization on 2026-09-10.** The
+  [first public deployment](https://github.com/AlambritoDito/lila-modeler/actions/runs/34485464026)
+  published main `be0f695` successfully. Both [the landing](https://alambritodito.github.io/lila-modeler/)
+  and [editor](https://alambritodito.github.io/lila-modeler/app/) were verified publicly, including
+  both simulations, comparison, editing, saving, reload and reopening the download. Pages is
+  configured for Actions; automatic publication remains disabled. This supersedes the earlier
+  local-only Pages status. See [Pages instructions](PAGES.md) for subsequent manual publications.
 - **#223 and #48 stay open.** Decide npm organization/package name, credentials, provenance policy
   and the first tag/publication. Registry-based `npx` acceptance cannot be completed beforehand.
 - **#77 stays open.** This is preliminary 0.1.0 preparation, not a completed 1.0 release.
@@ -87,7 +90,7 @@ For desktop, always build the regular web app before desktop:
 `npm run build -w @lila/web` then `npm run build -w @lila/desktop`. Never package the Pages-base
 web build. On the distribution branch, run `npm run test:package` after integration.
 
-The original integration checkout and existing release worktree were preserved. Review worktrees
+At the stabilization handoff, the original integration checkout and existing release worktree were preserved. Review worktrees
 were isolated so branch changes never occurred during their suites. Final PR comments and the
 session report record current remote heads, checks and local cleanliness; inspect `git status`,
 `git worktree list`, and GitHub again before continuing.
