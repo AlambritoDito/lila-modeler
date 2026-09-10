@@ -311,6 +311,9 @@ it('bloquea interacción con edición durante apertura y la restaura al cancelar
 });
 
 it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el lienzo (LILA-113)', async () => {
+  // Let the independent initial XML parse finish before measuring the theme change.
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+  mocks.exportXml.mockClear();
   const papel = { name: 'Papel', tokens: { 'bg.base': '#F4F1EC' } };
   const montajesAntes = mocks.montajes;
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => papel } as Response);
@@ -1161,6 +1164,14 @@ it('el aviso de pérdida concuerda en singular', async () => {
   expect(pie.textContent).toContain(T.app.avisosAlImportar(1));
   await click(T.app.exportarBpmn);
   expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe(T.app.perdidaTitulo(1));
+});
+
+it('restores the saved browser project after the canvas becomes ready', async () => {
+  const saved = proyecto('browser-project', 'Restored project');
+  (session as unknown as { restoreSession: unknown }).restoreSession = vi.fn(() => saved);
+  await remontar();
+  expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
+  expect(container.textContent).toContain('Restored project');
 });
 
 it.each(['cancelled', 'failed'] as const)('close-time save distinguishes %s from a partial save', async (outcome) => {

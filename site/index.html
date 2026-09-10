@@ -1,0 +1,278 @@
+<!doctype html>
+<!--
+  Landing page of Lila Modeler (LILA-067), published to GitHub Pages by
+  `.github/workflows/pages.yml`, which copies this folder to the root of the site and the built
+  web app to `app/`. Hand-written on purpose: no site generator, no framework, no external CSS,
+  JavaScript or fonts, so the page is exactly what is served and it works offline. The
+  screenshots under `img/` are copied from `docs/design/` by that same workflow, so they are not
+  duplicated in git; to preview this page locally, copy them into `site/img/` first (that folder is
+  in `.gitignore`).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lila Modeler — BPMN process simulation, open source</title>
+    <meta
+      name="description"
+      content="Lila Modeler is an open-source discrete-event simulator and modeler for BPMN processes: model, run scenarios with resources, calendars and costs, and compare AS-IS against TO-BE. Runs in the browser, from the CLI or over MCP."
+    />
+    <meta name="color-scheme" content="dark" />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap">
+        <a class="brand" href="./"><span class="mark" aria-hidden="true"></span> Lila Modeler</a>
+        <nav aria-label="Sections">
+          <a href="#what">What it does</a>
+          <a href="#cli">Command line</a>
+          <a href="#screenshots">Screenshots</a>
+          <a href="#docs">Docs</a>
+          <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="hero">
+        <div class="wrap">
+          <h1>Lila Modeler</h1>
+          <p class="tagline">
+            Open-source discrete-event simulator and modeler for BPMN processes.
+          </p>
+          <p class="lede">
+            Draw the process, describe a scenario — resources, calendars, costs, arrival patterns —
+            and run it. You get Bizagi-style result tables, bottlenecks over the diagram, and an
+            AS-IS versus TO-BE comparison with a significance marker. Apache-2.0, no account, no
+            server: the same engine runs in the browser, on the command line and behind an MCP
+            server.
+          </p>
+          <div class="actions">
+            <a class="btn btn-primary" href="app/">Try the demo</a>
+            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler">Source on GitHub</a>
+            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases">Releases</a>
+          </div>
+          <p class="note">
+            The demo is the whole web app running in your browser: it starts with the
+            <code>examples/pedido</code> restaurant process loaded, keeps your work in the
+            browser's local storage when you choose Save project, and opens and saves <code>.bpmn</code> and project files as
+            ordinary downloads. Nothing is uploaded anywhere.
+          </p>
+        </div>
+      </div>
+
+      <section id="what">
+        <div class="wrap">
+          <h2>What it does</h2>
+          <p class="section-lede">
+            One engine, three ways in. The core has no dependencies, so the numbers are the same
+            whether you get them from a browser tab, a terminal or an agent.
+          </p>
+          <ul class="cards">
+            <li>
+              <h3>Model</h3>
+              <p>
+                A BPMN editor built on bpmn-js: start and end events, timers, tasks, call
+                activities, subprocesses, XOR/OR/AND gateways, lanes and pools — with validation
+                errors and warnings marked on the diagram as you draw.
+              </p>
+            </li>
+            <li>
+              <h3>Scenarios</h3>
+              <p>
+                Resource pools with costs and shift calendars, per-element processing times and
+                probability distributions, gateway probabilities, arrival patterns. Scenarios are
+                plain JSON files and can extend one another.
+              </p>
+            </li>
+            <li>
+              <h3>Replications</h3>
+              <p>
+                Every run is seeded and replicated, so results are reproducible and come with
+                confidence intervals rather than a single lucky number.
+              </p>
+            </li>
+            <li>
+              <h3>Results</h3>
+              <p>
+                Process, element, resource and flow tables in the layout Bizagi Modeler users
+                already read, plus Lila's own extras: ranked bottlenecks and cost per case. Every
+                table exports to CSV.
+              </p>
+            </li>
+            <li>
+              <h3>Compare AS-IS vs TO-BE</h3>
+              <p>
+                Put two or more simulated scenarios side by side, with per-metric deltas and a
+                marker on the differences that are significant at 95% confidence.
+              </p>
+            </li>
+            <li>
+              <h3>CLI and MCP</h3>
+              <p>
+                <code>lila validate</code>, <code>lila run</code> and <code>lila compare</code> for
+                scripts and CI, with JSON and CSV output — and <code>lila mcp</code>, an MCP server
+                that hands the same five tools to an agent.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="cli">
+        <div class="wrap">
+          <h2>Simulate the benchmark in 3 commands</h2>
+          <p class="section-lede">
+            <code>examples/pedido</code> is the repo's reference benchmark: a restaurant process
+            with a parallel branch, an approval and a timer, with the AS-IS and TO-BE scenarios
+            already written. Clone the repo, run <code>npm ci</code> and <code>npm run build</code>, and:
+          </p>
+
+          <div class="step">
+            <h3><span class="num">1</span>Validate the model</h3>
+            <pre><code>npx lila validate examples/pedido/model.bpmn</code></pre>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">2</span>Simulate the AS-IS scenario</h3>
+            <pre><code>npx lila run \
+  examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
+  --seed 42 --replications 3 \
+  --json out/result.json --csv out/csv</code></pre>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">3</span>Compare AS-IS against TO-BE</h3>
+            <pre><code>npx lila compare \
+  examples/pedido/model.bpmn \
+  examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json \
+  --seed 42 --replications 3</code></pre>
+          </div>
+
+          <p class="note">
+            There is no <code>lila</code> package on the npm registry yet: <code>npx</code> resolves
+            the workspace's own binary after <code>npm ci</code> and <code>npm run build</code>, with no registry lookup and no global
+            install.
+          </p>
+        </div>
+      </section>
+
+      <section id="screenshots">
+        <div class="wrap">
+          <h2>Screenshots</h2>
+          <p class="section-lede">
+            The web app in the Eva-01 theme, its default. A light theme (Papel) ships with it and
+            themes are plain JSON files you can edit.
+          </p>
+          <div class="shots">
+            <figure>
+              <img
+                src="img/model.png"
+                width="1280"
+                height="720"
+                loading="lazy"
+                alt="The modeling view: a BPMN diagram of a restaurant order process with two pools, a shape palette on the left, a properties panel on the right and a minimap over the canvas."
+              />
+              <figcaption>
+                <b>Model.</b> The bpmn-js editor with the shape palette, the properties panel and
+                validation warnings marked on the elements themselves.
+              </figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/simulate.png"
+                width="1280"
+                height="720"
+                loading="lazy"
+                alt="The simulation view with the scenario editor beside the restaurant process."
+              />
+              <figcaption>
+                <b>Scenario.</b> Run settings, resource pools and shift calendars, edited as a
+                weekly grid or as a plain list of intervals.
+              </figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/compare.png"
+                width="1280"
+                height="720"
+                loading="lazy"
+                alt="Comparison of the AS-IS and three-cashier scenarios, showing KPI differences."
+              />
+              <figcaption>
+                <b>Compare scenarios.</b> Inspect KPI differences between the current process and a
+                proposed change, including confidence intervals.
+              </figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/results.png"
+                width="1280"
+                height="720"
+                loading="lazy"
+                alt="The results view: a ranked bottleneck list, a process-elements table with instances started and completed and minimum, maximum and average times, and a list of simulation warnings."
+              />
+              <figcaption>
+                <b>Results.</b> Bizagi-style tables for elements, resources, the process and the
+                flows, each one exportable to CSV, plus the run's warnings in full.
+              </figcaption>
+            </figure>
+          </div>
+          <p class="note">
+            These captures show the English interface. Spanish is available in Settings.
+          </p>
+        </div>
+      </section>
+
+      <section id="docs">
+        <div class="wrap">
+          <h2>Documentation and downloads</h2>
+          <ul class="links">
+            <li>
+              <b><a href="https://github.com/AlambritoDito/lila-modeler">Repository</a></b>
+              Source, issues and the full README.
+            </li>
+            <li>
+              <b><a href="https://github.com/AlambritoDito/lila-modeler/releases">Releases</a></b>
+              Desktop builds (macOS arm64 is the tested one; unsigned).
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/SEMANTICS.md"
+                  >docs/SEMANTICS.md</a
+                >
+              </b>
+              The supported BPMN profile and the engine's exact semantics.
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/MCP.md"
+                  >docs/MCP.md</a
+                >
+              </b>
+              The MCP server, its five tools and how to register it.
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>
+          Lila Modeler is free software under the
+          <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/LICENSE">Apache-2.0</a>
+          license. Copyright holder: Perfer Process. The editor uses
+          <a href="https://github.com/bpmn-io/bpmn-js">bpmn-js</a> (MIT), whose license requires the
+          "Powered by bpmn.io" mark to stay visible on the canvas.
+        </p>
+        <p class="fine">
+          Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is an independent
+          open-source project, not affiliated with or endorsed by Bizagi; it is cited only as the
+          reference and inspiration for the simulation workflow and the result table layout.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

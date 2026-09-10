@@ -3,5 +3,9 @@ dist/
 .DS_Store
 *.log
 coverage/
+# GitHub Pages (LILA-067): `_site/` is assembled by the workflow and `site/img/` holds the
+# screenshots copied out of `docs/design/`; neither is committed.
+_site/
+site/img/
 *.tsbuildinfo
 __pycache__/

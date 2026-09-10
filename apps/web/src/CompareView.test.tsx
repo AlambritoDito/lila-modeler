@@ -402,6 +402,21 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
     expect(html).toContain('Aviso propio de TO-BE');
   });
 
+  test('long per-run warning lists remain available without pushing KPIs below them', () => {
+    const comparison = compare([syntheticResult(10), syntheticResult(30)]);
+    const warnings = Array.from({ length: 30 }, (_, i) => `Warning from replication ${i}`);
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr}
+        runs={[{ name: 'AS-IS', warnings }, { name: 'TO-BE', warnings: [] }]}
+        scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+    expect(html).toContain('<details>');
+    expect(html).not.toContain('<details open');
+    expect(html).toContain('(30)</summary>');
+    for (const warning of warnings) expect(html).toContain(warning);
+    expect(html).toContain('<table');
+  });
+
   test('(d) unidades de tiempo distintas: aviso y formato por corrida', () => {
     // Mismo id/metrica en las dos corridas, valores en segundos elegidos para que la conversión
     // a la unidad de cada corrida dé un número redondo: 600 s en "min" = 10; 7200 s en "h" = 2.
