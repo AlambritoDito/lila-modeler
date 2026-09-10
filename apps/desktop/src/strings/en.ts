@@ -40,6 +40,8 @@ export const en = {
     mensaje: 'There are unsaved changes.',
     detalle: 'Do you want to save the changes before closing?',
     /** Second dialog: the save the user asked for did not go through, so the window stays open. */
+    parcialMensaje: 'The diagram was saved.',
+    parcialDetalle: 'Scenarios and simulation runs are still unsaved. Use “Save as…” to save the complete project. The window will stay open.',
     errorMensaje: 'Could not save.',
     errorDetalle: 'Closing was cancelled so no changes are lost. Try saving manually again.',
   },

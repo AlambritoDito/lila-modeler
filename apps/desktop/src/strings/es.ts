@@ -28,6 +28,8 @@ export const es: Strings = {
     cancelar: 'Cancelar',
     mensaje: 'Hay cambios sin guardar.',
     detalle: '¿Quieres guardar los cambios antes de cerrar?',
+    parcialMensaje: 'El diagrama se guardó.',
+    parcialDetalle: 'Los escenarios y las corridas siguen sin guardarse. Usa «Guardar como…» para guardar el proyecto completo. La ventana permanecerá abierta.',
     errorMensaje: 'No se pudo guardar.',
     errorDetalle: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
   },
