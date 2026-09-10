@@ -211,7 +211,9 @@ describe('catálogo de mensajes (LILA-211)', () => {
 
 /** Cuerpo de la § 17, hasta el encabezado siguiente. */
 function section17(): string {
-  const start = SEMANTICS.indexOf('## 17. Catálogo de errores y avisos');
+  // Desde #281 (LILA-212) `docs/SEMANTICS.md` es el documento en inglés; el encabezado del § 17
+  // se traduce con él, así que el ancla sigue el texto en inglés.
+  const start = SEMANTICS.indexOf('## 17. Error and warning catalog');
   expect(start).toBeGreaterThan(-1);
   const end = SEMANTICS.indexOf('\n## ', start + 1);
   return SEMANTICS.slice(start, end === -1 ? undefined : end);
