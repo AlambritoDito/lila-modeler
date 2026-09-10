@@ -18,7 +18,7 @@ describe('icono propio de la app de escritorio (LILA-207)', () => {
     expect(declarados).toEqual([
       'resources/icons/icon.icns', // mac
       'resources/icons/icon.icns', // fileAssociations[0], .bpmn (electron-builder lo pasa a .ico en Windows)
-      'resources/icons/icon.icns', // fileAssociations[1], .lila (ADR-024)
+      'resources/icons/icon.icns', // fileAssociations[1], .lila (ADR-027)
       'resources/icons/icon.ico', // win
       'resources/icons/icon.png', // linux
     ]);

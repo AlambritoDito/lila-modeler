@@ -12,7 +12,7 @@ export function projectStore(store: ProjectStore): ProjectSessionStore | null {
     ? candidate as ProjectSessionStore : null;
 }
 /**
- * Localized wrapper over the engine's structural validation (ADR-024). The rules themselves moved
+ * Localized wrapper over the engine's structural validation (ADR-027). The rules themselves moved
  * to `@lila/engine/project` so that the `.lila` container, the desktop folder reader and this app
  * cannot disagree about what a project is; what stays here is the wording, keyed by the stable
  * `code` each failure carries instead of by its English message.

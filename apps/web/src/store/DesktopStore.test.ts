@@ -195,7 +195,7 @@ describe('DesktopStore.openProject', () => {
     const bridge = new FakeBridge();
     bridge.queueChooseFolder('/carpeta/pedido');
     // `result` es un stub: lo que este caso comprueba es que `DesktopStore` deja pasar la corrida
-    // tal cual por la frontera IPC, no que sea un `RunResult` válido (desde ADR-024 el tipo
+    // tal cual por la frontera IPC, no que sea un `RunResult` válido (desde ADR-027 el tipo
     // compartido lo exige, así que el stub se declara como tal a propósito).
     const run = {
       id: 'run-1',

@@ -42,7 +42,7 @@ export interface LilaBridge {
 
   /**
    * Abre el selector nativo. Por defecto elige una CARPETA de proyecto (ADR-018); en macOS el
-   * mismo panel deja elegir también un `.lila` (ADR-024), que Windows y Linux no permiten mezclar
+   * mismo panel deja elegir también un `.lila` (ADR-027), que Windows y Linux no permiten mezclar
    * — de ahí `fileOnly`, que pide un diálogo de solo archivos (menú «Abrir proyecto .lila…»).
    * `null` es "se cerró sin elegir nada": no es un error. Lo elegido queda autorizado en main
    * para `readProject`/`writeProject`, sea carpeta o archivo.

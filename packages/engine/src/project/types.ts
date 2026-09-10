@@ -1,5 +1,5 @@
 /**
- * The shape of a Lila project, shared by every mode (ADR-018, ADR-023, ADR-024).
+ * The shape of a Lila project, shared by every mode (ADR-018, ADR-023, ADR-027).
  *
  * It used to live twice: once in `apps/web/src/store/ProjectStore.ts` (the contract the SPA
  * speaks) and once, hand-mirrored, in `apps/desktop/src/projectTypes.ts` (whose header asked for

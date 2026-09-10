@@ -1,5 +1,5 @@
 /**
- * Reading and writing a `.lila` project file (ADR-024): the same ADR-018 project, zipped into one
+ * Reading and writing a `.lila` project file (ADR-027): the same ADR-018 project, zipped into one
  * file instead of spread over a folder. The format itself lives in `@lila/engine/project` — this
  * module is only the disk half, kept apart from `projectIO.ts` so that the folder reader stays
  * the pure `node:fs` module its header promises.

@@ -1,5 +1,5 @@
 /**
- * The `.lila` project container (ADR-024): the ADR-018 project FOLDER, zipped, with the same
+ * The `.lila` project container (ADR-027): the ADR-018 project FOLDER, zipped, with the same
  * layout and the same file names. `zip -r project.lila project-folder/*` produces a valid `.lila`
  * and `unzip` turns one back into a folder the desktop app already knows how to open — that
  * equivalence is the whole point of the format, so nothing here may invent a name the folder
@@ -164,6 +164,12 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
     !isRevision(parsed.model.revision)
   ) {
     throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila project.`);
+  }
+  if (parsed.version !== 1) {
+    throw new ProjectFormatError(
+      'LILA-MANIFEST',
+      `"${MANIFEST_FILE}" declares version ${JSON.stringify(parsed.version)}; this reader only understands version 1.`,
+    );
   }
   const revisions = isPlainObject(parsed.scenarioRevisions) ? parsed.scenarioRevisions : {};
   return {

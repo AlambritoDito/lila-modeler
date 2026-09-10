@@ -53,7 +53,7 @@ export interface ProjectStore {
 }
 
 /**
- * The project document contract now lives in `@lila/engine/project` (ADR-024): `apps/desktop`
+ * The project document contract now lives in `@lila/engine/project` (ADR-027): `apps/desktop`
  * kept a hand-maintained copy of these same four shapes and the `.lila` container needs them
  * too, so the definition moved to the one package both already depend on. Re-exported here
  * because this module is what the SPA imports — the rest of the app did not have to change.
@@ -64,7 +64,7 @@ export type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } fro
 export interface ProjectSessionStore extends ProjectStore {
   createProject(document: ProjectDocument): Promise<ProjectDocument | null>;
   /**
-   * `options.fileOnly` pide explícitamente el contenedor `.lila` (ADR-024) en vez de una carpeta
+   * `options.fileOnly` pide explícitamente el contenedor `.lila` (ADR-027) en vez de una carpeta
    * de proyecto. Solo lo usa `DesktopStore`, donde son dos diálogos nativos distintos fuera de
    * macOS; `BrowserStore` ya abre las dos cosas con el mismo `<input type=file>` y lo ignora.
    */

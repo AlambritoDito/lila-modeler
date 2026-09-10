@@ -1,7 +1,7 @@
 # The Lila project format: the folder and the `.lila` file
 
 A Lila project is a **folder** (ADR-018). A `.lila` file is that same folder **zipped**, with the
-same layout and the same file names (ADR-024). The two are the same project in two containers:
+same layout and the same file names (ADR-027). The two are the same project in two containers:
 
 ```bash
 cd pedido && zip -r ../pedido.lila .   # a valid .lila

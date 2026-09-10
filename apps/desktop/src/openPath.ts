@@ -11,7 +11,7 @@ export function isBpmnPath(p: string): boolean {
 }
 
 /**
- * `true` si `p` termina en `.lila`, el contenedor de proyecto de ADR-024 (insensible a mayúsculas,
+ * `true` si `p` termina en `.lila`, el contenedor de proyecto de ADR-027 (insensible a mayúsculas,
  * mismo criterio que `isBpmnPath`). Vive aquí, en el módulo puro, porque lo necesitan tanto
  * `main.ts` como `lilaFile.ts` y este es el único que no arrastra `node:fs`.
  */

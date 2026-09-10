@@ -389,7 +389,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     }
 
     // Un proyecto puede ser una CARPETA (ADR-018) o un `.lila`, que es esa misma carpeta zipeada
-    // (ADR-024), así que el diálogo tiene que ofrecer las dos cosas. macOS es el único sistema
+    // (ADR-027), así que el diálogo tiene que ofrecer las dos cosas. macOS es el único sistema
     // cuyo diálogo nativo permite de verdad elegir archivo O carpeta en el mismo panel; en
     // Windows y Linux, Electron ignora `openFile` cuando también se pide `openDirectory` y solo
     // deja elegir carpetas. Por eso el menú Archivo lleva además «Abrir proyecto .lila…»
@@ -415,7 +415,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
-      // Un `.lila` es un proyecto entero en un archivo (ADR-024): mismo documento, misma respuesta
+      // Un `.lila` es un proyecto entero en un archivo (ADR-027): mismo documento, misma respuesta
       // IPC, otro contenedor. Lo decide la extensión de la ruta ya autorizada, no un argumento
       // nuevo del puente — el renderer guarda esa ruta y la devuelve tal cual al guardar.
       const { document, problems, loose } = isLilaPath(dir)

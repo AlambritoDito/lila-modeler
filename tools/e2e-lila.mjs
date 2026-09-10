@@ -1,5 +1,5 @@
 /**
- * End-to-end check of the `.lila` container in a real browser (#317, ADR-024), driven over the
+ * End-to-end check of the `.lila` container in a real browser (#317, ADR-027), driven over the
  * Chrome DevTools Protocol with nothing but Node's built-in WebSocket — no puppeteer, no
  * playwright, no dependency added to the repo for a script that runs by hand and in review.
  *

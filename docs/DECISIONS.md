@@ -347,7 +347,7 @@ Modeler calls for it. `ResourceManager` remains a non-public API. *(test: LILA-0
 
 ---
 
-## ADR-024 — `.lila`: the project folder, zipped
+## ADR-027 — `.lila`: the project folder, zipped
 
 **Status:** Accepted
 
@@ -387,6 +387,6 @@ serialization trick. *(tests: `packages/engine/test/project/lila.test.ts`,
 - `docs/BIZAGI_PARITY.md` — reference-behaviour table cited by ADR-021.
 - `docs/BPMN_EXTENSION.md` — operational implementation of ADR-012 and ADR-014.
 - `docs/RESULTS_FORMAT.md` — operational implementation of the calendar/utilization part of ADR-016.
-- `docs/PROJECT_FORMAT.md` — operational implementation of ADR-018 and ADR-024 (the project folder and the `.lila` container).
+- `docs/PROJECT_FORMAT.md` — operational implementation of ADR-018 and ADR-027 (the project folder and the `.lila` container).
 - `docs/DECISIONS-corpus-previo.md` — original text of ADR-001 through ADR-008 (earlier corpus, project then called *Open Process Platform*).
 - `BACKLOG.md` — breakdown into epics and tickets per milestone.

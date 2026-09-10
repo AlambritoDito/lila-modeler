@@ -25,7 +25,7 @@ import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument 
  */
 const CLAVE = 'lila.project.v1';
 
-/** The project container written by «Save project» (ADR-024, `docs/PROJECT_FORMAT.md`). */
+/** The project container written by «Save project» (ADR-027, `docs/PROJECT_FORMAT.md`). */
 const LILA_EXT = '.lila';
 const LILA_MIME = 'application/vnd.lila-modeler+zip';
 
@@ -208,7 +208,7 @@ export class BrowserStore implements ProjectSessionStore {
   }
 
   /**
-   * `.lila` (ADR-024) is what this store writes now; `.lila.json` is still accepted because it is
+   * `.lila` (ADR-027) is what this store writes now; `.lila.json` is still accepted because it is
    * what every project saved from the public demo before this change looks like, and the demo has
    * no migration step to run — the file is on the visitor's disk, not in a database. Which reader
    * to use is decided by the name, not by sniffing the bytes: a `.lila` is a ZIP and a `.lila.json`

@@ -59,7 +59,7 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
     expect(labels).toEqual([
       S.nuevoProyecto,
       S.abrirProyecto,
-      // El segundo abridor: el `.lila` de ADR-024, que fuera de macOS no cabe en el mismo diálogo
+      // El segundo abridor: el `.lila` de ADR-027, que fuera de macOS no cabe en el mismo diálogo
       // nativo que la carpeta de proyecto.
       S.abrirProyectoArchivo,
       S.abrirReciente,

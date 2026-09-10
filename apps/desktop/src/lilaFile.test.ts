@@ -11,7 +11,7 @@ import type { ProjectDocument } from './projectTypes.js';
 
 /**
  * Carpetas reales con `mkdtemp`, igual que `projectIO.test.ts`: lo que se comprueba aquí es el
- * lado de disco del `.lila` (ADR-024) —el temporal + `rename` y la traducción de errores de
+ * lado de disco del `.lila` (ADR-027) —el temporal + `rename` y la traducción de errores de
  * formato a `ProjectIOError`—, no el formato en sí, que tiene sus propias pruebas en el motor.
  */
 const XML = '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"/>';

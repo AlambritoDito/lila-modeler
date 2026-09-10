@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { strToU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { beforeAll, describe, expect, test } from 'vitest';
 
 import { parseBpmn } from '../../src/bpmn/index.js';
@@ -12,7 +12,7 @@ import { decodeLila, encodeLila, lilaEntryNames } from '../../src/project/index.
 import type { ProjectDocument, StoredRun } from '../../src/project/index.js';
 
 /**
- * Acceptance of the `.lila` container (#317, ADR-024) against the real example. `examples/pedido`
+ * Acceptance of the `.lila` container (#317, ADR-027) against the real example. `examples/pedido`
  * is a project FOLDER without a `lila-project.json` — the manifest is reconstructed here exactly
  * as the desktop opener reconstructs it for a folder someone assembled by hand, which is also the
  * shape `zip -r pedido.lila pedido/*` would produce.
@@ -114,6 +114,13 @@ describe('the .lila container', () => {
   test('an archive without a manifest is not a project', () => {
     expect(() => decodeLila(rebuilt((entries) => { delete entries['lila-project.json']; })))
       .toThrow(/lila-project\.json/);
+  });
+
+  test('a manifest of a newer version is refused instead of being read as version 1', () => {
+    expect(() => decodeLila(rebuilt((entries) => {
+      const manifest = JSON.parse(strFromU8(entries['lila-project.json']!));
+      entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 2 }));
+    }))).toThrow(/version 2/);
   });
 
   test('an archive without model.bpmn is not a project', () => {

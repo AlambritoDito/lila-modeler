@@ -167,7 +167,7 @@ describe('BrowserStore', () => {
   });
 
   /**
-   * El contenedor `.lila` (ADR-024, #317): la demo pasa a descargar el proyecto zipeado en vez de
+   * El contenedor `.lila` (ADR-027, #317): la demo pasa a descargar el proyecto zipeado en vez de
    * un `.lila.json`. Lo que hay que fijar es que lo escrito se puede volver a abrir y que el
    * formato viejo —el que ya está en el disco de quien usó la demo antes— sigue abriéndose.
    */
@@ -217,7 +217,7 @@ describe('BrowserStore', () => {
       await expect(promesa).resolves.toEqual(DOC);
     });
 
-    it('openProject sigue abriendo el .lila.json de antes de ADR-024', async () => {
+    it('openProject sigue abriendo el .lila.json de antes de ADR-027', async () => {
       const store = new BrowserStore();
       const promesa = store.openProject();
       elegirArchivo(new File([JSON.stringify(DOC)], 'Pedido.lila.json', { type: 'application/json' }));
@@ -234,7 +234,7 @@ describe('BrowserStore', () => {
       const store = new BrowserStore();
       const doc = { version: 1 as const, id: 'custom', name: 'Saved project',
         model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 4 },
-        // El nombre lleva el sufijo del formato: desde ADR-024 guardar produce un `.lila`, cuyas
+        // El nombre lleva el sufijo del formato: desde ADR-027 guardar produce un `.lila`, cuyas
         // entradas son las MISMAS que las de la carpeta ADR-018 (`<nombre>.scenario.json`), y el
         // escritor de carpetas ya lo exigía. El resto del caso —el borrador inválido— no cambia.
         scenarios: { 'draft.scenario.json': { version: 1, name: 'Draft', run: { duration: -1 } } },
