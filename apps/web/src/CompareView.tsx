@@ -23,6 +23,7 @@ import {
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
+  splitOutcomeMetric,
   type BaseTimeUnit,
 } from '@lila/engine/format';
 import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
@@ -77,7 +78,19 @@ const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
   'process:throughputPerHour',
   'process:costPerCase',
   'process:totalCost',
+  'process:withinServiceLevel',
 ]);
+
+/**
+ * Métricas por desenlace que entran en la tabla por defecto (#316), espejo de
+ * `isDefaultOutcomeMetric` en `packages/engine/src/cli.ts`: sus paths llevan el id BPMN dentro,
+ * así que no caben en el `Set` de arriba.
+ */
+function isDefaultOutcomeMetric(scope: CompareScope, metric: string): boolean {
+  if (scope !== 'process') return false;
+  const outcome = splitOutcomeMetric(metric);
+  return outcome !== null && (outcome.metric === 'cycleTime.mean' || outcome.metric === 'withinServiceLevel');
+}
 
 /**
  * Los únicos campos monetarios de `RunResult` (`run.currency`, docs/RESULTS_FORMAT.md §§2,4,5):
@@ -118,6 +131,9 @@ function formatCellValue(metric: string, value: number | null, unit: BaseTimeUni
   if (isCostMetric(metric)) return formatMoney(value, currency);
   if (isDurationMetric(metric)) return formatDuration(value, unit);
   if (metric === 'utilization') return S.comparar.porCiento(formatNumber(value * 100));
+  if (metric === 'withinServiceLevel' || splitOutcomeMetric(metric)?.metric === 'withinServiceLevel') {
+    return S.comparar.porCiento(formatNumber(value * 100));
+  }
   return formatNumber(value);
 }
 
@@ -176,7 +192,13 @@ export function visibleCompareRows(
   scope: CompareScope,
   showAll: boolean,
 ): CompareRow[] {
-  return rows.filter((row) => row.scope === scope && (showAll || DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`)));
+  return rows.filter(
+    (row) =>
+      row.scope === scope &&
+      (showAll ||
+        DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`) ||
+        isDefaultOutcomeMetric(scope, row.metric)),
+  );
 }
 
 function rowName(

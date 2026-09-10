@@ -200,6 +200,7 @@ export const en: Catalog = {
       `Seed ${seed} · Replications ${replications} · Time unit ${unit}`,
     currency: (currency) => `Currency ${currency}`,
     bottlenecks: () => 'Bottlenecks',
+    outcomes: () => 'Outcomes',
     noResourceWait: () => 'No wait for a resource detected.',
     warnings: () => 'Warnings:',
 

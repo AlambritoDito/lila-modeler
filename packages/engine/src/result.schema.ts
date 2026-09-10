@@ -52,6 +52,14 @@ const resourceMetricsSchema = z.object({
   totalCost: z.number(),
 });
 
+/** Un desenlace de `process.byEndEvent` (#316). */
+const outcomeMetricsSchema = z.object({
+  completed: z.number(),
+  cycleTime: percentilesSchema,
+  waitTime: percentilesSchema,
+  withinServiceLevel: z.number().optional(),
+});
+
 const processMetricsSchema = z.object({
   started: z.number(),
   completed: z.number(),
@@ -61,6 +69,10 @@ const processMetricsSchema = z.object({
   throughputPerHour: z.number(),
   costPerCase: z.number(),
   totalCost: z.number(),
+  // El motor siempre las emite; opcionales aquí para seguir aceptando resultados guardados
+  // antes de #316 (el esquema es un lector tolerante, no el contrato de salida).
+  byEndEvent: z.record(z.string(), outcomeMetricsSchema).optional(),
+  withinServiceLevel: z.number().optional(),
 });
 
 const bottleneckEntrySchema = z.object({

@@ -203,6 +203,7 @@ export const es: Catalog = {
       `Semilla ${seed} · Replicaciones ${replications} · Unidad de tiempo ${unit}`,
     currency: (currency) => `Moneda ${currency}`,
     bottlenecks: () => 'Cuellos de botella',
+    outcomes: () => 'Desenlaces',
     noResourceWait: () => 'Sin espera por recurso detectada.',
     warnings: () => 'Avisos:',
 

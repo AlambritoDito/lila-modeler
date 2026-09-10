@@ -517,6 +517,9 @@ export const es: Strings = {
         moneda === undefined ? '' : ` · moneda ${moneda}`
       }`,
 
+    /** Title of the per-outcome table (`process.byEndEvent`, #316). */
+    desenlaces: 'Desenlaces',
+
     cuellos: 'Cuellos de botella',
     sinCuellos: 'Sin espera por recurso detectada.',
     cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>

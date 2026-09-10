@@ -32,6 +32,7 @@ import type {
   BottleneckEntry,
   ElementMetrics,
   FlowMetrics,
+  OutcomeMetrics,
   ProcessIR,
   ResourceMetrics,
   RunResult,
@@ -431,6 +432,48 @@ function processColumns(unit: BaseTimeUnit): ColumnDef<RunResult>[] {
   ];
 }
 
+/** Una fila de la tabla "Desenlaces": un `end`/`terminate` con sus métricas (#316). */
+interface OutcomeRow {
+  id: string;
+  name: string;
+  metrics: OutcomeMetrics;
+}
+
+function outcomeRows(ir: ProcessIR, result: RunResult): OutcomeRow[] {
+  return Object.entries(result.process.byEndEvent ?? {}).map(([id, metrics]) => ({
+    id,
+    metrics,
+    name: ir.nodes[id]?.name ?? '',
+  }));
+}
+
+/**
+ * Tabla "Desenlaces" (docs/RESULTS_FORMAT.md §5): una fila por `end`/`terminate`, con las
+ * columnas que distinguen un desenlace de otro. `Within service level` solo existe cuando el
+ * escenario declara `run.serviceLevel`, así que la columna aparece con él y no antes.
+ */
+function outcomeColumns(unit: BaseTimeUnit, showServiceLevel: boolean): ColumnDef<OutcomeRow>[] {
+  return [
+    ...idNameColumns<OutcomeRow>(),
+    numberColumn('process', 'completed', (row) => row.metrics.completed),
+    durationColumn('process', 'cycleTime.mean', unit, (row) => row.metrics.cycleTime.mean),
+    durationColumn('process', 'cycleTime.p50', unit, (row) => row.metrics.cycleTime.p50),
+    durationColumn('process', 'cycleTime.p95', unit, (row) => row.metrics.cycleTime.p95),
+    durationColumn('process', 'waitTime.mean', unit, (row) => row.metrics.waitTime.mean),
+    ...(showServiceLevel
+      ? [
+          {
+            display: (row: OutcomeRow) => `${formatNumber((row.metrics.withinServiceLevel ?? 0) * 100)}%`,
+            header: columnLabel('process', 'withinServiceLevel'),
+            key: 'withinServiceLevel',
+            numeric: true,
+            sortValue: (row: OutcomeRow) => row.metrics.withinServiceLevel ?? 0,
+          },
+        ]
+      : []),
+  ];
+}
+
 /* ------------------------------------------------------------------ *
  * Tarjeta de cuellos de botella (docs/RESULTS_FORMAT.md §6): el orden ya lo decide el motor,
  * este componente solo lo pinta tal cual llega en `result.bottlenecks`.
@@ -518,6 +561,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const names = resourceNames(scenario);
   const csv = buildResultCsvExports(ir, scenario, result);
+  const outcomes = outcomeRows(ir, result);
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
@@ -584,6 +628,14 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
           rowKey={() => 'process'}
           csvFilename="process.csv"
           csvContents={csv.process}
+        />
+      )}
+      {tab === 'process' && outcomes.length > 0 && (
+        <DataTable
+          title={S.resultados.desenlaces}
+          columns={outcomeColumns(unit, result.process.withinServiceLevel !== undefined)}
+          rows={outcomes}
+          rowKey={(row) => row.id}
         />
       )}
 

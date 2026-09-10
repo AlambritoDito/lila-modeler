@@ -462,7 +462,8 @@ describe('determinismo y degradación', () => {
    * Degradación: un escenario sin OR (single + AND) tiene que dar exactamente el mismo
    * `ReplicationRun` que antes de LILA-035. El hash se capturó con este mismo motor en
    * `lila-34-and-resources` 84e1b5e; regenerarlo solo tiene sentido si cambia el contrato del
-   * formato de resultados, nunca para "arreglar" este test.
+   * formato de resultados, nunca para "arreglar" este test. Se regeneró en #316, que añade
+   * `CaseRecord.endId` —el desenlace de cada caso— a la `ReplicationRun` que aquí se hashea.
    */
   test('un escenario single + AND sigue dando el mismo resultado byte a byte que en 84e1b5e', () => {
     const nodes: Record<string, Node> = {
@@ -493,6 +494,6 @@ describe('determinismo y degradación', () => {
     };
 
     const digest = createHash('sha256').update(JSON.stringify(runReplication(ir, scenario))).digest('hex');
-    expect(digest).toBe('5ad1526302cc4cfc771a30cd4e08e35751952c1dfb5b12cbed3e3e40168ec284');
+    expect(digest).toBe('4c5e8792a72592d42ef244bddaa2a4cbf3fd69576308067e9ba4b921ba556a56');
   });
 });

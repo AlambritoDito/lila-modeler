@@ -136,6 +136,8 @@ export interface CliMessages {
   /** Appended to `runHeader` after a `·` when the scenario declares one. */
   currency: (currency: string) => string;
   bottlenecks: () => string;
+  /** Title of the per-outcome table of `lila run` (#316). */
+  outcomes: () => string;
   noResourceWait: () => string;
   warnings: () => string;
 

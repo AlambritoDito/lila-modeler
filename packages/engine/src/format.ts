@@ -97,11 +97,60 @@ export const COLUMN_LABELS: Readonly<Record<string, string>> = {
   'process:throughputPerHour': 'Throughput per hour',
   'process:costPerCase': 'Cost per case',
   'process:totalCost': 'Total cost',
+  'process:withinServiceLevel': 'Within service level',
+  'process:outcome': 'Outcome',
 };
+
+/** Prefijo de las métricas por desenlace dentro de `process` (#316). */
+const OUTCOME_PREFIX = 'byEndEvent.';
+
+/**
+ * Métricas que existen por desenlace, en orden de columna (`process.byEndEvent[id]`, § 5). El
+ * orden imita el de `PROCESS_COLUMNS`: conteo, ciclo, espera.
+ */
+export const OUTCOME_METRICS = [
+  'completed',
+  'cycleTime.min',
+  'cycleTime.max',
+  'cycleTime.mean',
+  'cycleTime.sd',
+  'cycleTime.p50',
+  'cycleTime.p90',
+  'cycleTime.p95',
+  'waitTime.min',
+  'waitTime.max',
+  'waitTime.mean',
+  'waitTime.sd',
+  'waitTime.p50',
+  'waitTime.p90',
+  'waitTime.p95',
+  'withinServiceLevel',
+] as const;
+
+/**
+ * Parte `byEndEvent.<id>.<métrica>` en sus dos mitades. El id BPMN puede contener puntos, así
+ * que la métrica se reconoce por el sufijo conocido y no partiendo por el primer punto.
+ * Devuelve `null` cuando el path no es de un desenlace.
+ */
+export function splitOutcomeMetric(metric: string): { endId: string; metric: string } | null {
+  if (!metric.startsWith(OUTCOME_PREFIX)) return null;
+  const rest = metric.slice(OUTCOME_PREFIX.length);
+  for (const candidate of OUTCOME_METRICS) {
+    if (rest.endsWith(`.${candidate}`)) {
+      return { endId: rest.slice(0, -candidate.length - 1), metric: candidate };
+    }
+  }
+  return null;
+}
 
 /** Nombre desnudo de la columna, sin unidad: el que llevan los CSV (siempre en segundos). */
 export function columnLabel(scope: ResultScope, metric: string): string {
-  return COLUMN_LABELS[`${scope}:${metric}`] ?? metric;
+  const direct = COLUMN_LABELS[`${scope}:${metric}`];
+  if (direct !== undefined) return direct;
+  // Las métricas por desenlace llevan el id delante y el nombre de la métrica de proceso detrás.
+  const outcome = scope === 'process' ? splitOutcomeMetric(metric) : null;
+  if (outcome !== null) return `${outcome.endId}: ${columnLabel(scope, outcome.metric)}`;
+  return metric;
 }
 
 /**
@@ -119,8 +168,13 @@ const DURATION_METRIC_PREFIXES: ReadonlySet<string> = new Set([
   'busyTime',
 ]);
 
+/**
+ * `byEndEvent.<id>.cycleTime.mean` también es una duración: el segmento que decide puede no ser
+ * el primero, así que se mira cualquiera de ellos (#316). Para las métricas de siempre —cuyos
+ * ids nunca viajan dentro del path— el resultado es idéntico al de mirar solo el primero.
+ */
 export function isDurationMetric(metric: string): boolean {
-  return DURATION_METRIC_PREFIXES.has(metric.split('.')[0] ?? '');
+  return metric.split('.').some((segment) => DURATION_METRIC_PREFIXES.has(segment));
 }
 
 /**

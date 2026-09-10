@@ -61,6 +61,10 @@
             "day"
           ]
         },
+        "serviceLevel": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "currency": {
           "type": "string",
           "pattern": "^[A-Z]{3}$"

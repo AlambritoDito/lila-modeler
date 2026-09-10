@@ -530,6 +530,9 @@ export const en = {
         moneda === undefined ? '' : ` · currency ${moneda}`
       }`,
 
+    /** Title of the per-outcome table (`process.byEndEvent`, #316). */
+    desenlaces: 'Outcomes',
+
     cuellos: 'Bottlenecks',
     sinCuellos: 'No resource wait detected.',
     cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>

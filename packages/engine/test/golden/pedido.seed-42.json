@@ -380,7 +380,51 @@
     },
     "throughputPerHour": 15.030626415732772,
     "costPerCase": 2.5,
-    "totalCost": 24958.833333333332
+    "totalCost": 24958.833333333332,
+    "byEndEvent": {
+      "EndEvent_Entregado": {
+        "completed": 7782.033333333334,
+        "cycleTime": {
+          "min": 961.28332993587,
+          "max": 1726.4919721182198,
+          "mean": 1329.9458187543266,
+          "sd": 103.52247925275856,
+          "p50": 1328.9140502619944,
+          "p90": 1463.7272891195587,
+          "p95": 1502.2966197594465
+        },
+        "waitTime": {
+          "min": 0,
+          "max": 0,
+          "mean": 0,
+          "sd": 0,
+          "p50": 0,
+          "p90": 0,
+          "p95": 0
+        }
+      },
+      "EndEvent_Rechazado": {
+        "completed": 2201.5,
+        "cycleTime": {
+          "min": 388.4543874945404,
+          "max": 1083.8030693558119,
+          "mean": 730.4185958100746,
+          "sd": 103.9077627123576,
+          "p50": 728.912347185211,
+          "p90": 865.4793882689631,
+          "p95": 904.0656526164968
+        },
+        "waitTime": {
+          "min": 0,
+          "max": 0,
+          "mean": 0,
+          "sd": 0,
+          "p50": 0,
+          "p90": 0,
+          "p95": 0
+        }
+      }
+    }
   },
   "bottlenecks": [],
   "warnings": [
@@ -2307,6 +2351,246 @@
         "ci95": [
           24955.045472717484,
           24962.62119394918
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.completed": {
+        "mean": 7782.033333333334,
+        "sd": 48.76932567133548,
+        "ci95": [
+          7763.822567842127,
+          7800.244098824541
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.min": {
+        "mean": 961.28332993587,
+        "sd": 28.80514297473735,
+        "ci95": [
+          950.5273127789228,
+          972.0393470928173
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.max": {
+        "mean": 1726.4919721182198,
+        "sd": 29.57108570250863,
+        "ci95": [
+          1715.449947246318,
+          1737.5339969901215
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.mean": {
+        "mean": 1329.9458187543266,
+        "sd": 1.1826079950008188,
+        "ci95": [
+          1329.5042256716147,
+          1330.3874118370386
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.sd": {
+        "mean": 103.52247925275856,
+        "sd": 0.7598009656997423,
+        "ci95": [
+          103.23876490945192,
+          103.8061935960652
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p50": {
+        "mean": 1328.9140502619944,
+        "sd": 1.6433562857821935,
+        "ci95": [
+          1328.3004109400042,
+          1329.5276895839845
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p90": {
+        "mean": 1463.7272891195587,
+        "sd": 1.9705537369485902,
+        "ci95": [
+          1462.9914722613714,
+          1464.463105977746
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p95": {
+        "mean": 1502.2966197594465,
+        "sd": 2.211087405372271,
+        "ci95": [
+          1501.470986153373,
+          1503.12225336552
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p50": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p90": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p95": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.completed": {
+        "mean": 2201.5,
+        "sd": 49.32352729507072,
+        "ci95": [
+          2183.0822922214893,
+          2219.9177077785107
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.min": {
+        "mean": 388.4543874945404,
+        "sd": 28.12396176986094,
+        "ci95": [
+          377.95272757973805,
+          398.9560474093428
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.max": {
+        "mean": 1083.8030693558119,
+        "sd": 28.698844692412298,
+        "ci95": [
+          1073.0867446298116,
+          1094.5193940818122
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.mean": {
+        "mean": 730.4185958100746,
+        "sd": 1.6016670529080421,
+        "ci95": [
+          729.8205235034764,
+          731.0166681166729
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.sd": {
+        "mean": 103.9077627123576,
+        "sd": 1.4025930152728456,
+        "ci95": [
+          103.38402587308136,
+          104.43149955163383
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p50": {
+        "mean": 728.912347185211,
+        "sd": 2.465123763244938,
+        "ci95": [
+          727.9918548441484,
+          729.8328395262737
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p90": {
+        "mean": 865.4793882689631,
+        "sd": 3.0517261042301254,
+        "ci95": [
+          864.3398550139402,
+          866.618921523986
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p95": {
+        "mean": 904.0656526164968,
+        "sd": 4.058482312152456,
+        "ci95": [
+          902.5501904152169,
+          905.5811148177767
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.min": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.max": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.mean": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.sd": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p50": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p90": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p95": {
+        "mean": 0,
+        "sd": 0,
+        "ci95": [
+          0,
+          0
         ]
       }
     }
