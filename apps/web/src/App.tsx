@@ -503,16 +503,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
       // delante de los problemas del delta sin resolver.
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
-      // Los mensajes de `problemasEscenario` son del motor (zod y `validateScenario`) y se
-      // enseñan tal cual; el idioma del motor se enchufa en #280.
-      const problemas = problemasEscenario(resuelto, ir);
+      // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
+      // are shown verbatim; since #280 the engine is asked for them in the active locale.
+      const problemas = problemasEscenario(resuelto, ir, locale);
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
     },
-    // El idioma va en las dependencias aunque no se lea aquí (LILA-210): `escenarioResuelto`
-    // llama a `strings()` por dentro y este `useMemo` guarda el texto que devolvió, así que sin
-    // esto un `extends` roto seguiría contándose en el idioma en el que se resolvió.
+    // The locale is in the dependencies for two reasons now: `escenarioResuelto` calls
+    // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
+    // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
+    // the whole lint— would stay in the language it was resolved in.
     [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale],
   );
 
@@ -522,9 +523,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // `Modelador.validacion` es idempotente. En «Validar rutas» (LILA-065) se apaga: los discos de
   // validación no se pintan sobre la animación de tokens.
   useEffect(() => {
-    // Mismo motivo que el overlay para llevar el idioma: el `title` del disco lo escribe
-    // `ValidationMarkers` sobre el DOM del lienzo. Los mensajes de dentro son del motor y siguen
-    // llegando en el idioma que el motor emite hasta que #280 le pase el idioma.
+    // Same reason as the overlay for carrying the locale: the `title` of the disc is written by
+    // `ValidationMarkers` onto the canvas DOM. The messages inside are the engine's, and since
+    // #280 `validacion` is already recomputed in the active locale (see the `useMemo` above).
     modelador?.validacion(modo === 'rutas' ? null : validacion);
   }, [modelador, validacion, modo, locale]);
 
@@ -719,9 +720,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const modelRevision = revisionRef.current;
       const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
       const xml = await modelador.exportar();
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo);
+      // The language is decided when the run starts and travels with it: a run already stored
+      // keeps the language it was produced in (its warnings are data, not text that is repainted).
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult } = await runInWorker(ir, scenario, {
+        locale,
         signal: control.signal,
         onProgress: (progreso) => {
           if (!control.signal.aborted && enVuelo.current === control) setSim({ progreso, tipo: 'simulando' });
@@ -962,7 +966,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           {Object.keys(escenarios).map((name) => <option key={name} value={name}>{etiquetaEscenario(name, escenarios)}</option>)}
         </select></label>
         {comparable && ir !== null
-          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result))}
+          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result), { locale })}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />

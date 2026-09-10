@@ -301,7 +301,8 @@ describe('validación en vivo', () => {
     const roto = escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5);
     const parsed = ScenarioSchema.safeParse(roto);
     expect(parsed.success).toBe(true);
-    const esperado = validateScenario(parsed.data!, ir).find(
+    // #280: el panel pide el lint en el idioma activo, así que la referencia se pide igual.
+    const esperado = validateScenario(parsed.data!, ir, { locale: 'es' }).find(
       (problema) => problema.path === 'elements.Flow_Aprobado.probability',
     )!;
     expect(esperado.code).toBe('E-PROB-RANGO');
