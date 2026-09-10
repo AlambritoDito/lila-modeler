@@ -27,15 +27,18 @@ import {
   type BaseTimeUnit,
 } from '@lila/engine/format';
 import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
+import { compareWorkbook, type CompareEntry } from '@lila/engine/xlsx-report';
 import {
   DataTable,
+  downloadXlsx,
+  exportButtonStyle,
   tabLabels,
   h2Style,
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
-import { strings, useStrings } from './i18n';
+import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 
@@ -58,6 +61,12 @@ export interface CompareViewProps {
    * (sin panel de avisos, sin metadatos en la cabecera, `baseTimeUnit` para todas las columnas).
    */
   runs?: readonly CompareRunMeta[];
+  /**
+   * Escenario resuelto y `RunResult` de cada corrida, en el mismo orden que `scenarioNames`
+   * (issue #80). Sin este prop no hay botón "Exportar XLSX": el libro necesita los resultados
+   * completos —no solo el `CompareResult`— para escribir la hoja Resumen de cada escenario.
+   */
+  entries?: readonly CompareEntry[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -378,6 +387,7 @@ export function CompareView({
   baseTimeUnit,
   resourceNames = {},
   runs,
+  entries,
 }: CompareViewProps): ReactNode {
   const S = useStrings();
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
@@ -428,6 +438,28 @@ export function CompareView({
         <input checked={showAll} onChange={() => setShowAll((current) => !current)} type="checkbox" />
         {S.comparar.mostrarTodos}
       </label>
+
+      {/*
+       * Un solo botón para toda la vista, no uno por tabla: el libro lleva la hoja Resumen de cada
+       * escenario y la hoja Comparación completa, así que exportarlo desde cada ámbito daría el
+       * mismo archivo cuatro veces. Los bytes se construyen al pulsar (issue #80).
+       */}
+      {entries !== undefined && entries.length > 0 && (
+        <div style={selectorRowStyle}>
+          <button
+            type="button"
+            style={exportButtonStyle}
+            onClick={() =>
+              downloadXlsx(
+                `${scenarioNames.join(' vs ')}.xlsx`,
+                compareWorkbook(ir, entries, comparison, getLocale()),
+              )
+            }
+          >
+            {S.resultados.exportarXlsx}
+          </button>
+        </div>
+      )}
 
       {/*
        * Panel de avisos (OP-05, issue #210): los de `compareWarnings` (moneda/unidad/significancia/

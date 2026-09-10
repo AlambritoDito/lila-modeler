@@ -11,7 +11,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ValidationResult } from './bpmn/validate.js';
@@ -43,6 +43,7 @@ import {
   runStartMs,
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
+import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
@@ -424,6 +425,25 @@ function writeJson(file: string, data: unknown, locale: Locale): void {
   console.log(`JSON: ${writeJsonAtomic(file, data, locale)}`);
 }
 
+/**
+ * Publica un `.xlsx` con la misma técnica atómica que el CSV y el JSON: temporal + `rename`, y
+ * nada se escribe encima de un archivo que ya existía sin pasar por `assertReplaceableFile`.
+ */
+function writeXlsx(file: string, bytes: Uint8Array, locale: Locale): void {
+  const target = absolutePath(file);
+  assertReplaceableFile(target, locale);
+  mkdirSync(dirname(target), { recursive: true });
+  const staged = stageFile(target, locale);
+  try {
+    staged.write(bytes);
+    staged.commit();
+  } catch (error) {
+    staged.abort();
+    throw error;
+  }
+  console.log(`XLSX: ${target}`);
+}
+
 function writeCsvDirectory(
   directory: string,
   ir: ParsedIr,
@@ -433,9 +453,7 @@ function writeCsvDirectory(
 ): void {
   const target = absolutePath(directory);
   mkdirSync(target, { recursive: true });
-  const resourceNames = Object.fromEntries(
-    Object.entries(scenario.resources ?? {}).map(([id, resource]) => [id, resource.name]),
-  );
+  const resourceNames = resourceNamesOf(scenario);
   const files: Readonly<Record<string, string>> = {
     'elements.csv': elementsCsv(ir, result),
     'flows.csv': flowsCsv(ir, result),
@@ -522,6 +540,7 @@ interface RunCommandOptions {
   replications?: number | undefined;
   json?: string | undefined;
   csv?: string | undefined;
+  xlsx?: string | undefined;
   locale: Locale;
 }
 
@@ -571,6 +590,13 @@ async function runCommand(
       logSink?.commit();
       console.log(`CSV: ${absolutePath(options.csv)}`);
     }
+    if (options.xlsx !== undefined) {
+      writeXlsx(
+        options.xlsx,
+        scenarioWorkbook(ir, scenario, result, resourceNamesOf(scenario), locale),
+        locale,
+      );
+    }
     return 0;
   } catch (error) {
     logSink?.abort();
@@ -586,6 +612,7 @@ interface CompareCommandOptions {
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
+  xlsx?: string | undefined;
   all: boolean;
   locale: Locale;
 }
@@ -809,6 +836,9 @@ async function compareCommand(
   const comparison = compare(loaded.map((entry) => entry.result), { locale });
   printCompareResult(ir, loaded, comparison, options.all, locale);
   if (options.json !== undefined) writeJson(options.json, comparison, locale);
+  if (options.xlsx !== undefined) {
+    writeXlsx(options.xlsx, compareWorkbook(ir, loaded, comparison, locale), locale);
+  }
   return 0;
 }
 
@@ -849,6 +879,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
       replications: { type: 'string' },
       json: { type: 'string' },
       csv: { type: 'string' },
+      xlsx: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -864,6 +895,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
     csv: values.csv,
+    xlsx: values.xlsx,
     locale,
   });
 }
@@ -875,6 +907,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
+      xlsx: { type: 'string' },
       all: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -891,6 +924,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
+    xlsx: values.xlsx,
     all: values.all === true,
     locale,
   });

@@ -39,6 +39,14 @@
     "./format": {
       "types": "./dist/format.d.ts",
       "default": "./dist/format.js"
+    },
+    "./xlsx": {
+      "types": "./dist/xlsx.d.ts",
+      "default": "./dist/xlsx.js"
+    },
+    "./xlsx-report": {
+      "types": "./dist/xlsx-report.d.ts",
+      "default": "./dist/xlsx-report.js"
     }
   },
   "files": [
@@ -55,6 +63,7 @@
   },
   "dependencies": {
     "bpmn-moddle": "^10.2.0",
+    "fflate": "^0.8.3",
     "zod": "^4.5.4"
   },
   "bin": {

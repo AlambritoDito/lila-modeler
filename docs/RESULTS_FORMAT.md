@@ -535,3 +535,46 @@ whose bottleneck is the `horno` pool with `capacity 1`, which the TO-BE does not
 > significant and `Task_Preparar` remains not significant. The conclusion does not change; the
 > decimals do.
 > *(test: LILA-041, QA)*
+
+---
+
+## 12. XLSX export *(issue #80)*
+
+`lila run --xlsx book.xlsx`, `lila compare --xlsx book.xlsx` and the "Export XLSX" buttons of the
+web app write a spreadsheet with the same numbers as the CSV. It is a hand-written OOXML file over
+`fflate` (`packages/engine/src/xlsx.ts`): inline strings, numeric cells, no shared string table and
+no styles beyond the default one, which is the subset Excel, LibreOffice, Numbers, pandas and
+openpyxl all read. The bytes are deterministic — the zip entries carry a fixed timestamp, so two
+exports of the same run are identical.
+
+The tables come from the **same row builders** as the CSV (`elementsRows`, `flowsRows`,
+`resourcesRows`, `processRows` in `packages/engine/src/csv.ts`), so the two exports cannot diverge;
+column names are the map of section 10, untranslated. Only the sheet names and the labels of the
+sheets the workbook adds come from the message catalog (`Summary`/`Resumen`, …).
+
+### `run --xlsx`: five sheets
+
+| Sheet | Columns | Content |
+|---|---|---|
+| `Summary` | Section, Id, Name, Metric, Value | the `process` metrics of section 5, one per row; the completed cases per end event when `process.byEndEvent` exists; and, per declared pool, `Capacity`, `Working hours` and `Payroll cost`, plus the total |
+| `Elements` | those of `elements.csv` | identical rows to `elements.csv` |
+| `Flows` | those of `flows.csv` | identical rows to `flows.csv` |
+| `Resources` | those of `resources.csv` | identical rows to `resources.csv` |
+| `Parameters` | Section, Id, Name, Parameter, Value | the **resolved** scenario that ran: run (start, duration, warmup, replications, seed, base time unit, currency), calendars, resources, arrivals, task times and gateway probabilities |
+
+`Payroll cost` is `capacity × costPerHour × the open hours of the run` for the pool's calendar —
+what the staffing costs whether it is busy or not. It is **not** `resources[id].unitCost`
+(section 4), which only charges the hours actually occupied; both readings are in the workbook.
+Without `run.duration` the hours are unknown and those cells stay empty.
+
+The event log is **not** a sheet: a run of a few million rows exceeds the 1 048 576 rows a
+worksheet holds. `--csv` keeps writing it in streaming (section 7).
+
+### `compare --xlsx`: one sheet per scenario plus `Comparison`
+
+Each scenario gets its own `Summary` sheet, named after the scenario (sanitized, clipped to 31
+characters and made unique). The `Comparison` sheet has one row per KPI of `compare()`
+(section 11) with `Kpi`, `Scope`, `Id`, `Name`, `Metric` and, per scenario, its value and the two
+ends of its 95 % CI; every non-base scenario adds the absolute delta, the relative delta and
+whether its interval **overlaps** the base's — `false` there is what the CLI prints as `*`. Without
+replications there is no interval and the cell is empty, never `false`.

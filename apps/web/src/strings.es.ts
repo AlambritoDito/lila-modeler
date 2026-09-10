@@ -506,6 +506,7 @@ export const es: Strings = {
     },
 
     exportarCsv: 'Exportar CSV',
+    exportarXlsx: 'Exportar XLSX',
     cabecera: (
       escenario: string,
       semilla: number,

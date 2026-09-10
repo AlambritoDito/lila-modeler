@@ -519,6 +519,7 @@ export const en = {
     },
 
     exportarCsv: 'Export CSV',
+    exportarXlsx: 'Export XLSX',
     cabecera: (
       escenario: string,
       semilla: number,

@@ -80,6 +80,7 @@ just the CLI)
 |---|---|---|---|
 | zod | 4.5.4 | MIT | https://github.com/colinhacks/zod |
 | bpmn-moddle | 10.2.0 | MIT | (already listed above, same package) |
+| fflate | 0.8.3 | MIT | https://github.com/101arrowz/fflate — the zip writer behind the XLSX export (issue #80); it ends up in the bundle because `ResultsView`/`CompareView` build the workbook in the browser |
 
 Confirmed that `zod` ends up in the final artifact, not just in the Node CLI: after
 `npm run build -w @lila/web`, `grep -c zod apps/web/dist/assets/index-*.js` returns matches in the

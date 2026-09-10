@@ -72,7 +72,7 @@ warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
-  --json out/result.json --csv out/csv
+  --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
 ```
 
 ```
@@ -123,7 +123,9 @@ Task_TomarPedido  Take order      Average time (waiting for resource)  0.234564 
 ...
 ```
 
-`--json` works the same in `run` and in `compare`; `--csv` only in `run`. `--help` on any subcommand
+`--json` and `--xlsx` work the same in `run` and in `compare`; `--csv` only in `run`. `--xlsx`
+writes one spreadsheet (Summary, Elements, Flows, Resources, Parameters; a Comparison sheet in
+`compare`) — see `docs/RESULTS_FORMAT.md` § 12. `--help` on any subcommand
 lists every option, and `--lang en|es` (any position) picks the language of the output.
 Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The scenario format is in `docs/SCENARIO_FORMAT.md`, the results format in
 `docs/RESULTS_FORMAT.md`, and the mapping of column names against Bizagi in
