@@ -1,3 +1,4 @@
+import type { SaveOutcome } from '../../../desktop/src/bridge.js';
 // @vitest-environment jsdom
 /**
  * `DesktopStore` con un `LilaBridge` falso (sin Electron): cubre cancelación, error, "guardar
@@ -38,7 +39,7 @@ class FakeBridge implements LilaBridge {
   writeShouldFail = false;
   readProjectImpl: ((dir: string) => Promise<LilaProjectDocument>) | null = null;
   readonly dirtyHistory: boolean[] = [];
-  private closeRequestedCb: (() => Promise<boolean>) | null = null;
+  private closeRequestedCb: (() => Promise<SaveOutcome>) | null = null;
 
   /** Encola el próximo (o los próximos) resultado(s) de `chooseFolder`. */
   queueChooseFolder(...results: (string | null)[]): void {
@@ -68,7 +69,7 @@ class FakeBridge implements LilaBridge {
     this.dirtyHistory.push(dirty);
   }
 
-  onCloseRequested(cb: () => Promise<boolean>): () => void {
+  onCloseRequested(cb: () => Promise<SaveOutcome>): () => void {
     this.closeRequestedCb = cb;
     return () => {
       this.closeRequestedCb = null;
@@ -76,7 +77,7 @@ class FakeBridge implements LilaBridge {
   }
 
   /** Simula que main pidió guardar antes de cerrar (`lila:close-requested`). */
-  async triggerCloseRequested(): Promise<boolean> {
+  async triggerCloseRequested(): Promise<SaveOutcome> {
     if (this.closeRequestedCb === null) {
       throw new Error('FakeBridge.triggerCloseRequested: no hay callback registrado (onSaveRequested).');
     }
@@ -377,9 +378,9 @@ describe('DesktopStore.setDirty / onSaveRequested', () => {
   it('onSaveRequested registra el callback en el bridge; su resultado vuelve tal cual', async () => {
     const bridge = new FakeBridge();
     const store = new DesktopStore(bridge);
-    const unsubscribe = store.onSaveRequested(async () => true);
+    const unsubscribe = store.onSaveRequested(async () => 'saved');
 
-    await expect(bridge.triggerCloseRequested()).resolves.toBe(true);
+    await expect(bridge.triggerCloseRequested()).resolves.toBe('saved');
     unsubscribe();
     await expect(bridge.triggerCloseRequested()).rejects.toThrow('no hay callback registrado');
   });

@@ -11,7 +11,7 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import type { LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
+import type { SaveOutcome, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import type {
   ProcessData,
   ProcessSummary,
@@ -199,7 +199,7 @@ export class DesktopStore implements ProjectSessionStore {
    * reenvío de IPC (ver `preload.cts`), así que toda la lógica de "qué es guardar" sigue siendo
    * responsabilidad de quien llame (`App.tsx`, vía `saveRef.current`).
    */
-  onSaveRequested(save: () => Promise<boolean>): () => void {
+  onSaveRequested(save: () => Promise<SaveOutcome>): () => void {
     return this.bridge.onCloseRequested(save);
   }
 

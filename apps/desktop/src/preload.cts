@@ -19,7 +19,7 @@
 // clásica de `require`, no con `import`/`export` de ES — ese es justamente el punto de este
 // archivo (ver comentario de arriba).
 import electron = require('electron');
-import type { Ajustes, LilaBridge, MenuAction, OpenPathRequest, Recent, WriteProjectOptions } from './bridge.js';
+import type { SaveOutcome, Ajustes, LilaBridge, MenuAction, OpenPathRequest, Recent, WriteProjectOptions } from './bridge.js';
 
 const { contextBridge, ipcRenderer } = electron;
 
@@ -35,11 +35,11 @@ const lila = {
   },
   // Sandboxeado: solo reenvía. `cb` (registrada por DesktopStore) corre en el renderer; el
   // resultado vuelve a main por `lila:close-response` para que decida si cierra la ventana.
-  onCloseRequested: (cb: () => Promise<boolean>) => {
+  onCloseRequested: (cb: () => Promise<SaveOutcome>) => {
     const listener = () => {
       void cb()
         .then((saved) => ipcRenderer.send('lila:close-response', { saved }))
-        .catch(() => ipcRenderer.send('lila:close-response', { saved: false }));
+        .catch(() => ipcRenderer.send('lila:close-response', { saved: 'failed' }));
     };
     ipcRenderer.on('lila:close-requested', listener);
     return () => ipcRenderer.removeListener('lila:close-requested', listener);
