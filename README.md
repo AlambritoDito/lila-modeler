@@ -46,8 +46,8 @@ The commands use `npx lila`: after `npm ci`, `npx` resolves the workspace's own 
 install — there is no `lila` package published to the npm registry (see "Known limitations").
 Equivalent, without relying on `npx`: `node packages/engine/bin/lila.js <command>`.
 
-The sample outputs below are copied verbatim from the CLI (output is in Spanish today; English is
-coming in #280).
+The sample outputs below are copied verbatim from the CLI. English is the default; `--lang es`
+(or `LILA_LANG=es`, or a Spanish `LANG`) prints the same run in Spanish.
 
 **1. Validate the model:**
 
@@ -56,14 +56,14 @@ npx lila validate examples/pedido/model.bpmn
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Exportado por Lila Modeler examples (hand-written) 0.0.0
+Process Process_Restaurante (Restaurante)
+Exported by Lila Modeler examples (hand-written) 0.0.0
 
-Nodos (11): and 2, end 2, start 1, task 4, timer 1, xor 1
+Nodes (11): and 2, end 2, start 1, task 4, timer 1, xor 1
   start     StartEvent_Pedido  Pedido recibido
   ...
-aviso  W-MSGFLOW  Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
-0 errores, 1 avisos.
+warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
+0 errors, 1 warnings.
 ```
 
 **2. Simulate the AS-IS scenario** (Bizagi-style result tables + JSON + CSV):
@@ -76,25 +76,25 @@ npx lila run \
 ```
 
 ```
-Escenario AS-IS
-Proceso Process_Restaurante (Restaurante)
-Semilla 42 · Replicaciones 3 · Unidad de tiempo min · Moneda MXN
+Scenario AS-IS
+Process Process_Restaurante (Restaurante)
+Seed 42 · Replications 3 · Time unit min · Currency MXN
 
 Process elements
 Id                  Name                Type   Instances started  Instances completed  ...
 StartEvent_Pedido   Pedido recibido     start  2975               2975                 ...
 ...
 
-Cuellos de botella
+Bottlenecks
 Id                Name               Total time (waiting for resource) (min)  Utilization (%)
 Task_Preparar     Preparar alimento  4514389.476272                           34.297909
 Task_TomarPedido  Tomar pedido       698.32272                                41.234838
 
-Avisos:
-  W-MSGFLOW: Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
+Warnings:
+  W-MSGFLOW: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
   ...
-JSON: /ruta/al/repo/out/result.json
-CSV: /ruta/al/repo/out/csv
+JSON: /path/to/repo/out/result.json
+CSV: /path/to/repo/out/csv
 ```
 
 **3. Compare AS-IS against TO-BE** (one more cashier) side by side:
@@ -107,14 +107,14 @@ npx lila compare \
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Unidad de tiempo min (escenario base) · Utilización en %
+Process Process_Restaurante (Restaurante)
+Time unit min (base scenario) · Utilization in %
 
-Escenarios comparados
-#  Nombre           Archivo                                        Semilla  Replicaciones
--  ---------------  ---------------------------------------------  -------  -------------
-0  AS-IS (base)     examples/pedido/as-is.scenario.json            42       3
-1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42       3
+Compared scenarios
+#  Name             File                                           Seed  Replications
+-  ---------------  ---------------------------------------------  ----  ------------
+0  AS-IS (base)     examples/pedido/as-is.scenario.json            42    3
+1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42    3
 
 Process elements
 Id                Name              Metric                               AS-IS (base)  TO-BE 3 cajeros
@@ -124,7 +124,8 @@ Task_TomarPedido  Tomar pedido      Average time (waiting for resource)  0.23456
 ```
 
 `--json` works the same in `run` and in `compare`; `--csv` only in `run`. `--help` on any subcommand
-lists every option. The scenario format is in `docs/SCENARIO_FORMAT.md`, the results format in
+lists every option, and `--lang en|es` (any position) picks the language of the output.
+Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The scenario format is in `docs/SCENARIO_FORMAT.md`, the results format in
 `docs/RESULTS_FORMAT.md`, and the mapping of column names against Bizagi in
 `docs/BIZAGI_PARITY.md`.
 
@@ -135,7 +136,7 @@ npm run dev -w @lila/web    # builds the engine if needed + starts Vite on http:
 ```
 
 It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes (the interface is in
-Spanish today; English is coming in #279 and #280):
+Spanish today; English is coming in #279):
 
 - **Modelar** (model) — bpmn-js editor: create, edit and export the `.bpmn`.
 - **Simular** (simulate) — scenario panel (resource pools, calendars, per-element parameters) and a

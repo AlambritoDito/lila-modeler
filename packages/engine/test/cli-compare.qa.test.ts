@@ -185,7 +185,7 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
 
     expect(await main(['compare', model, a, b])).toBe(0);
     const all = text();
-    expect(all).toContain('Avisos:');
+    expect(all).toContain('Warnings:');
     expect(all).toContain('"A" W-TAREA-SIN-TIEMPO');
 
     // Compare es una vista de resumen: una línea por código y escenario, diciendo cuántas más hubo.
@@ -193,7 +193,7 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
     expect(sinTiempo).toHaveLength(1);
     const sinParametros = all.split('\n').filter((line) => line.includes('W-ELEMENTO-SIN-PARAMETROS'));
     expect(sinParametros).toHaveLength(2);
-    expect(sinParametros.find((line) => line.includes('"A"'))).toContain('+1 aviso más con el mismo código');
+    expect(sinParametros.find((line) => line.includes('"A"'))).toContain('+1 more warning with the same code');
   });
 });
 
@@ -236,10 +236,10 @@ describe('QA LILA-047 · ataque 2: formato de valores y deltas', () => {
     expect(await main(['compare', model, enSegundos, enMinutos, '--all'])).toBe(0);
     const conBaseSeg = text();
 
-    expect(conBaseMin).toContain('Unidad de tiempo min');
-    expect(conBaseSeg).toContain('Unidad de tiempo s');
+    expect(conBaseMin).toContain('Time unit min');
+    expect(conBaseSeg).toContain('Time unit s');
     // La unidad la fija el escenario base, y cuando difieren se avisa.
-    expect(conBaseMin).toContain('no comparten baseTimeUnit');
+    expect(conBaseMin).toContain('do not share baseTimeUnit');
 
     const cell = (all: string, metric: string): number =>
       Number(rowLine(all, LONG_ID, metric).trim().split(/\s{2,}/).at(-2)!.replace(/[()%*+]/g, ''));
@@ -299,7 +299,7 @@ describe('QA LILA-047 · ataque 3: tres o más escenarios', () => {
     const espera = rowLine(all, LONG_ID, 'Average time (waiting for resource)');
     expect(espera.match(/\*/g)?.length).toBe(2);
 
-    for (const title of ['Escenarios comparados', 'Process elements', 'Resources', 'Process']) {
+    for (const title of ['Compared scenarios', 'Process elements', 'Resources', 'Process']) {
       const block = tableBlock(all, title);
       const separator = block[1]!;
       const gaps = [...separator.matchAll(/ {2}/g)].map((match) => match.index);
@@ -334,7 +334,7 @@ describe('QA LILA-047 · ataque 4: carga de modelo y escenarios', () => {
     expect(all).toContain('roto.scenario.json');
     expect(all).toContain('E-ELEMENTO-DESCONOCIDO');
     expect(all).not.toContain('Process elements');
-    expect(all).not.toContain('Escenarios comparados');
+    expect(all).not.toContain('Compared scenarios');
   });
 
   test('un escenario con JSON inválido cita el archivo y no imprime tabla parcial', async () => {
@@ -344,7 +344,7 @@ describe('QA LILA-047 · ataque 4: carga de modelo y escenarios', () => {
 
     expect(await main(['compare', model, a, invalido])).toBe(1);
     expect(text()).toContain('malo.scenario.json');
-    expect(text()).not.toContain('Escenarios comparados');
+    expect(text()).not.toContain('Compared scenarios');
   });
 
   test('`model` distinto del bpmn posicional se rechaza citando el archivo del escenario', async () => {
@@ -362,7 +362,7 @@ describe('QA LILA-047 · ataque 4: carga de modelo y escenarios', () => {
     );
 
     expect(await main(['compare', model, a, otro])).toBe(1);
-    expect(text()).toContain('no coincide con scenario.model');
+    expect(text()).toContain('does not match scenario.model');
     expect(text()).toContain('otro.scenario.json');
   });
 
@@ -386,7 +386,7 @@ describe('QA LILA-047 · ataque 4: carga de modelo y escenarios', () => {
     const a = writeScenario('a.scenario.json');
 
     expect(await main(['compare', invalido, a, a])).toBe(1);
-    expect(text()).not.toContain('Escenarios comparados');
+    expect(text()).not.toContain('Compared scenarios');
   });
 });
 
@@ -397,7 +397,7 @@ describe('QA LILA-047 · ataque 5: replicaciones sin IC95', () => {
 
     expect(await main(['compare', model, a, b, '--replications', '1'])).toBe(0);
     const all = text();
-    expect(all).toContain('sin IC95 no hay marca de significancia posible');
+    expect(all).toContain('without a 95% CI there is no significance mark possible');
     expect(all).toContain('"A"');
     expect(all).toContain('"B"');
     expect(all).not.toContain('%)*');
@@ -410,8 +410,8 @@ describe('QA LILA-047 · ataque 5: replicaciones sin IC95', () => {
 
     expect(await main(['compare', model, a, b])).toBe(0);
     const all = text();
-    expect(all).toContain('"A" corrió sin al menos dos replicaciones completas');
-    expect(all).not.toContain('"B" corrió sin');
+    expect(all).toContain('"A" ran without at least two complete replications');
+    expect(all).not.toContain('"B" ran without');
     // Sin IC95 en la base no hay significancia posible para ninguna columna.
     expect(all).not.toContain('%)*');
   });
@@ -429,9 +429,9 @@ describe('QA LILA-047 · ataque 6: semillas y `extends`', () => {
     expect(await main(args)).toBe(0);
     expect(text()).toBe(first);
 
-    const semillas = tableBlock(first, 'Escenarios comparados').slice(2);
+    const semillas = tableBlock(first, 'Compared scenarios').slice(2);
     for (const line of semillas) expect(line).toMatch(/\s123\s/);
-    expect(first).not.toContain('semillas distintas');
+    expect(first).not.toContain('different seeds');
   });
 
   test('sin --seed cada escenario usa la suya, se muestran y se avisa de la pérdida de R-DET-3', async () => {
@@ -442,7 +442,7 @@ describe('QA LILA-047 · ataque 6: semillas y `extends`', () => {
     const all = text();
     expect(all).toMatch(/\s11\s/);
     expect(all).toMatch(/\s999\s/);
-    expect(all).toContain('semillas distintas');
+    expect(all).toContain('different seeds');
     expect(all).toContain('R-DET-3');
   });
 
@@ -590,7 +590,7 @@ describe('QA LILA-047 · ataque 10: ayuda y argumentos', () => {
 
     output = [];
     expect(await main(['compare', '--help'])).toBe(0);
-    expect(text()).toContain('Opciones de compare');
+    expect(text()).toContain('compare options:');
   });
 
   test('un solo escenario, o ninguno, es un error claro con exit 1', async () => {
@@ -598,7 +598,7 @@ describe('QA LILA-047 · ataque 10: ayuda y argumentos', () => {
     for (const args of [['compare'], ['compare', model], ['compare', model, a]]) {
       output = [];
       expect(await main(args)).toBe(1);
-      expect(text()).toContain('al menos dos escenarios');
+      expect(text()).toContain('at least two scenarios');
     }
   });
 
@@ -607,12 +607,12 @@ describe('QA LILA-047 · ataque 10: ayuda y argumentos', () => {
     const b = writeScenario('b.scenario.json');
 
     expect(await main(['compare', model, a, b, '--replications', '0'])).toBe(1);
-    expect(text()).toContain('--replications requiere un entero >= 1');
+    expect(text()).toContain('--replications requires an integer >= 1');
 
     output = [];
     expect(await main(['compare', model, a, b, '--seed', 'x'])).toBe(1);
-    expect(text()).toContain('--seed requiere un entero');
-    expect(text()).not.toContain('Escenarios comparados');
+    expect(text()).toContain('--seed requires an integer');
+    expect(text()).not.toContain('Compared scenarios');
   });
 });
 

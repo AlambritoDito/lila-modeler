@@ -141,7 +141,7 @@ test('describe_process sobre examples/pedido: IR con los nodos esperados', async
   const text = textOf(result);
   const parsed = JSON.parse(text) as { ir: { nodes: Record<string, unknown> }; resumen: string };
   expect(Object.keys(parsed.ir.nodes)).toContain('Task_TomarPedido');
-  expect(parsed.resumen).toContain('gateway XOR');
+  expect(parsed.resumen).toContain('XOR gateway');
 });
 
 test('describe_process con scenario agrega los recursos referenciados', async () => {
@@ -162,13 +162,13 @@ test('validate_bpmn con path y xml a la vez: error explícito, no se ignora uno 
     arguments: { path: pedidoBpmn, xml: '<x/>' },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('no los dos');
+  expect(textOf(result)).toContain('not both');
 });
 
 test('validate_bpmn con una ruta inexistente: isError, y el servidor sigue respondiendo', async () => {
   const missing = await client.callTool({ name: 'validate_bpmn', arguments: { path: '/no/existe.bpmn' } });
   expect(missing.isError).toBe(true);
-  expect(textOf(missing)).toContain('no existe el archivo');
+  expect(textOf(missing)).toContain('does not exist');
 
   const ok = await client.callTool({ name: 'validate_bpmn', arguments: { path: pedidoBpmn } });
   expect(ok.isError).toBe(false);
@@ -197,15 +197,15 @@ test('describe_process avisa de los errores de validación en vez de describir y
   expect(result.isError).toBe(false);
 
   const { resumen } = JSON.parse(textOf(result)) as { resumen: string };
-  expect(resumen).toContain('Validación: 3 errores, 0 avisos.');
-  expect(resumen).toContain('NO se puede simular');
+  expect(resumen).toContain('Validation: 3 errors, 0 warnings.');
+  expect(resumen).toContain('CANNOT be simulated');
 });
 
 test('describe_process lista los otros procesos del archivo, no simulados', async () => {
   const result = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn } });
   const { resumen } = JSON.parse(textOf(result)) as { resumen: string };
-  expect(resumen).toContain('Otros procesos del archivo, no simulados: Process_Cliente');
-  expect(resumen).toContain('Validación: 0 errores, 1 aviso.');
+  expect(resumen).toContain('Other processes in the file, not simulated: Process_Cliente');
+  expect(resumen).toContain('Validation: 0 errors, 1 warning.');
 });
 
 test('describe_process acepta `xml` inline igual que validate_bpmn (LILA-056)', async () => {
@@ -217,7 +217,7 @@ test('describe_process acepta `xml` inline igual que validate_bpmn (LILA-056)', 
 
   const ambos = await client.callTool({ name: 'describe_process', arguments: { path: pedidoBpmn, xml } });
   expect(ambos.isError).toBe(true);
-  expect(textOf(ambos)).toContain('no los dos');
+  expect(textOf(ambos)).toContain('not both');
 
   const ninguno = await client.callTool({ name: 'describe_process', arguments: {} });
   expect(ninguno.isError).toBe(true);
@@ -243,9 +243,9 @@ test('describe_process con un escenario inválido: no falla, pero dice por qué 
     });
     expect(result.isError).toBe(false);
     const { resumen } = JSON.parse(textOf(result)) as { resumen: string };
-    expect(resumen).toContain('no se pudo leer el escenario');
+    expect(resumen).toContain('the scenario could not be read');
     expect(resumen).toContain('run.duration');
-    expect(resumen).not.toContain('sin escenario');
+    expect(resumen).not.toContain('no scenario');
   } finally {
     rmSync(bad, { force: true });
   }
@@ -258,8 +258,8 @@ test('describe_process con un escenario inexistente: lo dice y sigue describiend
   });
   expect(result.isError).toBe(false);
   const { resumen } = JSON.parse(textOf(result)) as { resumen: string };
-  expect(resumen).toContain('no se pudo leer el escenario');
-  expect(resumen).toContain('Proceso Process_Restaurante');
+  expect(resumen).toContain('the scenario could not be read');
+  expect(resumen).toContain('Process Process_Restaurante');
 });
 
 test('describe_process con `extends` resuelve el escenario padre', async () => {
@@ -370,7 +370,7 @@ test('run_simulation: modelo que no coincide con scenario.model es un error estr
     arguments: { model: boundaryBpmn, scenario: pedidoScenario },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('no coincide con scenario.model');
+  expect(textOf(result)).toContain('does not match scenario.model');
 });
 
 test('los defectos del esquema salen con el texto del catálogo, el mismo que la CLI (LILA-202)', async () => {
@@ -446,7 +446,7 @@ test('compare_scenarios: menos de dos escenarios es un error estructurado', asyn
     arguments: { scenarios: [pedidoScenario] },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('al menos dos escenarios');
+  expect(textOf(result)).toContain('at least two scenarios');
 });
 
 test('run_simulation: structuredContent repite el texto, sin log, y valida contra el outputSchema', async () => {
@@ -473,6 +473,148 @@ test('run_simulation: un escenario inline inválido no cita un archivo que no ex
     arguments: { scenario: { ...barato(), elements: { Flow_Aprobado: { probabilty: 1.5 } } } },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('escenario inline: escenario inválido');
+  expect(textOf(result)).toContain('inline scenario: invalid scenario');
   expect(textOf(result)).not.toContain('.json:');
+});
+
+/* ------------------------------------------------------------------ *
+ * Idioma (LILA-211, parte 2)
+ * ------------------------------------------------------------------ */
+
+test('`title`, `description` y los `describe()` de las cinco tools están en inglés', async () => {
+  const { tools } = await client.listTools();
+  // La superficie del protocolo no depende del `locale`: el cliente la leyó una sola vez.
+  for (const tool of tools) {
+    const surface = [
+      tool.title ?? '',
+      tool.description ?? '',
+      JSON.stringify(tool.inputSchema),
+    ].join(' ');
+    for (const spanish of ['Ruta', 'escenario', 'archivo', 'Sobrescribe', 'inválido']) {
+      expect(surface, `${tool.name} menciona "${spanish}"`).not.toContain(spanish);
+    }
+  }
+  expect(tools.map((tool) => tool.title).sort()).toEqual([
+    'Compare scenarios',
+    'Describe process',
+    'Patch scenario',
+    'Run simulation',
+    'Validate BPMN',
+  ]);
+});
+
+test('las cinco tools aceptan `locale` como enum opcional', async () => {
+  const { tools } = await client.listTools();
+  for (const tool of tools) {
+    const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    const required = (tool.inputSchema as { required?: string[] }).required ?? [];
+    expect(properties, tool.name).toHaveProperty('locale');
+    expect(required, tool.name).not.toContain('locale');
+    expect((properties['locale'] as { enum?: string[] }).enum, tool.name).toEqual(['en', 'es']);
+  }
+});
+
+test("validate_bpmn con locale 'es' devuelve los problemas traducidos, con el mismo código", async () => {
+  const spanish = await client.callTool({
+    name: 'validate_bpmn',
+    arguments: { path: boundaryBpmn, locale: 'es' },
+  });
+  const english = await client.callTool({ name: 'validate_bpmn', arguments: { path: boundaryBpmn } });
+
+  const errorsOf = (result: unknown): { code: string; message: string }[] =>
+    (JSON.parse(textOf(result as { content: unknown })) as { errors: { code: string; message: string }[] }).errors;
+
+  expect(errorsOf(spanish).map((error) => error.code)).toEqual(errorsOf(english).map((error) => error.code));
+  expect(errorsOf(spanish)[0]!.message).toContain('no soportado por el simulador');
+  expect(errorsOf(english)[0]!.message).toContain('not supported by the simulator');
+});
+
+test("describe_process con locale 'es' devuelve el resumen en español, en la misma clave `resumen`", async () => {
+  const result = await client.callTool({
+    name: 'describe_process',
+    arguments: { path: pedidoBpmn, scenario: pedidoScenario, locale: 'es' },
+  });
+  const parsed = JSON.parse(textOf(result)) as { ir: unknown; resumen: string };
+
+  expect(parsed.ir).toBeDefined();
+  expect(parsed.resumen).toContain('Proceso Process_Restaurante (Restaurante)');
+  expect(parsed.resumen).toContain('gateway XOR');
+  expect(parsed.resumen).toContain('Validación: 0 errores, 1 aviso.');
+  expect(parsed.resumen).toContain('Otros procesos del archivo, no simulados: Process_Cliente');
+  expect(parsed.resumen).toContain('Recursos referenciados:');
+});
+
+test("run_simulation con locale 'es': el escenario inválido sale en español y con su código", async () => {
+  const result = await client.callTool({
+    name: 'run_simulation',
+    arguments: {
+      scenario: { version: 1, name: 'Malo', model: pedidoBpmn, run: { start: '2026-09-07T08:00:00-06:00', duration: 60 }, elements: { NoExiste: {} } },
+      locale: 'es',
+    },
+  });
+  expect(result.isError).toBe(true);
+  expect(textOf(result)).toContain('escenario inválido');
+  expect(textOf(result)).toContain('E-ELEMENTO-DESCONOCIDO');
+  expect(textOf(result)).toContain('no existe en el modelo');
+});
+
+test("compare_scenarios con locale 'es': el error y las `notes` salen en español", async () => {
+  const solo = await client.callTool({
+    name: 'compare_scenarios',
+    arguments: { scenarios: [pedidoScenario], locale: 'es' },
+  });
+  expect(solo.isError).toBe(true);
+  expect(textOf(solo)).toContain('hacen falta al menos dos escenarios');
+
+  const compared = await client.callTool({
+    name: 'compare_scenarios',
+    arguments: { scenarios: [pedidoScenario, toBeScenario], seed: 42, replications: 1, locale: 'es' },
+  });
+  expect(compared.isError ?? false).toBe(false);
+  const notes = (JSON.parse(textOf(compared)) as { notes: string[] }).notes;
+  expect(notes.some((note) => note.includes('sin IC95 no hay marca de significancia'))).toBe(true);
+}, 60_000);
+
+test("patch_scenario con locale 'es': un patch que invalida el escenario se rechaza en español", async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'lila-mcp-locale-'));
+  try {
+    const scenario = join(directory, 'copia.scenario.json');
+    writeFileSync(scenario, readFileSync(pedidoScenario, 'utf8'), 'utf8');
+
+    const result = await client.callTool({
+      name: 'patch_scenario',
+      arguments: {
+        scenario,
+        patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 0 }],
+        locale: 'es',
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('escenario inválido tras el patch');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('el idioma del servidor es el que reciben las tools sin `locale`, y `locale` lo sobrescribe', async () => {
+  const spanishServer = createServer({ locale: 'es' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const spanishClient = new Client({ name: 'test-client-es', version: '0.0.0' });
+  await Promise.all([spanishClient.connect(clientTransport), spanishServer.connect(serverTransport)]);
+
+  try {
+    const byDefault = await spanishClient.callTool({
+      name: 'validate_bpmn',
+      arguments: { path: '/no/existe.bpmn' },
+    });
+    expect(textOf(byDefault)).toBe('validate_bpmn: no existe el archivo /no/existe.bpmn.');
+
+    const overridden = await spanishClient.callTool({
+      name: 'validate_bpmn',
+      arguments: { path: '/no/existe.bpmn', locale: 'en' },
+    });
+    expect(textOf(overridden)).toBe('validate_bpmn: the file /no/existe.bpmn does not exist.');
+  } finally {
+    await spanishClient.close();
+  }
 });

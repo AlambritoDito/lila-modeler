@@ -5,7 +5,9 @@
  * `core/`: the model validator (`bpmn/validate.ts`), the scenario lint and the zod texts. The
  * rules for an entry are the ones documented in `src/core/messages/types.ts`.
  *
- * PR-2 (CLI `--lang`, MCP `locale`) adds the `cli` and `mcp` namespaces here.
+ * PR-2 (CLI `--lang`, MCP `locale`) adds the `cli` and `mcp` namespaces here: the chrome of
+ * `cli.ts`/`cli-shared.ts` and of `@lila/mcp`. They live here and **not** in `core/messages/` on
+ * purpose: the web worker bundles `core/` only, and it has no console and no tools to describe.
  */
 import type { CoreChrome, CoreCodeMessages } from '../core/messages/types.js';
 import type { ConstructionId } from './constructions.js';
@@ -100,11 +102,140 @@ export interface ZodMessages {
   intervalOrder: () => string;
 }
 
+/**
+ * Chrome of the `lila` CLI (`cli.ts`) and of the code it shares with the MCP server
+ * (`cli-shared.ts`): usage, table and section titles, the labels of a problem line, and the errors
+ * of the argument parsing. The Bizagi table titles (`Process elements`, `Sequence flows`,
+ * `Resources`, `Process summary (extras)`) and every column name are **not** here: they are the
+ * parity contract with Bizagi (`docs/BIZAGI_PARITY.md`) and read the same in both locales.
+ *
+ * Entries are message **bodies**: `lila <command>: ` is `commandError()`, exactly like `coded()`
+ * puts the `CODE: ` prefix on a problem.
+ */
+export interface CliMessages {
+  /** `lila --help`, and what an empty or wrong command line prints. */
+  usage: () => string;
+
+  /* --- `lila validate` ---------------------------------------------- */
+  /** `subject` is `id` or `id (name)`, already assembled by the caller. */
+  process: (subject: string) => string;
+  exportedBy: (exporter: string, version: string) => string;
+  nodes: (count: number, byType: string) => string;
+  flows: (count: number) => string;
+  /** Mark of the default flow of a XOR, appended to its line. */
+  defaultFlow: () => string;
+  otherProcesses: (ids: string) => string;
+  /** Closing line of `validate`; not pluralised, same as the CLI has always printed it. */
+  problemCounts: (errors: number, warnings: number) => string;
+  errorLabel: () => string;
+  warningLabel: () => string;
+
+  /* --- `lila run` --------------------------------------------------- */
+  scenario: (name: string) => string;
+  runHeader: (seed: number, replications: number, unit: string) => string;
+  /** Appended to `runHeader` after a `·` when the scenario declares one. */
+  currency: (currency: string) => string;
+  bottlenecks: () => string;
+  noResourceWait: () => string;
+  warnings: () => string;
+
+  /* --- `lila compare` ----------------------------------------------- */
+  comparedScenarios: () => string;
+  timeUnitHeader: (unit: string) => string;
+  columnName: () => string;
+  columnFile: () => string;
+  columnSeed: () => string;
+  columnReplications: () => string;
+  baseColumn: (name: string) => string;
+  significantMark: () => string;
+
+  /* --- `compareWarnings()` (cli-shared.ts) -------------------------- */
+  mixedTimeUnit: (unit: string, others: string) => string;
+  differentSeeds: (seeds: string) => string;
+  fewReplications: (label: string) => string;
+  /** `count` is how many warnings of that code were dropped, never the total. */
+  moreWarnings: (count: number) => string;
+
+  /* --- loading a model or a scenario (cli-shared.ts) ---------------- */
+  invalidJson: (file: string, detail: string) => string;
+  /** Its own entry: `patch_scenario` rewrites this label into its own (`docs/MCP.md`). */
+  invalidScenarioLabel: () => string;
+  missingModel: (file: string) => string;
+  missingRun: (file: string) => string;
+  temporaryFileClosed: (file: string) => string;
+  cannotWrite: (target: string) => string;
+
+  /* --- arguments ---------------------------------------------------- */
+  commandError: (command: string, body: string) => string;
+  unknownCommand: (command: string) => string;
+  integerRequired: (option: string, raw: string) => string;
+  safeIntegerRequired: (option: string, raw: string) => string;
+  minimumIntegerRequired: (option: string, minimum: number, raw: string) => string;
+  expectedPositionals: (expected: string) => string;
+  bpmnPath: () => string;
+  runPaths: () => string;
+  comparePaths: () => string;
+  missingBpmnPath: () => string;
+  modelMismatch: (modelPath: string, scenarioModel: string) => string;
+  modelMismatchIn: (modelPath: string, scenarioModel: string, file: string) => string;
+  mcpNoArguments: () => string;
+  mcpMissingPackage: (packageName: string) => string;
+  /** `accepted` arrives already joined (`en, es`), like every list in the catalog. */
+  invalidLang: (value: string, accepted: string) => string;
+  missingLangValue: (accepted: string) => string;
+}
+
+/**
+ * Chrome of the MCP server (`packages/mcp/src/server.ts`): the readable summary of
+ * `describe_process` and the bodies of the `isError` messages. The tools' own `title`,
+ * `description` and `.describe()` are **not** here: they are the protocol surface an MCP client
+ * reads, they are fixed in English, and a per-call `locale` cannot change what was already
+ * advertised in `tools/list`.
+ *
+ * As in `CliMessages`, entries are bodies: `<tool>: ` is added by the caller.
+ */
+export interface McpMessages {
+  /* --- `describe_process` summary ----------------------------------- */
+  /** Node type of the IR (`task`, `xor`, …) in prose. An unknown type comes back unchanged. */
+  nodeType: (type: string) => string;
+  nodes: (count: number) => string;
+  gateways: () => string;
+  lanes: () => string;
+  embeddedSubprocesses: () => string;
+  /** `counts` is `errorCount` + `warningCount`, already joined by the caller. */
+  validation: (counts: string) => string;
+  validationWithErrors: (counts: string) => string;
+  errorCount: (count: number) => string;
+  warningCount: (count: number) => string;
+  referencedResources: () => string;
+  referencedResourcesNone: () => string;
+  referencedResourcesUnreadable: (detail: string) => string;
+
+  /* --- `isError` bodies --------------------------------------------- */
+  fileMissing: (file: string) => string;
+  bothPathAndXml: () => string;
+  pathOrXml: () => string;
+  modelMismatch: (modelPath: string, scenarioModel: string) => string;
+  modelInvalid: (detail: string) => string;
+  scenarioInvalid: (detail: string) => string;
+  atLeastTwoScenarios: () => string;
+  patchNotAnObject: () => string;
+  /** Replaces `CliMessages.invalidScenarioLabel` when the defect came from a patch. */
+  invalidAfterPatchLabel: () => string;
+  patchedMissingModel: () => string;
+  patchedMissingRun: () => string;
+  patchedName: (name: string) => string;
+  /** Etiqueta del escenario que llegó inline, en vez del archivo virtual que nunca existió. */
+  inlineScenario: () => string;
+}
+
 export interface Catalog {
   codes: CodeMessages;
   chrome: CoreChrome;
   constructions: Constructions;
   zod: ZodMessages;
+  cli: CliMessages;
+  mcp: McpMessages;
 }
 
 /** `'E-CAL-VACIO/sin-intervalos'` -> `'E-CAL-VACIO'`; a key without a variant is its own code. */

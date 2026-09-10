@@ -10,7 +10,8 @@
  * 4. § 17 de `docs/SEMANTICS.md` documenta todos los códigos salvo los guardias internos, y no
  *    documenta ninguno que el catálogo no tenga;
  * 5. no queda ni un literal `"CÓDIGO: …"` fuera de `src/messages/` y `src/core/messages/`
- *    (generalización del test de LILA-204).
+ *    (generalización del test de LILA-204), ni en `packages/mcp/src`, que consume el mismo
+ *    catálogo desde LILA-211 parte 2.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,6 +23,7 @@ import { INTERNAL_CODES, en, es, messages, type Catalog, type ProblemCode } from
 
 const REPOSITORY_ROOT = new URL('../../../', import.meta.url);
 const ENGINE_SRC = fileURLToPath(new URL('packages/engine/src', REPOSITORY_ROOT));
+const MCP_SRC = fileURLToPath(new URL('packages/mcp/src', REPOSITORY_ROOT));
 const SEMANTICS = readFileSync(
   fileURLToPath(new URL('docs/SEMANTICS.md', REPOSITORY_ROOT)),
   'utf8',
@@ -100,7 +102,9 @@ function codeOf(key: string): string {
   return slash === -1 ? key : key.slice(0, slash);
 }
 
-const NAMESPACES = ['codes', 'chrome', 'constructions', 'zod'] as const;
+// `cli` y `mcp` entran en LILA-211 parte 2: el chrome de la CLI y del servidor MCP se traduce con
+// las mismas reglas de paridad que los códigos.
+const NAMESPACES = ['codes', 'chrome', 'constructions', 'zod', 'cli', 'mcp'] as const;
 
 function entriesOf(catalog: Catalog, namespace: (typeof NAMESPACES)[number]): Record<string, unknown> {
   return catalog[namespace] as unknown as Record<string, unknown>;
@@ -193,10 +197,13 @@ describe('catálogo de mensajes (LILA-211)', () => {
    * LILA-204 lo hacía solo para `E-REC-CAPACIDAD`; desde LILA-211 vale para todo el catálogo:
    * un texto `"CÓDIGO: …"` fuera del catálogo es un texto que no se puede traducir.
    */
-  test('ningún literal `"CÓDIGO: …"` vive fuera del catálogo', () => {
+  test.each([
+    ['packages/engine/src', ENGINE_SRC],
+    ['packages/mcp/src', MCP_SRC],
+  ])('ningún literal `"CÓDIGO: …"` vive fuera del catálogo (%s)', (_label, root) => {
     const offenders: string[] = [];
-    for (const file of typeScriptFiles(ENGINE_SRC)) {
-      const relative = file.slice(ENGINE_SRC.length + 1).split('\\').join('/');
+    for (const file of typeScriptFiles(root)) {
+      const relative = file.slice(root.length + 1).split('\\').join('/');
       if (relative.startsWith('messages/') || relative.startsWith('core/messages/')) continue;
       // Las tres comillas: una comilla doble dejaba pasar el texto sin que el test se enterase.
       for (const [, text] of readFileSync(file, 'utf8').matchAll(

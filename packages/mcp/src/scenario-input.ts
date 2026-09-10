@@ -10,6 +10,7 @@
  * ambos casos: no se duplica frente a la CLI.
  */
 import { absolutePath, loadResolvedScenario, readJsonFile } from '@lila/engine/cli-shared';
+import { messages, type Locale } from '@lila/engine/messages';
 import type { ResolvedScenario } from '@lila/engine/schema';
 
 export type ScenarioInput = string | Record<string, unknown>;
@@ -17,16 +18,20 @@ export type ScenarioInput = string | Record<string, unknown>;
 /** Nombre del ancla virtual: no existe en disco, así que nunca debe salir en un mensaje. */
 const INLINE_FILE = '<escenario-inline>.json';
 
-export function resolveScenarioInput(input: ScenarioInput): ResolvedScenario {
-  if (typeof input === 'string') return loadResolvedScenario(absolutePath(input));
+export function resolveScenarioInput(input: ScenarioInput, locale: Locale = 'en'): ResolvedScenario {
+  if (typeof input === 'string') return loadResolvedScenario(absolutePath(input), undefined, locale);
 
   const virtualPath = absolutePath(INLINE_FILE);
   try {
-    return loadResolvedScenario(virtualPath, (file) => (file === virtualPath ? input : readJsonFile(file)));
+    return loadResolvedScenario(
+      virtualPath,
+      (file) => (file === virtualPath ? input : readJsonFile(file, locale)),
+      locale,
+    );
   } catch (error) {
     // Los mensajes de `loadResolvedScenario`/`resolveExtends` citan el archivo. El ancla no existe
     // en disco: dejarla en el mensaje manda al agente a leer una ruta inventada.
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(detail.replaceAll(virtualPath, 'escenario inline'));
+    throw new Error(detail.replaceAll(virtualPath, messages(locale).mcp.inlineScenario()));
   }
 }
