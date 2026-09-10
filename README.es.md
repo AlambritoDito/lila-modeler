@@ -130,11 +130,12 @@ de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
 
 ## App web
 
-**Pruébala en el navegador**: <https://alambritodito.github.io/lila-modeler/> — la app entera, con
-el proceso `examples/pedido` ya cargado. Guarda el proyecto en el almacenamiento local de la
-pestaña y abre y guarda archivos como descargas normales; no se sube nada a ningún sitio. (El
-enlace empieza a funcionar cuando se habilite GitHub Pages en el repositorio; lo publica
-`.github/workflows/pages.yml`.)
+**Pruébala en el navegador**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/) —
+[abrir el editor](https://alambritodito.github.io/lila-modeler/app/) con `examples/pedido` cargado.
+**Guardar proyecto** descarga el archivo completo y conserva una copia local para restaurarla al
+recargar. Los cambios sin guardar no se conservan automáticamente; no se sube nada al servidor.
+La demo pública fue verificada el 10 de septiembre de 2026. Las publicaciones siguen siendo
+manuales mediante `.github/workflows/pages.yml`.
 
 Para correrla en local:
 
