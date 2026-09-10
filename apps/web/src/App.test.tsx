@@ -310,6 +310,9 @@ it('bloquea interacción con edición durante apertura y la restaura al cancelar
 });
 
 it('cambiar de tema aplica el JSON nuevo, lo recuerda y repinta SIN remontar el lienzo (LILA-113)', async () => {
+  // Let the independent initial XML parse finish before measuring the theme change.
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
+  mocks.exportXml.mockClear();
   const papel = { name: 'Papel', tokens: { 'bg.base': '#F4F1EC' } };
   const montajesAntes = mocks.montajes;
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => papel } as Response);
