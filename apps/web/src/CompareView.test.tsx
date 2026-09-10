@@ -68,8 +68,8 @@ beforeAll(async () => {
       baseTimeUnit="min"
       comparison={comparison}
       ir={ir}
-      resourceNames={{ cajero: 'Cajero', cocinero: 'Cocinero', horno: 'Horno' }}
-      scenarioNames={['AS-IS', 'TO-BE 3 cajeros']}
+      resourceNames={{ cajero: 'Cashier', cocinero: 'Cook', horno: 'Oven' }}
+      scenarioNames={['AS-IS', 'TO-BE 3 cashiers']}
     />,
   );
   trBlocks = html.match(/<tr[^]*?<\/tr>/g) ?? [];
@@ -172,7 +172,7 @@ describe('CompareView (LILA-063): AS-IS vs TO-BE 3 cajeros', () => {
   });
 
   test('el nombre del recurso viene del escenario, no del id crudo', () => {
-    expect(html).toContain('Cajero');
+    expect(html).toContain('Cashier');
   });
 
   test('accesibilidad heredada de DataTable y marca legible por lector de pantalla', () => {

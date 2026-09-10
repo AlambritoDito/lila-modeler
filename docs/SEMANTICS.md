@@ -497,7 +497,7 @@ the XML, preserved in `ir.nodes[g].outgoing`), and let `p(fi)` be the `probabili
   *(test: LILA-027, LILA-033)*
 - **R-ARR-8 — Replications.** `run.replications = R` runs the same configuration R times; the
   replication `r` (0-indexed) uses streams derived from `(seed, r, elementId)`. Per KPI, `mean`,
-  `sd` (sample, `n − 1`) and `ci95 = mean ± t(0,975; R−1) · sd / √R` are reported. With `R = 1`
+  `sd` (sample, `n − 1`) and `ci95 = mean ± t(0.975; R−1) · sd / √R` are reported. With `R = 1`
   there is no `ci95`. Cases are **not** shared between replications: each one starts from empty
   state. *(test: LILA-027)*
 - **R-ARR-9 — Public multi-replication aggregate.** In `simulate()`, each top-level numeric field
@@ -685,7 +685,7 @@ contributes L-Sim/Bizagi's real behavior.
   - **Capacity at `t` by sum.** The capacity at instant `t` is the **sum** of the `capacity_i`
     whose `calendar_i` are open at `t`. Two calendars that overlap **add up** — unlike the
     intervals of a single calendar, which merge (R-CAL-2) — because each slice declares a
-    distinct group of units of the same role: `[{day, 2}, {24x7, 1}]` are 3 daytime units and 1
+    distinct group of units of the same role: `[{dia, 2}, {24x7, 1}]` are 3 daytime units and 1
     nighttime unit.
   - **While the whole pool is closed, capacity equals that of the next open instant.** At a `t`
     closed for every slice, capacity is not 0 but that of the following `nextOpen(t)`. This is

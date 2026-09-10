@@ -537,7 +537,7 @@ test("describe_process con locale 'es' devuelve el resumen en español, en la mi
   const parsed = JSON.parse(textOf(result)) as { ir: unknown; resumen: string };
 
   expect(parsed.ir).toBeDefined();
-  expect(parsed.resumen).toContain('Proceso Process_Restaurante (Restaurante)');
+  expect(parsed.resumen).toContain('Proceso Process_Restaurante (Restaurant)');
   expect(parsed.resumen).toContain('gateway XOR');
   expect(parsed.resumen).toContain('Validación: 0 errores, 1 aviso.');
   expect(parsed.resumen).toContain('Otros procesos del archivo, no simulados: Process_Cliente');
