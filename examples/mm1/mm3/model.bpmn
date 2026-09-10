@@ -24,7 +24,7 @@
 
     <bpmn:sequenceFlow id="Flow_Servicio_Fin" sourceRef="Task_Servicio" targetRef="EndEvent_Fin" />
 
-    <bpmn:endEvent id="EndEvent_Fin" name="Fin">
+    <bpmn:endEvent id="EndEvent_Fin" name="End">
       <bpmn:incoming>Flow_Servicio_Fin</bpmn:incoming>
     </bpmn:endEvent>
   </bpmn:process>

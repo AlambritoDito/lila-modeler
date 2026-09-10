@@ -11,7 +11,7 @@ export const AS_IS = {
   $schema: 'https://lila-modeler.org/schema/scenario/1.json',
   version: 1,
   name: 'AS-IS',
-  description: 'Operación actual, 2 cajeros y 3 cocineros',
+  description: 'Current operation, 2 cashiers and 3 cooks',
   model: 'model.bpmn',
   run: {
     start: '2026-09-07T08:00:00-06:00',
@@ -28,9 +28,9 @@ export const AS_IS = {
     },
   },
   resources: {
-    cajero: { name: 'Cajero', type: 'role', capacity: 2, costPerHour: 220, fixedCost: 0, calendar: 'oficina' },
-    cocinero: { name: 'Cocinero', type: 'role', capacity: 3, costPerHour: 180, calendar: 'oficina' },
-    horno: { name: 'Horno', type: 'equipment', capacity: 1 },
+    cajero: { name: 'Cashier', type: 'role', capacity: 2, costPerHour: 220, fixedCost: 0, calendar: 'oficina' },
+    cocinero: { name: 'Cook', type: 'role', capacity: 3, costPerHour: 180, calendar: 'oficina' },
+    horno: { name: 'Oven', type: 'equipment', capacity: 1 },
   },
   elements: {
     StartEvent_Pedido: {
@@ -62,7 +62,7 @@ export const AS_IS = {
 /** TO-BE como delta, literal de `docs/SCENARIO_FORMAT.md` § 7.2. */
 export const TO_BE = {
   version: 1,
-  name: 'TO-BE 3 cajeros',
+  name: 'TO-BE 3 cashiers',
   extends: 'as-is.scenario.json',
   resources: { cajero: { capacity: 3 } },
 } as const;
@@ -80,7 +80,7 @@ export function pedidoIr(): ProcessIR {
     name: 'Pedido',
     nodes: {
       StartEvent_Pedido: node('start', 'Llega pedido'),
-      Task_TomarPedido: node('task', 'Tomar pedido'),
+      Task_TomarPedido: node('task', 'Take order'),
       Task_Preparar: node('task', 'Preparar'),
       Task_Revisar: node('task', 'Revisar'),
       Timer_Reposo: node('timer', 'Reposo'),

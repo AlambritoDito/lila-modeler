@@ -98,8 +98,8 @@ beforeAll(async () => {
       baseTimeUnit="min"
       comparison={comparison}
       ir={ir}
-      resourceNames={{ cajero: 'Cajero', cocinero: 'Cocinero', horno: 'Horno' }}
-      scenarioNames={['AS-IS', 'TO-BE 3 cajeros']}
+      resourceNames={{ cajero: 'Cashier', cocinero: 'Cook', horno: 'Oven' }}
+      scenarioNames={['AS-IS', 'TO-BE 3 cashiers']}
     />,
   );
   // La misma comparación por la CLI: `simulate` es determinista con `seed`, así que las dos
@@ -218,8 +218,8 @@ describe('CompareView QA: resaltado y estructura', () => {
         baseTimeUnit="min"
         comparison={comparison}
         ir={ir}
-        resourceNames={{ cajero: 'Cajero', cocinero: 'Cocinero', horno: 'Horno' }}
-        scenarioNames={['AS-IS', 'TO-BE 3 cajeros']}
+        resourceNames={{ cajero: 'Cashier', cocinero: 'Cook', horno: 'Oven' }}
+        scenarioNames={['AS-IS', 'TO-BE 3 cashiers']}
       />,
     );
     expect(again).toBe(html);
@@ -288,8 +288,8 @@ describe('CompareView QA: baseTimeUnit', () => {
           baseTimeUnit={unit}
           comparison={comparison}
           ir={ir}
-          resourceNames={{ cajero: 'Cajero', cocinero: 'Cocinero', horno: 'Horno' }}
-          scenarioNames={['AS-IS', 'TO-BE 3 cajeros']}
+          resourceNames={{ cajero: 'Cashier', cocinero: 'Cook', horno: 'Oven' }}
+          scenarioNames={['AS-IS', 'TO-BE 3 cashiers']}
         />,
       );
     const enSegundos = render('s');
