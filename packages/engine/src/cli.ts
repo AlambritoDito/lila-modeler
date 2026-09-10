@@ -11,7 +11,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ValidationResult } from './bpmn/validate.js';
@@ -432,6 +432,7 @@ function writeJson(file: string, data: unknown, locale: Locale): void {
 function writeXlsx(file: string, bytes: Uint8Array, locale: Locale): void {
   const target = absolutePath(file);
   assertReplaceableFile(target, locale);
+  mkdirSync(dirname(target), { recursive: true });
   const staged = stageFile(target, locale);
   try {
     staged.write(bytes);
