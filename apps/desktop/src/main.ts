@@ -21,14 +21,16 @@ import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Ajustes, OpenPathRequest, Recent } from './bridge.js';
-import { decideClose, type CloseChoice } from './closeGuard.js';
+import { closeDialogOptions, decideClose, saveFailedDialogOptions, type CloseChoice } from './closeGuard.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
+import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath } from './openPath.js';
 import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
+import { desktopStrings, type Strings } from './strings/index.js';
 import {
   addRecent,
   fitsAnyDisplay,
@@ -286,6 +288,25 @@ function guardedOn(
 // Un único objeto en memoria, releído al arrancar y reescrito (entero, atómico) cada vez que
 // cambia algo — la app es de una sola ventana/proceso, así que no hace falta más que eso.
 let sessionState: SessionState = { version: 1, window: null, recents: [], ajustes: {} };
+
+/**
+ * The language of the menu and the close dialogs (LILA-213). It is derived from the preference
+ * the web app persists (`ajustes.idioma`: `'auto' | 'en' | 'es'`) and, when that says `'auto'`,
+ * from `app.getLocale()`. It starts as the base language and is resolved for real in
+ * `app.whenReady()`, once `estado.json` has been read; `lila:writeSettings` re-resolves it and
+ * rebuilds the menu when the user changes the setting.
+ */
+let desktopLocale: DesktopLocale = 'en';
+
+/** The active catalog. Call it where the text is built, never at module load. */
+function strings(): Strings {
+  return desktopStrings(desktopLocale);
+}
+
+/** Re-resolves `desktopLocale` from the persisted preference and the system language. */
+function resolveLocaleFromSettings(): DesktopLocale {
+  return resolveDesktopLocale(sessionState.ajustes.idioma, app.getLocale());
+}
 const sessionStatePath = path.join(app.getPath('userData'), 'estado.json');
 
 async function persistSessionState(): Promise<void> {
@@ -314,13 +335,20 @@ async function recordRecentIfProject(dir: string, name: string): Promise<void> {
 /**
  * Menú nativo (plantilla en `menu.ts`): Preferencias… (`CmdOrCtrl+,`), Archivo con Abrir reciente
  * y los aceleradores de guardar/abrir/nuevo. Cada ítem manda su acción al renderer por
- * `lila:menu`; el shell la despacha. Se reconstruye entero cada vez que cambian los recientes.
+ * `lila:menu`; el shell la despacha. Se reconstruye entero cada vez que cambian los recientes y,
+ * desde LILA-213, cada vez que cambia el idioma: la barra de menú vive en este proceso, así que
+ * no se repinta con el renderer.
  */
 function refreshMenu(): void {
   const win = mainWindow;
-  const template = menuTemplate(sessionState.recents, process.platform, (action) => {
-    if (win !== null && !win.isDestroyed()) win.webContents.send('lila:menu', action);
-  });
+  const template = menuTemplate(
+    sessionState.recents,
+    process.platform,
+    (action) => {
+      if (win !== null && !win.isDestroyed()) win.webContents.send('lila:menu', action);
+    },
+    strings(),
+  );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -422,6 +450,14 @@ function registerIpcHandlers(win: BrowserWindow): void {
       throw new Error('E-ARGUMENTO: "ajustes" debe ser un objeto.');
     }
     sessionState = withAjustes(sessionState, parseAjustes(value));
+    // Language (LILA-213): the native menu is painted by THIS process, so it does not repaint on
+    // its own when the renderer changes language. If the preference just saved resolves to a
+    // language other than the one on screen, the whole menu is rebuilt with the new catalog.
+    const siguiente = resolveLocaleFromSettings();
+    if (siguiente !== desktopLocale) {
+      desktopLocale = siguiente;
+      refreshMenu();
+    }
     await persistSessionState();
   });
 
@@ -616,14 +652,7 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
     // Seam E2E (`LILA_E2E_CLOSE`, ver `e2e.ts`): sin diálogo nativo.
     choice = e2e.close;
   } else {
-    const result = await dialog.showMessageBox(win, {
-      type: 'question',
-      buttons: ['Guardar', 'Descartar', 'Cancelar'],
-      defaultId: 0,
-      cancelId: 2,
-      message: 'Hay cambios sin guardar.',
-      detail: '¿Quieres guardar los cambios antes de cerrar?',
-    });
+    const result = await dialog.showMessageBox(win, closeDialogOptions(strings()));
     choice = result.response === 0 ? 'save' : result.response === 1 ? 'discard' : 'cancel';
   }
 
@@ -642,11 +671,7 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
     // El diálogo de error tampoco puede mostrarse en una sesión E2E sin interacción: se omite bajo
     // la misma condición que el diálogo Guardar/Descartar/Cancelar de arriba.
     if (e2e.close === undefined) {
-      await dialog.showMessageBox(win, {
-        type: 'error',
-        message: 'No se pudo guardar.',
-        detail: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
-      });
+      await dialog.showMessageBox(win, saveFailedDialogOptions(strings()));
     }
   }
   return false;
@@ -785,6 +810,10 @@ app.whenReady().then(async () => {
   registerLilaProtocol();
 
   sessionState = await readSessionState(sessionStatePath);
+  // The shell's language (LILA-213), before the menu is built: the persisted preference wins and,
+  // when it says `auto` (or there is none), the system language decides. `app.getLocale()` can
+  // only be read with the app ready, which is exactly where we are.
+  desktopLocale = resolveLocaleFromSettings();
   // Restaurar bounds guardados solo si caben en alguna pantalla conectada ahora mismo — un
   // portátil que se desconectó de un monitor externo, por ejemplo, no debe abrir la ventana fuera
   // de la pantalla visible.

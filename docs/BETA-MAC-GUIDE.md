@@ -2,8 +2,8 @@
 
 > Read this in: [Español](es/GUIA-BETA-MAC.md)
 
-This guide describes only what exists and has been verified as of SHA `358353d`
-(2026-09-07), the beta's final artifact: `DesktopStore` is already wired up in `main.tsx`
+This guide describes the desktop beta, including the language settings added on
+2026-09-09: `DesktopStore` is already wired up in `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore" — single choice point
 for BrowserStore/DesktopStore), with transactional saving, safe closing via a native dialog,
 recents, and the E2E test seam described below. It includes nothing promised or planned: wherever
@@ -29,7 +29,7 @@ macOS blocks a copy received from another machine, check where it came from and 
 opening options the system offers. This local build was tested without changing any global
 protections or removing quarantine attributes.
 
-No custom icon yet (issue #76): the app uses Electron's default icon in the Dock and in Finder.
+The app uses the Lila icon in the Dock and in Finder.
 
 ## What the window shows on launch
 
@@ -41,25 +41,24 @@ from `eva-01.json`.
 
 ## Usage walkthrough
 
-The top bar has five modes: **Modelar** (Model), **Simular** (Simulate), **Resultados** (Results),
-**Comparar** (Compare), and **Validar rutas** (Validate routes). The strings below are literal
-interface text (since LILA-066 they all live in `apps/web/src/strings.es.ts`), not a paraphrase —
-the web UI is still in Spanish today and is being translated separately in #279.
+The top bar has five modes: **Model**, **Simulate**, **Results**, **Compare**, and **Validate routes**.
+English is the base language and Spanish is available as a translation. The app follows the system
+language unless you select English or Spanish in Settings. The native File menu and close dialogs
+follow that same setting. This walkthrough uses the English labels.
 
 ### Model («Modelar»)
 
-- On desktop you work with **Nuevo proyecto** (New project) and **Abrir proyecto** (Open project)
-  by folder. Importing/exporting a loose BPMN file and opening by double click are still pending.
-  The supported flow uses projects created by the app; external folders with no manifest still need
-  metadata normalization.
+- On desktop you work with **New project** and **Open project**
+  by folder. You can also open a loose `.bpmn` by double click. Use **Save as** to retain
+  its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
   like any bpmn.io editor.
-- **Deshacer** (Undo) / **Rehacer** (Redo): in the bottom bar, next to the active file's name.
+- **Undo** / **Redo**: in the bottom bar, next to the active file's name.
 - The edited XML is saved as `model.bpmn` inside the project folder.
 
 ### Simulate (the "Simulación" tab in the right-hand panel)
 
-- **Escenario** (Scenario) selector: choose among the loaded scenarios (the project ships with
+- **Scenario** selector: choose among the loaded scenarios (the project ships with
   `as-is` and `to-be-3-cajeros` as examples).
 - The scenario panel lets you edit `run`, `calendars`, `resources`, and the process's per-element
   properties. Union-shaped fields — today only `resources.<id>.capacity` — have an explicit
@@ -73,25 +72,25 @@ the web UI is still in Spanish today and is being translated separately in #279.
 - **Guardar** (Save, inside the scenario panel) and **Duplicar** (Duplicate — creates a copy with
   `extends` on top of the current file, the app's own "what-if") are separate from the top bar's
   "Guardar proyecto" (Save project); they are never disabled.
-- **Simular** (Simulate): runs the simulation on whatever is on the canvas right now. While it
-  runs, a **Cancelar** (Cancel) button and a progress indicator (`% · replication N`) appear. The
-  **Cuellos de botella** (Bottlenecks) toggle turns the diagram overlay on or off without
+- **Simulate**: runs the simulation on whatever is on the canvas right now. While it
+  runs, a **Cancel** button and a progress indicator (`% · replication N`) appear. The
+  **Bottlenecks** toggle turns the diagram overlay on or off without
   re-simulating.
 
 ### Results («Resultados»)
 
 When a simulation finishes, the app switches to this mode on its own. Each table (elements, flows,
-resources, process) has its own **Exportar CSV** (Export CSV) button, which downloads exactly the
+resources, process) has its own **Export CSV** button, which downloads exactly the
 same content, byte for byte, that `npx lila run --csv` writes to disk (`elements.csv`, `flows.csv`,
 `resources.csv`, `process.csv`).
 
 ### Compare («Comparar»)
 
-- **Escenario base** (Base scenario) selector: any scenario that has already been simulated can be
+- **Base scenario** selector: any scenario that has already been simulated can be
   the comparison's baseline.
-- **Mostrar todos los KPI** (Show all KPIs) checkbox: by default the flows table is hidden; this
+- **Show all KPIs** checkbox: by default the flows table is hidden; this
   checkbox reveals it.
-- **Avisos** (Warnings) section: it only appears when there is something to say, and groups up to
+- **Warnings** section: it only appears when there is something to say, and groups up to
   five kinds, in this order:
   1. *Costs in different currencies*: if the compared runs do not use the same currency
      (`run.currency`), no cost delta is marked as comparable — the warning says so explicitly, and
@@ -102,7 +101,7 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
      difference is marked significant in any table.
   4. *Different seeds*: an informational warning; it blocks nothing.
   5. *Different replication count*: same, informational.
-- **Significancia** (Significance) section: an asterisk (`*`) in a cell means "significant
+- **Significance** section: an asterisk (`*`) in a cell means "significant
   difference (non-overlapping 95% CIs) against the baseline"; highlighted cells are the ones that
   changed relative to the baseline. If warning 3 above applies, this section repeats it and no
   asterisk is drawn at all.
@@ -140,23 +139,22 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
 This is real, working functionality: `DesktopStore` is wired up in `main.tsx` and reads/writes a
 **project folder** on disk, not a loose file downloaded by the browser.
 
-- **Nuevo proyecto** (New project): asks you to choose a folder. It can be empty, or already
+- **New project**: asks you to choose a folder. It can be empty, or already
   contain a project with the same id (to save back into it); a folder holding content from
   **another** project (a `lila-project.json` with a different id, or a `model.bpmn` with no
   matching manifest) is rejected with `E-CARPETA-OCUPADA`, without touching anything that was
   already there.
-- **Abrir proyecto** (Open project): a native folder picker; loads whatever project is there.
-- **Guardar proyecto** (Save project): saves into the active folder (the one from the last
+- **Open project**: a native folder picker; loads whatever project is there.
+- **Save project**: saves into the active folder (the one from the last
   successful "New"/"Open"/"Save as").
-- **Guardar como** (Save as): asks for a new folder (the same `E-CARPETA-OCUPADA` rules as "New
+- **Save as**: asks for a new folder (the same `E-CARPETA-OCUPADA` rules as "New
   project").
 - The top bar shows `<project name> · Sin guardar` (Unsaved) or `· Guardado` (Saved) depending on
   whether there are pending changes (`apps/web/src/App.tsx`).
 - **Closing with unsaved changes**: the window (red button, Cmd+Q, or closing it from the Dock)
-  shows the system's native dialog with **Guardar / Descartar / Cancelar** (Save / Discard /
-  Cancel). "Guardar" (Save) waits up to 30 s for the app's response before closing; if it fails or
+  shows the system's native dialog with **Save / Discard / Cancel**. **Save** waits up to 30 s for the app's response before closing; if it fails or
   never arrives, a warning is shown and the window does not close. Closing the last window also
-  quits the app on Mac; on reopening, use **Abrir proyecto** (Open project) to get the saved folder
+  quits the app on Mac; on reopening, use **Open project** to get the saved folder
   back.
 - **What files a project folder holds**: `model.bpmn` (the diagram), one `<name>.scenario.json`
   per scenario (for example `as-is.scenario.json`, `to-be.scenario.json`), `lila-project.json`
@@ -203,10 +201,10 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 - The window's size/position and the list of recent projects are saved in
   `~/Library/Application Support/Lila Modeler/estado.json`, and restored the next time the app
   opens (if the saved window no longer fits any connected screen, the default size is used).
-- **Archivo → Abrir reciente** (File → Open recent) lists those projects (newest first) and reopens
+- **File → Open recent** lists those projects (newest first) and reopens
   them with no dialog; if the folder no longer exists, it drops off the list and the app says so in
-  the status bar. The native menu also carries Nuevo (New, `⌘N`), Abrir (Open, `⌘O`), Guardar
-  (Save, `⌘S`), Guardar como (Save as, `⇧⌘S`), and **Preferencias…** (Preferences…, `⌘,`) in the app
+  the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Save project**
+  (`⌘S`), **Save as…** (`⇧⌘S`), and **Preferences…** (`⌘,`) in the app
   menu.
 
 ### Settings («Ajustes»)

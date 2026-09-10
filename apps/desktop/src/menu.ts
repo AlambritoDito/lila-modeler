@@ -8,21 +8,30 @@
 import type { MenuItemConstructorOptions } from 'electron';
 import type { MenuAction } from './bridge.js';
 import type { RecentEntry } from './sessionState.js';
+import type { Strings } from './strings/index.js';
 
+/**
+ * The texts come in as an argument (LILA-213) instead of being written here: the catalog is
+ * chosen in `main.ts` from the language setting, and the menu is rebuilt with a different one
+ * when that setting changes. Only the labels this app owns are translated — `appMenu`,
+ * `editMenu`, `viewMenu` and `windowMenu` are roles, and the OS localises them itself.
+ */
 export function menuTemplate(
   recents: readonly RecentEntry[],
   platform: NodeJS.Platform,
   send: (action: MenuAction) => void,
+  strings: Strings,
 ): MenuItemConstructorOptions[] {
   const mac = platform === 'darwin';
+  const S = strings.menu;
   const preferencias: MenuItemConstructorOptions = {
-    label: 'Preferencias…',
+    label: S.preferencias,
     accelerator: 'CmdOrCtrl+,',
     click: () => send('ajustes'),
   };
   const recientes: MenuItemConstructorOptions[] = recents.length
     ? recents.map((r) => ({ label: r.name, sublabel: r.dir, toolTip: r.dir, click: () => send({ openRecent: r.dir }) }))
-    : [{ label: 'Ninguno', enabled: false }];
+    : [{ label: S.ninguno, enabled: false }];
 
   return [
     ...(mac
@@ -44,14 +53,14 @@ export function menuTemplate(
         }]
       : []),
     {
-      label: 'Archivo',
+      label: S.archivo,
       submenu: [
-        { label: 'Nuevo proyecto', accelerator: 'CmdOrCtrl+N', click: () => send('nuevo') },
-        { label: 'Abrir proyecto…', accelerator: 'CmdOrCtrl+O', click: () => send('abrir') },
-        { label: 'Abrir reciente', submenu: recientes },
+        { label: S.nuevoProyecto, accelerator: 'CmdOrCtrl+N', click: () => send('nuevo') },
+        { label: S.abrirProyecto, accelerator: 'CmdOrCtrl+O', click: () => send('abrir') },
+        { label: S.abrirReciente, submenu: recientes },
         { type: 'separator' },
-        { label: 'Guardar proyecto', accelerator: 'CmdOrCtrl+S', click: () => send('guardar') },
-        { label: 'Guardar como…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('guardarComo') },
+        { label: S.guardarProyecto, accelerator: 'CmdOrCtrl+S', click: () => send('guardar') },
+        { label: S.guardarComo, accelerator: 'CmdOrCtrl+Shift+S', click: () => send('guardarComo') },
         ...(mac ? [] : [{ type: 'separator' as const }, preferencias, { type: 'separator' as const }, { role: 'quit' as const }]),
       ],
     },
