@@ -12,12 +12,13 @@ const escritorio = (rel: string) => fileURLToPath(new URL(`../${rel}`, import.me
 const yml = readFileSync(escritorio('electron-builder.yml'), 'utf8');
 
 describe('icono propio de la app de escritorio (LILA-207)', () => {
-  it('electron-builder.yml declara icono en mac, Windows, Linux y en la asociación .bpmn', () => {
-    // `icon:` aparece una vez por plataforma más la de fileAssociations.
+  it('electron-builder.yml declara icono en mac, Windows, Linux y en las asociaciones .bpmn/.lila', () => {
+    // `icon:` aparece una vez por plataforma más una por cada `fileAssociations`.
     const declarados = [...yml.matchAll(/^\s*icon:\s*(\S+)\s*$/gm)].map((m) => m[1]);
     expect(declarados).toEqual([
       'resources/icons/icon.icns', // mac
-      'resources/icons/icon.icns', // fileAssociations[0] (electron-builder lo pasa a .ico en Windows)
+      'resources/icons/icon.icns', // fileAssociations[0], .bpmn (electron-builder lo pasa a .ico en Windows)
+      'resources/icons/icon.icns', // fileAssociations[1], .lila (ADR-024)
       'resources/icons/icon.ico', // win
       'resources/icons/icon.png', // linux
     ]);

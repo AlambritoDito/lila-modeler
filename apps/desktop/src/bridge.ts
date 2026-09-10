@@ -41,10 +41,13 @@ export interface LilaBridge {
   readonly version: string;
 
   /**
-   * Abre el selector nativo de carpetas. `null` es "se cerró sin elegir nada": no es un error.
-   * La carpeta elegida queda autorizada en main para `readProject`/`writeProject`.
+   * Abre el selector nativo. Por defecto elige una CARPETA de proyecto (ADR-018); en macOS el
+   * mismo panel deja elegir también un `.lila` (ADR-024), que Windows y Linux no permiten mezclar
+   * — de ahí `fileOnly`, que pide un diálogo de solo archivos (menú «Abrir proyecto .lila…»).
+   * `null` es "se cerró sin elegir nada": no es un error. Lo elegido queda autorizado en main
+   * para `readProject`/`writeProject`, sea carpeta o archivo.
    */
-  chooseFolder(): Promise<string | null>;
+  chooseFolder(fileOnly?: boolean): Promise<string | null>;
   /**
    * Lee el proyecto completo de `dir` (ya autorizada por `chooseFolder`): modelo, escenarios
    * crudos (con `problems` para los que no se pudieron interpretar) y corridas guardadas.
@@ -156,6 +159,7 @@ export type MenuAction =
   | 'ajustes'
   | 'nuevo'
   | 'abrir'
+  | 'abrirArchivo'
   | 'guardar'
   | 'guardarComo'
   | { readonly openRecent: string };

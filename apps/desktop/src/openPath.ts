@@ -11,6 +11,15 @@ export function isBpmnPath(p: string): boolean {
 }
 
 /**
+ * `true` si `p` termina en `.lila`, el contenedor de proyecto de ADR-024 (insensible a mayúsculas,
+ * mismo criterio que `isBpmnPath`). Vive aquí, en el módulo puro, porque lo necesitan tanto
+ * `main.ts` como `lilaFile.ts` y este es el único que no arrastra `node:fs`.
+ */
+export function isLilaPath(p: string): boolean {
+  return p.toLowerCase().endsWith('.lila');
+}
+
+/**
  * El `model.bpmn` de un proyecto Lila (el mismo `MODEL_FILE` de `projectIO.ts`, repetido aquí
  * porque este módulo es puro y no importa nada).
  */
@@ -44,7 +53,7 @@ export function isMiscasedModelFile(name: string): boolean {
 export function findBpmnArg(argv: readonly string[], skip: number): string | null {
   for (let i = skip; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg !== undefined && !arg.startsWith('-') && isBpmnPath(arg)) return arg;
+    if (arg !== undefined && !arg.startsWith('-') && (isBpmnPath(arg) || isLilaPath(arg))) return arg;
   }
   return null;
 }

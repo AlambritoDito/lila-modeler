@@ -26,7 +26,8 @@ import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
-import { findBpmnArg, isBpmnPath } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isLilaPath } from './openPath.js';
+import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
@@ -371,7 +372,9 @@ function scheduleSaveBounds(win: BrowserWindow): void {
 }
 
 function registerIpcHandlers(win: BrowserWindow): void {
-  guardedHandle(win, 'lila:chooseFolder', async (): Promise<string | null> => {
+  guardedHandle(win, 'lila:chooseFolder', async (_event, soloArchivoArg: unknown): Promise<string | null> => {
+    // `true` cuando el renderer pide explícitamente un `.lila` (menú «Abrir proyecto .lila…»).
+    const soloArchivo = soloArchivoArg === true;
     if (e2e.folder !== undefined) {
       // Seam E2E (`LILA_E2E_FOLDER`, ver `e2e.ts`): sin diálogo nativo.
       if (e2e.folder === null) {
@@ -385,8 +388,20 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return dir;
     }
 
+    // Un proyecto puede ser una CARPETA (ADR-018) o un `.lila`, que es esa misma carpeta zipeada
+    // (ADR-024), así que el diálogo tiene que ofrecer las dos cosas. macOS es el único sistema
+    // cuyo diálogo nativo permite de verdad elegir archivo O carpeta en el mismo panel; en
+    // Windows y Linux, Electron ignora `openFile` cuando también se pide `openDirectory` y solo
+    // deja elegir carpetas. Por eso el menú Archivo lleva además «Abrir proyecto .lila…»
+    // (`menu.ts`, acción `abrirArchivo`), que abre este mismo diálogo SIN `openDirectory`: es la
+    // única forma de abrir un `.lila` fuera de macOS, y en macOS tampoco estorba.
     const result = await dialog.showOpenDialog(win, {
-      properties: ['openDirectory', 'createDirectory'],
+      properties: soloArchivo
+        ? ['openFile']
+        : process.platform === 'darwin'
+          ? ['openFile', 'openDirectory', 'createDirectory']
+          : ['openDirectory', 'createDirectory'],
+      filters: [{ name: 'Lila Modeler Project', extensions: ['lila'] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
@@ -400,7 +415,12 @@ function registerIpcHandlers(win: BrowserWindow): void {
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
-      const { document, problems, loose } = await readProjectFolder(dir);
+      // Un `.lila` es un proyecto entero en un archivo (ADR-024): mismo documento, misma respuesta
+      // IPC, otro contenedor. Lo decide la extensión de la ruta ya autorizada, no un argumento
+      // nuevo del puente — el renderer guarda esa ruta y la devuelve tal cual al guardar.
+      const { document, problems, loose } = isLilaPath(dir)
+        ? await readLilaFile(dir)
+        : await readProjectFolder(dir);
       await recordRecent(dir, document.name);
       return { ...document, problems, loose };
     } catch (error) {
@@ -418,7 +438,8 @@ function registerIpcHandlers(win: BrowserWindow): void {
       const options = requireWriteOptions(dir, optionsArg);
       requireSafeFileNames(dir, document);
       try {
-        await writeProjectFolder(dir, document, options);
+        if (isLilaPath(dir)) await writeLilaFile(dir, document);
+        else await writeProjectFolder(dir, document, options);
         // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
         // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
         await recordRecentIfProject(dir, document.name);
@@ -479,6 +500,19 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return null;
     }
     authorizedFolders.add(real);
+    if (isLilaPath(real)) {
+      // El `file` del puente nombra el `.bpmn` a abrir dentro de una CARPETA; un `.lila` no tiene
+      // carpeta que recorrer, así que se ignora (`acceptOpenPath` manda el propio nombre del
+      // archivo, que no es un `.bpmn` y `requireBpmnName` rechazaría).
+      try {
+        const { document, problems, loose } = await readLilaFile(real);
+        await recordRecent(real, document.name);
+        return { ...document, problems, loose };
+      } catch (error) {
+        if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+        throw error;
+      }
+    }
     const file = requireBpmnName(real, fileArg);
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
@@ -557,13 +591,16 @@ let windowLoaded = false;
  * comandos que no nos interesa).
  */
 async function acceptOpenPath(filePath: string): Promise<void> {
-  if (!isBpmnPath(filePath)) return;
+  if (!isBpmnPath(filePath) && !isLilaPath(filePath)) return;
   try {
     await stat(filePath);
   } catch {
     return;
   }
-  const dir = await realpath(path.dirname(filePath));
+  // Un `.lila` ES el proyecto: lo que se autoriza y se manda al renderer es el archivo, no su
+  // carpeta (que puede ser `~/Descargas` entera). Un `.bpmn` sigue autorizando su carpeta, que es
+  // donde viven el manifiesto, los escenarios y las corridas.
+  const dir = isLilaPath(filePath) ? await realpath(filePath) : await realpath(path.dirname(filePath));
   authorizedFolders.add(dir);
   const request: OpenPathRequest = { dir, file: path.basename(filePath) };
   if (process.env.LILA_DEBUG === '1') {

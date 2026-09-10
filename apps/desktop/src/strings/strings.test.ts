@@ -76,6 +76,9 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       archivo: 'Archivo',
       nuevoProyecto: 'Nuevo proyecto',
       abrirProyecto: 'Abrir proyecto…',
+      // LILA-317: el `.lila` es nuevo, así que este texto no existía antes de ADR-024 — el
+      // criterio «los textos españoles son los de siempre» cubre los que ya se enviaban.
+      abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
       abrirReciente: 'Abrir reciente',
       guardarProyecto: 'Guardar proyecto',
       guardarComo: 'Guardar como…',

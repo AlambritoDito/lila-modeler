@@ -18,6 +18,7 @@ export const es: Strings = {
     archivo: 'Archivo',
     nuevoProyecto: 'Nuevo proyecto',
     abrirProyecto: 'Abrir proyecto…',
+    abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
     abrirReciente: 'Abrir reciente',
     guardarProyecto: 'Guardar proyecto',
     guardarComo: 'Guardar como…',

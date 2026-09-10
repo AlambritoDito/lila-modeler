@@ -26,6 +26,11 @@ fileAssociations:
     # electron-builder cambia la extensión según la plataforma (getPlatformIconFileName
     # en builder-util): icon.icns en mac, icon.ico en Windows a partir del mismo valor.
     icon: resources/icons/icon.icns
+  # El contenedor de proyecto (ADR-024): la carpeta ADR-018 zipeada en un solo archivo.
+  - ext: lila
+    name: Lila Modeler Project
+    role: Editor
+    icon: resources/icons/icon.icns
 artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 win:
   icon: resources/icons/icon.ico

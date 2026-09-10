@@ -26,7 +26,8 @@ const { contextBridge, ipcRenderer } = electron;
 const lila = {
   platform: 'desktop',
   version: process.versions.electron ?? '',
-  chooseFolder: () => ipcRenderer.invoke('lila:chooseFolder') as Promise<string | null>,
+  chooseFolder: (fileOnly?: boolean) =>
+    ipcRenderer.invoke('lila:chooseFolder', fileOnly) as Promise<string | null>,
   readProject: (dir: string) => ipcRenderer.invoke('lila:readProject', dir) as ReturnType<LilaBridge['readProject']>,
   writeProject: (dir: string, document: unknown, options?: WriteProjectOptions) =>
     ipcRenderer.invoke('lila:writeProject', dir, document, options) as Promise<void>,
