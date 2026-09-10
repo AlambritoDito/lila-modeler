@@ -18,12 +18,12 @@ function baseIr(): ProcessIR {
       StartEvent_Pedido: { type: 'start', name: 'Llega pedido', incoming: [], outgoing: ['Flow_1'] },
       Task_TomarPedido: {
         type: 'task',
-        name: 'Tomar pedido',
+        name: 'Take order',
         lane: 'Caja',
         incoming: ['Flow_1'],
         outgoing: ['Flow_2'],
       },
-      EndEvent_Listo: { type: 'end', name: 'Pedido listo', incoming: ['Flow_2'], outgoing: [] },
+      EndEvent_Listo: { type: 'end', name: 'Order ready', incoming: ['Flow_2'], outgoing: [] },
     },
     flows: {
       Flow_1: { from: 'StartEvent_Pedido', to: 'Task_TomarPedido', name: '', isDefault: false },

@@ -1,8 +1,8 @@
 {
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
-  "name": "Bizagi nivel 3 - analisis de recursos (3 enfermeras)",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_3_example.htm, configuracion final con 3 enfermeras (la que la pagina recomienda y de la que parte el nivel 4). Llegadas y probabilidades: ver la nota de examples/bizagi-levels/level-2/scenario.json (mismo control constante de 5 min, 2017 tokens, Green/Yellow/Red 20/30/50%). Asignacion QAV/BA: la tabla de requerimientos en prosa de esta pagina dice literalmente 'Arrive at patient place QAV -> Basic ambulance' y 'Arrive at patient place BA -> Quick attention vehicle' (cruzada respecto al nombre de la tarea), pero la tabla de COSTOS (resourcesanalysis3.png) solo cuadra con la lectura contraria: Quick Attention Vehicle 11.124 = 618 x 18 (tarea QAV, 618 instancias) y Basic Ambulance 9.825 = 393 x 25 (tarea BA, 393 instancias) -- ver docs/BIZAGI_PARITY.md D8. Este escenario usa la asignacion que cuadra con los costos publicados (QAV con quickAttentionVehicle, BA con basicAmbulance); para la utilizacion da igual, los dos pools tienen capacidad 2.",
+  "name": "Bizagi level 3 - resource analysis (3 nurses)",
+  "description": "Reconstructs https://help.bizagi.com/platform/en/level_3_example.htm using the recommended three-nurse configuration. Arrivals and probabilities match level 2: every 5 minutes, 2017 tokens, Green/Yellow/Red 20/30/50%. The prose resource table swaps QAV and BA. This scenario follows the published cost table resourcesanalysis3.png: Quick Attention Vehicle 11124 = 618 x 18 for QAV; Basic Ambulance 9825 = 393 x 25 for BA. See docs/BIZAGI_PARITY.md D8. Both vehicle pools have capacity 2.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T00:00:00+00:00",

@@ -1,8 +1,8 @@
 {
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
-  "name": "Bizagi nivel 2 - analisis de tiempos",
-  "description": "Reproduce https://help.bizagi.com/platform/en/level_2_example.htm: tiempos de proceso, recursos infinitos (sin resources). Llegadas: la pagina describe el control simple como 'tokens are generated every 5 minutes' (constante), y la tabla de resultados (processvalidation47.png) trae exactamente 2017 instancias iniciadas y completadas -- 10080/5 + 1 -- imposible con una exponencial de media 5 min (que solo aparece, detras del icono 'advanced', en el ejemplo generico de 100 tokens de esta misma pagina). Sin duration: Bizagi drena la corrida completa (2017 = 2017) en vez de cortar a la semana con casos en vuelo. Probabilidades del gateway 'Triage type' publicadas en prosa en https://help.bizagi.com/platform/en/level_1_example.htm (Green 20% / Yellow 30% / Red 50%).",
+  "name": "Bizagi level 2 - time analysis",
+  "description": "Reconstructs https://help.bizagi.com/platform/en/level_2_example.htm with processing times and infinite resources. Arrivals are constant every 5 minutes: processvalidation47.png reports exactly 2017 started and completed instances (10080/5 + 1). The advanced exponential setting belongs to the separate generic 100-token example. No duration is set, allowing all cases to drain. Triage probabilities come from level_1_example.htm: Green 20%, Yellow 30%, Red 50%.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-01-05T00:00:00+00:00"

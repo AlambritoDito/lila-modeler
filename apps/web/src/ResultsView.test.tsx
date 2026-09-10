@@ -123,12 +123,12 @@ describe('ResultsView (LILA-062)', () => {
     };
     const scenario = {
       ...scenarioWithUnit('min'),
-      resources: { cajero: { capacity: 2, name: 'Cajero' } },
+      resources: { cajero: { capacity: 2, name: 'Cashier' } },
     } as unknown as ResolvedScenario;
 
     const exported = buildResultCsvExports(ir, scenario, result);
-    expect(exported.resources).toBe(resourcesCsv(result, { cajero: 'Cajero' }));
-    expect(exported.resources).toContain('Cajero');
+    expect(exported.resources).toBe(resourcesCsv(result, { cajero: 'Cashier' }));
+    expect(exported.resources).toContain('Cashier');
     expect(exported.resources).not.toContain('cajero,cajero');
   });
 

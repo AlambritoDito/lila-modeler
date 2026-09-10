@@ -1,1 +1,1 @@
-{ "version": 1, "name": "TO-BE 3 cajeros", "extends": "as-is.scenario.json", "resources": { "cajero": { "capacity": 3 } } }
+{ "version": 1, "name": "TO-BE 3 cashiers", "extends": "as-is.scenario.json", "resources": { "cajero": { "capacity": 3 } } }
