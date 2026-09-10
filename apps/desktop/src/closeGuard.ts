@@ -9,6 +9,7 @@
  * that the order of the buttons can be tested in both languages.
  */
 import type { MessageBoxOptions } from 'electron';
+import type { SaveOutcome } from './bridge.js';
 import type { Strings } from './strings/index.js';
 
 /** Elección del usuario en el diálogo nativo "Guardar" / "Descartar" / "Cancelar". */
@@ -16,18 +17,13 @@ export type CloseChoice = 'save' | 'discard' | 'cancel';
 
 export type CloseDecision = 'close' | 'stay';
 
-/**
- * `saved` solo importa cuando `choice === 'save'`: `true` si el renderer confirmó el guardado a
- * tiempo, `false` si falló o no respondió en el plazo (main.ts usa 30 s), `null` cuando no aplica
- * (otra elección). Sin cambios (`dirty === false`) siempre cierra, sin mostrar diálogo — pero la
- * función es total: no requiere que la llamada dependa de haber mostrado el diálogo antes.
- */
-export function decideClose(dirty: boolean, choice: CloseChoice, saved: boolean | null): CloseDecision {
+/** Only a complete save permits closing; cancellation and partial saves preserve the window. */
+export function decideClose(dirty: boolean, choice: CloseChoice, saved: SaveOutcome | null): CloseDecision {
   if (!dirty) return 'close';
   if (choice === 'cancel') return 'stay';
   if (choice === 'discard') return 'close';
   // choice === 'save'
-  return saved === true ? 'close' : 'stay';
+  return saved === 'saved' ? 'close' : 'stay';
 }
 
 /**
@@ -59,4 +55,20 @@ export function closeDialogOptions(strings: Strings): MessageBoxOptions {
 export function saveFailedDialogOptions(strings: Strings): MessageBoxOptions {
   const S = strings.cierre;
   return { type: 'error', message: S.errorMensaje, detail: S.errorDetalle };
+}
+
+/** Validate the renderer boundary; malformed replies cannot authorize closing. */
+export function readSaveOutcome(payload: unknown): SaveOutcome {
+  const value = typeof payload === 'object' && payload !== null
+    ? (payload as { saved?: unknown }).saved : undefined;
+  return value === 'saved' || value === 'diagram-only' || value === 'cancelled' ? value : 'failed';
+}
+
+/** Cancellation is not an error; a partial save explains what remains in memory. */
+export function saveOutcomeDialogOptions(outcome: SaveOutcome, strings: Strings): MessageBoxOptions | null {
+  if (outcome === 'failed') return saveFailedDialogOptions(strings);
+  if (outcome === 'diagram-only') return {
+    type: 'info', message: strings.cierre.parcialMensaje, detail: strings.cierre.parcialDetalle,
+  };
+  return null;
 }

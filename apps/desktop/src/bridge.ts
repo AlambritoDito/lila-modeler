@@ -33,6 +33,9 @@ export interface LilaProjectDocument extends ProjectDocument {
   readonly loose?: boolean;
 }
 
+/** Result of a close-time save. Only `saved` permits closing the window. */
+export type SaveOutcome = 'saved' | 'diagram-only' | 'cancelled' | 'failed';
+
 export interface LilaBridge {
   readonly platform: typeof LILA_PLATFORM;
   readonly version: string;
@@ -63,12 +66,12 @@ export interface LilaBridge {
   setDirty(dirty: boolean): void;
   /**
    * Registra `cb` para cuando main pide guardar antes de cerrar (el usuario eligió "Guardar" en el
-   * diálogo nativo de cierre). `cb` debe resolver `true` solo si guardó con éxito: main usa ese
-   * valor para decidir si cierra la ventana o mantiene el error visible. Devuelve una función para
+   * diálogo nativo de cierre). `cb` reports a SaveOutcome; main closes only on `saved` and distinguishes
+   * cancellation, a partial diagram save and a real failure. Devuelve una función para
    * cancelar la suscripción. El preload solo reenvía el evento IPC — no hay lógica aquí más que la
    * de mensajería (ver `preload.cts`).
    */
-  onCloseRequested(cb: () => Promise<boolean>): () => void;
+  onCloseRequested(cb: () => Promise<SaveOutcome>): () => void;
 
   /** Hasta 10 proyectos abiertos/guardados recientemente en esta máquina, más nuevo primero (OP-14). */
   listRecents(): Promise<readonly Recent[]>;
