@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_TarjetaCredito"
+                  targetNamespace="https://lila-modeler.org/bpmn/tarjeta-credito"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:collaboration id="Collaboration_TarjetaCredito">
+    <bpmn:participant id="Participant_Tienda" name="Department store" processRef="Process_TarjetaCredito" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_TarjetaCredito" name="Credit card issuance" isExecutable="false">
+    <bpmn:documentation>Credit card issuance at a department store (LILA-318). Lanes are labels only: resources are assigned task by task in the scenario. Both denial paths are modelled as separate task pairs because the v1 engine routes on probability, never on case data.</bpmn:documentation>
+
+    <bpmn:laneSet id="LaneSet_TarjetaCredito">
+      <bpmn:lane id="Lane_AccountExecutive" name="Account Executive">
+        <bpmn:flowNodeRef>StartEvent_Application</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_FillApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CopyId</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_InformBureauDenial</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_InformDebtDenial</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DeliverCard</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_BureauRejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_DebtRejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_CardDelivered</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_CreditAnalyst" name="Credit Analyst">
+        <bpmn:flowNodeRef>Task_CheckBureau</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Bureau</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DenyBureau</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AssessDebt</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Debt</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DenyDebt</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OpenAccount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ComputePaymentCapacity</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AssignCreditLimit</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_ProductionOperator" name="Production Operator">
+        <bpmn:flowNodeRef>Task_PrintCard</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="StartEvent_Application" name="Card application received">
+      <bpmn:outgoing>Flow_Start_FillApplication</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_FillApplication" sourceRef="StartEvent_Application" targetRef="Task_FillApplication" />
+
+    <bpmn:task id="Task_FillApplication" name="Fill in the application">
+      <bpmn:incoming>Flow_Start_FillApplication</bpmn:incoming>
+      <bpmn:outgoing>Flow_FillApplication_CopyId</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_FillApplication_CopyId" sourceRef="Task_FillApplication" targetRef="Task_CopyId" />
+
+    <bpmn:task id="Task_CopyId" name="Copy the ID document">
+      <bpmn:incoming>Flow_FillApplication_CopyId</bpmn:incoming>
+      <bpmn:outgoing>Flow_CopyId_CheckBureau</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_CopyId_CheckBureau" sourceRef="Task_CopyId" targetRef="Task_CheckBureau" />
+
+    <bpmn:task id="Task_CheckBureau" name="Check the credit bureau">
+      <bpmn:incoming>Flow_CopyId_CheckBureau</bpmn:incoming>
+      <bpmn:outgoing>Flow_CheckBureau_GatewayBureau</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_CheckBureau_GatewayBureau" sourceRef="Task_CheckBureau" targetRef="Gateway_Bureau" />
+
+    <bpmn:exclusiveGateway id="Gateway_Bureau" name="Bureau record?">
+      <bpmn:incoming>Flow_CheckBureau_GatewayBureau</bpmn:incoming>
+      <bpmn:outgoing>Flow_BureauBad</bpmn:outgoing>
+      <bpmn:outgoing>Flow_BureauGood</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_BureauBad" name="Bad" sourceRef="Gateway_Bureau" targetRef="Task_DenyBureau" />
+    <bpmn:sequenceFlow id="Flow_BureauGood" name="Good" sourceRef="Gateway_Bureau" targetRef="Task_AssessDebt" />
+
+    <bpmn:task id="Task_DenyBureau" name="Deny for bureau record">
+      <bpmn:incoming>Flow_BureauBad</bpmn:incoming>
+      <bpmn:outgoing>Flow_DenyBureau_InformBureauDenial</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_DenyBureau_InformBureauDenial" sourceRef="Task_DenyBureau" targetRef="Task_InformBureauDenial" />
+
+    <bpmn:task id="Task_InformBureauDenial" name="Inform the bureau denial">
+      <bpmn:incoming>Flow_DenyBureau_InformBureauDenial</bpmn:incoming>
+      <bpmn:outgoing>Flow_InformBureauDenial_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_InformBureauDenial_End" sourceRef="Task_InformBureauDenial" targetRef="End_BureauRejected" />
+
+    <bpmn:endEvent id="End_BureauRejected" name="Rejected by the bureau">
+      <bpmn:incoming>Flow_InformBureauDenial_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:task id="Task_AssessDebt" name="Assess the debt capacity">
+      <bpmn:incoming>Flow_BureauGood</bpmn:incoming>
+      <bpmn:outgoing>Flow_AssessDebt_GatewayDebt</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_AssessDebt_GatewayDebt" sourceRef="Task_AssessDebt" targetRef="Gateway_Debt" />
+
+    <bpmn:exclusiveGateway id="Gateway_Debt" name="Debt capacity?">
+      <bpmn:incoming>Flow_AssessDebt_GatewayDebt</bpmn:incoming>
+      <bpmn:outgoing>Flow_DebtNotEligible</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DebtEligible</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_DebtNotEligible" name="Not eligible" sourceRef="Gateway_Debt" targetRef="Task_DenyDebt" />
+    <bpmn:sequenceFlow id="Flow_DebtEligible" name="Eligible" sourceRef="Gateway_Debt" targetRef="Task_OpenAccount" />
+
+    <bpmn:task id="Task_DenyDebt" name="Deny for debt capacity">
+      <bpmn:incoming>Flow_DebtNotEligible</bpmn:incoming>
+      <bpmn:outgoing>Flow_DenyDebt_InformDebtDenial</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_DenyDebt_InformDebtDenial" sourceRef="Task_DenyDebt" targetRef="Task_InformDebtDenial" />
+
+    <bpmn:task id="Task_InformDebtDenial" name="Inform the debt denial">
+      <bpmn:incoming>Flow_DenyDebt_InformDebtDenial</bpmn:incoming>
+      <bpmn:outgoing>Flow_InformDebtDenial_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_InformDebtDenial_End" sourceRef="Task_InformDebtDenial" targetRef="End_DebtRejected" />
+
+    <bpmn:endEvent id="End_DebtRejected" name="Rejected for debt capacity">
+      <bpmn:incoming>Flow_InformDebtDenial_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:task id="Task_OpenAccount" name="Open the account">
+      <bpmn:incoming>Flow_DebtEligible</bpmn:incoming>
+      <bpmn:outgoing>Flow_OpenAccount_ComputePaymentCapacity</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_OpenAccount_ComputePaymentCapacity" sourceRef="Task_OpenAccount" targetRef="Task_ComputePaymentCapacity" />
+
+    <bpmn:task id="Task_ComputePaymentCapacity" name="Compute the payment capacity">
+      <bpmn:incoming>Flow_OpenAccount_ComputePaymentCapacity</bpmn:incoming>
+      <bpmn:outgoing>Flow_ComputePaymentCapacity_AssignCreditLimit</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_ComputePaymentCapacity_AssignCreditLimit" sourceRef="Task_ComputePaymentCapacity" targetRef="Task_AssignCreditLimit" />
+
+    <bpmn:task id="Task_AssignCreditLimit" name="Assign the credit limit">
+      <bpmn:incoming>Flow_ComputePaymentCapacity_AssignCreditLimit</bpmn:incoming>
+      <bpmn:outgoing>Flow_AssignCreditLimit_PrintCard</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_AssignCreditLimit_PrintCard" sourceRef="Task_AssignCreditLimit" targetRef="Task_PrintCard" />
+
+    <bpmn:task id="Task_PrintCard" name="Print the card">
+      <bpmn:incoming>Flow_AssignCreditLimit_PrintCard</bpmn:incoming>
+      <bpmn:outgoing>Flow_PrintCard_DeliverCard</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_PrintCard_DeliverCard" sourceRef="Task_PrintCard" targetRef="Task_DeliverCard" />
+
+    <bpmn:task id="Task_DeliverCard" name="Deliver the card">
+      <bpmn:incoming>Flow_PrintCard_DeliverCard</bpmn:incoming>
+      <bpmn:outgoing>Flow_DeliverCard_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_DeliverCard_End" sourceRef="Task_DeliverCard" targetRef="End_CardDelivered" />
+
+    <bpmn:endEvent id="End_CardDelivered" name="Card delivered">
+      <bpmn:incoming>Flow_DeliverCard_End</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_TarjetaCredito">
+    <bpmndi:BPMNPlane id="BPMNPlane_TarjetaCredito" bpmnElement="Collaboration_TarjetaCredito">
+
+      <bpmndi:BPMNShape id="Participant_Tienda_di" bpmnElement="Participant_Tienda" isHorizontal="true">
+        <dc:Bounds x="140" y="60" width="1790" height="560" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_AccountExecutive_di" bpmnElement="Lane_AccountExecutive" isHorizontal="true">
+        <dc:Bounds x="170" y="60" width="1760" height="220" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_CreditAnalyst_di" bpmnElement="Lane_CreditAnalyst" isHorizontal="true">
+        <dc:Bounds x="170" y="280" width="1760" height="220" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_ProductionOperator_di" bpmnElement="Lane_ProductionOperator" isHorizontal="true">
+        <dc:Bounds x="170" y="500" width="1760" height="120" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="StartEvent_Application_di" bpmnElement="StartEvent_Application">
+        <dc:Bounds x="200" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_FillApplication_di" bpmnElement="Task_FillApplication">
+        <dc:Bounds x="270" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_CopyId_di" bpmnElement="Task_CopyId">
+        <dc:Bounds x="420" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_CheckBureau_di" bpmnElement="Task_CheckBureau">
+        <dc:Bounds x="570" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_Bureau_di" bpmnElement="Gateway_Bureau" isMarkerVisible="true">
+        <dc:Bounds x="730" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_DenyBureau_di" bpmnElement="Task_DenyBureau">
+        <dc:Bounds x="730" y="410" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_InformBureauDenial_di" bpmnElement="Task_InformBureauDenial">
+        <dc:Bounds x="880" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_BureauRejected_di" bpmnElement="End_BureauRejected">
+        <dc:Bounds x="1030" y="212" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_AssessDebt_di" bpmnElement="Task_AssessDebt">
+        <dc:Bounds x="830" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_Debt_di" bpmnElement="Gateway_Debt" isMarkerVisible="true">
+        <dc:Bounds x="990" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_DenyDebt_di" bpmnElement="Task_DenyDebt">
+        <dc:Bounds x="990" y="410" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_InformDebtDenial_di" bpmnElement="Task_InformDebtDenial">
+        <dc:Bounds x="1140" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_DebtRejected_di" bpmnElement="End_DebtRejected">
+        <dc:Bounds x="1290" y="212" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_OpenAccount_di" bpmnElement="Task_OpenAccount">
+        <dc:Bounds x="1090" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_ComputePaymentCapacity_di" bpmnElement="Task_ComputePaymentCapacity">
+        <dc:Bounds x="1240" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_AssignCreditLimit_di" bpmnElement="Task_AssignCreditLimit">
+        <dc:Bounds x="1390" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_PrintCard_di" bpmnElement="Task_PrintCard">
+        <dc:Bounds x="1540" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_DeliverCard_di" bpmnElement="Task_DeliverCard">
+        <dc:Bounds x="1690" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_CardDelivered_di" bpmnElement="End_CardDelivered">
+        <dc:Bounds x="1840" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_FillApplication_di" bpmnElement="Flow_Start_FillApplication">
+        <di:waypoint x="236" y="140" />
+        <di:waypoint x="270" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_FillApplication_CopyId_di" bpmnElement="Flow_FillApplication_CopyId">
+        <di:waypoint x="370" y="140" />
+        <di:waypoint x="420" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_CopyId_CheckBureau_di" bpmnElement="Flow_CopyId_CheckBureau">
+        <di:waypoint x="520" y="140" />
+        <di:waypoint x="545" y="140" />
+        <di:waypoint x="545" y="360" />
+        <di:waypoint x="570" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_CheckBureau_GatewayBureau_di" bpmnElement="Flow_CheckBureau_GatewayBureau">
+        <di:waypoint x="670" y="360" />
+        <di:waypoint x="730" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_BureauBad_di" bpmnElement="Flow_BureauBad">
+        <di:waypoint x="755" y="385" />
+        <di:waypoint x="755" y="410" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_BureauGood_di" bpmnElement="Flow_BureauGood">
+        <di:waypoint x="780" y="360" />
+        <di:waypoint x="830" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DenyBureau_InformBureauDenial_di" bpmnElement="Flow_DenyBureau_InformBureauDenial">
+        <di:waypoint x="830" y="450" />
+        <di:waypoint x="855" y="450" />
+        <di:waypoint x="855" y="230" />
+        <di:waypoint x="880" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_InformBureauDenial_End_di" bpmnElement="Flow_InformBureauDenial_End">
+        <di:waypoint x="980" y="230" />
+        <di:waypoint x="1030" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_AssessDebt_GatewayDebt_di" bpmnElement="Flow_AssessDebt_GatewayDebt">
+        <di:waypoint x="930" y="360" />
+        <di:waypoint x="990" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DebtNotEligible_di" bpmnElement="Flow_DebtNotEligible">
+        <di:waypoint x="1015" y="385" />
+        <di:waypoint x="1015" y="410" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DebtEligible_di" bpmnElement="Flow_DebtEligible">
+        <di:waypoint x="1040" y="360" />
+        <di:waypoint x="1090" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DenyDebt_InformDebtDenial_di" bpmnElement="Flow_DenyDebt_InformDebtDenial">
+        <di:waypoint x="1090" y="450" />
+        <di:waypoint x="1115" y="450" />
+        <di:waypoint x="1115" y="230" />
+        <di:waypoint x="1140" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_InformDebtDenial_End_di" bpmnElement="Flow_InformDebtDenial_End">
+        <di:waypoint x="1240" y="230" />
+        <di:waypoint x="1290" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_OpenAccount_ComputePaymentCapacity_di" bpmnElement="Flow_OpenAccount_ComputePaymentCapacity">
+        <di:waypoint x="1190" y="360" />
+        <di:waypoint x="1240" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ComputePaymentCapacity_AssignCreditLimit_di" bpmnElement="Flow_ComputePaymentCapacity_AssignCreditLimit">
+        <di:waypoint x="1340" y="360" />
+        <di:waypoint x="1390" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_AssignCreditLimit_PrintCard_di" bpmnElement="Flow_AssignCreditLimit_PrintCard">
+        <di:waypoint x="1490" y="360" />
+        <di:waypoint x="1515" y="360" />
+        <di:waypoint x="1515" y="580" />
+        <di:waypoint x="1540" y="580" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_PrintCard_DeliverCard_di" bpmnElement="Flow_PrintCard_DeliverCard">
+        <di:waypoint x="1640" y="580" />
+        <di:waypoint x="1665" y="580" />
+        <di:waypoint x="1665" y="140" />
+        <di:waypoint x="1690" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DeliverCard_End_di" bpmnElement="Flow_DeliverCard_End">
+        <di:waypoint x="1790" y="140" />
+        <di:waypoint x="1840" y="140" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>
