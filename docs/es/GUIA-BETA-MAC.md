@@ -1,5 +1,7 @@
 # Guía de la beta de escritorio (macOS)
 
+> Leer en: [English](../BETA-MAC-GUIDE.md)
+
 Esta guía describe únicamente lo que existe y se ha verificado sobre el SHA `358353d`
 (2026-09-07), el artefacto final de la beta: `DesktopStore` ya está conectado en `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore"), con guardado

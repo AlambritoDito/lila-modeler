@@ -21,10 +21,19 @@ import {
   type SimScenario,
   type SimulationProgress,
 } from '@lila/engine';
+// Type-only import: `import type` is erased before bundling, so naming the engine's `Locale`
+// here costs the worker bundle nothing (`worker.bundle.test.ts` keeps it under 100 KB).
+import type { Locale } from '@lila/engine/messages';
 
 /** ponytail: tope por defecto de filas retenidas de la primera replicación (docs/RESULTS_FORMAT.md §7). */
 export const DEFAULT_LOG_SAMPLE_LIMIT = 10_000;
 
+/**
+ * The worker still does not know the app's language: neither the UI catalog nor `i18n.ts` is
+ * imported here — everything textual that leaves this file comes from the engine, and
+ * `worker.bundle.test.ts` keeps the bundle under 100 KB. What #280 adds is the *choice* of
+ * language, which travels as a plain string in the request and is handed straight to `simulate`.
+ */
 export interface RunRequest {
   type: 'run';
   ir: ProcessIR;
@@ -33,6 +42,13 @@ export interface RunRequest {
   seed?: number | undefined;
   /** Tope configurable de filas de log retenidas (solo replicación 0). */
   logSampleLimit?: number | undefined;
+  /**
+   * Language of the engine messages this run produces (`result.warnings`, preflight errors).
+   * `undefined` leaves the engine on its default, English. A run that is already stored keeps
+   * the language it was produced in: its warnings are data, not text re-rendered on every
+   * language change — switching the app's language only affects runs started afterwards.
+   */
+  locale?: Locale | undefined;
 }
 
 export type WorkerRequest = RunRequest;
@@ -75,6 +91,7 @@ export function handleMessage(post: Post, message: WorkerRequest): void {
 
   try {
     const result = simulate(message.ir, withSeed(message.scenario, message.seed), {
+      locale: message.locale,
       onEvent: (row) => {
         // Solo la primera replicación se retiene en memoria (docs/RESULTS_FORMAT.md §7).
         if (row.replication === 0 && logSample.length < limit) logSample.push(row);

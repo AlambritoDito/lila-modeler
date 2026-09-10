@@ -8,6 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInWorker } from './simulationClient.js';
 import type { WorkerRequest, WorkerResponse } from './worker.js';
 import type { ProcessIR, SimScenario } from '@lila/engine';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const IR = { id: 'P', elements: {}, flows: {} } as unknown as ProcessIR;
 const SCENARIO = { model: 'm.bpmn', run: { seed: 1 } } as unknown as SimScenario;
@@ -64,12 +69,35 @@ describe('runInWorker', () => {
     const worker = lastWorker();
 
     expect(worker.posted).toEqual([
-      { type: 'run', ir: IR, scenario: SCENARIO, seed: 7, logSampleLimit: 3 },
+      // #280: el idioma activo de la app viaja en el propio mensaje (esta suite lo fija en `es`).
+      { type: 'run', ir: IR, scenario: SCENARIO, seed: 7, logSampleLimit: 3, locale: 'es' },
     ]);
 
     worker.reply(doneResponse);
     await expect(promise).resolves.toEqual({ result: { warnings: [] }, logSample: [] });
     expect(worker.terminated).toBe(1);
+  });
+
+  /**
+   * #280: el worker no importa `i18n.ts` —el bundle no puede crecer—, así que el idioma se
+   * decide aquí y viaja como dato. Una corrida ya guardada conserva el idioma en el que se
+   * produjo: lo que cambia el interruptor son las corridas que empiezan después.
+   */
+  it('el mensaje lleva el idioma activo, y `locale` explícito manda sobre él (#280)', async () => {
+    setLocale('en');
+    try {
+      void runInWorker(IR, SCENARIO);
+      expect(lastWorker().posted[0]).toMatchObject({ locale: 'en' });
+
+      setLocale('es');
+      void runInWorker(IR, SCENARIO);
+      expect(lastWorker().posted[0]).toMatchObject({ locale: 'es' });
+
+      void runInWorker(IR, SCENARIO, { locale: 'en' });
+      expect(lastWorker().posted[0]).toMatchObject({ locale: 'en' });
+    } finally {
+      setLocale('es');
+    }
   });
 
   it('reenvía el progreso sin terminar el worker', async () => {

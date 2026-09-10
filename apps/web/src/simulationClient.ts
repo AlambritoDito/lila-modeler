@@ -13,18 +13,25 @@
  */
 import type { ProcessIR, RunResult, EventLogRow, SimScenario, SimulationProgress } from '@lila/engine';
 import type { DoneResponse, WorkerRequest, WorkerResponse } from './worker.js';
-import { S } from './strings.es';
+import { getLocale, strings, type Locale } from './i18n';
 
 export interface RunInWorkerOptions {
   onProgress?: ((progress: SimulationProgress) => void) | undefined;
   signal?: AbortSignal | undefined;
   seed?: number | undefined;
   logSampleLimit?: number | undefined;
+  /**
+   * Language of the engine messages this run produces (#280). Defaults to the app's active
+   * locale, read when the run starts: a run already stored keeps the language it was produced
+   * in, so switching the app's language does not rewrite the warnings of past runs.
+   */
+  locale?: Locale | undefined;
 }
 
 export type RunInWorkerResult = Pick<DoneResponse, 'result' | 'logSample'>;
 
 function abortError(): DOMException {
+  const S = strings();
   return new DOMException(S.simulacion.cancelada, 'AbortError');
 }
 
@@ -75,6 +82,7 @@ export function runInWorker(
       scenario,
       seed: options.seed,
       logSampleLimit: options.logSampleLimit,
+      locale: options.locale ?? getLocale(),
     } satisfies WorkerRequest);
   });
 }

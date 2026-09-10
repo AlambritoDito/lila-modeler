@@ -31,7 +31,9 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
-import { S } from './strings.es';
+import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
+import type { Strings } from './strings.types';
+import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -60,20 +62,16 @@ type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readon
  * porque sigue siendo la única clave (regla 5 de BACKLOG.md). `undefined` = no hubo cuellos.
  */
 function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
+  const S = strings();
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
   return nombre === undefined || nombre === '' || nombre === id ? id : S.app.nombreDeCuello(nombre, id);
 }
 
-const MODOS = S.app.modos;
-const PESTANAS = S.app.pestanas;
-
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
-const TEMAS = S.app.temas;
-type TemaId = keyof typeof TEMAS;
-const TEMA_IDS = Object.keys(TEMAS) as TemaId[];
-const DENSIDADES = S.app.densidades.map((d) => d.id);
-type Densidad = (typeof S.app.densidades)[number]['id'];
+type TemaId = keyof Strings['app']['temas'];
+/** Sus ids son los mismos en todos los idiomas —lo garantiza `Strings`—; su rótulo, no. */
+const temaIds = (): TemaId[] => Object.keys(strings().app.temas) as TemaId[];
 
 /**
  * Preferencias de apariencia (LILA-113). Con puente van a `<userData>/estado.json`
@@ -98,6 +96,7 @@ async function preferencias(): Promise<Ajustes> {
   try {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
+    const idioma = localStorage.getItem('lila.idioma');
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -110,6 +109,7 @@ async function preferencias(): Promise<Ajustes> {
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
+      ...(idioma === null ? {} : { idioma }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
     };
   } catch { return {}; }
@@ -127,6 +127,7 @@ function recordar(ajustes: Ajustes): void {
   try {
     if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
+    if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
@@ -148,6 +149,7 @@ function aplicarTema(t: Theme): void {
 }
 
 async function cargarTema(id: TemaId): Promise<Theme> {
+  const S = strings();
   const r = await fetch(`./${id}.json`);
   if (!r.ok) throw new Error(S.app.errorTemaHttp(r.status));
   return r.json() as Promise<Theme>;
@@ -162,6 +164,7 @@ async function cargarTema(id: TemaId): Promise<Theme> {
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
 function atajo(tecla: string, soloDesktop = false): string {
+  const S = strings();
   if (soloDesktop && !DESKTOP) return '';
   const shift = tecla.startsWith('⇧');
   const letra = shift ? tecla.slice(1) : tecla;
@@ -202,6 +205,7 @@ function etiquetaEscenario(archivo: string, escenarios: Escenarios): string {
  * dejar los chips en blanco escondería el resto de los problemas.
  */
 function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto: unknown; error: string | null } {
+  const S = strings();
   try {
     return { error: null, resuelto: resolveExtends(archivo, (ruta) => {
       const encontrado = escenarios[ruta];
@@ -220,6 +224,7 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
  * escenario está a medio editar y no resuelve, la barra enseña «—» en vez de romperse.
  */
 function semillaEscenario(archivo: string, escenarios: Escenarios): string {
+  const S = strings();
   try {
     const run = resolveExtends(archivo, (p) => escenarios[p] ?? {})['run'] as { seed?: unknown } | undefined;
     return run?.seed === undefined ? S.app.sinValor : String(run.seed);
@@ -233,6 +238,7 @@ type EstadoSim =
   | { tipo: 'error'; mensaje: string };
 
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
+  const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -263,7 +269,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // `window.confirm` porque el diálogo tiene que verse, leerse y probarse como el resto de la app.
   // El estado es el verbo de la acción que espera respuesta —exportar o guardar—, y el `resolve`
   // de esa espera vive en la ref: así ambas pasan por el mismo diálogo y ninguna escribe sin el sí.
-  const [confirmarPerdida, setConfirmarPerdida] = useState<'Exportar' | 'Guardar' | null>(null);
+  const [confirmarPerdida, setConfirmarPerdida] = useState<VerboPerdida | null>(null);
   const respuestaPerdida = useRef<((acepta: boolean) => void) | null>(null);
   const exportDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -271,13 +277,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }, [confirmarPerdida]);
   const [baseId, setBaseId] = useState('as-is.scenario.json');
   const adapter = projectStore(store);
-  const [modo, setModo] = useState<(typeof MODOS)[number]>('Modelar');
+  const [modo, setModo] = useState<ModoId>('modelar');
   const [revision, setRevision] = useState(0);
   const revisionRef = useRef(0);
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
-  const [pestana, setPestana] = useState<(typeof PESTANAS)[number]>('Propiedades');
+  const [pestana, setPestana] = useState<PestanaId>('propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
   // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
   // sabe"; `null`, "no se pudo cargar, seguimos con los valores por defecto de tokens.css".
@@ -291,6 +297,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /**
+   * Preferencia de idioma (LILA-210): `auto` sigue al sistema. Se guarda la preferencia y no el
+   * idioma resuelto, y el idioma vivo lo lleva `i18n.ts` —de ahí `useLocale()`, que es lo que
+   * pone al día lo que se pinta fuera de React y lo que va en la `key` de `TokenSim`—.
+   */
+  const [idioma, setIdioma] = useState<Preferencia>('auto');
+  const locale = useLocale();
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
@@ -353,7 +366,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * `true` si se puede escribir: no hay pérdida, o el usuario la aceptó en el diálogo. Exportar y
    * guardar comparten esta puerta porque los dos escriben un .bpmn mutilado (LILA-192).
    */
-  async function aceptaPerdida(verbo: 'Exportar' | 'Guardar'): Promise<boolean> {
+  async function aceptaPerdida(verbo: VerboPerdida): Promise<boolean> {
     if (perdidasAlExportar.length === 0) return true;
     respuestaPerdida.current?.(false);
     return new Promise<boolean>((resolve) => { respuestaPerdida.current = resolve; setConfirmarPerdida(verbo); });
@@ -382,7 +395,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
     // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
     // cancelar el cierre: la ventana sigue abierta con el diálogo delante, sin nada perdido.
-    if (!await aceptaPerdida('Guardar')) return false;
+    if (!await aceptaPerdida('guardar')) return false;
     ioLock.current = true; setIoBusy(true); setIoError(null);
     try {
       const doc = await snapshot();
@@ -426,7 +439,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : doc.scenarios;
     setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
-    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('Modelar');
+    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar');
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
@@ -474,8 +487,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
   // rutas» (LILA-065) se apaga: la animación de tokens no convive con la tinta de cuellos.
   useEffect(() => {
-    modelador?.cuellos(corrida, modo !== 'Validar rutas' && verCuellos);
-  }, [modelador, corrida, verCuellos, modo]);
+    // El idioma está en las dependencias porque la etiqueta del overlay se escribe en el lienzo,
+    // fuera de React: sin esto se quedaría en el idioma en el que se pintó (LILA-210).
+    modelador?.cuellos(corrida, modo !== 'rutas' && verCuellos);
+  }, [modelador, corrida, verCuellos, modo, locale]);
 
   /**
    * Errores y avisos de ahora mismo (LILA-209): el lint del escenario activo —la misma lista
@@ -488,12 +503,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
       // delante de los problemas del delta sin resolver.
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
-      const problemas = problemasEscenario(resuelto, ir);
+      // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
+      // are shown verbatim; since #280 the engine is asked for them in the active locale.
+      const problemas = problemasEscenario(resuelto, ir, locale);
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
     },
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems],
+    // The locale is in the dependencies for two reasons now: `escenarioResuelto` calls
+    // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
+    // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
+    // the whole lint— would stay in the language it was resolved in.
+    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -502,8 +523,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // `Modelador.validacion` es idempotente. En «Validar rutas» (LILA-065) se apaga: los discos de
   // validación no se pintan sobre la animación de tokens.
   useEffect(() => {
-    modelador?.validacion(modo === 'Validar rutas' ? null : validacion);
-  }, [modelador, validacion, modo]);
+    // Same reason as the overlay for carrying the locale: the `title` of the disc is written by
+    // `ValidationMarkers` onto the canvas DOM. The messages inside are the engine's, and since
+    // #280 `validacion` is already recomputed in the active locale (see the `useMemo` above).
+    modelador?.validacion(modo === 'rutas' ? null : validacion);
+  }, [modelador, validacion, modo, locale]);
 
   useEffect(() => {
     if (modelador === null) return;
@@ -535,9 +559,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
       // (o a Eva-01), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, TEMA_IDS, 'eva-01');
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
-      setDensidad(valido(guardadas.densidad, DENSIDADES, 'normal'));
+      setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
+      // mano— cae en `auto`, que es arrancar en el idioma del sistema.
+      const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
+      setIdioma(preferido);
+      setLocale(preferido);
       try {
         const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
         aplicarTema(t);
@@ -584,6 +613,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * Cambiar de idioma no recarga nada: `setLocale` avisa a todos los componentes suscritos con
+   * `useStrings()` y el árbol se repinta con el catálogo nuevo. El lienzo no se remonta (la pila
+   * de deshacer y la selección siguen ahí); lo imperativo —el `title` del minimapa, la animación
+   * de tokens, el overlay de cuellos— lo rehacen sus efectos con el idioma en las dependencias.
+   */
+  function cambiarIdioma(preferido: Preferencia): void {
+    setIdioma(preferido);
+    setLocale(preferido);
+    recordar({ idioma: preferido });
   }
 
   /**
@@ -679,9 +720,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const modelRevision = revisionRef.current;
       const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
       const xml = await modelador.exportar();
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo);
+      // The language is decided when the run starts and travels with it: a run already stored
+      // keeps the language it was produced in (its warnings are data, not text that is repainted).
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult } = await runInWorker(ir, scenario, {
+        locale,
         signal: control.signal,
         onProgress: (progreso) => {
           if (!control.signal.aborted && enVuelo.current === control) setSim({ progreso, tipo: 'simulando' });
@@ -695,7 +739,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
       }]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
-      setModo('Resultados');
+      setModo('resultados');
       setSim({ tipo: 'inactivo' });
     } catch (e: unknown) {
       // Cancelar no es un error que enseñar: quien canceló ya dejó la UI como quería. Se
@@ -711,7 +755,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function exportar(): Promise<void> {
     if (modelador === null) return;
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
-    if (!await aceptaPerdida('Exportar')) return;
+    if (!await aceptaPerdida('exportar')) return;
     try { await store.putProcess(procesoId, await modelador.exportar({ aceptarPerdida: true })); }
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
@@ -733,7 +777,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </dialog>}
       {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>
         <h2 id="perdida-titulo">{S.app.perdidaTitulo(perdidasAlExportar.length)}</h2>
-        <p>{S.app.perdidaTexto(confirmarPerdida === 'Guardar')}</p>
+        <p>{S.app.perdidaTexto(confirmarPerdida === 'guardar')}</p>
         <ul>{perdidasAlExportar.map((perdida) => <li key={perdida}>{perdida}</li>)}</ul>
         <div className="acciones">
           <button className="boton primario" type="button" onClick={() => responderPerdida(true)}>{S.app.perdidaConfirmar(S.app.perdidaVerbo[confirmarPerdida])}</button>
@@ -750,15 +794,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </div>
         </div>
         <nav className="modos">
-          {MODOS.map((m) => (
+          {MODO_IDS.map((m) => (
             <button
               key={m}
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
 
-              onClick={() => { setModo(m); if (m === 'Simular') setPestana('Simulación'); }}
+              onClick={() => { setModo(m); if (m === 'simular') setPestana('simulacion'); }}
             >
-              {m}
+              {S.app.modos[m]}
             </button>
           ))}
         </nav>
@@ -826,6 +870,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
         <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
           <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+          {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
+              toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
+              se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
+              elegir el propio a quien no entiende el que está puesto. */}
+          <h3>{S.app.idioma}</h3>
+          <label className="campo idioma">
+            <select aria-label={S.app.idioma} value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
+              <option value="auto">{S.app.idiomaAuto}</option>
+              {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
+            </select>
+          </label>
           <h3>{S.app.apariencia}</h3>
           <Apariencia
             temaId={temaId}
@@ -843,11 +898,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
           pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
           pinta y su columna de la retícula se encoge a 0. */}
-      {(modo === 'Modelar' || modo === 'Simular') && <Paleta servicios={serviciosDe(modelador)} />}
+      {(modo === 'modelar' || modo === 'simular') && <Paleta servicios={serviciosDe(modelador)} />}
 
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
-      <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'Resultados' || modo === 'Comparar' ? 'hidden' : 'visible' }}>
+      <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'resultados' || modo === 'comparar' ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -877,9 +932,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           —texto invisible—. Remontar `TokenSim` apaga y vuelve a encender el modo, que es donde
           el módulo relee los tokens (QA de #275). No basta con `temaId`: editar un token del tema
           activo no cambia el id (LILA-114), así que la `key` lleva además los dos tokens que el
-          modo congela en el DI (QA de #277). */}
-      {modo === 'Validar rutas' && (
-        <TokenSim key={`${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
+          modo congela en el DI (QA de #277). Y el idioma (LILA-210): el módulo escribe su interfaz
+          una sola vez al encenderse, así que sin remontar quedaba medio lienzo en el anterior. */}
+      {modo === 'rutas' && (
+        <TokenSim key={`${locale}|${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
       )}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <div className="chips-validacion">
@@ -898,19 +954,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       )}
       </div>
-      {modo === 'Resultados' && (
+      {modo === 'resultados' && (
         <section className="zona-resultados">
           {corrida !== null && ir !== null
             ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
             : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}
-      {modo === 'Comparar' && <section className="zona-resultados">
+      {modo === 'comparar' && <section className="zona-resultados">
         <label>{S.app.escenarioBase} <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
           {Object.keys(escenarios).map((name) => <option key={name} value={name}>{etiquetaEscenario(name, escenarios)}</option>)}
         </select></label>
         {comparable && ir !== null
-          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result))}
+          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result), { locale })}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
@@ -925,7 +981,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </section>}
       <aside className="panel" inert={ioBusy}>
         <nav className="pestanas">
-          {PESTANAS.map((p) => (
+          {PESTANA_IDS.map((p) => (
             <button
               key={p}
               type="button"
@@ -934,11 +990,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 setPestana(p);
               }}
             >
-              {p}
+              {S.app.pestanas[p]}
             </button>
           ))}
         </nav>
-        {pestana === 'Simulación' ? (
+        {pestana === 'simulacion' ? (
           <div className="simulacion">
             <label className="campo">
               {S.app.escenario}

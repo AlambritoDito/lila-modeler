@@ -143,7 +143,7 @@ Arranca con `examples/pedido/model.bpmn` cargado. La barra superior tiene cinco 
   la simulación DES del motor, no lee el escenario ni produce resultados.
 
 Detalle de cada modo, textos literales de la interfaz y limitaciones actuales en
-[`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) (escrito para la beta de escritorio, pero describe
+[`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) (escrito para la beta de escritorio, pero describe
 la misma app web).
 
 ## Beta de escritorio (macOS)
@@ -160,7 +160,7 @@ dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`
 deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 
 Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
-en [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
+en [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md).
 
 ## MCP en 3 líneas
 
@@ -209,7 +209,7 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
   nivel.
 - [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — namespace `lila:` y política de ids.
 - [`docs/MCP.md`](docs/MCP.md) — servidor MCP, sus cinco tools y cómo registrarlo.
-- [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) — beta de escritorio.
+- [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — beta de escritorio.
 - [`docs/THEMES.md`](docs/THEMES.md) — formato de tema de la app web.
 - `LILA_MODELER_ESTRUCTURA.md` — decisiones (ADR), diseño del motor, hitos.
 - `BACKLOG.md` — desglose del trabajo; los tickets viven en GitHub Issues (`LILA-nnn` = `#nnn`).

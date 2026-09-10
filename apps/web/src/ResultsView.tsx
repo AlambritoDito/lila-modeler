@@ -36,7 +36,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
-import { S } from './strings.es';
+import { strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
   ir: ProcessIR;
@@ -183,6 +183,7 @@ export interface DataTableProps<Row> {
 
 /** Tabla ordenable genérica; ResultsView (LILA-062) y CompareView (LILA-063) la comparten. */
 export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents }: DataTableProps<Row>): ReactNode {
+  const S = useStrings();
   const [sort, setSort] = useState<SortState | null>(null);
   const sorted = sortRows(rows, columns, sort);
 
@@ -318,6 +319,7 @@ function resourceRows(result: RunResult, names: Readonly<Record<string, string>>
 
 /** Columnas Id/Name comunes a Elementos, Flujos y Recursos (docs/RESULTS_FORMAT.md §10). */
 function idNameColumns<Row extends { id: string; name: string }>(): ColumnDef<Row>[] {
+  const S = strings();
   return [
     { display: (row) => row.id, header: S.resultados.columnas.id, key: 'id', sortValue: (row) => row.id },
     { display: (row) => row.name, header: S.resultados.columnas.name, key: 'name', sortValue: (row) => row.name },
@@ -345,6 +347,7 @@ function durationColumn<Row>(
   unit: BaseTimeUnit,
   get: (row: Row) => number,
 ): ColumnDef<Row> {
+  const S = strings();
   return {
     display: (row) => formatDuration(get(row), unit),
     header: S.resultados.columnaConUnidad(columnLabel(scope, key), unit),
@@ -356,6 +359,7 @@ function durationColumn<Row>(
 
 /** docs/RESULTS_FORMAT.md §10, tabla "Process elements": mismas columnas y orden que `elementsCsv`. */
 function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
+  const S = strings();
   return [
     ...idNameColumns<ElementRow>(),
     { display: (row) => row.type, header: S.resultados.columnas.type, key: 'type', sortValue: (row) => row.type },
@@ -376,6 +380,7 @@ function elementColumns(unit: BaseTimeUnit): ColumnDef<ElementRow>[] {
 
 /** docs/RESULTS_FORMAT.md §10, tabla "Sequence flows": mismas columnas que `flowsCsv`. */
 function flowColumns(): ColumnDef<FlowRow>[] {
+  const S = strings();
   return [
     ...idNameColumns<FlowRow>(),
     { display: (row) => row.from, header: S.resultados.columnas.from, key: 'from', sortValue: (row) => row.from },
@@ -440,6 +445,7 @@ function BottleneckCard({
   ir: ProcessIR;
   unit: BaseTimeUnit;
 }): ReactNode {
+  const S = useStrings();
   return (
     <section style={sectionStyle}>
       <h2 style={h2Style}>{S.resultados.cuellos}</h2>
@@ -470,8 +476,8 @@ function BottleneckCard({
 const TABS = ['elements', 'resources', 'process', 'flows'] as const;
 type Tab = (typeof TABS)[number];
 
-/** Rótulos de sección en español; CompareView (LILA-063) los reutiliza para no inventar otros. */
-export const TAB_LABELS: Readonly<Record<Tab, string>> = S.resultados.secciones;
+/** Rótulos de sección del idioma activo; CompareView (LILA-063) los reutiliza para no inventar otros. */
+export const tabLabels = (): Readonly<Record<Tab, string>> => strings().resultados.secciones;
 
 const tabBarStyle: CSSProperties = { display: 'flex', gap: 4, marginBottom: 12 };
 
@@ -507,6 +513,7 @@ export function buildResultCsvExports(
 }
 
 export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNode {
+  const S = useStrings();
   const [tab, setTab] = useState<Tab>('elements');
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const names = resourceNames(scenario);
@@ -534,14 +541,14 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
             style={tabButtonStyle(candidate === tab)}
             onClick={() => setTab(candidate)}
           >
-            {TAB_LABELS[candidate]}
+            {tabLabels()[candidate]}
           </button>
         ))}
       </div>
 
       {tab === 'elements' && (
         <DataTable
-          title={TAB_LABELS.elements}
+          title={tabLabels().elements}
           columns={elementColumns(unit)}
           rows={elementRows(ir, result)}
           rowKey={(row) => row.id}
@@ -551,7 +558,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       )}
       {tab === 'flows' && (
         <DataTable
-          title={TAB_LABELS.flows}
+          title={tabLabels().flows}
           columns={flowColumns()}
           rows={flowRows(ir, result)}
           rowKey={(row) => row.id}
@@ -561,7 +568,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       )}
       {tab === 'resources' && (
         <DataTable
-          title={TAB_LABELS.resources}
+          title={tabLabels().resources}
           columns={resourceColumns(unit)}
           rows={resourceRows(result, names)}
           rowKey={(row) => row.id}
@@ -571,7 +578,7 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
       )}
       {tab === 'process' && (
         <DataTable
-          title={TAB_LABELS.process}
+          title={tabLabels().process}
           columns={processColumns(unit)}
           rows={[result]}
           rowKey={() => 'process'}

@@ -886,7 +886,9 @@ body {
 /* La cabecera «MINIMAPA ▾» es el propio botón de plegar del plugin. Abierto, el plugin lo
    coloca en absoluto en una esquina; aquí vuelve al flujo y ocupa el ancho, como en el
    artboard. Su texto sale de `content: attr(title)` y está en inglés: se pisa con el
-   `content` de abajo en vez de montar un servicio `translate` propio.
+   `content` de abajo en vez de montar un servicio `translate` propio. El rótulo lo escribe
+   `Modeler.tsx` en `data-titulo` desde el catálogo (LILA-210): un pseudoelemento no puede leerlo,
+   así que aquí solo se dibuja lo que ponga el atributo.
    ponytail: la cabecera es CSS sobre el plugin · si algún día hace falta más (contador de
    elementos, menú), entonces sí toca un componente React con su propio estado. */
 .lienzo .djs-minimap.open .toggle,
@@ -906,7 +908,7 @@ body {
 }
 
 .lienzo .djs-minimap .toggle::before {
-  content: 'Minimapa';
+  content: attr(data-titulo);
 }
 
 .lienzo .djs-minimap.open .toggle::after {
