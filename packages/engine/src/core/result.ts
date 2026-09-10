@@ -61,6 +61,20 @@ export interface ResourceMetrics {
   totalCost: number;
 }
 
+/**
+ * Métricas de un desenlace: los casos completados que terminaron en un `end` (o `terminate`)
+ * concreto (`RunResult.process.byEndEvent[id]`, sección 5). Todo nodo final del IR aparece,
+ * aunque ningún caso lo haya alcanzado, para que las claves sean estables entre replicaciones.
+ */
+export interface OutcomeMetrics {
+  /** Casos completados que terminaron en este nodo final. Suma = `process.completed`. */
+  completed: number;
+  cycleTime: Percentiles;
+  waitTime: Percentiles;
+  /** Fracción 0..1 de esos casos con `cycleTime <= run.serviceLevel`. Solo con `run.serviceLevel`. */
+  withinServiceLevel?: number;
+}
+
 /** Métricas agregadas de todo el proceso (`RunResult.process`), sección 5. */
 export interface ProcessMetrics {
   started: number;
@@ -71,6 +85,13 @@ export interface ProcessMetrics {
   throughputPerHour: number;
   costPerCase: number;
   totalCost: number;
+  /**
+   * Desglose por desenlace, keyed por id BPMN del `end`/`terminate` que cerró cada caso (#316).
+   * Los casos en vuelo no cuentan en ninguna entrada.
+   */
+  byEndEvent: Record<string, OutcomeMetrics>;
+  /** Fracción 0..1 de casos completados con `cycleTime <= run.serviceLevel`. Solo con `run.serviceLevel`. */
+  withinServiceLevel?: number;
 }
 
 /** Una entrada del ranking de cuellos de botella (`RunResult.bottlenecks`), sección 6. */

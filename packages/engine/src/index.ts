@@ -9,6 +9,7 @@ export type {
   EventLogRow,
   FlowMetrics,
   KpiSummary,
+  OutcomeMetrics,
   Percentiles,
   ProcessMetrics,
   ReplicationSummary,

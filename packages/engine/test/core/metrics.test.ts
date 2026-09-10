@@ -290,3 +290,101 @@ describe('casos adversos de agregación', () => {
     expect(JSON.stringify(run)).toBe(before);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * #316 — desglose por desenlace (`process.byEndEvent`)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Dos ramas independientes, cada una con su propio `end`: los casos rápidos (60 s) y los lentos
+ * (600 s) tienen tiempos de ciclo distintos entre sí y distintos de la media global, que es la
+ * mezcla ponderada de ambos. La duración corta la corrida a mitad de la rama lenta, así que dos
+ * casos quedan en vuelo y no pueden contar en ningún desenlace.
+ */
+const OUTCOME_IR = makeIr(
+  {
+    StartFast: 'start',
+    StartSlow: 'start',
+    Fast: 'task',
+    Slow: 'task',
+    EndFast: 'end',
+    EndSlow: 'end',
+  },
+  {
+    Flow_SF: ['StartFast', 'Fast'],
+    Flow_FE: ['Fast', 'EndFast'],
+    Flow_SS: ['StartSlow', 'Slow'],
+    Flow_SE: ['Slow', 'EndSlow'],
+  },
+);
+
+/** Llegadas en 0, 100, …, 400 por rama; la rápida cierra en +60 y la lenta en +600. */
+const OUTCOME_SCENARIO: SimScenario = {
+  run: { seed: 42, duration: 850 },
+  elements: {
+    StartFast: { interTriggerTimer: { type: 'constant', value: 100 }, triggerCount: 5 },
+    StartSlow: { interTriggerTimer: { type: 'constant', value: 100 }, triggerCount: 5 },
+    Fast: { processingTime: { type: 'constant', value: 60 } },
+    Slow: { processingTime: { type: 'constant', value: 600 } },
+  },
+};
+
+describe('#316: métricas por desenlace', () => {
+  const run = runReplication(OUTCOME_IR, OUTCOME_SCENARIO);
+  const result = aggregateReplication(OUTCOME_IR, run, OUTCOME_SCENARIO);
+
+  test('cada desenlace tiene su propia media de ciclo, distinta de la global', () => {
+    expect(result.process.byEndEvent.EndFast?.cycleTime.mean).toBe(60);
+    expect(result.process.byEndEvent.EndSlow?.cycleTime.mean).toBe(600);
+    // La media global es la mezcla ponderada: (5 × 60 + 3 × 600) / 8.
+    expect(result.process.cycleTime.mean).toBe(262.5);
+  });
+
+  test('los conteos por desenlace suman `process.completed`', () => {
+    const outcomes = Object.values(result.process.byEndEvent);
+    expect(outcomes.reduce((total, outcome) => total + outcome.completed, 0)).toBe(
+      result.process.completed,
+    );
+    expect(result.process.completed).toBe(8);
+  });
+
+  test('los casos en vuelo no cuentan en ningún desenlace', () => {
+    // Los dos casos lentos que cerrarían en 900 y 1000 siguen vivos al parar en 850.
+    expect(result.process.inFlight).toBe(2);
+    expect(result.process.started).toBe(10);
+    expect(result.process.byEndEvent.EndSlow?.completed).toBe(3);
+    expect(result.process.byEndEvent.EndSlow?.cycleTime.max).toBe(600);
+  });
+
+  test('todo `end` del IR estrena entrada, aunque ningún caso lo alcance', () => {
+    const sinLlegadas = aggregateReplication(
+      OUTCOME_IR,
+      runReplication(OUTCOME_IR, { run: { seed: 42, duration: 1 } }),
+      { run: { seed: 42, duration: 1 } },
+    );
+    expect(Object.keys(sinLlegadas.process.byEndEvent)).toEqual(['EndFast', 'EndSlow']);
+    expect(sinLlegadas.process.byEndEvent.EndFast).toEqual({
+      completed: 0,
+      cycleTime: { min: 0, max: 0, mean: 0, sd: 0, p50: 0, p90: 0, p95: 0 },
+      waitTime: { min: 0, max: 0, mean: 0, sd: 0, p50: 0, p90: 0, p95: 0 },
+    });
+  });
+
+  test('sin `run.serviceLevel` no se publica `withinServiceLevel`', () => {
+    expect(result.process.withinServiceLevel).toBeUndefined();
+    expect(result.process.byEndEvent.EndFast?.withinServiceLevel).toBeUndefined();
+  });
+
+  test('`run.serviceLevel` publica la fracción cumplida, global y por desenlace', () => {
+    const scenario: SimScenario = {
+      ...OUTCOME_SCENARIO,
+      run: { ...OUTCOME_SCENARIO.run, serviceLevel: 300 },
+    };
+    const conUmbral = aggregateReplication(OUTCOME_IR, runReplication(OUTCOME_IR, scenario), scenario);
+
+    // 5 de los 8 casos completados (los rápidos, 60 s) bajan del umbral de 300 s.
+    expect(conUmbral.process.withinServiceLevel).toBe(0.625);
+    expect(conUmbral.process.byEndEvent.EndFast?.withinServiceLevel).toBe(1);
+    expect(conUmbral.process.byEndEvent.EndSlow?.withinServiceLevel).toBe(0);
+  });
+});

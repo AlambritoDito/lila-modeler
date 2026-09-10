@@ -402,7 +402,51 @@
     },
     "throughputPerHour": 7.486091794158554,
     "costPerCase": 41.62371740793715,
-    "totalCost": 280627.196584307
+    "totalCost": 280627.196584307,
+    "byEndEvent": {
+      "EndEvent_Entregado": {
+        "completed": 4194.566666666667,
+        "cycleTime": {
+          "min": 5591.234136321892,
+          "max": 1299054.439808007,
+          "mean": 651579.2058490433,
+          "sd": 373012.2123902457,
+          "p50": 650175.4978551498,
+          "p90": 1168361.515326582,
+          "p95": 1233569.738475456
+        },
+        "waitTime": {
+          "min": 4284.299361926284,
+          "max": 1297713.395753506,
+          "mean": 650249.3375493102,
+          "sd": 373011.886263063,
+          "p50": 648830.7331600442,
+          "p90": 1167041.7933460004,
+          "p95": 1232219.2787624074
+        }
+      },
+      "EndEvent_Rechazado": {
+        "completed": 1187.9333333333334,
+        "cycleTime": {
+          "min": 5915.921753428063,
+          "max": 1297926.3010944943,
+          "mean": 649788.333013942,
+          "sd": 372401.52817714086,
+          "p50": 648132.937735632,
+          "p90": 1166767.2067248665,
+          "p95": 1231190.434167367
+        },
+        "waitTime": {
+          "min": 5179.774494166284,
+          "max": 1297191.1564630189,
+          "mean": 649058.1625643081,
+          "sd": 372400.62556677684,
+          "p50": 647424.4779893024,
+          "p90": 1166045.1392525847,
+          "p95": 1230488.6490863082
+        }
+      }
+    }
   },
   "bottlenecks": [
     {
@@ -2482,6 +2526,246 @@
         "ci95": [
           280497.4133900428,
           280756.9797785712
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.completed": {
+        "mean": 4194.566666666667,
+        "sd": 38.50453026040848,
+        "ci95": [
+          4180.188838774461,
+          4208.944494558872
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.min": {
+        "mean": 5591.234136321892,
+        "sd": 1864.3065387774836,
+        "ci95": [
+          4895.090633945048,
+          6287.3776386987365
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.max": {
+        "mean": 1299054.439808007,
+        "sd": 20662.91646877486,
+        "ci95": [
+          1291338.7799952568,
+          1306770.0996207574
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.mean": {
+        "mean": 651579.2058490433,
+        "sd": 10294.576380866316,
+        "ci95": [
+          647735.1478531079,
+          655423.2638449788
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.sd": {
+        "mean": 373012.2123902457,
+        "sd": 6535.126055723535,
+        "ci95": [
+          370571.956216554,
+          375452.4685639374
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p50": {
+        "mean": 650175.4978551498,
+        "sd": 13398.919443148645,
+        "ci95": [
+          645172.2591091573,
+          655178.7366011423
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p90": {
+        "mean": 1168361.515326582,
+        "sd": 18901.146311524026,
+        "ci95": [
+          1161303.7113021053,
+          1175419.3193510585
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.cycleTime.p95": {
+        "mean": 1233569.738475456,
+        "sd": 19008.94323332198,
+        "ci95": [
+          1226471.6824188565,
+          1240667.7945320553
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.min": {
+        "mean": 4284.299361926284,
+        "sd": 1867.7804060385242,
+        "ci95": [
+          3586.8586961958854,
+          4981.740027656683
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.max": {
+        "mean": 1297713.395753506,
+        "sd": 20689.514514060378,
+        "ci95": [
+          1289987.8040674203,
+          1305438.987439592
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.mean": {
+        "mean": 650249.3375493102,
+        "sd": 10294.176916873286,
+        "ci95": [
+          646405.4287156812,
+          654093.2463829392
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.sd": {
+        "mean": 373011.886263063,
+        "sd": 6535.046108294381,
+        "ci95": [
+          370571.65994223196,
+          375452.11258389405
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p50": {
+        "mean": 648830.7331600442,
+        "sd": 13414.467514493625,
+        "ci95": [
+          643821.6886687967,
+          653839.7776512917
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p90": {
+        "mean": 1167041.7933460004,
+        "sd": 18881.44525863281,
+        "ci95": [
+          1159991.345815574,
+          1174092.2408764267
+        ]
+      },
+      "process.byEndEvent.EndEvent_Entregado.waitTime.p95": {
+        "mean": 1232219.2787624074,
+        "sd": 19025.01163162228,
+        "ci95": [
+          1225115.2226672748,
+          1239323.33485754
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.completed": {
+        "mean": 1187.9333333333334,
+        "sd": 36.95191034521651,
+        "ci95": [
+          1174.1352632455128,
+          1201.731403421154
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.min": {
+        "mean": 5915.921753428063,
+        "sd": 2326.79710936905,
+        "ci95": [
+          5047.081433799801,
+          6784.762073056326
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.max": {
+        "mean": 1297926.3010944943,
+        "sd": 20919.902460501835,
+        "ci95": [
+          1290114.6811353723,
+          1305737.9210536163
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.mean": {
+        "mean": 649788.333013942,
+        "sd": 12899.917743550244,
+        "ci95": [
+          644971.424564832,
+          654605.241463052
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.sd": {
+        "mean": 372401.52817714086,
+        "sd": 6534.53093120074,
+        "ci95": [
+          369961.4942265981,
+          374841.5621276836
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p50": {
+        "mean": 648132.937735632,
+        "sd": 18316.703338133088,
+        "ci95": [
+          641293.3683040045,
+          654972.5071672593
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p90": {
+        "mean": 1166767.2067248665,
+        "sd": 18816.81737536581,
+        "ci95": [
+          1159740.8916426578,
+          1173793.5218070752
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.cycleTime.p95": {
+        "mean": 1231190.434167367,
+        "sd": 20515.61452785816,
+        "ci95": [
+          1223529.7778033111,
+          1238851.0905314228
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.min": {
+        "mean": 5179.774494166284,
+        "sd": 2361.55818076602,
+        "ci95": [
+          4297.9541771581235,
+          6061.594811174445
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.max": {
+        "mean": 1297191.1564630189,
+        "sd": 20903.964488300448,
+        "ci95": [
+          1289385.4878405244,
+          1304996.8250855133
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.mean": {
+        "mean": 649058.1625643081,
+        "sd": 12899.707613944469,
+        "ci95": [
+          644241.3325788825,
+          653874.9925497338
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.sd": {
+        "mean": 372400.62556677684,
+        "sd": 6534.684256017557,
+        "ci95": [
+          369960.5343638066,
+          374840.7167697471
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p50": {
+        "mean": 647424.4779893024,
+        "sd": 18306.83423587106,
+        "ci95": [
+          640588.5937410239,
+          654260.3622375808
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p90": {
+        "mean": 1166045.1392525847,
+        "sd": 18799.332655805138,
+        "ci95": [
+          1159025.3530719595,
+          1173064.9254332099
+        ]
+      },
+      "process.byEndEvent.EndEvent_Rechazado.waitTime.p95": {
+        "mean": 1230488.6490863082,
+        "sd": 20489.093425899675,
+        "ci95": [
+          1222837.8958644774,
+          1238139.402308139
         ]
       }
     }

@@ -150,6 +150,15 @@ interface ProcessMetrics {
   throughputPerHour: number;
   costPerCase: number;
   totalCost: number;
+  byEndEvent: Record<string, OutcomeMetrics>;  // keyed by the BPMN id of the end/terminate node
+  withinServiceLevel?: number;                 // only with run.serviceLevel
+}
+
+interface OutcomeMetrics {
+  completed: number;
+  cycleTime: Percentiles;
+  waitTime: Percentiles;
+  withinServiceLevel?: number;                 // only with run.serviceLevel
 }
 
 interface Percentiles {
@@ -166,6 +175,9 @@ interface Percentiles {
 - **`throughputPerHour`** — `completed / (effective run duration in hours)`, where the effective duration excludes `warmup` (see section 8).
 - **`costPerCase`** — average of `Σ row.cost` over completed cases. In-flight cases' costs are part of `totalCost`, but not of this average (R-COST-4). *(test: LILA-028)*
 - **`totalCost`** — sum of `fixedCostTotal` across every element plus `totalCost` across every resource (the scenario's total cost in the replication).
+
+- **`byEndEvent`** *(#316)* — the same cycle and wait statistics, split by the **outcome** each case reached: the key is the BPMN id of the `end` (or `terminate`) event that closed it. `process.cycleTime` mixes every outcome; a process whose rejections are fast and whose approvals are slow needs both numbers apart. Every `end`/`terminate` node of the model has an entry, even one no case reached (`completed: 0` and zeroed statistics), so the key set is identical across replications and across scenarios. In-flight cases are not counted in any entry, so `Σ byEndEvent[*].completed === completed`. Over several replications, each entry is the mean of that entry across replications, exactly like the rest of `process`.
+- **`withinServiceLevel`** *(#316)* — only present when the scenario declares `run.serviceLevel` (seconds, docs/SCENARIO_FORMAT.md § 2.2): fraction in `0..1` of **completed** cases whose `cycleTime` is at most that target. It is reported both for the whole process and inside each `byEndEvent` entry. Without a declared target the field is absent, rather than a `0` that would read as "0 % met".
 
 `cycleTime.mean` "weighted by gateway probabilities" is exactly what aggregating over the real set of simulated cases already produces (no separate weighting is needed): each path appears in the sample in proportion to how many times it was taken.
 
@@ -417,14 +429,30 @@ Bizagi Modeler does not publish this table; the names are Lila's own and come fr
 | `throughputPerHour` | Throughput per hour |
 | `costPerCase` | Cost per case |
 | `totalCost` | Total cost |
+| `withinServiceLevel` | Within service level *(#316; empty without `run.serviceLevel`)* |
+| — (row identity) | Outcome *(#316; the BPMN id of the `end`/`terminate` of a per-outcome row)* |
 
-`process.csv` and the web app's "Process" tab carry all **20** columns. `lila run`'s console
+`process.csv` and the web app's "Process" tab carry all **22** columns. `lila run`'s console
 prints a subset — `started`, `completed`, `inFlight`, the mean and the p50/p90/p95 percentiles of
-`cycleTime` and `waitTime`, `throughputPerHour`, `costPerCase`, and `totalCost` — because all 20
+`cycleTime` and `waitTime`, `throughputPerHour`, `costPerCase`, and `totalCost` — because all 22
 do not fit legibly on one terminal row; the minimums, maximums, and standard deviations remain
 intact in `--json` and in the CSV. *(LILA-201: previously the console called `Average cycle`,
 `p50`, and `Throughput/hour` what the CSV and the web app already called `Cycle time average`,
 `Cycle time p50`, and `Throughput per hour`, and printed neither `totalCost` nor the wait time.)*
+
+### "Outcomes" table *(#316)*
+
+`process.csv` keeps its first row as the run total and adds, after it, **one row per outcome**
+(`process.byEndEvent`, section 5): the `Outcome` column carries the BPMN id of the `end` /
+`terminate`, `Instances completed` its case count, and the `Cycle time` / `Wait time` columns its
+own statistics. The columns that only mean something for the whole run — `Instances started`,
+`In flight`, `Throughput per hour`, `Cost per case`, `Total cost` — are left empty in those rows.
+The two new columns are appended at the end, so no v1 consumer loses a column or sees one move.
+
+`lila run` prints the same breakdown as an `Outcomes` / `Desenlaces` table after the process
+summary, with `Id`, `Name`, `Instances completed`, `Cycle time average / p50 / p95`,
+`Wait time average` and — only with `run.serviceLevel` — `Within service level`. The web app's
+"Process" tab shows the same table under the process one.
 
 ### "Bottlenecks" table
 
@@ -477,6 +505,11 @@ interface CompareRow {
 - **Order**: the base result's KPIs in their order of appearance (elements, flows, resources,
   process) and, after that, the ones that only exist in later results — a pool new to the TO-BE —
   in result order. Two calls with the same input produce an identical `JSON.stringify`.
+- **Outcomes** *(#316)*: the per-outcome KPIs are ordinary `process` rows whose `metric` is
+  `byEndEvent.<endId>.<metric>` (with `id` still `null`, because the scope is `process`). They are
+  compared across scenarios like any other KPI, with the same CI95 significance rule. `lila compare`
+  and the web comparison show `byEndEvent.<endId>.cycleTime.mean` — and `withinServiceLevel` when the
+  scenarios declare `run.serviceLevel` — in the default table; `--all` shows every percentile.
 - **Missing keys**: a KPI that does not exist in some result is `null` there; it is not an error,
   and its `deltaAbs`/`deltaRel` are also `null`.
 - **`deltaRel` with base 0**: `null`, never `Infinity` or `NaN`, so the JSON stays valid.

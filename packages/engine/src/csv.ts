@@ -65,6 +65,11 @@ export const PROCESS_COLUMNS = [
   'throughputPerHour',
   'costPerCase',
   'totalCost',
+  // #316, añadidas al final: ningún consumidor v1 pierde su columna ni cambia de índice.
+  // `withinServiceLevel` queda vacía sin `run.serviceLevel`; `outcome` está vacía en la fila
+  // global y lleva el id del `end`/`terminate` en las filas por desenlace.
+  'withinServiceLevel',
+  'outcome',
 ] as const;
 
 function labels(scope: ResultScope, metrics: readonly string[]): string[] {
@@ -122,10 +127,15 @@ export function resourcesCsv(
   return toCsv(headers, rows);
 }
 
+/**
+ * Proceso (§ 5). La primera fila es el total de la corrida; detrás va una fila por desenlace
+ * (`process.byEndEvent`, #316) con el id en la columna `Outcome` y vacías las columnas que solo
+ * tienen sentido para el total (`started`, `inFlight`, rendimiento y costos).
+ */
 export function processCsv(result: RunResult): string {
   const headers = labels('process', PROCESS_COLUMNS);
   const { process } = result;
-  return toCsv(headers, [
+  const rows: CsvValue[][] = [
     [
       process.started,
       process.completed,
@@ -147,8 +157,37 @@ export function processCsv(result: RunResult): string {
       process.throughputPerHour,
       process.costPerCase,
       process.totalCost,
+      process.withinServiceLevel ?? null,
+      null,
     ],
-  ]);
+  ];
+  for (const [endId, outcome] of Object.entries(process.byEndEvent ?? {})) {
+    rows.push([
+      null,
+      outcome.completed,
+      null,
+      outcome.cycleTime.min,
+      outcome.cycleTime.max,
+      outcome.cycleTime.mean,
+      outcome.cycleTime.sd,
+      outcome.cycleTime.p50,
+      outcome.cycleTime.p90,
+      outcome.cycleTime.p95,
+      outcome.waitTime.min,
+      outcome.waitTime.max,
+      outcome.waitTime.mean,
+      outcome.waitTime.sd,
+      outcome.waitTime.p50,
+      outcome.waitTime.p90,
+      outcome.waitTime.p95,
+      null,
+      null,
+      null,
+      outcome.withinServiceLevel ?? null,
+      endId,
+    ]);
+  }
+  return toCsv(headers, rows);
 }
 
 /**

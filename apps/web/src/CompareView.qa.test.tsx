@@ -357,6 +357,7 @@ function syntheticResult(
       completed: 0,
       costPerCase: 0,
       cycleTime: { max: 0, mean: 0, min: 0, p50: 0, p90: 0, p95: 0, sd: 0 },
+      byEndEvent: {},
       inFlight: 0,
       started: 0,
       throughputPerHour: 0,

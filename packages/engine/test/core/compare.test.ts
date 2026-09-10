@@ -134,6 +134,7 @@ function runResult(
       throughputPerHour: 0,
       costPerCase: 0,
       totalCost: 0,
+      byEndEvent: {},
     },
     bottlenecks: [],
     warnings: [],

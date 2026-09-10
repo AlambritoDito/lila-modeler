@@ -16,6 +16,7 @@ import type {
   BottleneckEntry,
   ElementMetrics,
   EventLogRow,
+  OutcomeMetrics,
   Percentiles,
   ResourceMetrics,
   RunResult,
@@ -674,6 +675,44 @@ export function aggregateReplication(
   const completedCases = run.cases.filter((record) => record.endedAt !== null);
   const cycleTimes = completedCases.map((record) => record.endedAt! - record.startedAt);
   const waitTimes = completedCases.map((record) => waitByCase.get(String(record.caseId)) ?? 0);
+
+  // Desglose por desenlace (#316). Todo `end`/`terminate` del IR estrena entrada, aunque ningún
+  // caso lo alcance: las claves deben ser idénticas en todas las replicaciones para que
+  // `summarizeKpis` no vea contratos distintos y para que la media entre réplicas sea estable.
+  // Los casos en vuelo (`endedAt === null`) no cuentan en ninguna entrada.
+  const outcomeCycleTimes = new Map<string, number[]>();
+  const outcomeWaitTimes = new Map<string, number[]>();
+  for (const nodeId of Object.keys(ir.nodes)) {
+    const type = ir.nodes[nodeId]!.type;
+    if (type !== 'end' && type !== 'terminate') continue;
+    outcomeCycleTimes.set(nodeId, []);
+    outcomeWaitTimes.set(nodeId, []);
+  }
+  for (const record of completedCases) {
+    // Un caso completado antes de que el motor registrara `endId` (o cerrado por un nodo que no
+    // está en el IR) no puede atribuirse a ningún desenlace y solo cuenta en el total.
+    const endId = record.endId;
+    if (endId === null || endId === undefined || !outcomeCycleTimes.has(endId)) continue;
+    outcomeCycleTimes.get(endId)!.push(record.endedAt! - record.startedAt);
+    outcomeWaitTimes.get(endId)!.push(waitByCase.get(String(record.caseId)) ?? 0);
+  }
+
+  // R-DURA-1: el umbral llega en segundos, como todo tiempo del escenario. Un valor no positivo
+  // (o ausente) apaga la métrica entera en vez de publicar un 100 % vacío de sentido.
+  const serviceLevel = scenario.run.serviceLevel;
+  const tracksServiceLevel = serviceLevel !== undefined && serviceLevel > 0;
+  const withinServiceLevel = (values: readonly number[]): number =>
+    values.length === 0 ? 0 : values.filter((value) => value <= serviceLevel!).length / values.length;
+
+  const byEndEvent: Record<string, OutcomeMetrics> = {};
+  for (const [endId, values] of outcomeCycleTimes) {
+    byEndEvent[endId] = {
+      completed: values.length,
+      cycleTime: percentiles(values),
+      waitTime: percentiles(outcomeWaitTimes.get(endId) ?? []),
+      ...(tracksServiceLevel ? { withinServiceLevel: withinServiceLevel(values) } : {}),
+    };
+  }
   const completedCaseCosts = completedCases.map((record) => costByCase.get(String(record.caseId)) ?? 0);
   const totalCost = includedRows.reduce((total, row) => total + row.cost, 0);
   const effectiveSeconds = Math.max(0, run.statisticsDuration);
@@ -694,6 +733,8 @@ export function aggregateReplication(
           ? completedCaseCosts.reduce((total, cost) => total + cost, 0) / completedCaseCosts.length
           : 0,
       totalCost,
+      byEndEvent,
+      ...(tracksServiceLevel ? { withinServiceLevel: withinServiceLevel(cycleTimes) } : {}),
     },
     bottlenecks,
     warnings,
