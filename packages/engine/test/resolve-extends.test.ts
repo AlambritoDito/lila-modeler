@@ -43,7 +43,7 @@ describe('resolveExtends', () => {
     expect(toBe).toEqual({
       ...asIs,
       // Lo propio del delta: su nombre. `extends` ya está aplicado y no viaja al resuelto.
-      name: 'TO-BE 3 cajeros',
+      name: 'TO-BE 3 cashiers',
       resources: { ...resources, cajero: { ...resources['cajero'], capacity: 3 } },
     });
     expect(toBe['extends']).toBeUndefined();

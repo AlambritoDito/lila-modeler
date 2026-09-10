@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closeDialogOptions, decideClose, saveFailedDialogOptions } from './closeGuard.js';
+import { closeDialogOptions, decideClose, saveFailedDialogOptions, saveOutcomeDialogOptions, readSaveOutcome } from './closeGuard.js';
 import { desktopStrings } from './strings/index.js';
 
 describe('decideClose', () => {
@@ -7,7 +7,7 @@ describe('decideClose', () => {
     expect(decideClose(false, 'save', null)).toBe('close');
     expect(decideClose(false, 'discard', null)).toBe('close');
     expect(decideClose(false, 'cancel', null)).toBe('close');
-    expect(decideClose(false, 'save', false)).toBe('close');
+    expect(decideClose(false, 'save', 'failed')).toBe('close');
   });
 
   it('con cambios, "Cancelar" siempre se queda', () => {
@@ -19,11 +19,11 @@ describe('decideClose', () => {
   });
 
   it('con cambios, "Guardar" cierra solo si el guardado tuvo éxito', () => {
-    expect(decideClose(true, 'save', true)).toBe('close');
+    expect(decideClose(true, 'save', 'saved')).toBe('close');
   });
 
   it('con cambios, "Guardar" se queda si el guardado falló o no respondió a tiempo', () => {
-    expect(decideClose(true, 'save', false)).toBe('stay');
+    expect(decideClose(true, 'save', 'failed')).toBe('stay');
     expect(decideClose(true, 'save', null)).toBe('stay');
   });
 });
@@ -95,4 +95,28 @@ describe('saveFailedDialogOptions', () => {
     // No `buttons`: it is an acknowledgement, and Electron puts the OS's own OK there.
     expect(opciones.buttons).toBeUndefined();
   });
+});
+
+for (const locale of ['en', 'es'] as const) {
+  it(`${locale}: partial saves keep the window open and explain Save as`, () => {
+    expect(decideClose(true, 'save', 'diagram-only')).toBe('stay');
+    const notice = saveOutcomeDialogOptions('diagram-only', desktopStrings(locale));
+    expect(notice?.type).toBe('info');
+    expect(notice?.detail).toContain(locale === 'en' ? 'Save as' : 'Guardar como');
+    expect(notice?.message).not.toBe(desktopStrings(locale).cierre.errorMensaje);
+  });
+  it(`${locale}: cancellation stays open without a failure dialog`, () => {
+    expect(decideClose(true, 'save', 'cancelled')).toBe('stay');
+    expect(saveOutcomeDialogOptions('cancelled', desktopStrings(locale))).toBeNull();
+    expect(saveOutcomeDialogOptions('saved', desktopStrings(locale))).toBeNull();
+    expect(saveOutcomeDialogOptions('failed', desktopStrings(locale))?.type).toBe('error');
+  });
+}
+it('only recognized renderer replies can authorize closing', () => {
+  for (const saved of ['saved', 'diagram-only', 'cancelled', 'failed'] as const) {
+    expect(readSaveOutcome({ saved })).toBe(saved);
+  }
+  for (const payload of [null, true, { saved: true }, { saved: 'yes' }, {}]) {
+    expect(readSaveOutcome(payload)).toBe('failed');
+  }
 });

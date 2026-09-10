@@ -433,9 +433,10 @@ The ranking from section 6, with no equivalent in Bizagi Modeler. Columns: `Id`,
 (= `resources:utilization`).
 
 It is printed **always**, even when the scenario declares not a single pool: with no resources the
-ranking is empty by construction (R-DEG-1), and the surface says so with "Sin espera por recurso
-detectada." instead of silencing the section. This way the console and the web app's `ResultsView`
-card show the same thing for the same `RunResult`. *(decision: LILA-201; test: `cli-run.test.ts`,
+ranking is empty by construction (R-DEG-1). The English CLI says "No wait for a resource detected."
+and the web app says "No resource wait detected."; both Spanish surfaces say "Sin espera por
+recurso detectada." The section remains visible, so the console and the web app's `ResultsView`
+card communicate the same result for the same `RunResult`. *(decision: LILA-201; test: `cli-run.test.ts`,
 `ResultsView.test.tsx`)*
 
 Confidence note: the exact names above are marked `[verified]` in the cited research, except for the breakdown of "waiting for resource" into separate Min/Max/Avg/Std.Dev/Total columns, which Bizagi Modeler's help describes as a group but without giving the literal text of each subcolumn — the pattern `Minimum/Maximum/Average/Standard deviation/Total time` is used for consistency with the `processing` group. If reproducing Bizagi Modeler's official level 3/4 example (M1's acceptance test, section 7 of the structure document) shows the real text differs, this document is then corrected without opening a separate ticket.

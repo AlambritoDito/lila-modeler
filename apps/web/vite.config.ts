@@ -10,6 +10,14 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   publicDir: 'src/theme/themes',
+  // The default `/` is what the desktop needs: Electron loads `lila://app/index.html`, so the
+  // bundle has to keep referencing its assets from the root of that custom scheme. The GitHub
+  // Pages demo (LILA-067) is served from a sub-path instead
+  // (`https://alambritodito.github.io/lila-modeler/app/`), and `.github/workflows/pages.yml`
+  // builds it with `LILA_WEB_BASE=/lila-modeler/app/`. Nothing else in the app hardcodes `/`:
+  // themes are fetched as `./<id>.json` (relative to the document) and the worker goes through
+  // `new URL('./worker.ts', import.meta.url)`, which Vite rewrites with this same `base`.
+  base: process.env.LILA_WEB_BASE ?? '/',
   // Ningún asset incrustado como `data:`: Vite inlinea por defecto lo que pesa menos de 4 KB y
   // los subconjuntos griego/cirílico de JetBrains Mono (#238) caen ahí, y el CSP de Electron
   // (`font-src 'self'`, `apps/desktop/src/main.ts`) los bloquea. Con archivos sueltos la CSP

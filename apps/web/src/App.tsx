@@ -23,7 +23,7 @@ import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
-import type { Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
+import type { SaveOutcome, Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
@@ -351,8 +351,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (!adapter?.onSaveRequested) window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [adapter, dirty]);
-  const saveRef = useRef<() => Promise<boolean>>(async () => false);
-  saveRef.current = () => guardar();
+  const saveRef = useRef<() => Promise<SaveOutcome>>(async () => 'cancelled');
+  saveRef.current = () => saveWithOutcome();
   useEffect(() => adapter?.onSaveRequested?.(() => saveRef.current()), [adapter]);
 
   /**
@@ -390,12 +390,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
   }
   async function guardar(saveAs = false): Promise<boolean> {
-    if (adapter === null || ioLock.current) return false;
+    return await saveWithOutcome(saveAs) === 'saved';
+  }
+
+  async function saveWithOutcome(saveAs = false): Promise<SaveOutcome> {
+    if (adapter === null || ioLock.current) return 'cancelled';
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
     // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
     // cancelar el cierre: la ventana sigue abierta con el diálogo delante, sin nada perdido.
-    if (!await aceptaPerdida('guardar')) return false;
+    if (!await aceptaPerdida('guardar')) return 'cancelled';
     ioLock.current = true; setIoBusy(true); setIoError(null);
     try {
       const doc = await snapshot();
@@ -410,15 +414,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id))
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
       const saved = await adapter.saveProject(doc, { saveAs });
-      if (saved === null) return false;
+      if (saved === null) return 'cancelled';
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs) setSuelto(false);
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
       adapter.setDirty?.(!unchanged);
-      return unchanged;
-    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return false; }
+      return unchanged ? 'saved' : previo !== null ? 'diagram-only' : 'cancelled';
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return 'failed'; }
     finally { ioLock.current = false; setIoBusy(false); }
   }
   async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
@@ -443,6 +447,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
+  const sessionRestored = useRef(false);
+  useEffect(() => {
+    if (modelador === null || sessionRestored.current) return;
+    sessionRestored.current = true;
+    const doc = adapter?.restoreSession?.();
+    if (!doc) return;
+    ioLock.current = true; setIoBusy(true);
+    void activate(doc, true, tokenRef.current)
+      .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
+      .finally(() => { ioLock.current = false; setIoBusy(false); });
+  }, [modelador, adapter]);
+
   async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
     // QA de #258: el diálogo de pérdida es modal para el ratón, pero Cmd+O/Cmd+N —y en Electron
     // los aceleradores del menú nativo— llegan igual por `window`. Sin esta puerta, abrir otro

@@ -426,16 +426,16 @@ export function CompareView({
             const warnings = run.warnings ?? [];
             if (warnings.length === 0) return null;
             return (
-              <div key={index}>
-                <h3 style={{ ...h2Style, fontSize: 13, margin: '12px 0 0' }}>
-                  {index === 0 ? S.comparar.base(run.name) : run.name}
-                </h3>
+              <details key={index} open={warnings.length <= 10}>
+                <summary style={{ ...h2Style, fontSize: 13, margin: '12px 0 0' }}>
+                  {index === 0 ? S.comparar.base(run.name) : run.name} ({warnings.length})
+                </summary>
                 <ul style={warningListStyle}>
                   {warnings.map((warning) => (
                     <li key={warning}>{warning}</li>
                   ))}
                 </ul>
-              </div>
+              </details>
             );
           })}
         </section>

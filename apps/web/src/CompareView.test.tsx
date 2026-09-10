@@ -68,8 +68,8 @@ beforeAll(async () => {
       baseTimeUnit="min"
       comparison={comparison}
       ir={ir}
-      resourceNames={{ cajero: 'Cajero', cocinero: 'Cocinero', horno: 'Horno' }}
-      scenarioNames={['AS-IS', 'TO-BE 3 cajeros']}
+      resourceNames={{ cajero: 'Cashier', cocinero: 'Cook', horno: 'Oven' }}
+      scenarioNames={['AS-IS', 'TO-BE 3 cashiers']}
     />,
   );
   trBlocks = html.match(/<tr[^]*?<\/tr>/g) ?? [];
@@ -172,7 +172,7 @@ describe('CompareView (LILA-063): AS-IS vs TO-BE 3 cajeros', () => {
   });
 
   test('el nombre del recurso viene del escenario, no del id crudo', () => {
-    expect(html).toContain('Cajero');
+    expect(html).toContain('Cashier');
   });
 
   test('accesibilidad heredada de DataTable y marca legible por lector de pantalla', () => {
@@ -400,6 +400,21 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
 
     expect(html).toContain('Aviso propio de AS-IS');
     expect(html).toContain('Aviso propio de TO-BE');
+  });
+
+  test('long per-run warning lists remain available without pushing KPIs below them', () => {
+    const comparison = compare([syntheticResult(10), syntheticResult(30)]);
+    const warnings = Array.from({ length: 30 }, (_, i) => `Warning from replication ${i}`);
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr}
+        runs={[{ name: 'AS-IS', warnings }, { name: 'TO-BE', warnings: [] }]}
+        scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+    expect(html).toContain('<details>');
+    expect(html).not.toContain('<details open');
+    expect(html).toContain('(30)</summary>');
+    for (const warning of warnings) expect(html).toContain(warning);
+    expect(html).toContain('<table');
   });
 
   test('(d) unidades de tiempo distintas: aviso y formato por corrida', () => {
