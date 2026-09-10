@@ -529,6 +529,27 @@ it('el idioma guardado manda sobre el del sistema (LILA-210)', async () => {
   expect(selectIdioma().value).toBe('es');
 });
 
+// ---------- el idioma viaja al motor (#280) ----------
+
+/**
+ * La frontera de validación y el worker son mocks en esta suite, así que lo que se comprueba no
+ * es el texto del motor —eso lo hace `simulationGate.test.ts`— sino lo que la app le **pide**:
+ * el idioma activo en el momento de arrancar la corrida. Una corrida ya guardada conserva el
+ * idioma en el que se produjo, y por eso el idioma se lee al arrancar y no al pintar.
+ */
+it('la corrida pide los mensajes del motor en el idioma activo (#280)', async () => {
+  await click(T.app.ejecutar);
+  expect(mocks.gate.mock.calls.at(-1)?.at(-1)).toEqual({ locale: 'en' });
+  expect(mocks.worker.mock.calls.at(-1)?.[2]).toMatchObject({ locale: 'en' });
+
+  const select = selectIdioma();
+  await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  await click(ES.app.ejecutar);
+
+  expect(mocks.gate.mock.calls.at(-1)?.at(-1)).toEqual({ locale: 'es' });
+  expect(mocks.worker.mock.calls.at(-1)?.[2]).toMatchObject({ locale: 'es' });
+});
+
 /** Un tema del usuario tal y como lo deja Apariencia (LILA-114). */
 const temaMio = { id: 'u:1', tema: { name: 'Mío', tokens: { 'accent.primary': '#123456' } }, origen: { 'accent.primary': '#9EF01A' } };
 /**
