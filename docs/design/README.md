@@ -10,6 +10,23 @@ El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
 **referencia, no código a copiar**: la app se construye con los tokens del brief
 (`apps/web/src/theme/`), no con el design system del artefacto.
 
+## Capturas públicas actuales (inglés)
+
+Las capturas vigentes están en [`en/`](en/README.md): modelado, escenario, resultados y comparación.
+La página de producto usa exclusivamente esas imágenes. Las capturas `app-*` de abajo son evidencia
+histórica de las sesiones de diseño en español, no imágenes de la demo actual.
+
+Para regenerar:
+
+1. Ejecutar `npm ci` y `npm run build:pages`.
+2. Servir `_site` bajo `/lila-modeler/` y abrir `/lila-modeler/app/` en un navegador limpio.
+3. Elegir English y Eva-01 en Settings; cargar el ejemplo mantenido de `examples/pedido`.
+4. Capturar Model y Simulate; ejecutar AS-IS y TO-BE 3 cashiers con semilla 42 y 30 réplicas.
+5. Capturar Results, guardar con File → Save, recargar y capturar Compare verificando las dos corridas.
+6. Guardar PNG reales en `en/`, anotar tamaño/fecha en su README y volver a ejecutar `build:pages`.
+
+La captura actual usa 1280×720, el viewport del navegador de validación. No es un render ni un mockup.
+
 ## Captura de la app real
 
 `shell-modelar.png` **no** es un artboard: es una captura de 1440×900 de la app que corre en
