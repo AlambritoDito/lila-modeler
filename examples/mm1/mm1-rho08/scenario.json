@@ -2,7 +2,7 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "M/M/1 rho=0.8",
-  "description": "Oráculo M/M/1: 1 servidor, lambda=1/375 s^-1, mu=1/300 s^-1, rho=0.8. Ver expected.json (Erlang C) y README.md.",
+  "description": "Oracle M/M/1: 1 server, lambda=1/375 s^-1, mu=1/300 s^-1, rho=0.8. See expected.json (Erlang C) and README.md.",
   "model": "model.bpmn",
   "run": {
     "start": "2026-09-07T00:00:00+00:00",
@@ -13,7 +13,7 @@
     "baseTimeUnit": "s"
   },
   "resources": {
-    "servidor": { "name": "Servidor", "type": "equipment", "capacity": 1 }
+    "servidor": { "name": "Server", "type": "equipment", "capacity": 1 }
   },
   "elements": {
     "StartEvent_Llegadas": { "interTriggerTimer": { "type": "exponential", "mean": 375 }, "triggerCount": 100000 },

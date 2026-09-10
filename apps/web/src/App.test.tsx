@@ -76,7 +76,7 @@ let session: ProjectSessionStore;
 let container: HTMLDivElement;
 // `nodes` es lo que el panel lee para nombrar el cuello principal (#226): una tarea con nombre
 // y otra sin él, que son los dos caminos de `nombreDeCuello`.
-const ir = { id: 'Process_1', nodes: { Task_Preparar: { name: 'Preparar alimento' }, Task_Anonima: { name: '' } }, source: { originalIds: {} } };
+const ir = { id: 'Process_1', nodes: { Task_Preparar: { name: 'Prepare food' }, Task_Anonima: { name: '' } }, source: { originalIds: {} } };
 /** Corrida con un cuello de botella pintable, para el overlay y el panel derecho (#226). */
 const conCuello = (elementId: string) => ({ result: { warnings: [], bottlenecks: [{ elementId, utilization: 0.9 }] }, logSample: [] });
 /** Última llamada a `Modelador.cuellos`: `[corrida, visible]`. */
@@ -158,7 +158,7 @@ it('desmontar termina la corrida activa', async () => {
 });
 
 // #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo.
-it.each([['Task_Preparar', T.app.nombreDeCuello('Preparar alimento', 'Task_Preparar')], ['Task_Anonima', 'Task_Anonima']])(
+it.each([['Task_Preparar', T.app.nombreDeCuello('Prepare food', 'Task_Preparar')], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
@@ -210,7 +210,7 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
 
   expect(mocks.abrir).toHaveBeenCalledOnce();
   expect(container.textContent).toContain(T.app.proyectoDemo);
-  expect(container.textContent).toContain(T.app.nombreDeCuello('Preparar alimento', 'Task_Preparar'));
+  expect(container.textContent).toContain(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
   // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
   expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
@@ -955,7 +955,7 @@ it('el pie lleva errores, avisos, escenario y semilla heredada del escenario act
   expect(pie.textContent).toContain(T.app.semilla('42'));
   const select = container.querySelector<HTMLSelectElement>('.simulacion select')!;
   await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-  expect(pie.textContent).toContain('TO-BE 3 cajeros');
+  expect(pie.textContent).toContain('TO-BE 3 cashiers');
   expect(pie.textContent).toContain(T.app.semilla('42'));
 });
 

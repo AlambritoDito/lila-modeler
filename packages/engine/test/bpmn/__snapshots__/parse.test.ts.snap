@@ -24,7 +24,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
     "Flow_Aprobado": {
       "from": "Gateway_Aprobacion",
       "isDefault": false,
-      "name": "Aprobado",
+      "name": "Approved",
       "to": "Timer_Reposo",
     },
     "Flow_Empacar_ANDJoin": {
@@ -42,7 +42,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
     "Flow_Rechazado": {
       "from": "Gateway_Aprobacion",
       "isDefault": false,
-      "name": "Rechazado",
+      "name": "Rejected",
       "to": "EndEvent_Rechazado",
     },
     "Flow_Revisar_Aprobacion": {
@@ -71,13 +71,13 @@ exports[`snapshot del IR de examples/pedido 1`] = `
     },
   },
   "id": "Process_Restaurante",
-  "name": "Restaurante",
+  "name": "Restaurant",
   "nodes": {
     "EndEvent_Entregado": {
       "incoming": [
         "Flow_Timer_EndEntregado",
       ],
-      "name": "Pedido entregado",
+      "name": "Order delivered",
       "outgoing": [],
       "type": "end",
     },
@@ -85,7 +85,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_Rechazado",
       ],
-      "name": "Pedido rechazado",
+      "name": "Order rejected",
       "outgoing": [],
       "type": "end",
     },
@@ -93,7 +93,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_TomarPedido_ANDFork",
       ],
-      "name": "Preparar y empacar",
+      "name": "Prepare and pack",
       "outgoing": [
         "Flow_ANDFork_Preparar",
         "Flow_ANDFork_Empacar",
@@ -105,7 +105,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
         "Flow_Preparar_ANDJoin",
         "Flow_Empacar_ANDJoin",
       ],
-      "name": "Pedido listo",
+      "name": "Order ready",
       "outgoing": [
         "Flow_ANDJoin_Revisar",
       ],
@@ -115,7 +115,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_Revisar_Aprobacion",
       ],
-      "name": "¿Aprobado?",
+      "name": "Approved?",
       "outgoing": [
         "Flow_Aprobado",
         "Flow_Rechazado",
@@ -124,7 +124,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
     },
     "StartEvent_Pedido": {
       "incoming": [],
-      "name": "Pedido recibido",
+      "name": "Order received",
       "outgoing": [
         "Flow_Start_TomarPedido",
       ],
@@ -134,7 +134,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_ANDFork_Empacar",
       ],
-      "name": "Empacar pedido",
+      "name": "Pack order",
       "outgoing": [
         "Flow_Empacar_ANDJoin",
       ],
@@ -144,7 +144,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_ANDFork_Preparar",
       ],
-      "name": "Preparar alimento",
+      "name": "Prepare food",
       "outgoing": [
         "Flow_Preparar_ANDJoin",
       ],
@@ -154,7 +154,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_ANDJoin_Revisar",
       ],
-      "name": "Revisar pedido",
+      "name": "Review order",
       "outgoing": [
         "Flow_Revisar_Aprobacion",
       ],
@@ -164,7 +164,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_Start_TomarPedido",
       ],
-      "name": "Tomar pedido",
+      "name": "Take order",
       "outgoing": [
         "Flow_TomarPedido_ANDFork",
       ],
@@ -174,7 +174,7 @@ exports[`snapshot del IR de examples/pedido 1`] = `
       "incoming": [
         "Flow_Aprobado",
       ],
-      "name": "Reposo",
+      "name": "Rest",
       "outgoing": [
         "Flow_Timer_EndEntregado",
       ],
