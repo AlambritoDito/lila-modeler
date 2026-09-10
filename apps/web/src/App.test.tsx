@@ -1176,3 +1176,11 @@ it.each(['cancelled', 'failed'] as const)('close-time save distinguishes %s from
   expect(result).toBe(outcome);
   expect(container.textContent).toContain(T.app.sinGuardar);
 });
+
+it('restores the saved browser project after the canvas becomes ready', async () => {
+  const saved = proyecto('browser-project', 'Restored project');
+  (session as unknown as { restoreSession: unknown }).restoreSession = vi.fn(() => saved);
+  await remontar();
+  expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
+  expect(container.textContent).toContain('Restored project');
+});

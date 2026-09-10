@@ -447,6 +447,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
+  const sessionRestored = useRef(false);
+  useEffect(() => {
+    if (modelador === null || sessionRestored.current) return;
+    sessionRestored.current = true;
+    const doc = adapter?.restoreSession?.();
+    if (!doc) return;
+    ioLock.current = true; setIoBusy(true);
+    void activate(doc, true, tokenRef.current)
+      .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
+      .finally(() => { ioLock.current = false; setIoBusy(false); });
+  }, [modelador, adapter]);
+
   async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
     // QA de #258: el diálogo de pérdida es modal para el ratón, pero Cmd+O/Cmd+N —y en Electron
     // los aceleradores del menú nativo— llegan igual por `window`. Sin esta puerta, abrir otro
