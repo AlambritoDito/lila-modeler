@@ -97,8 +97,8 @@ export class DesktopStore implements ProjectSessionStore {
     return document;
   }
 
-  async openProject(): Promise<ProjectDocument | null> {
-    const dir = await this.bridge.chooseFolder();
+  async openProject(options?: { readonly fileOnly?: boolean }): Promise<ProjectDocument | null> {
+    const dir = await this.bridge.chooseFolder(options?.fileOnly === true);
     if (dir === null) return null;
     const raw = await this.bridge.readProject(dir);
     const { document, problems } = toProjectDocument(raw);

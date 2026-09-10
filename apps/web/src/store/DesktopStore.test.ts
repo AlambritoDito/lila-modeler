@@ -13,7 +13,7 @@ import { setLocale } from '../i18n';
 // English is the base language (LILA-210); it is set here so the message does not depend on the
 // machine's locale.
 setLocale('en');
-import type { ProjectDocument } from './ProjectStore';
+import type { ProjectDocument, StoredRun } from './ProjectStore';
 
 const XML_MINIMO = '<?xml version="1.0"?><definitions xmlns="http://example.org"/>';
 
@@ -194,10 +194,13 @@ describe('DesktopStore.openProject', () => {
     // `doc.problems` directamente del documento devuelto por `openProject`, no de un canal aparte.
     const bridge = new FakeBridge();
     bridge.queueChooseFolder('/carpeta/pedido');
+    // `result` es un stub: lo que este caso comprueba es que `DesktopStore` deja pasar la corrida
+    // tal cual por la frontera IPC, no que sea un `RunResult` válido (desde ADR-024 el tipo
+    // compartido lo exige, así que el stub se declara como tal a propósito).
     const run = {
       id: 'run-1',
       scenarioName: 'as-is.scenario.json',
-      result: { kpis: { total: 7 } },
+      result: { kpis: { total: 7 } } as unknown as StoredRun['result'],
       inputs: { modelRevision: 1, scenarioRevision: 1, xml: XML_MINIMO, scenario: {} },
     };
     const raw: LilaProjectDocument = {

@@ -18,6 +18,7 @@
 import type { SaveOutcome } from '../../../desktop/src/bridge.js';
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
+import type { ProjectDocument } from '@lila/engine/project';
 
 /** Lo mínimo para listar un proceso sin cargar su XML. */
 export interface ProcessSummary {
@@ -51,39 +52,23 @@ export interface ProjectStore {
   putRun(processId: string, scenarioName: string, result: RunResult): Promise<void>;
 }
 
-/** Documento editable; su contenido puede ser un borrador aún inválido. */
-export type ScenarioDocument = Record<string, unknown>;
-export interface StoredRun {
-  readonly id: string;
-  readonly scenarioName: string;
-  readonly result: RunResult;
-  readonly inputs: {
-    readonly modelRevision: number;
-    readonly scenarioRevision: number;
-    readonly xml: string;
-    readonly scenario: ScenarioDocument;
-  };
-}
-export interface ProjectDocument {
-  readonly version: 1;
-  readonly id: string;
-  readonly name: string;
-  readonly model: { readonly id: string; readonly name: string; readonly xml: string; readonly revision: number };
-  readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
-  readonly scenarioRevisions: Readonly<Record<string, number>>;
-  readonly runs: readonly StoredRun[];
-  /** Archivos inválidos preservados por el adaptador; visibles al abrir. */
-  readonly problems?: readonly { readonly file: string; readonly message: string }[];
-  /**
-   * `true` si esto es un diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto
-   * (LILA-072, solo `DesktopStore`). Guardar escribe únicamente ese `.bpmn`; el pie lo advierte.
-   */
-  readonly loose?: boolean;
-}
+/**
+ * The project document contract now lives in `@lila/engine/project` (ADR-024): `apps/desktop`
+ * kept a hand-maintained copy of these same four shapes and the `.lila` container needs them
+ * too, so the definition moved to the one package both already depend on. Re-exported here
+ * because this module is what the SPA imports — the rest of the app did not have to change.
+ */
+export type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '@lila/engine/project';
+
 /** Snapshot coherente; null es cancelación, error rechaza la promesa. */
 export interface ProjectSessionStore extends ProjectStore {
   createProject(document: ProjectDocument): Promise<ProjectDocument | null>;
-  openProject(): Promise<ProjectDocument | null>;
+  /**
+   * `options.fileOnly` pide explícitamente el contenedor `.lila` (ADR-024) en vez de una carpeta
+   * de proyecto. Solo lo usa `DesktopStore`, donde son dos diálogos nativos distintos fuera de
+   * macOS; `BrowserStore` ya abre las dos cosas con el mismo `<input type=file>` y lo ignora.
+   */
+  openProject(options?: { readonly fileOnly?: boolean }): Promise<ProjectDocument | null>;
   saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
   /** Browser-only: last explicitly saved project, restored on startup without a file picker. */
   restoreSession?(): ProjectDocument | null;

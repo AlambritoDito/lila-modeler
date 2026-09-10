@@ -53,7 +53,7 @@ import './theme/tokens.css';
 import './app.css';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readonly file?: string };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -471,7 +471,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
-      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
+      if (kind === 'open' || kind === 'openFile') {
+        const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
+        if (doc) await activate(doc, true, beforeToken); return;
+      }
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
         if (doc) await activate(doc, true, beforeToken);
@@ -662,6 +665,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
+    else if (accion === 'abrirArchivo') void projectAction('openFile');
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
     else void projectAction({ recent: accion.openRecent });

@@ -1,7 +1,8 @@
-import { ScenarioSchema, resolveScenarioPath } from '@lila/engine/schema';
+import { resolveScenarioPath } from '@lila/engine/schema';
 import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
-import { runResultSchema } from '@lila/engine/result-schema';
+import { ProjectFormatError, readProjectDocument } from '@lila/engine/project';
+import type { ProjectErrorCode } from '@lila/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
 
@@ -10,25 +11,31 @@ export function projectStore(store: ProjectStore): ProjectSessionStore | null {
   return typeof candidate.openProject === 'function' && typeof candidate.saveProject === 'function' && typeof candidate.createProject === 'function'
     ? candidate as ProjectSessionStore : null;
 }
-function object(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
-function revision(value: unknown): value is number { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }
-/** Validación de estructura; los escenarios pueden contener borradores inválidos. */
+/**
+ * Localized wrapper over the engine's structural validation (ADR-024). The rules themselves moved
+ * to `@lila/engine/project` so that the `.lila` container, the desktop folder reader and this app
+ * cannot disagree about what a project is; what stays here is the wording, keyed by the stable
+ * `code` each failure carries instead of by its English message.
+ */
+const MENSAJES: Partial<Record<ProjectErrorCode, (S: ReturnType<typeof strings>) => string>> = {
+  'LILA-DOCUMENT': (S) => S.proyecto.errorDocumento,
+  'LILA-PROBLEMS': (S) => S.proyecto.errorDiagnostico,
+  'LILA-RUN': (S) => S.proyecto.errorCorrida,
+  'LILA-RUN-INPUTS': (S) => S.proyecto.errorEntradasCorrida,
+};
+
 export function readProject(value: unknown): ProjectDocument {
-  const S = strings();
-  if (!object(value) || value.version !== 1 || typeof value.id !== 'string' || typeof value.name !== 'string' || !object(value.model)
-    || typeof value.model.id !== 'string' || typeof value.model.name !== 'string' || typeof value.model.xml !== 'string' || !revision(value.model.revision)
-    || !object(value.scenarios) || !Object.values(value.scenarios).every(object) || !object(value.scenarioRevisions)
-    || !Object.values(value.scenarioRevisions).every(revision) || !Array.isArray(value.runs)) throw new Error(S.proyecto.errorDocumento);
-  if (value.problems !== undefined && (!Array.isArray(value.problems) || !value.problems.every((p) => object(p) && typeof p.file === 'string' && typeof p.message === 'string'))) throw new Error(S.proyecto.errorDiagnostico);
-  for (const run of value.runs) {
-    if (!object(run) || typeof run.id !== 'string' || typeof run.scenarioName !== 'string' || !object(run.inputs)
-      || !revision(run.inputs.modelRevision) || !revision(run.inputs.scenarioRevision) || typeof run.inputs.xml !== 'string' || !object(run.inputs.scenario)
-      || !runResultSchema.safeParse(run.result).success) throw new Error(S.proyecto.errorCorrida);
-    const scenario = ScenarioSchema.safeParse(run.inputs.scenario);
-    if (!scenario.success || scenario.data.model === undefined || scenario.data.run === undefined) throw new Error(S.proyecto.errorEntradasCorrida);
+  try {
+    return readProjectDocument(value);
+  } catch (error) {
+    if (error instanceof ProjectFormatError) {
+      const mensaje = MENSAJES[error.code];
+      throw new Error(mensaje === undefined ? error.message : mensaje(strings()));
+    }
+    throw error;
   }
-  return value as unknown as ProjectDocument;
 }
+
 export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument> {
   const S = strings();
   const elements: Record<string, unknown> = {};

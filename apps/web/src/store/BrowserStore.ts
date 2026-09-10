@@ -14,6 +14,7 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
+import { decodeLila, encodeLila } from '@lila/engine/project';
 import { readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
@@ -23,6 +24,10 @@ import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument 
  * (`lila.tema`, `lila.densidad`, `lila.temas`, `lila.idioma`).
  */
 const CLAVE = 'lila.project.v1';
+
+/** The project container written by «Save project» (ADR-024, `docs/PROJECT_FORMAT.md`). */
+const LILA_EXT = '.lila';
+const LILA_MIME = 'application/vnd.lila-modeler+zip';
 
 /** What is mirrored: the three collections this store owns, as plain JSON. */
 interface SesionGuardada {
@@ -202,16 +207,26 @@ export class BrowserStore implements ProjectSessionStore {
     return this.saveProject(document);
   }
 
+  /**
+   * `.lila` (ADR-024) is what this store writes now; `.lila.json` is still accepted because it is
+   * what every project saved from the public demo before this change looks like, and the demo has
+   * no migration step to run — the file is on the visitor's disk, not in a database. Which reader
+   * to use is decided by the name, not by sniffing the bytes: a `.lila` is a ZIP and a `.lila.json`
+   * is JSON, and a file whose extension lies about that is a file worth refusing.
+   */
   async openProject(): Promise<ProjectDocument | null> {
-    const file = await elegirArchivo('.lila.json,.json');
+    const file = await elegirArchivo('.lila,.lila.json,.json');
     if (file === null) return null;
+    if (file.name.toLowerCase().endsWith('.lila')) {
+      return decodeLila(new Uint8Array(await file.arrayBuffer()));
+    }
     return readProject(JSON.parse(await file.text()) as unknown);
   }
 
   async saveProject(document: ProjectDocument): Promise<ProjectDocument> {
     const snapshot = structuredClone(readProject(document));
     this.project = snapshot;
-    descargar(JSON.stringify(snapshot, null, 2), `${snapshot.name}.lila.json`, 'application/json');
+    descargar(encodeLila(snapshot), `${snapshot.name}${LILA_EXT}`, LILA_MIME);
     // Saving also flushes the mirror. Normally it is already up to date — every mutation writes
     // it — but if an earlier write hit the quota and the tab has since freed room, an explicit
     // save is the moment to try again.

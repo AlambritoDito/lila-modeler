@@ -12,6 +12,7 @@
  * full quota leaves the store working in memory.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeLila, encodeLila } from '@lila/engine/project';
 import { BrowserStore } from './BrowserStore';
 import type { ProcessData } from './ProjectStore';
 
@@ -165,6 +166,66 @@ describe('BrowserStore', () => {
     });
   });
 
+  /**
+   * El contenedor `.lila` (ADR-024, #317): la demo pasa a descargar el proyecto zipeado en vez de
+   * un `.lila.json`. Lo que hay que fijar es que lo escrito se puede volver a abrir y que el
+   * formato viejo —el que ya está en el disco de quien usó la demo antes— sigue abriéndose.
+   */
+  describe('proyectos .lila', () => {
+    const DOC = {
+      version: 1 as const,
+      id: 'p1',
+      name: 'Pedido',
+      model: { id: 'Process_1', name: 'model.bpmn', xml: '<definitions/>', revision: 4 },
+      scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS' } },
+      scenarioRevisions: { 'as-is.scenario.json': 2 },
+      runs: [],
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal('URL', {
+        ...URL,
+        createObjectURL: vi.fn(() => 'blob:mock'),
+        revokeObjectURL: vi.fn(),
+      });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('saveProject descarga un .lila con su propio MIME', async () => {
+      const clic = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const store = new BrowserStore();
+
+      await store.saveProject(DOC);
+
+      expect(clic.mock.instances[0]).toMatchObject({ download: 'Pedido.lila' });
+      const blob = (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Blob;
+      expect(blob.type).toBe('application/vnd.lila-modeler+zip');
+      // Lo descargado es exactamente lo que `decodeLila` vuelve a leer: la ida y la vuelta del
+      // formato ya la cubre el motor, aquí importa que sea ESTO lo que se escribe.
+      expect(decodeLila(new Uint8Array(await blob.arrayBuffer()))).toEqual(DOC);
+    });
+
+    it('openProject abre el .lila que acaba de descargarse', async () => {
+      const store = new BrowserStore();
+      const promesa = store.openProject();
+      elegirArchivo(new File([encodeLila(DOC)], 'Pedido.lila'));
+
+      await expect(promesa).resolves.toEqual(DOC);
+    });
+
+    it('openProject sigue abriendo el .lila.json de antes de ADR-024', async () => {
+      const store = new BrowserStore();
+      const promesa = store.openProject();
+      elegirArchivo(new File([JSON.stringify(DOC)], 'Pedido.lila.json', { type: 'application/json' }));
+
+      await expect(promesa).resolves.toEqual(DOC);
+    });
+  });
+
   // El espejo en `localStorage` (LILA-067): lo que hace que la demo publicada en GitHub Pages
   // aguante un F5. Las descargas siguen ocurriendo en todos estos casos, así que hace falta el
   // mismo doblaje de `URL` y del clic que en el bloque anterior.
@@ -173,8 +234,11 @@ describe('BrowserStore', () => {
       const store = new BrowserStore();
       const doc = { version: 1 as const, id: 'custom', name: 'Saved project',
         model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 4 },
-        scenarios: { 'draft.json': { version: 1, name: 'Draft', run: { duration: -1 } } },
-        scenarioRevisions: { 'draft.json': 2 }, runs: [] };
+        // El nombre lleva el sufijo del formato: desde ADR-024 guardar produce un `.lila`, cuyas
+        // entradas son las MISMAS que las de la carpeta ADR-018 (`<nombre>.scenario.json`), y el
+        // escritor de carpetas ya lo exigía. El resto del caso —el borrador inválido— no cambia.
+        scenarios: { 'draft.scenario.json': { version: 1, name: 'Draft', run: { duration: -1 } } },
+        scenarioRevisions: { 'draft.scenario.json': 2 }, runs: [] };
       await store.saveProject(doc);
       expect(new BrowserStore().restoreSession()).toEqual(doc);
       doc.name = 'Later unsaved edit';
