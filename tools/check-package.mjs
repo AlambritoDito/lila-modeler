@@ -8,9 +8,10 @@ import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const consumer = mkdtempSync(join(tmpdir(), 'lila-package-consumer-'));
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCli = process.env.npm_execpath;
+assert.ok(npmCli, 'Run this check through npm run test:package');
 function run(command, args, cwd = consumer) {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8', shell: process.platform === 'win32' && command.endsWith('.cmd') });
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
   if (result.error || result.status !== 0) {
     throw new Error(`${command} ${args.join(' ')} failed\n${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
   }
@@ -18,13 +19,13 @@ function run(command, args, cwd = consumer) {
 }
 function json(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 console.log(`Checking package in ${consumer}`);
-run(npm, ['pack', '--workspace', '@lila/engine', '--pack-destination', consumer], root);
+run(process.execPath, [npmCli, 'pack', '--workspace', '@lila/engine', '--pack-destination', consumer], root);
 const archives = readdirSync(consumer).filter((name) => name.endsWith('.tgz'));
 assert.equal(archives.length, 1);
 writeFileSync(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
 const typescript = json(join(root, 'node_modules/typescript/package.json')).version;
 const nodeTypes = json(join(root, 'node_modules/@types/node/package.json')).version;
-run(npm, ['install', '--ignore-scripts', '--no-audit', '--no-fund', join(consumer, archives[0]), `typescript@${typescript}`, `@types/node@${nodeTypes}`]);
+run(process.execPath, [npmCli, 'install', '--ignore-scripts', '--no-audit', '--no-fund', join(consumer, archives[0]), `typescript@${typescript}`, `@types/node@${nodeTypes}`]);
 const installed = join(consumer, 'node_modules/@lila/engine');
 const manifest = json(join(installed, 'package.json'));
 assert.equal(manifest.version, json(join(root, 'packages/engine/package.json')).version);
