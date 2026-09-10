@@ -1,0 +1,39 @@
+name: Release
+
+# The owner creates the release tag and configures NPM_TOKEN after approving publication.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - name: Check release versions
+        run: |
+          node --input-type=module - <<'JS'
+          import { readFileSync } from 'node:fs';
+          const tag = process.env.GITHUB_REF_NAME.slice(1);
+          for (const file of ['packages/engine/package.json', 'apps/desktop/package.json']) {
+            const { version } = JSON.parse(readFileSync(file, 'utf8'));
+            if (version !== tag) throw new Error(`${file}: ${version} differs from tag ${tag}`);
+          }
+          JS
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm pack --workspace @lila/engine --dry-run
+      - run: npm publish --workspace @lila/engine --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

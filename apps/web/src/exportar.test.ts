@@ -18,6 +18,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, it } from 'vitest';
 import { parseBpmn } from '../../../packages/engine/src/bpmn/parse.js';
 import { sanitizeXmlIds } from '../../../packages/engine/src/bpmn/ids.js';
+import { version } from '../../../packages/engine/src/version.js';
 import { validate, type ValidationResult } from '../../../packages/engine/src/bpmn/validate.js';
 import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { type: 'json' };
 import {
@@ -161,7 +162,7 @@ describe('el XML que exporta la app web', () => {
     expect(exportado).toContain('<bpmn:documentation>Documento intacto</bpmn:documentation>');
     expect(exportado).toContain('<lila:responsibility type="R" roleRef="rol-1" />');
     expect(exportado).toContain('exporter="Lila Modeler"');
-    expect(exportado).toContain('exporterVersion="0.0.0"');
+    expect(exportado).toContain(`exporterVersion="${version}"`);
 
     const reabierto = await parseBpmn(exportado);
     const taskId = Object.keys(reabierto.ir.nodes).find(

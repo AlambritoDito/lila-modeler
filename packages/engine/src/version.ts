@@ -5,4 +5,4 @@
  * en `packages/engine/test/bpmn/ids.test.ts` lee el manifiesto y comprueba que no se
  * desincronizan.
  */
-export const version = '0.0.0';
+export const version = '0.1.0';
