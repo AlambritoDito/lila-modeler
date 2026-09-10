@@ -20,8 +20,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } fr
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Ajustes, OpenPathRequest, Recent } from './bridge.js';
-import { closeDialogOptions, decideClose, saveFailedDialogOptions, type CloseChoice } from './closeGuard.js';
+import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js';
+import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
@@ -618,13 +618,13 @@ const CLOSE_SAVE_TIMEOUT_MS = 30_000;
 
 /**
  * Pide al renderer que guarde (`lila:close-requested`) y espera su respuesta
- * (`lila:close-response`, `{ saved: boolean }`) hasta `CLOSE_SAVE_TIMEOUT_MS`. Sin respuesta a
- * tiempo se trata como fallo (`saved: false`), igual que pide el ticket.
+ * (`lila:close-response`, `{ saved: SaveOutcome }`) hasta `CLOSE_SAVE_TIMEOUT_MS`. Sin respuesta a
+ * tiempo se trata como fallo (`saved: "failed"`), igual que pide el ticket.
  */
-function requestRendererSave(win: BrowserWindow): Promise<boolean> {
+function requestRendererSave(win: BrowserWindow): Promise<SaveOutcome> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (saved: boolean): void => {
+    const finish = (saved: SaveOutcome): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -633,10 +633,10 @@ function requestRendererSave(win: BrowserWindow): Promise<boolean> {
     };
     const onResponse = (event: IpcMainEvent, payload: unknown): void => {
       if (!isMainFrameOf(win, event.senderFrame)) return;
-      const saved = typeof payload === 'object' && payload !== null && (payload as { saved?: unknown }).saved === true;
+      const saved = readSaveOutcome(payload);
       finish(saved);
     };
-    const timer = setTimeout(() => finish(false), CLOSE_SAVE_TIMEOUT_MS);
+    const timer = setTimeout(() => finish('failed'), CLOSE_SAVE_TIMEOUT_MS);
     ipcMain.on('lila:close-response', onResponse);
     win.webContents.send('lila:close-requested');
   });
@@ -656,7 +656,7 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
     choice = result.response === 0 ? 'save' : result.response === 1 ? 'discard' : 'cancel';
   }
 
-  let saved: boolean | null = null;
+  let saved: SaveOutcome | null = null;
   if (choice === 'save') {
     saved = await requestRendererSave(win);
   }
@@ -667,12 +667,9 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
     dirty = false;
     return true;
   }
-  if (choice === 'save' && saved !== true) {
-    // El diálogo de error tampoco puede mostrarse en una sesión E2E sin interacción: se omite bajo
-    // la misma condición que el diálogo Guardar/Descartar/Cancelar de arriba.
-    if (e2e.close === undefined) {
-      await dialog.showMessageBox(win, saveFailedDialogOptions(strings()));
-    }
+  const notice = saved === null ? null : saveOutcomeDialogOptions(saved, strings());
+  if (notice !== null && e2e.close === undefined) {
+    await dialog.showMessageBox(win, notice);
   }
   return false;
 }
