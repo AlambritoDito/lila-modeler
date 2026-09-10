@@ -14,7 +14,7 @@ test('los nodos y flujos esperados de examples/pedido están en el IR', async ()
   const { ir, ignoredProcessIds } = await parseBpmn(PEDIDO);
 
   expect(ir.id).toBe('Process_Restaurante');
-  expect(ir.name).toBe('Restaurante');
+  expect(ir.name).toBe('Restaurant');
   // Multiproceso: se parsea el primer proceso no vacío; el pool "Cliente" solo se lista.
   expect(ignoredProcessIds).toEqual(['Process_Cliente']);
 
@@ -49,7 +49,7 @@ test('los nodos y flujos esperados de examples/pedido están en el IR', async ()
   expect(ir.flows['Flow_Aprobado']).toEqual({
     from: 'Gateway_Aprobacion',
     to: 'Timer_Reposo',
-    name: 'Aprobado',
+    name: 'Approved',
     isDefault: false,
   });
 

@@ -471,16 +471,16 @@ describe('QA adversarial del panel de propiedades', () => {
     const panel = montar(modelador, 'propiedades');
     clic('Task_TomarPedido');
     const nombre = panel.querySelector('input');
-    expect(nombre?.value).toBe('Tomar pedido');
+    expect(nombre?.value).toBe('Take order');
 
     teclear(nombre as HTMLInputElement, 'Tomar pedido en caja');
     expect(figura('Task_TomarPedido').businessObject.name).toBe('Tomar pedido en caja');
 
     // Cmd+Z: bpmn-js devuelve el moddle a su valor anterior y lo anuncia con `element.changed`.
     desdeElLienzo(() => {
-      figura('Task_TomarPedido').businessObject.name = 'Tomar pedido';
+      figura('Task_TomarPedido').businessObject.name = 'Take order';
     });
-    expect(panel.querySelector('input')?.value).toBe('Tomar pedido');
+    expect(panel.querySelector('input')?.value).toBe('Take order');
   });
 
   it('la pestaña de documentación también se resincroniza tras un cambio externo', async () => {

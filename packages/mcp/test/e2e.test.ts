@@ -87,7 +87,7 @@ test('flujo "qué pasa si agrego un cajero": patch_scenario con extends y compar
       patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 3 }],
       saveTo,
       extendsFrom: asIs,
-      name: 'TO-BE 3 cajeros',
+      name: 'TO-BE 3 cashiers',
     },
   });
   expect(patched.isError ?? false).toBe(false);
@@ -128,6 +128,7 @@ test('el servidor sobrevive a un error de tool y sigue respondiendo', async () =
 
 test('nada de esto deja archivos nuevos en examples/pedido', () => {
   expect(readdirSync(join(repo, 'examples/pedido')).sort()).toEqual([
+    'README.md',
     'as-is.scenario.json',
     'model.bpmn',
     'to-be-3-cajeros.scenario.json',

@@ -436,7 +436,7 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
       const row = lines.find((line) => line.startsWith('cajero'))!.split(/ {2,}/);
       expect(row.slice(0, 4)).toEqual([
         'cajero',
-        'Cajero',
+        'Cashier',
         formatNumber(cajero.utilization * 100),
         formatDuration(cajero.busyTime, 'min'),
       ]);

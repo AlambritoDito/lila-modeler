@@ -53,11 +53,11 @@ npx lila validate examples/pedido/model.bpmn
 ```
 
 ```
-Process Process_Restaurante (Restaurante)
+Process Process_Restaurante (Restaurant)
 Exported by Lila Modeler examples (hand-written) 0.0.0
 
 Nodes (11): and 2, end 2, start 1, task 4, timer 1, xor 1
-  start     StartEvent_Pedido  Pedido recibido
+  start     StartEvent_Pedido  Order received
   ...
 warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
 0 errors, 1 warnings.
@@ -74,18 +74,18 @@ npx lila run \
 
 ```
 Scenario AS-IS
-Process Process_Restaurante (Restaurante)
+Process Process_Restaurante (Restaurant)
 Seed 42 · Replications 3 · Time unit min · Currency MXN
 
 Process elements
 Id                  Name                Type   Instances started  Instances completed  ...
-StartEvent_Pedido   Pedido recibido     start  2975               2975                 ...
+StartEvent_Pedido   Order received     start  2975               2975                 ...
 ...
 
 Bottlenecks
 Id                Name               Total time (waiting for resource) (min)  Utilization (%)
-Task_Preparar     Preparar alimento  4514389.476272                           34.297909
-Task_TomarPedido  Tomar pedido       698.32272                                41.234838
+Task_Preparar     Prepare food  4514389.476272                           34.297909
+Task_TomarPedido  Take order       698.32272                                41.234838
 
 Warnings:
   W-MSGFLOW: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
@@ -104,19 +104,19 @@ npx lila compare \
 ```
 
 ```
-Process Process_Restaurante (Restaurante)
+Process Process_Restaurante (Restaurant)
 Time unit min (base scenario) · Utilization in %
 
 Compared scenarios
 #  Name             File                                           Seed  Replications
 -  ---------------  ---------------------------------------------  ----  ------------
 0  AS-IS (base)     examples/pedido/as-is.scenario.json            42    3
-1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42    3
+1  TO-BE 3 cashiers  examples/pedido/to-be-3-cajeros.scenario.json  42    3
 
 Process elements
-Id                Name              Metric                               AS-IS (base)  TO-BE 3 cajeros
+Id                Name              Metric                               AS-IS (base)  TO-BE 3 cashiers
 ...
-Task_TomarPedido  Tomar pedido      Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
+Task_TomarPedido  Take order      Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
 ...
 ```
 
