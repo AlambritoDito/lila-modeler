@@ -4,6 +4,12 @@
  * `@lila/engine/cli-shared` (extraído de `cli.ts` en el mismo ticket, sin cambiar su salida).
  * `createServer()` solo registra tools; conectar un transporte (stdio, in-memory para tests) es
  * responsabilidad de quien lo use — ver `src/bin.ts` para el caso stdio real.
+ *
+ * Idioma (LILA-211, parte 2): `title`, `description` y los `.describe()` son **fijos en inglés**
+ * —son la superficie del protocolo, la que un cliente ya leyó en `tools/list`, y un `locale` por
+ * llamada no puede reescribirla—. Todo lo demás (el resumen de `describe_process`, los mensajes de
+ * `isError` y los problemas que devuelve el motor) sale del catálogo: `createServer({ locale })`
+ * fija el idioma por defecto del servidor y cada tool acepta `locale` para una llamada suelta.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
@@ -34,6 +40,7 @@ import {
   type ScenarioProblem,
 } from '@lila/engine/schema';
 import { compare, simulate, type CompareResult, type RunResult } from '@lila/engine';
+import { messages, resolveLocale, type Locale } from '@lila/engine/messages';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -45,8 +52,19 @@ import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 const NAME = 'lila-mcp';
 const VERSION = '0.0.0';
 
+/** Idioma por llamada: sobrescribe el del servidor solo para esa respuesta. */
+const localeSchema = z
+  .enum(['en', 'es'])
+  .optional()
+  .describe('Language of the texts this call returns. Defaults to the server locale (LILA_LANG).');
+
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Los mensajes del catálogo son cuerpos; el nombre de la tool lo pone siempre quien llama. */
+function toolMessage(tool: string, body: string): string {
+  return `${tool}: ${body}`;
 }
 
 function textResult(payload: unknown): CallToolResult {
@@ -63,12 +81,13 @@ function errorResult(message: string): CallToolResult {
 }
 
 /** Lee un archivo del que ya se validó la existencia; devuelve el error legible si no se puede. */
-function readModel(tool: string, file: string): { xml: string } | { error: string } {
-  if (!existsSync(file)) return { error: `${tool}: no existe el archivo ${file}.` };
+function readModel(tool: string, file: string, locale: Locale): { xml: string } | { error: string } {
+  const M = messages(locale).mcp;
+  if (!existsSync(file)) return { error: toolMessage(tool, M.fileMissing(file)) };
   try {
     return { xml: readFileSync(file, 'utf8') };
   } catch (error) {
-    return { error: `${tool}: ${message(error)}` };
+    return { error: toolMessage(tool, message(error)) };
   }
 }
 
@@ -81,56 +100,51 @@ function modelXml(
   tool: string,
   path: string | undefined,
   xml: string | undefined,
+  locale: Locale,
 ): { xml: string } | { error: string } {
+  const M = messages(locale).mcp;
   if (path !== undefined && xml !== undefined) {
-    return { error: `${tool}: hay que pasar \`path\` o \`xml\`, no los dos.` };
+    return { error: toolMessage(tool, M.bothPathAndXml()) };
   }
   if (xml !== undefined) return { xml };
-  if (path !== undefined) return readModel(tool, absolutePath(path));
-  return { error: `${tool}: hay que pasar \`path\` o \`xml\`.` };
+  if (path !== undefined) return readModel(tool, absolutePath(path), locale);
+  return { error: toolMessage(tool, M.pathOrXml()) };
 }
-
-const CONTEO_TIPOS: Record<string, string> = {
-  start: 'inicio',
-  end: 'fin',
-  terminate: 'terminación',
-  task: 'tarea',
-  xor: 'gateway XOR',
-  or: 'gateway OR',
-  and: 'gateway AND',
-  timer: 'temporizador',
-};
 
 const GATEWAY_TYPES = new Set(['xor', 'or', 'and']);
 
-function plural(n: number, singular: string, plural_: string): string {
-  return `${n} ${n === 1 ? singular : plural_}`;
-}
-
-/** Arma el resumen legible en español pedido por LILA-053: nodos, gateways, lanes, subprocesos. */
-function describeIr(report: ValidateBpmnReport, resources: string[], scenarioError?: string): string {
+/** Resumen legible pedido por LILA-053: nodos, gateways, lanes, subprocesos, en `locale`. */
+function describeIr(
+  report: ValidateBpmnReport,
+  resources: string[],
+  scenarioError: string | undefined,
+  locale: Locale,
+): string {
+  const catalog = messages(locale);
+  const M = catalog.mcp;
+  const C = catalog.cli;
   const { ir, ignoredProcessIds, errors, warnings } = report;
   const lines: string[] = [];
-  lines.push(`Proceso ${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`);
+  lines.push(C.process(`${ir.id}${ir.name === '' ? '' : ` (${ir.name})`}`));
 
   const counts = new Map<string, number>();
   for (const node of Object.values(ir.nodes)) counts.set(node.type, (counts.get(node.type) ?? 0) + 1);
   lines.push('');
-  lines.push(`Nodos (${Object.keys(ir.nodes).length}):`);
+  lines.push(M.nodes(Object.keys(ir.nodes).length));
   for (const [type, n] of [...counts].sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push(`  ${CONTEO_TIPOS[type] ?? type}: ${n}`);
+    lines.push(`  ${M.nodeType(type)}: ${n}`);
   }
 
   const gatewayIds = Object.entries(ir.nodes).filter(([, node]) => GATEWAY_TYPES.has(node.type));
   if (gatewayIds.length > 0) {
     lines.push('');
-    lines.push('Gateways y sus salidas:');
+    lines.push(M.gateways());
     for (const [id, node] of gatewayIds) {
       lines.push(`  ${id}${node.name === '' ? '' : ` (${node.name})`} [${node.type}]:`);
       for (const flowId of node.outgoing) {
         const flow = ir.flows[flowId];
         if (flow === undefined) continue;
-        const mark = flow.isDefault ? '  (por defecto)' : '';
+        const mark = flow.isDefault ? `  ${C.defaultFlow()}` : '';
         lines.push(`    -> ${flow.to}${flow.name === '' ? '' : `  ${flow.name}`}${mark}`);
       }
     }
@@ -143,7 +157,7 @@ function describeIr(report: ValidateBpmnReport, resources: string[], scenarioErr
   }
   if (lanes.size > 0) {
     lines.push('');
-    lines.push('Lanes:');
+    lines.push(M.lanes());
     for (const [lane, ids] of lanes) lines.push(`  ${lane}: ${ids.join(', ')}`);
   }
 
@@ -156,33 +170,29 @@ function describeIr(report: ValidateBpmnReport, resources: string[], scenarioErr
   }
   if (subprocesses.size > 0) {
     lines.push('');
-    lines.push('Subprocesos embebidos (aplanados):');
+    lines.push(M.embeddedSubprocesses());
     for (const [id, ids] of subprocesses) lines.push(`  ${id}: ${ids.join(', ')}`);
   }
 
   if (ignoredProcessIds.length > 0) {
     lines.push('');
-    lines.push(`Otros procesos del archivo, no simulados: ${ignoredProcessIds.join(', ')}`);
+    lines.push(C.otherProcesses(ignoredProcessIds.join(', ')));
   }
 
   // Un modelo fuera del perfil se describe igual, pero no se puede simular: decirlo aquí evita
   // que un agente encadene describe_process -> run_simulation sobre un modelo que no corre.
   lines.push('');
-  const cuenta = `${plural(errors.length, 'error', 'errores')}, ${plural(warnings.length, 'aviso', 'avisos')}`;
-  lines.push(
-    errors.length > 0
-      ? `Validación: ${cuenta}. El modelo NO se puede simular; usa validate_bpmn para el detalle.`
-      : `Validación: ${cuenta}.`,
-  );
+  const counted = `${M.errorCount(errors.length)}, ${M.warningCount(warnings.length)}`;
+  lines.push(errors.length > 0 ? M.validationWithErrors(counted) : M.validation(counted));
 
   lines.push('');
   if (scenarioError !== undefined) {
-    lines.push(`Recursos referenciados: no se pudo leer el escenario: ${scenarioError}`);
+    lines.push(M.referencedResourcesUnreadable(scenarioError));
   } else if (resources.length > 0) {
-    lines.push('Recursos referenciados:');
+    lines.push(M.referencedResources());
     for (const line of resources) lines.push(`  ${line}`);
   } else {
-    lines.push('Recursos referenciados: (sin escenario, o el escenario no referencia recursos)');
+    lines.push(M.referencedResourcesNone());
   }
 
   return lines.join('\n');
@@ -201,12 +211,14 @@ function resourceLines(scenario: Scenario): string[] {
 }
 
 /** Recursos por elemento del escenario, o el motivo por el que no se pudo leer. */
-function scenarioResources(file: string): { resources: string[] } | { error: string } {
+function scenarioResources(file: string, locale: Locale): { resources: string[] } | { error: string } {
   try {
-    const parsed = parseScenario(resolveExtends(absolutePath(file), readJsonFile));
+    const raw = resolveExtends(absolutePath(file), (path) => readJsonFile(path, locale));
+    const parsed = parseScenario(raw, { locale });
     if (parsed.success) return { resources: resourceLines(parsed.data) };
+    // `$` para la raíz, igual que `schemaIssueLines` del motor: no es texto traducible.
     const detail = parsed.error.issues
-      .map((issue) => `${issue.path.join('.') || '(raíz)'}: ${issue.message}`)
+      .map((issue) => `${issue.path.join('.') || '$'}: ${issue.message}`)
       .join('; ');
     return { error: detail };
   } catch (error) {
@@ -219,8 +231,8 @@ function scenarioResources(file: string): { resources: string[] } | { error: str
  * ------------------------------------------------------------------ */
 
 const scenarioInputSchema = z.union([
-  z.string().describe('Ruta a un escenario .json, relativa al cwd del proceso servidor.'),
-  z.record(z.string(), z.unknown()).describe('Escenario ya resuelto, inline.'),
+  z.string().describe('Path to a .json scenario, relative to the cwd of the server process.'),
+  z.record(z.string(), z.unknown()).describe('The already resolved scenario, inline.'),
 ]);
 
 interface RunSimulationInput {
@@ -229,6 +241,7 @@ interface RunSimulationInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  locale?: Locale | undefined;
 }
 
 /**
@@ -237,56 +250,54 @@ interface RunSimulationInput {
  * rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
-async function runSimulation({
-  model,
-  scenario,
-  seed,
-  replications,
-  saveTo,
-}: RunSimulationInput): Promise<CallToolResult> {
+async function runSimulation(
+  { model, scenario, seed, replications, saveTo }: RunSimulationInput,
+  locale: Locale,
+): Promise<CallToolResult> {
+  const M = messages(locale).mcp;
+  const fail = (body: string): CallToolResult => errorResult(toolMessage('run_simulation', body));
+
   let resolved: ResolvedScenario;
   try {
-    resolved = resolveScenarioInput(scenario);
+    resolved = resolveScenarioInput(scenario, locale);
   } catch (error) {
-    return errorResult(`run_simulation: ${message(error)}`);
+    return fail(message(error));
   }
 
   const modelPath = model === undefined ? resolved.model : absolutePath(model);
   if (model !== undefined && comparablePath(modelPath) !== comparablePath(resolved.model)) {
-    return errorResult(
-      `run_simulation: el modelo (${modelPath}) no coincide con scenario.model (${resolved.model}).`,
-    );
+    return fail(M.modelMismatch(modelPath, resolved.model));
   }
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(modelPath));
+    ({ ir, validation: modelValidation } = await loadValidatedModel(modelPath, locale));
   } catch (error) {
-    return errorResult(`run_simulation: ${message(error)}`);
+    return fail(message(error));
   }
   if (modelValidation.errors.length > 0) {
-    return errorResult(`run_simulation: el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}`);
+    return fail(M.modelInvalid(JSON.stringify(modelValidation.errors)));
   }
 
   const withOverrides = withRunOverrides(resolved, { seed, replications });
-  const scenarioProblems = validateScenario(withOverrides, ir);
+  const scenarioProblems = validateScenario(withOverrides, ir, { locale });
   const scenarioIssues = scenarioErrors(scenarioProblems);
-  if (scenarioIssues.length > 0) return errorResult(`run_simulation: escenario inválido: ${JSON.stringify(scenarioIssues)}`);
+  if (scenarioIssues.length > 0) return fail(M.scenarioInvalid(JSON.stringify(scenarioIssues)));
 
   let result: RunResult;
   try {
-    const simulated = simulate(ir, withOverrides, { log: false });
+    const simulated = simulate(ir, withOverrides, { log: false, locale });
     result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
   } catch (error) {
-    return errorResult(`run_simulation: ${message(error)}`);
+    return fail(message(error));
   }
 
   if (saveTo !== undefined) {
     try {
-      writeJsonAtomic(saveTo, result);
+      writeJsonAtomic(saveTo, result, locale);
     } catch (error) {
-      return errorResult(`run_simulation: ${message(error)}`);
+      return fail(message(error));
     }
   }
 
@@ -299,6 +310,7 @@ interface CompareScenariosInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  locale?: Locale | undefined;
 }
 
 /** Etiqueta de un escenario en los mensajes de error: su ruta, o su posición si vino inline. */
@@ -313,52 +325,49 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
  * `lila compare --json`; los avisos que la CLI imprime aparte de la tabla (semillas distintas,
  * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
  */
-async function compareScenarios({
-  model,
-  scenarios,
-  seed,
-  replications,
-  saveTo,
-}: CompareScenariosInput): Promise<CallToolResult> {
-  if (scenarios.length < 2) return errorResult('compare_scenarios: hacen falta al menos dos escenarios.');
+async function compareScenarios(
+  { model, scenarios, seed, replications, saveTo }: CompareScenariosInput,
+  locale: Locale,
+): Promise<CallToolResult> {
+  const M = messages(locale).mcp;
+  const fail = (body: string): CallToolResult => errorResult(toolMessage('compare_scenarios', body));
+  if (scenarios.length < 2) return fail(M.atLeastTwoScenarios());
 
   const resolved: Array<{ label: string; scenario: ResolvedScenario }> = [];
   for (const [index, entry] of scenarios.entries()) {
     const label = scenarioLabel(entry, index);
     try {
-      resolved.push({ label, scenario: resolveScenarioInput(entry) });
+      resolved.push({ label, scenario: resolveScenarioInput(entry, locale) });
     } catch (error) {
-      return errorResult(`compare_scenarios: ${label}: ${message(error)}`);
+      return fail(`${label}: ${message(error)}`);
     }
   }
 
   const referenceModel = model === undefined ? resolved[0]!.scenario.model : absolutePath(model);
   for (const { label, scenario } of resolved) {
     if (comparablePath(referenceModel) !== comparablePath(scenario.model)) {
-      return errorResult(
-        `compare_scenarios: ${label}: el modelo (${referenceModel}) no coincide con scenario.model (${scenario.model}).`,
-      );
+      return fail(`${label}: ${M.modelMismatch(referenceModel, scenario.model)}`);
     }
   }
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(referenceModel));
+    ({ ir, validation: modelValidation } = await loadValidatedModel(referenceModel, locale));
   } catch (error) {
-    return errorResult(`compare_scenarios: ${message(error)}`);
+    return fail(message(error));
   }
   if (modelValidation.errors.length > 0) {
-    return errorResult(`compare_scenarios: el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}`);
+    return fail(M.modelInvalid(JSON.stringify(modelValidation.errors)));
   }
 
   // Todo se valida antes de simular nada, igual que `compareCommand`.
   const validated: Array<{ label: string; scenario: ResolvedScenario; problems: readonly ScenarioProblem[] }> = [];
   for (const { label, scenario } of resolved) {
     const withOverrides = withRunOverrides(scenario, { seed, replications });
-    const problems = validateScenario(withOverrides, ir);
+    const problems = validateScenario(withOverrides, ir, { locale });
     const issues = scenarioErrors(problems);
-    if (issues.length > 0) return errorResult(`compare_scenarios: ${label}: escenario inválido: ${JSON.stringify(issues)}`);
+    if (issues.length > 0) return fail(`${label}: ${M.scenarioInvalid(JSON.stringify(issues))}`);
     validated.push({ label, scenario: withOverrides, problems });
   }
 
@@ -367,28 +376,28 @@ async function compareScenarios({
     loaded = validated.map(({ label, scenario, problems }) => ({
       file: label,
       scenario,
-      result: resultWithBoundaryWarnings(simulate(ir, scenario, { log: false }), modelValidation, problems),
+      result: resultWithBoundaryWarnings(simulate(ir, scenario, { log: false, locale }), modelValidation, problems),
     }));
   } catch (error) {
-    return errorResult(`compare_scenarios: ${message(error)}`);
+    return fail(message(error));
   }
 
   let comparison: CompareResult;
   try {
-    comparison = compare(loaded.map((entry) => entry.result));
+    comparison = compare(loaded.map((entry) => entry.result), { locale });
   } catch (error) {
     // E-COMPARE-VACIO u otro error de `compare()`: no debería pasar tras el check de arriba, pero
     // se atrapa igual para no tumbar el servidor (mismo criterio que #53).
-    return errorResult(`compare_scenarios: ${message(error)}`);
+    return fail(message(error));
   }
 
-  const notes = compareWarnings(loaded, loaded[0]!.scenario.run.baseTimeUnit);
+  const notes = compareWarnings(loaded, loaded[0]!.scenario.run.baseTimeUnit, locale);
 
   if (saveTo !== undefined) {
     try {
-      writeJsonAtomic(saveTo, comparison);
+      writeJsonAtomic(saveTo, comparison, locale);
     } catch (error) {
-      return errorResult(`compare_scenarios: ${message(error)}`);
+      return fail(message(error));
     }
   }
 
@@ -414,36 +423,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 async function validatePatchedScenario(
   raw: unknown,
+  locale: Locale,
 ): Promise<{ ok: true; scenario: ResolvedScenario; notes: string[] } | { ok: false; error: string }> {
-  const parsed = parseScenario(raw);
+  const M = messages(locale).mcp;
+  const parsed = parseScenario(raw, { locale });
   if (!parsed.success) {
     // `schemaIssueLines` es la que pone los códigos de § 17 (`E-CLAVE-DESCONOCIDA`) que la CLI ya
     // emite (LILA-198); formatear los defectos aquí a mano los perdía.
-    return { ok: false, error: `escenario inválido tras el patch: ${schemaIssueLines(parsed.error.issues).join('; ')}` };
+    const detail = schemaIssueLines(parsed.error.issues, { locale }).join('; ');
+    return { ok: false, error: `${M.invalidAfterPatchLabel()} ${detail}` };
   }
   // `ScenarioSchema` tiene `model` y `run` opcionales (un archivo con `extends` los hereda), así
   // que un patch puede borrarlos y aun así pasar el esquema. `loadResolvedScenario` los exige y es
   // lo que hace el modo (b); sin este par de guardas el modo (a) escribía un escenario que la
   // propia `run_simulation` rechaza después — y el `remove /model` filtraba el TypeError de
   // `node:path` en vez de un mensaje del dominio.
-  if (parsed.data.model === undefined) return { ok: false, error: 'el escenario resultante no declara model.' };
-  if (parsed.data.run === undefined) return { ok: false, error: 'el escenario resultante no declara run.' };
+  if (parsed.data.model === undefined) return { ok: false, error: M.patchedMissingModel() };
+  if (parsed.data.run === undefined) return { ok: false, error: M.patchedMissingRun() };
   const scenario = parsed.data as ResolvedScenario;
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(scenario.model));
+    ({ ir, validation: modelValidation } = await loadValidatedModel(scenario.model, locale));
   } catch (error) {
     return { ok: false, error: message(error) };
   }
   if (modelValidation.errors.length > 0) {
-    return { ok: false, error: `el modelo no pasa la validación: ${JSON.stringify(modelValidation.errors)}` };
+    return { ok: false, error: M.modelInvalid(JSON.stringify(modelValidation.errors)) };
   }
 
-  const problems = validateScenario(scenario, ir);
+  const problems = validateScenario(scenario, ir, { locale });
   const issues = scenarioErrors(problems);
-  if (issues.length > 0) return { ok: false, error: `escenario inválido tras el patch: ${JSON.stringify(issues)}` };
+  if (issues.length > 0) {
+    return { ok: false, error: `${M.invalidAfterPatchLabel()} ${JSON.stringify(issues)}` };
+  }
 
   const notes = problems.filter((p) => p.severity === 'warning').map((p) => `${p.code}: ${p.message}`);
   return { ok: true, scenario, notes };
@@ -455,10 +469,13 @@ async function validatePatchedScenario(
  * escribir. Citarlo manda al agente a abrir una ruta fantasma — el mismo problema que el escenario
  * inline de LILA-054. Se le quita el prefijo y se alinea el texto con el del modo (a).
  */
-function withoutPhantomFile(error: unknown, phantom: string): string {
+function withoutPhantomFile(error: unknown, phantom: string, locale: Locale): string {
+  const catalog = messages(locale);
   const raw = message(error).replaceAll('\n', ' ');
   return raw.startsWith(`${phantom}: `)
-    ? raw.slice(phantom.length + 2).replace('escenario inválido:', 'escenario inválido tras el patch:')
+    ? raw
+        .slice(phantom.length + 2)
+        .replace(catalog.cli.invalidScenarioLabel(), catalog.mcp.invalidAfterPatchLabel())
     : raw;
 }
 
@@ -480,6 +497,7 @@ interface PatchScenarioInput {
   extendsFrom?: string | undefined;
   name?: string | undefined;
   description?: string | undefined;
+  locale?: Locale | undefined;
 }
 
 /**
@@ -490,27 +508,25 @@ interface PatchScenarioInput {
  * si el escenario resultante valida contra el modelo; nunca dos veces (primero se valida, después
  * se escribe una única vez).
  */
-async function patchScenario({
-  scenario,
-  patch,
-  saveTo,
-  extendsFrom,
-  name,
-  description,
-}: PatchScenarioInput): Promise<CallToolResult> {
+async function patchScenario(
+  { scenario, patch, saveTo, extendsFrom, name, description }: PatchScenarioInput,
+  locale: Locale,
+): Promise<CallToolResult> {
+  const M = messages(locale).mcp;
+  const fail = (body: string): CallToolResult => errorResult(toolMessage('patch_scenario', body));
   const scenarioPath = absolutePath(scenario);
   let base: ResolvedScenario;
   try {
-    base = loadResolvedScenario(scenarioPath);
+    base = loadResolvedScenario(scenarioPath, undefined, locale);
   } catch (error) {
-    return errorResult(`patch_scenario: ${message(error)}`);
+    return fail(message(error));
   }
 
   let patchedRaw: unknown;
   try {
     patchedRaw = applyJsonPatch(base, patch);
   } catch (error) {
-    return errorResult(`patch_scenario: ${message(error)}`);
+    return fail(message(error));
   }
 
   if (saveTo === undefined) {
@@ -519,73 +535,91 @@ async function patchScenario({
       if (name !== undefined) patchedRaw.name = name;
       if (description !== undefined) patchedRaw.description = description;
     }
-    const outcome = await validatePatchedScenario(patchedRaw);
-    if (!outcome.ok) return errorResult(`patch_scenario: ${outcome.error}`);
+    const outcome = await validatePatchedScenario(patchedRaw, locale);
+    if (!outcome.ok) return fail(outcome.error);
     try {
-      const file = writeJsonAtomic(scenarioPath, withRelativeModel(outcome.scenario, scenarioPath));
+      const file = writeJsonAtomic(
+        scenarioPath,
+        withRelativeModel(outcome.scenario, scenarioPath),
+        locale,
+      );
       return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
     } catch (error) {
-      return errorResult(`patch_scenario: ${message(error)}`);
+      return fail(message(error));
     }
   }
 
   // Modo (b): archivo nuevo con `extends` al padre, solo el delta del patch.
-  if (!isPlainObject(patchedRaw)) {
-    return errorResult('patch_scenario: el patch no produjo un objeto de escenario.');
-  }
+  if (!isPlainObject(patchedRaw)) return fail(M.patchNotAnObject());
   const saveToPath = absolutePath(saveTo);
   const extendsFromPath = absolutePath(extendsFrom ?? scenario);
   const relExtends = posix.relative(posix.dirname(saveToPath), extendsFromPath);
   const delta = buildPatchDelta(patch, patchedRaw);
 
   const candidate: Record<string, unknown> = { version: base.version, extends: relExtends, ...delta };
-  candidate['name'] = name ?? (typeof delta['name'] === 'string' ? delta['name'] : `${base.name} (parcheado)`);
+  candidate['name'] =
+    name ?? (typeof delta['name'] === 'string' ? delta['name'] : M.patchedName(base.name));
   if (description !== undefined) candidate['description'] = description;
 
   let resolvedCandidate: ResolvedScenario;
   try {
-    resolvedCandidate = loadResolvedScenario(saveToPath, (file) => (file === saveToPath ? candidate : readJsonFile(file)));
+    resolvedCandidate = loadResolvedScenario(
+      saveToPath,
+      (file) => (file === saveToPath ? candidate : readJsonFile(file, locale)),
+      locale,
+    );
   } catch (error) {
-    return errorResult(`patch_scenario: ${withoutPhantomFile(error, saveToPath)}`);
+    return fail(withoutPhantomFile(error, saveToPath, locale));
   }
 
-  const outcome = await validatePatchedScenario(resolvedCandidate);
-  if (!outcome.ok) return errorResult(`patch_scenario: ${outcome.error}`);
+  const outcome = await validatePatchedScenario(resolvedCandidate, locale);
+  if (!outcome.ok) return fail(outcome.error);
 
   try {
-    const file = writeJsonAtomic(saveToPath, candidate);
+    const file = writeJsonAtomic(saveToPath, candidate, locale);
     return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
   } catch (error) {
-    return errorResult(`patch_scenario: ${message(error)}`);
+    return fail(message(error));
   }
 }
 
-export function createServer(): McpServer {
+/** Opciones de arranque comunes a `createServer` y `startStdioServer`. */
+export interface ServerOptions {
+  /** Idioma por defecto de las respuestas; cada llamada puede pedir otro con `locale`. */
+  locale?: Locale | undefined;
+}
+
+export function createServer(options: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: NAME, version: VERSION }, { capabilities: { tools: {} } });
+  // El idioma del servidor: lo que pidió `lila mcp --lang`/`LILA_LANG`, o inglés.
+  const fallbackLocale: Locale = options.locale ?? 'en';
+  const localeOf = (locale: Locale | undefined): Locale => locale ?? fallbackLocale;
 
   server.registerTool(
     'validate_bpmn',
     {
-      title: 'Validar BPMN',
+      title: 'Validate BPMN',
       description:
-        'Parsea y valida un archivo .bpmn (por ruta o XML inline, uno de los dos) y devuelve el ' +
-        'mismo JSON que `lila validate --json`: el IR, los procesos ignorados, y errores/avisos ' +
-        'estructurados. Un modelo con `errors` no vacío no se puede simular, pero eso es un ' +
-        'resultado válido de la tool: isError solo marca que la tool falló (argumentos malos, ' +
-        'archivo ilegible, XML impenetrable).',
+        'Parses and validates a .bpmn file (by path or inline XML, one of the two) and returns the ' +
+        'same JSON as `lila validate --json`: the IR, the ignored processes, and structured ' +
+        'errors/warnings. A model with a non-empty `errors` cannot be simulated, but that is a ' +
+        'valid result of the tool: isError only marks that the tool failed (bad arguments, ' +
+        'unreadable file, impenetrable XML).',
       inputSchema: z.object({
-        path: z.string().optional().describe('Ruta al .bpmn, relativa al cwd del proceso servidor.'),
-        xml: z.string().optional().describe('Contenido XML del .bpmn, en vez de una ruta.'),
+        path: z.string().optional().describe('Path to the .bpmn, relative to the cwd of the server process.'),
+        xml: z.string().optional().describe('XML content of the .bpmn, instead of a path.'),
+        locale: localeSchema,
       }),
     },
-    async ({ path, xml }): Promise<CallToolResult> => {
-      const read = modelXml('validate_bpmn', path, xml);
+    async ({ path, xml, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      const read = modelXml('validate_bpmn', path, xml, language);
       if ('error' in read) return errorResult(read.error);
 
       try {
-        return textResult(await validateBpmnXml(read.xml));
+        return textResult(await validateBpmnXml(read.xml, { locale: language }));
       } catch (error) {
-        return errorResult(`validate_bpmn: ${message(error)}`);
+        return errorResult(toolMessage('validate_bpmn', message(error)));
       }
     },
   );
@@ -593,120 +627,129 @@ export function createServer(): McpServer {
   server.registerTool(
     'describe_process',
     {
-      title: 'Describir proceso',
+      title: 'Describe process',
       description:
-        'Parsea un .bpmn (por ruta o XML inline, uno de los dos) y devuelve su IR (ProcessIR) ' +
-        'junto con un resumen legible en español: ' +
-        'conteo de nodos por tipo, gateways con sus salidas, lanes, subprocesos, otros procesos ' +
-        'del archivo y si el modelo pasa la validación. Con `scenario` opcional (ruta a un ' +
-        'escenario .json, resuelve `extends`), agrega los recursos referenciados por elemento.',
+        'Parses a .bpmn (by path or inline XML, one of the two) and returns its IR (ProcessIR) ' +
+        'together with a readable summary (the `resumen` key): node count by type, gateways with ' +
+        'their outgoing flows, lanes, subprocesses, other processes in the file and whether the ' +
+        'model passes validation. With the optional `scenario` (path to a .json scenario, resolves ' +
+        '`extends`) it adds the resources referenced by element.',
       inputSchema: z.object({
-        path: z.string().optional().describe('Ruta al .bpmn, relativa al cwd del proceso servidor.'),
-        xml: z.string().optional().describe('Contenido XML del .bpmn, en vez de una ruta.'),
-        scenario: z.string().optional().describe('Ruta a un escenario .json, relativa al cwd.'),
+        path: z.string().optional().describe('Path to the .bpmn, relative to the cwd of the server process.'),
+        xml: z.string().optional().describe('XML content of the .bpmn, instead of a path.'),
+        scenario: z.string().optional().describe('Path to a .json scenario, relative to the cwd.'),
+        locale: localeSchema,
       }),
     },
-    async ({ path, xml, scenario }): Promise<CallToolResult> => {
-      const read = modelXml('describe_process', path, xml);
+    async ({ path, xml, scenario, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      const read = modelXml('describe_process', path, xml, language);
       if ('error' in read) return errorResult(read.error);
 
       let report: ValidateBpmnReport;
       try {
-        report = await validateBpmnXml(read.xml);
+        report = await validateBpmnXml(read.xml, { locale: language });
       } catch (error) {
-        return errorResult(`describe_process: ${message(error)}`);
+        return errorResult(toolMessage('describe_process', message(error)));
       }
 
-      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario);
+      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario, language);
       const resources = scenarioResult !== undefined && 'resources' in scenarioResult ? scenarioResult.resources : [];
       const scenarioError = scenarioResult !== undefined && 'error' in scenarioResult ? scenarioResult.error : undefined;
 
-      return textResult({ ir: report.ir, resumen: describeIr(report, resources, scenarioError) });
+      // `resumen` es el nombre de la clave desde LILA-053 y es contrato documentado
+      // (`docs/MCP.md`): no se renombra al traducir, solo cambia el idioma de su contenido.
+      return textResult({ ir: report.ir, resumen: describeIr(report, resources, scenarioError, language) });
     },
   );
 
   server.registerTool(
     'run_simulation',
     {
-      title: 'Correr simulación',
+      title: 'Run simulation',
       description:
-        'Valida modelo y escenario, simula con `log: false` y devuelve el mismo `RunResult` que ' +
-        '`lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` ' +
-        'acepta una ruta .json (resuelve `extends`) o el escenario ya resuelto como objeto inline. ' +
-        '`saveTo` escribe el mismo JSON de forma atómica, como `lila run --json <ruta>`. ' +
-        'isError solo marca que la tool falló (modelo/escenario inválido, archivo ilegible).',
+        'Validates model and scenario, simulates with `log: false` and returns the same `RunResult` ' +
+        'as `lila run --json` (elements, flows, resources, process, bottlenecks and warnings). ' +
+        '`scenario` accepts a .json path (resolves `extends`) or the already resolved scenario as an ' +
+        'inline object. `saveTo` writes the same JSON atomically, like `lila run --json <path>`. ' +
+        'isError only marks that the tool failed (invalid model/scenario, unreadable file).',
       inputSchema: z.object({
-        model: z.string().optional().describe('Ruta al .bpmn; por defecto, scenario.model.'),
+        model: z.string().optional().describe('Path to the .bpmn; defaults to scenario.model.'),
         scenario: scenarioInputSchema,
-        seed: z.number().int().optional().describe('Sobrescribe run.seed.'),
-        replications: z.number().int().min(1).optional().describe('Sobrescribe run.replications.'),
-        saveTo: z.string().optional().describe('Ruta donde escribir el RunResult como JSON.'),
+        seed: z.number().int().optional().describe('Overrides run.seed.'),
+        replications: z.number().int().min(1).optional().describe('Overrides run.replications.'),
+        saveTo: z.string().optional().describe('Path to write the RunResult as JSON.'),
+        locale: localeSchema,
       }),
       outputSchema: runResultSchema,
     },
-    runSimulation,
+    async (input): Promise<CallToolResult> => runSimulation(input, localeOf(input.locale)),
   );
 
   server.registerTool(
     'compare_scenarios',
     {
-      title: 'Comparar escenarios',
+      title: 'Compare scenarios',
       description:
-        'Valida y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y ' +
-        'devuelve el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que ' +
-        'la CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas ' +
-        'insuficientes para IC95). `scenarios` acepta rutas .json u objetos inline, mezclados. ' +
-        '`saveTo` escribe `comparison` como JSON, igual que `lila compare --json`.',
+        'Validates and simulates two or more scenarios on the same model (the first one is the ' +
+        'base) and returns the same `CompareResult` as `lila compare --json`, plus `notes`: the ' +
+        'warnings the CLI prints beside the table (different seeds, different `baseTimeUnit`, too ' +
+        'few replications for a 95% CI). `scenarios` accepts .json paths and inline objects, mixed. ' +
+        '`saveTo` writes `comparison` as JSON, like `lila compare --json`.',
       inputSchema: z.object({
-        model: z.string().optional().describe('Ruta al .bpmn; por defecto, el model del primer escenario.'),
-        // Sin `.min(2)`: así el mensaje lo da `compareScenarios` en español, no el validador del SDK.
+        model: z.string().optional().describe('Path to the .bpmn; defaults to the model of the first scenario.'),
+        // Sin `.min(2)`: así el mensaje lo da `compareScenarios` en el idioma pedido, no el
+        // validador del SDK, que solo habla inglés.
         scenarios: z.array(scenarioInputSchema),
-        seed: z.number().int().optional().describe('Sobrescribe run.seed en todos los escenarios.'),
-        replications: z.number().int().min(1).optional().describe('Sobrescribe run.replications en todos.'),
-        saveTo: z.string().optional().describe('Ruta donde escribir el CompareResult como JSON.'),
+        seed: z.number().int().optional().describe('Overrides run.seed in every scenario.'),
+        replications: z.number().int().min(1).optional().describe('Overrides run.replications in every scenario.'),
+        saveTo: z.string().optional().describe('Path to write the CompareResult as JSON.'),
+        locale: localeSchema,
       }),
     },
-    compareScenarios,
+    async (input): Promise<CallToolResult> => compareScenarios(input, localeOf(input.locale)),
   );
 
   server.registerTool(
     'patch_scenario',
     {
-      title: 'Parchear escenario',
+      title: 'Patch scenario',
       description:
-        'Aplica un JSON Patch (RFC 6902; solo add/replace/remove/test, sin move/copy) a un ' +
-        'escenario, valida el resultado contra su modelo y solo si valida lo escribe a disco. Sin ' +
-        '`saveTo`, parchea `scenario` en sitio (escenario resuelto completo, sin `extends`). Con ' +
-        '`saveTo`, crea un archivo nuevo con `extends` hacia `extendsFrom` (por defecto, el propio ' +
-        '`scenario`) y solo las claves que tocó el patch — como `to-be-3-cajeros.scenario.json`. ' +
-        'Devuelve el escenario resultante ya resuelto, la ruta escrita y `notes` con los avisos de ' +
-        'lint. Un patch que deja el escenario inválido (`probability` fuera de `[0,1]`, `capacity` ' +
-        '< 1, una `ref` que no existe en `resources`, …) se rechaza sin escribir nada.',
+        'Applies a JSON Patch (RFC 6902; only add/replace/remove/test, no move/copy) to a scenario, ' +
+        'validates the result against its model and writes it to disk only if it validates. Without ' +
+        '`saveTo` it patches `scenario` in place (the full resolved scenario, without `extends`). ' +
+        'With `saveTo` it creates a new file with `extends` towards `extendsFrom` (by default, ' +
+        '`scenario` itself) and only the keys the patch touched — like ' +
+        '`to-be-3-cajeros.scenario.json`. Returns the resulting resolved scenario, the path written ' +
+        'and `notes` with the lint warnings. A patch that leaves the scenario invalid (`probability` ' +
+        'outside `[0,1]`, `capacity` < 1, a `ref` that does not exist in `resources`, …) is rejected ' +
+        'without writing anything.',
       inputSchema: z.object({
-        scenario: z.string().describe('Ruta al escenario .json a leer y patchear, relativa al cwd.'),
+        scenario: z.string().describe('Path to the .json scenario to read and patch, relative to the cwd.'),
         patch: z
           .array(
             z.object({
-              op: z.string().describe('add | replace | remove | test (move/copy no soportadas).'),
-              path: z.string().describe('Puntero RFC 6901, p. ej. "/resources/cajero/capacity".'),
-              value: z.unknown().optional().describe('Requerido por add/replace/test.'),
-              from: z.string().optional().describe('No usado: move/copy no están implementadas.'),
+              op: z.string().describe('add | replace | remove | test (move/copy are not supported).'),
+              path: z.string().describe('RFC 6901 pointer, e.g. "/resources/cajero/capacity".'),
+              value: z.unknown().optional().describe('Required by add/replace/test.'),
+              from: z.string().optional().describe('Unused: move/copy are not implemented.'),
             }),
           )
           .min(1),
         saveTo: z
           .string()
           .optional()
-          .describe('Ausente: escribe sobre `scenario`. Presente: crea un escenario nuevo con `extends` ahí.'),
+          .describe('Absent: writes over `scenario`. Present: creates a new scenario with `extends` there.'),
         extendsFrom: z
           .string()
           .optional()
-          .describe('Padre del `extends` del archivo nuevo (solo con `saveTo`). Por defecto, `scenario`.'),
-        name: z.string().optional().describe('Nombre del escenario resultante; por defecto, uno generado.'),
-        description: z.string().optional().describe('Descripción del escenario resultante.'),
+          .describe('Parent of the `extends` of the new file (only with `saveTo`). Defaults to `scenario`.'),
+        name: z.string().optional().describe('Name of the resulting scenario; defaults to a generated one.'),
+        description: z.string().optional().describe('Description of the resulting scenario.'),
+        locale: localeSchema,
       }),
     },
-    patchScenario,
+    async (input): Promise<CallToolResult> => patchScenario(input, localeOf(input.locale)),
   );
 
   return server;
@@ -716,7 +759,11 @@ export function createServer(): McpServer {
  * Arranca el servidor sobre stdio. Lo usan el bin `lila-mcp` de este paquete y el subcomando
  * `lila mcp` de `@lila/engine` (LILA-056), que lo carga con `import()` dinámico para no crear un
  * ciclo de dependencia entre los dos paquetes. stdout es el transporte: nada más puede escribir ahí.
+ *
+ * Sin `locale`, el idioma sale del entorno (`LILA_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`), la misma
+ * regla que la CLI: quien lo lanza desde `lila mcp` ya resolvió `--lang` y lo pasa explícito.
  */
-export async function startStdioServer(): Promise<void> {
-  await createServer().connect(new StdioServerTransport());
+export async function startStdioServer(options: ServerOptions = {}): Promise<void> {
+  const locale = options.locale ?? resolveLocale(undefined, process.env);
+  await createServer({ locale }).connect(new StdioServerTransport());
 }

@@ -1,17 +1,9 @@
 {
   "name": "@lila/engine",
   "version": "0.1.0",
-  "description": "Motor de simulación DES para BPMN, con paridad de Bizagi Modeler",
+  "description": "Discrete-event simulation engine for BPMN processes, inspired by the simulation workflow of Bizagi Modeler and validated against public examples",
   "license": "Apache-2.0",
   "type": "module",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/AlambritoDito/lila-modeler.git",
-    "directory": "packages/engine"
-  },
-  "engines": {
-    "node": ">=22"
-  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -27,6 +19,10 @@
     "./schema": {
       "types": "./dist/scenario.d.ts",
       "default": "./dist/scenario.js"
+    },
+    "./messages": {
+      "types": "./dist/messages/index.d.ts",
+      "default": "./dist/messages/index.js"
     },
     "./cli-shared": {
       "types": "./dist/cli-shared.d.ts",
@@ -49,15 +45,13 @@
     "dist",
     "bin",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "build": "tsc --build",
-    "prepack": "npm run build",
-    "golden:update": "tsx test/golden/generate.ts"
+    "golden:update": "tsx test/golden/generate.ts",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "bpmn-moddle": "^10.2.0",
@@ -65,5 +59,16 @@
   },
   "bin": {
     "lila": "./bin/lila.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlambritoDito/lila-modeler.git",
+    "directory": "packages/engine"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

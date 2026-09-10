@@ -1,5 +1,7 @@
 # Prompt — Claude Design · Interfaz de Lila Modeler
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 > Pegar en Claude Design. Pide un canvas con varios artboards. Si el resultado es bueno, los tokens de la sección "Sistema de temas" se convierten directamente en las variables CSS de `apps/web`.
 
 ---

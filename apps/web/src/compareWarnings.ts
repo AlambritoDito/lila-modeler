@@ -14,7 +14,7 @@
 import type { BaseTimeUnit } from '@lila/engine/format';
 import type { RunResult } from '@lila/engine';
 import type { ResolvedScenario } from '@lila/engine/schema';
-import { S } from './strings.es';
+import { strings } from './i18n';
 
 /**
  * Metadatos de una corrida comparada, en el mismo orden que `scenarioNames`/`comparison` de
@@ -44,8 +44,6 @@ export interface CompareWarningsResult {
   unitsMixed: boolean;
 }
 
-const NO_CURRENCY = S.comparar.sinMoneda;
-
 /**
  * `run.replications` tiene default en `RunSchema` (1) y `run.seed` lo aplica el motor (`?? 1`,
  * R-DEG-4): una corrida sin el campo declarado en sus metadatos de comparación se trata como si
@@ -66,9 +64,10 @@ function distinct<T>(values: readonly T[]): T[] {
 }
 
 export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarningsResult {
+  const S = strings();
   const warnings: string[] = [];
 
-  const currencyLabels = distinct(runs.map((run) => run.currency ?? NO_CURRENCY));
+  const currencyLabels = distinct(runs.map((run) => run.currency ?? S.comparar.sinMoneda));
   const costsComparable = currencyLabels.length <= 1;
   if (!costsComparable) {
     warnings.push(S.comparar.avisoMonedas(currencyLabels));
@@ -101,8 +100,8 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
 /**
  * Construye el `CompareRunMeta` de una corrida a partir de lo que ya guarda `ProjectStore`
  * (`apps/web/src/store/ProjectStore.ts`): un escenario resuelto y su `RunResult`. Pensado para A
- * en OP-13, que conecta `CompareView` al flujo real — ver la interfaz documentada en
- * `docs/plan-operativo-2026-09-06/estado/OP-05-claude.md`.
+ * en OP-13, que conecta `CompareView` al flujo real: la interfaz es `CompareRunMeta` tal como
+ * está declarada en este archivo; no hay más contrato que ese.
  */
 export function runMetaFrom(name: string, scenario: ResolvedScenario, result: RunResult): CompareRunMeta {
   return {

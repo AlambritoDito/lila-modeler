@@ -167,7 +167,7 @@ test('extends cíclico y XML impenetrable: isError con el motivo, y el servidor 
     arguments: { path: modelo, scenario: a },
   });
   expect(conCiclo.isError ?? false).toBe(false);
-  expect(jsonOf(conCiclo).resumen).toContain('no se pudo leer el escenario');
+  expect(jsonOf(conCiclo).resumen).toContain('the scenario could not be read');
 
   expect((await client.listTools()).tools).toHaveLength(5);
 }, 120_000);
@@ -238,19 +238,60 @@ test('`.mcp.json` del repo apunta a un comando que existe tras `npm run build`',
   expect(lila.args[1]).toBe('mcp');
 });
 
-test('`lila mcp` con argumentos de más falla en español; `--help` imprime la ayuda', () => {
+test('`lila mcp` con argumentos de más falla; `--help` imprime la ayuda, y `--lang` traduce las dos', () => {
   // Los dos casos que **no** arrancan servidor, que son los que alguien escribe a mano. El test
   // anterior solo comprobaba que el proceso nacía (`pid > 0`) y lo mataba: `lila mcp de-más`
   // podía haber arrancado el servidor igualmente y nadie se enteraba.
   const sobra = spawnSync(process.execPath, [lilaBin, 'mcp', 'de-más'], { cwd: repo, encoding: 'utf8' });
   expect(sobra.status).toBe(1);
-  expect(sobra.stderr).toContain('lila mcp: no acepta argumentos.');
+  expect(sobra.stderr).toContain('lila mcp: it takes no arguments.');
   expect(sobra.stdout).toBe(''); // stdout es el transporte: nada que no sea protocolo.
 
   const ayuda = spawnSync(process.execPath, [lilaBin, 'mcp', '--help'], { cwd: repo, encoding: 'utf8' });
   expect(ayuda.status).toBe(0);
   expect(ayuda.stdout).toContain('lila mcp');
-  expect(ayuda.stdout).toContain('Arranca el servidor MCP por stdio');
+  expect(ayuda.stdout).toContain('Starts the MCP server over stdio');
+  expect(ayuda.stdout).toContain('--lang en|es');
+
+  // LILA-211 parte 2: `--lang` es global, así que `lila mcp --lang es` no puede morir en el
+  // `parseArgs` de `mcp` por confundir el valor con un positional.
+  const sobraEs = spawnSync(process.execPath, [lilaBin, 'mcp', '--lang', 'es', 'de-más'], {
+    cwd: repo,
+    encoding: 'utf8',
+  });
+  expect(sobraEs.status).toBe(1);
+  expect(sobraEs.stderr).toContain('lila mcp: no acepta argumentos.');
+
+  const ayudaEs = spawnSync(process.execPath, [lilaBin, 'mcp', '--help', '--lang=es'], {
+    cwd: repo,
+    encoding: 'utf8',
+  });
+  expect(ayudaEs.status).toBe(0);
+  expect(ayudaEs.stdout).toContain('Arranca el servidor MCP por stdio');
+}, 120_000);
+
+/**
+ * El servidor toma el idioma de quien lo arrancó (`lila mcp --lang`), y `locale` lo sobrescribe
+ * para una llamada suelta. Como proceso: es lo que ve un cliente MCP de verdad.
+ */
+test('`lila mcp --lang es` sirve en español, y `locale` sobrescribe por llamada', async () => {
+  const c = new Client({ name: 'lila-qa-m4-es', version: '0' });
+  await c.connect(
+    new StdioClientTransport({ command: process.execPath, args: [lilaBin, 'mcp', '--lang', 'es'], cwd: repo }),
+  );
+  try {
+    const enEspanol = await c.callTool({ name: 'describe_process', arguments: { path: modelo } });
+    expect(enEspanol.isError ?? false).toBe(false);
+    expect(jsonOf(enEspanol).resumen).toContain('Validación: 0 errores, 1 aviso.');
+
+    const enIngles = await c.callTool({
+      name: 'describe_process',
+      arguments: { path: modelo, locale: 'en' },
+    });
+    expect(jsonOf(enIngles).resumen).toContain('Validation: 0 errors, 1 warning.');
+  } finally {
+    await c.close();
+  }
 }, 120_000);
 
 test('docs/MCP.md documenta las tools reales, con los argumentos reales', async () => {

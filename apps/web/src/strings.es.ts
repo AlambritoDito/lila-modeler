@@ -1,55 +1,57 @@
 /**
- * Catálogo de textos de la app web (LILA-066).
+ * Traducción al español del catálogo base (`strings.en.ts`, LILA-210).
  *
- * Aceptación literal del ticket: «no hay literales de UI fuera de `strings.es.ts`». Todo lo que
- * una persona llega a leer en la app —texto de botones y rótulos, `title`/`aria-label`/
- * `placeholder`, mensajes de error y aviso, y los textos que se pintan sobre el lienzo— sale de
- * aquí. `strings.test.ts` es la prueba de aceptación: relee los `.tsx`/`.ts` de `apps/web/src` con
- * el parser de TypeScript y falla si vuelve a aparecer un literal de UI fuera de este archivo.
+ * Aquí no se decide qué textos hay: eso lo fija `strings.en.ts`, que es la lengua base, y el tipo
+ * `Strings` (`strings.types.ts`) obliga a que esta traducción tenga **exactamente** sus claves,
+ * con la misma forma —lo que allí es una función con dos parámetros, aquí también—. Olvidar una
+ * clave, inventarse otra o cambiar una función por un texto no compila; `strings.test.ts` lo
+ * vuelve a comprobar en tiempo de ejecución, clave por clave, para los mapas que `tsc` no puede
+ * comparar (`Record<string, string>`).
  *
- * Tres decisiones que explican la forma del objeto:
+ * Las claves siguen en español (`app.guardar`, `escenario.seccionCorrida`): son identificadores,
+ * no texto que nadie lea, y renombrar ~380 de ellas tocaría todos los componentes sin que nadie
+ * lo notara en pantalla.
  *
- * 1. **Un objeto plano, sin framework i18n.** La app es monolingüe (regla del repo: todo en
- *    español). Un `S.escenario.guardar` es una constante con nombre, no una clave que alguien
- *    tenga que traducir; el día que haya un segundo idioma, este archivo es exactamente la lista
- *    de lo que hay que traducir y el sitio donde enchufar lo que sea.
- * 2. **Los textos con parámetros son funciones**, no plantillas con marcadores: `S.resultados
- *    .corridas(n)` se typechea, y el plural o el género se deciden aquí y no en la vista.
- * 3. **Agrupado por vista o módulo**, con el nombre del archivo que lo usa. Nada de claves
- *    genéricas (`text1`): el nombre dice dónde se lee el texto.
+ * Lo que decide **este** archivo y no el base: el plural, el género y la morfología del español
+ * (`errores(n)`, `densidadNombre('comoda') === 'cómoda'`), y `tokenSim.traducciones`, que es el
+ * inventario de cadenas que `bpmn-js-token-simulation` escribe en inglés dentro del lienzo y que
+ * en la lengua base está vacío por serlo ya.
  *
- * Lo que **no** está aquí, a propósito:
- *
- * - Los mensajes del motor (`packages/engine`): el catálogo § 17 de `docs/SEMANTICS.md` manda, y
- *   la web los muestra tal cual llegan para no tener dos ortografías del mismo error.
- * - Los nombres de columna de resultados que fija Bizagi (`Id`, `Name`, `Type`, `From`, `To`,
- *   `Metric`): están en `S.resultados.columnas` para que se lean desde aquí, pero su valor lo
- *   manda `docs/BIZAGI_PARITY.md` (regla 4 de `BACKLOG.md`) y no se traducen.
- * - Las claves del JSON Schema del escenario (`run`, `calendars`, `capacity`, …): son el nombre
- *   del campo en el archivo, no una etiqueta; `docs/SCENARIO_FORMAT.md` es su ortografía.
+ * Lo que **no** está aquí, a propósito (igual que en el base): los mensajes del motor
+ * (`packages/engine`, § 17 de `docs/SEMANTICS.md`), los nombres de columna que fija Bizagi
+ * (`S.resultados.columnas`, `docs/BIZAGI_PARITY.md`) y las claves del JSON Schema del escenario
+ * (`docs/SCENARIO_FORMAT.md`): esos tres no se traducen.
  */
+
+import type { Strings } from './strings.types';
 
 /** Días de la semana del formato de calendarios, en el orden canónico (`CalendarEditor.DIAS`). */
 const DIAS_SEMANA = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
-export const S = {
+export const es: Strings = {
   /* ------------------------------------------------------------------ *
    * Shell de la app (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
-    /** Modos de la barra superior. El texto es también el identificador del modo activo. */
-    modos: ['Modelar', 'Simular', 'Resultados', 'Comparar', 'Validar rutas'],
-    /** Pestañas del panel derecho; igual que los modos, el texto identifica la pestaña. */
-    pestanas: ['Propiedades', 'Documentación', 'Simulación'],
+    /** Rótulo de cada modo de la barra superior; el id lo fija `ids.ts` (`MODO_IDS`). */
+    modos: {
+      modelar: 'Modelar',
+      simular: 'Simular',
+      resultados: 'Resultados',
+      comparar: 'Comparar',
+      rutas: 'Validar rutas',
+    },
+    /** Rótulo de cada pestaña del panel derecho; el id lo fija `ids.ts` (`PESTANA_IDS`). */
+    pestanas: {
+      propiedades: 'Propiedades',
+      documentacion: 'Documentación',
+      simulacion: 'Simulación',
+    },
 
     /** Nombre visible de cada tema integrado (`src/theme/themes/*.json`). */
     temas: { 'eva-01': 'Eva-01', papel: 'Papel' },
-    /** Nombre visible de cada densidad; `id` es el valor que se guarda en `localStorage`. */
-    densidades: [
-      { id: 'compacta', nombre: 'Compacta' },
-      { id: 'normal', nombre: 'Normal' },
-      { id: 'comoda', nombre: 'Cómoda' },
-    ],
+    /** Nombre visible de cada densidad; el id (`ids.ts`) es lo que se guarda en `localStorage`. */
+    densidades: { compacta: 'Compacta', normal: 'Normal', comoda: 'Cómoda' },
     /** El mismo nombre en minúscula, para la barra de estado («Densidad cómoda»). */
     densidadNombre: (id: string): string => (id === 'comoda' ? 'cómoda' : id),
 
@@ -107,7 +109,7 @@ export const S = {
     descartar: 'Descartar',
 
     /** Diálogo de pérdida al exportar o guardar (LILA-192). */
-    perdidaVerbo: { Exportar: 'Exportar', Guardar: 'Guardar' },
+    perdidaVerbo: { exportar: 'Exportar', guardar: 'Guardar' },
     perdidaTitulo: (n: number): string =>
       `${n === 1 ? 'Se perderá' : 'Se perderán'} ${n} ${
         n === 1
@@ -120,7 +122,10 @@ export const S = {
       } no las llevará:`,
     perdidaConfirmar: (verbo: string): string => `${verbo} igualmente`,
 
-    /** Diálogo de ajustes. */
+    /** Diálogo de ajustes. El endónimo de cada idioma es el mismo en todos los catálogos. */
+    idioma: 'Idioma',
+    idiomaAuto: 'Predeterminado del sistema',
+    idiomas: { en: 'English', es: 'Español' },
     apariencia: 'Apariencia',
     tema: 'Tema',
     densidad: 'Densidad',
@@ -573,6 +578,7 @@ export const S = {
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
   lienzo: {
+    minimapa: 'Minimapa',
     plegarMinimapa: 'Plegar minimapa',
     desplegarMinimapa: 'Desplegar minimapa',
     errorSinBpmn: 'El modelador todavía no tiene un BPMN abierto.',
@@ -707,4 +713,4 @@ export const S = {
     tituloResultados: 'Lila Modeler · Resultados (demo LILA-062)',
     tituloComparar: 'Lila Modeler · Comparar (demo LILA-063)',
   },
-} as const;
+};

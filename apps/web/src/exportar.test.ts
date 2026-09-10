@@ -28,6 +28,11 @@ import {
   prepararImportacionTransaccional,
   referenciasRotas,
 } from './modelerXml';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 const raiz = new URL('../../../', import.meta.url);
 const leer = (rel: string): string => readFileSync(new URL(rel, raiz), 'utf8');

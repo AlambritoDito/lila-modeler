@@ -3,19 +3,21 @@
 `packages/mcp` (`@lila/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
 `@lila/engine`, sin lógica propia: cinco tools por ahora.
 
-- **`validate_bpmn({ path | xml })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
+- **`validate_bpmn({ path | xml, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
   `path` **o** `xml`, nunca los dos: pasar ambos es un error de la tool, no una precedencia
   silenciosa.
-- **`describe_process({ path | xml, scenario? })`** — parsea un `.bpmn` (por ruta o XML inline,
+- **`describe_process({ path | xml, scenario?, locale? })`** — parsea un `.bpmn` (por ruta o XML inline,
   uno de los dos, con la misma regla que `validate_bpmn`) y devuelve su IR (`ProcessIR`)
-  junto con un resumen legible en español: conteo de nodos por tipo, gateways con sus salidas,
+  junto con un resumen legible (la clave `resumen`, en el idioma que diga `locale`): conteo de
+  nodos por tipo, gateways con sus salidas,
   lanes, subprocesos embebidos aplanados, los otros `bpmn:process` del archivo que no se simulan, y
-  una línea de validación (`Validación: N errores, M avisos`) que avisa cuando el modelo está fuera
+  una línea de validación (`Validation: N errors, M warnings`, o su equivalente en español) que
+  avisa cuando el modelo está fuera
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, scenario, seed?, replications?, saveTo? })`** (LILA-054) — valida
+- **`run_simulation({ model?, scenario, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
@@ -23,13 +25,13 @@
   rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila/engine/result-schema`) y responde `structuredContent` además del texto.
-- **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo? })`** (LILA-054) — valida
+- **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno.
-- **`patch_scenario({ scenario, patch, saveTo?, extendsFrom?, name?, description? })`**
+- **`patch_scenario({ scenario, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
   § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
@@ -62,6 +64,23 @@
 Las tres tools de LILA-054/055 reutilizan `@lila/engine/cli-shared`, extraído de `cli.ts` en
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
+
+## Idioma
+
+El `title`, la `description` y los `describe()` de cada tool están **fijos en inglés**: son la
+superficie del protocolo, lo que el cliente MCP leyó una sola vez en `tools/list`, y ninguna
+llamada suelta puede reescribirlos. Lo que sí cambia de idioma es el contenido de las respuestas:
+el resumen de `describe_process`, los mensajes de `isError` y los problemas del motor (`E-…`/`W-…`
+de `docs/SEMANTICS.md` § 17).
+
+- El **idioma del servidor** sale de quien lo arrancó: `lila mcp --lang es` se lo pasa hecho, y el
+  bin `lila-mcp` (que no tiene línea de comandos) lo resuelve del entorno con la misma regla que la
+  CLI: `LILA_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`; inglés si no hay ninguna.
+- El **idioma de una llamada** es `locale: "en" | "es"`, opcional en las cinco tools. Solo afecta a
+  esa respuesta; no cambia el idioma del servidor para las siguientes.
+
+La clave `resumen` de `describe_process` **no** se renombra al traducir: es contrato desde
+LILA-053 y hay agentes y tests que la leen por nombre. Cambia su contenido, no su etiqueta.
 
 ## Instalación
 
@@ -243,7 +262,8 @@ propia operación de JSON Patch no se puede aplicar — un `path` inexistente en
 operación desconocida) es `isError: true`, sin escribir nada. No hay ambigüedad "resultado
 correcto pero el modelo tiene errores" aquí: si el escenario resultante no valida, no hay nada que
 devolver. Los defectos del esquema salen por `parseScenario` (LILA-202): en español y con los
-códigos de `docs/SEMANTICS.md` § 17 (`E-CLAVE-DESCONOCIDA: …`), el mismo texto que la CLI.
+códigos de `docs/SEMANTICS.md` § 17 (`E-CLAVE-DESCONOCIDA: …`), el mismo texto que la CLI y en el
+idioma que pidió la llamada (§ Idioma).
 
 ## `saveTo`
 

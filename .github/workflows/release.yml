@@ -1,8 +1,6 @@
 name: Release
 
-# El secreto NPM_TOKEN lo crea Brito en la configuración del repositorio (Settings → Secrets
-# and variables → Actions). Sin él el job llega hasta `npm publish` y falla ahí, nunca antes:
-# build y test corren igual y sirven para detectar un tag roto aunque falte el secreto.
+# The owner creates the release tag and configures NPM_TOKEN after approving publication.
 on:
   push:
     tags:
@@ -21,20 +19,21 @@ jobs:
           node-version: '22'
           cache: npm
           registry-url: https://registry.npmjs.org
-      # El tag manda el número que se publica: si no coincide con la versión del
-      # package.json, npm publicaría otra versión (o fallaría con 403 por duplicada)
-      # y las versiones de npm son inmutables. Falla antes de tocar el registro.
-      - name: El tag coincide con la versión de @lila/engine
+      - name: Check release versions
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./packages/engine/package.json').version")"
-          if [ "$tag" != "$pkg" ]; then
-            echo "El tag $GITHUB_REF_NAME no coincide con @lila/engine@$pkg" >&2
-            exit 1
-          fi
+          node --input-type=module - <<'JS'
+          import { readFileSync } from 'node:fs';
+          const tag = process.env.GITHUB_REF_NAME.slice(1);
+          for (const file of ['packages/engine/package.json', 'apps/desktop/package.json']) {
+            const { version } = JSON.parse(readFileSync(file, 'utf8'));
+            if (version !== tag) throw new Error(`${file}: ${version} differs from tag ${tag}`);
+          }
+          JS
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: npm run typecheck
+      - run: npm pack --workspace @lila/engine --dry-run
       - run: npm publish --workspace @lila/engine --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

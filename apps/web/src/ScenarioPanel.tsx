@@ -41,7 +41,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
-import { S } from './strings.es';
+import { getLocale, strings, useLocale, useStrings, type Locale } from './i18n';
 
 /* ------------------------------------------------------------------ *
  * JSON Schema: el subconjunto que produce `z.toJSONSchema` para el escenario
@@ -147,15 +147,14 @@ export function indiceVariante(valor: unknown, vars: readonly EsquemaJson[]): nu
   return -1;
 }
 
-const TIPOS_ES: Readonly<Record<string, string>> = S.escenario.tiposJson;
-
-/** Etiqueta de una variante: su discriminador si lo tiene, y si no, su tipo JSON en español. */
+/** Etiqueta de una variante: su discriminador si lo tiene, y si no, su tipo JSON del idioma. */
 export function etiquetaVariante(variante: EsquemaJson, indice: number): string {
+  const S = strings();
   const discriminador = Object.values(variante.properties ?? {}).find(
     (sub) => typeof sub.const === 'string',
   );
   if (discriminador !== undefined) return String(discriminador.const);
-  if (variante.type !== undefined) return TIPOS_ES[variante.type] ?? variante.type;
+  if (variante.type !== undefined) return S.escenario.tiposJson[variante.type] ?? variante.type;
   return S.escenario.opcionN(indice + 1);
 }
 
@@ -284,9 +283,18 @@ export interface Problema {
  * Si el esquema no pasa, `validateScenario` no puede correr (necesita un `Scenario` parseado):
  * salen los defectos de zod, que son los mismos que imprime `loadResolvedScenario`. Sin IR
  * —el diagrama todavía no se ha parseado— solo se valida el esquema.
+ *
+ * These messages are the engine's and are shown verbatim; since #280 the engine is asked for
+ * them in `locale`, which defaults to the app's active language, so the live lint of the panel
+ * finally speaks the language the rest of the UI speaks. A component passes it explicitly, read
+ * with `useLocale()`, so the `useMemo` that caches this list recomputes on a language change.
  */
-export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Problema[] {
-  const parsed = parseScenario(resuelto);
+export function problemasEscenario(
+  resuelto: unknown,
+  ir: ProcessIR | null,
+  locale: Locale = getLocale(),
+): Problema[] {
+  const parsed = parseScenario(resuelto, { locale });
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
       ruta: rutaTexto(issue.path as Ruta),
@@ -295,7 +303,7 @@ export function problemasEscenario(resuelto: unknown, ir: ProcessIR | null): Pro
     }));
   }
   if (ir === null) return [];
-  return validateScenario(parsed.data, ir).map((problema) => ({
+  return validateScenario(parsed.data, ir, { locale }).map((problema) => ({
     ruta: problema.path,
     mensaje: problema.message,
     severidad: problema.severity,
@@ -320,6 +328,7 @@ export function duplicarEscenario(
   archivo: string,
   escenario: Record<string, unknown>,
 ): { archivo: string; escenario: Record<string, unknown> } {
+  const S = strings();
   const base = archivo.replace(/\.scenario\.json$/, '');
   const nombre = typeof escenario['name'] === 'string' ? escenario['name'] : base;
   // § 6: `extends` se resuelve **relativo al archivo del hijo**, y la copia vive en el mismo
@@ -438,6 +447,7 @@ function estadoReservado(ctx: Contexto, ruta: Ruta): EstadoReservado {
  * lo único que LILA-061/§ 6 pide de un campo que solo puede venir del padre.
  */
 function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string; ctx: Contexto }): React.JSX.Element | null {
+  const S = useStrings();
   const estado = estadoReservado(ctx, ruta);
   if (estado === 'ausente') return null;
   const definidoEnPadre = ctx.padre != null && leer(ctx.padre, ruta) !== undefined;
@@ -508,6 +518,7 @@ function CampoCapacidadRecurso({
   ruta: Ruta;
   ctx: Contexto;
 }): React.JSX.Element {
+  const S = useStrings();
   const vars = variantes(esquema)!;
   const indiceFija = vars.findIndex((v) => v.type !== 'array');
   const indiceTurno = vars.findIndex((v) => v.type === 'array');
@@ -636,6 +647,7 @@ function CampoIntervalos({
   ruta: Ruta;
   ctx: Contexto;
 }): React.JSX.Element {
+  const S = useStrings();
   const [rejilla, setRejilla] = useState(true);
   const valor = leer(ctx.resuelto, ruta);
   const intervals = (Array.isArray(valor) ? valor : []) as Intervalo[];
@@ -718,6 +730,7 @@ function AnadirClave({
   onAnadir: (clave: string) => void;
   existe: (clave: string) => boolean;
 }): React.JSX.Element {
+  const S = useStrings();
   const [clave, setClave] = useState('');
   const repetida = clave.trim() !== '' && existe(clave.trim());
   return (
@@ -776,6 +789,7 @@ export function Campo({
    */
   sufijo?: string;
 }): React.JSX.Element | null {
+  const S = useStrings();
   const valor = leer(ctx.resuelto, ruta);
   const id = `campo-${rutaTexto(ruta)}${sufijo}`;
 
@@ -1039,6 +1053,10 @@ export function ScenarioPanel({
   seleccion,
   onSeleccionar,
 }: ScenarioPanelProps): React.JSX.Element {
+  const S = useStrings();
+  // The engine takes the language as a value, not as a catalog: `useLocale()` is what makes the
+  // memoised lint below recompute when the app switches language.
+  const locale = useLocale();
   const delta = escenarios[archivo] ?? {};
 
   const lector = useMemo<ScenarioReader>(
@@ -1047,7 +1065,11 @@ export function ScenarioPanel({
       if (encontrado === undefined) throw new Error(S.escenario.errorEscenarioDesconocido(ruta));
       return encontrado;
     },
-    [escenarios],
+    // `S` va en las dependencias porque el lector lo captura (LILA-210): `herencia` guarda el
+    // mensaje que este lector lanzó, así que sin esto un `extends` roto se quedaría con el error
+    // escrito en el idioma que hubiera al montar el panel. `useStrings()` devuelve un catálogo
+    // distinto por idioma, así que la identidad solo cambia cuando el idioma cambia.
+    [escenarios, S],
   );
 
   /**
@@ -1078,13 +1100,15 @@ export function ScenarioPanel({
   }, [archivo, delta, lector]);
 
   const problemas = useMemo(() => {
-    const propios = problemasEscenario(resuelto, ir);
+    const propios = problemasEscenario(resuelto, ir, locale);
     if (herencia.error === null) return propios;
     return [
       { ruta: 'extends', mensaje: herencia.error, severidad: 'error' as const },
       ...propios,
     ];
-  }, [resuelto, ir, herencia.error]);
+    // `locale` is a dependency because the messages cached here are the engine's: without it the
+    // list would keep the language it was linted in until the scenario or the IR changed.
+  }, [resuelto, ir, herencia.error, locale]);
   const indice = useMemo(() => porRuta(problemas), [problemas]);
   const errores = problemas.filter((p) => p.severidad === 'error').length;
   const avisos = problemas.length - errores;

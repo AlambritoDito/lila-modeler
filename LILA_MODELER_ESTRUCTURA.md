@@ -1,6 +1,8 @@
 # Lila Modeler — Estructura del sistema
 
-Fecha: 2026-09-03. Documento de decisión, no de investigación. La investigación previa (`open-process-platform-docs/`) fue el insumo; las verificaciones de hoy (licencias, versiones, benchmarks, qué hace Bizagi exactamente) están en `investigacion-2026-09-03/`. Aquí están las decisiones y su porqué.
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](docs/) and [`README.md`](README.md).
+
+Fecha: 2026-09-03. Documento de decisión, no de investigación. La investigación previa (corpus previo, archivado fuera del repo) fue el insumo; las verificaciones de hoy (licencias, versiones, benchmarks, qué hace Bizagi exactamente) están en `investigacion-2026-09-03/`. Aquí están las decisiones y su porqué.
 
 ---
 
@@ -37,6 +39,10 @@ Lila Modeler empieza como **un motor de simulación de eventos discretos (DES) s
 ---
 
 ## 3. Checklist de paridad con Bizagi
+
+«Paridad» aquí es el criterio interno de aceptación (reproducir los resultados publicados), no
+el posicionamiento público del proyecto: de cara afuera Bizagi es referencia e inspiración
+(#289).
 
 Fuente: ayuda oficial de Bizagi (niveles 1–4, escenarios, elementos no soportados), verificada hoy. Bizagi no expone "4 niveles" en el motor: son qué parámetros están rellenos. Lila no reproduce los niveles como concepto de producto; el motor degrada: sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7.
 

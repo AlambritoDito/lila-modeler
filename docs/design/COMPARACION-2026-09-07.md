@@ -1,7 +1,9 @@
 # Demo vs artboards de Claude Design — 2026-09-07
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../) and [`README.md`](../../README.md).
+
 Comparación de la app contra los diez artboards del artefacto (`Lila Modeler.dc.html`, capturas
-`01…10-*.png`). El artefacto se leyó completo por `DesignSync` tras `/design-login`; las capturas
+`01…10-*.png`). El artefacto se leyó completo desde el proyecto de Claude Design; las capturas
 se renderizaron con Chrome headless a partir del HTML de cada artboard, sin retocar.
 
 **Actualizado en la sesión 8 (2026-09-07 tarde)** con #237–#241 mezclados en `codex/ui-artefacto`

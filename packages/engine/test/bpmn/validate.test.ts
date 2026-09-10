@@ -5,6 +5,13 @@ import { validate } from '../../src/bpmn/validate.js';
 import type { ProcessIR } from '../../src/core/ir.js';
 import { UNSUPPORTED_FIXTURES, WARNINGS_FIXTURE } from './unsupported.fixtures.js';
 
+/**
+ * `docs/SEMANTICS.md` § 3 es normativo para el **español**, así que este archivo valida siempre
+ * con `locale: 'es'`: lo que fija es que el catálogo `es` sigue diciendo exactamente lo que dice
+ * el documento (LILA-211).
+ */
+const ES = { locale: 'es' } as const;
+
 function read(url: URL): string {
   return readFileSync(url, 'utf8');
 }
@@ -28,7 +35,7 @@ function ir(partial: Partial<ProcessIR> = {}): ProcessIR {
 // Aceptación LILA-021: un .bpmn con un boundary event produce error explícito.
 test('un boundary event produce E-NOSOP con el texto literal de SEMANTICS § 3', async () => {
   const { ir: parsed, unsupported } = await parseBpmn(fixture('boundary-event.bpmn'));
-  const { errors, warnings } = validate(parsed, { unsupported });
+  const { errors, warnings } = validate(parsed, { unsupported, ...ES });
 
   expect(errors.filter((e) => e.code === 'E-NOSOP')).toEqual([
     {
@@ -56,7 +63,7 @@ test('examples/pedido/model.bpmn no produce ningún error', async () => {
   const xml = read(new URL('../../../../examples/pedido/model.bpmn', import.meta.url));
   const { ir: parsed, unsupported } = await parseBpmn(xml);
 
-  expect(validate(parsed, { unsupported }).errors).toEqual([]);
+  expect(validate(parsed, { unsupported, ...ES }).errors).toEqual([]);
 });
 
 test('los exports de Bizagi pasan por validate sin lanzar excepción', async () => {
@@ -66,7 +73,7 @@ test('los exports de Bizagi pasan por validate sin lanzar excepción', async () 
 
   for (const name of names) {
     const { ir: parsed, unsupported } = await parseBpmn(read(new URL(name, dir)));
-    const result = validate(parsed, { unsupported });
+    const result = validate(parsed, { unsupported, ...ES });
     // Pueden tener errores de validación (usan construcciones fuera de perfil); lo que no pueden
     // es reventar, y todo problema cita el id de un elemento.
     expect(Array.isArray(result.errors)).toBe(true);
@@ -90,6 +97,7 @@ test('el proceso sin start, sin end y con gateway suelto acumula todos los error
       },
       flows: { Flow_1: { from: 'Gateway_1', to: 'Task_1', name: '', isDefault: false } },
     }),
+    ES,
   ).errors;
 
   expect(problems.map((p) => p.code)).toEqual([
@@ -109,6 +117,7 @@ test('un nodo desconectado de todo start es E-INALCANZABLE', () => {
       },
       flows: { Flow_1: { from: 'Start_1', to: 'End_1', name: '', isDefault: false } },
     }),
+    ES,
   ).errors;
 
   expect(problems).toEqual([
@@ -122,6 +131,7 @@ test('un nodo desconectado de todo start es E-INALCANZABLE', () => {
 
 test('los elementos que el perfil sí admite pero no son nodos no producen error', () => {
   const { errors } = validate(ir(), {
+    ...ES,
     unsupported: [
       { id: 'DataObject_1', qname: 'bpmn:DataObject', name: 'Pedido' },
       { id: 'Annotation_1', qname: 'bpmn:TextAnnotation', name: '' },
@@ -134,6 +144,7 @@ test('los elementos que el perfil sí admite pero no son nodos no producen error
 
 test('sin nombre, el mensaje de E-NOSOP usa la plantilla corta', () => {
   const { errors } = validate(ir(), {
+    ...ES,
     unsupported: [{ id: 'Gateway_9', qname: 'bpmn:ComplexGateway', name: '' }],
   });
 
@@ -147,7 +158,7 @@ test('cada fila de SEMANTICS § 3 produce el texto normativo exacto (LILA-163)',
 
   for (const fixtureCase of UNSUPPORTED_FIXTURES) {
     const parsed = await parseBpmn(fixtureCase.xml);
-    const errors = validate(parsed.ir, { unsupported: parsed.unsupported }).errors
+    const errors = validate(parsed.ir, { unsupported: parsed.unsupported, ...ES }).errors
       .filter((error) => error.code === 'E-NOSOP')
       .map((error) => error.message);
     expect(errors, fixtureCase.row).toEqual(fixtureCase.messages);
@@ -157,6 +168,7 @@ test('cada fila de SEMANTICS § 3 produce el texto normativo exacto (LILA-163)',
 test('W-MSGFLOW agrega el conteo y W-COND cita cada flujo condicionado (LILA-163)', async () => {
   const parsed = await parseBpmn(WARNINGS_FIXTURE);
   const { warnings } = validate(parsed.ir, {
+    ...ES,
     unsupported: parsed.unsupported,
     messageFlowCount: parsed.messageFlowCount,
     conditionFlowIds: parsed.conditionFlowIds,
@@ -198,7 +210,7 @@ test('parseBpmn conserva los avisos de bpmn-moddle en ir.source.warnings (LILA-1
 
 test('un id duplicado produce E-PARSE-INCOMPLETO con el texto de SEMANTICS R-NOSOP-6 (LILA-185)', async () => {
   const parsed = await parseBpmn(fixture('parse-incompleto.bpmn'));
-  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported });
+  const { errors, warnings } = validate(parsed.ir, { unsupported: parsed.unsupported, ...ES });
 
   const parseErrors = errors.filter((error) => error.code === 'E-PARSE-INCOMPLETO');
   expect(parseErrors).toHaveLength(1);
@@ -229,7 +241,7 @@ test('una referencia rota de topología es error y una de mensaje solo aviso (LI
       ],
     },
   });
-  const { errors, warnings } = validate(base);
+  const { errors, warnings } = validate(base, ES);
 
   expect(errors.filter((error) => error.code === 'E-PARSE-INCOMPLETO')).toEqual([
     {

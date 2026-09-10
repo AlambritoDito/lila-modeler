@@ -69,9 +69,12 @@ function isRecentEntry(value: unknown): value is RecentEntry {
  */
 export function parseAjustes(value: unknown): Ajustes {
   if (!isPlainObject(value)) return {};
-  const ajustes: { tema?: string; densidad?: string; temas?: readonly TemaGuardado[] } = {};
+  const ajustes: { tema?: string; densidad?: string; idioma?: string; temas?: readonly TemaGuardado[] } = {};
   if (typeof value.tema === 'string') ajustes.tema = value.tema;
   if (typeof value.densidad === 'string') ajustes.densidad = value.densidad;
+  // El idioma (LILA-210) es la PREFERENCIA (`auto`/`en`/`es`), no el idioma resuelto; qué valores
+  // valen lo decide el renderer, igual que con el tema y la densidad.
+  if (typeof value.idioma === 'string') ajustes.idioma = value.idioma;
   if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
   return ajustes;
 }

@@ -107,8 +107,8 @@ describe('lila run (LILA-046)', () => {
     const text = output.join('\n');
 
     expect(code).toBe(0);
-    expect(text).toContain('Escenario Hijo por extends');
-    expect(text).toContain('Semilla 7 · Replicaciones 2 · Unidad de tiempo min');
+    expect(text).toContain('Scenario Hijo por extends');
+    expect(text).toContain('Seed 7 · Replications 2 · Time unit min');
     expect(text).toContain('Process elements');
     expect(text).toContain('Instances started');
     expect(text).toContain('Instances completed');
@@ -119,8 +119,8 @@ describe('lila run (LILA-046)', () => {
     expect(text).not.toContain('Resources');
     // LILA-201: la sección de cuellos sí se imprime sin pools (RESULTS_FORMAT.md § 10), con el
     // mismo texto que la tarjeta de la web ante un ranking vacío.
-    expect(text).toContain('Cuellos de botella');
-    expect(text).toContain('Sin espera por recurso detectada.');
+    expect(text).toContain('Bottlenecks');
+    expect(text).toContain('No wait for a resource detected.');
     expect(formatDuration(90, 'min')).toBe('1.5');
   });
 
@@ -291,7 +291,7 @@ describe('lila run (LILA-046)', () => {
     expect(consoleHeader('Process summary (extras)')).toContain(columnLabel('process', 'totalCost'));
 
     // La tabla de cuellos reutiliza dos columnas del mismo mapa (§ 6 y § 10).
-    expect(consoleHeader('Cuellos de botella')).toEqual([
+    expect(consoleHeader('Bottlenecks')).toEqual([
       'Id',
       'Name',
       columnHeader('elements', 'resourceWait.total', 'min'),
@@ -315,7 +315,7 @@ describe('lila run (LILA-046)', () => {
     );
 
     expect(await main(['run', fixture.model, scenario])).toBe(1);
-    expect(output.join('\n')).toContain('no coincide con scenario.model');
+    expect(output.join('\n')).toContain('does not match scenario.model');
   });
 
   test('acepta que el modelo posicional sea un symlink al scenario.model real', async () => {
@@ -323,7 +323,7 @@ describe('lila run (LILA-046)', () => {
     symlinkSync(fixture.model, alias);
 
     expect(await main(['run', alias, fixture.scenario])).toBe(0);
-    expect(output.join('\n')).not.toContain('no coincide con scenario.model');
+    expect(output.join('\n')).not.toContain('does not match scenario.model');
   });
 
   test('un conflicto en un CSV no publica un conjunto parcial ni deja temporales', async () => {
@@ -339,6 +339,32 @@ describe('lila run (LILA-046)', () => {
     expect(readdirSync(directory).some((name) => name.includes('.tmp-'))).toBe(false);
   });
 
+  // LILA-211 parte 2: el mismo `run`, con `--lang es`, imprime el chrome en español y los mismos
+  // números; los nombres de columna Bizagi no se traducen ni con `--lang`.
+  test('`--lang es` traduce el chrome de run y deja intactas las columnas Bizagi', async () => {
+    const args = ['run', fixture.model, fixture.scenario, '--seed', '7', '--replications', '2'];
+    expect(await main([...args, '--lang', 'es'])).toBe(0);
+    const text = output.join('\n');
+
+    expect(text).toContain('Escenario Hijo por extends');
+    expect(text).toContain('Semilla 7 · Replicaciones 2 · Unidad de tiempo min');
+    expect(text).toContain('Cuellos de botella');
+    expect(text).toContain('Sin espera por recurso detectada.');
+    // Paridad Bizagi: títulos y nombres de columna iguales en los dos idiomas.
+    expect(text).toContain('Process elements');
+    expect(text).toContain('Instances started');
+    expect(text).toContain('Process summary (extras)');
+  });
+
+  test('`--lang es` traduce también los errores de opción y de posicionales', async () => {
+    expect(await main(['run', fixture.model, fixture.scenario, '--replications', '0', '--lang=es'])).toBe(1);
+    expect(output.join('\n')).toContain('--replications requiere un entero >= 1');
+
+    output = [];
+    expect(await main(['run', '--lang=es', fixture.model, fixture.scenario, 'extra'])).toBe(1);
+    expect(output.join('\n')).toContain('se esperaba las rutas');
+  });
+
   test('separa --json booleano de validate y --json con ruta de run', async () => {
     expect(await main(['validate', fixture.model, '--json'])).toBe(0);
     expect(() => JSON.parse(output.join('\n'))).not.toThrow();
@@ -350,11 +376,11 @@ describe('lila run (LILA-046)', () => {
 
   test('rechaza overrides inválidos y argumentos posicionales de más', async () => {
     expect(await main(['run', fixture.model, fixture.scenario, '--replications', '0'])).toBe(1);
-    expect(output.join('\n')).toContain('--replications requiere un entero >= 1');
+    expect(output.join('\n')).toContain('--replications requires an integer >= 1');
 
     output = [];
     expect(await main(['run', fixture.model, fixture.scenario, 'extra'])).toBe(1);
-    expect(output.join('\n')).toContain('se esperaba las rutas');
+    expect(output.join('\n')).toContain('expected the paths');
   });
 });
 
@@ -417,12 +443,12 @@ describe('lila run · aceptación LILA-184 (examples/pedido)', () => {
 
       // LILA-188: run.currency en la cabecera de la corrida (docs/RESULTS_FORMAT.md §8, mismo
       // criterio que ResultsView en apps/web/src/ResultsView.tsx).
-      expect(firstText).toContain('Semilla 42 · Replicaciones 3 · Unidad de tiempo min · Moneda MXN');
+      expect(firstText).toContain('Seed 42 · Replications 3 · Time unit min · Currency MXN');
 
-      // LILA-188: tabla "Cuellos de botella" con el ranking de RunResult.bottlenecks
+      // LILA-188: tabla "Bottlenecks" con el ranking de RunResult.bottlenecks
       // (docs/RESULTS_FORMAT.md §6), tras las tablas Bizagi.
-      expect(firstText).toContain('Cuellos de botella');
-      const bottleneckHeaderIndex = lines.indexOf('Cuellos de botella') + 1;
+      expect(firstText).toContain('Bottlenecks');
+      const bottleneckHeaderIndex = lines.indexOf('Bottlenecks') + 1;
       expect(lines[bottleneckHeaderIndex]).toMatch(
         /^Id +Name +Total time \(waiting for resource\) \(min\) +Utilization \(%\)$/,
       );
@@ -509,7 +535,7 @@ describe('README · el ejemplo de `lila run` (LILA-188)', () => {
       ).toBe(0);
 
       const lines = output.join('\n').split('\n');
-      const bottleneckIndex = lines.indexOf('Cuellos de botella');
+      const bottleneckIndex = lines.indexOf('Bottlenecks');
       expect(bottleneckIndex).toBeGreaterThanOrEqual(0);
       expect(lines[bottleneckIndex + 1]).toMatch(/^Id +Name +Total time \(waiting for resource\)/);
       expect(lines[bottleneckIndex + 3]).not.toBe('');

@@ -1,836 +1,911 @@
-# Lila Modeler — Semántica del motor v1
+# Lila Modeler — Engine semantics v1
 
-Estado: normativo para v1 (hitos M0–M3). Fecha: 2026-09-03.
+> Read this in: [Español](es/SEMANTICS.md)
 
-Este documento define **qué hace exactamente el motor** antes de que exista una línea de `sim.ts`.
-Es la fuente de verdad para `packages/engine/src/core/` y para los tests de `test/semantics.test.ts`.
-Deriva de `LILA_MODELER_ESTRUCTURA.md` secciones 3 (paridad Bizagi), 4 (ADR-009…023) y 6 (diseño del
-motor); si algo aquí contradijera ese documento, gana el documento y este archivo se corrige.
+Status: normative for v1 (milestones M0–M3). Date: 2026-09-03.
 
-Cada regla tiene un identificador estable (`R-XXX-n`) y el ticket que la prueba. El resumen
-`regla → ticket` está en la sección 18. Los códigos de error (`E-…`) y de aviso (`W-…`) están en la
-sección 17.
+This document defines **exactly what the engine does** before a single line of `sim.ts` exists.
+It is the source of truth for `packages/engine/src/core/` and for the tests in `test/semantics.test.ts`.
+It derives from `LILA_MODELER_ESTRUCTURA.md` sections 3 (Bizagi reference), 4 (ADR-009…023) and 6
+(engine design); if anything here contradicted that document, the document wins and this file gets
+corrected.
 
-Convenciones de lectura: **error** aborta (`validate` devuelve `errors`, la CLI sale con código 1,
-`simulate` no corre); **aviso** no aborta y viaja en `RunResult.warnings[]`.
+Each rule has a stable identifier (`R-XXX-n`) and the ticket that tests it. The `rule → ticket`
+summary is in section 18. Error codes (`E-…`) and warning codes (`W-…`) are in section 17.
 
----
-
-## 1. Reglas duras
-
-Valen en todo el documento y en todo el código.
-
-- **R-DURA-1 — Segundos.** Todo tiempo del escenario y del `RunResult` es un número de **segundos**
-  (float64), salvo `run.start`, que es un instante ISO-8601 con offset. Las duraciones de
-  distribuciones, `warmup`, `duration`, `processingTime`, `interTriggerTimer`, las esperas y los
-  tiempos del event log son segundos. *(prueba: LILA-013)*
-- **R-DURA-2 — `baseTimeUnit` es presentación.** `run.baseTimeUnit` (`sec|min|hour|day`) **no**
-  cambia ningún cálculo: solo la forma en que la CLI y la UI imprimen números (`format.ts`). Dos
-  escenarios idénticos salvo `baseTimeUnit` producen el mismo `RunResult` numérico.
-  *(prueba: LILA-013)*
-- **R-DURA-3 — Dinero.** Todos los costos están expresados en `run.currency`. El motor no convierte
-  divisas ni conoce tipos de cambio; `currency` es una etiqueta que viaja al resultado y al CSV.
-  *(prueba: LILA-036)*
-- **R-DURA-4 — El `id` BPMN es la única clave.** Las claves de `scenario.elements` son atributos
-  `id` de BPMN (nodos o sequence flows). El **nombre nunca es clave** y nunca desambigua: dos
-  elementos pueden llamarse igual. Los ids se conservan en todo el pipeline; los ids ajenos que no
-  son NCName se sanitizan con un mapa reversible (ADR-012) y el escenario se escribe contra el id
-  **sanitizado**. *(prueba: LILA-013, LILA-017)*
-- **R-DURA-5 — `elements` faltante es error, sobrante es aviso.** Una clave de `elements` que no
-  existe en el IR produce error `E-ELEMENTO-DESCONOCIDO` citando el id. Un elemento del IR sin entrada
-  en `elements` toma los defaults degradantes (sección 14) y produce aviso solo cuando la ausencia
-  cambia la semántica (start sin `interTriggerTimer`). *(prueba: LILA-013, LILA-042)*
-- **R-DURA-6 — Pureza.** `simulate(ir, scenario, opts)` es una función pura: mismos argumentos,
-  mismo resultado. No lee reloj, ni disco, ni red, ni `Math.random`, ni variables globales.
-  *(prueba: LILA-029, LILA-032)*
+Reading conventions: **error** aborts (`validate` returns `errors`, the CLI exits with code 1,
+`simulate` does not run); **warning** does not abort and travels in `RunResult.warnings[]`.
 
 ---
 
-## 2. Perfil BPMN soportado en v1
+## 1. Hard rules
 
-Es la lista de la sección 3 del documento de estructura. Todo lo que aparece aquí tiene semántica
-definida; todo lo demás cae en la sección 3 de este documento.
+Hold throughout the document and throughout the code.
 
-| Construcción BPMN | Tipo en el IR | Semántica |
+- **R-DURA-1 — Seconds.** Every time value in the scenario and in the `RunResult` is a **seconds**
+  number (float64), except `run.start`, which is an ISO-8601 instant with an offset. Distribution
+  durations, `warmup`, `duration`, `processingTime`, `interTriggerTimer`, the waits and the event
+  log's timestamps are all seconds. *(test: LILA-013)*
+- **R-DURA-2 — `baseTimeUnit` is presentation.** `run.baseTimeUnit` (`sec|min|hour|day`) does
+  **not** change any calculation: it only changes how the CLI and the UI print numbers
+  (`format.ts`). Two scenarios identical except for `baseTimeUnit` produce the same numeric
+  `RunResult`. *(test: LILA-013)*
+- **R-DURA-3 — Money.** All costs are expressed in `run.currency`. The engine does not convert
+  currencies or know exchange rates; `currency` is a label that travels to the result and to the
+  CSV. *(test: LILA-036)*
+- **R-DURA-4 — The BPMN `id` is the only key.** The keys of `scenario.elements` are BPMN `id`
+  attributes (nodes or sequence flows). The **name is never a key** and never disambiguates: two
+  elements can share the same name. Ids are preserved throughout the pipeline; foreign ids that
+  are not an NCName are sanitized with a reversible map (ADR-012), and the scenario is written
+  against the **sanitized** id. *(test: LILA-013, LILA-017)*
+- **R-DURA-5 — A missing `elements` entry is an error, an extra one is a warning.** An `elements`
+  key that does not exist in the IR produces error `E-ELEMENTO-DESCONOCIDO`, citing the id. An IR
+  element with no entry in `elements` takes the degrading defaults (section 14) and produces a
+  warning only when the absence changes the semantics (a start with no `interTriggerTimer`).
+  *(test: LILA-013, LILA-042)*
+- **R-DURA-6 — Purity.** `simulate(ir, scenario, opts)` is a pure function: same arguments, same
+  result. It reads no clock, no disk, no network, no `Math.random`, no global variables.
+  *(test: LILA-029, LILA-032)*
+
+---
+
+## 2. BPMN profile supported in v1
+
+This is the list from section 3 of the structure document. Everything that appears here has
+defined semantics; everything else falls into section 3 of this document.
+
+| BPMN construct | IR type | Semantics |
 |---|---|---|
-| `bpmn:startEvent` sin disparador (*none*) | `start` | generador de casos (sección 10) |
-| `bpmn:startEvent` con `timerEventDefinition` | `start` | generador de casos, idéntico al *none* |
-| `bpmn:endEvent` sin disparador (*none*) | `end` | consume el token (§9) |
-| `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
-| `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
-| `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
-| `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
-| `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
-| `bpmn:exclusiveGateway` | `xor` | divergente: §6; convergente: mezcla pass-through |
+| `bpmn:startEvent` with no trigger (*none*) | `start` | case generator (section 10) |
+| `bpmn:startEvent` with `timerEventDefinition` | `start` | case generator, identical to *none* |
+| `bpmn:endEvent` with no trigger (*none*) | `end` | consumes the token (§9) |
+| `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
+| `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
+| `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
+| `bpmn:callActivity` | `task` | task with its own duration (§4) |
+| `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
+| `bpmn:exclusiveGateway` | `xor` | diverging: §6; converging: pass-through merge |
 | `bpmn:inclusiveGateway` | `or` | §7 |
 | `bpmn:parallelGateway` | `and` | §8 |
-| `bpmn:sequenceFlow` (con `isDefault` cuando el gateway lo declara) | `flow` | arista; lleva `probability` |
-| `bpmn:laneSet` / `bpmn:lane` | `lane` en el nodo | solo etiqueta; sin efecto en la simulación |
-| `bpmn:participant` (pools) | — | varios pools se aplanan a un solo grafo de tokens |
-| `bpmn:documentation`, `bpmn:textAnnotation`, `bpmn:association`, `bpmn:group`, `bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:*DI` | — | se leen y se preservan, **no** afectan a la simulación |
+| `bpmn:sequenceFlow` (with `isDefault` when the gateway declares it) | `flow` | edge; carries `probability` |
+| `bpmn:laneSet` / `bpmn:lane` | `lane` on the node | label only; no effect on the simulation |
+| `bpmn:participant` (pools) | — | several pools are flattened into a single token graph |
+| `bpmn:documentation`, `bpmn:textAnnotation`, `bpmn:association`, `bpmn:group`, `bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:*DI` | — | read and preserved, they **do not** affect the simulation |
 
-- **R-PERF-1 — Toda variante de tarea es `task`.** El tipo concreto de tarea no cambia nada del
-  motor: solo su `processingTime`, sus `resources` y su `fixedCost`. *(prueba: LILA-018)*
-- **R-PERF-2 — Un gateway convergente de tipo `xor` (una sola salida, varias entradas) es una
-  mezcla sin espera**: cada token que llega sale inmediatamente por la única salida, sin sincronizar
-  y sin consumir tiempo. *(prueba: LILA-026)*
-- **R-PERF-3 — `bpmn:messageFlow` no transporta tokens.** Los flujos de mensaje entre pools se
-  ignoran y producen aviso `W-MSGFLOW` una vez por archivo, citando cuántos se ignoraron. Los pools
-  se simulan como un único grafo: un token no “salta” de pool. *(prueba: LILA-021, LILA-163)*
-- **R-PERF-4 — `conditionExpression` se ignora.** Las condiciones de los sequence flows no se
-  evalúan en v1 (`conditions` es campo reservado, §15): el ramaje es probabilístico. Un flujo con
-  `conditionExpression` produce aviso `W-COND` citando el id del flujo. *(prueba: LILA-021,
+- **R-PERF-1 — Every task variant is `task`.** The concrete task type changes nothing in the
+  engine: only its `processingTime`, its `resources` and its `fixedCost`. *(test: LILA-018)*
+- **R-PERF-2 — A converging `xor` gateway (one outgoing flow, several incoming) is a merge with no
+  wait**: every token that arrives leaves immediately through the single outgoing flow, with no
+  synchronizing and no time consumed. *(test: LILA-026)*
+- **R-PERF-3 — `bpmn:messageFlow` does not carry tokens.** Message flows between pools are
+  ignored and produce warning `W-MSGFLOW` once per file, citing how many were ignored. Pools are
+  simulated as a single graph: a token never "jumps" between pools. *(test: LILA-021, LILA-163)*
+- **R-PERF-4 — `conditionExpression` is ignored.** Sequence flow conditions are not evaluated in
+  v1 (`conditions` is a reserved field, §15): branching is probabilistic. A flow with a
+  `conditionExpression` produces warning `W-COND` citing the flow's id. *(test: LILA-021,
   LILA-163)*
-- **R-PERF-5 — Varios start events son válidos.** Cada `start` con `interTriggerTimer` o
-  `triggerCount` genera su propio flujo de llegadas, con su propio `triggerCount` y su propio
-  stream de números aleatorios. Un `start` sin ninguno de los dos no genera nada y produce aviso
-  `W-START-SIN-LLEGADAS`. *(prueba: LILA-026, LILA-186)*
+- **R-PERF-5 — Several start events are valid.** Each `start` with `interTriggerTimer` or
+  `triggerCount` generates its own arrival stream, with its own `triggerCount` and its own random
+  number stream. A `start` with neither of the two generates nothing and produces warning
+  `W-START-SIN-LLEGADAS`. *(test: LILA-026, LILA-186)*
 
 ---
 
-## 3. Elementos no soportados y texto exacto del error
+## 3. Unsupported elements and the exact error text
 
-ADR-021: todo lo que no está en la sección 2 produce **error de validación explícito**, nunca un
-fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el simulador”).
+ADR-021: everything not in section 2 produces an **explicit validation error**, never a silent
+failure. The text follows Bizagi's style ("not supported by the simulator").
 
-- **R-NOSOP-1 — Plantilla exacta del mensaje.** Sin nombre:
+- **R-NOSOP-1 — Exact message template.** Since LILA-211 the engine speaks two languages: English
+  is the default language and Spanish a translation. Both texts are normative, each for its own
+  language. Without a name, in `en` and in `es`:
+
+  ```
+  {id} ({qname}): {construction} not supported by the simulator.
+  ```
 
   ```
   {id} ({qname}): {construcción} no soportado por el simulador.
   ```
 
-  Con nombre (`name` no vacío):
+  With a name (`name` non-empty), in `en` and in `es`:
+
+  ```
+  {id} ({qname}, "{name}"): {construction} not supported by the simulator.
+  ```
 
   ```
   {id} ({qname}, "{name}"): {construcción} no soportado por el simulador.
   ```
 
-  `{qname}` es el nombre calificado BPMN (`bpmn:boundaryEvent`). `{construcción}` es exactamente el
-  texto de la tabla siguiente. El código del error es `E-NOSOP`. *(prueba: LILA-021, LILA-163)*
+  `{qname}` is the qualified BPMN name (`bpmn:boundaryEvent`). `{construcción}` is exactly the
+  text in the table below, in the column for that language. The error code is `E-NOSOP`.
+  *(test: LILA-021, LILA-163, LILA-211)*
 
-- **R-NOSOP-2 — Catálogo cerrado de `{construcción}`.** Ningún otro texto es válido:
+- **R-NOSOP-2 — Closed catalog of `{construcción}`.** No other text is valid. The `id` is the one
+  that travels as data in `ParseResult.unsupported[].construction` (LILA-211); the displayed text
+  comes from that language's catalog:
 
-| Construcción detectada | `{construcción}` (texto exacto) |
-|---|---|
-| `bpmn:boundaryEvent` (cualquier disparador) | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` en cualquier evento | `evento de mensaje` |
-| `signalEventDefinition` | `evento de señal` |
-| `linkEventDefinition` | `evento de enlace` |
-| `errorEventDefinition` | `evento de error` |
-| `escalationEventDefinition` | `evento de escalamiento` |
-| `compensateEventDefinition` | `evento de compensación` |
-| `conditionalEventDefinition` | `evento condicional` |
-| `cancelEventDefinition` | `evento de cancelación` |
-| `multipleEventDefinition` / `parallelMultipleEventDefinition` | `evento con disparadores múltiples` |
-| `bpmn:intermediateThrowEvent` (sin disparador o con cualquiera) | `evento intermedio de lanzamiento` |
-| `bpmn:eventBasedGateway` | `gateway basado en eventos` |
-| `bpmn:complexGateway` | `gateway complejo` |
-| `multiInstanceLoopCharacteristics` | `marcador de multi-instancia` |
-| `standardLoopCharacteristics` | `marcador de bucle en la actividad` |
-| `bpmn:transaction` | `subproceso transaccional` |
-| `bpmn:adHocSubProcess` | `subproceso ad-hoc` |
-| `bpmn:subProcess` con `triggeredByEvent="true"` | `subproceso de eventos` |
-| `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `diagrama de coreografía` |
-| `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `diagrama de conversación` |
-| `startQuantity` distinto de 1 | `atributo startQuantity distinto de 1` |
-| `completionQuantity` distinto de 1 | `atributo completionQuantity distinto de 1` |
-| `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `evento de fin con ese disparador` |
-| `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `evento de inicio con ese disparador` |
+| Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
+|---|---|---|---|
+| `bpmn:boundaryEvent` (any trigger) | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `messageEventDefinition` in any event | `messageEvent` | `message event` | `evento de mensaje` |
+| `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
+| `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
+| `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
+| `escalationEventDefinition` | `escalationEvent` | `escalation event` | `evento de escalamiento` |
+| `compensateEventDefinition` | `compensationEvent` | `compensation event` | `evento de compensación` |
+| `conditionalEventDefinition` | `conditionalEvent` | `conditional event` | `evento condicional` |
+| `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
+| `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
+| `bpmn:intermediateThrowEvent` (no trigger or with any) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
+| `bpmn:eventBasedGateway` | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
+| `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
+| `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
+| `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
+| `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
+| `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
+| `bpmn:subProcess` with `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
+| `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `choreographyDiagram` | `choreography diagram` | `diagrama de coreografía` |
+| `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
+| `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | `atributo startQuantity distinto de 1` |
+| `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | `atributo completionQuantity distinto de 1` |
+| `bpmn:endEvent` with a trigger other than *none* or `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
+| `bpmn:startEvent` with a trigger other than *none* or `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
-  El detalle que distingue cada fila del catálogo se conserva desde el parser; los fixtures que
-  verifican el texto exacto de las 24 filas son parte de LILA-163.
+  The detail that distinguishes each row of the catalog is preserved from the parser; the fixtures
+  that verify the exact text of the 24 rows are part of LILA-163. Row 25 of the catalog,
+  `outOfProfile` (`element outside the v1 profile` / `elemento fuera del perfil v1`), is not
+  produced by the parser: it is the fallback for hand-built `unsupported` lists.
 
-  Ejemplo literal del mensaje que emite `validate(ir)`:
+  Literal example of the message that `validate(ir)` emits, in `en` and in `es`:
+
+  ```
+  Boundary_3a1f (bpmn:boundaryEvent, "Vence el plazo"): event attached to an activity (boundary event) not supported by the simulator.
+  ```
 
   ```
   Boundary_3a1f (bpmn:boundaryEvent, "Vence el plazo"): evento adjunto a actividad (boundary event) no soportado por el simulador.
   ```
 
-- **R-NOSOP-3 — Un solo error por elemento, todos los elementos en una pasada.** `validate(ir)`
-  no se detiene en el primero: devuelve la lista completa, ordenada por orden de aparición en el
-  XML, para que el usuario arregle el archivo de una vez. *(prueba: LILA-021, LILA-163)*
-- **R-NOSOP-4 — Nada de degradación silenciosa.** Un elemento no soportado nunca se convierte en
-  `task` de duración 0 ni se “salta”. `simulate()` se niega a correr si `validate()` devolvió al
-  menos un error. *(prueba: LILA-021, LILA-045)*
-- **R-NOSOP-5 — Errores estructurales (mismo tratamiento, otros códigos):** flujo colgante
-  (`E-FLUJO-COLGANTE`), id duplicado (`E-ID-DUPLICADO`), gateway sin salidas o sin entradas
-  (`E-GATEWAY-SIN-ARISTAS`), nodo inalcanzable desde algún `start` (`E-INALCANZABLE`), proceso sin
-  `start` (`E-SIN-START`), proceso sin `end` ni `terminate` (`E-SIN-END`). *(prueba: LILA-021)*
-- **R-NOSOP-6 — Lo que el lector XML descarta también es error.** `bpmn-moddle` no lanza cuando
-  no puede leer una parte del archivo: la reporta como *warning* de `fromXML` y sigue. `parseBpmn`
-  conserva esos avisos tal cual en `ir.source.warnings` (texto de moddle en una línea, más el id
-  afectado y la propiedad rota cuando moddle los da) y `validate(ir)` los clasifica en dos, sin
-  descartar ninguno:
+- **R-NOSOP-3 — One error per element, all elements in a single pass.** `validate(ir)` does not
+  stop at the first one: it returns the complete list, ordered by order of appearance in the XML,
+  so the user can fix the file in one go. *(test: LILA-021, LILA-163)*
+- **R-NOSOP-4 — No silent degradation.** An unsupported element never turns into a `task` with
+  duration 0, and it is never "skipped". `simulate()` refuses to run if `validate()` returned at
+  least one error. *(test: LILA-021, LILA-045)*
+- **R-NOSOP-5 — Structural errors (same treatment, other codes):** a dangling flow
+  (`E-FLUJO-COLGANTE`), a duplicate id (`E-ID-DUPLICADO`), a gateway with no outgoing or no
+  incoming flows (`E-GATEWAY-SIN-ARISTAS`), a node unreachable from any `start`
+  (`E-INALCANZABLE`), a process with no `start` (`E-SIN-START`), a process with neither `end` nor
+  `terminate` (`E-SIN-END`). *(test: LILA-021)*
+- **R-NOSOP-6 — What the XML reader discards is also an error.** `bpmn-moddle` does not throw when
+  it cannot read part of the file: it reports it as a `fromXML` *warning* and moves on. `parseBpmn`
+  keeps those warnings as-is in `ir.source.warnings` (moddle's text on a single line, plus the
+  affected id and the broken property when moddle gives them), and `validate(ir)` classifies them
+  into two, without dropping any:
 
-  - **Error `E-PARSE-INCOMPLETO`** cuando el aviso implica que se perdió un nodo o un flujo **del
-    proceso simulado**: un elemento entero que moddle tiró por `id` ilegal o duplicado
-    (`unparsable content … nested error: illegal ID <X>` / `duplicate ID <X>`) y que sería nodo o
-    flujo según el perfil de la sección 2, o una referencia sin resolver sobre una propiedad de
-    topología (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`, `bpmn:flowNodeRef`).
-    Texto exacto:
+  - **Error `E-PARSE-INCOMPLETO`** when the warning implies that a node or a flow **of the
+    simulated process** was lost: an entire element that moddle discarded for an illegal or
+    duplicate `id` (`unparsable content … nested error: illegal ID <X>` / `duplicate ID <X>`) that
+    would be a node or a flow under the profile from section 2, or an unresolved reference on a
+    topology property (`bpmn:sourceRef`, `bpmn:targetRef`, `bpmn:attachedToRef`,
+    `bpmn:flowNodeRef`). Exact text, in `en` and in `es`:
+
+    ```
+    {id}: the XML reader discarded model content, which was left incomplete: {aviso}.
+    ```
 
     ```
     {id}: el lector XML descartó contenido del modelo, que quedó incompleto: {aviso}.
     ```
 
-  - **Aviso `W-PARSE`** en todo lo demás: referencias sin resolver a construcciones que el perfil
-    de la sección 2 ya ignora (`bpmn:messageRef`, `bpmn:dataStoreRef`, `bpmn:categoryValueRef`) y
-    tipos que moddle no conoce (`unparsable content … unknown type <bpmn:LoopCounter>`, típico de
-    los exports de Bizagi). También lo que se descarta de la capa de diagrama (`bpmndi:`, `di:`,
-    `dc:`, `dd:`), lo que se descarta **fuera de todo `bpmn:process`** (`bpmn:message`,
-    `bpmn:signal`, `bpmn:error`, `bpmn:category`, `bpmn:participant`, …) y los elementos que la
-    sección 2 lee sin simular (`bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:textAnnotation`,
-    `bpmn:association`, `bpmn:group`, `bpmn:documentation`, `bpmn:extensionElements`,
-    `bpmn:laneSet`, `bpmn:lane`), aunque sea por id ilegal o duplicado: ninguno es nodo ni flujo
-    del grafo de tokens, así que perderlos no quita ni un nodo ni un flujo (de `bpmn:lane` el IR
-    solo se queda el nombre en `Node.lane`, que la CLI usa para mostrar). Texto exacto:
+  - **Warning `W-PARSE`** for everything else: unresolved references to constructs the profile
+    from section 2 already ignores (`bpmn:messageRef`, `bpmn:dataStoreRef`,
+    `bpmn:categoryValueRef`) and types moddle does not know
+    (`unparsable content … unknown type <bpmn:LoopCounter>`, typical of Bizagi exports). Also
+    whatever gets discarded from the diagram layer (`bpmndi:`, `di:`, `dc:`, `dd:`), whatever gets
+    discarded **outside any `bpmn:process`** (`bpmn:message`, `bpmn:signal`, `bpmn:error`,
+    `bpmn:category`, `bpmn:participant`, …) and the elements that section 2 reads without
+    simulating (`bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:textAnnotation`, `bpmn:association`,
+    `bpmn:group`, `bpmn:documentation`, `bpmn:extensionElements`, `bpmn:laneSet`, `bpmn:lane`),
+    even if for an illegal or duplicate id: none of them is a node or a flow of the token graph, so
+    losing them removes neither a node nor a flow (from `bpmn:lane` the IR keeps only the name in
+    `Node.lane`, which the CLI uses for display). Exact text, in `en` and in `es`:
+
+    ```
+    {id}: XML reader notice, with no loss of nodes or flows: {aviso}.
+    ```
 
     ```
     {id}: aviso del lector XML, sin pérdida de nodos ni flujos: {aviso}.
     ```
 
-  - **Aviso `W-PARSE`, referencia a un flujo ausente**: una referencia sin resolver sobre
-    `bpmn:incoming` o `bpmn:outgoing` no descarta nada por sí misma — el elemento nombra un flujo
-    que no está en el modelo cargado, y el IR deriva `incoming`/`outgoing` de los flujos que sí
-    existen. Si ese flujo se perdió, el error lo emite el aviso que lo descartó, no este. Texto
-    exacto:
+  - **Warning `W-PARSE`, reference to a missing flow**: an unresolved reference on
+    `bpmn:incoming` or `bpmn:outgoing` does not by itself discard anything — the element names a
+    flow that is not in the loaded model, and the IR derives `incoming`/`outgoing` from the flows
+    that do exist. If that flow was lost, the error comes from whichever warning discarded it, not
+    from this one. Exact text, in `en` and in `es`:
+
+    ```
+    {id}: the XML reader did not find a flow this element declares; the graph is built without it: {aviso}.
+    ```
 
     ```
     {id}: el lector XML no encontró un flujo que este elemento declara; el grafo se construye sin él: {aviso}.
     ```
 
-  - **Aviso `W-PARSE`, aviso de otro proceso**: los avisos son del archivo entero y el IR es de
-    **un** proceso (los demás viajan en `ParseResult.ignoredProcessIds`). Lo que se descartó en
-    otro `bpmn:process` no deja incompleto el que se simula, así que nunca aborta y el aviso dice
-    de qué proceso viene. Texto exacto:
+  - **Warning `W-PARSE`, warning from another process**: the warnings are for the whole file, and
+    the IR is of **one** process (the others travel in `ParseResult.ignoredProcessIds`). Whatever
+    was discarded in another `bpmn:process` does not leave the simulated one incomplete, so it
+    never aborts, and the warning names which process it comes from. Exact text, in `en` and in
+    `es`:
+
+    ```
+    {id}: XML reader notice in {proceso}, another process of the file that Lila does not simulate: {aviso}.
+    ```
 
     ```
     {id}: aviso del lector XML en {proceso}, otro proceso del archivo que Lila no simula: {aviso}.
     ```
 
-  - **Aviso `W-XOR-DEFAULT-ROTO`**: un `bpmn:default` que apunta a un flujo inexistente no
-    descarta nada del grafo; solo se pierde la marca `isDefault`, y la sección 6 (R-XOR-1/R-XOR-2)
-    reparte igual sin ella. Texto exacto:
+  - **Warning `W-XOR-DEFAULT-ROTO`**: a `bpmn:default` that points to a flow that does not exist
+    discards nothing from the graph; only the `isDefault` mark is lost, and section 6
+    (R-XOR-1/R-XOR-2) splits the same way without it. Exact text, in `en` and in `es`:
+
+    ```
+    {id}: the declared default flow does not exist; the isDefault mark is ignored and the split follows the rules of a XOR without a default: {aviso}.
+    ```
 
     ```
     {id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: {aviso}.
     ```
 
-  `{aviso}` es el mensaje de bpmn-moddle literal, aplanado a una sola línea. `{id}` es el id del
-  elemento que moddle señala (o el que aparece dentro del mensaje) y, si no hay ninguno, el id del
-  proceso; `{proceso}` es el id del `bpmn:process` donde ocurrió el aviso, que se ubica por la
-  posición absoluta que da el propio aviso (`detected line: N column: C`) dentro de los tramos
-  `<bpmn:process …>…</bpmn:process>` del archivo, de modo que un export minificado o con los
-  atributos partidos en varias líneas se clasifica igual que uno indentado. Si un aviso no dice
-  dónde ocurrió, se atribuye al proceso simulado: falla cerrado. Un modelo que perdió
-  nodos o flujos del proceso simulado nunca valida en verde: `E-PARSE-INCOMPLETO` aborta y
-  `lila validate` sale con 1. Los ids no NCName **no** entran aquí: `sanitizeIds` (R-DURA-4,
-  LILA-017/020) los reescribe antes de llegar a moddle. *(prueba: LILA-185, LILA-196)*
+  `{aviso}` is bpmn-moddle's literal message, flattened to a single line. `{id}` is the id of the
+  element moddle points to (or the one that appears inside the message) and, if there is none, the
+  id of the process; `{proceso}` is the id of the `bpmn:process` where the warning occurred, which
+  is located by the absolute position the warning itself gives (`detected line: N column: C`)
+  within the `<bpmn:process …>…</bpmn:process>` stretches of the file, so a minified export or one
+  with attributes split across several lines is classified the same as an indented one. If a
+  warning does not say where it happened, it is attributed to the simulated process: it fails
+  closed. A model that lost nodes or flows of the simulated process never validates clean:
+  `E-PARSE-INCOMPLETO` aborts and `lila validate` exits with 1. Non-NCName ids do **not** enter
+  here: `sanitizeIds` (R-DURA-4, LILA-017/020) rewrites them before they reach moddle. *(test:
+  LILA-185, LILA-196)*
 
 ---
 
-## 4. Aplanado: subproceso embebido y call activity
+## 4. Flattening: embedded sub-process and call activity
 
-- **R-PLAN-1 — Subproceso embebido, aplanado.** Un `bpmn:subProcess` embebido desaparece como nodo.
-  Sus flujos entrantes se reconectan al `start` interno y los flujos salientes del subproceso
-  cuelgan del `end` interno. Los nodos internos conservan su `id` y reciben `subprocessId` = id del
-  subproceso que los contiene (el más interno si hay anidamiento). El aplanado es recursivo.
-  *(prueba: LILA-019)*
-- **R-PLAN-2 — Start y end internos son pass-through.** El `start` y el `end` de un subproceso
-  aplanado no consumen tiempo, no consumen recursos y no cuentan como casos: reenvían el token.
-  Con varios `end` internos, todos apuntan a las salidas del subproceso. *(prueba: LILA-019)*
-- **R-PLAN-3 — El subproceso no tiene tiempo propio.** `elements[subProcessId].processingTime` (o
-  `resources`, o `fixedCost`) es error `E-SUBPROC-PARAMETRO` citando el id: el tiempo del subproceso
-  es la suma de lo que ocurre dentro. Las métricas por subproceso se agregan desde `subprocessId`.
-  El lint lo caza aunque el subproceso ya no sea un nodo del IR: sus nodos citan de quién vienen
-  (`ProcessIR.nodes[x].subprocessId`). **Límite conocido**: ese campo guarda solo el subproceso
-  *inmediato*, así que con subprocesos anidados el lint reconoce el más interno; declarar
-  parámetros en uno exterior sale hoy como `E-ELEMENTO-DESCONOCIDO`. Cerrarlo pide llevar la
-  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket.
-  *(prueba: LILA-019, LILA-198)*
-- **R-PLAN-4 — Call activity = tarea con tiempo global.** Un `bpmn:callActivity` se traduce a
-  `task` y **no** se expande el proceso llamado, aunque esté en el archivo. Su duración es su
-  `processingTime` y puede tener recursos y `fixedCost` como cualquier tarea. Es la regla de Bizagi
-  para subprocesos reusables. *(prueba: LILA-019)*
-- **R-PLAN-5 — El aplanado no cambia los números.** Un proceso con subproceso embebido y el mismo
-  proceso aplanado a mano producen el mismo `RunResult` salvo los ids de los nodos internos.
-  *(prueba: LILA-019)*
-
----
-
-## 5. Caso, tokens y reloj
-
-- **R-TOK-1 — Reloj.** El tiempo de simulación es un `float64` en segundos desde `run.start`, que
-  vale 0. Los instantes ISO del event log se derivan al exportar sumando segundos a `run.start`.
-  *(prueba: LILA-037)*
-- **R-TOK-2 — Un caso es un conjunto de tokens.** Un caso nace con un token en su `start`. Los
-  gateways crean y destruyen tokens. El caso **termina** en el instante en que su número de tokens
-  llega a 0 (o por `terminate`, §9). El `caseId` es un entero monótono por corrida, asignado en
-  orden de llegada. *(prueba: LILA-026)*
-- **R-TOK-3 — Orden de eventos.** El heap ordena por `(t, seq)` con `seq` monótono creciente
-  asignado en el momento de insertar. A igual `t`, sale primero el evento insertado antes. No hay
-  otro criterio de desempate en ninguna parte del motor. *(prueba: LILA-023, LILA-030)*
-- **R-TOK-4 — Tránsito por flujos instantáneo.** Recorrer un `sequenceFlow` consume 0 segundos e
-  incrementa `flows[id].count`. Los gateways consumen 0 segundos. *(prueba: LILA-028)*
-- **R-TOK-5 — Instantes por token y tarea.** `enabled` = instante en que el token llega al nodo;
-  `started` = instante en que empieza a consumirse la duración; `ended` = instante en que termina.
-  Para nodos sin recurso ni calendario, `enabled = started`. *(prueba: LILA-033, LILA-036)*
-- **R-TOK-6 — Identidad y lifecycle de actividad.** Cada entrada a una tarea o timer crea un
-  `activityInstanceId` opaco y único dentro de la replicación, derivado de un contador. Todas las asignaciones de pools
-  de esa ocurrencia comparten el id y los mismos instantes. Al cierre normal se emite
-  `status = "completed"`; `terminate` emite `status = "terminated"`, y la parada o cancelación
-  emite `status = "inFlight"`. En los dos últimos, `startedAt = null` distingue una instancia que
-  seguía en cola de una ya iniciada y `endedAt = null`; `observedUntil` fija el corte.
-  *(decisión: ADR-025; prueba: LILA-033, LILA-037)*
+- **R-PLAN-1 — Embedded sub-process, flattened.** A `bpmn:subProcess` embedded disappears as a
+  node. Its incoming flows are reconnected to the internal `start` and the sub-process's outgoing
+  flows hang off the internal `end`. Internal nodes keep their `id` and receive `subprocessId` =
+  the id of the sub-process that contains them (the innermost one if nested). Flattening is
+  recursive. *(test: LILA-019)*
+- **R-PLAN-2 — Internal start and end are pass-through.** The `start` and `end` of a flattened
+  sub-process consume no time, consume no resources and do not count as cases: they forward the
+  token. With several internal `end`s, all of them point to the sub-process's outputs.
+  *(test: LILA-019)*
+- **R-PLAN-3 — The sub-process has no time of its own.**
+  `elements[subProcessId].processingTime` (or `resources`, or `fixedCost`) is error
+  `E-SUBPROC-PARAMETRO` citing the id: the sub-process's time is the sum of what happens inside
+  it. Per-sub-process metrics are aggregated from `subprocessId`. The lint catches this even
+  though the sub-process is no longer a node of the IR: its nodes cite where they come from
+  (`ProcessIR.nodes[x].subprocessId`). **Known limitation**: that field only keeps the *immediate*
+  sub-process, so with nested sub-processes the lint recognizes only the innermost one; declaring
+  parameters on an outer one today comes out as `E-ELEMENTO-DESCONOCIDO`. Closing that gap
+  requires carrying the full chain into the IR (`bpmn/parse.ts`), which is a separate ticket.
+  *(test: LILA-019, LILA-198)*
+- **R-PLAN-4 — Call activity = task with its own duration.** A `bpmn:callActivity` is translated
+  to `task` and the called process is **not** expanded, even if it is present in the file. Its
+  duration is its `processingTime`, and it can have resources and `fixedCost` like any task. It
+  is Bizagi's rule for reusable sub-processes. *(test: LILA-019)*
+- **R-PLAN-5 — Flattening does not change the numbers.** A process with an embedded sub-process
+  and the same process flattened by hand produce the same `RunResult`, except for the ids of the
+  internal nodes. *(test: LILA-019)*
 
 ---
 
-## 6. Gateway exclusivo (XOR) divergente
+## 5. Case, tokens and clock
 
-Sea un `xor` con salidas `f1…fn` en **orden de documento** (el orden de `bpmn:outgoing` en el XML,
-conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
+- **R-TOK-1 — Clock.** Simulation time is a `float64` in seconds since `run.start`, which is 0.
+  The event log's ISO instants are derived on export by adding seconds to `run.start`.
+  *(test: LILA-037)*
+- **R-TOK-2 — A case is a set of tokens.** A case is born with one token at its `start`. Gateways
+  create and destroy tokens. The case **ends** at the instant its number of tokens reaches 0 (or
+  through `terminate`, §9). `caseId` is a monotonic integer per run, assigned in arrival order.
+  *(test: LILA-026)*
+- **R-TOK-3 — Event order.** The heap orders by `(t, seq)`, with `seq` a monotonically increasing
+  counter assigned at insertion time. At equal `t`, the event inserted first comes out first.
+  There is no other tie-break criterion anywhere in the engine. *(test: LILA-023, LILA-030)*
+- **R-TOK-4 — Transit through flows is instantaneous.** Traversing a `sequenceFlow` takes 0
+  seconds and increments `flows[id].count`. Gateways take 0 seconds. *(test: LILA-028)*
+- **R-TOK-5 — Instants per token and task.** `enabled` = the instant the token reaches the node;
+  `started` = the instant the duration starts being consumed; `ended` = the instant it finishes.
+  For nodes with neither resource nor calendar, `enabled = started`. *(test: LILA-033, LILA-036)*
+- **R-TOK-6 — Activity identity and lifecycle.** Every entry into a task or timer creates an
+  opaque `activityInstanceId`, unique within the replication and derived from a counter. All the
+  pool assignments of that occurrence share the id and the same instants. On normal closure,
+  `status = "completed"` is emitted; `terminate` emits `status = "terminated"`, and a stop or
+  cancellation emits `status = "inFlight"`. In the last two, `startedAt = null` distinguishes an
+  instance that was still queued from one already started, and `endedAt = null`; `observedUntil`
+  fixes the cutoff. *(decision: ADR-025; test: LILA-033, LILA-037)*
+
+---
+
+## 6. Exclusive gateway (XOR), diverging
+
+Let an `xor` have outgoing flows `f1…fn` in **document order** (the order of `bpmn:outgoing` in
+the XML, preserved in `ir.nodes[g].outgoing`), and let `p(fi)` be the `probability` declared in
 `scenario.elements[fi]`.
 
-- **R-XOR-1 — Sin probabilidades, reparto equitativo.** Si ningún `fi` declara `probability`, cada
-  uno recibe `1/n` (el `isDefault` incluido). *(prueba: LILA-026)*
-- **R-XOR-2 — El residuo va al flujo que falta.** Sea `S` la suma de las probabilidades declaradas
-  y `U` el conjunto de flujos sin `probability`. Si `|U| = 1`, ese flujo recibe `max(0, 1 − S)`.
-  Es el caso normal del `isDefault`: **el flujo `isDefault` recibe el residuo**. *(prueba: LILA-026)*
-- **R-XOR-3 — Varios flujos sin probabilidad.** Si `|U| ≥ 2`, el residuo `max(0, 1 − S)` se reparte
-  **por igual** entre ellos (el `isDefault` recibe la misma parte que los demás) y se emite aviso
-  `W-XOR-RESIDUO-COMPARTIDO` citando el id del gateway y los ids de `U`. *(prueba: LILA-026,
-  LILA-042)*
-- **R-XOR-4 — Normalización con aviso.** Si tras R-XOR-1…3 la suma `T` de las probabilidades del
-  gateway difiere de 1 en más de `1e-9`, todas se dividen entre `T` y se emite aviso
-  `W-XOR-NORMALIZADA` con el id del gateway y el valor original de `T`. La simulación continúa con
-  las probabilidades normalizadas. *(prueba: LILA-026, LILA-042)*
-- **R-XOR-5 — Suma cero es error.** Si `T = 0` (todas declaradas en 0 y sin residuo), es error
-  `E-XOR-SUMA-CERO` citando el gateway: no hay ruta posible. *(prueba: LILA-042)*
-- **R-XOR-6 — Rango.** `probability` fuera de `[0, 1]` lo rechaza el lint de `validateScenario`
-  (`E-PROB-RANGO`), no el motor. El esquema **no** acota el rango a propósito (LILA-198): si lo
-  hiciera, el defecto saldría como un error genérico de zod, sin el código del catálogo.
-  *(prueba: LILA-013, LILA-198)*
-- **R-XOR-7 — Sorteo.** Se toma **un** uniforme `u ∈ [0,1)` del stream del **gateway** y se elige
-  el primer `fi` tal que `u < Σ_{j≤i} p(fj)`, recorriendo en orden de documento. Por error de
-  redondeo, si ningún `fi` cumple, se elige el último con `p > 0`. Un token, un sorteo, una salida.
-  *(prueba: LILA-026, LILA-030)*
-- **R-XOR-8 — `probability` solo en sequence flows.** `probability` en un nodo es error
-  `E-PROB-EN-NODO`; en un flujo cuyo origen no es `xor` ni `or` es aviso `W-PROB-IGNORADA`.
-  *(prueba: LILA-013, LILA-042, LILA-198)*
+- **R-XOR-1 — With no probabilities, an even split.** If no `fi` declares `probability`, each one
+  receives `1/n` (`isDefault` included). *(test: LILA-026)*
+- **R-XOR-2 — The remainder goes to the missing flow.** Let `S` be the sum of the declared
+  probabilities and `U` the set of flows with no `probability`. If `|U| = 1`, that flow receives
+  `max(0, 1 − S)`. This is the normal case for `isDefault`: **the `isDefault` flow receives the
+  remainder**. *(test: LILA-026)*
+- **R-XOR-3 — Several flows with no probability.** If `|U| ≥ 2`, the remainder `max(0, 1 − S)` is
+  split **evenly** among them (`isDefault` receives the same share as the others), and warning
+  `W-XOR-RESIDUO-COMPARTIDO` is emitted, citing the gateway's id and the ids in `U`.
+  *(test: LILA-026, LILA-042)*
+- **R-XOR-4 — Normalization with a warning.** If after R-XOR-1…3 the sum `T` of the gateway's
+  probabilities differs from 1 by more than `1e-9`, all of them are divided by `T` and warning
+  `W-XOR-NORMALIZADA` is emitted with the gateway's id and the original value of `T`. The
+  simulation continues with the normalized probabilities. *(test: LILA-026, LILA-042)*
+- **R-XOR-5 — A sum of zero is an error.** If `T = 0` (all declared as 0 and no remainder), it is
+  error `E-XOR-SUMA-CERO` citing the gateway: there is no possible route. *(test: LILA-042)*
+- **R-XOR-6 — Range.** A `probability` outside `[0, 1]` is rejected by `validateScenario`'s lint
+  (`E-PROB-RANGO`), not by the engine. The schema deliberately does **not** bound the range
+  (LILA-198): if it did, the flaw would come out as a generic zod error, without the catalog's
+  code. *(test: LILA-013, LILA-198)*
+- **R-XOR-7 — Draw.** A single uniform `u ∈ [0,1)` is drawn from the **gateway's** stream, and the
+  first `fi` such that `u < Σ_{j≤i} p(fj)` is chosen, walking in document order. Due to rounding
+  error, if no `fi` satisfies it, the last one with `p > 0` is chosen. One token, one draw, one
+  outgoing flow. *(test: LILA-026, LILA-030)*
+- **R-XOR-8 — `probability` only on sequence flows.** `probability` on a node is error
+  `E-PROB-EN-NODO`; on a flow whose source is neither `xor` nor `or` it is warning
+  `W-PROB-IGNORADA`. *(test: LILA-013, LILA-042, LILA-198)*
 
 ---
 
-## 7. Gateway inclusivo (OR)
+## 7. Inclusive gateway (OR)
 
-- **R-OR-1 — Fork: probabilidades independientes.** En un `or` divergente, cada salida `fi` se
-  sortea **de forma independiente** con su propia `p(fi)`: un uniforme por salida, tomados del
-  stream del gateway en orden de documento. No se normaliza: la suma puede ser cualquier valor en
-  `[0, n]`. *(prueba: LILA-026)*
-- **R-OR-2 — Salida sin `probability` en un OR vale 1.** Un `or` sin ninguna probabilidad declarada
-  se comporta como un `and` fork (todas las ramas). Se emite aviso `W-OR-SIN-PROBABILIDAD` la
-  primera vez. *(prueba: LILA-026)*
-- **R-OR-3 — Al menos una salida.** Si los `n` sorteos fallan, se activa el flujo `isDefault`; si no
-  hay `isDefault`, el de mayor `p`, con desempate por orden de documento. Se cuenta y se reporta
-  aviso `W-OR-VACIO` con el id del gateway y el número de veces que ocurrió. *(prueba: LILA-026)*
-- **R-OR-4 — Registro de activación.** Al activar `k` salidas, el fork registra
-  `(caso, forkId, activationId, k)` con `activationId` monótono, y **marca cada token emitido** con
-  ese `activationId`. Los tokens hijos heredan la marca al pasar por gateways posteriores; un token
-  puede llevar varias marcas apiladas (forks OR anidados: se apilan y se desapilan en orden LIFO).
-  *(prueba: LILA-026)*
-- **R-OR-5 — Join: espera a los del fork emparejado.** Un `or` convergente cuenta los tokens que
-  llegan por `(caso, activationId)` de la marca más reciente y dispara cuando ha recibido `k`
-  tokens, emitiendo **un** token por su salida y desapilando la marca. Es la semántica práctica de
-  Bizagi/Prosimos y se documenta como **simplificación**: el motor no evalúa alcanzabilidad
-  estructural (la semántica OR-join completa del estándar BPMN) porque sin condiciones evaluables no
-  aporta nada. *(prueba: LILA-026)*
-- **R-OR-6 — Join sin fork emparejado = mezcla.** Si un token llega a un `or` convergente sin marca
-  activa (por ejemplo, viene de un `xor`, o el fork está fuera del ciclo), el join se comporta como
-  pass-through: cada token sale inmediatamente. Se emite aviso `W-OR-JOIN-SIN-FORK` con el id del
-  join. *(prueba: LILA-026)*
-- **R-OR-7 — Reinicio por loop.** El contador de un `or` join vive en `(caso, activationId)`: una
-  nueva vuelta del ciclo genera un `activationId` nuevo, así que el contador de la vuelta anterior
-  no interfiere. *(prueba: LILA-026)*
-- **R-OR-8 — Tokens huérfanos al parar.** Los tokens que quedan esperando en un join cuando la
-  corrida termina cuentan como caso `inFlight` y disparan aviso `W-JOIN-BLOQUEADO` con el id del
-  join y el número de casos afectados. *(prueba: LILA-026, LILA-028)*
-
----
-
-## 8. Gateway paralelo (AND)
-
-- **R-AND-1 — Fork.** Un `and` divergente emite **un token por cada salida**, todos en el mismo
-  instante, sin sorteo. `probability` en las salidas de un `and` es aviso `W-PROB-IGNORADA`.
-  *(prueba: LILA-026)*
-- **R-AND-2 — Join por contador `(caso, join)`.** Un `and` convergente mantiene un contador por
-  pareja `(caso, joinId)`. Cada token que llega lo incrementa y se consume. Cuando el contador
-  alcanza el número de **flujos entrantes** del join en el IR, se emite un token por la salida y el
-  contador **se reinicia a 0**. *(prueba: LILA-026)*
-- **R-AND-3 — Loops.** El reinicio de R-AND-2 es lo que hace correcto el comportamiento en ciclos:
-  la segunda vuelta vuelve a contar desde 0 y no dispara con tokens de la vuelta anterior. No hay
-  “memoria” entre vueltas ni por rama. *(prueba: LILA-026)*
-- **R-AND-4 — El AND join no distingue por rama.** Dos tokens que llegan por la misma rama entrante
-  (posible en modelos mal formados con ciclos) cuentan como dos. El motor no lo corrige; si al
-  terminar la corrida quedan contadores parciales, aplica `W-JOIN-BLOQUEADO`. *(prueba: LILA-026)*
-- **R-AND-5 — Duración de la sección paralela.** Con ramas de duración determinista, la sección
-  `fork → ramas → join` dura exactamente el máximo de las ramas (no hay costo de sincronización).
-  *(prueba: LILA-026)*
-- **R-AND-6 — Join con una sola entrada.** Un `and` con una entrada y una salida es pass-through.
-  *(prueba: LILA-026)*
+- **R-OR-1 — Fork: independent probabilities.** In a diverging `or`, each outgoing flow `fi` is
+  drawn **independently** with its own `p(fi)`: one uniform per outgoing flow, drawn from the
+  gateway's stream in document order. There is no normalization: the sum can be any value in
+  `[0, n]`. *(test: LILA-026)*
+- **R-OR-2 — An outgoing flow with no `probability` in an OR is worth 1.** An `or` with no
+  probability declared at all behaves like an `and` fork (every branch). Warning
+  `W-OR-SIN-PROBABILIDAD` is emitted the first time. *(test: LILA-026)*
+- **R-OR-3 — At least one outgoing flow.** If all `n` draws fail, the `isDefault` flow is
+  activated; if there is no `isDefault`, the one with the highest `p`, tie-broken by document
+  order. It is counted and reported as warning `W-OR-VACIO` with the gateway's id and the number
+  of times it happened. *(test: LILA-026)*
+- **R-OR-4 — Activation record.** When activating `k` outgoing flows, the fork records
+  `(case, forkId, activationId, k)` with a monotonic `activationId`, and **marks every emitted
+  token** with that `activationId`. Child tokens inherit the mark as they pass through later
+  gateways; a token can carry several stacked marks (nested OR forks: they are pushed and popped
+  in LIFO order). *(test: LILA-026)*
+- **R-OR-5 — Join: waits for those of the matching fork.** A converging `or` counts the tokens
+  arriving under `(case, activationId)` of the most recent mark and fires once it has received
+  `k` tokens, emitting **one** token through its outgoing flow and popping the mark. It is
+  Bizagi/Prosimos's practical semantics, and it is documented as a **simplification**: the engine
+  does not evaluate structural reachability (the full OR-join semantics of the BPMN standard)
+  because with no evaluable conditions it contributes nothing. *(test: LILA-026)*
+- **R-OR-6 — Join with no matching fork = merge.** If a token arrives at a converging `or` with
+  no active mark (for example, it comes from an `xor`, or the fork is outside the loop), the join
+  behaves as pass-through: every token leaves immediately. Warning `W-OR-JOIN-SIN-FORK` is
+  emitted with the join's id. *(test: LILA-026)*
+- **R-OR-7 — Reset on a loop.** An `or` join's counter lives in `(case, activationId)`: a new
+  turn of the loop generates a new `activationId`, so the previous turn's counter does not
+  interfere. *(test: LILA-026)*
+- **R-OR-8 — Orphan tokens on stop.** Tokens left waiting at a join when the run ends count as an
+  `inFlight` case and trigger warning `W-JOIN-BLOQUEADO` with the join's id and the number of
+  affected cases. *(test: LILA-026, LILA-028)*
 
 ---
 
-## 9. Timer, end y terminate
+## 8. Parallel gateway (AND)
 
-- **R-EVT-1 — Timer = retardo sin recurso.** Un `timer` retiene el token durante
-  `elements[id].processingTime` segundos y lo suelta por su única salida. **No consume recursos.**
-  Declarar `resources` en un `timer` es error `E-TIMER-RECURSO` citando el id.
-  *(prueba: LILA-026, LILA-198)*
-- **R-EVT-2 — Timer sin tiempo.** Un `timer` sin `processingTime` retarda 0 segundos y produce aviso
-  `W-TIMER-SIN-TIEMPO`. *(prueba: LILA-026)*
-- **R-EVT-3 — El timer corre 24×7 salvo que declare calendario.** Por defecto el retardo del timer
-  transcurre en tiempo de reloj (un plazo legal corre también de noche). Si el elemento declara
-  `elements[id].calendar`, el retardo consume solo tiempo abierto y el tiempo cerrado se acumula en
-  `offHoursWait`. *(prueba: LILA-041)*
-- **R-EVT-4 — End consume el token.** Un `end` consume el token que llega y no hace nada más. El
-  caso se marca `completed` cuando **su número de tokens llega a 0**, no cuando el primer token toca
-  un `end`. Un modelo con AND fork y dos `end` termina el caso al llegar el segundo token.
-  *(prueba: LILA-026, LILA-028)*
-- **R-EVT-5 — Terminate mata el caso.** Un `terminate` destruye **todos** los tokens del caso, sus
-  contadores de join y sus marcas de activación OR, cancela sus eventos futuros y **libera de
-  inmediato los recursos que el caso tuviera ocupados**, cargando el costo por hora hasta ese
-  instante. El caso cuenta como `completed` con `endedAt` = ese instante. `terminate` **no** afecta
-  a otros casos ni detiene la corrida. *(prueba: LILA-026)*
-- **R-EVT-6 — Tareas en curso al morir el caso.** La tarea interrumpida por `terminate` cuenta como
-  `started` y no como `completed` en su elemento; no aporta a las estadísticas de `processing`.
-  *(prueba: LILA-026, LILA-028)*
+- **R-AND-1 — Fork.** A diverging `and` emits **one token per outgoing flow**, all at the same
+  instant, with no draw. `probability` on the outgoing flows of an `and` is warning
+  `W-PROB-IGNORADA`. *(test: LILA-026)*
+- **R-AND-2 — Join by counter `(case, join)`.** A converging `and` keeps a counter per
+  `(case, joinId)` pair. Every token that arrives increments it and is consumed. When the counter
+  reaches the number of **incoming flows** of the join in the IR, one token is emitted through the
+  outgoing flow and the counter **resets to 0**. *(test: LILA-026)*
+- **R-AND-3 — Loops.** The reset in R-AND-2 is what makes the behavior in cycles correct: the
+  second turn counts again from 0 and does not fire with tokens from the previous turn. There is
+  no "memory" between turns nor per branch. *(test: LILA-026)*
+- **R-AND-4 — The AND join does not distinguish by branch.** Two tokens arriving through the same
+  incoming branch (possible in malformed models with cycles) count as two. The engine does not
+  correct this; if partial counters remain when the run ends, `W-JOIN-BLOQUEADO` applies.
+  *(test: LILA-026)*
+- **R-AND-5 — Duration of the parallel section.** With deterministic-duration branches, the
+  section `fork → branches → join` lasts exactly the maximum of the branches (there is no
+  synchronization cost). *(test: LILA-026)*
+- **R-AND-6 — Join with a single incoming flow.** An `and` with one incoming and one outgoing flow
+  is pass-through. *(test: LILA-026)*
 
 ---
 
-## 10. Llegadas, parada, warmup y replicaciones
+## 9. Timer, end and terminate
 
-- **R-ARR-1 — Un generador por start.** Cada `start` con `interTriggerTimer` genera casos. La
-  primera llegada ocurre en `t = 0`; la siguiente en `t + muestra` con una muestra nueva de
-  `interTriggerTimer` tomada del stream de ese `start`. Un `start` con `triggerCount` y **sin**
-  `interTriggerTimer` equivale al default `interTriggerTimer: {"type":"constant","value":0}`, es
-  decir `triggerCount` llegadas en `t = 0`: es lo que hace el nivel 1 de Bizagi, cuya configuración
-  son solo «porcentajes de activación en cada flujo saliente de gateways exclusivos/inclusivos y
-  "Max. arrival count" en el Start Event», sin ningún campo de tiempo con el que espaciarlas
-  (`help.bizagi.com/platform/en/level_1_example.htm`). Solo el `start` sin ninguno de los dos campos
-  no genera nada y avisa `W-START-SIN-LLEGADAS`. *(prueba: LILA-026, LILA-186)*
-- **R-ARR-2 — Fin de la generación.** Un generador deja de emitir cuando ocurre lo primero de:
-  (a) ha emitido `triggerCount` casos; (b) el instante de la siguiente llegada es `≥ t_stop`.
-  *(prueba: LILA-026)*
-- **R-ARR-3 — Parada de la corrida.** `t_stop = run.duration` si está definido; si no, la corrida
-  termina cuando el heap se vacía. Con ambos definidos, manda lo primero que ocurra: el heap vacío
-  también termina la corrida antes de `run.duration`. Es error `E-SIN-PARADA` que no haya ni
-  `run.duration` ni ningún `triggerCount` **en un start** (solo el `start` monta generador, R-ARR-1:
-  un `triggerCount` en un `timer` intermedio es `E-CAMPO-NO-APLICA` y no cuenta como parada). *(prueba: LILA-026, LILA-013)*
-- **R-ARR-4 — Ejemplo normativo.** `duration = 3600`, `triggerCount = 10000`, llegadas constantes
-  cada 10 s ⇒ llegadas en `t = 0, 10, …, 3590` ⇒ `started = 360`. *(prueba: LILA-026)*
-- **R-ARR-5 — En vuelo al parar.** En `t_stop` se descartan los eventos pendientes. Los casos
-  iniciados y no terminados cuentan en `started` y **no** en `completed`; `inFlight = started −
-  completed`. Sus tareas a medias no aportan a `processing` ni a `resourceWait`. Es el criterio de
-  Bizagi. *(prueba: LILA-026, LILA-028)*
-- **R-ARR-6 — Llegadas con calendario.** Si el `start` declara `calendar`, una llegada que cae en
-  tiempo cerrado se **desplaza** al siguiente instante abierto (`nextOpen`); no se pierde y no se
-  acumulan varias en el instante de apertura salvo que el propio muestreo las genere. La cadencia
-  sigue midiéndose en tiempo de reloj. *(prueba: LILA-041)*
-- **R-ARR-7 — Warmup.** `run.warmup` (segundos desde `run.start`) excluye de **todas** las
-  estadísticas los casos **iniciados** antes de `warmup`, pero esos casos existen: ocupan recursos,
-  hacen cola y afectan a los demás. Un caso iniciado en `warmup − 1` no cuenta aunque termine
-  después. Tampoco aporta directamente a costos ni integrales: `queueLength` y utilización
-  integran solo el estado atribuible a la cohorte medida en `[warmup, t_stop]`; la ocupación
-  pre-warmup sí puede retrasar indirectamente a esa cohorte. *(prueba: LILA-027, LILA-033)*
-- **R-ARR-8 — Replicaciones.** `run.replications = R` corre R veces la misma configuración; la
-  replicación `r` (0-indexada) usa streams derivados de `(seed, r, elementId)`. Por KPI se reportan
-  `mean`, `sd` (muestral, `n − 1`) y `ci95 = mean ± t(0,975; R−1) · sd / √R`. Con `R = 1` no hay
-  `ci95`. Los casos **no** se comparten entre replicaciones: cada una parte del estado vacío.
-  *(prueba: LILA-027)*
-- **R-ARR-9 — Agregado público multi-réplica.** En `simulate()`, cada campo numérico top-level es
-  la media del mismo campo agregado por replicación; no es la primera replicación ni una muestra
-  agrupada de todos los casos. En una corrida completa coincide con el `mean` del mismo path en
-  `replications.kpis`. *(prueba: LILA-029; decisión: ADR-024)*
-- **R-ARR-10 — Cancelación cooperativa.** `opts.signal` se comprueba entre eventos y entre
-  replicaciones. El resultado parcial lleva `cancelled: true` y `completedReplications`; el
-  top-level conserva la réplica parcial, pero `replications.kpis` solo usa replicaciones completas
-  y se omite si hay menos de dos. Cada evento DES se cierra atómicamente: una señal activada desde
-  `onEvent` surte efecto antes del siguiente evento, no entre completar una tarea y recorrer sus
-  flujos salientes instantáneos. *(prueba: LILA-029)*
+- **R-EVT-1 — Timer = delay with no resource.** A `timer` holds the token for
+  `elements[id].processingTime` seconds and releases it through its single outgoing flow. **It
+  consumes no resources.** Declaring `resources` on a `timer` is error `E-TIMER-RECURSO` citing
+  the id. *(test: LILA-026, LILA-198)*
+- **R-EVT-2 — Timer with no time.** A `timer` with no `processingTime` delays 0 seconds and
+  produces warning `W-TIMER-SIN-TIEMPO`. *(test: LILA-026)*
+- **R-EVT-3 — The timer runs 24×7 unless it declares a calendar.** By default the timer's delay
+  elapses in clock time (a legal deadline also runs at night). If the element declares
+  `elements[id].calendar`, the delay consumes only open time and closed time accumulates in
+  `offHoursWait`. *(test: LILA-041)*
+- **R-EVT-4 — End consumes the token.** An `end` consumes the token that arrives and does nothing
+  else. The case is marked `completed` when **its number of tokens reaches 0**, not when the
+  first token touches an `end`. A model with an AND fork and two `end`s ends the case when the
+  second token arrives. *(test: LILA-026, LILA-028)*
+- **R-EVT-5 — Terminate kills the case.** A `terminate` destroys **every** token of the case, its
+  join counters and its OR activation marks, cancels its future events and **immediately releases
+  the resources the case had occupied**, charging the hourly cost up to that instant. The case
+  counts as `completed` with `endedAt` = that instant. `terminate` does **not** affect other cases
+  and does not stop the run. *(test: LILA-026)*
+- **R-EVT-6 — Tasks in progress when a case dies.** The task interrupted by `terminate` counts as
+  `started` and not as `completed` on its element; it does not contribute to `processing`
+  statistics. *(test: LILA-026, LILA-028)*
 
 ---
 
-## 11. Recursos
+## 10. Arrivals, stop, warm-up and replications
+
+- **R-ARR-1 — One generator per start.** Each `start` with `interTriggerTimer` generates cases.
+  The first arrival happens at `t = 0`; the next at `t + sample`, with a new sample of
+  `interTriggerTimer` drawn from that `start`'s stream. A `start` with `triggerCount` and
+  **without** `interTriggerTimer` is equivalent to the default
+  `interTriggerTimer: {"type":"constant","value":0}`, that is, `triggerCount` arrivals at
+  `t = 0`: it is what Bizagi's level 1 does, whose configuration is only "activation percentages
+  on each outgoing flow of exclusive/inclusive gateways" and "Max. arrival count on the Start
+  Event", with no time field to space them out
+  (`help.bizagi.com/platform/en/level_1_example.htm`). Only a `start` with neither of the two
+  fields generates nothing and warns `W-START-SIN-LLEGADAS`. *(test: LILA-026, LILA-186)*
+- **R-ARR-2 — End of generation.** A generator stops emitting when the first of these occurs:
+  (a) it has emitted `triggerCount` cases; (b) the instant of the next arrival is `≥ t_stop`.
+  *(test: LILA-026)*
+- **R-ARR-3 — Stopping the run.** `t_stop = run.duration` if it is defined; otherwise, the run
+  ends when the heap empties out. With both defined, whichever happens first wins: an empty heap
+  also ends the run before `run.duration`. It is error `E-SIN-PARADA` for there to be neither
+  `run.duration` nor any `triggerCount` **on a start** (only a `start` sets up a generator,
+  R-ARR-1: a `triggerCount` on an intermediate `timer` is `E-CAMPO-NO-APLICA` and does not count
+  as a stop). *(test: LILA-026, LILA-013)*
+- **R-ARR-4 — Normative example.** `duration = 3600`, `triggerCount = 10000`, constant arrivals
+  every 10 s ⇒ arrivals at `t = 0, 10, …, 3590` ⇒ `started = 360`. *(test: LILA-026)*
+- **R-ARR-5 — In flight at stop.** At `t_stop`, pending events are discarded. Cases started but
+  not ended count in `started` and **not** in `completed`; `inFlight = started − completed`.
+  Their half-finished tasks do not contribute to `processing` or `resourceWait`. It is Bizagi's
+  criterion. *(test: LILA-026, LILA-028)*
+- **R-ARR-6 — Arrivals with a calendar.** If the `start` declares `calendar`, an arrival that
+  falls in closed time is **shifted** to the next open instant (`nextOpen`); it is not lost, and
+  several do not pile up at the opening instant unless sampling itself generates them. The
+  cadence keeps being measured in clock time. *(test: LILA-041)*
+- **R-ARR-7 — Warm-up.** `run.warmup` (seconds since `run.start`) excludes from **all**
+  statistics the cases **started** before `warmup`, but those cases exist: they occupy resources,
+  they queue and they affect the others. A case started at `warmup − 1` does not count even if it
+  finishes afterward. It also does not contribute directly to costs or integrals: `queueLength`
+  and utilization integrate only the state attributable to the measured cohort within
+  `[warmup, t_stop]`; pre-warmup occupancy can still indirectly delay that cohort.
+  *(test: LILA-027, LILA-033)*
+- **R-ARR-8 — Replications.** `run.replications = R` runs the same configuration R times; the
+  replication `r` (0-indexed) uses streams derived from `(seed, r, elementId)`. Per KPI, `mean`,
+  `sd` (sample, `n − 1`) and `ci95 = mean ± t(0,975; R−1) · sd / √R` are reported. With `R = 1`
+  there is no `ci95`. Cases are **not** shared between replications: each one starts from empty
+  state. *(test: LILA-027)*
+- **R-ARR-9 — Public multi-replication aggregate.** In `simulate()`, each top-level numeric field
+  is the mean of that same field aggregated per replication; it is not the first replication nor
+  a pooled sample of every case. In a full run it matches the `mean` of the same path in
+  `replications.kpis`. *(test: LILA-029; decision: ADR-024)*
+- **R-ARR-10 — Cooperative cancellation.** `opts.signal` is checked between events and between
+  replications. The partial result carries `cancelled: true` and `completedReplications`; the
+  top-level result keeps the partial replication, but `replications.kpis` uses only complete
+  replications and is omitted if fewer than two are available. Every DES event closes
+  atomically: a signal raised from `onEvent` takes effect before the next event, not between
+  completing a task and walking its instantaneous outgoing flows. *(test: LILA-029)*
+
+---
+
+## 11. Resources
 
 `scenario.resources[pool] = { name, type: "role"|"equipment", capacity, costPerHour, fixedCost,
-calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" | "or"`.
+calendar }`. On the task: `resources: [{ ref, quantity }]` and `selection: "and" | "or"`.
 
-- **R-REC-1 — Pool con capacidad entera.** `capacity` es obligatorio y es un entero `≥ 1`, **o** la
-  lista de tramos `[{ calendar, capacity }]` de R-CAL-11, en la que cada `capacity_i` es a su vez un
-  entero `≥ 1` y la capacidad del pool varía con el reloj. Un pool es un contador de unidades
-  idénticas: no hay identidad individual de recurso en v1 (el event log registra el **pool**, no la
-  unidad), y eso no cambia con la capacidad variable —lo que varía es cuántas unidades hay, no
-  cuáles—. Fuera de R-CAL-11 el resto de esta sección lee `capacity` por un único camino y no
-  distingue las dos formas. *(prueba: LILA-033, LILA-164)*
-- **R-REC-2 — Defaults de la asignación.** `quantity` ausente vale 1. `selection` ausente vale
-  `"and"`. Con un solo pool, `and` y `or` son equivalentes. `quantity > capacity` del pool es error
-  `E-REC-CANTIDAD` citando tarea y pool (esperaría para siempre); con capacidad por intervalos el
-  tope es el **máximo de la semana**, no la suma de los tramos (R-CAL-11). Una `ref` a un pool inexistente es
-  error `E-REC-DESCONOCIDO`, un pool repetido en la misma tarea es `E-REC-DUPLICADO` y una
-  `capacity` que no sea entero ≥ 1 es `E-REC-CAPACIDAD`. Los cuatro se comprueban en un preflight
-  **antes de cualquier callback público**: una corrida no puede emitir filas ni progreso y fallar
-  después. Desde LILA-034 múltiples pools con selección ausente o `"and"` son válidos y desde
-  LILA-035 también lo es `"or"`. `quantity > capacity` es error también en una alternativa OR: la
-  alternativa nunca podría arrancar y el escenario está mal declarado aunque otra sí quepa.
-  *(prueba: LILA-013, LILA-033, LILA-034, LILA-035, LILA-042)*
-- **R-REC-3 — Cola FIFO por instante de habilitación.** Cada pool tiene una cola ordenada por
-  `(enabled, seq)` ascendente, donde `seq` es el contador monótono del evento que habilitó al token.
-  Como `seq` es único, el orden es total y determinista: **no hay empates reales**.
-  *(prueba: LILA-033, LILA-023)*
-- **R-REC-4 — Selección AND: atómica, sin retención parcial.** La tarea entra en la cola de todos
-  sus pools. Arranca cuando **todos** ellos tienen simultáneamente `quantity` unidades libres; en
-  ese instante se descuentan todas de golpe. Nunca se retiene un recurso mientras se espera otro,
-  así que **no puede haber deadlock**. Las filas y `assignments` conservan el orden declarado en
-  el escenario aunque el índice interno use todos los pools. *(prueba: LILA-034)*
-- **R-REC-5 — FIFO con salto en la asignación AND.** En cada liberación se recorre la cola en orden
-  FIFO global `(enabled, seq)` y arranca el **primer candidato satisfacible**; un candidato que no
-  puede arrancar no bloquea a los que van detrás. Es una desviación deliberada del FIFO estricto:
-  sin ella, un candidato multi-pool bloqueado congelaría el pool entero. El salto es **entre
-  firmas de requisitos distintas**: todas las solicitudes que piden un único pool comparten una sola
-  cola FIFO por pool, así que una cabeza single-pool que no cabe sí bloquea a las que van detrás en
-  ese mismo pool, aunque pidan menos unidades (ADR-026). *(prueba: LILA-034, LILA-033)*
-- **R-REC-6 — Selección OR.** La tarea se encola en **todos** los pools alternativos y arranca con
-  el primero que tenga `quantity` unidades libres; al arrancar se retira de las demás colas y solo
-  ocupa unidades del pool elegido. Cada alternativa entra en la cola FIFO de su pool con el **mismo**
-  `(enabled, seq)`, así que OR, AND y single-pool compiten en igualdad en cada pool (R-REC-5).
-  **Desempate**: cuando en el mismo instante hay varias alternativas libres, gana la que aparece
-  **primero en el array `resources`** de la tarea (orden de documento del escenario). Es la única
-  regla: da igual por qué liberación llegó la disponibilidad, porque todas las liberaciones de un
-  mismo instante se aplican antes de planificar. El pool efectivamente usado se registra en
-  `resourceId` del event log y una OR produce **exactamente una** fila de asignación (R-REC-11);
-  sus costos son los del pool usado. *(prueba: LILA-035)*
-- **R-REC-7 — Ocupación y liberación.** Las unidades se ocupan en `started` y se liberan en `ended`
-  (o al morir el caso, R-EVT-5). No hay apropiación (`preempt` es campo reservado, §15) ni
-  prioridades: una tarea empezada nunca se interrumpe salvo por `terminate`. *(prueba: LILA-033)*
-- **R-REC-8 — Espera por recurso.** `resourceWait = started − enabled − offHoursWait[enabled,
-  started]`. Sin calendarios, `offHoursWait = 0` y queda la definición de la sección 6 del documento
-  de estructura: `resourceWait = started − enabled`. *(prueba: LILA-036, LILA-041)*
-- **R-REC-9 — Un mismo pool no se pide dos veces.** Dos entradas con la misma `ref` en una tarea es
-  error `E-REC-DUPLICADO`: la cantidad se expresa con `quantity`. *(prueba: LILA-013)*
-- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, gateways y `timer` nunca
-  consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
-  *(prueba: LILA-021, LILA-026)*
-- **R-REC-11 — Filas por asignación.** Cada asignación efectiva de pool produce una fila plana con
-  `resourceId` y `resourceQuantity`; una actividad sin pool produce exactamente una fila sentinel
-  con `resourceId`, `resourceQuantity` y `allocationIndex` en `null`. Una actividad AND/OR que se cierra mientras aún espera
-  también emite una sola sentinel, porque todavía no existe asignación; una vez iniciada emite sus
-  asignaciones efectivas. Las filas se agrupan por `activityInstanceId`, nunca mediante un array
-  anidado. Métricas de actividad y caso deduplican por `(replication, activityInstanceId)`; costos y
-  ocupación de recurso sí se suman por fila. *(decisión: ADR-025; prueba: LILA-033, LILA-034,
-  LILA-037)*
-
----
-
-## 12. Calendarios (ADR-016)
-
-Bizagi no documenta su semántica de calendarios; esta es la de Lila, ajustable si alguien aporta el
-comportamiento real de L-Sim/Bizagi.
-
-`scenario.calendars[nombre] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }] }`.
-
-- **R-CAL-1 — Patrón semanal relativo a `run.start`.** Los días y horas se interpretan en el mismo
-  offset UTC que `run.start`. No hay DST, no hay festivos, no hay zonas horarias por recurso en v1
-  (`timezone` y `holidays` son campos reservados, §15). El patrón se repite indefinidamente.
-  *(prueba: LILA-040)*
-- **R-CAL-2 — Intervalos.** `from` inclusivo, `to` exclusivo. **`to > from` es obligatorio** (R13 de
-  `SCENARIO_FORMAT.md`): ningún intervalo cruza la medianoche, y una ventana nocturna se declara
-  como dos intervalos (p. ej. `22:00–24:00` del lunes y `00:00–06:00` del martes). `to` admite
-  `"24:00"`, la medianoche del día siguiente, y es el único sitio donde se admite: sin ella el
-  formato no sabría decir "hasta el final del día" —el tope de `HH:MM` es `23:59` y `to` es
-  exclusivo— y tanto un 24×7 escrito a mano como esa ventana nocturna perderían 60 s cada noche en
-  silencio. Los intervalos de un mismo calendario se normalizan uniendo solapes **y adyacencias**,
-  así que los dos de la ventana nocturna quedan como uno solo. Un calendario con `intervals: []` es
-  error `E-CAL-VACIO` (nunca abriría). *(prueba: LILA-040, LILA-041, LILA-042)*
-- **R-CAL-3 — Primitivas.** `isOpen(t)`, `nextOpen(t)` (el propio `t` si ya está abierto) y
-  `addWorkingTime(t, d)` (instante en que se han consumido `d` segundos abiertos desde `t`; con
-  `d ≤ 0` devuelve `t` tal cual, aunque esté cerrado, y si `d` termina justo al cerrar un intervalo
-  devuelve ese cierre). Derivadas: `openTime(a, b)` (segundos abiertos contenidos en `[a, b)`, base
-  de `offHoursWait` y de `availableTime`) e `intersect(cal1, cal2)` (calendario de intervalos
-  comunes, R-CAL-4). Son las únicas operaciones de calendario del motor: **no hay eventos de
-  apertura/cierre en el heap**, la disponibilidad se resuelve al planificar. *(prueba: LILA-040)*
-- **R-CAL-4 — Una tarea solo arranca en horario abierto.** `started = nextOpen(instante en que hay
-  recursos)`. El calendario aplicable a una tarea es la **intersección** de los calendarios de los
-  pools que ocupa (selección AND) o el del pool asignado (selección OR); si además el elemento
-  declara `elements[id].calendar`, se intersecta también. Sin recursos, el del elemento; sin
-  ninguno, 24×7. Si la intersección queda **vacía** la tarea nunca podría arrancar: es error
-  `E-CAL-VACIO` citando la tarea; en selección OR se comprueba **cada alternativa por separado**,
-  porque cualquiera de ellas basta para arrancar. La intersección asume que los dos calendarios
-  comparten `offset`, que en v1 es global porque sale de `run.start`; si algún día `timezone` por
-  recurso deja de ser un campo reservado (§15), habrá que reconciliar los offsets antes de
-  intersecar. *(prueba: LILA-041)*
-- **R-CAL-5 — El processingTime se pausa y se reanuda.** La duración muestreada se consume **solo**
-  en tiempo abierto: `ended = addWorkingTime(started, d)`. Al cerrar el turno la tarea se congela y
-  reanuda en la siguiente apertura. Ejemplo normativo: tarea de 2 h que arranca a las 17:30 con
-  calendario 9:00–18:00 ⇒ termina a las 10:30 del siguiente día hábil. *(prueba: LILA-040,
-  LILA-041)*
-- **R-CAL-6 — La unidad de recurso queda reservada desde la concesión y durante el cierre.** La
-  unidad se descuenta del pool en el instante en que el planificador la **concede**, no en
-  `started`: si la concesión cae en tiempo cerrado, la unidad queda reservada mientras la tarea
-  espera a la apertura y **no** se reasigna a otro token. Tampoco se reasigna mientras la tarea
-  está pausada fuera de horario. En ninguno de los dos tramos acumula `busyTime` ni costo por
-  hora. *(prueba: LILA-041, LILA-036)*
-- **R-CAL-7 — `offHoursWait` separado de `resourceWait`.** `offHoursWait` de una fila del log es el
-  tiempo **cerrado** contenido en `[enabled, ended]`, sumando el cerrado antes de arrancar y el
-  cerrado durante el procesamiento. Ejemplo normativo (el de R-CAL-5): `offHoursWait = 15 h`
-  (18:00→09:00) y `resourceWait = 0`. *(prueba: LILA-041)*
-- **R-CAL-8 — Identidad de tiempos.** Para toda fila del log:
-  `ended − enabled = resourceWait + offHoursWait + processing`, donde `processing` es la duración
-  muestreada (tiempo abierto efectivamente trabajado). *(prueba: LILA-036, LILA-041)*
-- **R-CAL-9 — Utilización sobre horas disponibles.** Para un pool,
-  `utilization = busyTime / Σᵢ (capacityᵢ × openTimeᵢ)`, donde el sumatorio recorre los tramos de
-  capacidad del pool (R-CAL-11) y `openTimeᵢ` es el tiempo **abierto** del calendario del tramo `i`
-  dentro de la ventana de medida `[warmup, t_stop]`. Con la forma numérica hay un solo tramo y la
-  fórmula colapsa en `busyTime / (capacity × availableTime)`, con `availableTime` el tiempo abierto
-  del calendario del pool dentro de esa misma ventana (o el tiempo total de la ventana si no tiene
-  calendario). La ventana es siempre `[warmup, t_stop]`, **no** la duración declarada del escenario:
-  con una corrida que para al agotarse las llegadas (R-ARR-3) las dos difieren y las utilizaciones
-  no son las mismas. Bizagi usa la duración declarada en su nivel 4 —y `[warmup, t_stop]` en el
-  nivel 3—; la conversión es exacta y está en `docs/BIZAGI_PARITY.md` § D7:
-  `util_bizagi = util_lila × ventana_lila / duración_declarada`. Lila **no** cambia de denominador
-  por eso. Es la única definición que hace comparables los niveles 3 y 4 de Bizagi.
-
-  La métrica es **atribuible a la cohorte medida**, no un sensor del estado físico del pool:
-  `busyTime` excluye por R-ARR-7 los casos nacidos antes del `warmup`, mientras el denominador
-  conserva toda la capacidad disponible de `[warmup, t_stop]`. Por ello puede valer 0 aunque un
-  caso de calentamiento mantenga ocupado el pool durante toda la ventana; descontar esa ocupación
-  del denominador mezclaría cohortes y haría que ya no representase capacidad disponible.
-
-  Tampoco está acotada artificialmente a 1. Con capacidad por turnos, una tarea iniciada antes de
-  una bajada sigue ejecutándose por R-CAL-11: el `busyTime` observado puede superar
-  `Σᵢ capacityᵢ × openTimeᵢ` y la utilización será `> 1`. Ese exceso es evidencia de trabajo no
-  interrumpido sobre la plantilla posterior; el resultado conserva el valor y emite
-  `W-UTILIZACION-MAYOR-UNO` por pool. Solo se tolera el ruido de coma flotante de unas pocas ULP
-  alrededor de 1 al decidir si emitir el aviso.
-  *(prueba: LILA-041, LILA-036, LILA-164, LILA-204)*
-- **R-CAL-10 — Matriz recurso × calendario con calendario por defecto.** Cada pool puede declarar
-  `calendar`; si no lo hace, usa el calendario llamado `default` si existe, y si no existe, 24×7.
-  Una `calendar` que no existe en `calendars` es error citando el pool: `E-REF-DESCONOCIDA` si lo
-  caza el lint estático de `validateScenario` (el camino normal, R9 de `SCENARIO_FORMAT.md`) y
-  `E-CAL-DESCONOCIDO` si lo caza el guardia de `core/sim.ts`, que no puede importar el validador
-  y se defiende solo. Unificar los dos códigos en uno toca `core/`.
-  *(prueba: LILA-041, LILA-042)*
-- **R-CAL-11 — Capacidad por turno dentro de un mismo pool.** `resources[pool].capacity` admite,
-  además del entero, la lista de tramos `[{ calendar, capacity }]` (§ 2.4 y R16 de
-  `SCENARIO_FORMAT.md`): 3 enfermeras de día y 1 de noche son **un** pool, no tres. Es el
-  «Resources → Calendars → quantity» de Bizagi, el que hace falta para el nivel 4. El contrato
-  completo:
-  - **Apertura por unión.** El pool está **abierto** cuando lo está **cualquiera** de los
-    calendarios de sus tramos. Si los turnos cubren las 24 h el pool es un 24×7 y ninguna tarea que
-    lo use tiene `offHoursWait`. Ese calendario-unión es el que entra en la intersección de
-    R-CAL-4.
-  - **Capacidad en `t` por suma.** La capacidad en el instante `t` es la **suma** de los
-    `capacity_i` cuyos `calendar_i` están abiertos en `t`. Dos calendarios que se **solapan suman**
-    —a diferencia de los intervalos de un mismo calendario, que se unen (R-CAL-2)—, porque cada
-    tramo declara un grupo distinto de unidades del mismo rol: `[{dia, 2}, {24x7, 1}]` son 3
-    unidades de día y 1 de noche.
-  - **Durante el cierre del pool entero vale la capacidad del primer instante abierto posterior.**
-    En un `t` cerrado para todos los tramos la capacidad no es 0 sino la del siguiente
-    `nextOpen(t)`. Es lo que conserva R-CAL-6 —la unidad concedida en tiempo cerrado sigue
-    reservada, no desaparece bajo los pies del token que espera la apertura— y lo que deja el caso
-    de un solo tramo bit a bit igual al de M3, es decir R-DEG-2 intacta.
-  - **Cerrar un tramo no interrumpe nada.** Al bajar la capacidad, las tareas en curso **siguen**:
-    no hay apropiación (R-REC-7), así que `used` puede quedar temporalmente **por encima** de la
-    capacidad del instante hasta que terminen. Lo que la bajada sí impide es **conceder** nuevas
-    unidades: hasta que `used` vuelva a caer por debajo de la capacidad del instante no arranca
-    nadie más.
-  - **Un solo evento de calendario en el heap.** La **subida** de capacidad de un pool variable es
-    el único evento de calendario que existe (despierta la cola); una bajada no planifica nada,
-    porque no habilita a nadie. El resto de la disponibilidad se sigue resolviendo al planificar
-    (R-CAL-3).
-  - **Validación.** `capacity` por intervalos y `calendar` del pool son **excluyentes**
-    (`E-CAPACIDAD-Y-CALENDARIO`, R16): el calendario ya va en cada tramo. Cada `calendar_i` debe
-    existir (R9, `E-REF-DESCONOCIDA` en el lint y `E-CAL-DESCONOCIDO` en el guardia de `core/`,
-    igual que R-CAL-10). Cada `capacity_i` es entero `≥ 1` y la lista no puede estar vacía
-    (`E-REC-CAPACIDAD`). `quantity` de una tarea se valida contra el **máximo de la semana**, no
-    contra la suma declarada: 3 + 1 unidades en turnos disjuntos nunca son 4 simultáneas.
-  - **Equivalencia con la forma numérica.** `{ capacity: 3, calendar: "dia" }` y
-    `{ capacity: [{ calendar: "dia", capacity: 3 }] }` producen exactamente el mismo resultado; el
-    entero es el caso de un solo tramo y no sube `version` (§ 9 de `SCENARIO_FORMAT.md`).
-  - **Utilización y costo.** Se reportan **por rol**, no por turno, y el denominador es el de
-    R-CAL-9: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` sobre `[warmup, t_stop]`.
-  *(prueba: LILA-164)*
+- **R-REC-1 — Pool with integer capacity.** `capacity` is required and is either an integer
+  `≥ 1`, **or** the list of slices `[{ calendar, capacity }]` from R-CAL-11, in which each
+  `capacity_i` is itself an integer `≥ 1` and the pool's capacity varies with the clock. A pool is
+  a counter of identical units: there is no individual resource identity in v1 (the event log
+  records the **pool**, not the unit), and that does not change with variable capacity — what
+  varies is how many units there are, not which ones. Outside R-CAL-11, the rest of this section
+  reads `capacity` through a single path and does not distinguish the two forms.
+  *(test: LILA-033, LILA-164)*
+- **R-REC-2 — Assignment defaults.** An absent `quantity` is worth 1. An absent `selection` is
+  worth `"and"`. With a single pool, `and` and `or` are equivalent. `quantity > capacity` of the
+  pool is error `E-REC-CANTIDAD` citing the task and pool (it would wait forever); with capacity
+  by intervals the ceiling is the **week's maximum**, not the sum of the slices (R-CAL-11). A
+  `ref` to a nonexistent pool is error `E-REC-DESCONOCIDO`, a pool repeated on the same task is `E-REC-DUPLICADO`, and a `capacity` that is not an integer ≥ 1 is `E-REC-CAPACIDAD`. All four
+  are checked in a preflight **before any public callback**: a run cannot emit rows or progress
+  and then fail afterward. Since LILA-034, several pools with `selection` absent or `"and"` are
+  valid, and since LILA-035 so is `"or"`. `quantity > capacity` is also an error in an OR
+  alternative: that alternative could never start, and the scenario is misdeclared even if
+  another one does fit. *(test: LILA-013, LILA-033, LILA-034, LILA-035, LILA-042)*
+- **R-REC-3 — FIFO queue by enablement instant.** Each pool has a queue ordered by
+  `(enabled, seq)` ascending, where `seq` is the monotonic counter of the event that enabled the
+  token. Since `seq` is unique, the order is total and deterministic: **there are no real ties**.
+  *(test: LILA-033, LILA-023)*
+- **R-REC-4 — AND selection: atomic, no partial holding.** The task enters the queue of all its
+  pools. It starts when **all** of them simultaneously have `quantity` free units; at that
+  instant, all of them are discounted at once. A resource is never held while waiting for
+  another, so **deadlock is impossible**. Rows and `assignments` preserve the order declared in
+  the scenario even though the internal index uses all pools. *(test: LILA-034)*
+- **R-REC-5 — FIFO with skip-ahead in AND assignment.** On every release, the queue is walked in
+  global FIFO order `(enabled, seq)` and the **first satisfiable candidate** starts; a candidate
+  that cannot start does not block the ones behind it. It is a deliberate deviation from strict
+  FIFO: without it, a blocked multi-pool candidate would freeze the entire pool. The skip is
+  **between distinct requirement signatures**: every request asking for a single pool shares one
+  FIFO queue per pool, so a single-pool head that does not fit does block the ones behind it in
+  that same pool, even if they ask for fewer units (ADR-026). *(test: LILA-034, LILA-033)*
+- **R-REC-6 — OR selection.** The task queues in **all** the alternative pools and starts with the
+  first one that has `quantity` free units; on starting, it withdraws from the other queues and
+  occupies units of the chosen pool only. Each alternative enters its pool's FIFO queue with the
+  **same** `(enabled, seq)`, so OR, AND and single-pool compete on equal footing in each pool
+  (R-REC-5). **Tie-break**: when several alternatives are free at the same instant, the one that
+  appears **first in the task's `resources` array** wins (the scenario's document order). It is
+  the only rule: it does not matter which release made the availability arrive, because all the
+  releases of a given instant are applied before scheduling. The pool actually used is recorded
+  in the event log's `resourceId`, and an OR produces **exactly one** assignment row (R-REC-11);
+  its costs are those of the pool used. *(test: LILA-035)*
+- **R-REC-7 — Occupation and release.** Units are occupied at `started` and released at `ended`
+  (or when the case dies, R-EVT-5). There is no preemption (`preempt` is a reserved field, §15)
+  and no priorities: a task that has started is never interrupted except by `terminate`.
+  *(test: LILA-033)*
+- **R-REC-8 — Wait for resource.** `resourceWait = started − enabled − offHoursWait[enabled,
+  started]`. With no calendars, `offHoursWait = 0` and the definition matches section 6 of the
+  structure document: `resourceWait = started − enabled`. *(test: LILA-036, LILA-041)*
+- **R-REC-9 — The same pool is never requested twice.** Two entries with the same `ref` on a task
+  is error `E-REC-DUPLICADO`: the amount is expressed with `quantity`. *(test: LILA-013)*
+- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, gateways and `timer`
+  never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
+  *(test: LILA-021, LILA-026)*
+- **R-REC-11 — Rows per assignment.** Every effective pool assignment produces a flat row with
+  `resourceId` and `resourceQuantity`; an activity with no pool produces exactly one sentinel row
+  with `resourceId`, `resourceQuantity` and `allocationIndex` set to `null`. An AND/OR activity
+  that closes while still waiting also emits a single sentinel, because there is no assignment
+  yet; once started, it emits its effective assignments. Rows are grouped by
+  `activityInstanceId`, never through a nested array. Activity and case metrics deduplicate by
+  `(replication, activityInstanceId)`; resource costs and occupancy are indeed summed per row.
+  *(decision: ADR-025; test: LILA-033, LILA-034, LILA-037)*
 
 ---
 
-## 13. Costos
+## 12. Calendars (ADR-016)
 
-- **R-COST-1 — Costo por elemento.** `element.fixedCostTotal = elements[id].fixedCost × completados`
-  (solo los completados dentro de la ventana de estadísticas). Se carga en `ended`.
-  *(prueba: LILA-036)*
-- **R-COST-2 — Costo por recurso.**
-  `resource.fixedCost = pool.fixedCost × usos`, donde *usos* es la suma de `quantity` sobre las
-  filas del log que ocupan el pool (una tarea que ocupa 2 unidades son 2 usos);
+Bizagi does not document its calendar semantics; this one is Lila's, adjustable if someone
+contributes L-Sim/Bizagi's real behavior.
+
+`scenario.calendars[name] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }] }`.
+
+- **R-CAL-1 — Weekly pattern relative to `run.start`.** Days and hours are interpreted in the
+  same UTC offset as `run.start`. There is no DST, no holidays, no per-resource time zones in v1
+  (`timezone` and `holidays` are reserved fields, §15). The pattern repeats indefinitely.
+  *(test: LILA-040)*
+- **R-CAL-2 — Intervals.** `from` is inclusive, `to` is exclusive. **`to > from` is required** (R13
+  of `SCENARIO_FORMAT.md`): no interval crosses midnight, and a night window is declared as two
+  intervals (e.g. `22:00–24:00` on Monday and `00:00–06:00` on Tuesday). `to` accepts `"24:00"`,
+  midnight of the following day, and it is the only place it is accepted: without it, the format
+  would have no way to say "until the end of the day" — the ceiling of `HH:MM` is `23:59` and
+  `to` is exclusive — and both a hand-written 24×7 and that night window would silently lose 60 s
+  every night. Intervals within the same calendar are normalized by merging overlaps **and
+  adjacencies**, so the two intervals of the night window end up as one. A calendar with
+  `intervals: []` is error `E-CAL-VACIO` (it would never open). *(test: LILA-040, LILA-041,
+  LILA-042)*
+- **R-CAL-3 — Primitives.** `isOpen(t)`, `nextOpen(t)` (`t` itself if already open) and
+  `addWorkingTime(t, d)` (the instant at which `d` open seconds since `t` have been consumed;
+  with `d ≤ 0` it returns `t` as-is, even if closed, and if `d` finishes exactly when an interval
+  closes it returns that closing instant). Derived: `openTime(a, b)` (open seconds contained in
+  `[a, b)`, the basis of `offHoursWait` and of `availableTime`) and `intersect(cal1, cal2)`
+  (calendar of shared intervals, R-CAL-4). These are the engine's only calendar operations:
+  **there are no opening/closing events in the heap**; availability is resolved when scheduling.
+  *(test: LILA-040)*
+- **R-CAL-4 — A task only starts during open hours.** `started = nextOpen(instant at which
+  resources are available)`. The calendar that applies to a task is the **intersection** of the
+  calendars of the pools it occupies (AND selection) or that of the assigned pool (OR selection);
+  if the element also declares `elements[id].calendar`, that is intersected too. With no
+  resources, the element's; with none at all, 24×7. If the intersection is **empty**, the task
+  could never start: it is error `E-CAL-VACIO` citing the task; under OR selection, **each
+  alternative is checked separately**, because any one of them is enough to start.
+  The intersection assumes the two calendars share `offset`, which in v1 is global because it
+  comes from `run.start`; if some day a per-resource `timezone` stops being a reserved field
+  (§15), the offsets will need to be reconciled before intersecting. *(test: LILA-041)*
+- **R-CAL-5 — `processingTime` pauses and resumes.** The sampled duration is consumed **only** in
+  open time: `ended = addWorkingTime(started, d)`. When the shift closes, the task freezes and
+  resumes at the next opening. Normative example: a 2 h task that starts at 17:30 with a
+  9:00–18:00 calendar ⇒ ends at 10:30 the next business day. *(test: LILA-040, LILA-041)*
+- **R-CAL-6 — The resource unit stays reserved from the grant and through the closure.** The unit
+  is discounted from the pool at the instant the scheduler **grants** it, not at `started`: if
+  the grant falls in closed time, the unit stays reserved while the task waits for the opening
+  and is **not** reassigned to another token. It is also not reassigned while the task is paused
+  outside hours. In neither stretch does it accrue `busyTime` or hourly cost. *(test: LILA-041,
+  LILA-036)*
+- **R-CAL-7 — `offHoursWait` separate from `resourceWait`.** A log row's `offHoursWait` is the
+  **closed** time contained in `[enabled, ended]`, adding the closed time before starting and the
+  closed time during processing. Normative example (the one from R-CAL-5): `offHoursWait = 15 h`
+  (18:00→09:00) and `resourceWait = 0`. *(test: LILA-041)*
+- **R-CAL-8 — Time identity.** For every log row:
+  `ended − enabled = resourceWait + offHoursWait + processing`, where `processing` is the sampled
+  duration (open time effectively worked). *(test: LILA-036, LILA-041)*
+- **R-CAL-9 — Utilization over available hours.** For a pool,
+  `utilization = busyTime / Σᵢ (capacityᵢ × openTimeᵢ)`, where the sum runs over the pool's
+  capacity slices (R-CAL-11) and `openTimeᵢ` is the **open** time of slice `i`'s calendar within
+  the measurement window `[warmup, t_stop]`. With the numeric form there is a single slice and the
+  formula collapses to `busyTime / (capacity × availableTime)`, with `availableTime` the open time
+  of the pool's calendar within that same window (or the window's total time if it has no
+  calendar). The window is always `[warmup, t_stop]`, **not** the scenario's declared duration:
+  with a run that stops when arrivals run out (R-ARR-3) the two differ, and utilizations are not
+  the same. Bizagi uses the declared duration in its level 4 — and `[warmup, t_stop]` in level
+  3 —; the conversion is exact and is in `docs/BIZAGI_PARITY.md` § D7:
+  `util_bizagi = util_lila × ventana_lila / duración_declarada`. Lila does **not** change its
+  denominator because of that. It is the only definition that makes levels 3 and 4 of Bizagi
+  comparable.
+
+  The metric is **attributable to the measured cohort**, not a sensor of the pool's physical
+  state: `busyTime` excludes, by R-ARR-7, the cases born before `warmup`, while the denominator
+  keeps all the capacity available in `[warmup, t_stop]`. Because of that it can be 0 even if a
+  warm-up case keeps the pool busy through the whole window; subtracting that occupancy from the
+  denominator would mix cohorts and would make it no longer represent available capacity.
+
+  Nor is it artificially capped at 1. With shift-based capacity, a task started before a
+  downshift keeps running under R-CAL-11: the observed `busyTime` can exceed
+  `Σᵢ capacityᵢ × openTimeᵢ`, and utilization will be `> 1`. That excess is evidence of
+  uninterrupted work carrying over onto the later template; the result keeps the value and emits
+  `W-UTILIZACION-MAYOR-UNO` per pool. Only floating-point noise of a few ULPs around 1 is
+  tolerated when deciding whether to emit the warning.
+  *(test: LILA-041, LILA-036, LILA-164, LILA-204)*
+- **R-CAL-10 — Resource × calendar matrix with a default calendar.** Every pool can declare
+  `calendar`; if it does not, it uses the calendar named `default` if it exists, and if not,
+  24×7. A `calendar` that does not exist in `calendars` is an error citing the pool:
+  `E-REF-DESCONOCIDA` if caught by `validateScenario`'s static lint (the normal path, R9 of
+  `SCENARIO_FORMAT.md`), and `E-CAL-DESCONOCIDO` if caught by `core/sim.ts`'s guard, which cannot
+  import the validator and defends itself alone. Unifying the two codes into one requires
+  touching `core/`. *(test: LILA-041, LILA-042)*
+- **R-CAL-11 — Shift capacity within a single pool.** `resources[pool].capacity` admits, besides
+  the integer, the list of slices `[{ calendar, capacity }]` (§ 2.4 and R16 of
+  `SCENARIO_FORMAT.md`): 3 day nurses and 1 night nurse are **one** pool, not three. It is
+  Bizagi's "Resources → Calendars → quantity", the piece needed for level 4. The full contract:
+  - **Union opening.** The pool is **open** when **any** of its slices' calendars is open. If the
+    shifts cover the full 24 h the pool is a 24×7, and no task that uses it has `offHoursWait`.
+    That union calendar is the one that enters R-CAL-4's intersection.
+  - **Capacity at `t` by sum.** The capacity at instant `t` is the **sum** of the `capacity_i`
+    whose `calendar_i` are open at `t`. Two calendars that overlap **add up** — unlike the
+    intervals of a single calendar, which merge (R-CAL-2) — because each slice declares a
+    distinct group of units of the same role: `[{day, 2}, {24x7, 1}]` are 3 daytime units and 1
+    nighttime unit.
+  - **While the whole pool is closed, capacity equals that of the next open instant.** At a `t`
+    closed for every slice, capacity is not 0 but that of the following `nextOpen(t)`. This is
+    what preserves R-CAL-6 — the unit granted in closed time stays reserved, it does not
+    disappear from under the token waiting for the opening — and what leaves the single-slice
+    case bit-for-bit identical to M3, i.e. R-DEG-2 intact.
+  - **Closing a slice interrupts nothing.** When capacity goes down, tasks in progress
+    **continue**: there is no preemption (R-REC-7), so `used` can temporarily sit **above** the
+    instant's capacity until they finish. What the downshift does prevent is **granting** new
+    units: until `used` falls back below the instant's capacity, no one else starts.
+  - **A single calendar event on the heap.** A variable pool's capacity **rise** is the only
+    calendar event that exists (it wakes the queue); a drop schedules nothing, because it enables
+    no one. The rest of availability is still resolved when scheduling (R-CAL-3).
+  - **Validation.** `capacity` by intervals and the pool's `calendar` are **mutually exclusive**
+    (`E-CAPACIDAD-Y-CALENDARIO`, R16): the calendar already lives in each slice. Every
+    `calendar_i` must exist (R9, `E-REF-DESCONOCIDA` in the lint and `E-CAL-DESCONOCIDO` in the
+    `core/` guard, same as R-CAL-10). Every `capacity_i` is an integer `≥ 1`, and the list cannot
+    be empty (`E-REC-CAPACIDAD`). A task's `quantity` is validated against the **week's
+    maximum**, not against the declared sum: 3 + 1 units in disjoint shifts are never 4
+    simultaneous units.
+  - **Equivalence with the numeric form.** `{ capacity: 3, calendar: "dia" }` and
+    `{ capacity: [{ calendar: "dia", capacity: 3 }] }` produce exactly the same result; the
+    integer is the single-slice case and does not bump `version` (§ 9 of `SCENARIO_FORMAT.md`).
+  - **Utilization and cost.** These are reported **per role**, not per shift, and the
+    denominator is R-CAL-9's: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` over `[warmup, t_stop]`.
+  *(test: LILA-164)*
+
+---
+
+## 13. Costs
+
+- **R-COST-1 — Cost per element.** `element.fixedCostTotal = elements[id].fixedCost × completed`
+  (only those completed within the statistics window). It is charged at `ended`.
+  *(test: LILA-036)*
+- **R-COST-2 — Cost per resource.**
+  `resource.fixedCost = pool.fixedCost × uses`, where *uses* is the sum of `quantity` over the log
+  rows that occupy the pool (a task occupying 2 units is 2 uses);
   `resource.unitCost = pool.costPerHour × busyTime / 3600`;
-  `resource.totalCost = fixedCost + unitCost`. `busyTime` es tiempo **abierto** ocupado, sumado
-  sobre las unidades ocupadas (una tarea que ocupa `quantity = 2` durante 1 h aporta 2 h).
-  *(prueba: LILA-036)*
-- **R-COST-3 — Costo de una fila del log.**
-  `row.cost = row.elementCost + row.resourceCost`. `elementCost` vale el fijo del elemento solo en
-  la primera fila de la instancia (orden del array `resources`) y 0 en las demás; para el sentinel
-  es el fijo del elemento. `resourceCost = pool.fixedCost × quantity + pool.costPerHour × quantity
-  × busyTime_fila / 3600` si el pool llegó a ocuparse, y 0 mientras siguió en cola. Así el fijo del
-  elemento no se duplica en AND y cada componente es reconstruible. *(decisión: ADR-025; prueba:
-  LILA-037, LILA-036)*
-- **R-COST-4 — Costo por caso y total.** `costo(caso) = Σ row.cost de sus filas`;
-  `process.costPerCase` = media sobre los casos **completados** de la ventana;
-  `process.totalCost = Σ row.cost` de todas las filas de la ventana, incluidas las parciales de
-  casos en vuelo. `element.fixedCostTotal = Σ row.elementCost`, no `Σ row.cost`. De ahí sale la identidad verificable
-  `totalCost = Σ fijo × usos + Σ porHora × horas ocupadas`. *(prueba: LILA-036)*
-- **R-COST-5 — Costos ausentes.** `fixedCost` y `costPerHour` ausentes valen 0. Costos negativos los
-  rechaza el esquema. *(prueba: LILA-013)*
-- **R-COST-6 — Nada de costo por espera.** En v1 esperar no cuesta: un recurso ocioso o una cola no
-  generan costo. *(prueba: LILA-036)*
+  `resource.totalCost = fixedCost + unitCost`. `busyTime` is **open** time occupied, summed over
+  the occupied units (a task occupying `quantity = 2` for 1 h contributes 2 h).
+  *(test: LILA-036)*
+- **R-COST-3 — Cost of a log row.**
+  `row.cost = row.elementCost + row.resourceCost`. `elementCost` is worth the element's fixed
+  cost only on the instance's first row (order of the `resources` array) and 0 on the others; for
+  the sentinel it is the element's fixed cost. `resourceCost = pool.fixedCost × quantity +
+  pool.costPerHour × quantity × busyTime_row / 3600` if the pool was actually occupied, and 0
+  while it was still queued. This way the element's fixed cost is not duplicated in AND, and
+  every component is reconstructible. *(decision: ADR-025; test: LILA-037, LILA-036)*
+- **R-COST-4 — Cost per case and total.** `cost(case) = Σ row.cost of its rows`;
+  `process.costPerCase` = mean over the **completed** cases of the window;
+  `process.totalCost = Σ row.cost` of all the rows of the window, including partial rows of
+  in-flight cases. `element.fixedCostTotal = Σ row.elementCost`, not `Σ row.cost`. From this comes
+  the checkable identity `totalCost = Σ fixed × uses + Σ perHour × occupied hours`.
+  *(test: LILA-036)*
+- **R-COST-5 — Absent costs.** Absent `fixedCost` and `costPerHour` are worth 0. Negative costs
+  are rejected by the schema. *(test: LILA-013)*
+- **R-COST-6 — No cost for waiting.** In v1, waiting costs nothing: an idle resource or a queue
+  generate no cost. *(test: LILA-036)*
 
 ---
 
-## 14. Degradación
+## 14. Degradation
 
-El motor no tiene “niveles”: el escenario que no dice algo obtiene el comportamiento neutro. Es lo
-que hace que el mismo modelo sirva de nivel 1 a nivel 4 de Bizagi.
+The engine has no "levels": a scenario that does not say something gets the neutral behavior. It
+is what makes the same model serve as Bizagi level 1 through level 4.
 
-- **R-DEG-1 — Sin `resources` en el escenario ⇒ capacidad infinita.** Ninguna tarea espera; toda
-  `resourceWait` es 0; no hay tablas de recurso ni costos por hora. El resultado debe ser
-  **idéntico bit a bit** al del mismo escenario corrido por el motor de M1. *(prueba: LILA-039)*
-- **R-DEG-2 — Sin `calendars` ⇒ 24×7.** `isOpen` siempre verdadero, `offHoursWait = 0`,
-  `availableTime` = duración de la ventana. El resultado debe ser **idéntico bit a bit** al del
-  mismo escenario corrido por el motor de M2. *(prueba: LILA-043)*
-- **R-DEG-3 — Sin `processingTime` en una tarea ⇒ duración 0** más aviso `W-TAREA-SIN-TIEMPO`
-  citando el id. La tarea sigue ocupando recursos durante 0 segundos. Si el escenario no declara
-  **ningún** `processingTime` —validación de rutas, como el nivel 1 de Bizagi— el aviso es **uno
-  solo** que lista los ids: un aviso por tarea ahí es ruido por diseño, no un olvido concreto.
-  *(prueba: LILA-042, LILA-198)*
-- **R-DEG-4 — Sin `probability` ⇒ §6 y §7.** Sin `warmup` ⇒ 0. Sin `replications` ⇒ 1. Sin `seed` ⇒
-  `seed = 1` y aviso `W-SIN-SEED`: la corrida sigue siendo determinista y reproducible, pero el
-  escenario no dice con qué semilla. Por eso `run.seed` **no** lleva default en el esquema: con
-  default no se podría distinguir "no declarada" de "declarada en 1"; el 1 lo aplica el motor.
-  *(prueba: LILA-013, LILA-030, LILA-198)*
-- **R-DEG-5 — La degradación nunca inventa.** Ningún default introduce esperas, costos ni
-  variabilidad: todos son el elemento neutro de su operación. *(prueba: LILA-039, LILA-043)*
-
----
-
-## 15. Campos reservados
-
-El esquema del escenario los **acepta** (para que un archivo escrito hoy siga validando mañana) pero
-el motor los **rechaza** con error claro mientras no estén implementados (ADR-015, LILA-013).
-
-- **R-RES-1 — Lista v1:** `priority`, `preempt`, `batch`, `conditions` (sección 6 del documento de
-  estructura) más `holidays` y `timezone` en `calendars` (ADR-016, LILA-013).
-  *(prueba: LILA-013)*
-- **R-RES-2 — Texto exacto del error.**
-
-  ```
-  {ruta}: campo reservado, no soportado por el simulador en v1.
-  ```
-
-  `{ruta}` es la ruta JSON del campo desde la raíz del escenario **resuelto**, con el id del
-  elemento o del pool. Ejemplos literales:
-
-  ```
-  elements.Task_TomarPedido.priority: campo reservado, no soportado por el simulador en v1.
-  resources.cajero.preempt: campo reservado, no soportado por el simulador en v1.
-  calendars.oficina.holidays: campo reservado, no soportado por el simulador en v1.
-  ```
-
-  Código `E-RESERVADO`. *(prueba: LILA-013)*
-- **R-RES-3 — Se rechaza en `resolveScenario`, no en `simulate`.** El error aparece antes de correr
-  y aborta; nunca se ignora en silencio. Un campo reservado presente pero con valor `null` (borrado
-  por `extends`) **no** dispara el error. *(prueba: LILA-013, LILA-014)*
-- **R-RES-4 — Campos desconocidos.** Una clave no reconocida por el esquema y que no está en la
-  lista de reservados es error de esquema `E-CLAVE-DESCONOCIDA` (el esquema es cerrado): protege
-  contra erratas silenciosas del tipo `capacty: 3`. Única excepción: `__proto__`, `constructor` y
-  `prototype`, que la fusión de `extends` descarta antes del esquema y por tanto en silencio
-  (`SCENARIO_FORMAT.md` § 6). *(prueba: LILA-013, LILA-198; excepción: LILA-204)*
+- **R-DEG-1 — No `resources` in the scenario ⇒ infinite capacity.** No task waits; every
+  `resourceWait` is 0; there are no resource tables or hourly costs. The result must be
+  **bit-for-bit identical** to the same scenario run through the M1 engine. *(test: LILA-039)*
+- **R-DEG-2 — No `calendars` ⇒ 24×7.** `isOpen` is always true, `offHoursWait = 0`,
+  `availableTime` = the window's duration. The result must be **bit-for-bit identical** to the
+  same scenario run through the M2 engine. *(test: LILA-043)*
+- **R-DEG-3 — No `processingTime` on a task ⇒ duration 0**, plus warning
+  `W-TAREA-SIN-TIEMPO` citing the id. The task still occupies resources for 0 seconds. If the
+  scenario declares **no** `processingTime` at all — path validation, like Bizagi's level 1 —
+  the warning is a **single one** that lists the ids: one warning per task there is noise by
+  design, not a specific oversight. *(test: LILA-042, LILA-198)*
+- **R-DEG-4 — No `probability` ⇒ §6 and §7.** No `warmup` ⇒ 0. No `replications` ⇒ 1. No `seed` ⇒
+  `seed = 1` and warning `W-SIN-SEED`: the run stays deterministic and reproducible, but the
+  scenario does not say which seed. That is why `run.seed` carries **no** default in the schema:
+  with a default it would be impossible to tell "not declared" from "declared as 1"; the engine
+  applies the 1. *(test: LILA-013, LILA-030, LILA-198)*
+- **R-DEG-5 — Degradation never invents anything.** No default introduces waits, costs or
+  variability: all of them are the neutral element of their operation. *(test: LILA-039,
+  LILA-043)*
 
 ---
 
-## 16. Determinismo (ADR-017)
+## 15. Reserved fields
 
-- **R-DET-1 — Dos fuentes de orden, ambas explícitas.** El orden de eventos es `(t, seq)` (R-TOK-3)
-  y el orden de colas es `(enabled, seq)` (R-REC-3). No hay ninguna estructura iterada por orden de
-  inserción de un `Map` ni por orden alfabético de ids en el camino de una decisión.
-  *(prueba: LILA-030, LILA-023)*
-- **R-DET-2 — Un stream por elemento.** El PRNG (mulberry32/xoshiro) se siembra con
-  `hash(seed, replication, elementId)`. Cada elemento consume **solo** su stream: `interTriggerTimer`
-  del `start`, `processingTime` de la tarea o el timer, los sorteos de ramaje del gateway.
-  *(prueba: LILA-024)*
-- **R-DET-3 — Common random numbers.** Consecuencia de R-DET-2: añadir un cajero (o cambiar una
-  capacidad, un costo o un calendario) **no cambia** la secuencia de números de los elementos no
-  tocados, así que un what-if se lee limpio. Es un requisito, no un efecto colateral.
-  *(prueba: LILA-024, LILA-038)*
-- **R-DET-4 — Consumo estable de uniformes.** Las distribuciones cerradas consumen un número fijo de
-  uniformes por muestra; `normal` y `truncatedNormal` usan Box-Muller **sin cachear** el segundo
-  valor (2 uniformes por muestra siempre). Las de rechazo (`gamma`, `beta`, `poisson`, `binomial`)
-  consumen un número variable: eso solo desalinea el stream **de ese elemento**, nunca el de otro.
-  *(prueba: LILA-025, LILA-024)*
-- **R-DET-5 — Nunca `Math.random` ni `Date`.** Ni en `core/`, ni en la CLI, ni en el Worker. El
-  `RunResult` no contiene marcas de tiempo de reloj real. *(prueba: LILA-032, LILA-030)*
-- **R-DET-6 — Garantía de bytes.** Con la misma semilla y la misma entrada, `lila run --json`
-  produce **bytes idénticos** dentro de una misma plataforma y arquitectura, en Node 22 y 24. La
-  igualdad de bytes **no cruza arquitecturas**: `Math.log`, `Math.exp`, `Math.cos` y `Math.pow` no
-  están correctamente redondeadas y difieren en el último bit entre, por ejemplo, `linux/x64` y
-  `darwin/arm64` (solo `Math.sqrt` lo está, por el ISA). En nivel 1 y 2 esa deriva se cancela
-  —`processing` es una diferencia de dos instantes desplazados por igual— y los goldens de M1
-  coinciden byte a byte en las dos; en nivel 3 no, porque `resourceWait` resta el instante de un
-  caso al de otro: un ULP en el reloj de llegadas sobrevive hasta `resourceWait.total`. Por eso el
-  golden de nivel 3 (`test/golden/pedido-nivel3.seed-42.json`) lleva los bytes de la plataforma del
-  CI, `linux/x64`, se compara byte a byte cuando `process.env.CI` está definido, y con tolerancia
-  relativa `1e-9` fuera de él. Entre navegadores la igualdad también es solo estadística.
-  *(prueba: LILA-030, LILA-043)*
-- **R-DET-7 — Distribuciones.** Las 14 con parámetros nombrados y en segundos: `constant{value}`,
-  `uniform{min,max}`, `triangular{min,mode,max}`, `exponential{mean}`, `normal{mean,sd}` (truncada a
-  `≥ 0`; aviso `W-NORMAL-NEGATIVA` si `P(x<0) > 1 %`), `truncatedNormal{mean,sd,min,max}`,
-  `lognormal{mean,sd}` (media y desviación **de la variable**, no de su logaritmo),
-  `gamma{shape,scale}`, `erlang{k,mean}`, `weibull{shape,scale}`, `beta{alpha,beta,min,max}`,
-  `poisson{mean}`, `binomial{n,p}`, `user{points:[{value,probability}]}` (empírica discreta,
-  probabilidades normalizadas con aviso si no suman 1). Toda muestra de duración se trunca a `≥ 0`.
-  *(prueba: LILA-025)*
+The scenario schema **accepts** them (so that a file written today keeps validating tomorrow) but
+the engine **rejects** them with a clear error while they are not implemented (ADR-015, LILA-013).
+
+- **R-RES-1 — v1 list:** `priority`, `preempt`, `batch`, `conditions` (section 6 of the structure
+  document) plus `holidays` and `timezone` in `calendars` (ADR-016, LILA-013).
+  *(test: LILA-013)*
+- **R-RES-2 — Exact error text.**
+
+  ```
+  {path}: reserved field, not supported by the simulator in v1.
+  ```
+
+  `{path}` is the JSON path of the field from the root of the **resolved** scenario, with the id
+  of the element or the pool. Literal examples:
+
+  ```
+  elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.
+  resources.cajero.preempt: reserved field, not supported by the simulator in v1.
+  calendars.oficina.holidays: reserved field, not supported by the simulator in v1.
+  ```
+
+  Code `E-RESERVADO`. *(test: LILA-013)*
+- **R-RES-3 — It is rejected in `resolveScenario`, not in `simulate`.** The error appears before
+  running and aborts; it is never silently ignored. A reserved field present but with value
+  `null` (cleared out by `extends`) does **not** trigger the error. *(test: LILA-013, LILA-014)*
+- **R-RES-4 — Unknown fields.** A key not recognized by the schema, and not on the reserved list,
+  is schema error `E-CLAVE-DESCONOCIDA` (the schema is closed): it guards against silent typos
+  like `capacty: 3`. The single exception is `__proto__`, `constructor` and `prototype`, which
+  the `extends` merge discards before the schema and therefore silently
+  (`SCENARIO_FORMAT.md` § 6). *(test: LILA-013, LILA-198; exception: LILA-204)*
 
 ---
 
-## 17. Catálogo de errores y avisos
+## 16. Determinism (ADR-017)
 
-Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
+- **R-DET-1 — Two sources of order, both explicit.** Event order is `(t, seq)` (R-TOK-3) and
+  queue order is `(enabled, seq)` (R-REC-3). There is no structure anywhere in a decision's path
+  that is iterated by a `Map`'s insertion order or by alphabetical order of ids.
+  *(test: LILA-030, LILA-023)*
+- **R-DET-2 — One stream per element.** The PRNG (mulberry32/xoshiro) is seeded with
+  `hash(seed, replication, elementId)`. Each element consumes **only** its own stream: the
+  `start`'s `interTriggerTimer`, the task's or timer's `processingTime`, the gateway's branching
+  draws. *(test: LILA-024)*
+- **R-DET-3 — Common random numbers.** A consequence of R-DET-2: adding a cashier (or changing a
+  capacity, a cost or a calendar) does **not change** the number sequence of the untouched
+  elements, so a what-if reads clean. It is a requirement, not a side effect.
+  *(test: LILA-024, LILA-038)*
+- **R-DET-4 — Stable uniform consumption.** Closed-form distributions consume a fixed number of
+  uniforms per sample; `normal` and `truncatedNormal` use Box-Muller **without caching** the
+  second value (2 uniforms per sample, always). The rejection-based ones (`gamma`, `beta`,
+  `poisson`, `binomial`) consume a variable number: that only desynchronizes **that element's**
+  stream, never another's. *(test: LILA-025, LILA-024)*
+- **R-DET-5 — Never `Math.random` nor `Date`.** Not in `core/`, not in the CLI, not in the
+  Worker. `RunResult` contains no real-clock timestamps. *(test: LILA-032, LILA-030)*
+- **R-DET-6 — Byte guarantee.** With the same seed and the same input, `lila run --json`
+  produces **byte-identical** output within a given platform and architecture, on Node 22 and 24.
+  Byte equality does **not** cross architectures: `Math.log`, `Math.exp`, `Math.cos` and
+  `Math.pow` are not correctly rounded and differ in the last bit between, for example,
+  `linux/x64` and `darwin/arm64` (only `Math.sqrt` is, because of the ISA). At levels 1 and 2
+  that drift cancels out — `processing` is a difference of two instants shifted equally — and the
+  M1 goldens match byte-for-byte on both; at level 3 they do not, because `resourceWait` subtracts
+  one case's instant from another's: one ULP in the arrival clock survives all the way to
+  `resourceWait.total`. That is why the level 3 golden
+  (`test/golden/pedido-nivel3.seed-42.json`) carries the bytes of the CI platform, `linux/x64`,
+  is compared byte-for-byte when `process.env.CI` is set, and with relative tolerance `1e-9`
+  outside of it. Between browsers, equality is likewise only statistical.
+  *(test: LILA-030, LILA-043)*
+- **R-DET-7 — Distributions.** The 14, with named parameters and in seconds: `constant{value}`,
+  `uniform{min,max}`, `triangular{min,mode,max}`, `exponential{mean}`, `normal{mean,sd}`
+  (truncated to `≥ 0`; warning `W-NORMAL-NEGATIVA` if `P(x<0) > 1 %`),
+  `truncatedNormal{mean,sd,min,max}`, `lognormal{mean,sd}` (mean and standard deviation **of the
+  variable**, not of its logarithm), `gamma{shape,scale}`, `erlang{k,mean}`,
+  `weibull{shape,scale}`, `beta{alpha,beta,min,max}`, `poisson{mean}`, `binomial{n,p}`,
+  `user{points:[{value,probability}]}` (discrete empirical, probabilities normalized with a
+  warning if they do not add up to 1). Every duration sample is truncated to `≥ 0`.
+  *(test: LILA-025)*
 
-| Código | Cuándo |
+---
+
+## 17. Error and warning catalog
+
+Since LILA-211 the texts of all these codes live in a catalog per language
+(`packages/engine/src/messages/`, with the subset that `core/` needs in
+`packages/engine/src/core/messages/`). **English** is the default language and **Spanish** a
+translation; both are normative, each for its own language, and this section gives both texts
+wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
+translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
+the code in sync: the catalog's 57 codes are exactly the ones `packages/engine/src` emits, `en`
+and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
+
+Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1):
+
+| Code | When |
 |---|---|
-| `E-NOSOP` | elemento fuera del perfil (§3, texto exacto en R-NOSOP-1/2) |
-| `E-PARSE-INCOMPLETO` | el lector XML descartó parte del modelo (§3, R-NOSOP-6) |
-| `E-FLUJO-COLGANTE` | sequence flow sin origen o sin destino |
-| `E-ID-DUPLICADO` | dos elementos con el mismo `id` |
-| `E-GATEWAY-SIN-ARISTAS` | gateway sin entradas o sin salidas |
-| `E-INALCANZABLE` | nodo no alcanzable desde ningún `start` |
-| `E-SIN-START` / `E-SIN-END` | proceso sin start, o sin `end` ni `terminate` |
-| `E-ELEMENTO-DESCONOCIDO` | clave de `elements` que no existe en el IR |
-| `E-CLAVE-DESCONOCIDA` | clave no reconocida por el esquema |
-| `E-PROB-RANGO` | `probability` fuera de `[0,1]` |
-| `E-PROB-EN-NODO` | `probability` declarada en un nodo |
-| `E-XOR-SUMA-CERO` | XOR cuyas probabilidades suman 0 |
-| `E-SUBPROC-PARAMETRO` | `processingTime`/`resources`/`fixedCost` en un subproceso embebido |
-| `E-TIMER-RECURSO` | `resources` en un `timer` |
-| `E-REC-DESCONOCIDO` | `ref` a un pool inexistente |
-| `E-REC-DUPLICADO` | el mismo pool dos veces en una tarea |
-| `E-REC-CANTIDAD` | `quantity` mayor que la `capacity` del pool (con capacidad por intervalos, mayor que el máximo de la semana, R-CAL-11) |
-| `E-REC-CAPACIDAD` | `capacity` que no es entero ≥ 1, o lista de tramos vacía (R-REC-1, R-CAL-11) |
-| `E-CAPACIDAD-Y-CALENDARIO` | `capacity` por intervalos y `calendar` del pool declarados a la vez (R-CAL-11, R16 de `SCENARIO_FORMAT.md`) |
-| `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
-| `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
-| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
-| `E-CAL-VACIO` | calendario sin intervalos, o intersección de calendarios vacía (cita la tarea) |
-| `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
-| `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
+| `E-NOSOP` | element outside the profile (§3, exact text in R-NOSOP-1/2) |
+| `E-PARSE-INCOMPLETO` | the XML reader discarded part of the model (§3, R-NOSOP-6) |
+| `E-FLUJO-COLGANTE` | sequence flow with no source or no target |
+| `E-ID-DUPLICADO` | two elements with the same `id` |
+| `E-GATEWAY-SIN-ARISTAS` | gateway with no incoming or no outgoing flows |
+| `E-INALCANZABLE` | node unreachable from any `start` |
+| `E-SIN-START` / `E-SIN-END` | process with no start, or with neither `end` nor `terminate` |
+| `E-ELEMENTO-DESCONOCIDO` | `elements` key that does not exist in the IR |
+| `E-CLAVE-DESCONOCIDA` | key not recognized by the schema |
+| `E-PROB-RANGO` | `probability` outside `[0,1]` |
+| `E-PROB-EN-NODO` | `probability` declared on a node |
+| `E-XOR-SUMA-CERO` | XOR whose probabilities add up to 0 |
+| `E-SUBPROC-PARAMETRO` | `processingTime`/`resources`/`fixedCost` on an embedded sub-process |
+| `E-TIMER-RECURSO` | `resources` on a `timer` |
+| `E-REC-DESCONOCIDO` | `ref` to a nonexistent pool |
+| `E-REC-DUPLICADO` | the same pool twice on a task |
+| `E-REC-CANTIDAD` | `quantity` greater than the pool's `capacity` (with capacity by intervals, greater than the week's maximum, R-CAL-11) |
+| `E-REC-CAPACIDAD` | `capacity` that is not an integer ≥ 1, or an empty slice list (R-REC-1, R-CAL-11) |
+| `E-CAPACIDAD-Y-CALENDARIO` | `capacity` by intervals and the pool's `calendar` declared at the same time (R-CAL-11, R16 of `SCENARIO_FORMAT.md`) |
+| `E-REF-DESCONOCIDA` | `calendar` that does not exist in `calendars` (`validateScenario`'s lint), including that of each `capacity` slice |
+| `E-CAL-DESCONOCIDO` | the same, caught by `core/sim.ts`'s guard (see R-CAL-10 and R-CAL-11) |
+| `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14) |
+| `E-CAL-VACIO` | calendar with no intervals, or empty intersection of calendars (cites the task) |
+| `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
+| `E-RESERVADO` | reserved field (§15, exact text in R-RES-2) |
 
-Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts` para el lint,
-`packages/engine/src/core/sim.ts` para el guardia de `core/`, que no puede importar el validador):
+Exact texts of R-CAL-11's two errors (`packages/engine/src/scenario.ts` for the lint,
+`packages/engine/src/core/sim.ts` for `core/`'s guard, which cannot import the validator), in
+`en` and in `es`:
+
+```
+resources.<pool>.capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+E-REC-CAPACIDAD: <pool>: capacity must declare at least one slice.
+E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
+```
 
 ```
 resources.<pool>.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
@@ -839,164 +914,196 @@ E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.
 E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.
 ```
 
-La primera línea es el `message` del problema que devuelve `validateScenario` (el `code` viaja
-aparte, en su propio campo, como en el resto del lint); las tres siguientes son las excepciones de
-`core/`, que sí llevan el código dentro del mensaje. El lint estático no emite `E-REC-CAPACIDAD`:
-un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esquema zod con su
-mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
-mano. Es el único desajuste que queda; ver el párrafo final de esta sección.
+The first line is the `message` of the problem returned by `validateScenario` (the `code` travels
+separately, in its own field, like the rest of the lint); the next three are `core/`'s
+exceptions, which do carry the code inside the message. The static lint does not emit
+`E-REC-CAPACIDAD`: a `capacity` that is not an integer ≥ 1, or an empty list, is rejected earlier
+by the zod schema with its generic message, and `E-REC-CAPACIDAD` is `core/`'s guard for whoever
+builds the scenario by hand. It is the only mismatch that remains; see this section's final
+paragraph.
 
-Todos los errores de la tabla salen del lint (`validateScenario`) o del validador del IR, salvo
-`E-CLAVE-DESCONOCIDA`, que lo caza el esquema cerrado antes del lint: el código va delante del
-mensaje en la línea que imprime la CLI, y lo formatea `schemaIssueLines` (LILA-198).
+Every error in the table comes from the lint (`validateScenario`) or from the IR validator,
+except `E-CLAVE-DESCONOCIDA`, which is caught by the closed schema before the lint: the code goes
+ahead of the message on the line the CLI prints, formatted by `schemaIssueLines` (LILA-198).
 
-Esos dos son **todos** los textos de `E-REC-CAPACIDAD` que emite `packages/engine/src`. Los dos
-guardias internos de `core/calendar.ts` —`compileCapacity` sin tramos y `nextCapacityRise` con un
-horario constante— son invariantes de la API de `core/`, inalcanzables desde un escenario (los caza
-antes `assertSupportedResourceScenario`, y el segundo solo se llama con horario no constante), así
-que lanzan **sin** código de catálogo. Antes lanzaban con `E-REC-CAPACIDAD` y sin pool: dos textos
-que esta sección no recogía. La exhaustividad la fija un test (LILA-204).
+Those two are **all** the `E-REC-CAPACIDAD` texts that `packages/engine/src` emits. The two
+internal guards in `core/calendar.ts` — `compileCapacity` with no slices and
+`nextCapacityRise` with a constant schedule — are invariants of `core/`'s API, unreachable from a
+scenario (they are caught earlier by `assertSupportedResourceScenario`, and the second is only
+called with a non-constant schedule), so they throw **without** a catalog code. They used to
+throw with `E-REC-CAPACIDAD` and no pool: two texts this section did not cover. Exhaustiveness is
+fixed by a test (LILA-204).
 
-Avisos (no abortan; viajan en `RunResult.warnings[]`, siempre con el id del elemento implicado y,
-cuando se repiten por caso, con un contador agregado en vez de una línea por ocurrencia):
+Warnings (they do not abort; they travel in `RunResult.warnings[]`, always with the id of the
+element involved and, when they repeat per case, with an aggregated counter instead of one line
+per occurrence):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
-`W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
-`isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
-`W-RECURSO-SATURADO`.
+`W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
+ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`.
 
-`W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
-del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool
-y por corrida:
+`W-RECURSO-SATURADO` warns that a pool never reaches a steady state: more work arrives than it
+can dispatch, and its queue grows with the run's duration. Exact text, once per pool and per run:
+
+```
+W-RECURSO-SATURADO: <poolId>: the queue grows without settling (λ/μ·c ≈ X)
+```
 
 ```
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
 ```
 
-La señal es **el pool lleno**: sin unidades libres suficientes para conceder, o sea con menos
-disponibles que la menor `quantity` con que alguna tarea lo pide —un pool de `capacity` 3 pedido de
-dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. El
-umbral es del pool: si otra tarea pide ese mismo pool de una en una manda esa `quantity`, y
-entonces la tarea que pide de dos en dos puede estar bloqueada sin que el pool cuente como lleno
-—el aviso deja de salir, nunca sale de más—. Una
-instancia en cola se atribuye solo a los pools que estuvieron llenos —tiempo de **reloj**: quien
-conserva la unidad durante el cierre del calendario (R-CAL-8) tampoco la tiene libre— durante al
-menos la mitad de su espera con el pool abierto (su `resourceWait`, ya sin el tiempo de calendario
-cerrado, R-REC-8); con calendario el umbral es por tanto más laxo que en una corrida 24×7. Por eso
-un pool ocioso atado por AND, que hereda la cola entera de la instancia (R-REC-4), y una
-alternativa OR libre, en cuya cola la instancia también está (R-REC-6), llegan al criterio con
-demanda cero: el aviso no puede contradecir a `resources[poolId].utilization`. Una OR reparte
-además su demanda entre las alternativas que sí estaban llenas, porque consume exactamente una.
+The signal is **the pool being full**: no free units enough to grant, i.e. fewer available than
+the smallest `quantity` any task requests it with — a pool of `capacity` 3 requested two at a
+time is full with two units occupied, because no one can take the third. The threshold belongs
+to the pool: if another task requests that same pool one at a time, that `quantity` governs, and
+then the task requesting two at a time can be blocked without the pool counting as full — the
+warning stops firing, it never over-fires. A queued instance is attributed only to the pools that
+were full — **clock** time: whoever keeps the unit through the calendar's closure (R-CAL-8) does
+not have it free either — for at least half of its wait while the pool was open (its
+`resourceWait`, already without the closed calendar time, R-REC-8); with a calendar the threshold
+is therefore laxer than in a 24×7 run. That is why an idle pool tied by AND, which inherits the
+instance's whole queue (R-REC-4), and a free OR alternative, in whose queue the instance is also
+present (R-REC-6), meet the criterion with zero demand: the warning cannot contradict
+`resources[poolId].utilization`. An OR also splits its demand among the alternatives that were
+indeed full, because it consumes exactly one.
 
-Sobre esa demanda atribuida se exige `ρ = demanda atribuida / unidades concedidas ≥ 1,1` y, además,
-una de estas dos: que la cola atribuida media en la segunda mitad de `[warmup, t_stop]` supere la
-capacidad efectiva del pool (su `Σᵢ capacityᵢ × openTimeᵢ` de R-CAL-9 dividida entre sus propias
-horas abiertas, o sea unidades y no unidades diluidas por el calendario) y sea al menos 1,5 veces
-la de la primera mitad; **o** que las instancias atribuidas que seguían en cola al cortar sean al
-menos el 25 % de las unidades concedidas **y** la cola de la segunda mitad no sea menor que la de
-la primera —un lote de llegadas simultáneas (R-ARR-1) deja mucho pendiente al corte con la cola
-**bajando**, y eso es trabajo despachándose, no falta de estado estacionario—. Las colas se
-promedian sobre el tiempo en que el pool estuvo lleno, que es el único en que la cola de un pool
-significa algo y deja fuera el `offHoursWait` sin tener que restarlo aparte. Una cola estacionaria larga no avisa: M/M/1 con
-ρ = 0,8 tiene `Lq = 3,2` y sus dos mitades miden lo mismo.
+On that attributed demand, `ρ = attributed demand / granted units ≥ 1.1` is required, plus one of
+these two: that the attributed queue averaged over the second half of `[warmup, t_stop]` exceeds
+the pool's effective capacity (its `Σᵢ capacityᵢ × openTimeᵢ` from R-CAL-9 divided by its own
+open hours, i.e. units, not units diluted by the calendar) and is at least 1.5 times that of the
+first half; **or** that the attributed instances still queued at the cutoff are at least 25 % of
+the granted units **and** the second half's queue is not smaller than the first's — a batch of
+simultaneous arrivals (R-ARR-1) leaves a lot pending at the cutoff with the queue **falling**, and
+that is work being dispatched, not a lack of steady state. Queues are averaged over the time the
+pool was full, which is the only time a pool's queue means anything, and it leaves `offHoursWait`
+out without having to subtract it separately. A long stationary queue does not warn: an M/M/1
+with ρ = 0.8 has `Lq = 3.2`, and its two halves measure the same.
 
-Con varias replicaciones la decisión se toma **una sola vez sobre la media** de esas cantidades, no
-réplica a réplica: la saturación es una propiedad del pool y de la corrida, y deduplicar avisos
-dejaría que una sola réplica que cruza un umbral por azar decidiera por las treinta. `X` es el ρ de
-esa media, con un decimal.
+With several replications, the decision is made **once, over the mean** of those quantities, not
+replication by replication: saturation is a property of the pool and of the run, and
+deduplicating warnings would let a single replication that crosses a threshold by chance decide
+for all thirty. `X` is the ρ of that mean, with one decimal.
 
-Es un aviso, no un error: no cambia ninguna métrica. Lo que señala es que `resourceWait` y
-`bottlenecks` de ese pool son números que crecen con la duración de la corrida y no son comparables
-con los de un pool estable. *(prueba: LILA-191)*
+It is a warning, not an error: it changes no metric. What it flags is that `resourceWait` and
+`bottlenecks` for that pool are numbers that grow with the run's duration and are not comparable
+to those of a stable pool. *(test: LILA-191)*
 
-`W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
-`triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
+`W-START-SIN-LLEGADAS` fires only when the `start` declares **neither** `interTriggerTimer`
+**nor** `triggerCount`: with `triggerCount` alone there are arrivals (all at `t = 0`, R-ARR-1) and
+no warning.
 
-`W-TAREA-SIN-TIEMPO` es la excepción a la línea por elemento: cuando el escenario no declara
-**ningún** `processingTime`, el aviso es uno solo y lista los ids de todas las tareas (R-DEG-3,
-LILA-198).
+`W-TAREA-SIN-TIEMPO` is the exception to the one-line-per-element rule: when the scenario
+declares **no** `processingTime` at all, the warning is a single one that lists the ids of every
+task (R-DEG-3, LILA-198).
 
-Los códigos de este catálogo son los que emite el código de hoy, con dos salvedades declaradas:
-`E-REC-CAPACIDAD`, que el lint estático no emite (párrafo de arriba, LILA-164), y el par
-`E-REF-DESCONOCIDA` / `E-CAL-DESCONOCIDO`, dos códigos para lo mismo según lo cace el lint o el
-guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
+### Internal guards
+
+Eleven codes in the catalog are **not** in the tables above because they are not flaws a model or
+a scenario can produce: they are guards of `core/`'s internal API, which only fire when whoever
+calls it builds the input by hand and breaks an invariant. They signal a programming error in the
+consumer, not something the user can fix in their model, and that is why they are neither in the
+user error table nor in the warning list. They are:
+
+| Code | Guard |
+|---|---|
+| `E-REF-INEXISTENTE` | a node declares an incoming or outgoing flow that is not in the IR (`core/ir.ts`) |
+| `E-REC-LIBERACION` | a request with no active assignment is released (`core/resources.ts`) |
+| `E-REC-SOLICITUD-DUPLICADA` | the same request id is registered twice (`core/resources.ts`) |
+| `E-REC-SIN-ASIGNACION` | a granted request ended up with no pool (`core/resources.ts`) |
+| `E-REC-ESTADO` | negative usage on a pool (`core/resources.ts`) |
+| `E-REPLICACIONES-INSUFICIENTES` | fewer than 2 values or replications for the 95% CI (`core/replications.ts`) |
+| `E-REPLICACIONES-VACIAS` | there are no results to aggregate (`core/run.ts`, `meanRunResults`) |
+| `E-KPI-INCONSISTENTE` | two replications with a different set of KPIs (`core/replications.ts`) |
+| `E-KPI-NO-FINITO` | a replication's KPI is not finite (`core/replications.ts`) |
+| `E-AGREGADO-NO-NUMERICO` | the metrics structure is not averageable (`core/run.ts`, `meanShape`) |
+| `E-COMPARE-VACIO` | `compare()` with no result at all (`core/compare.ts`) |
+
+The list also lives in the code, in `INTERNAL_CODES` (`packages/engine/src/messages/index.ts`),
+and a test checks that those eleven are exactly the codes in the catalog that this section does
+not document as public (LILA-211).
+
+The codes in this catalog are the ones today's code emits, with two declared exceptions:
+`E-REC-CAPACIDAD`, which the static lint does not emit (paragraph above, LILA-164), and the pair
+`E-REF-DESCONOCIDA` / `E-CAL-DESCONOCIDO`, two codes for the same thing depending on whether the
+lint or the `core/` guard catches it (unifying them requires touching `core/`; see R-CAL-10).
 
 ---
 
-## 18. Regla → ticket que la prueba
+## 18. Rule → ticket that tests it
 
-| Regla | Qué fija | Ticket que la prueba |
+| Rule | What it fixes | Ticket that tests it |
 |---|---|---|
-| R-DURA-1, R-DURA-2 | segundos; `baseTimeUnit` solo presentación | LILA-013 |
-| R-DURA-3 | dinero en `run.currency` | LILA-036 |
-| R-DURA-4 | el `id` BPMN es la única clave | LILA-013, LILA-017 |
-| R-DURA-5 | `elements` faltante = error, sobrante = aviso | LILA-013, LILA-042 |
-| R-DURA-6 | pureza de `simulate` | LILA-029, LILA-032 |
-| R-PERF-1 | toda variante de tarea → `task` | LILA-018 |
-| R-PERF-2 | XOR convergente = mezcla sin espera | LILA-026 |
-| R-PERF-3 | message flow ignorado | LILA-021, LILA-163 |
-| R-PERF-4 | `conditionExpression` ignorada | LILA-021, LILA-163 |
-| R-PERF-5 | varios starts | LILA-026 |
-| R-NOSOP-1 … R-NOSOP-3 | texto exacto y catálogo de no soportados | LILA-021, LILA-163 |
-| R-NOSOP-4, R-NOSOP-5 | no degradar; errores estructurales | LILA-021 |
-| R-NOSOP-6 | avisos de bpmn-moddle: `E-PARSE-INCOMPLETO` / `W-PARSE` / `W-XOR-DEFAULT-ROTO` | LILA-185, LILA-196 |
-| R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
-| R-PLAN-3 | subproceso sin tiempo propio | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
-| R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
-| R-TOK-1 | reloj en segundos desde `run.start` | LILA-037 |
-| R-TOK-2 | caso = conjunto de tokens | LILA-026 |
+| R-DURA-1, R-DURA-2 | seconds; `baseTimeUnit` is presentation only | LILA-013 |
+| R-DURA-3 | money in `run.currency` | LILA-036 |
+| R-DURA-4 | the BPMN `id` is the only key | LILA-013, LILA-017 |
+| R-DURA-5 | missing `elements` = error, extra = warning | LILA-013, LILA-042 |
+| R-DURA-6 | purity of `simulate` | LILA-029, LILA-032 |
+| R-PERF-1 | every task variant → `task` | LILA-018 |
+| R-PERF-2 | converging XOR = merge with no wait | LILA-026 |
+| R-PERF-3 | message flow ignored | LILA-021, LILA-163 |
+| R-PERF-4 | `conditionExpression` ignored | LILA-021, LILA-163 |
+| R-PERF-5 | several starts | LILA-026 |
+| R-NOSOP-1 … R-NOSOP-3 | exact text and catalog of unsupported constructs | LILA-021, LILA-163 |
+| R-NOSOP-4, R-NOSOP-5 | no degrading; structural errors | LILA-021 |
+| R-NOSOP-6 | bpmn-moddle warnings: `E-PARSE-INCOMPLETO` / `W-PARSE` / `W-XOR-DEFAULT-ROTO` | LILA-185, LILA-196 |
+| R-PLAN-1, R-PLAN-2, R-PLAN-5 | embedded sub-process flattened | LILA-019 |
+| R-PLAN-3 | sub-process has no time of its own | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
+| R-PLAN-4 | call activity = task with its own duration | LILA-019 |
+| R-TOK-1 | clock in seconds since `run.start` | LILA-037 |
+| R-TOK-2 | case = set of tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
-| R-TOK-4 | tránsito instantáneo y `flows.count` | LILA-028 |
-| R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identidad y lifecycle parcial | LILA-033, LILA-037 |
-| R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: equitativo, residuo al default, normalización, sorteo | LILA-026 (normalización y avisos: LILA-042) |
-| R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042, LILA-198 |
-| R-OR-1 … R-OR-7 | OR fork/join, emparejamiento y loops | LILA-026 |
-| R-OR-8 | tokens huérfanos al parar | LILA-026, LILA-028 |
-| R-AND-1 … R-AND-6 | AND fork/join, contador `(caso, join)`, loops | LILA-026 |
-| R-EVT-1 … R-EVT-2 | timer = retardo sin recurso | LILA-026 (`E-TIMER-RECURSO`: LILA-198) |
-| R-EVT-3 | timer 24×7 salvo calendario propio | LILA-041 |
-| R-EVT-4 | end consume token; caso termina con 0 tokens | LILA-026, LILA-028 |
+| R-TOK-4 | instantaneous transit and `flows.count` | LILA-028 |
+| R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identity and partial lifecycle | LILA-033, LILA-037 |
+| R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: even split, remainder to the default, normalization, draw | LILA-026 (normalization and warnings: LILA-042) |
+| R-XOR-6, R-XOR-8 | range and placement of `probability` | LILA-013, LILA-042, LILA-198 |
+| R-OR-1 … R-OR-7 | OR fork/join, matching and loops | LILA-026 |
+| R-OR-8 | orphan tokens on stop | LILA-026, LILA-028 |
+| R-AND-1 … R-AND-6 | AND fork/join, `(case, join)` counter, loops | LILA-026 |
+| R-EVT-1 … R-EVT-2 | timer = delay with no resource | LILA-026 (`E-TIMER-RECURSO`: LILA-198) |
+| R-EVT-3 | timer runs 24×7 unless it has its own calendar | LILA-041 |
+| R-EVT-4 | end consumes the token; case ends at 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
-| R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
-| R-ARR-6 | llegadas con calendario | LILA-041 |
-| R-ARR-7 | warmup | LILA-027 |
-| R-ARR-8 | replicaciones e IC 95 % | LILA-027 |
-| R-ARR-9, R-ARR-10 | agregado público y cancelación | LILA-029 |
-| R-REC-1 … R-REC-3 | pools, defaults y FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
-| R-REC-4, R-REC-5 | AND atómico sin retención parcial; sin deadlock | LILA-034 |
-| R-REC-6 | selección OR | LILA-035 |
-| R-REC-7 | ocupación/liberación, sin apropiación | LILA-033 |
+| R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
+| R-ARR-6 | arrivals with a calendar | LILA-041 |
+| R-ARR-7 | warm-up | LILA-027 |
+| R-ARR-8 | replications and 95% CI | LILA-027 |
+| R-ARR-9, R-ARR-10 | public aggregate and cancellation | LILA-029 |
+| R-REC-1 … R-REC-3 | pools, defaults and FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
+| R-REC-4, R-REC-5 | atomic AND with no partial holding; no deadlock | LILA-034 |
+| R-REC-6 | OR selection | LILA-035 |
+| R-REC-7 | occupation/release, no preemption | LILA-033 |
 | R-REC-8 | `resourceWait = started − enabled − offHoursWait` | LILA-036, LILA-041 |
-| R-REC-9, R-REC-10 | pool duplicado; qué elementos admiten recursos | LILA-013, LILA-021 |
-| R-REC-11 | filas planas por asignación y sentinel sin recurso | LILA-033, LILA-037 |
-| `W-RECURSO-SATURADO` | pool sin estado estacionario: cola atribuida solo a los pools que estuvieron llenos, decidida sobre la media de las réplicas | LILA-191 |
-| R-CAL-1, R-CAL-2, R-CAL-3 | patrón semanal, intervalos (`to > from`, `to` admite `24:00`), primitivas y derivadas | LILA-040 (`24:00`: LILA-041) |
-| R-CAL-4 … R-CAL-8 | arranque en horario abierto, pausa/reanudación, `offHoursWait` | LILA-041 (caso 17:30: LILA-040) |
-| R-CAL-9 | utilización atribuible a la cohorte sobre horas disponibles; puede superar 1 sin apropiación (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (denominador por tramos: LILA-164) |
-| R-CAL-10 | matriz recurso × calendario y calendario por defecto | LILA-041, LILA-042 |
-| R-CAL-11 | capacidad por turno dentro de un mismo pool (unión, suma, cierre y validación) | LILA-164 |
-| R-COST-1 … R-COST-4 | costos por elemento, recurso, fila y caso | LILA-036 (fila del log: LILA-037) |
-| R-COST-5, R-COST-6 | costos ausentes = 0; esperar no cuesta | LILA-013, LILA-036 |
-| R-DEG-1 | sin recursos ⇒ capacidad infinita, bit a bit igual a M1 | LILA-039 |
-| R-DEG-2 | sin calendarios ⇒ 24×7, igual a M2 (bytes en linux/x64; ver R-DET-6) | LILA-043 (motor: LILA-041) |
-| R-DEG-3 … R-DEG-5 | defaults neutros | LILA-042, LILA-013 (aviso agregado y `W-SIN-SEED`: LILA-198) |
-| R-RES-1 … R-RES-4 | campos reservados y su texto de error | LILA-013 (`null` de `extends`: LILA-014; `E-CLAVE-DESCONOCIDA`: LILA-198) |
-| R-DET-1 | orden explícito en eventos y colas | LILA-030, LILA-023 |
-| R-DET-2, R-DET-3 | stream por elemento; common random numbers | LILA-024 (what-if: LILA-038) |
-| R-DET-4, R-DET-7 | consumo de uniformes y las 14 distribuciones | LILA-025 |
-| R-DET-5, R-DET-6 | sin `Math.random`/`Date`; bytes idénticos por plataforma y arquitectura | LILA-032, LILA-030, LILA-043 |
-| §2 a §14 en conjunto | paridad con los ejemplos oficiales de Bizagi (niveles 1–4, ±5 %) | LILA-044 |
-| §11 + §12 | validación numérica contra M/M/1 y Erlang-C | LILA-050, LILA-011 |
+| R-REC-9, R-REC-10 | duplicate pool; which elements admit resources | LILA-013, LILA-021 |
+| R-REC-11 | flat rows per assignment and sentinel with no resource | LILA-033, LILA-037 |
+| `W-RECURSO-SATURADO` | pool with no steady state: queue attributed only to the pools that were full, decided over the mean of the replications | LILA-191 |
+| R-CAL-1, R-CAL-2, R-CAL-3 | weekly pattern, intervals (`to > from`, `to` accepts `24:00`), primitives and derived operations | LILA-040 (`24:00`: LILA-041) |
+| R-CAL-4 … R-CAL-8 | starting during open hours, pause/resume, `offHoursWait` | LILA-041 (17:30 case: LILA-040) |
+| R-CAL-9 | utilization attributable to the cohort over available hours; can exceed 1 with no preemption (`Σᵢ capacityᵢ × openTimeᵢ` over `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (per-slice denominator: LILA-164) |
+| R-CAL-10 | resource × calendar matrix and default calendar | LILA-041, LILA-042 |
+| R-CAL-11 | shift capacity within a single pool (union, sum, closure and validation) | LILA-164 |
+| R-COST-1 … R-COST-4 | costs per element, resource, row and case | LILA-036 (log row: LILA-037) |
+| R-COST-5, R-COST-6 | absent costs = 0; waiting is free | LILA-013, LILA-036 |
+| R-DEG-1 | no resources ⇒ infinite capacity, bit-for-bit equal to M1 | LILA-039 |
+| R-DEG-2 | no calendars ⇒ 24×7, equal to M2 (bytes on linux/x64; see R-DET-6) | LILA-043 (engine: LILA-041) |
+| R-DEG-3 … R-DEG-5 | neutral defaults | LILA-042, LILA-013 (aggregated warning and `W-SIN-SEED`: LILA-198) |
+| R-RES-1 … R-RES-4 | reserved fields and their error text | LILA-013 (`null` from `extends`: LILA-014; `E-CLAVE-DESCONOCIDA`: LILA-198) |
+| R-DET-1 | explicit order in events and queues | LILA-030, LILA-023 |
+| R-DET-2, R-DET-3 | stream per element; common random numbers | LILA-024 (what-if: LILA-038) |
+| R-DET-4, R-DET-7 | uniform consumption and the 14 distributions | LILA-025 |
+| R-DET-5, R-DET-6 | no `Math.random`/`Date`; byte-identical per platform and architecture | LILA-032, LILA-030, LILA-043 |
+| §2 to §14 as a whole | agreement with Bizagi's official examples (levels 1–4, ±5 %) | LILA-044 |
+| §11 + §12 | numerical validation against M/M/1 and Erlang-C | LILA-050, LILA-011 |
 
 ---
 
-## 19. Lo que este documento **no** decide
+## 19. What this document does **not** decide
 
-- Nombres de columna y unidades del `RunResult`, del event log y del CSV: `docs/RESULTS_FORMAT.md`
-  (LILA-005) y `docs/BIZAGI_PARITY.md` (LILA-007).
-- Forma exacta del JSON del escenario, defaults del esquema y mapeo a BPSim 2.0 / qbp / Bizagi:
+- Column names and units of the `RunResult`, of the event log and of the CSV:
+  `docs/RESULTS_FORMAT.md` (LILA-005) and `docs/BIZAGI_PARITY.md` (LILA-007).
+- Exact shape of the scenario JSON, schema defaults and mapping to BPSim 2.0 / qbp / Bizagi:
   `docs/SCENARIO_FORMAT.md` (LILA-004).
-- Namespace `lila:` y política de ids: `docs/BPMN_EXTENSION.md` (LILA-006).
+- The `lila:` namespace and id policy: `docs/BPMN_EXTENSION.md` (LILA-006).

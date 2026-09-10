@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { prepareSimulation } from './simulationGate';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 const xml = readFileSync('examples/pedido/model.bpmn', 'utf8');
 const raw = JSON.parse(readFileSync('examples/pedido/as-is.scenario.json', 'utf8')) as Record<string, unknown>;
 it('resuelve y valida el escenario real antes de simular', async () => {
@@ -12,14 +17,35 @@ it('bloquea parámetros inválidos', async () => {
 });
 // Los defectos del esquema son la tercera boca de `parseScenario` (LILA-202): la CLI y el MCP
 // tienen la suya en `scenario.test.ts` y `packages/mcp/test/server.test.ts`. Sin esta, volver a
-// `ScenarioSchema.parse` aquí no rompe nada y el `ZodError` en inglés reaparece en la barra.
-it('un defecto del esquema llega en español y citando la ruta, igual que en la CLI (LILA-202)', async () => {
+// `ScenarioSchema.parse` aquí no rompe nada y el `ZodError` crudo de zod reaparece en la barra.
+it('un defecto del esquema llega con el texto del catálogo y citando la ruta, igual que en la CLI (LILA-202)', async () => {
   // Cebo: un campo que el esquema acota. (`probability` ya no lo es: desde LILA-198 su rango
   // lo comprueba el lint con `E-PROB-RANGO`.)
   const run = { ...(raw['run'] as Record<string, unknown>), warmup: -1 };
-  await expect(prepareSimulation(xml, 'roto', { roto: { ...raw, run } })).rejects.toThrow(
+  // #280: el idioma del motor va explícito; este caso pide el catálogo base.
+  await expect(prepareSimulation(xml, 'roto', { roto: { ...raw, run } }, 'model.bpmn', { locale: 'en' })).rejects.toThrow(
+    'run.warmup: must be ≥ 0',
+  );
+});
+
+/**
+ * #280: los defectos que salen de aquí son del motor, y desde ahora se le piden en el idioma de
+ * la app. Sin `locale` se usa el activo (esta suite lo fija en español), que es lo que hace que
+ * la barra de estado hable el mismo idioma que el resto de la interfaz.
+ */
+it('los problemas del escenario llegan en el idioma pedido, y sin pedirlo en el activo (#280)', async () => {
+  const run = { ...(raw['run'] as Record<string, unknown>), warmup: -1 };
+  const scenarios = { roto: { ...raw, run } };
+  await expect(prepareSimulation(xml, 'roto', scenarios, 'model.bpmn', { locale: 'es' })).rejects.toThrow(
     'run.warmup: debe ser ≥ 0',
   );
+  await expect(prepareSimulation(xml, 'roto', scenarios)).rejects.toThrow('run.warmup: debe ser ≥ 0');
+  setLocale('en');
+  try {
+    await expect(prepareSimulation(xml, 'roto', scenarios)).rejects.toThrow('run.warmup: must be ≥ 0');
+  } finally {
+    setLocale('es');
+  }
 });
 
 it('bloquea elementos BPMN fuera del perfil antes de simular', async () => {

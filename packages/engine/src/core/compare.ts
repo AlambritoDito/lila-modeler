@@ -18,6 +18,7 @@
  * comunes de R-DET-3: cambiar una capacidad no altera el stream de los elementos no tocados.
  */
 
+import { coded, coreMessages, type Locale } from './messages/index.js';
 import { numericKpis } from './replications.js';
 import type { RunResult } from './result.js';
 
@@ -47,6 +48,11 @@ export interface CompareRow {
 }
 
 /** Salida de `compare(results)`. */
+/** Opciones de `compare`. Serializable: `locale` viaja como cadena por `postMessage`. */
+export interface CompareOptions {
+  locale?: Locale | undefined;
+}
+
 export interface CompareResult {
   /** Número de resultados comparados; el índice 0 de cada array es la base. */
   count: number;
@@ -97,11 +103,14 @@ function disjoint(left: readonly [number, number], right: readonly [number, numb
  * Compara resultados de `simulate` contra el primero de la lista.
  *
  * @param results al menos un `RunResult`; `results[0]` es la base.
+ * @param options `locale` elige el idioma del error; el resto del resultado no lleva texto.
  * @throws RangeError `E-COMPARE-VACIO` si la lista viene vacía.
  */
-export function compare(results: readonly RunResult[]): CompareResult {
+export function compare(results: readonly RunResult[], options: CompareOptions = {}): CompareResult {
   if (results.length === 0) {
-    throw new RangeError('E-COMPARE-VACIO: compare() necesita al menos un resultado.');
+    throw new RangeError(
+      coded('E-COMPARE-VACIO', coreMessages(options.locale).codes['E-COMPARE-VACIO']()),
+    );
   }
 
   const kpisByResult = results.map((result) => numericKpis(result));

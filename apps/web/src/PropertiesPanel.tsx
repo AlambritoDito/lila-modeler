@@ -21,7 +21,9 @@
  */
 import { useEffect, useReducer, useState } from 'react';
 import type { Modelador } from './Modeler';
-import { S } from './strings.es';
+import { strings, useStrings } from './i18n';
+import type { PestanaId } from './ids';
+import type { Strings } from './strings.types';
 
 /* ------------------------------------------------------------------ *
  * Modelo: lo mínimo de bpmn-js que hace falta para leer y escribir.
@@ -248,20 +250,18 @@ export function escribirVersionTag(
  * Etiquetas.
  * ------------------------------------------------------------------ */
 
-/** Tipos RACI de `lila:responsibility` (`docs/BPMN_EXTENSION.md` § 2). */
-export const RACI = S.propiedades.raci;
+/** Tipos RACI de `lila:responsibility` (`docs/BPMN_EXTENSION.md` § 2), en el idioma activo. */
+export const raci = (): Strings['propiedades']['raci'] => strings().propiedades.raci;
 
 /**
  * Los `lila:*Ref` que son una referencia suelta al catálogo, con su etiqueta y el texto de
  * ayuda del campo. El selector desde el catálogo es LILA-093; aquí el id se escribe a mano.
  */
-export const REFERENCIAS = S.propiedades.referencias;
+export const referencias = (): Strings['propiedades']['referencias'] => strings().propiedades.referencias;
 
-const NOMBRES_DE_TIPO: Record<string, string> = S.propiedades.tipos;
-
-/** Nombre legible en español del `$type`; si no está en la tabla, el tipo sin el prefijo. */
+/** Nombre legible del `$type` en el idioma activo; si no está en la tabla, el tipo sin el prefijo. */
 export function nombreDeTipo(tipo: string): string {
-  return NOMBRES_DE_TIPO[tipo] ?? tipo.replace(/^bpmn:/, '');
+  return strings().propiedades.tipos[tipo] ?? tipo.replace(/^bpmn:/, '');
 }
 
 /* ------------------------------------------------------------------ *
@@ -271,10 +271,11 @@ export function nombreDeTipo(tipo: string): string {
 interface Props {
   /** `null` mientras el lienzo no ha terminado de montarse. */
   modelador: Modelador | null;
-  pestana: 'Propiedades' | 'Documentación';
+  pestana: Exclude<PestanaId, 'simulacion'>;
 }
 
 export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Element {
+  const S = useStrings();
   const [seleccion, setSeleccion] = useState<ElementoLienzo[]>([]);
   // El moddle no es estado de React: se lee en cada render. Este contador es lo que fuerza a
   // releerlo cuando algo cambia, venga del panel o del lienzo.
@@ -317,7 +318,7 @@ export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Eleme
     );
   }
 
-  return pestana === 'Propiedades' ? (
+  return pestana === 'propiedades' ? (
     <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
   ) : (
     <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
@@ -331,6 +332,7 @@ interface PropsPestana {
 }
 
 function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+  const S = useStrings();
   const [copiado, setCopiado] = useState(false);
   const bo = elemento.businessObject;
   // `bpmn:association` y algún artefacto más no tienen atributo `name`: escribírselo produciría
@@ -426,6 +428,7 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
 }
 
 function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+  const S = useStrings();
   const proceso = procesoRelacionado(elemento);
   const documentado = proceso ?? elemento;
   const responsabilidades = leerExtensiones(elemento, 'lila:Responsibility');
@@ -470,7 +473,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
           // archivo —y el XML seguiría diciendo otra cosa—, así que el valor real se añade como
           // opción propia, deshabilitada para que solo se pueda salir de ahí hacia un RACI.
           const tipo = responsabilidad.type ?? '';
-          const esRaci = RACI.some(([valor]) => valor === tipo);
+          const esRaci = raci().some(([valor]) => valor === tipo);
 
           // El moddle no da una clave estable y el orden de la lista sí lo es: el índice vale.
           return (
@@ -488,7 +491,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
                     {tipo === '' ? S.propiedades.sinTipo : S.propiedades.noEsRaci(tipo)}
                   </option>
                 )}
-                {RACI.map(([valor, etiqueta]) => (
+                {raci().map(([valor, etiqueta]) => (
                   <option key={valor} value={valor}>
                     {etiqueta}
                   </option>
@@ -531,7 +534,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
         </button>
       </section>
 
-      {REFERENCIAS.map(([tipo, etiqueta, ayuda]) => (
+      {referencias().map(([tipo, etiqueta, ayuda]) => (
         <ListaDeReferencias
           key={tipo}
           tipo={tipo}
@@ -554,6 +557,7 @@ function ListaDeReferencias({
   escritor,
   refrescar,
 }: PropsPestana & { tipo: string; etiqueta: string; ayuda: string }): React.JSX.Element {
+  const S = useStrings();
   const referencias = leerExtensiones(elemento, tipo);
 
   return (

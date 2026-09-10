@@ -197,7 +197,7 @@ describe('simulate (LILA-029)', () => {
     // El escenario se queda sin ningún `processingTime`, así que el aviso es el agregado de
     // R-DEG-3 (LILA-198): uno solo, con los ids, y el mismo en las dos replicaciones.
     expect(result.warnings).toEqual([
-      'W-TAREA-SIN-TIEMPO: A: el escenario no declara ningún processingTime; esas tareas duran 0 segundos.',
+      'W-TAREA-SIN-TIEMPO: A: the scenario declares no processingTime at all; those tasks take 0 seconds.',
     ]);
   });
 

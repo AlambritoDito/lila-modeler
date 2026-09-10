@@ -1,17 +1,12 @@
 name: Desktop
 
-# Empaqueta la SPA con electron-builder por commit, sin certificados (sin firma,
-# ver #109/E19). Se dispara manualmente, en ramas codex/** (sin publicar, para no
-# cargar cada PR de main con una compilación de instaladores) y en tags v* (publica
-# un GitHub Release en borrador con los tres instaladores para que Brito lo revise).
-# Cortar una release: `git tag v0.0.1 && git push origin v0.0.1`. El Release queda en
-# BORRADOR: hay que publicarlo a mano desde la web. Ojo: la versión del nombre de los
-# instaladores sale de `apps/desktop/package.json` (hoy 0.0.1), no del tag — súbela ahí
-# antes de etiquetar o dos tags distintos producirán ficheros con el mismo nombre.
+# Build unsigned installers on PRs and manual runs. Tags create a draft release.
+# The owner approves publication and creates v0.1.0 only after validation.
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['apps/desktop/**', '.github/workflows/desktop.yml']
   push:
-    branches: ['codex/**']
     tags: ['v*']
 
 permissions:

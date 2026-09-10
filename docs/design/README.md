@@ -1,10 +1,10 @@
 # Diseño de la interfaz
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../) and [`README.md`](../../README.md).
+
 Fuente visual: el proyecto de **Claude Design** de Lila Modeler, archivo
 `Lila Modeler.dc.html` (diez artboards en un mismo lienzo, tabla de tokens con
-los dos temas, inventario de componentes y notas de React al final):
-
-<https://claude.ai/design/p/37922743-d30e-41a6-b361-fce3cd3714fa?file=Lila+Modeler.dc.html>
+los dos temas, inventario de componentes y notas de React al final).
 
 El brief que lo originó es `prompts/claude-design-ui.md`. Los artboards son
 **referencia, no código a copiar**: la app se construye con los tokens del brief
@@ -18,7 +18,7 @@ construido contra los artboards de abajo cuando estos existan.
 
 ## Capturas de los artboards
 
-Descargadas el 2026-09-07 con `DesignSync` tras `/design-login`. El artefacto entero está en
+Descargadas el 2026-09-07 desde el proyecto de Claude Design. El artefacto entero está en
 `Lila Modeler.dc.html` (solo el documento; el runtime `support.js` y el bundle del design system
 no se copian: los artboards son HTML con estilos en línea y se renderizan solos). Las capturas se
 generaron con Chrome headless a partir de cada artboard. La comparación contra la app, con la

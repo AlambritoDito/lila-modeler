@@ -1,14 +1,16 @@
 # Architecture Decision Log
 
-Registro de decisiones de arquitectura de Lila Modeler. Son reversibles mientras el proyecto esté en etapa temprana — cada una indica, cuando aplica, cuándo revisarla.
+> Read this in: [Español](es/DECISIONS.md)
 
-Fuentes:
+Lila Modeler's architecture decision log. These are reversible while the project is in its early stage — each one states, where it applies, when to revisit it.
 
-- **ADR-001 a ADR-008**: corpus previo del proyecto (entonces llamado *Open Process Platform*), `open-process-platform-docs/DECISIONS.md`. Se copian aquí verbatim.
-- **ADR-009 a ADR-023**: `LILA_MODELER_ESTRUCTURA.md`, sección 4 ("Decisiones (ADR)"). Se copian aquí verbatim; ese documento es la fuente de verdad — ante cualquier discrepancia entre este archivo y `LILA_MODELER_ESTRUCTURA.md`, gana el documento de estructura y este archivo se corrige para reflejarlo.
-- **ADR-024 en adelante**: decisiones surgidas durante la implementación, con su ticket de prueba.
+Sources:
 
-Varias ADR del corpus previo quedan cerradas o reinterpretadas por decisiones posteriores; cada una lo indica en una nota al final de su entrada, con el ADR que la cierra o reinterpreta.
+- **ADR-001 through ADR-008**: the project's earlier corpus (then called *Open Process Platform*), `docs/DECISIONS-corpus-previo.md`. Copied here verbatim.
+- **ADR-009 through ADR-023**: `LILA_MODELER_ESTRUCTURA.md`, section 4 ("Decisiones (ADR)"). Copied here verbatim; that document is the source of truth — for any discrepancy between this file and `LILA_MODELER_ESTRUCTURA.md`, the structure document wins and this file is corrected to match.
+- **ADR-024 onward**: decisions that came up during implementation, with their test ticket.
+
+Several ADRs from the earlier corpus end up closed or reinterpreted by later decisions; each one says so in a note at the end of its entry, naming the ADR that closes or reinterprets it.
 
 ---
 
@@ -16,16 +18,16 @@ Varias ADR del corpus previo quedan cerradas o reinterpretadas por decisiones po
 
 **Status:** Accepted
 
-Usaremos archivos `.bpmn` estándar para importación y exportación.
+We will use standard `.bpmn` files for import and export.
 
-El XML BPMN no será necesariamente nuestra única base de datos interna.
+BPMN XML will not necessarily be our only internal data store.
 
 ### Reason
 
-- Interoperabilidad.
-- Evitar lock-in.
-- Compatibilidad con herramientas existentes.
-- Permitir que el archivo sobreviva al producto.
+- Interoperability.
+- Avoid lock-in.
+- Compatibility with existing tools.
+- Let the file outlive the product.
 
 ---
 
@@ -33,18 +35,18 @@ El XML BPMN no será necesariamente nuestra única base de datos interna.
 
 **Status:** Accepted
 
-La aplicación principal será web.
+The main application will be web-based.
 
-Debe poder ejecutarse:
+It must be able to run:
 
 - Local.
 - Self-hosted.
-- Servidor.
+- Server.
 - Cloud.
 
-Desktop wrapper será opcional.
+A desktop wrapper will be optional.
 
-> **Nota:** ADR-023 concreta esto: la SPA de `apps/web` es la única UI, empaquetada como app de escritorio (Electron, `apps/desktop`) y servida sin cambios por el servidor self-hosted (`packages/server`, M6). "Desktop wrapper opcional" de este ADR es exactamente lo que ADR-023 diseña.
+> **Note:** ADR-023 makes this concrete: the `apps/web` SPA is the only UI, packaged as a desktop app (Electron, `apps/desktop`) and served unchanged by the self-hosted server (`packages/server`, M6). This ADR's "optional desktop wrapper" is exactly what ADR-023 designs.
 
 ---
 
@@ -52,11 +54,11 @@ Desktop wrapper será opcional.
 
 **Status:** Accepted
 
-Las operaciones de dominio deberán exponerse mediante servicios reutilizables.
+Domain operations must be exposed through reusable services.
 
-UI y MCP utilizarán esos servicios.
+The UI and MCP will use those services.
 
-> **Nota:** ADR-019 concreta esto: la API son las funciones exportadas de `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI; MCP llega en M4 sobre las mismas funciones, antes que REST.
+> **Note:** ADR-019 makes this concrete: the API is the exported functions of `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI; MCP arrives in M4 on top of the same functions, ahead of REST.
 
 ---
 
@@ -64,11 +66,11 @@ UI y MCP utilizarán esos servicios.
 
 **Status:** Accepted
 
-El primer producto funcional será el motor de simulación.
+The first working product will be the simulation engine.
 
-RACI, repository, interviews y process mining vendrán después.
+RACI, repository, interviews, and process mining come later.
 
-> **Nota:** Confirmado por el orden de hitos de `LILA_MODELER_ESTRUCTURA.md` sección 7: M0–M3 son el motor y la CLI con paridad Bizagi; RACI (`packages/catalog`), `packages/interview` y `mining/` son módulos futuros explícitamente pospuestos (sección 5, "Módulos futuros").
+> **Note:** Confirmed by the milestone order in `LILA_MODELER_ESTRUCTURA.md` section 7: M0-M3 are the engine and the CLI, matching Bizagi Modeler's published reference results; RACI (`packages/catalog`), `packages/interview`, and `mining/` are future modules explicitly deferred (section 5, "Future modules").
 
 ---
 
@@ -76,9 +78,9 @@ RACI, repository, interviews y process mining vendrán después.
 
 **Status:** Accepted
 
-No reescribir ni forkear por reflejo.
+Do not rewrite or fork by reflex.
 
-Proceso:
+Process:
 
 ```text
 Discover
@@ -91,19 +93,19 @@ Decide:
 Use / Wrap / Fork / Replace
 ```
 
-> **Nota:** Cerrado por ADR-010: resultado *Replace* para motores DES existentes (Prosimos, Scylla, BIMP/QBP, Apromore, bpmn-engine, Camunda 8, SpiffWorkflow — motor propio) y *Use* para bpmn-js/bpmn-moddle (ADR-011). Prosimos y Scylla se conservan como oráculos numéricos en desarrollo, no como núcleo.
+> **Note:** Closed by ADR-010: *Replace* result for existing DES engines (Prosimos, Scylla, BIMP/QBP, Apromore, bpmn-engine, Camunda 8, SpiffWorkflow — build our own engine) and *Use* for bpmn-js/bpmn-moddle (ADR-011). Prosimos and Scylla are kept as numeric oracles under development, not as the core.
 
 ---
 
 ## ADR-006 — Own the abstraction layer
 
-**Status:** Accepted (reinterpretado, ver nota)
+**Status:** Accepted (reinterpreted, see note)
 
-Incluso si utilizamos un motor externo, la plataforma hablará con una interfaz propia.
+Even if we use an external engine, the platform will talk to its own interface.
 
-Esto permite reemplazar componentes en el futuro.
+This allows replacing components in the future.
 
-> **Nota — reinterpretación (`LILA_MODELER_ESTRUCTURA.md` sección 4):** "Own the abstraction layer" no significa una interfaz `SimulationScheduler` con adaptadores a SimPy/Rust (abstracción especulativa que ningún proposal defendió): significa poseer los **tres contratos JSON** (IR, escenario, resultado + event log) y la firma `simulate()`. Es lo que permite reemplazar el kernel sin tocar CLI, UI ni MCP.
+> **Note — reinterpretation (`LILA_MODELER_ESTRUCTURA.md` section 4):** "Own the abstraction layer" does not mean a `SimulationScheduler` interface with adapters to SimPy/Rust (a speculative abstraction no proposal actually argued for): it means owning the **three JSON contracts** (IR, scenario, result + event log) and the `simulate()` signature. That is what lets the kernel be replaced without touching the CLI, UI, or MCP.
 
 ---
 
@@ -111,241 +113,245 @@ Esto permite reemplazar componentes en el futuro.
 
 **Status:** Accepted
 
-Los parámetros de simulación deberán poder existir como escenarios independientes del BPMN.
+Simulation parameters must be able to exist as scenarios independent of the BPMN.
 
-Esto permite múltiples escenarios sobre un mismo proceso.
+This allows multiple scenarios over the same process.
 
-> **Nota:** Concretado por ADR-013 (dónde vive cada dato) y ADR-015 (formato de escenario v1): parámetros de simulación en `*.scenario.json`, fuera del `.bpmn`; el `.bpmn` solo lleva diagrama, documentación estándar y la extensión `lila:` (ver `docs/BPMN_EXTENSION.md`).
+> **Note:** Made concrete by ADR-013 (where each piece of data lives) and ADR-015 (scenario format v1): simulation parameters live in `*.scenario.json`, outside the `.bpmn`; the `.bpmn` carries only the diagram, standard documentation, and the `lila:` extension (see `docs/BPMN_EXTENSION.md`).
 
 ---
 
 ## ADR-008 — No final product name yet
 
-**Status:** Closed (ver nota)
+**Status:** Closed (see note)
 
-Usar `Open Process Platform` como working title hasta definir:
+Use `Open Process Platform` as a working title until we define:
 
-- Posicionamiento.
-- Marca.
-- Dominio.
-- Licencia.
-- Público objetivo.
+- Positioning.
+- Brand.
+- Domain.
+- License.
+- Target audience.
 
-> **Nota:** Cerrado por ADR-020 ("Cierra ADR-008: el proyecto se llama Lila Modeler."), decidido por Brito el 2026-09-03. Licencia cerrada en el mismo ADR-020 (Apache-2.0).
+> **Note:** Closed by ADR-020 ("Closes ADR-008: the project is called Lila Modeler."), decided by Brito on 2026-09-03. The license was also settled in ADR-020 (Apache-2.0).
 
 ---
 
-## ADR-009 — Lenguaje y kernel del motor: TypeScript, bucle de eventos propio, cero dependencias en `core/`
+## ADR-009 — Engine language and kernel: TypeScript, our own event loop, zero dependencies in `core/`
 
 **Status:** Accepted
 
-Porqué: un solo runtime cubre navegador (Worker), CLI, tests y MCP; benchmark medido hoy (100k casos: JS 143 ms, SimPy 1 273 ms, SimPy/Pyodide 2 798 ms más ~12 MB de runtime); ninguna librería DES en TS tiene adopción (0–35 estrellas, un autor cada una); los crates Rust no traen recursos/colas y el toolchain wasm se acaba de reorganizar. Descarta: Python/SimPy (segundo runtime, parser BPMN sin opción permisiva mantenida: SpiffWorkflow es LGPL), Rust/WASM (sin necesidad demostrada), cualquier librería DES. Revisar: solo si un spike muestra que TS no alcanza un objetivo real de rendimiento; entonces `core/` se reimplementa detrás de la misma `simulate()`.
+Why: a single runtime covers the browser (Worker), CLI, tests, and MCP; a benchmark measured today (100k cases: JS 143 ms, SimPy 1,273 ms, SimPy/Pyodide 2,798 ms plus ~12 MB of runtime); no DES library in TS has real adoption (0-35 stars, one author each); Rust crates carry no resources/queues, and the wasm toolchain was just reorganized. Rules out: Python/SimPy (a second runtime, no BPMN parser with a maintained permissive license: SpiffWorkflow is LGPL), Rust/WASM (no demonstrated need), any DES library. Revisit: only if a spike shows TS cannot meet a real performance target; then `core/` gets reimplemented behind the same `simulate()`.
 
 ---
 
-## ADR-010 — Motor existente: ninguno. Se escribe propio. Prosimos y Scylla solo como oráculos numéricos en desarrollo
+## ADR-010 — Existing engine: none. We write our own. Prosimos and Scylla only as numeric oracles under development
 
 **Status:** Accepted
 
-Porqué: Prosimos no tiene archivo LICENSE en ninguna rama (todos los derechos reservados), embebe jars propietarios de QBP, exige Python < 3.12 y su `main` está parado desde 2025-01-30; Scylla es MIT pero Java + Swing + DESMO-J 2017; BIMP/QBP es cerrado; Apromore archivado 2025-08-29; bpmn-engine, Camunda 8 y SpiffWorkflow son motores de ejecución con semántica y licencias equivocadas. Cierra ADR-005 (evaluate before fork) con resultado *Replace* para motores y *Use* para bpmn-js/bpmn-moddle. Revisar: si Prosimos publica una licencia permisiva, reevaluar como oráculo en CI (no como núcleo).
+Why: Prosimos has no `LICENSE` file on any branch (all rights reserved), embeds proprietary QBP jars, requires Python < 3.12, and its `main` has been stalled since 2025-01-30; Scylla is MIT but Java + Swing + DESMO-J from 2017; BIMP/QBP is closed source; Apromore was archived on 2025-08-29; bpmn-engine, Camunda 8, and SpiffWorkflow are execution engines with the wrong semantics and licenses. Closes ADR-005 (evaluate before fork) with a *Replace* result for engines and *Use* for bpmn-js/bpmn-moddle. Revisit: if Prosimos publishes a permissive license, re-evaluate it as a CI oracle (not as the core).
 
 ---
 
-## ADR-011 — Editor: bpmn-js tal cual, con la marca de agua bpmn.io visible; panel de propiedades propio en React
+## ADR-011 — Editor: bpmn-js as-is, with the bpmn.io watermark visible; our own properties panel in React
 
 **Status:** Accepted
 
-Porqué: bpmn-js 18.27.1 (publicado 2026-09-03, 27 releases en 2026) es la única librería del sector viva, con tipos y ejemplos oficiales de moddle extensions, properties providers y renderers; "nueva tarea → nombre editable sin `Task 1`" viene de serie. La licencia es MIT más una cláusula: la marca de agua no se puede quitar, ocultar ni tapar, **tampoco en un fork** (Camunda Desktop Modeler, Fluxnova y Miragon la llevan); reemplazarla por diagram-js son ~28 000 líneas. Los paquetes oficiales del panel de propiedades no publican tipos y arrastran dependencias Camunda. Descarta: fork, KIE bpmn-editor (una sola release, React ≤ 18, semántica jBPM; revisitar en 12 meses), LogicFlow, Camunda Web Modeler (propietario). Consecuencia de diseño: reservar la esquina inferior derecha del canvas.
+Why: bpmn-js 18.27.1 (published 2026-09-03, 27 releases in 2026) is the only actively maintained library in this space, with official types and examples for moddle extensions, properties providers, and renderers; "new task → editable name instead of `Task 1`" comes out of the box. The license is MIT plus one clause: the watermark cannot be removed, hidden, or covered, **not even in a fork** (Camunda Desktop Modeler, Fluxnova, and Miragon keep it); replacing it with diagram-js is ~28,000 lines. The official properties-panel packages ship no types and drag in Camunda dependencies. Rules out: forking, KIE bpmn-editor (a single release, React ≤ 18, jBPM semantics; revisit in 12 months), LogicFlow, Camunda Web Modeler (proprietary). Design consequence: reserve the canvas's bottom-right corner.
 
 ---
 
-## ADR-012 — Identidad de elemento y de proceso
+## ADR-012 — Element and process identity
 
 **Status:** Accepted
 
-Elemento = atributo `id` BPMN, NCName, generado con prefijo por tipo y sufijo aleatorio (`Task_7f3k2q1`), nunca regenerado al importar/exportar/renombrar, nuevo al copiar; ids ajenos no-NCName (Bizagi puede emitirlos) se sanitizan con un mapa reversible. Proceso = `bpmn:process@id` como clave lógica (slug ASCII) + `lila:versionTag`; `exporter="Lila Modeler"` y `exporterVersion` en `definitions`. Porqué: es la única clave que comparten todas las herramientas (Signavio `sid-uuid`, bpmn-js `Activity_x`, jBPM `_uuid`) y de la que cuelgan BPSim, qbp, Prosimos y Scylla; usar nombres como clave es la decisión que fuerza reescrituras. Patrón Flowable (definition key + version) / Bonita / Camunda (process id + versionTag).
+Element = BPMN `id` attribute, NCName, generated with a type prefix and random suffix (`Task_7f3k2q1`), never regenerated on import/export/rename, new on copy; foreign non-NCName ids (Bizagi can emit them) are sanitized with a reversible map. Process = `bpmn:process@id` as the logical key (ASCII slug) + `lila:versionTag`; `exporter="Lila Modeler"` and `exporterVersion` in `definitions`. Why: it is the only key every tool shares (Signavio `sid-uuid`, bpmn-js `Activity_x`, jBPM `_uuid`) and the one BPSim, qbp, Prosimos, and Scylla hang off of; using names as the key is the decision that forces rewrites. Pattern from Flowable (definition key + version) / Bonita / Camunda (process id + versionTag).
 
-> Implementación operativa completa en `docs/BPMN_EXTENSION.md`.
+> Full operational implementation in `docs/BPMN_EXTENSION.md`.
 
 ---
 
-## ADR-013 — Dónde vive cada dato
+## ADR-013 — Where each piece of data lives
 
 **Status:** Accepted
 
-Diagrama y documentación por elemento **dentro** del `.bpmn` (`bpmn:documentation` estándar + `lila:` en `extensionElements`); parámetros de simulación **fuera**, en `*.scenario.json`; catálogo (roles, sistemas, documentos, riesgos, controles, KPIs) en `catalog.json` con ids estables; resultados en JSON + CSV. Los elementos **referencian** el catálogo (`lila:roleRef`), nunca contienen texto libre: es lo que hacen ADONIS, Signavio (dictionary) y ARIS (definición/ocurrencia), y es la otra decisión que forzaría reescritura si se toma mal. Confirma ADR-001 y ADR-007.
+Diagram and per-element documentation **inside** the `.bpmn` (standard `bpmn:documentation` + `lila:` in `extensionElements`); simulation parameters **outside**, in `*.scenario.json`; catalog (roles, systems, documents, risks, controls, KPIs) in `catalog.json` with stable ids; results in JSON + CSV. Elements **reference** the catalog (`lila:roleRef`), never contain free text: that is what ADONIS, Signavio (dictionary), and ARIS (definition/occurrence) do, and it is the other decision that would force a rewrite if made wrong. Confirms ADR-001 and ADR-007.
 
 ---
 
-## ADR-014 — Un solo namespace de extensión, definido una sola vez
+## ADR-014 — A single extension namespace, defined once
 
 **Status:** Accepted
 
-`xmlns:lila="https://lila-modeler.org/schema/bpmn/1"` (el IRI no necesita resolver; debe ser estable y decidirse antes de M4). Descriptor moddle JSON en `packages/engine/src/bpmn/lila.moddle.json`, compartido por editor, CLI y servidor. Elementos (no atributos) para permitir listas. Crece de forma aditiva. bpmn-moddle preserva namespaces desconocidos en round-trip (verificado hoy con archivos BPSim, qbp y Bizagi reales); la preservación por Camunda/Signavio/ADONIS se prueba en M4 y el plan B es `annotations.json` sidecar keyed por id con el mismo descriptor.
+`xmlns:lila="https://lila-modeler.org/schema/bpmn/1"` (the IRI does not need to resolve; it must be stable and decided before M4). moddle JSON descriptor in `packages/engine/src/bpmn/lila.moddle.json`, shared by the editor, CLI, and server. Elements (not attributes) to allow lists. Grows additively. bpmn-moddle preserves unknown namespaces on round-trip (verified today with real BPSim, qbp, and Bizagi files); preservation by Camunda/Signavio/ADONIS is tested in M4, and the fallback plan is an `annotations.json` sidecar keyed by id with the same descriptor.
 
-> Implementación operativa completa en `docs/BPMN_EXTENSION.md`.
+> Full operational implementation in `docs/BPMN_EXTENSION.md`.
 
 ---
 
-## ADR-015 — Formato de escenario v1: JSON propio, separado del .bpmn, keyed por id, vocabulario BPSim 2.0, parámetros nombrados, segundos, `extends`
+## ADR-015 — Scenario format v1: our own JSON, separate from the .bpmn, keyed by id, BPSim 2.0 vocabulary, named parameters, seconds, `extends`
 
 **Status:** Accepted
 
-Porqué: cumple los cuatro criterios a la vez (N escenarios por diagrama; diffs de git sin ruido de coordenadas DI; parcheable por agentes como `elements["Task_1"].processingTime.mean = 400`; migra 1:1 a `jsonb`). BPSim está congelado desde 2016 sin tooling open source y, embebido, mezcla layout con parámetros; qbp admite un solo escenario y un recurso por tarea; Prosimos usa parámetros posicionales de scipy y no tiene licencia; Bizagi no exporta parámetros. Descarta: BPSim o qbp como formato canónico. Adaptadores en los bordes cuando aparezca un consumidor: import qbp (~150 líneas, 182 archivos en GitHub, fixtures de Prosimos/Simod), export/import BPSim 2.0 como archivo `.bpsim` cuando haya usuario de Sparx EA, export Prosimos solo para oráculos.
+Why: it satisfies all four criteria at once (N scenarios per diagram; git diffs without DI-coordinate noise; patchable by agents like `elements["Task_1"].processingTime.mean = 400`; migrates 1:1 to `jsonb`). BPSim has been frozen since 2016 with no open source tooling and, embedded, mixes layout with parameters; qbp allows only one scenario and one resource per task; Prosimos uses positional scipy parameters and has no license; Bizagi does not export parameters. Rules out: BPSim or qbp as the canonical format. Edge adapters when a consumer shows up: qbp import (~150 lines, 182 files on GitHub, Prosimos/Simod fixtures), BPSim 2.0 export/import as a `.bpsim` file when there is a Sparx EA user, Prosimos export for oracles only.
 
 ---
 
-## ADR-016 — Semántica de calendarios (Bizagi no documenta la suya)
+## ADR-016 — Calendar semantics (Bizagi does not document its own)
 
 **Status:** Accepted
 
-Patrón semanal relativo a `run.start`; sin DST ni festivos en v1 (campos reservados). Una tarea solo arranca dentro del calendario de su recurso y su `processingTime` consume solo tiempo de calendario (se pausa al cerrar el turno y reanuda al abrir). El tiempo cerrado se reporta como `offHoursWait`, separado de `resourceWait`. Utilización = tiempo ocupado / `Σᵢ (capacidadᵢ × tiempo abiertoᵢ)`, sumando los tramos de capacidad del pool sobre la ventana de medida `[warmup, t_stop]` — **no** la duración declarada del escenario, que es lo que usa Bizagi en su nivel 4 (conversión exacta en `docs/BIZAGI_PARITY.md` § D7). Es la única definición que hace comparables niveles 3 y 4. Documentado en `docs/SEMANTICS.md`; ajustable si alguien aporta el comportamiento real de L-Sim/Bizagi.
+A weekly pattern relative to `run.start`; no DST or holidays in v1 (reserved fields). A task only starts within its resource's calendar, and its `processingTime` consumes only calendar time (it pauses when the shift closes and resumes when it opens). Closed time is reported as `offHoursWait`, separate from `resourceWait`. Utilization = busy time / `Σᵢ (capacityᵢ × openTimeᵢ)`, summing the pool's capacity segments over the measurement window `[warmup, t_stop]` — **not** the scenario's declared duration, which is what Bizagi uses at its level 4 (exact conversion in `docs/BIZAGI_PARITY.md` § D7). It is the only definition that makes levels 3 and 4 comparable. Documented in `docs/SEMANTICS.md`; adjustable if someone provides L-Sim/Bizagi's actual behaviour.
 
-**LILA-164 (R-CAL-11):** un mismo pool puede tener capacidad distinta por calendario — `capacity: [{ calendar, capacity }]`, el «Resources → Calendars → quantity» de Bizagi — en vez de partirse en un pool por turno. El pool está abierto por **unión** de sus calendarios (tres turnos que cubren las 24 h son un 24×7, sin `offHoursWait`), su capacidad en `t` es la **suma** de los tramos abiertos (dos calendarios que se solapan suman), cerrar un tramo **no** interrumpe lo que está en curso, y durante el cierre del pool entero vale la capacidad del primer instante abierto posterior, que es lo que conserva R-CAL-6 y deja la forma numérica bit a bit igual a M3 (R-DEG-2). Sin esto el nivel 4 de Bizagi no se puede replicar.
+**LILA-164 (R-CAL-11):** a single pool can have different capacity per calendar — `capacity: [{ calendar, capacity }]`, Bizagi's «Resources → Calendars → quantity» — instead of splitting into one pool per shift. The pool is open by the **union** of its calendars (three shifts covering 24 h are a 24×7, with no `offHoursWait`), its capacity at `t` is the **sum** of the open segments (two overlapping calendars add up), closing a segment does **not** interrupt what is already in progress, and while the whole pool is closed the capacity of the next open instant applies, which is what preserves R-CAL-6 and keeps the numeric shape bit-for-bit identical to M3 (R-DEG-2). Without this, Bizagi's level 4 cannot be reproduced.
 
-> Fórmulas y definiciones operativas completas en `docs/RESULTS_FORMAT.md`.
+> Full operational formulas and definitions in `docs/RESULTS_FORMAT.md`.
 
 ---
 
-## ADR-017 — Determinismo
+## ADR-017 — Determinism
 
 **Status:** Accepted
 
-Heap ordenado por `(t, seq)` con `seq` monótono; PRNG propio sembrado (mulberry32/xoshiro) con un stream por elemento derivado de `hash(seed, replicación, elementId)`: cinco líneas que dan *common random numbers*, es decir, añadir un cajero no cambia los números de las tareas no tocadas y los what-if se leen limpios. Nunca `Math.random` ni `Date`. Garantía: bytes idénticos dentro de un mismo runtime (test en Node 22 y 24); entre navegadores solo estadísticamente idénticos (`Math.log/exp` pueden diferir en el último bit).
+A heap ordered by `(t, seq)` with a monotonic `seq`; our own seeded PRNG (mulberry32/xoshiro) with one stream per element derived from `hash(seed, replication, elementId)`: five lines that give *common random numbers*, meaning adding a cashier does not change the numbers for untouched tasks, and what-ifs read clean. Never `Math.random` or `Date`. Guarantee: byte-identical within the same runtime (tested on Node 22 and 24); across browsers, only statistically identical (`Math.log`/`exp` can differ in the last bit).
 
 ---
 
-## ADR-018 — Persistencia de la modalidad instalable: archivos del usuario; nada de servidor
+## ADR-018 — Persistence for the installable mode: the user's own files; no server at all
 
 **Status:** Accepted
 
-Un proyecto es una carpeta (`model.bpmn` + `*.scenario.json`). En la app de escritorio: abrir y guardar con los diálogos nativos del sistema (`dialog.showOpenDialog` / `showSaveDialog` y `fs` en el proceso principal de Electron, expuestos al renderer por `preload` + IPC con una API mínima: `openFile`, `saveFile`, `readProject`, `recentFiles`); recientes y estado de ventana en `app.getPath('userData')`. Sin SQLite, sin IndexedDB, sin cuentas, sin servidor. La demo online (GitHub Pages) usa `<input type=file>` y descarga: sirve para probar sin instalar, no es una modalidad. Porqué: un estudiante o analista trabaja con archivos; git da versionado AS-IS/TO-BE y diff gratis para quien lo use; los bytes son los mismos que guardará la modalidad servidor. Revisar: nunca por sí sola; la modalidad servidor (ADR-023) es la respuesta al trabajo compartido, no una evolución de esta.
+A project is a folder (`model.bpmn` + `*.scenario.json`). In the desktop app: open and save with the system's native dialogs (`dialog.showOpenDialog` / `showSaveDialog` and `fs` in Electron's main process, exposed to the renderer via `preload` + IPC with a minimal API: `openFile`, `saveFile`, `readProject`, `recentFiles`); recents and window state in `app.getPath('userData')`. No SQLite, no IndexedDB, no accounts, no server. The online demo (GitHub Pages) uses `<input type=file>` and downloads: it is there to try without installing, not a mode of its own. Why: a student or analyst works with files; git gives AS-IS/TO-BE versioning and diff for free to whoever uses it; the bytes are the same ones the server mode will save. Revisit: never on its own; the server mode (ADR-023) is the answer to shared work, not an evolution of this one.
 
 ---
 
-## ADR-019 — MCP antes que REST; ambos sobre las mismas funciones
+## ADR-019 — MCP before REST; both over the same functions
 
 **Status:** Accepted
 
-La API del MVP son las funciones exportadas de `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) llega en M4, justo después de la paridad en CLI y antes de la UI, con 5 tools: cuesta ~100 líneas, no depende de la UI y Brito trabaja con agentes; desde ahí un agente valida, simula, parchea escenarios y compara en su computadora. REST (hono/fastify, una pantalla) llega con el servidor y el repositorio. Ninguna lógica vive en el borde. Cumple ADR-003 (UI y agentes hacen lo mismo) sin construir un servidor que hoy no sirve a nadie.
+The MVP's API is the exported functions of `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) arrives in M4, right after the CLI matches Bizagi Modeler's reference results and before the UI, with 5 tools: it costs ~100 lines, does not depend on the UI, and Brito works with agents; from there an agent can validate, simulate, patch scenarios, and compare on its own machine. REST (hono/fastify, one screen) arrives with the server and the repository. No logic lives at the edge. This satisfies ADR-003 (the UI and agents do the same thing) without building a server that serves no one today.
 
 ---
 
-## ADR-020 — Licencias
+## ADR-020 — Licenses
 
 **Status:** Accepted
 
-Núcleo, CLI, MCP y web bajo **Apache-2.0** (decidido por Brito el 2026-09-03: cláusula de patentes explícita y adopción empresarial; compatible con la licencia bpmn.io, MIT de bpmn-moddle y Apache-2.0 de Simod). Prohibido AGPL/LGPL/Camunda License en `packages/*` (pm4py es AGPL-3.0 desde 2.7.12; SpiffWorkflow LGPL; Camunda 8 licencia propia). Prosimos y el jar de QBP jamás entran al repositorio ni a CI pública. La marca de agua de bpmn.io se acepta y se anuncia en el README. Cierra ADR-008: el proyecto se llama Lila Modeler.
+Core, CLI, MCP, and web under **Apache-2.0** (decided by Brito on 2026-09-03: an explicit patent clause and enterprise adoption; compatible with bpmn.io's license, bpmn-moddle's MIT, and Simod's Apache-2.0). AGPL/LGPL/Camunda License are forbidden in `packages/*` (pm4py has been AGPL-3.0 since 2.7.12; SpiffWorkflow is LGPL; Camunda 8 has its own license). Prosimos and the QBP jar never enter the repository or public CI. The bpmn.io watermark is accepted and disclosed in the README. Closes ADR-008: the project is called Lila Modeler.
 
 ---
 
-## ADR-021 — Alcance BPMN y política de "no soportado"
+## ADR-021 — BPMN scope and the "not supported" policy
 
 **Status:** Accepted
 
-Soportado en v1: la lista de la sección 3 de `LILA_MODELER_ESTRUCTURA.md` (ver `docs/BIZAGI_PARITY.md`). Todo lo demás produce **error de validación explícito** con el mismo texto que Bizagi ("no soportado por el simulador"), nunca un fallo silencioso. Cada elemento extra se añade cuando lo pida un usuario real.
+Supported in v1: the list in section 3 of `LILA_MODELER_ESTRUCTURA.md` (see `docs/BIZAGI_PARITY.md`). Everything else produces an **explicit validation error** with the same text Bizagi Modeler uses ("not supported by the simulator"), never a silent failure. Each extra element gets added when a real user asks for it.
 
 ---
 
-## ADR-022 — Estructura del repositorio: un paquete que se publica, una app, y nada especulativo
+## ADR-022 — Repository structure: one package that gets published, one app, and nothing speculative
 
 **Status:** Accepted
 
-`packages/engine` (con `core/` puro como subcarpeta), `apps/web`, `packages/mcp` en M4. npm workspaces (viene con Node; sin pnpm/turbo/nx). Sin paquetes `shared`, `types` ni `utils`. Porqué: un paquete por cosa que se publica; el aislamiento de `core/` se garantiza con un test que comprueba que el bundle del Worker no incluye `bpmn-moddle`, React ni `node:*`, no con un paquete aparte. Se divide en más paquetes cuando publicar por separado importe.
+`packages/engine` (with `core/` as a pure subfolder), `apps/web`, `packages/mcp` in M4. npm workspaces (comes with Node; no pnpm/turbo/nx). No `shared`, `types`, or `utils` packages. Why: one package per thing that gets published; `core/`'s isolation is guaranteed by a test that checks the Worker bundle includes no `bpmn-moddle`, React, or `node:*`, not by a separate package. It splits into more packages once publishing separately actually matters.
 
 ---
 
-## ADR-023 — Dos modalidades de despliegue, una sola SPA, un solo motor
+## ADR-023 — Two deployment modes, one SPA, one engine
 
 **Status:** Accepted
 
-(1) **App de escritorio**: la SPA de `apps/web` empaquetada con **Electron** en `apps/desktop` (proceso principal + `preload`), construida con electron-builder para macOS (dmg), Windows (nsis) y Linux (AppImage y deb) desde una matriz de CI; `fileAssociations` para abrir `.bpmn` con doble clic; auto-update opcional cuando haya releases frecuentes. El motor corre en el Web Worker del renderer; la persistencia es ADR-018. Precedente directo: Camunda Desktop Modeler (MIT) es Electron + bpmn-js + electron-builder con asociación de `.bpmn`; su `electron-builder.json` es la plantilla.
+(1) **Desktop app**: the `apps/web` SPA packaged with **Electron** in `apps/desktop` (main process + `preload`), built with electron-builder for macOS (dmg), Windows (nsis), and Linux (AppImage and deb) from a CI matrix; `fileAssociations` to open `.bpmn` on double click; optional auto-update once releases are frequent. The engine runs in the renderer's Web Worker; persistence is ADR-018. Direct precedent: Camunda Desktop Modeler (MIT) is Electron + bpmn-js + electron-builder with a `.bpmn` file association; its `electron-builder.json` is the template.
 
-(2) **Servidor self-hosted**: `packages/server` (M6) en Node sirve **la misma SPA compilada**, expone REST y MCP por HTTP sobre las funciones de `@lila/engine`, autentica usuarios, guarda procesos/versiones/escenarios/runs en SQLite o PostgreSQL, y se distribuye como imagen Docker con `docker-compose.yml`. La simulación interactiva sigue corriendo en el Worker del navegador de cada usuario; el servidor solo simula cuando lo piden agentes, la CLI remota o corridas programadas.
+(2) **Self-hosted server**: `packages/server` (M6) in Node serves **the same compiled SPA**, exposes REST and MCP over HTTP on top of `@lila/engine`'s functions, authenticates users, stores processes/versions/scenarios/runs in SQLite or PostgreSQL, and ships as a Docker image with `docker-compose.yml`. Interactive simulation keeps running in each user's browser Worker; the server only simulates when agents, the remote CLI, or scheduled runs ask for it.
 
-**La costura entre ambas** es una interfaz `ProjectStore` en la SPA (listar/leer/escribir procesos, escenarios y runs) con implementaciones `DesktopStore` (IPC → `fs`), `RemoteStore` (REST, M6) y un `BrowserStore` mínimo (input/descarga) para la demo online. Se define en M5; la remota llega en M6 sin tocar vistas ni motor.
+**The seam between the two** is a `ProjectStore` interface in the SPA (list/read/write processes, scenarios, and runs) with `DesktopStore` (IPC → `fs`), `RemoteStore` (REST, M6), and a minimal `BrowserStore` (input/download) for the online demo. Defined in M5; the remote one arrives in M6 without touching views or the engine.
 
-**Porqué Electron y no Tauri**: Tauri 2 produce instaladores de ~10 MB frente a ~150 MB y usa menos memoria, pero depende del webview del sistema, y en Linux (WebKitGTK) hay problemas de rendimiento y estabilidad documentados (reportes de 40 fps frente a 240 fps en Chromium para la misma app; hilo "WebKit is totally unstable" en las discusiones de Tauri); bpmn-js es un canvas SVG intensivo donde la consistencia de Chromium en los tres sistemas vale más que el tamaño; y Tauri exige toolchain Rust. Electron 43, electron-builder 26 y electron-forge (ESM, Node ≥ 22.12) están activos en 2026. Descarta: PWA como modalidad principal (sin diálogos nativos en Safari/Firefox, sin asociación de archivos). Reversible: si el tamaño del instalador se vuelve problema real, Tauri envuelve la misma SPA y solo cambia `DesktopStore`.
+**Why Electron and not Tauri**: Tauri 2 produces ~10 MB installers versus ~150 MB and uses less memory, but it depends on the system's webview, and on Linux (WebKitGTK) there are documented performance and stability problems (reports of 40 fps versus 240 fps in Chromium for the same app; a "WebKit is totally unstable" thread in Tauri's discussions); bpmn-js is an SVG-heavy canvas where Chromium's consistency across all three OSes is worth more than installer size; and Tauri requires a Rust toolchain. Electron 43, electron-builder 26, and electron-forge (ESM, Node ≥ 22.12) are all active in 2026. Rules out: a PWA as the primary mode (no native dialogs in Safari/Firefox, no file association). Reversible: if installer size becomes a real problem, Tauri wraps the same SPA and only `DesktopStore` changes.
 
-**Porqué TypeScript sale reforzado**: el mismo bundle corre en el Worker de la app de escritorio y en el Node del servidor; un motor Python habría exigido empaquetar un runtime Python dentro del instalador o cargar Pyodide (~12 MB).
+**Why TypeScript comes out stronger**: the same bundle runs in the desktop app's Worker and in the server's Node; a Python engine would have required bundling a Python runtime inside the installer or loading Pyodide (~12 MB).
 
 ---
 
-## ADR-024 — Agregado top-level de varias replicaciones
+## ADR-024 — Top-level aggregate across multiple replications
 
 **Status:** Accepted
 
-`simulate()` publica en los campos numéricos top-level la media aritmética del mismo campo ya
-agregado en cada replicación. `replications.kpis` conserva, para esos mismos paths, media,
-desviación muestral e IC95. Esto deja un resultado directamente consumible por CLI/UI sin obligar
-a navegar el mapa de KPI y mantiene una observación estadística por replicación.
+`simulate()` publishes, in the top-level numeric fields, the arithmetic mean of that same field
+already aggregated within each replication. `replications.kpis` keeps, for those same paths, the
+mean, sample deviation, and 95% CI. This leaves a result directly consumable by the CLI/UI without
+forcing a walk through the KPI map, while keeping one statistical observation per replication.
 
-Se descarta usar la primera replicación: sería determinista pero no representativa y podría
-contradecir el `mean` publicado al lado. Se descarta agrupar todos los casos de todas las
-replicaciones: daría más peso a las corridas con más observaciones y rompería la unidad estadística
-con la que se calcula el IC. En cancelación, el top-level incluye el trabajo de la réplica parcial
-para no ocultarlo; el IC usa solo replicaciones completas y se omite con menos de dos.
+Using the first replication is ruled out: it would be deterministic but not representative, and
+could contradict the `mean` published right next to it. Pooling all cases from all replications
+together is also ruled out: it would give more weight to runs with more observations and break the
+statistical unit the CI is computed on. On cancellation, the top-level includes the partial
+replication's work so it is not hidden; the CI uses only complete replications and is omitted with
+fewer than two.
 
-Revisar solo si un consumidor necesita explícitamente resultados por réplica; en ese caso se añade
-un campo separado, sin cambiar el significado del top-level. *(prueba: LILA-029)*
+Revisit only if a consumer explicitly needs per-replication results; in that case a separate field
+is added, without changing the top-level's meaning. *(test: LILA-029)*
 
 ---
 
-## ADR-025 — Event log plano por asignación, agrupado por instancia de actividad
+## ADR-025 — Flat event log by allocation, grouped by activity instance
 
 **Status:** Accepted
 
-Cada asignación de pool produce una fila plana y todas las filas de una ocurrencia comparten
-`activityInstanceId` y su posición original en `allocationIndex`. Una actividad sin recurso, o
-una que se cierra todavía en cola, produce una fila sentinel (`resourceId = null`,
-`resourceQuantity = null`, `allocationIndex = null`). El lifecycle parcial distingue `terminated` de `inFlight`, conserva timestamps anulables y
-`observedUntil`. Los costos se descomponen en `elementCost` y `resourceCost`; el fijo del elemento
-aparece una sola vez en la fila emitida de menor `allocationIndex` y `cost` es su suma exacta.
+Each pool allocation produces one flat row, and all the rows of one occurrence share
+`activityInstanceId` and their original position in `allocationIndex`. An activity with no
+resource, or one that closes while still queued, produces a sentinel row (`resourceId = null`,
+`resourceQuantity = null`, `allocationIndex = null`). The partial lifecycle distinguishes
+`terminated` from `inFlight`, keeps nullable timestamps and `observedUntil`. Costs are broken down
+into `elementCost` and `resourceCost`; the element's fixed cost appears exactly once, in the
+emitted row with the lowest `allocationIndex`, and `cost` is its exact sum.
 
-Se descarta una fila por actividad con `resources[]`: duplica estructura dentro del CSV, dificulta
-streaming/XES y contradice el formato plano comprometido. Se descartan acumuladores internos sin
-reconstrucción desde el log: violan R-COST-3 y no permiten auditar utilización/costos sin volver a
-simular. La alternativa elegida conserva CSV plano, representa `quantity` y AND/OR, evita duplicar
-el costo fijo y mantiene observables las tareas en cola o en curso al cortar.
+One row per activity with `resources[]` is ruled out: it duplicates structure inside the CSV,
+hinders streaming/XES, and contradicts the committed flat format. Internal accumulators with no
+reconstruction from the log are also ruled out: they violate R-COST-3 and prevent auditing
+utilization/costs without re-running the simulation. The chosen alternative keeps the CSV flat,
+represents `quantity` and AND/OR, avoids duplicating the fixed cost, and keeps queued or in-flight
+tasks observable at cutoff.
 
-Revisar solo con una nueva versión del formato de resultados; consumidores v1 dependen de estas
-columnas. *(prueba: LILA-033, LILA-036, LILA-037)*
+Revisit only with a new version of the results format; v1 consumers depend on these columns.
+*(test: LILA-033, LILA-036, LILA-037)*
 
 ---
 
-## ADR-026 — Scheduler AND por firmas y heap de cabezas elegibles
+## ADR-026 — AND scheduler by signature, and a heap of eligible heads
 
 **Status:** Accepted
 
-Las solicitudes AND con la misma firma ordenada de `(pool, quantity)` comparten una cola FIFO. Cada
-pool indexa solo las firmas que lo usan; al cambiar su capacidad se reevalúan esas cabezas. Un heap
-separado, comparado explícitamente por el `(enabledAt, seq)` original, elige el primer candidato
-satisfacible y reserva todos sus pools en una sola mutación. Las solicitudes single-pool comparten
-una única clase por pool, incluso con cantidades distintas, para conservar FIFO estricto.
+AND requests with the same sorted `(pool, quantity)` signature share one FIFO queue. Each pool
+indexes only the signatures that use it; when its capacity changes, those heads get re-evaluated.
+A separate heap, compared explicitly by the original `(enabledAt, seq)`, picks the first
+satisfiable candidate and reserves all its pools in a single mutation. Single-pool requests share
+one class per pool, even across different quantities, to keep strict FIFO.
 
-Se descarta recorrer y reinsertar toda la cola global en cada llegada: bajo saturación produce
-O(n² log n). También se descarta crear una clase single-pool por cantidad, porque permitiría que una
-solicitud pequeña adelantase a la cabeza del mismo pool. Versiones/tombstones invalidan cabezas sin
-búsquedas lineales y release/cancel reúnen todos los pools afectados antes de planificar.
+Walking and reinserting the whole global queue on every arrival is ruled out: under saturation it
+produces O(n² log n). Creating one single-pool class per quantity is also ruled out, because it
+would let a small request cut ahead of the same pool's head. Versions/tombstones invalidate heads
+without linear searches, and release/cancel gather all affected pools before scheduling.
 
-LILA-035 usa esa estructura sin añadir nada nuevo: una selección OR se encola como **una entrada
-por alternativa**, cada una en la clase single-pool de su pool y todas con el mismo `seq`, así que
-comparten posición FIFO y compiten en igualdad con las solicitudes de un solo pool. Conceder una
-alternativa deja a las demás como lápidas — el mismo mecanismo que ya invalida cabezas — y marca sus
-clases para reevaluar en el acto, que es lo que impide que la cabeza siguiente de un pool retirado
-espere a un evento que ya no va a llegar. El desempate entre alternativas libres a la vez es el
-índice declarado en el escenario (R-REC-6): `(enabledAt, seq, altIndex)` sigue siendo un orden total
-y no altera el de AND/single, donde `altIndex` siempre vale 0. Se descarta elegir el pool más libre o
-el de menor utilización: obligaría a un criterio global y a reordenar colas, y no hay paridad Bizagi
-que lo pida. `ResourceManager` sigue sin ser API pública. *(prueba: LILA-034, LILA-035)*
+LILA-035 uses this same structure without adding anything new: an OR selection is enqueued as
+**one entry per alternative**, each in its pool's single-pool class and all sharing the same
+`seq`, so they share FIFO position and compete on equal footing with single-pool requests.
+Granting one alternative leaves the others as tombstones — the same mechanism that already
+invalidates heads — and flags their classes for immediate re-evaluation, which is what stops the
+next head of a withdrawn pool from waiting on an event that will never arrive. The tie-break among
+alternatives freed at the same time is the index declared in the scenario (R-REC-6):
+`(enabledAt, seq, altIndex)` is still a total order and does not change the AND/single order,
+where `altIndex` is always 0. Picking the freest pool or the least-utilized one is ruled out: it
+would require a global criterion and reordering queues, and no reference behaviour from Bizagi
+Modeler calls for it. `ResourceManager` remains a non-public API. *(test: LILA-034, LILA-035)*
 
 ---
 
-## Ver también
+## See also
 
-- `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).
-- `docs/BIZAGI_PARITY.md` — tabla de paridad referenciada por ADR-021.
-- `docs/BPMN_EXTENSION.md` — implementación operativa de ADR-012 y ADR-014.
-- `docs/RESULTS_FORMAT.md` — implementación operativa de la parte de calendarios/utilización de ADR-016.
-- `open-process-platform-docs/DECISIONS.md` — texto original de ADR-001 a ADR-008 (corpus previo, proyecto entonces llamado *Open Process Platform*).
-- `BACKLOG.md` — desglose en épicas y tickets por hito.
+- `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).
+- `docs/BIZAGI_PARITY.md` — reference-behaviour table cited by ADR-021.
+- `docs/BPMN_EXTENSION.md` — operational implementation of ADR-012 and ADR-014.
+- `docs/RESULTS_FORMAT.md` — operational implementation of the calendar/utilization part of ADR-016.
+- `docs/DECISIONS-corpus-previo.md` — original text of ADR-001 through ADR-008 (earlier corpus, project then called *Open Process Platform*).
+- `BACKLOG.md` — breakdown into epics and tickets per milestone.

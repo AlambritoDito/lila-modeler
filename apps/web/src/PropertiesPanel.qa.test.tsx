@@ -41,6 +41,11 @@ import {
   type ElementoModdle,
   type Escritor,
 } from './PropertiesPanel.js';
+import { setLocale } from './i18n';
+
+// This suite pins the Spanish translation. English is the app's base language since
+// LILA-210, so the locale is set here instead of depending on the machine's.
+setLocale('es');
 
 // React 19 exige declararlo para usar `act` fuera de @testing-library (que el repo no trae).
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -168,7 +173,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function montar(modelador: Modelador, pestana: 'Propiedades' | 'Documentación'): HTMLElement {
+function montar(modelador: Modelador, pestana: 'propiedades' | 'documentacion'): HTMLElement {
   const contenedor = document.createElement('div');
   document.body.append(contenedor);
   const raiz = createRoot(contenedor);
@@ -233,8 +238,8 @@ describe('QA adversarial del panel de propiedades', () => {
         <bpmn:text>Nota anterior</bpmn:text>
       </bpmn:textAnnotation></bpmn:process></bpmn:definitions>`;
     const bancoSimple = await banco(xml);
-    const propiedades = montar(bancoSimple.modelador, 'Propiedades');
-    const documentacion = montar(bancoSimple.modelador, 'Documentación');
+    const propiedades = montar(bancoSimple.modelador, 'propiedades');
+    const documentacion = montar(bancoSimple.modelador, 'documentacion');
 
     teclear(propiedades.querySelector('input') as HTMLInputElement, 'Proceso nuevo');
     teclear(documentacion.querySelector('textarea') as HTMLTextAreaElement, 'Documentado');
@@ -366,7 +371,7 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('una responsabilidad ajena sin `type` (o con uno que no es RACI) no se enseña como R', async () => {
     const { modelador, clic, exportar } = await banco(pedidoConRaciAjeno());
-    const panel = montar(modelador, 'Documentación');
+    const panel = montar(modelador, 'documentacion');
     clic('Task_TomarPedido');
 
     const tipos = [...panel.querySelectorAll('select')];
@@ -385,7 +390,7 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('editar el rol de esa responsabilidad ajena no le inventa un `type`', async () => {
     const { modelador, clic, exportar } = await banco(pedidoConRaciAjeno());
-    const panel = montar(modelador, 'Documentación');
+    const panel = montar(modelador, 'documentacion');
     clic('Task_TomarPedido');
 
     teclear(campoPorEtiqueta(panel, 'Rol'), 'rol-nuevo');
@@ -416,7 +421,7 @@ describe('QA adversarial del panel de propiedades', () => {
     // Es lo que pasa fuera de un contexto seguro: la demo servida por http desde otra máquina.
     expect(navigator.clipboard).toBeUndefined();
     const { modelador, clic } = await banco(leer(PEDIDO));
-    const panel = montar(modelador, 'Propiedades');
+    const panel = montar(modelador, 'propiedades');
     clic('Task_TomarPedido');
 
     const copiar = panel.querySelector('button');
@@ -444,7 +449,7 @@ describe('QA adversarial del panel de propiedades', () => {
     const escribir = vi.fn<(t: string) => Promise<void>>(() => Promise.resolve());
     vi.stubGlobal('navigator', { clipboard: { writeText: escribir } });
     const { modelador, clic } = await banco(leer(PEDIDO));
-    const panel = montar(modelador, 'Propiedades');
+    const panel = montar(modelador, 'propiedades');
     clic('Task_TomarPedido');
 
     await act(async () => {
@@ -463,7 +468,7 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('el panel se resincroniza cuando el moddle cambia por fuera (deshacer, lienzo)', async () => {
     const { modelador, clic, figura, desdeElLienzo } = await banco(leer(PEDIDO));
-    const panel = montar(modelador, 'Propiedades');
+    const panel = montar(modelador, 'propiedades');
     clic('Task_TomarPedido');
     const nombre = panel.querySelector('input');
     expect(nombre?.value).toBe('Tomar pedido');
@@ -480,7 +485,7 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('la pestaña de documentación también se resincroniza tras un cambio externo', async () => {
     const { modelador, clic, figura, desdeElLienzo } = await banco(leer(PEDIDO));
-    const panel = montar(modelador, 'Documentación');
+    const panel = montar(modelador, 'documentacion');
     clic('Task_Revisar');
     expect(panel.querySelectorAll('select')).toHaveLength(0);
 
@@ -497,8 +502,8 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('flujos, compuertas, eventos, pools y la selección múltiple no rompen el panel', async () => {
     const { modelador, clic, clicEnElFondo } = await banco(leer(PEDIDO));
-    const propiedades = montar(modelador, 'Propiedades');
-    const documentacion = montar(modelador, 'Documentación');
+    const propiedades = montar(modelador, 'propiedades');
+    const documentacion = montar(modelador, 'documentacion');
 
     const tipos: Array<[string, string]> = [
       ['Flow_Start_TomarPedido', 'Flujo de secuencia'],
@@ -533,7 +538,7 @@ describe('QA adversarial del panel de propiedades', () => {
     // no puede ni regenerarlo ni sanearlo por su cuenta.
     const id = '_5a972b87-735d-454a-b31c-f52fb3afc5c7';
     const { modelador, clic, exportar } = await banco(leer(BIZAGI));
-    const panel = montar(modelador, 'Propiedades');
+    const panel = montar(modelador, 'propiedades');
     clic(id);
 
     expect([...panel.querySelectorAll('output')].map((o) => o.textContent)).toContain(id);
@@ -550,7 +555,7 @@ describe('QA adversarial del panel de propiedades', () => {
     // Antes: todas las filas de "Sistemas" compartían aria-label="Sistemas" y un lector de
     // pantalla anunciaba campos idénticos. pedidoConRaciAjeno() ya trae dos responsabilidades.
     const { modelador, clic, figura } = await banco(pedidoConRaciAjeno());
-    const panel = montar(modelador, 'Documentación');
+    const panel = montar(modelador, 'documentacion');
     clic('Task_TomarPedido');
     act(() => {
       anadirExtension(modelador.servicios, figura('Task_TomarPedido'), 'lila:SystemRef', {
@@ -582,7 +587,7 @@ describe('QA adversarial del panel de propiedades', () => {
 
   it('todos los controles del panel tienen nombre accesible y el RACI es un `select` nativo', async () => {
     const { modelador, clic } = await banco(pedidoConRaciAjeno());
-    const panel = montar(modelador, 'Documentación');
+    const panel = montar(modelador, 'documentacion');
     clic('Task_TomarPedido');
     act(() => {
       // Una fila por cada lista, para que ninguna quede sin ejercitar.

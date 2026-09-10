@@ -1,5 +1,7 @@
 # Modelo de dominio y fronteras de módulos de una plataforma de Process Intelligence, aprendidos de ADONIS, Signavio, Apromore, Camunda Web Modeler, ARIS, Bizagi, Bonita, Flowable y Modelio, más los estándares (BPMN 2.0 extensiones, BPSim, DMN, CMMN, XPDL, XES, OCEL 2.0), para definir identidad/versionado/namespace/layout mínimos del MVP de Lila Modeler sin forzar una reescritura.
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación
@@ -77,7 +79,7 @@ Riesgos a comprobar en el spike de bpmn-js antes de cerrar el namespace: que `li
 - **[verified]** Patrones de identidad observados: (a) el id del elemento BPMN es la única clave estable que todas las herramientas comparten (Signavio 'sid-<uuid>', bpmn-js 'Activity_xxxxxxx', jBPM '_<uuid>'); BPSim, Prosimos, Scylla y Signavio metadata cuelgan todo de ese id; (b) la identidad del PROCESO es una clave lógica + versión (Flowable definition key + version, Bonita pool name + version, Camunda process id + versionTag), nunca el nombre; (c) el catálogo (roles, sistemas, documentos, riesgos, controles, KPIs) tiene ids propios y se versiona aparte del diagrama (ADONIS los versiona junto con el modelo en el release; Signavio no versiona el dictionary con el diagrama).
   - _Evidencia_: Síntesis de handle-invoice.bpmn (Signavio), developer.jboss.org/thread/265741, documentation.flowable.com/latest/model/versioning-deployment, documentation.ofelia.com/bonita/latest/process/pools-and-lanes, docs ADONIS rwf-000000, Signavio dictionary API.
 - **[verified]** El corpus previo (ARCHITECTURE.md) propone desde el inicio 'Internal model ≠ BPMN XML' con entidades Activity/Role/System/… en PostgreSQL y bpmn_element_id como referencia. Las herramientas analizadas muestran que eso es el estado final correcto (ADONIS/ARIS/Signavio), pero también que Camunda —el modelador web más moderno— trata el fichero como unidad de versión y deriva lo demás; para un MVP de simulación el fichero .bpmn + sidecars es suficiente y compatible con ese destino.
-  - _Evidencia_: /Users/brito/development/Lila Modeler/open-process-platform-docs/ARCHITECTURE.md y DECISIONS.md (ADR-001, ADR-007) frente a los hallazgos de Camunda Hub 8.10 y BPSim.
+  - _Evidencia_: ARCHITECTURE.md y DECISIONS.md del corpus previo (ADR-001, ADR-007; corpus previo archivado fuera del repo, ADR-001 a ADR-008 en `docs/DECISIONS-corpus-previo.md`) frente a los hallazgos de Camunda Hub 8.10 y BPSim.
 
 ## Preguntas abiertas
 
@@ -171,6 +173,4 @@ Riesgos a comprobar en el spike de bpmn-js antes de cerrar el namespace: que `li
 - https://github.com/bptlab/scylla/wiki
 - https://api.github.com/repos/bptlab/scylla
 - https://qbpsimulator.github.io/qbp-simulator-engine/schemadoc/http___www.qbp-simulator.com_Schema201212/element/processSimulationInfo.html
-- file:///Users/brito/development/Lila%20Modeler/open-process-platform-docs/ARCHITECTURE.md
-- file:///Users/brito/development/Lila%20Modeler/open-process-platform-docs/DECISIONS.md
-- file:///Users/brito/development/Lila%20Modeler/open-process-platform-docs/SIMULATION_ENGINE.md
+- ARCHITECTURE.md, DECISIONS.md y SIMULATION_ENGINE.md: corpus previo archivado fuera del repo; ADR-001 a ADR-008 en `docs/DECISIONS-corpus-previo.md`

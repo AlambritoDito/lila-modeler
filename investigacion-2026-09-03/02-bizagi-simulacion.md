@@ -1,5 +1,7 @@
 # Qué hace exactamente la simulación de Bizagi Modeler (niveles, parámetros, salidas, persistencia, estado 2026, limitaciones) y checklist de paridad para Lila Modeler
 
+> **Working document, kept in Spanish.** The public documentation is in [`docs/`](../docs/) and [`README.md`](../README.md).
+
 _Investigación verificada el 2026-09-03 por un agente con búsqueda web. Cada hallazgo lleva su nivel de confianza._
 
 ## Recomendación
@@ -47,7 +49,7 @@ Donde Lila puede ganar sin esfuerzo adicional: percentiles, longitud de cola, th
 - **[verified]** [Persistencia] El formato nativo es .bpm (propietario; descrito como contenedor ZIP) y ahí viven escenarios y parámetros. La exportación BPMN 2.0 declara explícitamente que 'extended attributes are not included'.
   - _Evidencia_: help.bizagi.com/platform/en/exporting_to_bpmn.htm; fileinfo/fileproinfo sobre .bpm (ZIP) — lo del ZIP es fuente secundaria.
 - **[verified]** [Persistencia] El BPMN exportado por Bizagi NO contiene parámetros de simulación ni BPSim. Usa el namespace xmlns:bizagi="http://www.bizagi.com/bpmn20" declarado dentro de cada <extensionElements> (no en <definitions>), con la estructura <bizagi:BizagiExtensions><bizagi:BizagiProperties><bizagi:BizagiProperty name="…" value="…"/>. En 5 archivos reales (exportados entre 2014 y agosto-2026) sólo aparecen propiedades visuales: bgColor, borderColor, textColor, textBackgroundColor, textDirection, runtimeProperties, y en uno antiguo DeadlineConfig/DeadlineType/IntervalType/Percentage/Value/UniqueCode. Cero apariciones de triggerCount, processingTime, distribution, resource, bpsim.
-  - _Evidencia_: Archivos descargados vía gh api: bpmn-miwg/bpmn-miwg-test-suite 'Bizagi Modeler 2.8.0.8/A.1.0-roundtrip.bpmn'; chenKuer/Umise-Cat_Named_Doggie PRD/Administrator.bpmn (2018); iamlvv/BPE-be static/diagram.bpmn (2023); Wadagraprana/Testing_pm4py Masak.bpmn (2025-11); rrojasda94/provecho-erp docs/diagrams/Procesos/Comercial/PROC-COM-003-v1.0.bpmn (2026-08). Bizagi no escribe atributo exporter/exporterVersion, así que la versión exacta del exportador de cada muestra no es verificable.
+  - _Evidencia_: Archivos descargados vía gh api: bpmn-miwg/bpmn-miwg-test-suite 'Bizagi Modeler 2.8.0.8/A.1.0-roundtrip.bpmn' y cuatro exportaciones Bizagi de repos personales sin archivo LICENSE (2018–2026; se descartaron como fixtures por ese motivo). Bizagi no escribe atributo exporter/exporterVersion, así que la versión exacta del exportador de cada muestra no es verificable.
 - **[verified]** [Persistencia] La declaración de namespace anidada por elemento rompió el round-trip en bpmn-js (guardar tras editar dejaba el archivo inabrible); se corrigió en bpmn-moddle. Es un dato útil: cualquier importador propio debe tolerar xmlns declarados dentro de extensionElements.
   - _Evidencia_: github.com/bpmn-io/bpmn-js/issues/469 (fix en bpmn-io/bpmn-moddle#40).
 - **[likely]** [Persistencia] Bizagi afirma seguir BPSim para su simulación, pero no documenta exportación ni importación de XML BPSim; el intercambio de parámetros de simulación con otras herramientas no existe en la práctica (sólo Excel de resultados).
@@ -143,10 +145,7 @@ Donde Lila puede ganar sin esfuerzo adicional: percentiles, longitud de cola, th
 - https://github.com/bpmn-io/bpmn-js/issues/469
 - https://github.com/bpmn-io/bpmn-moddle/issues/40
 - https://github.com/bpmn-miwg/bpmn-miwg-test-suite/tree/master/Bizagi%20Modeler%202.8.0.8
-- https://github.com/chenKuer/Umise-Cat_Named_Doggie/blob/master/PRD/Administrator.bpmn
-- https://github.com/iamlvv/BPE-be/blob/main/static/diagram.bpmn
-- https://github.com/Wadagraprana/Testing_pm4py/blob/main/Masak.bpmn
-- https://github.com/rrojasda94/provecho-erp/blob/main/docs/diagrams/Procesos/Comercial/PROC-COM-003-v1.0.bpmn
+- (se descartaron repos personales sin archivo LICENSE como fuente de fixtures)
 - https://eprints.lancs.ac.uk/id/eprint/86603/1/article_rr_v6_np.pdf
 - https://adnlean.com/modelado-y-simulacion-en-bizagi-caso-aplicado-en-plantilla-excel/
 - https://www.linkedin.com/pulse/bizagi-modeler-niveles-de-simulaci%C3%B3n-daniel-jara-tralma

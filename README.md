@@ -1,26 +1,29 @@
 # Lila Modeler
 
-Simulador de eventos discretos (DES) para procesos BPMN, open source (Apache-2.0), con paridad de
-funciones con Bizagi Modeler y su simulador de niveles 1–4. El proyecto es un monorepo npm:
+Read this in: [Español](README.es.md)
 
-- **Motor + CLI** (`packages/engine`, paquete `@lila/engine`) — parsea `.bpmn`, valida el modelo y
-  simula un escenario. Sin dependencias en su núcleo (`packages/engine/src/core/`): corre igual en
-  Node, en un Web Worker del navegador o detrás de un servidor MCP.
-- **Servidor MCP** (`packages/mcp`, y el subcomando `lila mcp` del propio CLI) — expone el motor a
-  agentes vía [MCP](https://modelcontextprotocol.io).
-- **App web** (`apps/web`, React + [bpmn-js](https://github.com/bpmn-io/bpmn-js)) — modelar,
-  simular, ver resultados y comparar escenarios desde el navegador.
-- **Beta de escritorio** (`apps/desktop`, Electron, solo macOS arm64) — la misma app web
-  empaquetada, con guardado en carpeta de proyecto.
+An open source (Apache-2.0) discrete-event simulation (DES) engine for BPMN processes, inspired by
+the simulation workflow of tools such as Bizagi Modeler; results are validated against publicly
+documented examples. The project is an npm monorepo:
 
-Los contratos —el IR del proceso, el formato de escenario y el de resultados— están documentados
-en `docs/` antes que el código, y son la parte del proyecto que se mantiene estable.
+- **Engine + CLI** (`packages/engine`, package `@lila/engine`) — parses `.bpmn`, validates the model
+  and simulates a scenario. Its core (`packages/engine/src/core/`) has no dependencies: it runs the
+  same in Node, in a browser Web Worker, or behind an MCP server.
+- **MCP server** (`packages/mcp`, and the CLI's own `lila mcp` subcommand) — exposes the engine to
+  agents via [MCP](https://modelcontextprotocol.io).
+- **Web app** (`apps/web`, React + [bpmn-js](https://github.com/bpmn-io/bpmn-js)) — model, simulate,
+  view results and compare scenarios from the browser.
+- **Desktop beta** (`apps/desktop`, Electron, macOS arm64 only) — the same web app packaged, with
+  saving into a project folder.
 
-## Requisitos
+The contracts — the process IR, the scenario format and the results format — are documented in
+`docs/` before the code, and they are the part of the project that stays stable.
 
-- Node.js **22 o superior** (`engines.node` en `package.json`).
+## Requirements
 
-## Instalar desde el repo
+- Node.js **22 or later** (`engines.node` in `package.json`).
+
+## Install from the repo
 
 ```bash
 git clone git@github.com:AlambritoDito/lila-modeler.git
@@ -29,38 +32,41 @@ npm ci
 npm run build
 ```
 
-`npm run build` compila `packages/engine` y `packages/mcp` (`tsc --build`); es lo que necesitan la
-CLI y el servidor MCP. La app web se compila aparte (ver más abajo).
+`npm run build` compiles `packages/engine` and `packages/mcp` (`tsc --build`); that is what the CLI
+and the MCP server need. The web app is built separately (see below).
 
-## Simular el benchmark en 3 comandos
+## Simulate the benchmark in 3 commands
 
-`examples/pedido` es el benchmark de referencia del repo: un proceso de restaurante con paralelo
-(preparar/empacar), una aprobación y un timer, con dos escenarios ya escritos
-(`as-is.scenario.json` y `to-be-3-cajeros.scenario.json`, este último con un cajero más).
+`examples/pedido` is the repo's reference benchmark: a restaurant process with a parallel branch
+(prepare/pack), an approval and a timer, with two scenarios already written
+(`as-is.scenario.json` and `to-be-3-cajeros.scenario.json`, the latter with one more cashier).
 
-Los comandos usan `npx lila`: tras `npm ci`, `npx` resuelve el binario del propio workspace
-(`node_modules/.bin/lila`, ver `package.json` de `@lila/engine`) sin red ni instalación global —
-no hay paquete `lila` publicado en el registro de npm (ver «Límites conocidos»). Equivalente y
-sin depender de `npx`: `node packages/engine/bin/lila.js <comando>`.
+The commands use `npx lila`: after `npm ci`, `npx` resolves the workspace's own binary
+(`node_modules/.bin/lila`, see the `package.json` of `@lila/engine`) with no network and no global
+install — there is no `lila` package published to the npm registry (see "Known limitations").
+Equivalent, without relying on `npx`: `node packages/engine/bin/lila.js <command>`.
 
-**1. Validar el modelo:**
+The sample outputs below are copied verbatim from the CLI. English is the default; `--lang es`
+(or `LILA_LANG=es`, or a Spanish `LANG`) prints the same run in Spanish.
+
+**1. Validate the model:**
 
 ```bash
 npx lila validate examples/pedido/model.bpmn
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Exportado por Lila Modeler examples (hand-written) 0.0.0
+Process Process_Restaurante (Restaurante)
+Exported by Lila Modeler examples (hand-written) 0.0.0
 
-Nodos (11): and 2, end 2, start 1, task 4, timer 1, xor 1
+Nodes (11): and 2, end 2, start 1, task 4, timer 1, xor 1
   start     StartEvent_Pedido  Pedido recibido
   ...
-aviso  W-MSGFLOW  Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
-0 errores, 1 avisos.
+warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
+0 errors, 1 warnings.
 ```
 
-**2. Simular el escenario AS-IS** (tablas de resultados estilo Bizagi + JSON + CSV):
+**2. Simulate the AS-IS scenario** (Bizagi-style result tables + JSON + CSV):
 
 ```bash
 npx lila run \
@@ -70,28 +76,28 @@ npx lila run \
 ```
 
 ```
-Escenario AS-IS
-Proceso Process_Restaurante (Restaurante)
-Semilla 42 · Replicaciones 3 · Unidad de tiempo min · Moneda MXN
+Scenario AS-IS
+Process Process_Restaurante (Restaurante)
+Seed 42 · Replications 3 · Time unit min · Currency MXN
 
 Process elements
 Id                  Name                Type   Instances started  Instances completed  ...
 StartEvent_Pedido   Pedido recibido     start  2975               2975                 ...
 ...
 
-Cuellos de botella
+Bottlenecks
 Id                Name               Total time (waiting for resource) (min)  Utilization (%)
 Task_Preparar     Preparar alimento  4514389.476272                           34.297909
 Task_TomarPedido  Tomar pedido       698.32272                                41.234838
 
-Avisos:
-  W-MSGFLOW: Process_Restaurante: se ignoraron 2 flujos de mensaje (bpmn:messageFlow).
+Warnings:
+  W-MSGFLOW: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
   ...
-JSON: /ruta/al/repo/out/result.json
-CSV: /ruta/al/repo/out/csv
+JSON: /path/to/repo/out/result.json
+CSV: /path/to/repo/out/csv
 ```
 
-**3. Comparar AS-IS contra TO-BE** (un cajero más) lado a lado:
+**3. Compare AS-IS against TO-BE** (one more cashier) side by side:
 
 ```bash
 npx lila compare \
@@ -101,14 +107,14 @@ npx lila compare \
 ```
 
 ```
-Proceso Process_Restaurante (Restaurante)
-Unidad de tiempo min (escenario base) · Utilización en %
+Process Process_Restaurante (Restaurante)
+Time unit min (base scenario) · Utilization in %
 
-Escenarios comparados
-#  Nombre           Archivo                                        Semilla  Replicaciones
--  ---------------  ---------------------------------------------  -------  -------------
-0  AS-IS (base)     examples/pedido/as-is.scenario.json            42       3
-1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42       3
+Compared scenarios
+#  Name             File                                           Seed  Replications
+-  ---------------  ---------------------------------------------  ----  ------------
+0  AS-IS (base)     examples/pedido/as-is.scenario.json            42    3
+1  TO-BE 3 cajeros  examples/pedido/to-be-3-cajeros.scenario.json  42    3
 
 Process elements
 Id                Name              Metric                               AS-IS (base)  TO-BE 3 cajeros
@@ -117,125 +123,145 @@ Task_TomarPedido  Tomar pedido      Average time (waiting for resource)  0.23456
 ...
 ```
 
-`--json` funciona igual en `run` y en `compare`; `--csv` solo en `run`. `--help` en cualquier
-subcomando lista todas las opciones. El formato de escenario está en
-`docs/SCENARIO_FORMAT.md`, el de resultados en `docs/RESULTS_FORMAT.md`, y el mapeo de nombres
-de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
+`--json` works the same in `run` and in `compare`; `--csv` only in `run`. `--help` on any subcommand
+lists every option, and `--lang en|es` (any position) picks the language of the output.
+Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The scenario format is in `docs/SCENARIO_FORMAT.md`, the results format in
+`docs/RESULTS_FORMAT.md`, and the mapping of column names against Bizagi in
+`docs/BIZAGI_PARITY.md`.
 
-## App web
+## Web app
 
 ```bash
-npm run dev -w @lila/web    # compila el motor si hace falta + arranca Vite en http://localhost:5173
+npm run dev -w @lila/web    # builds the engine if needed + starts Vite on http://localhost:5173
 ```
 
-Arranca con `examples/pedido/model.bpmn` cargado. La barra superior tiene cinco modos:
+It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes (the interface is in
+Spanish today; English is coming in #279):
 
-- **Modelar** — editor bpmn-js: crear, editar y exportar el `.bpmn`.
-- **Simular** — panel de escenario (recursos, calendarios, parámetros por elemento) y botón
-  Simular con progreso y cancelar.
-- **Resultados** — las tablas estilo Bizagi más las extras de Lila (cuellos de botella, costo por
-  caso), con exportación CSV por tabla.
-- **Comparar** — dos o más escenarios ya simulados lado a lado, con marca de significancia (IC95).
-- **Validar rutas** — animación de tokens de `bpmn-js-token-simulation` sobre el diagrama; no es
-  la simulación DES del motor, no lee el escenario ni produce resultados.
+- **Modelar** (model) — bpmn-js editor: create, edit and export the `.bpmn`.
+- **Simular** (simulate) — scenario panel (resource pools, calendars, per-element parameters) and a
+  Simular button with progress and cancel.
+- **Resultados** (results) — the Bizagi-style tables plus Lila's extras (bottlenecks, cost per
+  case), with per-table CSV export.
+- **Comparar** (compare) — two or more already-simulated scenarios side by side, with a
+  significance marker (95% CI).
+- **Validar rutas** (validate paths) — token animation from `bpmn-js-token-simulation` over the
+  diagram; it is not the engine's DES simulation, it does not read the scenario and it produces no
+  results.
 
-Detalle de cada modo, textos literales de la interfaz y limitaciones actuales en
-[`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) (escrito para la beta de escritorio, pero describe
-la misma app web).
+Details of each mode, the literal interface strings and current limitations are in
+[`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) (written for the desktop beta, but it describes the
+same web app).
 
-## Beta de escritorio (macOS)
+## Desktop beta (macOS)
 
-Hay una beta de `apps/desktop` (Electron, **solo macOS arm64, sin firmar ni notarizar**) que
-empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se distribuye dentro del
-repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
-en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
-intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
-como editor de `.bpmn`: doble clic sobre un archivo (o un arranque en frío con él) lo abre en el
-editor; si el archivo no está dentro de una carpeta de proyecto Lila, se guarda solo ese `.bpmn`
-hasta que se use «Guardar como». Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
-dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
-deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
+There is a beta of `apps/desktop` (Electron, **macOS arm64 only, neither signed nor notarized**)
+that packages the web app as a `.dmg` with saving into a project folder. It is not distributed
+inside the repository: you have to build it with `npm run dist:mac -w @lila/desktop`, which leaves
+the installer in `apps/desktop/release/` (a folder in `.gitignore`). Because it is unsigned, macOS
+blocks the first attempt to open it by double-clicking; you have to open it with right-click → Open.
+The app registers itself as a `.bpmn` editor: double-clicking a file (or a cold start with one)
+opens it in the editor; if the file is not inside a Lila project folder, only that `.bpmn` is saved
+until «Guardar como» (Save as) is used. Pushing a `v*` tag
+(`git tag v0.0.1 && git push origin v0.0.1`) triggers the `Desktop` workflow, which builds the three
+installers (`.dmg`, `.exe`, `.AppImage`) and leaves them in a GitHub Release **as a draft**, to be
+published by hand.
 
-Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
-en [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md).
+The full guide — requirements, a usage walkthrough, how to rebuild the `.dmg`, known limitations —
+is in [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md).
 
-## MCP en 3 líneas
+## MCP in 3 lines
 
-`packages/engine` trae el subcomando `lila mcp`, que arranca un servidor MCP por stdio con cinco
-tools sobre el mismo motor (`validate_bpmn`, `describe_process`, `run_simulation`,
-`compare_scenarios`, `patch_scenario`). Para registrarlo en Claude Code:
+`packages/engine` ships the `lila mcp` subcommand, which starts an MCP server over stdio with five
+tools on top of the same engine (`validate_bpmn`, `describe_process`, `run_simulation`,
+`compare_scenarios`, `patch_scenario`). To register it in Claude Code:
 
 ```bash
 claude mcp add lila -- node /ruta/al/repo/packages/engine/bin/lila.js mcp
 ```
 
-El repo trae además un `.mcp.json` de proyecto, así que al abrir Claude Code aquí mismo el
-servidor aparece solo. Detalle de cada tool, cómo probarlo a mano y límites conocidos (sin
-cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md`](docs/MCP.md).
+The repo also ships a project-level `.mcp.json`, so opening Claude Code right here makes the server
+show up on its own. Details of each tool, how to test it by hand and known limits (no cancellation,
+all I/O goes against the disk of the server process) are in [`docs/MCP.md`](docs/MCP.md).
 
-## Límites conocidos
+## Known limitations
 
-- **Perfil BPMN soportado**: start/end (none y terminate), timer, tareas (todas las variantes),
-  call activity, subproceso embebido, XOR/OR/AND, lanes y pools. Lo que queda fuera produce un
-  error de validación explícito, no un fallo silencioso (`docs/SEMANTICS.md` §§1–3).
-- **Publicación en npm**: `@lila/engine` se publica con un tag `vX.Y.Z` sobre `main`
-  (`.github/workflows/release.yml` comprueba que el tag coincida con la versión del paquete,
-  compila, corre los tests y hace `npm publish --provenance`). Hasta el primer tag no hay
-  `npx @lila/engine` fuera del repo; se usa clonando y compilando como arriba.
-- **Sin demo online todavía**: la app web solo corre local (`npm run dev -w @lila/web`) o desde el
-  `.dmg` de la beta de escritorio.
-- **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
-  están configurados en `apps/desktop/electron-builder.yml`, y el workflow `Desktop`
-  (`.github/workflows/desktop.yml`, manual o al empujar a `codex/**`) compila los tres como
-  artefactos de CI, pero no se han probado ni se distribuyen.
+- **Supported BPMN profile**: start/end (none and terminate), timer, tasks (all variants), call
+  activity, embedded subprocess, XOR/OR/AND, lanes and pools. Anything outside it produces an
+  explicit validation error, not a silent failure (`docs/SEMANTICS.md` §§1–3).
+- **Not published to npm yet**: there is no `npx @lila/engine` and no package installable outside
+  the repo; you use it by cloning and building as above.
+- **No online demo yet**: the web app only runs locally (`npm run dev -w @lila/web`) or from the
+  desktop beta's `.dmg`.
+- **Only the macOS arm64 beta (`dmg`) is tested**. Windows (`nsis`) and Linux (`AppImage`) are
+  configured in `apps/desktop/electron-builder.yml`, and the `Desktop` workflow
+  (`.github/workflows/desktop.yml`, manual, on PRs that touch `apps/desktop` or on `v*` tags) builds
+  all three as CI artifacts, but they have not been tested and are not distributed.
 
-## Estructura del repo
+## Repo layout
 
-- `packages/engine` — motor de simulación (`src/core/`, sin dependencias externas) + parser BPMN +
-  CLI (`src/cli.ts`, binario `lila`).
-- `packages/mcp` — servidor MCP (`@lila/mcp`, binario `lila-mcp`), capa fina sobre `@lila/engine`.
-- `apps/web` — editor y viewer en React + bpmn-js.
-- `apps/desktop` — empaquetado Electron de `apps/web`.
-- `docs/` — contratos y guías (ver abajo); `examples/` — modelos y escenarios de ejemplo.
+- `packages/engine` — simulation engine (`src/core/`, no external dependencies) + BPMN parser + CLI
+  (`src/cli.ts`, `lila` binary).
+- `packages/mcp` — MCP server (`@lila/mcp`, `lila-mcp` binary), a thin layer over `@lila/engine`.
+- `apps/web` — editor and viewer in React + bpmn-js.
+- `apps/desktop` — Electron packaging of `apps/web`.
+- `docs/` — contracts and guides (see below); `examples/` — example models and scenarios.
 
-## Documentación
+## Documentation
 
-- [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — perfil BPMN soportado y semántica exacta del motor.
-- [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — formato del escenario JSON.
-- [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — formato del resultado y de los CSV.
-- [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — checklist de paridad con Bizagi por nivel.
-- [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — namespace `lila:` y política de ids.
-- [`docs/MCP.md`](docs/MCP.md) — servidor MCP, sus cinco tools y cómo registrarlo.
-- [`docs/GUIA-BETA-MAC.md`](docs/GUIA-BETA-MAC.md) — beta de escritorio.
-- [`docs/THEMES.md`](docs/THEMES.md) — formato de tema de la app web.
-- `LILA_MODELER_ESTRUCTURA.md` — decisiones (ADR), diseño del motor, hitos.
-- `BACKLOG.md` — desglose del trabajo; los tickets viven en GitHub Issues (`LILA-nnn` = `#nnn`).
+The pages under `docs/` are still written in Spanish; they are being translated in #281.
 
-## Licencia
+- [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — supported BPMN profile and the engine's exact semantics.
+- [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the JSON scenario format.
+- [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — the result format and the CSVs.
+- [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist against Bizagi
+  Modeler's public documentation (validation against public examples), by level.
+- [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
+- [`docs/MCP.md`](docs/MCP.md) — the MCP server, its five tools and how to register it.
+- [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
+- [`docs/THEMES.md`](docs/THEMES.md) — the web app's theme format.
+- `LILA_MODELER_ESTRUCTURA.md` — decisions (ADRs), engine design, milestones.
+- `BACKLOG.md` — work breakdown; the tickets live in GitHub Issues (`LILA-nnn` = `#nnn`).
 
-Apache-2.0. Ver [`LICENSE`](LICENSE).
+## Languages
 
-El editor de la app web usa [bpmn-js](https://github.com/bpmn-io/bpmn-js) (MIT + cláusula de marca
-de agua): su licencia exige que la marca **"Powered by bpmn.io"** quede visible en el lienzo, y
-Lila Modeler la respeta sin ocultarla. El modo "Validar rutas" usa
-[bpmn-js-token-simulation](https://github.com/bpmn-io/bpmn-js-token-simulation) (MIT). La app web
-es React (MIT) y la beta de escritorio empaqueta Electron. El inventario completo de dependencias
-de tiempo de ejecución, con versión y licencia de cada una, está en
+English is the project's base language and Spanish is the first translation. The user-facing text of
+the app, the CLI and the MCP server is being moved to English with Spanish as a translation
+(epic #283). Contributions of new languages will be one file per language.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE). `examples/bizagi-exports/` is CC BY 3.0 from the BPMN MIWG
+(see its README); the rest of the repo is Apache-2.0. Copyright holder: Perfer Process (`NOTICE`).
+
+The web app's editor uses [bpmn-js](https://github.com/bpmn-io/bpmn-js) (MIT + watermark clause):
+its license requires the **"Powered by bpmn.io"** mark to stay visible on the canvas, and Lila
+Modeler honours it without hiding it. The "Validar rutas" mode uses
+[bpmn-js-token-simulation](https://github.com/bpmn-io/bpmn-js-token-simulation) (MIT). The web app
+is React (MIT) and the desktop beta packages Electron. The full inventory of runtime dependencies,
+with the version and license of each one, is in
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
-## Cómo contribuir
+Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is an independent open-source
+project, not affiliated with or endorsed by Bizagi.
 
-Antes de tocar el motor, lee `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` y
-`docs/RESULTS_FORMAT.md`. Reglas del repo (cabecera de `BACKLOG.md`):
+## How to contribute
 
-1. `packages/engine/src/core/` no importa nada fuera de `core/` (ni `bpmn-moddle`, ni `node:*`, ni
-   React).
-2. Ningún ticket/PR cierra sin su prueba de aceptación en verde.
-3. Los nombres de columna de resultados son los de Bizagi (`docs/BIZAGI_PARITY.md`).
-4. Todo tiempo en segundos, dinero en `run.currency`.
-5. El `id` BPMN es la única clave; el nombre nunca desambigua.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide (setup, checks, PR process) and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for the project's code of conduct.
 
-Antes de abrir un PR:
+Before touching the engine, read `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` and
+`docs/RESULTS_FORMAT.md`. Repo rules (header of `BACKLOG.md`):
+
+1. `packages/engine/src/core/` imports nothing from outside `core/` (not `bpmn-moddle`, not
+   `node:*`, not React).
+2. No ticket/PR closes without its acceptance test green.
+3. Result column names follow Bizagi Modeler's public result tables so results can be compared
+   with published examples (`docs/BIZAGI_PARITY.md`).
+4. All times in seconds, money in `run.currency`.
+5. The BPMN `id` is the only key; the name never disambiguates.
+
+Before opening a PR:
 
 ```bash
 npm run typecheck
