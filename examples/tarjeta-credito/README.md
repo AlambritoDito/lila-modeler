@@ -109,6 +109,8 @@ Mean over 30 replications, seed 42, one 8-hour shift:
 | Cases closed (any end event) | 45.7 | 68.5 |
 | In process at 16:00 | 34.8 | 11.9 |
 | Average cycle time | 110.5 min | 57.8 min |
+| Cycle time of delivered cards (`byEndEvent.End_CardDelivered`) | 171.7 min | 93.9 min |
+| Delivered within 30 min (`run.serviceLevel: 1800`) | 0 % | 0 % |
 | Account Executive utilization | 45.7 % | 50.7 % |
 | Credit Analyst utilization | **95.4 %** | 83.1 % |
 | Production Operator utilization | 29.5 % | 55.8 % |
@@ -119,8 +121,9 @@ Mean over 30 replications, seed 42, one 8-hour shift:
 Reading it: with two analysts the store loses more than a third of its applicants to the clock —
 almost 35 of 80 applications are still open when the store closes, and only 14 cards leave the
 building. The third analyst nearly doubles the cards delivered (26.2), cuts the cycle time in half
-and moves the pressure downstream: the single production operator jumps from 29.5 % to 55.8 %
-utilization and becomes the next constraint to watch.
+and moves the pressure downstream; the 30-minute delivery promise is still not met in either
+scenario, because the analyst path alone carries 27 minutes of work per approved card. The single
+production operator jumps from 29.5 % to 55.8 % utilization and becomes the next constraint to watch.
 
 A note on the saturation warning: the analyst is saturated in the analytic sense (ρ ≈ 1.39), but the
 run does **not** emit `W-RECURSO-SATURADO`. That check compares the queue attributed to a full pool

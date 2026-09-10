@@ -207,6 +207,14 @@ describe('examples/tarjeta-credito', () => {
 
       // El analista es el cuello de botella del AS-IS: rho analítico 1,39 con dos analistas.
       expect(asIs.resources['analyst']!.utilization).toBeGreaterThan(0.9);
+      // Question 5: the 30-minute promise (`run.serviceLevel: 1800`, #316) is measured on delivered
+      // cards only; it is not met in either scenario (analyst path alone takes 27 min of work).
+      for (const result of [asIs, toBe]) {
+        const delivered = result.process.byEndEvent['End_CardDelivered']!;
+        expect(delivered.completed).toBe(result.elements['End_CardDelivered']!.completed);
+        expect(delivered.withinServiceLevel).toBeLessThan(0.05);
+        expect(delivered.cycleTime.mean).toBeGreaterThan(1800);
+      }
       expect(asIs.bottlenecks[0]!.elementId).toBe('Task_CheckBureau');
 
       // Tres analistas: menos espera, menos casos abiertos al cierre y ninguna alerta de pool

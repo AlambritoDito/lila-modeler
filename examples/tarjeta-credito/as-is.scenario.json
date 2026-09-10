@@ -10,6 +10,7 @@
     "warmup": 0,
     "replications": 30,
     "seed": 42,
+    "serviceLevel": 1800,
     "baseTimeUnit": "min",
     "currency": "MXN"
   },
