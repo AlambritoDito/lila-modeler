@@ -16,7 +16,8 @@
     "build": "tsc --build",
     "typecheck": "tsc --build --force && tsc --project packages/engine/bench/tsconfig.json && npm run typecheck --workspace @lila/web",
     "golden:update": "npm run golden:update --workspace @lila/engine",
-    "bench": "tsx packages/engine/bench/linear-100k.ts"
+    "bench": "tsx packages/engine/bench/linear-100k.ts",
+    "test:package": "node tools/check-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

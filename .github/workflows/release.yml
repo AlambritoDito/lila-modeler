@@ -33,6 +33,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run typecheck
+      - run: npm run test:package
       - run: npm pack --workspace @lila/engine --dry-run
       - run: npm publish --workspace @lila/engine --provenance --access public
         env:

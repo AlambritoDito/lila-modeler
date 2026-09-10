@@ -3,9 +3,13 @@ Copyright 2026 Perfer Process
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-This product includes third-party software listed in THIRD_PARTY_LICENSES.md.
-The files under examples/bizagi-exports/ come from the BPMN MIWG test suite and are
-licensed under CC BY 3.0 (see examples/bizagi-exports/README.md).
+Runtime dependencies are installed separately by npm and retain their own license files.
+The wider project dependency inventory is available at:
+https://github.com/AlambritoDito/lila-modeler/blob/main/THIRD_PARTY_LICENSES.md
+
+The repository examples/bizagi-exports/ fixtures (not included in this package) come
+from the BPMN MIWG test suite under CC BY 3.0. Their provenance is documented at:
+https://github.com/AlambritoDito/lila-modeler/blob/main/examples/bizagi-exports/README.md
 
 Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is an independent open-source
 project, not affiliated with or endorsed by Bizagi.

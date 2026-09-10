@@ -32,3 +32,11 @@ See the [scenario format](https://github.com/AlambritoDito/lila-modeler/blob/mai
 ## License
 
 Apache-2.0. See LICENSE and NOTICE for terms and attribution. Product names and logos are not covered by the license grant.
+
+## Validate the unpublished package
+
+From a repository checkout, run `npm ci`, `npm run build`, and `npm run test:package`.
+The last command packs and installs the actual archive in a temporary directory outside the
+workspace. It checks every runtime export, the JSON descriptor, TypeScript Node16 and bundler
+resolution, English/Spanish CLI commands, and byte-identical simulation results against the
+checkout. It does not publish anything; it retains the temporary directory for inspection.
