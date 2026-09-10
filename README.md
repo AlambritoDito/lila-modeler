@@ -131,21 +131,32 @@ Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The s
 
 ## Web app
 
+**Prepared demo address**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/).
+Publication is pending owner activation. The demo opens the restaurant example in English.
+**Save project** downloads a project file and retains a browser copy to restore on reload.
+Unsaved edits are not automatically persisted; nothing is uploaded. If browser storage is
+unavailable or full, use the downloaded file to reopen your work.
+
+Build the complete preview with `npm run build:pages`. See [Pages setup](docs/PAGES.md) for
+local preview and the separately controlled first deployment.
+
+To run it locally instead:
+
 ```bash
 npm run dev -w @lila/web    # builds the engine if needed + starts Vite on http://localhost:5173
 ```
 
-It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes (the interface is in
-Spanish today; English is coming in #279):
+It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes. English is the base language; select Spanish or automatic system
+language in Settings:
 
-- **Modelar** (model) — bpmn-js editor: create, edit and export the `.bpmn`.
-- **Simular** (simulate) — scenario panel (resource pools, calendars, per-element parameters) and a
-  Simular button with progress and cancel.
-- **Resultados** (results) — the Bizagi-style tables plus Lila's extras (bottlenecks, cost per
+- **Model** — bpmn-js editor: create, edit and export the `.bpmn`.
+- **Simulate** — scenario panel (resource pools, calendars, per-element parameters) and a
+  Simulate button with progress and cancel.
+- **Results** — the Bizagi-style tables plus Lila's extras (bottlenecks, cost per
   case), with per-table CSV export.
-- **Comparar** (compare) — two or more already-simulated scenarios side by side, with a
+- **Compare** — two or more already-simulated scenarios side by side, with a
   significance marker (95% CI).
-- **Validar rutas** (validate paths) — token animation from `bpmn-js-token-simulation` over the
+- **Validate routes** (validate paths) — token animation from `bpmn-js-token-simulation` over the
   diagram; it is not the engine's DES simulation, it does not read the scenario and it produces no
   results.
 
@@ -191,8 +202,6 @@ all I/O goes against the disk of the server process) are in [`docs/MCP.md`](docs
   explicit validation error, not a silent failure (`docs/SEMANTICS.md` §§1–3).
 - **Not published to npm yet**: there is no `npx @lila/engine` and no package installable outside
   the repo; you use it by cloning and building as above.
-- **No online demo yet**: the web app only runs locally (`npm run dev -w @lila/web`) or from the
-  desktop beta's `.dmg`.
 - **Only the macOS arm64 beta (`dmg`) is tested**. Windows (`nsis`) and Linux (`AppImage`) are
   configured in `apps/desktop/electron-builder.yml`, and the `Desktop` workflow
   (`.github/workflows/desktop.yml`, manual, on PRs that touch `apps/desktop` or on `v*` tags) builds
@@ -209,7 +218,7 @@ all I/O goes against the disk of the server process) are in [`docs/MCP.md`](docs
 
 ## Documentation
 
-The pages under `docs/` are still written in Spanish; they are being translated in #281.
+Public contracts and guides are in English, with linked Spanish versions under `docs/es/`.
 
 - [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — supported BPMN profile and the engine's exact semantics.
 - [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the JSON scenario format.
@@ -226,7 +235,7 @@ The pages under `docs/` are still written in Spanish; they are being translated 
 ## Languages
 
 English is the project's base language and Spanish is the first translation. The user-facing text of
-the app, the CLI and the MCP server is being moved to English with Spanish as a translation
+the app, the CLI and the MCP server uses English as the base and Spanish as a translation
 (epic #283). Contributions of new languages will be one file per language.
 
 ## License

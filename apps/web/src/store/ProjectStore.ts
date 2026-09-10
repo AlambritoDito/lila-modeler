@@ -84,6 +84,8 @@ export interface ProjectSessionStore extends ProjectStore {
   createProject(document: ProjectDocument): Promise<ProjectDocument | null>;
   openProject(): Promise<ProjectDocument | null>;
   saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
+  /** Browser-only: last explicitly saved project, restored on startup without a file picker. */
+  restoreSession?(): ProjectDocument | null;
   setDirty?(dirty: boolean): void;
   onSaveRequested?(save: () => Promise<boolean>): () => void;
   /**

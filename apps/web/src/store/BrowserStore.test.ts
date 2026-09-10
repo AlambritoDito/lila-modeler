@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 /**
- * Aceptación de LILA-058: «la demo abre y descarga archivos». `BrowserStore` no persiste nada,
- * así que lo único que hay que verificar es que habla con el DOM como se espera: `getProcess`
- * dispara un `<input type=file>` real y resuelve con lo que el usuario elige; `put*` crean un
- * Blob y hacen clic en un `<a download>`. `jsdom` es la única dependencia nueva de este ticket
- * — `apps/web` no la traía porque LILA-057 no montaba el DOM en sus tests (ver
- * `exportar.test.ts`); aquí sí hace falta.
+ * Aceptación de LILA-058: «la demo abre y descarga archivos». Lo que hay que verificar es que
+ * `BrowserStore` habla con el DOM como se espera: `getProcess` dispara un `<input type=file>`
+ * real y resuelve con lo que el usuario elige; `put*` crean un Blob y hacen clic en un
+ * `<a download>`. `jsdom` es la única dependencia nueva de este ticket — `apps/web` no la traía
+ * porque LILA-057 no montaba el DOM en sus tests (ver `exportar.test.ts`); aquí sí hace falta.
+ *
+ * LILA-067 adds the `localStorage` mirror, and the last block below covers the three cases that
+ * decide whether the public demo is trustworthy: the session comes back in a new instance (a
+ * reload), corrupt stored content falls back to the seed instead of breaking the boot, and a
+ * full quota leaves the store working in memory.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BrowserStore } from './BrowserStore';
@@ -20,6 +24,12 @@ function elegirArchivo(file: File): void {
 }
 
 describe('BrowserStore', () => {
+  // Cada caso arranca sin sesión guardada: desde LILA-067 el store escribe en `localStorage`, y
+  // sin esto lo que persiste un test lo hereda el siguiente al construir su propio store.
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   afterEach(() => {
     document.body.innerHTML = '';
   });
@@ -152,6 +162,105 @@ describe('BrowserStore', () => {
 
       await expect(store.putRun('pedido', 'as-is', resultado)).resolves.toBeUndefined();
       expect(URL.createObjectURL).toHaveBeenCalled();
+    });
+  });
+
+  // El espejo en `localStorage` (LILA-067): lo que hace que la demo publicada en GitHub Pages
+  // aguante un F5. Las descargas siguen ocurriendo en todos estos casos, así que hace falta el
+  // mismo doblaje de `URL` y del clic que en el bloque anterior.
+  describe('persistencia en localStorage', () => {
+    it('restores the exact saved project rather than the seed collections', async () => {
+      const store = new BrowserStore();
+      const doc = { version: 1 as const, id: 'custom', name: 'Saved project',
+        model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 4 },
+        scenarios: { 'draft.json': { version: 1, name: 'Draft', run: { duration: -1 } } },
+        scenarioRevisions: { 'draft.json': 2 }, runs: [] };
+      await store.saveProject(doc);
+      expect(new BrowserStore().restoreSession()).toEqual(doc);
+      doc.name = 'Later unsaved edit';
+      expect(store.restoreSession()?.name).toBe('Saved project');
+    });
+
+    const SEMILLA = new Map([['pedido', { xml: '<viejo/>', name: 'model.bpmn' }]]);
+    const ESCENARIO = { version: 1, name: 'as-is', model: 'model.bpmn', run: {} } as never;
+
+    beforeEach(() => {
+      vi.stubGlobal('URL', {
+        ...URL,
+        createObjectURL: vi.fn(() => 'blob:mock'),
+        revokeObjectURL: vi.fn(),
+      });
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('una instancia nueva recupera procesos y escenarios de la sesión anterior', async () => {
+      const store = new BrowserStore(SEMILLA);
+      await store.putProcess('pedido', '<nuevo/>');
+      await store.putScenario('pedido', 'as-is', ESCENARIO);
+
+      // Lo que ve el navegador al recargar: mismo `main.tsx`, misma semilla, otro objeto.
+      const recargado = new BrowserStore(SEMILLA);
+
+      await expect(recargado.getProcess('pedido')).resolves.toEqual({
+        xml: '<nuevo/>',
+        name: 'model.bpmn',
+      });
+      await expect(recargado.listScenarios('pedido')).resolves.toEqual(['as-is']);
+    });
+
+    it('la semilla sigue disponible para los ids que la sesión guardada no cubre', async () => {
+      const store = new BrowserStore();
+      await store.putScenario('otro', 'as-is', ESCENARIO);
+
+      // La sesión guardada no tiene ni un proceso: si pisara a la semilla en vez de escribirse
+      // encima, quien guardó un escenario antes de tocar el modelo se quedaría sin el ejemplo.
+      await expect(new BrowserStore(SEMILLA).listProcesses()).resolves.toEqual([
+        { id: 'pedido', name: 'model.bpmn' },
+      ]);
+    });
+
+    it.each([
+      ['JSON roto', '{esto no es json'],
+      ['forma inesperada', '{"processes":42,"scenarios":{},"runs":{}}'],
+    ])('arranca con la semilla si lo guardado no sirve (%s)', async (_caso, guardado) => {
+      localStorage.setItem('lila.project.v1', guardado);
+      const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const store = new BrowserStore(SEMILLA);
+
+      await expect(store.getProcess('pedido')).resolves.toEqual({
+        xml: '<viejo/>',
+        name: 'model.bpmn',
+      });
+      expect(aviso).toHaveBeenCalledTimes(1);
+      // Y la clave rota se retira: el siguiente guardado escribe sobre terreno limpio y el
+      // aviso no vuelve en cada recarga.
+      expect(localStorage.getItem('lila.project.v1')).toBeNull();
+    });
+
+    it('sigue funcionando en memoria si `setItem` se queda sin cuota', async () => {
+      const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('cuota agotada', 'QuotaExceededError');
+      });
+      const store = new BrowserStore(SEMILLA);
+
+      await store.putProcess('pedido', '<nuevo/>');
+      await store.putScenario('pedido', 'as-is', ESCENARIO);
+
+      // Ni la excepción sale del store ni se pierde nada de lo que la pestaña ya tenía.
+      await expect(store.getProcess('pedido')).resolves.toEqual({
+        xml: '<nuevo/>',
+        name: 'model.bpmn',
+      });
+      await expect(store.listScenarios('pedido')).resolves.toEqual(['as-is']);
+      // Dos escrituras fallidas, un solo aviso: el problema se ve en la consola sin inundarla.
+      expect(aviso).toHaveBeenCalledTimes(1);
     });
   });
 });
