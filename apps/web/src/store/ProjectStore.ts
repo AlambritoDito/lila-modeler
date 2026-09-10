@@ -15,6 +15,7 @@
  * `docs/RESULTS_FORMAT.md`. Ningún método aquí es especulativo: son exactamente los seis que
  * pide el ticket, ni uno más.
  */
+import type { SaveOutcome } from '../../../desktop/src/bridge.js';
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
 
@@ -87,7 +88,7 @@ export interface ProjectSessionStore extends ProjectStore {
   /** Browser-only: last explicitly saved project, restored on startup without a file picker. */
   restoreSession?(): ProjectDocument | null;
   setDirty?(dirty: boolean): void;
-  onSaveRequested?(save: () => Promise<boolean>): () => void;
+  onSaveRequested?(save: () => Promise<SaveOutcome>): () => void;
   /**
    * Reabre un proyecto reciente sin diálogo; `null` si ya no existe. Solo `DesktopStore`.
    * `file` es el `.bpmn` a abrir como modelo cuando no es el `model.bpmn` del proyecto (LILA-072).

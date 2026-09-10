@@ -1,3 +1,4 @@
+import type { SaveOutcome } from '../../desktop/src/bridge.js';
 // @vitest-environment jsdom
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -726,6 +727,7 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
 
 it.each([
   ['escenario editado', 'escenario', T.app.sinGuardar],
+  ['corrida sin guardar', 'corrida', T.app.sinGuardar],
   ['solo el XML editado', 'modelo', T.app.guardado],
 ] as const)('diagrama suelto, %s: guardar solo limpia el indicador de lo escrito (LILA-208)', async (_caso, que, esperado) => {
   // Un guardado normal en modo suelto escribe SOLO el `.bpmn`: el escenario editado sigue sin
@@ -733,16 +735,17 @@ it.each([
   // sale del mismo token).
   const suelto = { ...proyecto('p13', 'Suelto'), loose: true };
   (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
-  let pedirGuardado!: () => Promise<boolean>;
+  let pedirGuardado!: () => Promise<SaveOutcome>;
   (session as unknown as { onSaveRequested: unknown }).onSaveRequested =
-    (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; };
+    (cb: () => Promise<SaveOutcome>) => { pedirGuardado = cb; return () => {}; };
   const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
   await remontar();
   expect(container.textContent).toContain(T.app.guardado);
 
   // El `onCambio` del panel de escenario solo existe con su pestaña montada.
   await click(T.app.pestanas.simulacion);
-  await act(async () => { if (que === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
+  if (que === 'corrida') await click(T.app.ejecutar);
+  else await act(async () => { if (que === 'modelo') mocks.changed(); else mocks.scenarioChange(); });
   expect(container.textContent).toContain(T.app.sinGuardar);
   await act(async () => { puente.menu('guardar'); });
   expect(session.saveProject).toHaveBeenCalledWith(expect.anything(), { saveAs: false });
@@ -752,9 +755,9 @@ it.each([
   // La guardia de cierre (`onSaveRequested` → `closeGuard`) sale del MISMO token: con el escenario
   // todavía sin escribir, «Guardar» en el diálogo nativo devuelve `false` y la ventana no se
   // cierra, en vez de irse llevándose el escenario editado (QA de LILA-208).
-  let cerrar: boolean | null = null;
+  let cerrar: SaveOutcome | null = null;
   await act(async () => { cerrar = await pedirGuardado(); });
-  expect(cerrar).toBe(esperado === T.app.guardado);
+  expect(cerrar).toBe(esperado === T.app.guardado ? 'saved' : 'diagram-only');
 });
 
 it('una ruta que llega con el lienzo aún no listo se abre en cuanto lo está', async () => {
@@ -1096,17 +1099,17 @@ it('con pérdida, guardar pide la misma confirmación: cancelar no escribe nada 
 // diálogo se ve —la ventana sigue abierta—, y cancelar devuelve `false`, que `closeGuard` lee
 // como «no se guardó» y le hace cancelar el cierre: nada se escribe y nada se queda colgado.
 it.each([
-  [T.app.cancelar, false, 0],
-  [T.app.perdidaConfirmar(T.app.perdidaVerbo.guardar), true, 1],
+  [T.app.cancelar, 'cancelled', 0],
+  [T.app.perdidaConfirmar(T.app.perdidaVerbo.guardar), 'saved', 1],
 ] as const)('cerrar con pérdida espera el diálogo; «%s» devuelve %s al puente', async (accion, esperado, guardados) => {
-  let pedirGuardado!: () => Promise<boolean>;
+  let pedirGuardado!: () => Promise<SaveOutcome>;
   await act(async () => root.unmount());
-  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<SaveOutcome>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
   root = createRoot(container);
   await act(async () => root.render(<App store={conCierre} />));
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
 
-  let resultado: boolean | 'pendiente' = 'pendiente';
+  let resultado: SaveOutcome | 'pendiente' = 'pendiente';
   await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
   expect(dialogoPerdida()).not.toBeNull();
   expect(resultado).toBe('pendiente');
@@ -1120,17 +1123,17 @@ it.each([
 // QA de #258 (ronda 2): Escape dispara el `cancel` nativo del `<dialog>`; si no resolviera la
 // espera, el cierre de Electron se quedaría 30 s colgado antes de cancelarse. Resuelve «cancelar».
 it('Escape en el diálogo de pérdida resuelve la espera con «cancelar» y no escribe nada', async () => {
-  let pedirGuardado!: () => Promise<boolean>;
+  let pedirGuardado!: () => Promise<SaveOutcome>;
   await act(async () => root.unmount());
-  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<boolean>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
+  const conCierre = { ...session, onSaveRequested: (cb: () => Promise<SaveOutcome>) => { pedirGuardado = cb; return () => {}; } } as unknown as ProjectSessionStore;
   root = createRoot(container);
   await act(async () => root.render(<App store={conCierre} />));
   await act(async () => { mocks.publicarEstado(ESTADO_CON_PERDIDA); });
 
-  let resultado: boolean | 'pendiente' = 'pendiente';
+  let resultado: SaveOutcome | 'pendiente' = 'pendiente';
   await act(async () => { void pedirGuardado().then((r) => { resultado = r; }); });
   await act(async () => { dialogoPerdida()!.dispatchEvent(new Event('cancel', { cancelable: true })); });
-  expect(resultado).toBe(false);
+  expect(resultado).toBe('cancelled');
   expect(dialogoPerdida()).toBeNull();
   expect(session.saveProject).not.toHaveBeenCalled();
 });
@@ -1169,4 +1172,18 @@ it('restores the saved browser project after the canvas becomes ready', async ()
   await remontar();
   expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
   expect(container.textContent).toContain('Restored project');
+});
+
+it.each(['cancelled', 'failed'] as const)('close-time save distinguishes %s from a partial save', async (outcome) => {
+  let requestSave!: () => Promise<SaveOutcome>;
+  (session as unknown as { onSaveRequested: unknown }).onSaveRequested =
+    (cb: () => Promise<SaveOutcome>) => { requestSave = cb; return () => {}; };
+  await remontar();
+  await act(async () => { mocks.changed(); });
+  if (outcome === 'cancelled') vi.mocked(session.saveProject).mockResolvedValueOnce(null);
+  else vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('Disk write failed'));
+  let result: SaveOutcome | undefined;
+  await act(async () => { result = await requestSave(); });
+  expect(result).toBe(outcome);
+  expect(container.textContent).toContain(T.app.sinGuardar);
 });

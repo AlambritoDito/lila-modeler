@@ -152,8 +152,10 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 - The top bar shows `<project name> · Sin guardar` (Unsaved) or `· Guardado` (Saved) depending on
   whether there are pending changes (`apps/web/src/App.tsx`).
 - **Closing with unsaved changes**: the window (red button, Cmd+Q, or closing it from the Dock)
-  shows the system's native dialog with **Save / Discard / Cancel**. **Save** waits up to 30 s for the app's response before closing; if it fails or
-  never arrives, a warning is shown and the window does not close. Closing the last window also
+  shows the system's native dialog with **Save / Discard / Cancel**. **Save** waits up to 30 s for the app's response before closing; a cancelled save keeps the window open without an error. If saving fails or the response
+  never arrives, an error is shown and the window does not close. A loose diagram saved with
+  pending scenarios or runs shows an informational message explaining that **Save as…** is
+  required to save the complete project. Closing the last window also
   quits the app on Mac; on reopening, use **Open project** to get the saved folder
   back.
 - **What files a project folder holds**: `model.bpmn` (the diagram), one `<name>.scenario.json`
