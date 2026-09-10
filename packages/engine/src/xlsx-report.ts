@@ -36,14 +36,6 @@ export function resourceNamesOf(scenario: ResolvedScenario): Record<string, stri
   );
 }
 
-/**
- * Per-outcome counts, added to `process` by a parallel workstream. Read defensively — the Summary
- * sheet simply skips the section while the field does not exist.
- */
-interface WithOutcomes {
-  byEndEvent?: Readonly<Record<string, number>> | undefined;
-}
-
 /* ------------------------------------------------------------------ *
  * Payroll: what the pools cost for the whole run, used or not
  * ------------------------------------------------------------------ */
@@ -141,16 +133,14 @@ export function summarySheet(
     rows.push([C.xlsxSectionProcess(), '', '', columnLabel('process', metric), values[index] ?? null]);
   });
 
-  const byEndEvent = (result.process as WithOutcomes).byEndEvent;
-  if (byEndEvent !== undefined) {
-    for (const [id, count] of Object.entries(byEndEvent)) {
-      rows.push([
-        C.xlsxSectionOutcomes(),
-        id,
-        ir.nodes[id]?.name ?? '',
-        columnLabel('process', 'completed'),
-        count,
-      ]);
+  // Per-outcome block (#316): completed cases, mean cycle time and, with `run.serviceLevel`, the
+  // fraction met, one row per metric like the process block above.
+  for (const [id, outcome] of Object.entries(result.process.byEndEvent ?? {})) {
+    const name = ir.nodes[id]?.name ?? '';
+    rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'completed'), outcome.completed]);
+    rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'cycleTime.mean'), outcome.cycleTime.mean]);
+    if (outcome.withinServiceLevel !== undefined) {
+      rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'withinServiceLevel'), outcome.withinServiceLevel]);
     }
   }
 
