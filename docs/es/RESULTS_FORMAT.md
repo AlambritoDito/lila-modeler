@@ -502,3 +502,47 @@ cuyo cuello de botella es el pool `horno` con `capacity 1`, que el TO-BE no toca
 > da 14,97 s → 2,18 s, IC [14,57; 15,37] y [2,09; 2,27]: sigue siendo significativa y
 > `Task_Preparar` sigue sin serlo. La conclusión no cambia; los decimales sí.
 > *(prueba: LILA-041, QA)*
+
+---
+
+## 12. Exportación XLSX *(issue #80)*
+
+`lila run --xlsx libro.xlsx`, `lila compare --xlsx libro.xlsx` y los botones "Exportar XLSX" de la
+app web escriben una hoja de cálculo con los mismos números que el CSV. Es un OOXML escrito a mano
+sobre `fflate` (`packages/engine/src/xlsx.ts`): cadenas inline, celdas numéricas, sin tabla de
+cadenas compartidas y sin más estilos que el de por defecto, que es el subconjunto que leen Excel,
+LibreOffice, Numbers, pandas y openpyxl. Los bytes son deterministas —las entradas del zip llevan
+una marca de tiempo fija—, así que dos exportaciones de la misma corrida son idénticas.
+
+Las tablas salen de **los mismos constructores de filas** que el CSV (`elementsRows`, `flowsRows`,
+`resourcesRows`, `processRows` en `packages/engine/src/csv.ts`), de modo que las dos exportaciones
+no pueden divergir; los nombres de columna son el mapa de la sección 10, sin traducir. Solo los
+nombres de las hojas y las etiquetas de las hojas que el libro añade salen del catálogo de mensajes
+(`Summary`/`Resumen`, …).
+
+### `run --xlsx`: cinco hojas
+
+| Hoja | Columnas | Contenido |
+|---|---|---|
+| `Resumen` | Sección, Id, Name, Metric, Valor | las métricas de `process` de la sección 5, una por fila; los casos completados por evento de fin cuando existe `process.byEndEvent`; y, por cada pool declarado, `Capacidad`, `Horas laborables` y `Costo de nómina`, más el total |
+| `Elementos` | las de `elements.csv` | filas idénticas a `elements.csv` |
+| `Flujos` | las de `flows.csv` | filas idénticas a `flows.csv` |
+| `Recursos` | las de `resources.csv` | filas idénticas a `resources.csv` |
+| `Parámetros` | Sección, Id, Name, Parámetro, Valor | el escenario **resuelto** que corrió: run (start, duration, warmup, replications, seed, unidad de tiempo, moneda), calendarios, recursos, llegadas, tiempos de tarea y probabilidades de compuerta |
+
+`Costo de nómina` es `capacity × costPerHour × las horas abiertas de la corrida` según el
+calendario del pool: lo que cuesta la plantilla esté ocupada o no. **No** es
+`resources[id].unitCost` (sección 4), que solo cobra las horas realmente ocupadas; el libro lleva
+las dos lecturas. Sin `run.duration` las horas no se conocen y esas celdas quedan vacías.
+
+El event log **no** es una hoja: una corrida de millones de filas supera las 1 048 576 filas que
+admite una hoja. `--csv` lo sigue escribiendo en streaming (sección 7).
+
+### `compare --xlsx`: una hoja por escenario más `Comparación`
+
+Cada escenario tiene su propia hoja `Resumen`, con el nombre del escenario (saneado, recortado a 31
+caracteres y hecho único). La hoja `Comparación` lleva una fila por KPI de `compare()` (sección 11)
+con `Kpi`, `Scope`, `Id`, `Name`, `Metric` y, por escenario, su valor y los dos extremos de su
+IC 95 %; cada escenario no base añade el delta absoluto, el delta relativo y si su intervalo
+**se solapa** con el de la base — un `false` ahí es lo que la CLI imprime como `*`. Sin
+replicaciones no hay intervalo y la celda queda vacía, nunca en `false`.

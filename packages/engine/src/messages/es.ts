@@ -36,9 +36,9 @@ const TIPOS_NODO: Record<string, string> = {
 
 const ES_USAGE = `Uso: lila validate <archivo.bpmn> [--json]
      lila run <modelo.bpmn> <escenario.json> [--seed n] [--replications n]
-              [--json resultado.json] [--csv directorio]
+              [--json resultado.json] [--csv directorio] [--xlsx libro.xlsx]
      lila compare <modelo.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                  [--json resultado.json] [--all]
+                  [--json resultado.json] [--xlsx libro.xlsx] [--all]
      lila mcp
 
 Comandos:
@@ -56,11 +56,15 @@ Opciones de run:
   --json archivo    Escribe el RunResult determinista como JSON.
   --csv directorio  Escribe elements, flows, resources, process y log como CSV RFC 4180.
                     log.csv se escribe en streaming y lleva timestamps ISO desde run.start.
+  --xlsx archivo    Escribe un libro .xlsx con las hojas Resumen, Elementos, Flujos,
+                    Recursos y Parámetros. El event log solo está en --csv.
 
 Opciones de compare:
   --seed n          Sobrescribe run.seed en todos los escenarios comparados.
   --replications n  Sobrescribe run.replications en todos los escenarios comparados.
   --json archivo    Escribe el CompareResult determinista como JSON.
+  --xlsx archivo    Escribe un libro .xlsx con una hoja Resumen por escenario y una hoja
+                    Comparación (valor, IC95, delta y solape del IC por KPI).
   --all             Imprime todos los KPI de compare(), no solo el subconjunto curado.
                     El primer escenario listado es la base: los demás se comparan contra él.
 
@@ -215,6 +219,33 @@ export const es: Catalog = {
     columnReplications: () => 'Replicaciones',
     baseColumn: (name) => `${name} (base)`,
     significantMark: () => '* diferencia significativa (IC95 sin solapamiento)',
+
+    xlsxSheetSummary: () => 'Resumen',
+    xlsxSheetElements: () => 'Elementos',
+    xlsxSheetFlows: () => 'Flujos',
+    xlsxSheetResources: () => 'Recursos',
+    xlsxSheetParameters: () => 'Parámetros',
+    xlsxSheetComparison: () => 'Comparación',
+    xlsxColumnSection: () => 'Sección',
+    xlsxColumnParameter: () => 'Parámetro',
+    xlsxColumnValue: () => 'Valor',
+    xlsxSectionProcess: () => 'Proceso',
+    xlsxSectionOutcomes: () => 'Finales',
+    xlsxSectionPayroll: () => 'Nómina',
+    xlsxSectionRun: () => 'Corrida',
+    xlsxSectionArrivals: () => 'Llegadas',
+    xlsxSectionTasks: () => 'Tareas',
+    xlsxSectionGateways: () => 'Compuertas',
+    xlsxSectionCalendars: () => 'Calendarios',
+    xlsxCapacity: () => 'Capacidad',
+    xlsxWorkingHours: () => 'Horas laborables',
+    xlsxPayrollCost: () => 'Costo de nómina',
+    xlsxTotal: () => 'Total',
+    xlsxDelta: (escenario) => `Delta ${escenario}`,
+    xlsxDeltaRelative: (escenario) => `Delta % ${escenario}`,
+    xlsxCi95Low: (escenario) => `IC95 inferior ${escenario}`,
+    xlsxCi95High: (escenario) => `IC95 superior ${escenario}`,
+    xlsxOverlap: (escenario) => `Solape IC95 ${escenario}`,
 
     mixedTimeUnit: (unit, others) =>
       `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +

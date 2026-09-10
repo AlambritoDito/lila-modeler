@@ -4,7 +4,7 @@ import type { ProcessIR } from './core/ir.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import { columnLabel, type ResultScope } from './format.js';
 
-type CsvValue = string | number | null | undefined;
+export type CsvValue = string | number | null | undefined;
 
 function cell(value: CsvValue): string {
   if (value === null || value === undefined) return '';
@@ -76,7 +76,21 @@ function labels(scope: ResultScope, metrics: readonly string[]): string[] {
   return metrics.map((metric) => columnLabel(scope, metric));
 }
 
-export function elementsCsv(ir: ProcessIR, result: RunResult): string {
+/**
+ * Una tabla de resultados antes de serializarse: los mismos encabezados y las mismas filas que
+ * escribe el CSV, sin escapado ni CRLF.
+ *
+ * Existe para que el CSV (`toCsv`) y el XLSX (`src/xlsx-report.ts`, issue #80) consuman **la misma**
+ * construcción de filas: si el exportador de hoja de cálculo volviera a leer `RunResult` por su
+ * cuenta, las dos salidas divergirían en cuanto cambiara una columna. Los constructores son puros
+ * y no dependen de `node:*`, así que la web los usa igual.
+ */
+export interface ResultTable {
+  headers: readonly string[];
+  rows: readonly (readonly CsvValue[])[];
+}
+
+export function elementsRows(ir: ProcessIR, result: RunResult): ResultTable {
   const headers = ['Id', 'Name', 'Type', ...labels('elements', ELEMENT_COLUMNS)];
   const rows = Object.entries(result.elements).map(([id, metrics]) => {
     const node = ir.nodes[id];
@@ -98,22 +112,22 @@ export function elementsCsv(ir: ProcessIR, result: RunResult): string {
       metrics.fixedCostTotal,
     ];
   });
-  return toCsv(headers, rows);
+  return { headers, rows };
 }
 
-export function flowsCsv(ir: ProcessIR, result: RunResult): string {
+export function flowsRows(ir: ProcessIR, result: RunResult): ResultTable {
   const headers = ['Id', 'Name', 'From', 'To', columnLabel('flows', 'count')];
   const rows = Object.entries(result.flows).map(([id, metrics]) => {
     const flow = ir.flows[id];
     return [id, flow?.name ?? '', flow?.from ?? '', flow?.to ?? '', metrics.count];
   });
-  return toCsv(headers, rows);
+  return { headers, rows };
 }
 
-export function resourcesCsv(
+export function resourcesRows(
   result: RunResult,
   names: Readonly<Record<string, string | undefined>> = {},
-): string {
+): ResultTable {
   const headers = ['Id', 'Name', ...labels('resources', RESOURCE_COLUMNS)];
   const rows = Object.entries(result.resources).map(([id, metrics]) => [
     id,
@@ -124,15 +138,10 @@ export function resourcesCsv(
     metrics.unitCost,
     metrics.totalCost,
   ]);
-  return toCsv(headers, rows);
+  return { headers, rows };
 }
 
-/**
- * Proceso (§ 5). La primera fila es el total de la corrida; detrás va una fila por desenlace
- * (`process.byEndEvent`, #316) con el id en la columna `Outcome` y vacías las columnas que solo
- * tienen sentido para el total (`started`, `inFlight`, rendimiento y costos).
- */
-export function processCsv(result: RunResult): string {
+export function processRows(result: RunResult): ResultTable {
   const headers = labels('process', PROCESS_COLUMNS);
   const { process } = result;
   const rows: CsvValue[][] = [
@@ -187,7 +196,36 @@ export function processCsv(result: RunResult): string {
       endId,
     ]);
   }
-  return toCsv(headers, rows);
+  return { headers, rows };
+}
+
+/** Serializa una `ResultTable`; el CSV y el XLSX salen de la misma. */
+function tableCsv(table: ResultTable): string {
+  return toCsv(table.headers, table.rows);
+}
+
+export function elementsCsv(ir: ProcessIR, result: RunResult): string {
+  return tableCsv(elementsRows(ir, result));
+}
+
+export function flowsCsv(ir: ProcessIR, result: RunResult): string {
+  return tableCsv(flowsRows(ir, result));
+}
+
+export function resourcesCsv(
+  result: RunResult,
+  names: Readonly<Record<string, string | undefined>> = {},
+): string {
+  return tableCsv(resourcesRows(result, names));
+}
+
+/**
+ * Proceso (§ 5). La primera fila es el total de la corrida; detrás va una fila por desenlace
+ * (`process.byEndEvent`, #316) con el id en la columna `Outcome` y vacías las columnas que solo
+ * tienen sentido para el total (`started`, `inFlight`, rendimiento y costos).
+ */
+export function processCsv(result: RunResult): string {
+  return tableCsv(processRows(result));
 }
 
 /**

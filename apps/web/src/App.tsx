@@ -983,6 +983,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </select></label>
         {comparable && ir !== null
           ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result), { locale })}
+              entries={ordered.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />

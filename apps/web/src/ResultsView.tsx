@@ -20,6 +20,7 @@ import {
   processCsv,
   resourcesCsv,
 } from '@lila/engine/csv';
+import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila/engine/xlsx-report';
 import {
   columnLabel,
   formatDuration,
@@ -37,7 +38,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
-import { strings, useStrings } from './i18n';
+import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
   ir: ProcessIR;
@@ -107,7 +108,7 @@ const titleRowStyle: CSSProperties = {
 
 export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14, margin: 0 };
 
-const exportButtonStyle: CSSProperties = {
+export const exportButtonStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-strong)',
   color: 'var(--fg-primary)',
@@ -160,7 +161,20 @@ function ariaSort(sort: SortState | null, key: string): 'ascending' | 'descendin
 
 /** Descarga `contents` como si el navegador hubiera guardado el archivo del enlace. */
 function downloadCsv(filename: string, contents: string): void {
-  const blob = new Blob([contents], { type: 'text/csv;charset=utf-8' });
+  descargar(filename, new Blob([contents], { type: 'text/csv;charset=utf-8' }));
+}
+
+/**
+ * Descarga el libro `.xlsx` que produce `@lila/engine/xlsx-report` (issue #80). Los bytes se
+ * generan **al pulsar** y no en cada render: construir el zip de una corrida grande en cada
+ * repintado de la tabla se notaría en la interfaz y casi siempre se tiraría sin usar.
+ */
+export function downloadXlsx(filename: string, bytes: Uint8Array): void {
+  // `new Blob([bytes])` sobre la vista exacta: `bytes.buffer` podría llevar relleno de más.
+  descargar(filename, new Blob([bytes.slice()], { type: XLSX_MIME_TYPE }));
+}
+
+function descargar(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   try {
     const link = document.createElement('a');
@@ -177,13 +191,25 @@ export interface DataTableProps<Row> {
   columns: readonly ColumnDef<Row>[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
-  /** Sin CSV no hay botón "Exportar CSV" (CompareView, LILA-063, no exporta nada todavía). */
+  /** Sin CSV no hay botón "Exportar CSV". */
   csvFilename?: string;
   csvContents?: string;
+  /** Igual para el libro `.xlsx`; el thunk difiere la construcción del zip hasta el clic. */
+  xlsxFilename?: string;
+  xlsxContents?: () => Uint8Array;
 }
 
 /** Tabla ordenable genérica; ResultsView (LILA-062) y CompareView (LILA-063) la comparten. */
-export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvContents }: DataTableProps<Row>): ReactNode {
+export function DataTable<Row>({
+  title,
+  columns,
+  rows,
+  rowKey,
+  csvFilename,
+  csvContents,
+  xlsxFilename,
+  xlsxContents,
+}: DataTableProps<Row>): ReactNode {
   const S = useStrings();
   const [sort, setSort] = useState<SortState | null>(null);
   const sorted = sortRows(rows, columns, sort);
@@ -207,6 +233,15 @@ export function DataTable<Row>({ title, columns, rows, rowKey, csvFilename, csvC
             onClick={() => downloadCsv(csvFilename, csvContents)}
           >
             {S.resultados.exportarCsv}
+          </button>
+        )}
+        {xlsxContents !== undefined && xlsxFilename !== undefined && (
+          <button
+            type="button"
+            style={exportButtonStyle}
+            onClick={() => downloadXlsx(xlsxFilename, xlsxContents())}
+          >
+            {S.resultados.exportarXlsx}
           </button>
         )}
       </div>
@@ -562,6 +597,11 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
   const names = resourceNames(scenario);
   const csv = buildResultCsvExports(ir, scenario, result);
   const outcomes = outcomeRows(ir, result);
+  // Un solo libro para toda la vista: las cinco hojas ya llevan las cuatro tablas, así que el
+  // botón exporta lo mismo esté abierta la pestaña que esté.
+  const xlsxFilename = `${scenario.name}.xlsx`;
+  const xlsx = (): Uint8Array =>
+    scenarioWorkbook(ir, scenario, result, resourceNamesOf(scenario), getLocale());
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
@@ -598,6 +638,8 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
           rowKey={(row) => row.id}
           csvFilename="elements.csv"
           csvContents={csv.elements}
+          xlsxFilename={xlsxFilename}
+          xlsxContents={xlsx}
         />
       )}
       {tab === 'flows' && (
@@ -608,6 +650,8 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
           rowKey={(row) => row.id}
           csvFilename="flows.csv"
           csvContents={csv.flows}
+          xlsxFilename={xlsxFilename}
+          xlsxContents={xlsx}
         />
       )}
       {tab === 'resources' && (
@@ -618,6 +662,8 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
           rowKey={(row) => row.id}
           csvFilename="resources.csv"
           csvContents={csv.resources}
+          xlsxFilename={xlsxFilename}
+          xlsxContents={xlsx}
         />
       )}
       {tab === 'process' && (
@@ -628,6 +674,8 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
           rowKey={() => 'process'}
           csvFilename="process.csv"
           csvContents={csv.process}
+          xlsxFilename={xlsxFilename}
+          xlsxContents={xlsx}
         />
       )}
       {tab === 'process' && outcomes.length > 0 && (

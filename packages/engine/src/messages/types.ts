@@ -151,6 +151,41 @@ export interface CliMessages {
   baseColumn: (name: string) => string;
   significantMark: () => string;
 
+  /* --- `--xlsx` workbook (issue #80) -------------------------------- */
+  /**
+   * Sheet names and the labels of the sheets the spreadsheet adds on top of the CSV tables
+   * (`Summary`, `Parameters`, `Comparison`). The **column** names of the Elements / Flows /
+   * Resources tables are not here: they are the Bizagi contract of `docs/BIZAGI_PARITY.md` and
+   * come from `format.ts` untranslated, exactly as in the CSV.
+   */
+  xlsxSheetSummary: () => string;
+  xlsxSheetElements: () => string;
+  xlsxSheetFlows: () => string;
+  xlsxSheetResources: () => string;
+  xlsxSheetParameters: () => string;
+  xlsxSheetComparison: () => string;
+  xlsxColumnSection: () => string;
+  xlsxColumnParameter: () => string;
+  xlsxColumnValue: () => string;
+  xlsxSectionProcess: () => string;
+  xlsxSectionOutcomes: () => string;
+  xlsxSectionPayroll: () => string;
+  xlsxSectionRun: () => string;
+  xlsxSectionArrivals: () => string;
+  xlsxSectionTasks: () => string;
+  xlsxSectionGateways: () => string;
+  xlsxSectionCalendars: () => string;
+  xlsxCapacity: () => string;
+  xlsxWorkingHours: () => string;
+  xlsxPayrollCost: () => string;
+  xlsxTotal: () => string;
+  /** Column headers of the `Comparison` sheet, one group per compared scenario. */
+  xlsxDelta: (scenario: string) => string;
+  xlsxDeltaRelative: (scenario: string) => string;
+  xlsxCi95Low: (scenario: string) => string;
+  xlsxCi95High: (scenario: string) => string;
+  xlsxOverlap: (scenario: string) => string;
+
   /* --- `compareWarnings()` (cli-shared.ts) -------------------------- */
   mixedTimeUnit: (unit: string, others: string) => string;
   differentSeeds: (seeds: string) => string;
