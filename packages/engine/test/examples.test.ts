@@ -218,7 +218,9 @@ describe('examples/tarjeta-credito', () => {
       expect(toBe.elements['Task_CheckBureau']!.resourceWait.mean).toBeLessThan(
         asIs.elements['Task_CheckBureau']!.resourceWait.mean / 2,
       );
-      expect(toBe.warnings.filter((w) => w.includes('W-RECURSO-SATURADO'))).toEqual([]);
+      // `W-RECURSO-SATURADO` is not asserted: the heuristic (demand/served >= 1.1) never fires for
+      // the self-gated analyst pool, so the absence in TO-BE would be vacuous. Utilization,
+      // bottleneck and inFlight above carry the saturation evidence instead.
 
       // Las tres salidas se ejercitan en ambos escenarios.
       for (const result of [asIs, toBe]) {

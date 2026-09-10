@@ -34,7 +34,7 @@ One 8-hour shift, 10 applications per hour, three roles:
 
 Files:
 
-- `model.bpmn`: one pool, three lanes, 14 tasks, 2 XOR gateways, 1 start event and 3 end events,
+- `model.bpmn`: one pool, three lanes, 13 tasks, 2 XOR gateways, 1 start event and 3 end events,
   with English ids and full BPMNDI so it renders in bpmn-js.
 - `as-is.scenario.json`: today's operation, two credit analysts.
 - `to-be-3-analistas.scenario.json`: inherits the AS-IS through `extends` and only raises the
