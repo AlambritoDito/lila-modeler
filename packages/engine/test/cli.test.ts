@@ -138,7 +138,7 @@ describe('--lang / LILA_LANG / LANG', () => {
     expect(await main(['validate', pedido, '--lang', 'es'])).toBe(0);
     const text = out.join('\n');
 
-    expect(text).toContain('Proceso Process_Restaurante (Restaurante)');
+    expect(text).toContain('Proceso Process_Restaurante (Restaurant)');
     expect(text).toContain('Nodos (11)');
     expect(text).toContain('Flujos (11)');
     expect(text).toContain('0 errores, 1 avisos.');

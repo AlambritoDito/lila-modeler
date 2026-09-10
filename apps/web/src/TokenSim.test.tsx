@@ -112,12 +112,12 @@ describe('«Validar rutas»: la UI del módulo en español (#264)', () => {
   it('deja en paz lo que no es suyo y se puede repetir sin cambiar nada', () => {
     const lienzo = lienzoConSimulacion();
     // El nombre de una figura sale del modelo y ya está en español: no se toca.
-    lienzo.appendChild(entradaDeRegistro('Tomar pedido'));
+    lienzo.appendChild(entradaDeRegistro('Take order'));
     traducirSimulacion(lienzo);
     const primera = lienzo.innerHTML;
     traducirSimulacion(lienzo);
     expect(lienzo.innerHTML).toBe(primera);
-    expect(lienzo.textContent).toContain('Tomar pedido');
+    expect(lienzo.textContent).toContain('Take order');
   });
 
   it('traduce también lo que el módulo pinta después (el registro crece por pasos)', async () => {
