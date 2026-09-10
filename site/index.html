@@ -126,7 +126,7 @@
           <p class="section-lede">
             <code>examples/pedido</code> is the repo's reference benchmark: a restaurant process
             with a parallel branch, an approval and a timer, with the AS-IS and TO-BE scenarios
-            already written. Clone the repo, run <code>npm ci</code>, and:
+            already written. Clone the repo, run <code>npm ci</code> and <code>npm run build</code>, and:
           </p>
 
           <div class="step">
@@ -152,7 +152,7 @@
 
           <p class="note">
             There is no <code>lila</code> package on the npm registry yet: <code>npx</code> resolves
-            the workspace's own binary after <code>npm ci</code>, with no network and no global
+            the workspace's own binary after <code>npm ci</code> and <code>npm run build</code>, with no registry lookup and no global
             install.
           </p>
         </div>
