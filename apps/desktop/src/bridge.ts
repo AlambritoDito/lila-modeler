@@ -6,8 +6,23 @@
  * usa para detectar esta modalidad con `typeof window.lila !== 'undefined'`.
  *
  * `listFiles`/`readFile`/`writeFile` (OP-02, genéricos) se retiraron: el puente ya no expone E/S
- * de archivos sueltos, solo operaciones de proyecto completo (`chooseFolder`/`readProject`/
- * `writeProject`), como fija el contrato.
+ * de archivos sueltos, solo operaciones de proyecto completo (`chooseFolder`/`chooseSaveFile`/
+ * `readProject`/`writeProject`), como fija el contrato.
+ *
+ * **Vocabulario de errores.** Un fallo de proyecto llega al renderer como `Error` con el mensaje
+ * `"<código>: <texto>"` (lo compone `main.ts`). Los códigos son estables:
+ *
+ * - Carpeta y `.lila` por igual: `E-CARPETA-OCUPADA` («Guardar como» sobre un destino que ya tiene
+ *   otro proyecto), `E-CAMBIO-EXTERNO` (algo cambió en disco desde la última lectura/escritura y
+ *   no se pidió `overwrite`), `E-SIN-MODELO` (no hay proyecto que leer).
+ * - Solo carpeta: `E-RUN-DUPLICADO`, `E-SYMLINK`, `E-DESTINO-INVALIDO`, `E-RECUPERACION-PENDIENTE`.
+ * - Solo `.lila` (ADR-027, contenido del archivo): `E-ZIP` (no se pudo descomprimir),
+ *   `E-NO-MANIFEST` (sin `lila-project.json`), `E-MANIFEST` (manifiesto inválido o de otra
+ *   versión), `E-NO-MODEL` (sin `model.bpmn`), `E-ENTRY-PATH` (entrada con ruta insegura),
+ *   `E-DOCUMENTO`, `E-DIAGNOSTICO`, `E-CORRIDA`, `E-ENTRADAS-CORRIDA` (el documento a escribir no
+ *   valida). El mapa `LILA-…` del motor → `E-…` de aquí es explícito en `lilaFile.ts`.
+ * - Del propio puente (validación de argumentos IPC): `E-ARGUMENTO`, `E-NO-AUTORIZADO`,
+ *   `E-RUTA-FUERA`.
  */
 import type { ProjectDocument, ProjectProblem } from './projectTypes.js';
 

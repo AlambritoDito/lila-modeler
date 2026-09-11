@@ -70,12 +70,23 @@ describe('writeLilaFile / readLilaFile', () => {
     expect(document.model.revision).toBe(4);
   });
 
-  it('un archivo que no es un zip falla como error de proyecto, con código', async () => {
+  it('un archivo que no es un zip falla como error de proyecto, con código y mensaje en español', async () => {
     const file = join(await carpeta(), 'roto.lila');
     await writeFile(file, 'esto no es un zip', 'utf8');
 
     await expect(readLilaFile(file)).rejects.toThrow(ProjectIOError);
-    await expect(readLilaFile(file)).rejects.toMatchObject({ code: 'E-ZIP' });
+    // El código viene de un mapa explícito, no de recortarle el prefijo al del motor (hallazgo 6
+    // del QA a #323), y el mensaje es propio: el del motor está en inglés.
+    await expect(readLilaFile(file)).rejects.toMatchObject({
+      code: 'E-ZIP',
+      message: 'El archivo no es un .lila legible (no se pudo descomprimir).',
+    });
+  });
+
+  it('un documento inválido al escribir también sale traducido', async () => {
+    const file = join(await carpeta(), 'pedido.lila');
+    const roto = { ...documento(), runs: [{ id: 'r1' }] } as unknown as ProjectDocument;
+    await expect(writeLilaFile(file, roto)).rejects.toMatchObject({ code: 'E-CORRIDA' });
   });
 
   it('un archivo que no existe se distingue de uno ilegible', async () => {

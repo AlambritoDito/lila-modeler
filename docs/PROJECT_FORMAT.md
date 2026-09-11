@@ -86,3 +86,12 @@ mistake one for the other, since a Lila project starts with the ZIP magic `PK`.
 validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`).
 Published as `@lila/engine/project`. The folder reader/writer is
 `apps/desktop/src/projectIO.ts`; the `.lila` half of the desktop is `apps/desktop/src/lilaFile.ts`.
+
+The engine's codes are `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LILA-NO-MODEL`,
+`LILA-ENTRY-PATH` (the container) and `LILA-DOCUMENT`, `LILA-PROBLEMS`, `LILA-RUN`,
+`LILA-RUN-INPUTS` (the document). Each front end words them itself: the desktop maps them to its
+own `E-ZIP`, `E-NO-MANIFEST`, `E-MANIFEST`, `E-NO-MODEL`, `E-ENTRY-PATH`, `E-DOCUMENTO`,
+`E-DIAGNOSTICO`, `E-CORRIDA`, `E-ENTRADAS-CORRIDA` at the IPC boundary (an explicit map in
+`lilaFile.ts`, listed in the `bridge.ts` header); the web app localises them in
+`apps/web/src/project.ts`. A `.lila` save runs the same `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO`
+guards as a folder save.

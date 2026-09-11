@@ -10,6 +10,7 @@
  */
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { decodeLila, encodeLila, ProjectFormatError } from '@lila/engine/project';
+import type { ProjectErrorCode } from '@lila/engine/project';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,
@@ -20,14 +21,41 @@ import {
 import type { ProjectDocument, ProjectProblem } from './projectTypes.js';
 
 /**
- * Traduce un error de formato al `ProjectIOError` que el puente ya sabe reportar. El motor usa el
- * prefijo `LILA-` para sus códigos (el `E-`/`W-` de `packages/engine/src` es el catálogo de
- * problemas de modelo/escenario, con su propia prueba de cobertura); aquí se le devuelve la forma
- * `E-…` que usan el resto de errores del puente, que es lo que `main.ts` antepone al mensaje.
+ * Traduce un error de formato del motor al `ProjectIOError` que el puente ya sabe reportar. El
+ * mapa es explícito a propósito (hallazgo 6 del QA a #323): el vocabulario `E-…` del puente es
+ * público y no puede derivarse por cirugía de texto sobre un enum interno del motor —así, añadir
+ * un `LILA-…` allí rompe el typecheck aquí en vez de estrenar un código `E-…` sin que nadie lo
+ * decida. El mensaje también es propio: todos los demás `ProjectIOError` del escritorio están en
+ * español (`projectIO.ts`), y el del motor está en inglés por ser la capa sin idioma.
  */
+const CODES: Record<ProjectErrorCode, { readonly code: string; readonly message: string }> = {
+  'LILA-DOCUMENT': {
+    code: 'E-DOCUMENTO',
+    message: 'El documento de proyecto es inválido o de una versión no soportada.',
+  },
+  'LILA-PROBLEMS': { code: 'E-DIAGNOSTICO', message: 'El diagnóstico del proyecto es inválido.' },
+  'LILA-RUN': { code: 'E-CORRIDA', message: 'Hay una corrida guardada inválida.' },
+  'LILA-RUN-INPUTS': { code: 'E-ENTRADAS-CORRIDA', message: 'Las entradas de una corrida guardada son inválidas.' },
+  'LILA-ENTRY-PATH': {
+    code: 'E-ENTRY-PATH',
+    message: 'El archivo .lila tiene una entrada con una ruta que no es válida dentro de un proyecto.',
+  },
+  'LILA-ZIP': { code: 'E-ZIP', message: 'El archivo no es un .lila legible (no se pudo descomprimir).' },
+  'LILA-NO-MANIFEST': {
+    code: 'E-NO-MANIFEST',
+    message: 'Al archivo le falta "lila-project.json": no es un proyecto .lila.',
+  },
+  'LILA-MANIFEST': {
+    code: 'E-MANIFEST',
+    message: 'El "lila-project.json" del archivo es inválido o de una versión no soportada.',
+  },
+  'LILA-NO-MODEL': { code: 'E-NO-MODEL', message: 'Al archivo le falta "model.bpmn": no es un proyecto .lila.' },
+};
+
 function asProjectIOError(error: unknown): never {
   if (error instanceof ProjectFormatError) {
-    throw new ProjectIOError(`E-${error.code.replace(/^LILA-/, '')}`, error.message);
+    const { code, message } = CODES[error.code];
+    throw new ProjectIOError(code, message);
   }
   throw error;
 }
