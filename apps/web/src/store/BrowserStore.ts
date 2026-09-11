@@ -14,7 +14,8 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import { readProject } from '../project';
+import { encodeLila } from '@lila/engine/project';
+import { readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
 /**
@@ -23,6 +24,10 @@ import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument 
  * (`lila.tema`, `lila.densidad`, `lila.temas`, `lila.idioma`).
  */
 const CLAVE = 'lila.project.v1';
+
+/** The project container written by «Save project» (ADR-027, `docs/PROJECT_FORMAT.md`). */
+const LILA_EXT = '.lila';
+const LILA_MIME = 'application/vnd.lila-modeler+zip';
 
 /** What is mirrored: the three collections this store owns, as plain JSON. */
 interface SesionGuardada {
@@ -202,15 +207,25 @@ export class BrowserStore implements ProjectSessionStore {
     return this.saveProject(document);
   }
 
+  /**
+   * `.lila` (ADR-027) is what this store writes now; `.lila.json` is still accepted because it is
+   * what every project saved from the public demo before this change looks like, and the demo has
+   * no migration step to run — the file is on the visitor's disk, not in a database. Which reader
+   * to use is decided by the name, not by sniffing the bytes: a `.lila` is a ZIP and a `.lila.json`
+   * is JSON, and a file whose extension lies about that is a file worth refusing.
+   */
   async openProject(): Promise<ProjectDocument | null> {
-    const file = await elegirArchivo('.lila.json,.json');
+    const file = await elegirArchivo('.lila,.lila.json,.json');
     if (file === null) return null;
+    if (file.name.toLowerCase().endsWith('.lila')) {
+      return readLila(new Uint8Array(await file.arrayBuffer()));
+    }
     return readProject(JSON.parse(await file.text()) as unknown);
   }
 
   async saveProject(document: ProjectDocument): Promise<ProjectDocument> {
     const snapshot = structuredClone(readProject(document));
-    descargar(JSON.stringify(snapshot, null, 2), `${snapshot.name}.lila.json`, 'application/json');
+    descargar(encodeLila(snapshot), `${snapshot.name}${LILA_EXT}`, LILA_MIME);
     // Commit only after the download was initiated successfully. Keep the returned document
     // separate so callers cannot mutate the last explicit save through a shared reference.
     this.project = structuredClone(snapshot);

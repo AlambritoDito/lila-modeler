@@ -347,11 +347,46 @@ Modeler calls for it. `ResourceManager` remains a non-public API. *(test: LILA-0
 
 ---
 
+## ADR-027 — `.lila`: the project folder, zipped
+
+**Status:** Accepted
+
+A `.lila` file is the ADR-018 project **folder compressed as a ZIP**, with the same layout and the
+same file names (`lila-project.json`, `model.bpmn`, `<name>.scenario.json`, `runs/<id>.result.json`).
+`zip -r` of an existing project folder is a valid `.lila` and `unzip` of a `.lila` is a valid
+project folder; nothing converts and there is no migration. The manifest gains one optional field,
+`engine`, naming the engine version that wrote the runs. MIME `application/vnd.lila-modeler+zip`;
+see `docs/PROJECT_FORMAT.md`.
+
+Why a container at all: the folder is right for git and wrong for handing work to somebody — the
+online demo could only download a `.lila.json` blob that no desktop install could open, and «send
+me your model» meant a zip built by hand with no guarantee of what was in it. Why the folder
+zipped, and not a new format: the folder is already the contract every mode writes, so the
+container costs one reader and one writer instead of a second definition of what a project is,
+and anyone can inspect or repair a `.lila` with the unzip tool their system already has.
+
+`fflate` is the only new dependency (MIT, ~30 KB, no transitive dependencies, works unchanged in
+Node and in the browser worker) — a hand-rolled DEFLATE is not a thing this project should own,
+and the alternatives either assume Node (`node:zlib`, unusable in the SPA) or pull a tree of
+packages. The shared document types moved to `@lila/engine/project`, ending the hand-maintained
+copy `apps/desktop/src/projectTypes.ts` kept of `apps/web`'s.
+
+Unknown entries inside a `.lila` (`notes.md`, `attachments/…`) are reported in `problems` and
+dropped, not preserved: keeping them would put opaque bytes inside `ProjectDocument`, which
+crosses `structuredClone` over IPC and `JSON.stringify` into the browser's `localStorage` mirror.
+The folder form still leaves such files alone. Revisit if anyone actually wants attachments —
+that is a format decision (a declared `attachments/` area with a manifest entry), not a
+serialization trick. *(tests: `packages/engine/test/project/lila.test.ts`,
+`apps/desktop/src/lilaFile.test.ts`)*
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).
 - `docs/BIZAGI_PARITY.md` — reference-behaviour table cited by ADR-021.
 - `docs/BPMN_EXTENSION.md` — operational implementation of ADR-012 and ADR-014.
 - `docs/RESULTS_FORMAT.md` — operational implementation of the calendar/utilization part of ADR-016.
+- `docs/PROJECT_FORMAT.md` — operational implementation of ADR-018 and ADR-027 (the project folder and the `.lila` container).
 - `docs/DECISIONS-corpus-previo.md` — original text of ADR-001 through ADR-008 (earlier corpus, project then called *Open Process Platform*).
 - `BACKLOG.md` — breakdown into epics and tickets per milestone.

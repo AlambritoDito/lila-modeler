@@ -147,8 +147,11 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 - **Open project**: a native folder picker; loads whatever project is there.
 - **Save project**: saves into the active folder (the one from the last
   successful "New"/"Open"/"Save as").
-- **Save as**: asks for a new folder (the same `E-CARPETA-OCUPADA` rules as "New
-  project").
+- **Save as…**: asks where to create a new **`.lila`** — the whole project in one file
+  (ADR-027), which is the form to hand to somebody else. **Save as folder…** is the same thing
+  towards a project folder, which is the form to keep in git. Both apply the same
+  `E-CARPETA-OCUPADA` rules as "New project": a destination that already holds a *different*
+  project is refused without touching it.
 - The top bar shows `<project name> · Sin guardar` (Unsaved) or `· Guardado` (Saved) depending on
   whether there are pending changes (`apps/web/src/App.tsx`).
 - **Closing with unsaved changes**: the window (red button, Cmd+Q, or closing it from the Dock)

@@ -169,7 +169,11 @@ export function numericKpis(result: RunResult): Record<string, number> {
   visitById(result.elements, 'elements');
   visitById(result.flows, 'flows');
   visitById(result.resources, 'resources');
-  visit(result.process, 'process');
+  // `process.byEndEvent` lleva ids BPMN por clave y por eso se recorre con `visitById`, igual
+  // que las otras colecciones; el resto de `process` son claves fijas del contrato (#316).
+  const { byEndEvent, ...processScalars } = result.process;
+  visit(processScalars, 'process');
+  visitById(byEndEvent ?? {}, 'process.byEndEvent');
   return kpis;
 }
 

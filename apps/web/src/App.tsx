@@ -53,7 +53,7 @@ import './theme/tokens.css';
 import './app.css';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'bpmn' | { readonly recent: string; readonly file?: string };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -389,11 +389,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
   }
-  async function guardar(saveAs = false): Promise<boolean> {
-    return await saveWithOutcome(saveAs) === 'saved';
+  async function guardar(saveAs = false, asFolder = false): Promise<boolean> {
+    return await saveWithOutcome(saveAs, asFolder) === 'saved';
   }
 
-  async function saveWithOutcome(saveAs = false): Promise<SaveOutcome> {
+  /** `asFolder` solo cuenta con `saveAs`: elige carpeta de proyecto en vez de `.lila` (ADR-027). */
+  async function saveWithOutcome(saveAs = false, asFolder = false): Promise<SaveOutcome> {
     if (adapter === null || ioLock.current) return 'cancelled';
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
@@ -413,7 +414,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const token = previo === null
         ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id))
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
-      const saved = await adapter.saveProject(doc, { saveAs });
+      const saved = await adapter.saveProject(doc, { saveAs, ...(asFolder ? { asFolder: true } : {}) });
       if (saved === null) return 'cancelled';
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs) setSuelto(false);
@@ -471,7 +472,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const beforeToken = tokenRef.current;
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
-      if (kind === 'open') { const doc = await adapter.openProject(); if (doc) await activate(doc, true, beforeToken); return; }
+      if (kind === 'open' || kind === 'openFile') {
+        const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
+        if (doc) await activate(doc, true, beforeToken); return;
+      }
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
         if (doc) await activate(doc, true, beforeToken);
@@ -662,8 +666,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
+    else if (accion === 'abrirArchivo') void projectAction('openFile');
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
+    else if (accion === 'guardarComoCarpeta') void guardar(true, true);
     else void projectAction({ recent: accion.openRecent });
   }
   const ejecutarRef = useRef(ejecutar);
@@ -983,6 +989,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </select></label>
         {comparable && ir !== null
           ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result), { locale })}
+              entries={ordered.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />

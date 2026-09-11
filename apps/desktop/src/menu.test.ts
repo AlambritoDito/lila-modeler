@@ -56,7 +56,17 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
   it('the File submenu carries the catalog labels, in order', () => {
     const archivo = menuTemplate([], 'darwin', vi.fn(), desktopStrings(locale))[1];
     const labels = (archivo!.submenu as MenuItemConstructorOptions[]).map((i) => i.label).filter(Boolean);
-    expect(labels).toEqual([S.nuevoProyecto, S.abrirProyecto, S.abrirReciente, S.guardarProyecto, S.guardarComo]);
+    expect(labels).toEqual([
+      S.nuevoProyecto,
+      S.abrirProyecto,
+      // El segundo abridor: el `.lila` de ADR-027, que fuera de macOS no cabe en el mismo diálogo
+      // nativo que la carpeta de proyecto.
+      S.abrirProyectoArchivo,
+      S.abrirReciente,
+      S.guardarProyecto,
+      S.guardarComo,
+      S.guardarComoCarpeta,
+    ]);
   });
 });
 

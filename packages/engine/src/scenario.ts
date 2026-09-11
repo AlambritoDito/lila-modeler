@@ -263,6 +263,9 @@ function buildSchemas(locale: Locale) {
     // (`valorVacio` en `ScenarioPanel.tsx`). Sin él escribiría el `minimum` del entero seguro.
     seed: z.int().meta({ default: 1 }).optional(),
     baseTimeUnit: z.enum(['s', 'min', 'h', 'day']).default('s'),
+    // #316: objetivo de tiempo de ciclo en segundos (R-DURA-1, como toda duración del escenario).
+    // Solo alimenta el reporte `withinServiceLevel`; no cambia la simulación.
+    serviceLevel: positive.optional(),
     currency: z.string().regex(/^[A-Z]{3}$/, zod.currencyIso()).optional(),
     // § 4 — reservado: aceptado por el esquema, rechazado por el motor.
     timezone: z.unknown().optional(),

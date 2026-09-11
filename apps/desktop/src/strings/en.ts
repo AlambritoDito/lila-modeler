@@ -27,9 +27,13 @@ export const en = {
     archivo: 'File',
     nuevoProyecto: 'New project',
     abrirProyecto: 'Open project…',
+    /** Second opener for the `.lila` container: the only one Windows and Linux can use (ADR-027). */
+    abrirProyectoArchivo: 'Open project file (.lila)…',
     abrirReciente: 'Open recent',
     guardarProyecto: 'Save project',
     guardarComo: 'Save as…',
+    /** «Save as» writes a `.lila` (ADR-027); the folder (ADR-018) stays one entry away. */
+    guardarComoCarpeta: 'Save as folder…',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {

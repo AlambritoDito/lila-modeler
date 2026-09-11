@@ -11,7 +11,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ValidationResult } from './bpmn/validate.js';
@@ -43,6 +43,7 @@ import {
   runStartMs,
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
+import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
@@ -53,6 +54,7 @@ import {
   formatSignedPercent,
   formatTable,
   isDurationMetric,
+  splitOutcomeMetric,
   type BaseTimeUnit,
 } from './format.js';
 import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './messages/index.js';
@@ -231,6 +233,24 @@ const PROCESS_SUMMARY_COLUMNS = [
   'totalCost',
 ] as const;
 
+/**
+ * Columnas de la tabla "Outcomes" (#316). Solo lo que distingue un desenlace de otro de un
+ * vistazo: cuántos casos acabaron ahí y cómo de largo fue su ciclo. El resto de percentiles y
+ * la espera completa siguen en `--json` y en `process.csv`.
+ */
+const OUTCOME_SUMMARY_COLUMNS = [
+  'completed',
+  'cycleTime.mean',
+  'cycleTime.p50',
+  'cycleTime.p95',
+  'waitTime.mean',
+] as const;
+
+/** Fracción 0..1 como porcentaje, igual que `utilization` en las tablas de la CLI. */
+function formatPercent(fraction: number): string {
+  return `${formatNumber(fraction * 100)}%`;
+}
+
 function printRunResult(
   ir: ParsedIr,
   scenario: ResolvedScenario,
@@ -335,11 +355,17 @@ function printRunResult(
   }
 
   const process = result.process;
+  // `withinServiceLevel` solo existe cuando el escenario declara `run.serviceLevel` (#316): sin
+  // umbral la columna no se imprime, en vez de mostrar un cero que se leería como "0 % cumplido".
+  const tracksServiceLevel = process.withinServiceLevel !== undefined;
   console.log('');
   console.log('Process summary (extras)');
   console.log(
     formatTable(
-      PROCESS_SUMMARY_COLUMNS.map((metric) => columnHeader('process', metric, unit)),
+      [
+        ...PROCESS_SUMMARY_COLUMNS.map((metric) => columnHeader('process', metric, unit)),
+        ...(tracksServiceLevel ? [columnLabel('process', 'withinServiceLevel')] : []),
+      ],
       [[
         formatNumber(process.started),
         formatNumber(process.completed),
@@ -355,9 +381,37 @@ function printRunResult(
         formatNumber(process.throughputPerHour),
         formatNumber(process.costPerCase),
         formatNumber(process.totalCost),
+        ...(tracksServiceLevel ? [formatPercent(process.withinServiceLevel ?? 0)] : []),
       ]],
     ),
   );
+
+  // Desglose por desenlace (#316): una fila por `end`/`terminate` del modelo.
+  const outcomes = Object.entries(process.byEndEvent ?? {});
+  if (outcomes.length > 0) {
+    console.log('');
+    console.log(C.outcomes());
+    console.log(
+      formatTable(
+        [
+          'Id',
+          'Name',
+          ...OUTCOME_SUMMARY_COLUMNS.map((metric) => columnHeader('process', metric, unit)),
+          ...(tracksServiceLevel ? [columnLabel('process', 'withinServiceLevel')] : []),
+        ],
+        outcomes.map(([id, outcome]) => [
+          id,
+          ir.nodes[id]?.name ?? '',
+          formatNumber(outcome.completed),
+          formatDuration(outcome.cycleTime.mean, unit),
+          formatDuration(outcome.cycleTime.p50, unit),
+          formatDuration(outcome.cycleTime.p95, unit),
+          formatDuration(outcome.waitTime.mean, unit),
+          ...(tracksServiceLevel ? [formatPercent(outcome.withinServiceLevel ?? 0)] : []),
+        ]),
+      ),
+    );
+  }
 
   if (result.warnings.length > 0) {
     console.log('');
@@ -371,6 +425,25 @@ function writeJson(file: string, data: unknown, locale: Locale): void {
   console.log(`JSON: ${writeJsonAtomic(file, data, locale)}`);
 }
 
+/**
+ * Publica un `.xlsx` con la misma técnica atómica que el CSV y el JSON: temporal + `rename`, y
+ * nada se escribe encima de un archivo que ya existía sin pasar por `assertReplaceableFile`.
+ */
+function writeXlsx(file: string, bytes: Uint8Array, locale: Locale): void {
+  const target = absolutePath(file);
+  assertReplaceableFile(target, locale);
+  mkdirSync(dirname(target), { recursive: true });
+  const staged = stageFile(target, locale);
+  try {
+    staged.write(bytes);
+    staged.commit();
+  } catch (error) {
+    staged.abort();
+    throw error;
+  }
+  console.log(`XLSX: ${target}`);
+}
+
 function writeCsvDirectory(
   directory: string,
   ir: ParsedIr,
@@ -380,9 +453,7 @@ function writeCsvDirectory(
 ): void {
   const target = absolutePath(directory);
   mkdirSync(target, { recursive: true });
-  const resourceNames = Object.fromEntries(
-    Object.entries(scenario.resources ?? {}).map(([id, resource]) => [id, resource.name]),
-  );
+  const resourceNames = resourceNamesOf(scenario);
   const files: Readonly<Record<string, string>> = {
     'elements.csv': elementsCsv(ir, result),
     'flows.csv': flowsCsv(ir, result),
@@ -469,6 +540,7 @@ interface RunCommandOptions {
   replications?: number | undefined;
   json?: string | undefined;
   csv?: string | undefined;
+  xlsx?: string | undefined;
   locale: Locale;
 }
 
@@ -518,6 +590,13 @@ async function runCommand(
       logSink?.commit();
       console.log(`CSV: ${absolutePath(options.csv)}`);
     }
+    if (options.xlsx !== undefined) {
+      writeXlsx(
+        options.xlsx,
+        scenarioWorkbook(ir, scenario, result, resourceNamesOf(scenario), locale),
+        locale,
+      );
+    }
     return 0;
   } catch (error) {
     logSink?.abort();
@@ -533,6 +612,7 @@ interface CompareCommandOptions {
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
+  xlsx?: string | undefined;
   all: boolean;
   locale: Locale;
 }
@@ -558,13 +638,27 @@ const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
   'process:throughputPerHour',
   'process:costPerCase',
   'process:totalCost',
+  'process:withinServiceLevel',
 ]);
+
+/**
+ * Métricas por desenlace que entran en la tabla por defecto (#316): la media de ciclo de cada
+ * `end` y su nivel de servicio. Sus paths llevan el id dentro, así que no caben en un `Set`.
+ */
+function isDefaultOutcomeMetric(scope: CompareScope, metric: string): boolean {
+  if (scope !== 'process') return false;
+  const outcome = splitOutcomeMetric(metric);
+  return outcome !== null && (outcome.metric === 'cycleTime.mean' || outcome.metric === 'withinServiceLevel');
+}
 
 /** Valor de una sola celda, sin delta: usado también para la columna base. */
 function formatCompareValue(metric: string, value: number | null, unit: BaseTimeUnit): string {
   if (value === null) return '-';
   if (isDurationMetric(metric)) return formatDuration(value, unit);
-  if (metric === 'utilization') return `${formatNumber(value * 100)}%`;
+  if (metric === 'utilization') return formatPercent(value);
+  if (metric === 'withinServiceLevel' || splitOutcomeMetric(metric)?.metric === 'withinServiceLevel') {
+    return formatPercent(value);
+  }
   return formatNumber(value);
 }
 
@@ -642,7 +736,11 @@ function printCompareResult(
 
   for (const scope of scopes) {
     const rows = comparison.rows.filter(
-      (row) => row.scope === scope && (allRows || DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`)),
+      (row) =>
+        row.scope === scope &&
+        (allRows ||
+          DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`) ||
+          isDefaultOutcomeMetric(scope, row.metric)),
     );
     if (rows.length === 0) continue;
 
@@ -738,6 +836,9 @@ async function compareCommand(
   const comparison = compare(loaded.map((entry) => entry.result), { locale });
   printCompareResult(ir, loaded, comparison, options.all, locale);
   if (options.json !== undefined) writeJson(options.json, comparison, locale);
+  if (options.xlsx !== undefined) {
+    writeXlsx(options.xlsx, compareWorkbook(ir, loaded, comparison, locale), locale);
+  }
   return 0;
 }
 
@@ -778,6 +879,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
       replications: { type: 'string' },
       json: { type: 'string' },
       csv: { type: 'string' },
+      xlsx: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -793,6 +895,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
     csv: values.csv,
+    xlsx: values.xlsx,
     locale,
   });
 }
@@ -804,6 +907,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
+      xlsx: { type: 'string' },
       all: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -820,6 +924,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
+    xlsx: values.xlsx,
     all: values.all === true,
     locale,
   });

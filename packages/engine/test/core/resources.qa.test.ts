@@ -115,6 +115,15 @@ describe('QA adversarial de recursos (LILA-033)', () => {
         throughputPerHour: 480,
         costPerCase: 2,
         totalCost: 4,
+        // #316: el desglose por desenlace es aditivo y aparece siempre, con una entrada por
+        // `end`/`terminate` del IR aunque el modelo tenga uno solo.
+        byEndEvent: {
+          End: {
+            completed: 2,
+            cycleTime: { min: 5, max: 5, mean: 5, sd: 0, p50: 5, p90: 5, p95: 5 },
+            waitTime: { min: 0, max: 0, mean: 0, sd: 0, p50: 0, p90: 0, p95: 0 },
+          },
+        },
       },
       bottlenecks: [],
       warnings: [],

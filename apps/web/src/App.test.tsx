@@ -1166,14 +1166,6 @@ it('el aviso de pérdida concuerda en singular', async () => {
   expect(dialogoPerdida()!.querySelector('h2')!.textContent).toBe(T.app.perdidaTitulo(1));
 });
 
-it('restores the saved browser project after the canvas becomes ready', async () => {
-  const saved = proyecto('browser-project', 'Restored project');
-  (session as unknown as { restoreSession: unknown }).restoreSession = vi.fn(() => saved);
-  await remontar();
-  expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
-  expect(container.textContent).toContain('Restored project');
-});
-
 it.each(['cancelled', 'failed'] as const)('close-time save distinguishes %s from a partial save', async (outcome) => {
   let requestSave!: () => Promise<SaveOutcome>;
   (session as unknown as { onSaveRequested: unknown }).onSaveRequested =
@@ -1186,4 +1178,12 @@ it.each(['cancelled', 'failed'] as const)('close-time save distinguishes %s from
   await act(async () => { result = await requestSave(); });
   expect(result).toBe(outcome);
   expect(container.textContent).toContain(T.app.sinGuardar);
+});
+
+it('restores the saved browser project after the canvas becomes ready', async () => {
+  const saved = proyecto('browser-project', 'Restored project');
+  (session as unknown as { restoreSession: unknown }).restoreSession = vi.fn(() => saved);
+  await remontar();
+  expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
+  expect(container.textContent).toContain('Restored project');
 });

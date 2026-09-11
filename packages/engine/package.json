@@ -1,36 +1,87 @@
 {
   "name": "@lila/engine",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Discrete-event simulation engine for BPMN processes, inspired by the simulation workflow of Bizagi Modeler and validated against public examples",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./bpmn": "./dist/bpmn/index.js",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bpmn": {
+      "types": "./dist/bpmn/index.d.ts",
+      "default": "./dist/bpmn/index.js"
+    },
     "./bpmn/lila.moddle.json": "./dist/bpmn/lila.moddle.json",
-    "./schema": "./dist/scenario.js",
-    "./messages": "./dist/messages/index.js",
-    "./cli-shared": "./dist/cli-shared.js",
-    "./result-schema": "./dist/result.schema.js",
-    "./csv": "./dist/csv.js",
-    "./format": "./dist/format.js"
+    "./schema": {
+      "types": "./dist/scenario.d.ts",
+      "default": "./dist/scenario.js"
+    },
+    "./messages": {
+      "types": "./dist/messages/index.d.ts",
+      "default": "./dist/messages/index.js"
+    },
+    "./project": {
+      "types": "./dist/project/index.d.ts",
+      "default": "./dist/project/index.js"
+    },
+    "./cli-shared": {
+      "types": "./dist/cli-shared.d.ts",
+      "default": "./dist/cli-shared.js"
+    },
+    "./result-schema": {
+      "types": "./dist/result.schema.d.ts",
+      "default": "./dist/result.schema.js"
+    },
+    "./csv": {
+      "types": "./dist/csv.d.ts",
+      "default": "./dist/csv.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "default": "./dist/format.js"
+    },
+    "./xlsx": {
+      "types": "./dist/xlsx.d.ts",
+      "default": "./dist/xlsx.js"
+    },
+    "./xlsx-report": {
+      "types": "./dist/xlsx-report.d.ts",
+      "default": "./dist/xlsx-report.js"
+    }
   },
   "files": [
     "dist",
     "bin",
+    "README.md",
+    "LICENSE",
     "NOTICE"
   ],
   "scripts": {
     "build": "tsc --build",
-    "golden:update": "tsx test/golden/generate.ts"
+    "golden:update": "tsx test/golden/generate.ts",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "bpmn-moddle": "^10.2.0",
+    "fflate": "^0.8.3",
     "zod": "^4.5.4"
   },
   "bin": {
     "lila": "./bin/lila.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlambritoDito/lila-modeler.git",
+    "directory": "packages/engine"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

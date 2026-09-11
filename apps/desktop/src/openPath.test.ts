@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findBpmnArg, isBpmnPath, isMiscasedModelFile } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isMiscasedModelFile, withLilaExtension } from './openPath.js';
 
 describe('isBpmnPath', () => {
   it('acepta .bpmn en cualquier combinación de mayúsculas/minúsculas', () => {
@@ -52,5 +52,18 @@ describe('findBpmnArg', () => {
 
   it('second-instance: skip=1 salta solo el propio ejecutable', () => {
     expect(findBpmnArg(['/usr/bin/lila-modeler', '/ruta/model.bpmn'], 1)).toBe('/ruta/model.bpmn');
+  });
+});
+
+describe('withLilaExtension', () => {
+  it('pone la extensión cuando el diálogo de guardar no la puso', () => {
+    expect(withLilaExtension('/proyectos/pedido')).toBe('/proyectos/pedido.lila');
+    // Un nombre con punto tampoco es un `.lila`: se le añade, no se le reemplaza nada.
+    expect(withLilaExtension('/proyectos/pedido v1.2')).toBe('/proyectos/pedido v1.2.lila');
+  });
+
+  it('respeta la que ya está, en cualquier combinación de mayúsculas', () => {
+    expect(withLilaExtension('/proyectos/pedido.lila')).toBe('/proyectos/pedido.lila');
+    expect(withLilaExtension('/proyectos/PEDIDO.LILA')).toBe('/proyectos/PEDIDO.LILA');
   });
 });

@@ -142,6 +142,12 @@ export interface SimRun {
   warmup?: number | undefined;
   /** Número de corridas independientes; `runReplication` ejecuta una sola (R-ARR-8). */
   replications?: number | undefined;
+  /**
+   * Objetivo de tiempo de ciclo en segundos (#316). Con él, las métricas publican la fracción de
+   * casos completados que lo cumplieron (`withinServiceLevel`), global y por desenlace. No
+   * cambia la simulación: es solo un umbral de reporte.
+   */
+  serviceLevel?: number | undefined;
 }
 
 /** Escenario visto por el motor. */
@@ -170,6 +176,11 @@ export interface CaseRecord {
   startedAt: number;
   /** `null` = seguía en vuelo al parar la corrida: cuenta en `started`, no en `completed` (R-ARR-5). */
   endedAt: number | null;
+  /**
+   * Id del `end` (o `terminate`) que cerró el caso: el desenlace con el que cuenta en
+   * `process.byEndEvent` (#316). `null` mientras el caso sigue en vuelo, igual que `endedAt`.
+   */
+  endId: string | null;
 }
 
 /** Resultado intermedio de una replicación. */
@@ -463,6 +474,8 @@ interface CaseState {
   /** Tokens vivos; los que esperan en un join siguen contando (R-EVT-4). */
   tokens: number;
   endedAt: number | null;
+  /** Id del nodo final que cerró el caso; se fija junto a `endedAt` y nunca se reescribe. */
+  endId: string | null;
   /** `false` tras un `terminate`: sus eventos futuros se descartan al salir del heap (R-EVT-5). */
   alive: boolean;
   /** Contador del AND join por `joinId` (R-AND-2). */
@@ -923,6 +936,7 @@ export function runReplication(
         startedAt: next.t,
         tokens: 1,
         endedAt: null,
+        endId: null,
         alive: true,
         andCounts: new Map(),
         orCounts: new Map(),
@@ -1138,7 +1152,11 @@ export function runReplication(
         // cuando el primero toca un end.
         if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens -= 1;
-        if (state.tokens <= 0) state.endedAt = next.t;
+        if (state.tokens <= 0) {
+          state.endedAt = next.t;
+          // El desenlace es el end que consumió el último token: el caso termina ahí (R-EVT-4).
+          state.endId = next.nodeId;
+        }
         break;
 
       case 'terminate':
@@ -1150,6 +1168,7 @@ export function runReplication(
         state.andCounts.clear();
         state.orCounts.clear();
         state.endedAt = next.t;
+        state.endId = next.nodeId;
         {
           const requestIds: string[] = [];
           for (const activityId of [...state.activityIds]) {
@@ -1204,6 +1223,7 @@ export function runReplication(
         startId: state.startId,
         startedAt: state.startedAt,
         endedAt: state.endedAt,
+        endId: state.endId,
       })),
     rows,
     flows,

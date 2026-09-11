@@ -13,7 +13,7 @@ import { setLocale } from '../i18n';
 // English is the base language (LILA-210); it is set here so the message does not depend on the
 // machine's locale.
 setLocale('en');
-import type { ProjectDocument } from './ProjectStore';
+import type { ProjectDocument, StoredRun } from './ProjectStore';
 
 const XML_MINIMO = '<?xml version="1.0"?><definitions xmlns="http://example.org"/>';
 
@@ -41,16 +41,34 @@ class FakeBridge implements LilaBridge {
   readonly dirtyHistory: boolean[] = [];
   private closeRequestedCb: (() => Promise<SaveOutcome>) | null = null;
 
-  /** Encola el próximo (o los próximos) resultado(s) de `chooseFolder`. */
+  /**
+   * Qué diálogo nativo se abrió, en orden (ADR-027): `chooseFolder` elige algo que ya existe y
+   * `chooseSaveFile` crea un `.lila` nuevo. Los dos comparten la cola de resultados —para el fake
+   * el destino es la misma cadena y así las pruebas que ya existían siguen diciendo lo mismo—, y
+   * esta lista es lo que distingue cuál se usó.
+   */
+  readonly dialogos: ('folder' | 'saveFile')[] = [];
+
+  /** Encola el próximo (o los próximos) resultado(s) de `chooseFolder`/`chooseSaveFile`. */
   queueChooseFolder(...results: (string | null)[]): void {
     this.chooseFolderQueue.push(...results);
   }
 
-  async chooseFolder(): Promise<string | null> {
+  private siguienteDestino(quien: string): string | null {
     if (this.chooseFolderQueue.length === 0) {
-      throw new Error('FakeBridge.chooseFolder: no queda ningún resultado encolado en el test.');
+      throw new Error(`FakeBridge.${quien}: no queda ningún resultado encolado en el test.`);
     }
     return this.chooseFolderQueue.shift() as string | null;
+  }
+
+  async chooseFolder(): Promise<string | null> {
+    this.dialogos.push('folder');
+    return this.siguienteDestino('chooseFolder');
+  }
+
+  async chooseSaveFile(): Promise<string | null> {
+    this.dialogos.push('saveFile');
+    return this.siguienteDestino('chooseSaveFile');
   }
 
   async readProject(dir: string): Promise<LilaProjectDocument> {
@@ -194,10 +212,13 @@ describe('DesktopStore.openProject', () => {
     // `doc.problems` directamente del documento devuelto por `openProject`, no de un canal aparte.
     const bridge = new FakeBridge();
     bridge.queueChooseFolder('/carpeta/pedido');
+    // `result` es un stub: lo que este caso comprueba es que `DesktopStore` deja pasar la corrida
+    // tal cual por la frontera IPC, no que sea un `RunResult` válido (desde ADR-027 el tipo
+    // compartido lo exige, así que el stub se declara como tal a propósito).
     const run = {
       id: 'run-1',
       scenarioName: 'as-is.scenario.json',
-      result: { kpis: { total: 7 } },
+      result: { kpis: { total: 7 } } as unknown as StoredRun['result'],
       inputs: { modelRevision: 1, scenarioRevision: 1, xml: XML_MINIMO, scenario: {} },
     };
     const raw: LilaProjectDocument = {
@@ -546,5 +567,55 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     store.onOpenPath((path) => recibidos.push(path));
     bridge.triggerOpenPath({ dir: '/otra', file: 'model.bpmn' });
     expect(recibidos).toEqual([{ dir: '/otra', file: 'model.bpmn' }]);
+  });
+});
+
+/**
+ * Qué diálogo abre cada destino nuevo (ADR-027, hallazgo 4 del QA a #323). Antes de `chooseSaveFile`
+ * todo pasaba por `chooseFolder`, que solo sabe elegir algo que YA existe: un `.lila` no se podía
+ * crear desde el escritorio.
+ */
+describe('DesktopStore.saveProject · destino de «Guardar como»', () => {
+  it('«Guardar como» abre el diálogo de guardar un .lila, no el de carpeta', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/proyectos/pedido.lila');
+    const store = new DesktopStore(bridge);
+
+    await expect(store.saveProject(documentoBase(), { saveAs: true })).resolves.not.toBeNull();
+    expect(bridge.dialogos).toEqual(['saveFile']);
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/proyectos/pedido.lila', options: { saveAs: true } });
+  });
+
+  it('«Guardar como carpeta…» (asFolder) abre el selector de carpeta de siempre', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/proyectos/pedido');
+    const store = new DesktopStore(bridge);
+
+    await expect(store.saveProject(documentoBase(), { saveAs: true, asFolder: true })).resolves.not.toBeNull();
+    expect(bridge.dialogos).toEqual(['folder']);
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/proyectos/pedido' });
+  });
+
+  it('cancelar el diálogo de guardar devuelve null y no escribe nada', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder(null);
+    const store = new DesktopStore(bridge);
+
+    await expect(store.saveProject(documentoBase(), { saveAs: true })).resolves.toBeNull();
+    expect(bridge.dialogos).toEqual(['saveFile']);
+    expect(bridge.writes).toEqual([]);
+  });
+
+  it('un proyecto abierto como carpeta se sigue guardando en su carpeta, sin diálogo', async () => {
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/pedido');
+    bridge.readProjectImpl = async (dir) => ({ ...documentoBase(), model: { ...documentoBase().model }, problems: [], loose: false, dir } as never);
+    const store = new DesktopStore(bridge);
+    await store.openProject();
+    bridge.dialogos.length = 0;
+
+    await store.saveProject(documentoBase({ name: 'pedido v2' }));
+    expect(bridge.dialogos).toEqual([]);
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/pedido', options: { saveAs: false } });
   });
 });

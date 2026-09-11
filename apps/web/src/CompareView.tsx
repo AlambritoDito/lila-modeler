@@ -23,18 +23,22 @@ import {
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
+  splitOutcomeMetric,
   type BaseTimeUnit,
 } from '@lila/engine/format';
 import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
+import { compareWorkbook, type CompareEntry } from '@lila/engine/xlsx-report';
 import {
   DataTable,
+  downloadXlsx,
+  exportButtonStyle,
   tabLabels,
   h2Style,
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
-import { strings, useStrings } from './i18n';
+import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 
@@ -57,6 +61,12 @@ export interface CompareViewProps {
    * (sin panel de avisos, sin metadatos en la cabecera, `baseTimeUnit` para todas las columnas).
    */
   runs?: readonly CompareRunMeta[];
+  /**
+   * Escenario resuelto y `RunResult` de cada corrida, en el mismo orden que `scenarioNames`
+   * (issue #80). Sin este prop no hay botón "Exportar XLSX": el libro necesita los resultados
+   * completos —no solo el `CompareResult`— para escribir la hoja Resumen de cada escenario.
+   */
+  entries?: readonly CompareEntry[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -77,7 +87,19 @@ const DEFAULT_COMPARE_METRICS: ReadonlySet<string> = new Set([
   'process:throughputPerHour',
   'process:costPerCase',
   'process:totalCost',
+  'process:withinServiceLevel',
 ]);
+
+/**
+ * Métricas por desenlace que entran en la tabla por defecto (#316), espejo de
+ * `isDefaultOutcomeMetric` en `packages/engine/src/cli.ts`: sus paths llevan el id BPMN dentro,
+ * así que no caben en el `Set` de arriba.
+ */
+function isDefaultOutcomeMetric(scope: CompareScope, metric: string): boolean {
+  if (scope !== 'process') return false;
+  const outcome = splitOutcomeMetric(metric);
+  return outcome !== null && (outcome.metric === 'cycleTime.mean' || outcome.metric === 'withinServiceLevel');
+}
 
 /**
  * Los únicos campos monetarios de `RunResult` (`run.currency`, docs/RESULTS_FORMAT.md §§2,4,5):
@@ -118,6 +140,9 @@ function formatCellValue(metric: string, value: number | null, unit: BaseTimeUni
   if (isCostMetric(metric)) return formatMoney(value, currency);
   if (isDurationMetric(metric)) return formatDuration(value, unit);
   if (metric === 'utilization') return S.comparar.porCiento(formatNumber(value * 100));
+  if (metric === 'withinServiceLevel' || splitOutcomeMetric(metric)?.metric === 'withinServiceLevel') {
+    return S.comparar.porCiento(formatNumber(value * 100));
+  }
   return formatNumber(value);
 }
 
@@ -176,7 +201,13 @@ export function visibleCompareRows(
   scope: CompareScope,
   showAll: boolean,
 ): CompareRow[] {
-  return rows.filter((row) => row.scope === scope && (showAll || DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`)));
+  return rows.filter(
+    (row) =>
+      row.scope === scope &&
+      (showAll ||
+        DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`) ||
+        isDefaultOutcomeMetric(scope, row.metric)),
+  );
 }
 
 function rowName(
@@ -356,6 +387,7 @@ export function CompareView({
   baseTimeUnit,
   resourceNames = {},
   runs,
+  entries,
 }: CompareViewProps): ReactNode {
   const S = useStrings();
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
@@ -406,6 +438,28 @@ export function CompareView({
         <input checked={showAll} onChange={() => setShowAll((current) => !current)} type="checkbox" />
         {S.comparar.mostrarTodos}
       </label>
+
+      {/*
+       * Un solo botón para toda la vista, no uno por tabla: el libro lleva la hoja Resumen de cada
+       * escenario y la hoja Comparación completa, así que exportarlo desde cada ámbito daría el
+       * mismo archivo cuatro veces. Los bytes se construyen al pulsar (issue #80).
+       */}
+      {entries !== undefined && entries.length > 0 && (
+        <div style={selectorRowStyle}>
+          <button
+            type="button"
+            style={exportButtonStyle}
+            onClick={() =>
+              downloadXlsx(
+                `${scenarioNames.join(' vs ')}.xlsx`,
+                compareWorkbook(ir, entries, comparison, getLocale()),
+              )
+            }
+          >
+            {S.resultados.exportarXlsx}
+          </button>
+        </div>
+      )}
 
       {/*
        * Panel de avisos (OP-05, issue #210): los de `compareWarnings` (moneda/unidad/significancia/

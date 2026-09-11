@@ -20,7 +20,9 @@ The script builds the existing Vite app with `LILA_WEB_BASE=/lila-modeler/app/` 
 build retains its root base. To preview the real subpath, serve a directory containing a
 `lila-modeler` link or copy of `_site`, then open `/lila-modeler/` on that server.
 
-**Save project** downloads the complete `.lila.json` document and stores a local browser copy.
+**Save project** downloads the complete project as a `.lila` file — the project folder zipped,
+the same one the desktop app opens (see [project format](PROJECT_FORMAT.md)) — and stores a local
+browser copy. Projects saved before that change, as `.lila.json`, still open.
 Reload restores that saved model, draft scenarios, revisions and simulation results. Unsaved
 changes are not autosaved. Storage failure does not prevent downloading; keep the download
 as a portable backup. Clearing browser data removes the local copy.

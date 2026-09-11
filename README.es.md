@@ -69,7 +69,7 @@ warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
-  --json out/result.json --csv out/csv
+  --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
 ```
 
 ```
@@ -123,7 +123,9 @@ Task_TomarPedido  Take order      Average time (waiting for resource)  0.234564 
 La salida sale en inglés por defecto; con `--lang es` (en cualquier posición), `LILA_LANG=es` o
 un `LANG` español, la misma corrida se imprime en español.
 
-`--json` funciona igual en `run` y en `compare`; `--csv` solo en `run`. `--help` en cualquier
+`--json` y `--xlsx` funcionan igual en `run` y en `compare`; `--csv` solo en `run`. `--xlsx`
+escribe un libro de cálculo (Resumen, Elementos, Flujos, Recursos, Parámetros; más una hoja
+Comparación en `compare`) — ver `docs/RESULTS_FORMAT.md` § 12. `--help` en cualquier
 subcomando lista todas las opciones. El formato de escenario está en
 `docs/SCENARIO_FORMAT.md`, el de resultados en `docs/RESULTS_FORMAT.md`, y el mapeo de nombres
 de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
@@ -132,10 +134,12 @@ de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
 
 **Pruébala en el navegador**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/) —
 [abrir el editor](https://alambritodito.github.io/lila-modeler/app/) con `examples/pedido` cargado.
-**Guardar proyecto** descarga el archivo completo y conserva una copia local para restaurarla al
-recargar. Los cambios sin guardar no se conservan automáticamente; no se sube nada al servidor.
-La demo pública fue verificada el 10 de septiembre de 2026. Las publicaciones siguen siendo
-manuales mediante `.github/workflows/pages.yml`.
+**Guardar proyecto** descarga un `.lila`: la carpeta de proyecto zipeada, el mismo archivo que abre
+la app de escritorio (ver [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)). Los proyectos
+guardados antes, en `.lila.json`, se siguen abriendo. Además conserva una copia local para
+restaurarla al recargar; los cambios sin guardar no se conservan automáticamente y no se sube nada
+al servidor. La demo pública fue verificada el 10 de septiembre de 2026. Las publicaciones siguen
+siendo manuales mediante `.github/workflows/pages.yml`.
 
 Para correrla en local:
 
@@ -165,9 +169,12 @@ empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se dist
 repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
 en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
 intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
-como editor de `.bpmn`: doble clic sobre un archivo (o un arranque en frío con él) lo abre en el
-editor; si el archivo no está dentro de una carpeta de proyecto Lila, se guarda solo ese `.bpmn`
-hasta que se use «Guardar como». Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
+como editor de `.bpmn` y de `.lila`: doble clic sobre un archivo (o un arranque en frío con él) lo
+abre en el editor; si el `.bpmn` no está dentro de una carpeta de proyecto Lila, se guarda solo ese
+archivo hasta que se use «Guardar como». Un `.lila` es el proyecto entero en un archivo y se guarda
+sobre sí mismo; para abrir uno desde el menú, Archivo → «Abrir archivo de proyecto (.lila)…», y
+«Guardar como…» crea uno nuevo (la carpeta de proyecto de ADR-018 sigue a un menú de distancia,
+Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
 dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
 deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 

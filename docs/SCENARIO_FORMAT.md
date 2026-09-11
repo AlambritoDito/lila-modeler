@@ -52,6 +52,7 @@ Unknown keys are not accepted at the root (`strict`): a misspelled field is an e
 | `seed` | integer | no | `1` | PRNG seed. Byte-for-byte determinism per `(seed, replication, elementId)` (ADR-017). The default is applied by the engine, not the schema: without declaring it, the `W-SIN-SEED` warning is emitted (R-DEG-4). |
 | `baseTimeUnit` | `"s"` \| `"min"` \| `"h"` \| `"day"` | no | `"s"` | **Presentation only**: the unit times are printed in. It does not change a single internal number. |
 | `currency` | ISO 4217 string | no | — | Cost currency. If absent, amounts are reported without a symbol. |
+| `serviceLevel` | number > 0 (seconds) | no | — | Target cycle time. **Reporting only**: it does not change the simulation. With it, the result adds `process.withinServiceLevel` and `process.byEndEvent[*].withinServiceLevel`, the fraction of completed cases whose cycle time is at most this value (docs/RESULTS_FORMAT.md § 5). |
 
 ² At least one of `run.duration` or a `triggerCount` on a `start` in `elements` (rule R6). If both are present, whichever occurs first wins.
 

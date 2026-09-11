@@ -105,6 +105,8 @@ describe('mapa único de nombres de columna (LILA-201)', () => {
       'Throughput per hour',
       'Cost per case',
       'Total cost',
+      'Within service level',
+      'Outcome',
     ]);
   });
 });

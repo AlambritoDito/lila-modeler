@@ -32,9 +32,9 @@ const NODE_TYPES: Record<string, string> = {
 
 const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]
        lila run <model.bpmn> <scenario.json> [--seed n] [--replications n]
-                [--json result.json] [--csv directory]
+                [--json result.json] [--csv directory] [--xlsx book.xlsx]
        lila compare <model.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                    [--json result.json] [--all]
+                    [--json result.json] [--xlsx book.xlsx] [--all]
        lila mcp
 
 Commands:
@@ -52,11 +52,15 @@ run options:
   --json file       Writes the deterministic RunResult as JSON.
   --csv directory   Writes elements, flows, resources, process and log as RFC 4180 CSV.
                     log.csv is written streaming and carries ISO timestamps from run.start.
+  --xlsx file       Writes one .xlsx workbook with the Summary, Elements, Flows, Resources
+                    and Parameters sheets. The event log is only in --csv.
 
 compare options:
   --seed n          Overrides run.seed in every compared scenario.
   --replications n  Overrides run.replications in every compared scenario.
   --json file       Writes the deterministic CompareResult as JSON.
+  --xlsx file       Writes one .xlsx workbook with a Summary sheet per scenario plus a
+                    Comparison sheet (value, 95% CI, delta and CI overlap per KPI).
   --all             Prints every KPI of compare(), not just the curated subset.
                     The first scenario listed is the base: the rest are compared against it.
 
@@ -200,6 +204,7 @@ export const en: Catalog = {
       `Seed ${seed} · Replications ${replications} · Time unit ${unit}`,
     currency: (currency) => `Currency ${currency}`,
     bottlenecks: () => 'Bottlenecks',
+    outcomes: () => 'Outcomes',
     noResourceWait: () => 'No wait for a resource detected.',
     warnings: () => 'Warnings:',
 
@@ -211,6 +216,33 @@ export const en: Catalog = {
     columnReplications: () => 'Replications',
     baseColumn: (name) => `${name} (base)`,
     significantMark: () => '* significant difference (95% CI without overlap)',
+
+    xlsxSheetSummary: () => 'Summary',
+    xlsxSheetElements: () => 'Elements',
+    xlsxSheetFlows: () => 'Flows',
+    xlsxSheetResources: () => 'Resources',
+    xlsxSheetParameters: () => 'Parameters',
+    xlsxSheetComparison: () => 'Comparison',
+    xlsxColumnSection: () => 'Section',
+    xlsxColumnParameter: () => 'Parameter',
+    xlsxColumnValue: () => 'Value',
+    xlsxSectionProcess: () => 'Process',
+    xlsxSectionOutcomes: () => 'Outcomes',
+    xlsxSectionPayroll: () => 'Payroll',
+    xlsxSectionRun: () => 'Run',
+    xlsxSectionArrivals: () => 'Arrivals',
+    xlsxSectionTasks: () => 'Tasks',
+    xlsxSectionGateways: () => 'Gateways',
+    xlsxSectionCalendars: () => 'Calendars',
+    xlsxCapacity: () => 'Capacity',
+    xlsxWorkingHours: () => 'Working hours',
+    xlsxPayrollCost: () => 'Payroll cost',
+    xlsxTotal: () => 'Total',
+    xlsxDelta: (scenario) => `Delta ${scenario}`,
+    xlsxDeltaRelative: (scenario) => `Delta % ${scenario}`,
+    xlsxCi95Low: (scenario) => `CI95 low ${scenario}`,
+    xlsxCi95High: (scenario) => `CI95 high ${scenario}`,
+    xlsxOverlap: (scenario) => `CI95 overlap ${scenario}`,
 
     mixedTimeUnit: (unit, others) =>
       `the scenarios do not share baseTimeUnit; the whole table uses ${unit}, the one of the base ` +

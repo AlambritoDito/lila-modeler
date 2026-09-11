@@ -72,7 +72,7 @@ warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
-  --json out/result.json --csv out/csv
+  --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
 ```
 
 ```
@@ -123,7 +123,9 @@ Task_TomarPedido  Take order      Average time (waiting for resource)  0.234564 
 ...
 ```
 
-`--json` works the same in `run` and in `compare`; `--csv` only in `run`. `--help` on any subcommand
+`--json` and `--xlsx` work the same in `run` and in `compare`; `--csv` only in `run`. `--xlsx`
+writes one spreadsheet (Summary, Elements, Flows, Resources, Parameters; a Comparison sheet in
+`compare`) — see `docs/RESULTS_FORMAT.md` § 12. `--help` on any subcommand
 lists every option, and `--lang en|es` (any position) picks the language of the output.
 Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The scenario format is in `docs/SCENARIO_FORMAT.md`, the results format in
 `docs/RESULTS_FORMAT.md`, and the mapping of column names against Bizagi in
@@ -133,7 +135,9 @@ Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The s
 
 **Try it in your browser**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/).
 The public demo opens the restaurant example in English. [Open the editor directly](https://alambritodito.github.io/lila-modeler/app/).
-**Save project** downloads a project file and retains a browser copy to restore on reload.
+**Save project** downloads a `.lila` project file — the project folder zipped, the same one the
+desktop app opens ([project format](docs/PROJECT_FORMAT.md)) — and retains a browser copy to
+restore on reload. Projects saved earlier as `.lila.json` still open.
 Unsaved edits are not automatically persisted; nothing is uploaded. If browser storage is
 unavailable or full, use the downloaded file to reopen your work.
 
@@ -171,9 +175,12 @@ that packages the web app as a `.dmg` with saving into a project folder. It is n
 inside the repository: you have to build it with `npm run dist:mac -w @lila/desktop`, which leaves
 the installer in `apps/desktop/release/` (a folder in `.gitignore`). Because it is unsigned, macOS
 blocks the first attempt to open it by double-clicking; you have to open it with right-click → Open.
-The app registers itself as a `.bpmn` editor: double-clicking a file (or a cold start with one)
-opens it in the editor; if the file is not inside a Lila project folder, only that `.bpmn` is saved
-until «Guardar como» (Save as) is used. Pushing a `v*` tag
+The app registers itself as a `.bpmn` and `.lila` editor: double-clicking a file (or a cold start
+with one) opens it in the editor; if the `.bpmn` is not inside a Lila project folder, only that file
+is saved until «Guardar como» (Save as) is used. A `.lila` is the whole project in one file
+([project format](docs/PROJECT_FORMAT.md)) and saves back over itself; to open one from the menu,
+File → «Open project file (.lila)…», and «Save as…» creates a new one (the project folder of
+ADR-018 is still one entry away, File → «Save as folder…»). Pushing a `v*` tag
 (`git tag v0.0.1 && git push origin v0.0.1`) triggers the `Desktop` workflow, which builds the three
 installers (`.dmg`, `.exe`, `.AppImage`) and leaves them in a GitHub Release **as a draft**, to be
 published by hand.

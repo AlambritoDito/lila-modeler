@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
+import { loadResolvedScenario, loadValidatedModel, withRunOverrides } from '../src/cli-shared.js';
+import { simulate } from '../src/index.js';
+import { scenarioErrors, validateScenario } from '../src/scenario.js';
+
 // LILA-008: verifica examples/pedido/* sin depender del parser BPMN (aún no
 // existe, ver LILA_MODELER_ESTRUCTURA.md §6). Basta una expresión regular
 // sobre los id="..." del XML, tal como pide el ticket.
@@ -166,5 +170,99 @@ describe('examples/pedido', () => {
     expect(resolved.resources.cocinero).toEqual(asIs.resources.cocinero);
     expect(resolved.resources.horno).toEqual(asIs.resources.horno);
     expect(resolved.elements).toEqual(asIs.elements);
+  });
+});
+
+// LILA-318: humo de examples/tarjeta-credito por el mismo camino que el CLI
+// (parseBpmn -> resolveExtends/parseScenario -> validateScenario -> simulate), con pocas
+// réplicas para que el suite siga siendo rápido. Los números de referencia de 30 réplicas
+// viven en examples/tarjeta-credito/README.md; aquí solo se fija lo estructural.
+const tarjetaDir = resolve(here, '../../../examples/tarjeta-credito');
+
+async function runTarjeta(scenarioFile: string) {
+  const { ir, validation } = await loadValidatedModel(resolve(tarjetaDir, 'model.bpmn'));
+  expect(validation.errors).toEqual([]);
+
+  const scenario = withRunOverrides(loadResolvedScenario(resolve(tarjetaDir, scenarioFile)), {
+    seed: 42,
+    replications: 5,
+  });
+  expect(scenarioErrors(validateScenario(scenario, ir))).toEqual([]);
+
+  return simulate(ir, scenario, { log: false });
+}
+
+describe('examples/tarjeta-credito', () => {
+  test(
+    'el AS-IS satura al analista y el TO-BE con tres analistas lo descongestiona',
+    async () => {
+      const asIs = await runTarjeta('as-is.scenario.json');
+      const toBe = await runTarjeta('to-be-3-analistas.scenario.json');
+
+      // ~10 solicitudes/h durante 8 h; el rango es tolerante porque las llegadas son exponenciales.
+      for (const result of [asIs, toBe]) {
+        expect(result.process.started).toBeGreaterThan(60);
+        expect(result.process.started).toBeLessThan(100);
+      }
+
+      // El analista es el cuello de botella del AS-IS: rho analítico 1,39 con dos analistas.
+      expect(asIs.resources['analyst']!.utilization).toBeGreaterThan(0.9);
+      // Question 5: the 30-minute promise (`run.serviceLevel: 1800`, #316) is measured on delivered
+      // cards only; it is not met in either scenario (analyst path alone takes 27 min of work).
+      for (const result of [asIs, toBe]) {
+        const delivered = result.process.byEndEvent['End_CardDelivered']!;
+        expect(delivered.completed).toBe(result.elements['End_CardDelivered']!.completed);
+        expect(delivered.withinServiceLevel).toBeLessThan(0.05);
+        expect(delivered.cycleTime.mean).toBeGreaterThan(1800);
+      }
+      expect(asIs.bottlenecks[0]!.elementId).toBe('Task_CheckBureau');
+
+      // Tres analistas: menos espera, menos casos abiertos al cierre y ninguna alerta de pool
+      // sin estado estacionario.
+      expect(toBe.resources['analyst']!.utilization).toBeLessThan(
+        asIs.resources['analyst']!.utilization,
+      );
+      expect(toBe.process.inFlight).toBeLessThan(asIs.process.inFlight);
+      expect(toBe.elements['Task_CheckBureau']!.resourceWait.mean).toBeLessThan(
+        asIs.elements['Task_CheckBureau']!.resourceWait.mean / 2,
+      );
+      // `W-RECURSO-SATURADO` is not asserted: the heuristic (demand/served >= 1.1) never fires for
+      // the self-gated analyst pool, so the absence in TO-BE would be vacuous. Utilization,
+      // bottleneck and inFlight above carry the saturation evidence instead.
+
+      // Las tres salidas se ejercitan en ambos escenarios.
+      for (const result of [asIs, toBe]) {
+        for (const endId of ['End_BureauRejected', 'End_DebtRejected', 'End_CardDelivered']) {
+          expect(result.elements[endId]!.completed).toBeGreaterThan(0);
+        }
+      }
+    },
+    120_000, // ponytail: dos corridas de 5 réplicas; techo holgado, no es una medida de rendimiento
+  );
+
+  test('el escenario TO-BE es un delta de extends que solo mueve la capacidad del analista', () => {
+    const toBe = JSON.parse(
+      readFileSync(resolve(tarjetaDir, 'to-be-3-analistas.scenario.json'), 'utf8'),
+    );
+    expect(toBe.extends).toBe('as-is.scenario.json');
+    expect(toBe.resources.analyst.capacity).toBe(3);
+    expect(toBe.run).toBeUndefined();
+    expect(toBe.model).toBeUndefined();
+  });
+
+  test('todo elemento simulable del modelo está en elements o justificado', () => {
+    const xml = readFileSync(resolve(tarjetaDir, 'model.bpmn'), 'utf8');
+    const asIs = JSON.parse(readFileSync(resolve(tarjetaDir, 'as-is.scenario.json'), 'utf8'));
+    const covered = new Set(Object.keys(asIs.elements));
+    const diRefs = new Set([...xml.matchAll(/bpmnElement="([^"]+)"/g)].map((m) => m[1]));
+    // Gateways, end events y los flujos que no salen de un XOR toman sus defaults (§ 2.5, R4).
+    const sinParametros = /^(Gateway_|End_)/;
+    const flowsSinProbabilidad = /^Flow_(?!BureauBad|BureauGood|DebtNotEligible|DebtEligible)/;
+    for (const id of simulableIds(xml)) {
+      const ok =
+        covered.has(id) || sinParametros.test(id) || flowsSinProbabilidad.test(id);
+      expect(ok, `id sin cobertura ni justificación: ${id}`).toBe(true);
+      expect(diRefs.has(id), `id sin BPMNShape/BPMNEdge: ${id}`).toBe(true);
+    }
   });
 });

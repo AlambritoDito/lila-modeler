@@ -1,7 +1,11 @@
 # Stabilization handoff — 2026-09-10
 
-This supersedes the 2026-09-09 integration-branch handoff. The integration branch is historical;
-do not merge it wholesale. Functional and documentation changes were reviewed and squash-merged
+This supersedes the 2026-09-09 integration-branch handoff. Everything listed below was already
+merged into `main` through individual PRs; the stabilization branch's own copies of that work are
+historical. What the branch carries **beyond** this handoff — per-outcome metrics and service level
+(#321), XLSX export (#322), the credit-card example (#319), the `.lila` project container (#323),
+the XLSX Summary fix (#324) and the e2e failure fix (#325) — is what the 1.0.0-alpha integration
+brings across; each of those went through its own PR. Functional and documentation changes were reviewed and squash-merged
 through their individual PRs, with strict up-to-date Node 22/24 CI and specific adversarial QA.
 
 ## Merged work

@@ -207,7 +207,8 @@ export function compareWarnings(
 
 export interface StagedFile {
   readonly target: string;
-  write(contents: string): void;
+  /** Texto (CSV, JSON) o bytes crudos: `lila run --xlsx` publica un zip por esta misma vía. */
+  write(contents: string | Uint8Array): void;
   close(): void;
   commit(): void;
   abort(): void;
@@ -247,7 +248,9 @@ export function stageFile(target: string, locale: Locale = 'en'): StagedFile {
         throw new Error(messages(locale).cli.temporaryFileClosed(temporary));
       }
       // `writeFileSync(fd, ...)` completa todo el buffer; un único `writeSync` puede ser parcial.
-      writeFileSync(descriptor, contents, 'utf8');
+      // La codificación solo aplica al texto; con un `Uint8Array` Node la ignora y escribe crudo.
+      if (typeof contents === 'string') writeFileSync(descriptor, contents, 'utf8');
+      else writeFileSync(descriptor, contents);
     },
     close,
     commit() {
