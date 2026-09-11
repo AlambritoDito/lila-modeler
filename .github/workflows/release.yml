@@ -12,6 +12,12 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    # Publication is opt-in: the owner has not created NPM_TOKEN nor settled the npm org, so
+    # the alpha tag proves the package builds and packs without pushing anything to a registry.
+    # Secrets are unavailable to `if:` directly, so the job exposes the token as an env var and
+    # the publish step tests that instead.
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +40,12 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm pack --workspace @lila/engine --dry-run
-      - run: npm publish --workspace @lila/engine --provenance --access public
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: npm publish --workspace @lila/engine --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
+      - name: Report that publication was skipped
+        if: env.NPM_TOKEN == ''
+        run: |
+          echo "::notice title=npm publish skipped::NPM_TOKEN is not configured, so @lila/engine was not published. The tag still proved that the package builds, type-checks, tests and packs. Add the NPM_TOKEN secret and re-run this workflow to publish."
