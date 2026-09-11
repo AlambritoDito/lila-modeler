@@ -22,6 +22,7 @@ import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/
 import path from 'node:path';
 import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
+import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
@@ -88,27 +89,14 @@ async function e2eLog(event: string, data: object = {}): Promise<void> {
 
 /**
  * Valida `dir` contra `authorizedFolders` (que guarda siempre `realpath`, ver `chooseFolder`/
- * `acceptOpenPath`) y, además, vuelve a resolver su `realpath` en este momento: si difiere de sí
- * misma, la carpeta cambió de identidad (p. ej. la reemplazó un symlink) entre la autorización y
- * este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71).
+ * `acceptOpenPath`/`chooseSaveFile`) y, además, vuelve a resolver su identidad en este momento:
+ * si difiere de sí misma, la ruta cambió de identidad (p. ej. la reemplazó un symlink) entre la
+ * autorización y este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71). Un
+ * `.lila` recién elegido en «Guardar como…» todavía no existe: su identidad es la de su carpeta
+ * contenedora más el nombre (ver `authorizedPaths.ts`).
  */
 async function requireAuthorizedDir(dir: unknown): Promise<string> {
-  if (typeof dir !== 'string' || dir.length === 0) {
-    throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
-  }
-  if (!authorizedFolders.has(dir)) {
-    throw new Error('E-NO-AUTORIZADO: la carpeta no fue autorizada por un diálogo.');
-  }
-  let real: string;
-  try {
-    real = await realpath(dir);
-  } catch {
-    throw new Error('E-NO-AUTORIZADO: la carpeta autorizada ya no existe.');
-  }
-  if (real !== dir) {
-    throw new Error('E-NO-AUTORIZADO: la carpeta cambió de identidad desde que se autorizó (symlink).');
-  }
-  return dir;
+  return requireAuthorizedPath(authorizedFolders, dir);
 }
 
 /**
