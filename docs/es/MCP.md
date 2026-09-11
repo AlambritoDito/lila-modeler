@@ -23,8 +23,8 @@
   modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
-  inline; `model` es opcional y por defecto es `scenario.model`. Ningún campo de nivel 2/3 se
-  rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
+  inline; `model` es opcional y por defecto es `scenario.model`; se rechaza un modelo distinto.
+  Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila/engine/result-schema`) y responde `structuredContent` además del texto.
 - **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
@@ -54,7 +54,8 @@
     `saveTo`. Un `remove` se escribe como `null`, que es como `extends` borra una clave heredada
     (§ 6). Si `saveTo` apunta al propio `scenario` (o a `extendsFrom`), el archivo heredaría de sí
     mismo: es un ciclo de `extends` y la tool falla sin escribir — para parchear en sitio, se omite
-    `saveTo`.
+    `saveTo`. Un archivo de destino existente se sobrescribe: «nuevo» describe el escenario
+    derivado, no una garantía de creación exclusiva.
 
   El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
   (`/resources/cajero/capacity`); **no** soporta `move` ni `copy` — son las dos operaciones que
@@ -102,8 +103,8 @@ Eso deja listos los dos puntos de entrada, que arrancan **el mismo servidor**:
 ya tiene instalado. Como `@lila/mcp` depende de `@lila/engine`, importarlo estáticamente desde
 `cli.ts` sería un ciclo entre paquetes: se carga con `import()` dinámico
 (`packages/engine/src/cli.ts`, `dispatchMcp`) y, si el paquete no está, el comando lo dice por
-stderr y sale con 1 en vez de romperse. Cuando LILA-048 publique los paquetes, el registro pasará a
-ser `npx @lila/engine mcp` sin nada más.
+stderr y sale con 1 en vez de romperse. Instalar el paquete del motor no instala el workspace
+privado `@lila/mcp`. Usa el checkout hasta que exista una distribución MCP instalable por separado.
 
 `lila mcp` habla MCP por **stdout**: nada más puede escribir ahí. Todo diagnóstico (paquete
 ausente, fallo de arranque) sale por stderr, que es lo único que ve quien registró el servidor.
@@ -148,18 +149,15 @@ Claude Desktop no tiene CLI: se edita a mano
 {
   "mcpServers": {
     "lila": {
-      "command": "node",
-      "args": ["/ruta/al/repo/packages/engine/bin/lila.js", "mcp"],
-      "cwd": "/ruta/al/repo"
+      "command": "/ruta/absoluta/a/node",
+      "args": ["/ruta/al/repo/packages/engine/bin/lila.js", "mcp"]
     }
   }
 }
 ```
 
-Aquí las rutas **tienen que ser absolutas** (Desktop lanza el proceso desde `/`, y `node` puede no
-estar en su PATH: si no arranca, pon la ruta completa del binario de Node en `command`). `cwd` es
-lo que decide contra qué directorio se resuelven las rutas relativas de las tools; sin él, pasa
-rutas absolutas en cada llamada.
+Usa rutas absolutas para Node y el punto de entrada. Pasa también rutas absolutas de modelo y
+escenario en cada llamada, sin depender del directorio de trabajo que elija el cliente.
 
 ### Ejemplos
 
@@ -263,7 +261,7 @@ deja el escenario inválido (estructuralmente, por `docs/SCENARIO_FORMAT.md` § 
 propia operación de JSON Patch no se puede aplicar — un `path` inexistente en `replace`, una
 operación desconocida) es `isError: true`, sin escribir nada. No hay ambigüedad "resultado
 correcto pero el modelo tiene errores" aquí: si el escenario resultante no valida, no hay nada que
-devolver. Los defectos del esquema salen por `parseScenario` (LILA-202): en español y con los
+devolver. Los defectos del esquema salen por `parseScenario` (LILA-202): con los
 códigos de `docs/SEMANTICS.md` § 17 (`E-CLAVE-DESCONOCIDA: …`), el mismo texto que la CLI y en el
 idioma que pidió la llamada (§ Idioma).
 

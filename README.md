@@ -133,11 +133,11 @@ Without it, `LILA_LANG`, then `LC_ALL`/`LC_MESSAGES`/`LANG`, then English. The s
 
 ## Web app
 
-**Prepared demo address**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/).
-Publication is pending owner activation. The demo opens the restaurant example in English.
+**Try it in your browser**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/).
+The public demo opens the restaurant example in English. [Open the editor directly](https://alambritodito.github.io/lila-modeler/app/).
 **Save project** downloads a `.lila` project file — the project folder zipped, the same one the
 desktop app opens ([project format](docs/PROJECT_FORMAT.md)) — and retains a browser copy to
-restore on reload.
+restore on reload. Projects saved earlier as `.lila.json` still open.
 Unsaved edits are not automatically persisted; nothing is uploaded. If browser storage is
 unavailable or full, use the downloaded file to reopen your work.
 

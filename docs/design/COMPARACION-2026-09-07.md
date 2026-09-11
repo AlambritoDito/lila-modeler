@@ -1,5 +1,9 @@
 # Demo vs artboards de Claude Design — 2026-09-07
 
+> **Historical comparison, 2026-09-07.** Current English screenshots and the disposition of every
+> historical image are recorded in [the screenshot inventory](README.md). Retired application
+> images below link to their immutable historical commit; they are not the current demo.
+
 > **Working document, kept in Spanish.** The public documentation is in [`docs/`](../) and [`README.md`](../../README.md).
 
 Comparación de la app contra los diez artboards del artefacto (`Lila Modeler.dc.html`, capturas
@@ -7,10 +11,10 @@ Comparación de la app contra los diez artboards del artefacto (`Lila Modeler.dc
 se renderizaron con Chrome headless a partir del HTML de cada artboard, sin retocar.
 
 **Actualizado en la sesión 8 (2026-09-07 tarde)** con #237–#241 mezclados en `codex/ui-artefacto`
-(4dda203): la app de esa rama está capturada en `app-01-modelar-1440.png` (Eva-01) y
-`app-10-modelar-papel.png` (Papel), al lado de los artboards 01 y 10. Las capturas `app-01b/c/d-*`
+(4dda203): la app de esa rama está capturada en [app-01-modelar-1440.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-01-modelar-1440.png) (Eva-01) y
+[app-10-modelar-papel.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-10-modelar-papel.png) (Papel), al lado de los artboards 01 y 10. Las capturas `app-01b/c/d-*`
 y `app-05/12-*` son las de aceptación de cada ticket. La primera comparación (mañana, rama
-`codex/op-g-ajustes`) partía de `app-2026-09-07-modelar-eva01.png`.
+`codex/op-g-ajustes`) partía de [app-2026-09-07-modelar-eva01.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-2026-09-07-modelar-eva01.png).
 
 Leyenda: **✓** ya está · **≈** existe pero distinto · **✗** falta.
 
@@ -32,9 +36,9 @@ Leyenda: **✓** ya está · **≈** existe pero distinto · **✗** falta.
 
 | Zona | Artefacto | App | Estado |
 |---|---|---|---|
-| Barra superior | logo pentágono, nombre de proyecto + archivo en mono, modos con subrayado 3 px `accent.tertiary`, buscador «Buscar actividad… ⌘K», deshacer/rehacer como iconos, **EJECUTAR SIMULACIÓN** primario, botón de tema | igual (#237, `app-01-modelar-1440.png`): logo pentágono, proyecto + `model.bpmn · Guardado` en mono, subrayado de 3 px, campo de búsqueda, deshacer/rehacer en iconos, **EJECUTAR SIMULACIÓN** como única acción primaria y ⚙ de Ajustes | ✓ (el campo de búsqueda es inerte: buscar y la paleta de comandos son #66. Nuevo/Abrir/Guardar/Guardar como/.bpmn pasaron al desplegable «Archivo» en la web y siguen en el menú nativo en Electron) |
-| Paleta izquierda | 236 px, lista con nombre por figura, grupos colapsables (Eventos, Actividades, Compuertas, Datos, Artefactos, Pools), buscador «Filtrar figuras», modo compacto de 48 px, pie «Arrastra al lienzo o pulsa Enter» | igual (#239, `app-01b-paleta.png`): raíl propio de 236 px con las 19 figuras agrupadas y con nombre, `<details>` plegables, filtro que también entiende el nombre del grupo, modo compacto de 48 px recordado en `localStorage` y el pie del artboard; la paleta de bpmn-js queda oculta | ✓ (los carriles se siguen añadiendo desde el context pad del pool, que es donde bpmn-js sabe colocarlos; el raíl aún no se puede redimensionar ni arrastrar para reordenar) |
-| Lienzo | rejilla 24 px, chips «1 error · 2 avisos» arriba a la izquierda, marcador ⚠ sobre la figura con tooltip de validación (F2 renombrar, ⇥ propiedades), minimapa abajo a la izquierda, zoom +/−/ajustar abajo a la derecha, marca bpmn.io | rejilla, marca bpmn.io, minimapa «MINIMAPA ▾» abajo a la izquierda (`diagram-js-minimap` con tokens), zoom +/−/ajustar abajo a la derecha sin tapar la marca (#240, `app-01c-minimapa.png`), chips «n errores · n avisos» arriba a la izquierda y disco de 16 px sobre cada figura con problema, con el mensaje y «F2 renombrar · ⇥ propiedades» en el `title` (#241, `app-01d-marcadores.png`) | ✓ (el tooltip es el nativo del navegador, no la caja del artboard) |
+| Barra superior | logo pentágono, nombre de proyecto + archivo en mono, modos con subrayado 3 px `accent.tertiary`, buscador «Buscar actividad… ⌘K», deshacer/rehacer como iconos, **EJECUTAR SIMULACIÓN** primario, botón de tema | igual (#237, [app-01-modelar-1440.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-01-modelar-1440.png)): logo pentágono, proyecto + `model.bpmn · Guardado` en mono, subrayado de 3 px, campo de búsqueda, deshacer/rehacer en iconos, **EJECUTAR SIMULACIÓN** como única acción primaria y ⚙ de Ajustes | ✓ (el campo de búsqueda es inerte: buscar y la paleta de comandos son #66. Nuevo/Abrir/Guardar/Guardar como/.bpmn pasaron al desplegable «Archivo» en la web y siguen en el menú nativo en Electron) |
+| Paleta izquierda | 236 px, lista con nombre por figura, grupos colapsables (Eventos, Actividades, Compuertas, Datos, Artefactos, Pools), buscador «Filtrar figuras», modo compacto de 48 px, pie «Arrastra al lienzo o pulsa Enter» | igual (#239, [app-01b-paleta.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-01b-paleta.png)): raíl propio de 236 px con las 19 figuras agrupadas y con nombre, `<details>` plegables, filtro que también entiende el nombre del grupo, modo compacto de 48 px recordado en `localStorage` y el pie del artboard; la paleta de bpmn-js queda oculta | ✓ (los carriles se siguen añadiendo desde el context pad del pool, que es donde bpmn-js sabe colocarlos; el raíl aún no se puede redimensionar ni arrastrar para reordenar) |
+| Lienzo | rejilla 24 px, chips «1 error · 2 avisos» arriba a la izquierda, marcador ⚠ sobre la figura con tooltip de validación (F2 renombrar, ⇥ propiedades), minimapa abajo a la izquierda, zoom +/−/ajustar abajo a la derecha, marca bpmn.io | rejilla, marca bpmn.io, minimapa «MINIMAPA ▾» abajo a la izquierda (`diagram-js-minimap` con tokens), zoom +/−/ajustar abajo a la derecha sin tapar la marca (#240, [app-01c-minimapa.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-01c-minimapa.png)), chips «n errores · n avisos» arriba a la izquierda y disco de 16 px sobre cada figura con problema, con el mensaje y «F2 renombrar · ⇥ propiedades» en el `title` (#241, [app-01d-marcadores.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-01d-marcadores.png)) | ✓ (el tooltip es el nativo del navegador, no la caja del artboard) |
 | Panel derecho | cabecera con icono + nombre + `bpmn:UserTask · id`, campos con etiqueta versalita (NOMBRE, TIPO, CARRIL, ID), banda de aviso «Sin responsable asignado · CORREGIR», «Vista rápida · Simulación» con tiempo y recurso | pestañas iguales; el panel de propiedades existe (LILA-060) pero sin cabecera de tipo/id ni vista rápida | ≈ |
 | Pestañas de diagrama | abajo, con ✕ por pestaña y «+» | pestaña «model.bpmn ✕» y «+» (un diagrama por proyecto: los dos pasan por la guardia de cambios) (#240) | ✓ (Deshacer/Rehacer suben a la barra en #237) |
 | Barra de estado | «1 error · 2 avisos · Escenario AS-IS · Semilla 42 … Densidad normal · Zoom 100 %», todo en mono | igual (#237): conteos con su cuadradito de color, escenario activo, semilla resuelta por `extends`, densidad y zoom | ✓ (los conteos son los mismos que los chips del lienzo, #241) |
@@ -58,7 +62,7 @@ Artefacto: sub-pestañas Elementos / Recursos / Proceso / Flujos, tabla densa co
 
 App: LILA-062 tiene las cuatro tablas con nombres de Bizagi, ordenación y CSV. Las cifras ya van en
 JetBrains Mono alineadas a la derecha, con el encabezado de columna numérica también a la derecha
-(#238, `app-05-resultados.png`). **≈**: siguen fuera la fila de totales, los KPIs en tarjetas y el
+(#238, [app-05-resultados.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-05-resultados.png)). **≈**: siguen fuera la fila de totales, los KPIs en tarjetas y el
 semáforo de celdas —ninguno tiene ticket todavía—, y el selector de escenario y el CSV no están en la barra superior.
 
 ### 06 · Comparar
@@ -85,7 +89,7 @@ App (hoy): diálogo con tema y densidad. **≈**: es el hueco donde entra #144; 
 
 ### 10 · Modelar con Papel
 
-Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en primario/selección/pestaña activa, texto `#201E1D`. App: Papel ya se aplica en caliente y, con los tokens reconciliados, coincide en color. **✓** (`app-10-modelar-papel.png`, sesión 8: misma barra, paleta, minimapa, marcadores y pie que el artboard 01 en Papel; el rojo `#EC3013` manda en primario, pestaña activa y viewport del minimapa).
+Artefacto: mismo layout, fondo `#F3F2F2`, superficie blanca, rojo `#EC3013` en primario/selección/pestaña activa, texto `#201E1D`. App: Papel ya se aplica en caliente y, con los tokens reconciliados, coincide en color. **✓** ([app-10-modelar-papel.png](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/app-10-modelar-papel.png), sesión 8: misma barra, paleta, minimapa, marcadores y pie que el artboard 01 en Papel; el rojo `#EC3013` manda en primario, pestaña activa y viewport del minimapa).
 
 ## Inventario de componentes del artefacto (reconcilia el de `README.md`)
 

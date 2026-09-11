@@ -1,0 +1,113 @@
+{
+  "sourceCommit": "a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8",
+  "browser": "153.0.8010.36",
+  "locale": "en-US",
+  "timezone": "America/Mexico_City",
+  "theme": "Eva-01",
+  "seed": 42,
+  "replications": 30,
+  "path": "/lila-modeler/app/",
+  "acceptance": "edit, simulate both scenarios, compare, explicit save, reload, discard unsaved edits, reopen download: PASS",
+  "screenshots": [
+    {
+      "file": "model.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "model-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "properties.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "properties-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "documentation.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "documentation-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "simulate.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "simulate-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "calendar.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "calendar-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "results.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "results-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "overlay.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "overlay-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "compare.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "compare-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "routes.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "routes-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "appearance.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "appearance-1920.png",
+      "width": 1920,
+      "height": 1080
+    }
+  ]
+}

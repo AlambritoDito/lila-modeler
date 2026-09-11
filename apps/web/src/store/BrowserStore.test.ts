@@ -263,6 +263,32 @@ describe('BrowserStore', () => {
       expect(store.restoreSession()?.name).toBe('Saved project');
     });
 
+    it('does not replace the last saved project when initiating the download fails', async () => {
+      const store = new BrowserStore();
+      const doc = { version: 1 as const, id: 'saved', name: 'Saved project',
+        model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 0 },
+        scenarios: {}, scenarioRevisions: {}, runs: [] };
+      await store.saveProject(doc);
+      vi.mocked(URL.createObjectURL).mockImplementationOnce(() => { throw new Error('Download failed'); });
+      await expect(store.saveProject({ ...doc, name: 'Failed save' })).rejects.toThrow('Download failed');
+      expect(store.restoreSession()).toEqual(doc);
+      // A later legacy export must not flush the failed save into the mirror either.
+      await store.putProcess('P', '<definitions/>');
+      expect(new BrowserStore().restoreSession()).toEqual(doc);
+    });
+
+    it('isolates the saved snapshot from returned documents and restore callers', async () => {
+      const store = new BrowserStore();
+      const doc = { version: 1 as const, id: 'saved', name: 'Saved project',
+        model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 0 },
+        scenarios: { 'draft.scenario.json': { name: 'Original draft' } }, scenarioRevisions: {}, runs: [] };
+      const saved = await store.saveProject(doc);
+      Object.assign(saved.scenarios['draft.scenario.json']!, { name: 'Unsaved returned edit' });
+      Object.assign(store.restoreSession()!.scenarios['draft.scenario.json']!, { name: 'Unsaved restored edit' });
+      await store.putProcess('P', '<definitions/>');
+      expect(new BrowserStore().restoreSession()).toEqual(doc);
+    });
+
     const SEMILLA = new Map([['pedido', { xml: '<viejo/>', name: 'model.bpmn' }]]);
     const ESCENARIO = { version: 1, name: 'as-is', model: 'model.bpmn', run: {} } as never;
 
