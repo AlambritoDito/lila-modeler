@@ -7,7 +7,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
+import { hasProjectModel, isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
 import type { ProjectDocument, StoredRun } from './projectTypes.js';
 
 /** Ejecuta `fn`, espera que rechace, y devuelve el error capturado (o falla la prueba si no rechaza). */
@@ -790,5 +790,24 @@ describe('writeProjectFolder — el .bpmn abierto es el que se guarda (LILA-072,
     expect(await hasProjectModel(dir)).toBe(false);
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
     expect(await hasProjectModel(dir)).toBe(true);
+  });
+
+  // Anotación en recientes después de guardar (hallazgo 2 del segundo QA a #323): `main.ts` llama
+  // a esto con la MISMA ruta que acaba de escribir, que puede ser un archivo `.lila`.
+  it('hasProjectModel: false, sin lanzar ENOTDIR, si la ruta es un archivo', async () => {
+    const archivo = join(dir, 'proyecto.lila');
+    await writeFile(archivo, 'PK\u0003\u0004', 'utf8');
+    expect(await hasProjectModel(archivo)).toBe(false);
+    expect(await hasProjectModel(join(dir, 'no-existe.lila'))).toBe(false);
+  });
+
+  it('isRecordableProject: un .lila es proyecto por construcción; una carpeta solo con su model.bpmn', async () => {
+    const archivo = join(dir, 'proyecto.lila');
+    await writeFile(archivo, 'PK\u0003\u0004', 'utf8');
+    expect(await isRecordableProject(archivo)).toBe(true);
+    expect(await isRecordableProject(join(dir, 'MAYUSCULAS.LILA'))).toBe(true);
+    expect(await isRecordableProject(dir)).toBe(false);
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    expect(await isRecordableProject(dir)).toBe(true);
   });
 });

@@ -29,7 +29,7 @@ import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, withLilaExtension } from './openPath.js';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
-import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
@@ -310,7 +310,8 @@ async function recordRecent(dir: string, name: string): Promise<void> {
 }
 
 /**
- * `recordRecent` solo si en `dir` hay un `model.bpmn` que reabrir (hallazgos 6 y 9 del QA):
+ * `recordRecent` solo si `dir` es reabrible como proyecto (hallazgos 6 y 9 del QA; `.lila` lo es
+ * siempre, ver `isRecordableProject`):
  * recientes guarda CARPETAS y el menú Archivo las reabre por su `model.bpmn`, así que anotar la
  * carpeta de un `.bpmn` suelto prometería un proyecto que no existe (`E-SIN-MODELO` al reabrir).
  * Un proyecto Lila de verdad abierto por su `ventas.bpmn` SÍ entra: su `model.bpmn` sigue ahí y
@@ -318,7 +319,7 @@ async function recordRecent(dir: string, name: string): Promise<void> {
  * sensible a mayúsculas y dejaba fuera ese caso legítimo.
  */
 async function recordRecentIfProject(dir: string, name: string): Promise<void> {
-  if (await hasProjectModel(dir)) await recordRecent(dir, name);
+  if (await isRecordableProject(dir)) await recordRecent(dir, name);
 }
 
 /**

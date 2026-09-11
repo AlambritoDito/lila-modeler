@@ -14,7 +14,7 @@
  */
 import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import { isMiscasedModelFile } from './openPath.js';
+import { isLilaPath, isMiscasedModelFile } from './openPath.js';
 import { isSymlink } from './safePaths.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
 
@@ -55,6 +55,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /** `ENOENT` de Node trae siempre este `code`; el resto de errores de fs se re-lanzan tal cual. */
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT';
+}
+
+/** `true` si `error` es el `ENOTDIR` de tratar un archivo como si fuese una carpeta. */
+function isNotDirectory(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOTDIR';
 }
 
 // -- Detección de cambios externos (OP-14, incremento 2) ----------------------------------------
@@ -369,9 +374,23 @@ export async function hasProjectModel(dir: string): Promise<boolean> {
   try {
     return (await stat(join(dir, MODEL_FILE))).isFile();
   } catch (error) {
-    if (isNotFound(error)) return false;
+    // `ENOTDIR` además de `ENOENT` (hallazgo 2 del segundo QA a #323): si `dir` es un ARCHIVO
+    // —un `.lila`, o cualquier ruta que el usuario haya elegido—, `stat` de algo "dentro" de él
+    // no falla con "no existe" sino con "no es una carpeta". Las dos respuestas significan lo
+    // mismo aquí: ahí no hay un `model.bpmn` que reabrir. Sin esto, el error se propagaba crudo
+    // hasta el renderer DESPUÉS de una escritura correcta.
+    if (isNotFound(error) || isNotDirectory(error)) return false;
     throw error;
   }
+}
+
+/**
+ * `true` si anotar `p` en recientes promete un proyecto reabrible. Un `.lila` lo es por
+ * construcción (ADR-027: es el proyecto entero en un archivo, no puede existir sin su
+ * `model.bpmn` dentro); cualquier otra ruta lo es solo si es una carpeta con `model.bpmn`.
+ */
+export async function isRecordableProject(p: string): Promise<boolean> {
+  return isLilaPath(p) ? true : hasProjectModel(p);
 }
 
 interface PendingWrite {
