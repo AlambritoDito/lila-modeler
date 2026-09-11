@@ -151,6 +151,19 @@ describe('workbook of a run (examples/pedido)', () => {
     expect(actual.length).toBeGreaterThan(10);
   });
 
+  test('the Summary sheet skips the process rows that would be blank', async () => {
+    const ir = await pedidoIr();
+    const scenario = pedidoScenario('as-is.scenario.json', 1);
+    const files = parts(scenarioWorkbook(ir, scenario, simulate(ir, scenario, { log: false })));
+    const rows = sheetRows(files['xl/worksheets/sheet1.xml'] ?? '');
+    const metrics = rows.filter((row) => row[0] === 'Process').map((row) => row[3]);
+    // No `run.serviceLevel` in the example and `Outcome` only labels the per-outcome CSV rows.
+    expect(metrics).not.toContain('Within service level');
+    expect(metrics).not.toContain('Outcome');
+    expect(metrics).toContain('Total cost');
+    expect(rows.every((row) => row[0] !== 'Process' || (row[4] ?? '') !== '')).toBe(true);
+  });
+
   test('the five sheets are named and declared once each', async () => {
     const ir = await pedidoIr();
     const scenario = pedidoScenario('as-is.scenario.json', 1);

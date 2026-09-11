@@ -556,7 +556,7 @@ sheets the workbook adds come from the message catalog (`Summary`/`Resumen`, …
 
 | Sheet | Columns | Content |
 |---|---|---|
-| `Summary` | Section, Id, Name, Metric, Value | the `process` metrics of section 5, one per row; the completed cases per end event when `process.byEndEvent` exists; and, per declared pool, `Capacity`, `Working hours` and `Payroll cost`, plus the total |
+| `Summary` | Section, Id, Name, Metric, Value | the `process` metrics of section 5, one per row (a metric with no value, such as `Within service level` without `run.serviceLevel`, has no row); the completed cases per end event when `process.byEndEvent` exists; and, per declared pool, `Capacity`, `Working hours` and `Payroll cost`, plus the total |
 | `Elements` | those of `elements.csv` | identical rows to `elements.csv` |
 | `Flows` | those of `flows.csv` | identical rows to `flows.csv` |
 | `Resources` | those of `resources.csv` | identical rows to `resources.csv` |
