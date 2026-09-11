@@ -10,7 +10,13 @@
  */
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { decodeLila, encodeLila, ProjectFormatError } from '@lila/engine/project';
-import { ProjectIOError } from './projectIO.js';
+import {
+  assertNotAnotherProject,
+  assertPathsUnchanged,
+  ProjectIOError,
+  rememberSnapshot,
+  type WriteProjectOptions,
+} from './projectIO.js';
 import type { ProjectDocument, ProjectProblem } from './projectTypes.js';
 
 /**
@@ -49,7 +55,23 @@ export async function readLilaFile(
   } catch (error) {
     asProjectIOError(error);
   }
+  // El `.lila` acaba de verse tal y como está en disco: ese es el punto de partida de
+  // `E-CAMBIO-EXTERNO` para el próximo guardado (mismo mapa que la carpeta, ver `projectIO.ts`).
+  await rememberSnapshot(file);
   return { document, problems: document.problems ?? [], loose: false };
+}
+
+/**
+ * Lee el `id` del proyecto que YA está en `file`, o `null` si no hay archivo, no se puede leer, o
+ * no es un `.lila` interpretable. Mismo criterio que `readManifest` con un manifiesto roto: sin
+ * forma de saber de quién es, no se bloquea el guardado por un falso positivo.
+ */
+async function existingProjectId(file: string): Promise<string | null> {
+  try {
+    return decodeLila(new Uint8Array(await readFile(file))).id;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -58,8 +80,22 @@ export async function readLilaFile(
  * full disk leaves the previous project intact instead of a truncated archive. A single file
  * needs no rollback bookkeeping — `rename` within a directory is atomic, and the whole project is
  * that one entry.
+ *
+ * `options` are the SAME as the folder writer's and mean the same thing (hallazgo 3 del QA a
+ * #323): `saveAs` runs the "destination already holds another project" guard (`E-CARPETA-OCUPADA`)
+ * and, unless `overwrite`, the file is refused if it changed on disk since this process last read
+ * or wrote it (`E-CAMBIO-EXTERNO`). `modelFile`/`diagramOnly` have no meaning in a container that
+ * is the whole project or nothing, and are ignored.
  */
-export async function writeLilaFile(file: string, document: ProjectDocument): Promise<void> {
+export async function writeLilaFile(
+  file: string,
+  document: ProjectDocument,
+  options: WriteProjectOptions = {},
+): Promise<void> {
+  if (options.saveAs === true) {
+    assertNotAnotherProject(await existingProjectId(file), document.id, 'El archivo');
+  }
+  await assertPathsUnchanged([file], options.overwrite === true);
   let bytes: Uint8Array;
   try {
     bytes = encodeLila(document);
@@ -74,4 +110,5 @@ export async function writeLilaFile(file: string, document: ProjectDocument): Pr
     await unlink(tmp).catch(() => {});
     throw error;
   }
+  await rememberSnapshot(file);
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -101,5 +101,57 @@ describe('writeLilaFile / readLilaFile', () => {
     const file = join(await carpeta(), 'pedido.lila');
     await writeLilaFile(file, documento());
     expect((await readFile(file)).subarray(0, 2).toString('latin1')).toBe('PK');
+  });
+});
+
+/**
+ * Las mismas guardias que `writeProjectFolder` aplica a la carpeta (hallazgo 3 del QA a #323):
+ * el contenedor cambia, el contrato del puente no. Se prueban con archivos reales porque lo que
+ * distingue "lo tocó otro" de "lo escribí yo" es el `stat` del archivo, no un mock.
+ */
+describe('writeLilaFile: guardias de "Guardar como" y de cambio externo', () => {
+  it('«Guardar como» sobre el .lila de OTRO proyecto se rechaza con E-CARPETA-OCUPADA', async () => {
+    const file = join(await carpeta(), 'ajeno.lila');
+    await writeLilaFile(file, documento({ id: 'otro-proyecto' }));
+
+    await expect(writeLilaFile(file, documento({ id: 'p1' }), { saveAs: true })).rejects.toMatchObject({
+      code: 'E-CARPETA-OCUPADA',
+    });
+    // Y no lo tocó: el archivo sigue siendo el del otro proyecto.
+    expect((await readLilaFile(file)).document.id).toBe('otro-proyecto');
+  });
+
+  it('«Guardar como» sobre el .lila del MISMO proyecto, o sobre un archivo que no existe, pasa', async () => {
+    const dir = await carpeta();
+    const nuevo = join(dir, 'nuevo.lila');
+    await writeLilaFile(nuevo, documento(), { saveAs: true });
+    expect((await readLilaFile(nuevo)).document.id).toBe('p1');
+
+    await writeLilaFile(nuevo, documento({ name: 'pedido v2' }), { saveAs: true });
+    expect((await readLilaFile(nuevo)).document.name).toBe('pedido v2');
+  });
+
+  it('un cambio externo desde la última lectura se rechaza, y con overwrite se acepta', async () => {
+    const file = join(await carpeta(), 'pedido.lila');
+    await writeLilaFile(file, documento());
+    await readLilaFile(file);
+
+    // Otro proceso reescribe el archivo: distinto tamaño y distinta mtime.
+    await writeFile(file, 'tocado por fuera');
+    await utimes(file, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
+
+    await expect(writeLilaFile(file, documento({ name: 'pedido v2' }))).rejects.toMatchObject({
+      code: 'E-CAMBIO-EXTERNO',
+    });
+    await writeLilaFile(file, documento({ name: 'pedido v2' }), { overwrite: true });
+    expect((await readLilaFile(file)).document.name).toBe('pedido v2');
+  });
+
+  it('guardados propios consecutivos no disparan nada', async () => {
+    const file = join(await carpeta(), 'pedido.lila');
+    await writeLilaFile(file, documento());
+    await writeLilaFile(file, documento({ name: 'v2' }));
+    await writeLilaFile(file, documento({ name: 'v3' }));
+    expect((await readLilaFile(file)).document.name).toBe('v3');
   });
 });

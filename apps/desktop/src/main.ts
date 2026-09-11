@@ -438,7 +438,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
       const options = requireWriteOptions(dir, optionsArg);
       requireSafeFileNames(dir, document);
       try {
-        if (isLilaPath(dir)) await writeLilaFile(dir, document);
+        // Mismas `options` que el escritor de carpeta: un `.lila` se guarda con las mismas
+        // guardias (`E-CARPETA-OCUPADA`, `E-CAMBIO-EXTERNO`), no con menos (ADR-027).
+        if (isLilaPath(dir)) await writeLilaFile(dir, document, options);
         else await writeProjectFolder(dir, document, options);
         // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
         // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).

@@ -87,8 +87,12 @@ function sameSnapshot(a: FileSnapshot | null, b: FileSnapshot | null): boolean {
   return a.mtimeMs === b.mtimeMs && a.size === b.size;
 }
 
-/** Registra el snapshot actual de `path` tras una lectura/escritura con éxito. */
-async function rememberSnapshot(path: string): Promise<void> {
+/**
+ * Registra el snapshot actual de `path` tras una lectura/escritura con éxito. Exportada para que
+ * `lilaFile.ts` alimente el MISMO mapa desde el lado del `.lila` (ADR-027): el contenedor es otro,
+ * pero "cambió en disco desde que lo vimos" tiene que significar exactamente lo mismo en los dos.
+ */
+export async function rememberSnapshot(path: string): Promise<void> {
   const snap = await currentSnapshot(path);
   if (snap === null) lastSeen.delete(path);
   else lastSeen.set(path, snap);
@@ -434,12 +438,7 @@ async function assertFolderNotOccupied(dir: string, documentId: string): Promise
     }
   }
   if (manifestId !== null) {
-    if (manifestId !== documentId) {
-      throw new ProjectIOError(
-        'E-CARPETA-OCUPADA',
-        `La carpeta ya contiene el proyecto "${manifestId}"; "Guardar como" no puede escribir ahí el proyecto "${documentId}".`,
-      );
-    }
+    assertNotAnotherProject(manifestId, documentId, 'La carpeta');
     return;
   }
   try {
@@ -451,6 +450,21 @@ async function assertFolderNotOccupied(dir: string, documentId: string): Promise
   throw new ProjectIOError(
     'E-CARPETA-OCUPADA',
     `La carpeta ya contiene "${MODEL_FILE}" de otro proyecto sin manifiesto; "Guardar como" no puede escribir ahí.`,
+  );
+}
+
+/**
+ * Mitad reusable de la guardia de "Guardar como": rechaza (`E-CARPETA-OCUPADA`) si el destino ya
+ * declara pertenecer a OTRO proyecto. `existingId` es el `id` que el destino trae en su manifiesto,
+ * o `null` si no hay manifiesto legible (entonces no bloquea: no hay forma de saber de quién es).
+ * `destino` es el sujeto de la frase — «La carpeta» o «El archivo» —, que es lo único que cambia
+ * entre la carpeta (ADR-018) y el `.lila` (ADR-027).
+ */
+export function assertNotAnotherProject(existingId: string | null, documentId: string, destino: string): void {
+  if (existingId === null || existingId === documentId) return;
+  throw new ProjectIOError(
+    'E-CARPETA-OCUPADA',
+    `${destino} ya contiene el proyecto "${existingId}"; "Guardar como" no puede escribir ahí el proyecto "${documentId}".`,
   );
 }
 
@@ -545,9 +559,17 @@ async function assertValidDestination(dest: string, runsDir: string): Promise<vo
  * `options.overwrite === true` salta la comprobación entera (el llamador ya decidió sobrescribir).
  */
 async function assertNoExternalChanges(trackedWrites: readonly PendingWrite[], overwrite: boolean): Promise<void> {
+  await assertPathsUnchanged(trackedWrites.map(({ dest }) => dest), overwrite);
+}
+
+/**
+ * El mismo criterio sobre una lista de rutas sueltas, para que `lilaFile.ts` lo aplique a su único
+ * archivo (ADR-027) sin duplicar ni el mapa de snapshots ni el mensaje.
+ */
+export async function assertPathsUnchanged(paths: readonly string[], overwrite: boolean): Promise<void> {
   if (overwrite) return;
   const changed: string[] = [];
-  for (const { dest } of trackedWrites) {
+  for (const dest of paths) {
     const known = lastSeen.get(dest) ?? null;
     if (known === null) continue;
     const current = await currentSnapshot(dest);
