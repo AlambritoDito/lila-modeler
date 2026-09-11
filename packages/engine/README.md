@@ -4,7 +4,7 @@ Discrete-event simulation for BPMN processes. Part of [Lila Modeler](https://git
 
 ## Preliminary release
 
-Version 0.1.0 prepares the initial distribution; it does not mark the project's 1.0 milestone complete. Requires Node.js 22 or later. Registry availability depends on the repository owner's first publication.
+Version 1.0.0-alpha.1 is the first alpha, published for validation; it does not mark the project's 1.0 milestone complete. Requires Node.js 22 or later. Registry availability depends on the repository owner's first publication.
 
 ## CLI
 
@@ -32,3 +32,11 @@ See the [scenario format](https://github.com/AlambritoDito/lila-modeler/blob/mai
 ## License
 
 Apache-2.0. See LICENSE and NOTICE for terms and attribution. Product names and logos are not covered by the license grant.
+
+## Validate the unpublished package
+
+From a repository checkout, run `npm ci`, `npm run build`, and `npm run test:package`.
+The last command packs and installs the actual archive in a temporary directory outside the
+workspace. It checks every runtime export, the JSON descriptor, TypeScript Node16 and bundler
+resolution, English/Spanish CLI commands, and byte-identical simulation results against the
+checkout. It does not publish anything; it retains the temporary directory for inspection.

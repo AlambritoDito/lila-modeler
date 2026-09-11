@@ -35,6 +35,20 @@ npm run build
 `npm run build` compila `packages/engine` y `packages/mcp` (`tsc --build`); es lo que necesitan la
 CLI y el servidor MCP. La app web se compila aparte (ver más abajo).
 
+## Descargar una build 1.0.0-alpha
+
+`1.0.0-alpha.1` es la primera alfa, publicada para validar el flujo de punta a punta; sus
+resultados y formatos de archivo son provisionales. Los instaladores que se adjuntan a un GitHub
+Release `v1.0.0-alpha*` los construye CI y **no están firmados ni notarizados**, así que los dos
+sistemas de escritorio bloquean el primer arranque:
+
+- **macOS**: no hagas doble clic. Clic derecho sobre la app → **Abrir** y confirma **Abrir** en el
+  diálogo. [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
+- **Windows**: SmartScreen muestra «Windows protegió su PC». Pulsa **Más información** →
+  **Ejecutar de todas formas**.
+
+Todavía no se publica nada en el registro de npm; la CLI sale de un clon del repo, como arriba.
+
 ## Simular el benchmark en 3 comandos
 
 `examples/pedido` es el benchmark de referencia del repo: un proceso de restaurante con paralelo
@@ -174,7 +188,7 @@ abre en el editor; si el `.bpmn` no está dentro de una carpeta de proyecto Lila
 archivo hasta que se use «Guardar como». Un `.lila` es el proyecto entero en un archivo y se guarda
 sobre sí mismo; para abrir uno desde el menú, Archivo → «Abrir archivo de proyecto (.lila)…», y
 «Guardar como…» crea uno nuevo (la carpeta de proyecto de ADR-018 sigue a un menú de distancia,
-Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
+Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1`)
 dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
 deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 

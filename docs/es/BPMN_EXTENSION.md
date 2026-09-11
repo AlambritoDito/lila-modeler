@@ -119,7 +119,7 @@ Todo `.bpmn` que Lila escribe declara, en `bpmn:definitions`:
     xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
     xmlns:lila="https://lila-modeler.org/schema/bpmn/1"
     exporter="Lila Modeler"
-    exporterVersion="0.1.0"
+    exporterVersion="1.0.0-alpha.1"
     ...>
 ```
 
@@ -236,7 +236,7 @@ Notas de implementación (no normativas, se resuelven en el ticket que crea el a
     xmlns:lila="https://lila-modeler.org/schema/bpmn/1"
     id="Definitions_1"
     exporter="Lila Modeler"
-    exporterVersion="0.1.0"
+    exporterVersion="1.0.0-alpha.1"
     targetNamespace="http://lila-modeler.org/schema/bpmn">
 
   <bpmn:process id="credito-solicitud" name="Solicitud de crédito" isExecutable="false">
