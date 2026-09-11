@@ -130,7 +130,12 @@ export function summarySheet(
   const values = table.rows[0] ?? [];
 
   PROCESS_COLUMNS.forEach((metric, index) => {
-    rows.push([C.xlsxSectionProcess(), '', '', columnLabel('process', metric), values[index] ?? null]);
+    const value = values[index] ?? null;
+    // The CSV keeps `withinServiceLevel` (empty without `run.serviceLevel`) and `outcome` (empty
+    // on the global row) so its columns stay fixed; a tall sheet has no column to keep, so a row
+    // with nothing to say is left out instead of written blank.
+    if (value === null) return;
+    rows.push([C.xlsxSectionProcess(), '', '', columnLabel('process', metric), value]);
   });
 
   // Per-outcome block (#316): completed cases, mean cycle time and, with `run.serviceLevel`, the
