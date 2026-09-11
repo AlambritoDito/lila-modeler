@@ -37,7 +37,7 @@ const MIME = {
 };
 
 const report = {};
-const failures = [];
+const failures = {};
 function check(name, ok, detail) {
   (ok ? report : failures)[name] = detail ?? ok;
   if (!ok) console.error(`FAIL ${name}: ${JSON.stringify(detail)}`);
@@ -240,8 +240,9 @@ async function main() {
     }
   }
 
-  console.log(JSON.stringify({ ok: failures.length === 0, report, failures }, null, 2));
-  if (failures.length > 0) process.exitCode = 1;
+  const failed = Object.keys(failures).length > 0;
+  console.log(JSON.stringify({ ok: !failed, report, failures }, null, 2));
+  if (failed) process.exitCode = 1;
 }
 
 await main();
