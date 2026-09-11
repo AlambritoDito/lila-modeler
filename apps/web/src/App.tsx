@@ -389,11 +389,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
   }
-  async function guardar(saveAs = false): Promise<boolean> {
-    return await saveWithOutcome(saveAs) === 'saved';
+  async function guardar(saveAs = false, asFolder = false): Promise<boolean> {
+    return await saveWithOutcome(saveAs, asFolder) === 'saved';
   }
 
-  async function saveWithOutcome(saveAs = false): Promise<SaveOutcome> {
+  /** `asFolder` solo cuenta con `saveAs`: elige carpeta de proyecto en vez de `.lila` (ADR-027). */
+  async function saveWithOutcome(saveAs = false, asFolder = false): Promise<SaveOutcome> {
     if (adapter === null || ioLock.current) return 'cancelled';
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
@@ -413,7 +414,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const token = previo === null
         ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id))
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
-      const saved = await adapter.saveProject(doc, { saveAs });
+      const saved = await adapter.saveProject(doc, { saveAs, ...(asFolder ? { asFolder: true } : {}) });
       if (saved === null) return 'cancelled';
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs) setSuelto(false);
@@ -668,6 +669,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'abrirArchivo') void projectAction('openFile');
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
+    else if (accion === 'guardarComoCarpeta') void guardar(true, true);
     else void projectAction({ recent: accion.openRecent });
   }
   const ejecutarRef = useRef(ejecutar);

@@ -22,6 +22,7 @@ export const es: Strings = {
     abrirReciente: 'Abrir reciente',
     guardarProyecto: 'Guardar proyecto',
     guardarComo: 'Guardar como…',
+    guardarComoCarpeta: 'Guardar como carpeta…',
   },
   cierre: {
     guardar: 'Guardar',

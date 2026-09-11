@@ -64,6 +64,13 @@ export interface LilaBridge {
    */
   chooseFolder(fileOnly?: boolean): Promise<string | null>;
   /**
+   * Abre el diálogo nativo de guardar para crear un `.lila` NUEVO (ADR-027): es la contraparte de
+   * `chooseFolder`, que solo sabe elegir algo que ya existe. `defaultPath` es el nombre propuesto.
+   * Devuelve la ruta del archivo (con `.lila` puesto si el usuario no lo escribió), ya autorizada
+   * para `writeProject`, o `null` si se cerró sin elegir nada.
+   */
+  chooseSaveFile(defaultPath?: string): Promise<string | null>;
+  /**
    * Lee el proyecto completo de `dir` (ya autorizada por `chooseFolder`): modelo, escenarios
    * crudos (con `problems` para los que no se pudieron interpretar) y corridas guardadas.
    */
@@ -177,6 +184,7 @@ export type MenuAction =
   | 'abrirArchivo'
   | 'guardar'
   | 'guardarComo'
+  | 'guardarComoCarpeta'
   | { readonly openRecent: string };
 
 export interface WriteProjectOptions {

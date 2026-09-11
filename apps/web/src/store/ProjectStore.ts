@@ -69,7 +69,13 @@ export interface ProjectSessionStore extends ProjectStore {
    * macOS; `BrowserStore` ya abre las dos cosas con el mismo `<input type=file>` y lo ignora.
    */
   openProject(options?: { readonly fileOnly?: boolean }): Promise<ProjectDocument | null>;
-  saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null>;
+  /**
+   * `options.asFolder` pide que el destino nuevo sea una CARPETA de proyecto (ADR-018) en vez de
+   * un `.lila` (ADR-027), que es lo que «Guardar como» elige por defecto. Como `fileOnly`, solo lo
+   * usa `DesktopStore` —son dos diálogos nativos distintos— y `BrowserStore` lo ignora, porque en
+   * el navegador guardar es siempre descargar un `.lila`.
+   */
+  saveProject(document: ProjectDocument, options?: { saveAs?: boolean; asFolder?: boolean }): Promise<ProjectDocument | null>;
   /** Browser-only: last explicitly saved project, restored on startup without a file picker. */
   restoreSession?(): ProjectDocument | null;
   setDirty?(dirty: boolean): void;

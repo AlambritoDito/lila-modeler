@@ -20,6 +20,18 @@ export function isLilaPath(p: string): boolean {
 }
 
 /**
+ * La ruta que el diálogo nativo de «Guardar como» devolvió, con la extensión `.lila` puesta si le
+ * faltaba (ADR-027). Windows y Linux añaden la extensión del filtro solo a veces, y en macOS el
+ * usuario puede quitarla a mano en el campo del nombre; sin esto, el archivo resultante se
+ * guardaría con el formato correcto y un nombre que ni `isLilaPath` ni el sistema reconocen, así
+ * que al reabrirlo no sería un proyecto. Una ruta que ya termina en `.lila` (en cualquier
+ * combinación de mayúsculas) se devuelve tal cual.
+ */
+export function withLilaExtension(p: string): string {
+  return isLilaPath(p) ? p : `${p}.lila`;
+}
+
+/**
  * El `model.bpmn` de un proyecto Lila (el mismo `MODEL_FILE` de `projectIO.ts`, repetido aquí
  * porque este módulo es puro y no importa nada).
  */

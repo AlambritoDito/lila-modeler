@@ -19,6 +19,21 @@ describe('e2eOverrides', () => {
     expect(e2eOverrides({ LILA_E2E_FOLDER: '' })).toEqual({});
   });
 
+  it('LILA_E2E_SAVE_FILE: mismas tres formas que LILA_E2E_FOLDER, para el diálogo de guardar', () => {
+    expect(e2eOverrides({ LILA_E2E_SAVE_FILE: '/tmp/lila-e2e/pedido.lila' })).toEqual({
+      saveFile: '/tmp/lila-e2e/pedido.lila',
+    });
+    expect(e2eOverrides({ LILA_E2E_SAVE_FILE: 'cancel' })).toEqual({ saveFile: null });
+    expect(e2eOverrides({ LILA_E2E_SAVE_FILE: '' })).toEqual({});
+  });
+
+  it('las dos rutas conviven: abrir y guardar son diálogos distintos', () => {
+    expect(e2eOverrides({ LILA_E2E_FOLDER: '/tmp/a', LILA_E2E_SAVE_FILE: '/tmp/b.lila' })).toEqual({
+      folder: '/tmp/a',
+      saveFile: '/tmp/b.lila',
+    });
+  });
+
   it.each(['save', 'discard', 'cancel'] as const)('LILA_E2E_CLOSE=%s: se toma tal cual', (choice) => {
     expect(e2eOverrides({ LILA_E2E_CLOSE: choice })).toEqual({ close: choice });
   });

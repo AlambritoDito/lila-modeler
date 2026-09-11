@@ -26,7 +26,7 @@ import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
-import { findBpmnArg, isBpmnPath, isLilaPath } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isLilaPath, withLilaExtension } from './openPath.js';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
@@ -410,6 +410,42 @@ function registerIpcHandlers(win: BrowserWindow): void {
     const dir = await realpath(result.filePaths[0]!);
     authorizedFolders.add(dir);
     return dir;
+  });
+
+  /**
+   * «Guardar como» hacia un `.lila` NUEVO (ADR-027, hallazgo 4 del QA a #323). `chooseFolder` solo
+   * abre `showOpenDialog`, que en el mejor de los casos (macOS) deja elegir un `.lila` que YA
+   * existe: no había forma de crear uno. Lo que se autoriza es el `realpath` de la carpeta
+   * contenedora —el archivo todavía no existe, así que no tiene `realpath` propio— más el archivo
+   * dentro de ella, que es lo que `requireAuthorizedDir` va a recibir después en
+   * `readProject`/`writeProject`, igual que hace `acceptOpenPath` con un `.lila` abierto por doble
+   * clic.
+   */
+  guardedHandle(win, 'lila:chooseSaveFile', async (_event, defaultPathArg: unknown): Promise<string | null> => {
+    const defaultPath = typeof defaultPathArg === 'string' && defaultPathArg.length > 0 ? defaultPathArg : undefined;
+    let chosen: string;
+    if (e2e.saveFile !== undefined) {
+      // Seam E2E (`LILA_E2E_SAVE_FILE`, ver `e2e.ts`): sin diálogo nativo.
+      if (e2e.saveFile === null) {
+        await e2eLog('chooseSaveFile', { result: null });
+        return null;
+      }
+      await mkdir(path.dirname(e2e.saveFile), { recursive: true });
+      chosen = e2e.saveFile;
+    } else {
+      const result = await dialog.showSaveDialog(win, {
+        filters: [{ name: 'Lila project', extensions: ['lila'] }],
+        ...(defaultPath === undefined ? {} : { defaultPath }),
+      });
+      if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
+      chosen = result.filePath;
+    }
+    const file = withLilaExtension(chosen);
+    const dir = await realpath(path.dirname(file));
+    const real = path.join(dir, path.basename(file));
+    authorizedFolders.add(real);
+    await e2eLog('chooseSaveFile', { result: real });
+    return real;
   });
 
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {

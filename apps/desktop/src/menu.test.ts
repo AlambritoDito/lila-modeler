@@ -65,6 +65,7 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
       S.abrirReciente,
       S.guardarProyecto,
       S.guardarComo,
+      S.guardarComoCarpeta,
     ]);
   });
 });

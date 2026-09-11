@@ -62,6 +62,12 @@ export function menuTemplate(
         { type: 'separator' },
         { label: S.guardarProyecto, accelerator: 'CmdOrCtrl+S', click: () => send('guardar') },
         { label: S.guardarComo, accelerator: 'CmdOrCtrl+Shift+S', click: () => send('guardarComo') },
+        // Dos destinos, dos entradas (ADR-027): «Guardar como…» crea un `.lila` —el formato con
+        // el que se manda un proyecto a alguien— y esta crea la carpeta de ADR-018, que es la
+        // forma que sigue siendo la buena para versionar con git. No es un submenú ni un
+        // desplegable dentro del diálogo: el diálogo nativo de guardar no admite elegir «carpeta o
+        // archivo», así que la elección tiene que estar antes de abrirlo.
+        { label: S.guardarComoCarpeta, click: () => send('guardarComoCarpeta') },
         ...(mac ? [] : [{ type: 'separator' as const }, preferencias, { type: 'separator' as const }, { role: 'quit' as const }]),
       ],
     },

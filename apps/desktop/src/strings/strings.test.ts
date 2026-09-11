@@ -82,6 +82,9 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       abrirReciente: 'Abrir reciente',
       guardarProyecto: 'Guardar proyecto',
       guardarComo: 'Guardar como…',
+      // LILA-317: tampoco existía antes — «Guardar como…» pasó a crear un `.lila` y la carpeta
+      // necesitaba su propia entrada.
+      guardarComoCarpeta: 'Guardar como carpeta…',
     });
     expect(es.cierre).toEqual({
       guardar: 'Guardar',

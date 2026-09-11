@@ -32,6 +32,8 @@ export const en = {
     abrirReciente: 'Open recent',
     guardarProyecto: 'Save project',
     guardarComo: 'Save as…',
+    /** «Save as» writes a `.lila` (ADR-027); the folder (ADR-018) stays one entry away. */
+    guardarComoCarpeta: 'Save as folder…',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {

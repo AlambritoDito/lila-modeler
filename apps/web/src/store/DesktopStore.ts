@@ -119,7 +119,7 @@ export class DesktopStore implements ProjectSessionStore {
    */
   async saveProject(
     document: ProjectDocument,
-    options?: { saveAs?: boolean; overwrite?: boolean },
+    options?: { saveAs?: boolean; overwrite?: boolean; asFolder?: boolean },
   ): Promise<ProjectDocument | null> {
     const explicitSaveAs = options?.saveAs === true;
     // Guardia de identidad (OP-14, revisión de A: "openProject no debe permitir guardar el
@@ -143,7 +143,15 @@ export class DesktopStore implements ProjectSessionStore {
     let isNewDestination: boolean;
     if (dir === null || explicitSaveAs) {
       isNewDestination = true;
-      const chosen = await this.bridge.chooseFolder();
+      // Destino por defecto de «Guardar como»: un `.lila` NUEVO (ADR-027, hallazgo 4 del QA a
+      // #323). `chooseFolder` solo sabe elegir algo que ya existe, así que antes de `chooseSaveFile`
+      // un usuario de escritorio podía volver a guardar sobre un `.lila` que le pasaran, pero no
+      // producir uno. La carpeta sigue a un menú de distancia («Guardar como carpeta…»,
+      // `options.asFolder`), que es la forma que conviene para versionar con git.
+      const chosen =
+        options?.asFolder === true
+          ? await this.bridge.chooseFolder()
+          : await this.bridge.chooseSaveFile(`${document.name}.lila`);
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
