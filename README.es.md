@@ -35,6 +35,20 @@ npm run build
 `npm run build` compila `packages/engine` y `packages/mcp` (`tsc --build`); es lo que necesitan la
 CLI y el servidor MCP. La app web se compila aparte (ver más abajo).
 
+## Descargar una build 1.0.0-alpha
+
+`1.0.0-alpha.1` es la primera alfa, publicada para validar el flujo de punta a punta; sus
+resultados y formatos de archivo son provisionales. Los instaladores que se adjuntan a un GitHub
+Release `v1.0.0-alpha*` los construye CI y **no están firmados ni notarizados**, así que los dos
+sistemas de escritorio bloquean el primer arranque:
+
+- **macOS**: no hagas doble clic. Clic derecho sobre la app → **Abrir** y confirma **Abrir** en el
+  diálogo. [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
+- **Windows**: SmartScreen muestra «Windows protegió su PC». Pulsa **Más información** →
+  **Ejecutar de todas formas**.
+
+Todavía no se publica nada en el registro de npm; la CLI sale de un clon del repo, como arriba.
+
 ## Simular el benchmark en 3 comandos
 
 `examples/pedido` es el benchmark de referencia del repo: un proceso de restaurante con paralelo

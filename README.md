@@ -35,6 +35,19 @@ npm run build
 `npm run build` compiles `packages/engine` and `packages/mcp` (`tsc --build`); that is what the CLI
 and the MCP server need. The web app is built separately (see below).
 
+## Download a 1.0.0-alpha build
+
+`1.0.0-alpha.1` is the first alpha, published so the workflow can be validated end to end; treat
+its results and file formats as provisional. The installers attached to a `v1.0.0-alpha*` GitHub
+Release are built by CI and are **neither signed nor notarized**, so both desktop systems refuse
+the first launch:
+
+- **macOS**: do not double-click. Right-click the app → **Open**, then confirm **Open** in the
+  dialog. [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks through the whole flow.
+- **Windows**: SmartScreen shows "Windows protected your PC". Click **More info** → **Run anyway**.
+
+Nothing is published to the npm registry yet; the CLI comes from a repository checkout as above.
+
 ## Simulate the benchmark in 3 commands
 
 `examples/pedido` is the repo's reference benchmark: a restaurant process with a parallel branch
