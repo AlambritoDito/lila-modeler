@@ -6,8 +6,23 @@
  * usa para detectar esta modalidad con `typeof window.lila !== 'undefined'`.
  *
  * `listFiles`/`readFile`/`writeFile` (OP-02, genéricos) se retiraron: el puente ya no expone E/S
- * de archivos sueltos, solo operaciones de proyecto completo (`chooseFolder`/`readProject`/
- * `writeProject`), como fija el contrato.
+ * de archivos sueltos, solo operaciones de proyecto completo (`chooseFolder`/`chooseSaveFile`/
+ * `readProject`/`writeProject`), como fija el contrato.
+ *
+ * **Vocabulario de errores.** Un fallo de proyecto llega al renderer como `Error` con el mensaje
+ * `"<código>: <texto>"` (lo compone `main.ts`). Los códigos son estables:
+ *
+ * - Carpeta y `.lila` por igual: `E-CARPETA-OCUPADA` («Guardar como» sobre un destino que ya tiene
+ *   otro proyecto), `E-CAMBIO-EXTERNO` (algo cambió en disco desde la última lectura/escritura y
+ *   no se pidió `overwrite`), `E-SIN-MODELO` (no hay proyecto que leer).
+ * - Solo carpeta: `E-RUN-DUPLICADO`, `E-SYMLINK`, `E-DESTINO-INVALIDO`, `E-RECUPERACION-PENDIENTE`.
+ * - Solo `.lila` (ADR-027, contenido del archivo): `E-ZIP` (no se pudo descomprimir),
+ *   `E-NO-MANIFEST` (sin `lila-project.json`), `E-MANIFEST` (manifiesto inválido o de otra
+ *   versión), `E-NO-MODEL` (sin `model.bpmn`), `E-ENTRY-PATH` (entrada con ruta insegura),
+ *   `E-DOCUMENTO`, `E-DIAGNOSTICO`, `E-CORRIDA`, `E-ENTRADAS-CORRIDA` (el documento a escribir no
+ *   valida). El mapa `LILA-…` del motor → `E-…` de aquí es explícito en `lilaFile.ts`.
+ * - Del propio puente (validación de argumentos IPC): `E-ARGUMENTO`, `E-NO-AUTORIZADO`,
+ *   `E-RUTA-FUERA`.
  */
 import type { ProjectDocument, ProjectProblem } from './projectTypes.js';
 
@@ -41,10 +56,20 @@ export interface LilaBridge {
   readonly version: string;
 
   /**
-   * Abre el selector nativo de carpetas. `null` es "se cerró sin elegir nada": no es un error.
-   * La carpeta elegida queda autorizada en main para `readProject`/`writeProject`.
+   * Abre el selector nativo. Por defecto elige una CARPETA de proyecto (ADR-018); en macOS el
+   * mismo panel deja elegir también un `.lila` (ADR-027), que Windows y Linux no permiten mezclar
+   * — de ahí `fileOnly`, que pide un diálogo de solo archivos (menú «Abrir proyecto .lila…»).
+   * `null` es "se cerró sin elegir nada": no es un error. Lo elegido queda autorizado en main
+   * para `readProject`/`writeProject`, sea carpeta o archivo.
    */
-  chooseFolder(): Promise<string | null>;
+  chooseFolder(fileOnly?: boolean): Promise<string | null>;
+  /**
+   * Abre el diálogo nativo de guardar para crear un `.lila` NUEVO (ADR-027): es la contraparte de
+   * `chooseFolder`, que solo sabe elegir algo que ya existe. `defaultPath` es el nombre propuesto.
+   * Devuelve la ruta del archivo (con `.lila` puesto si el usuario no lo escribió), ya autorizada
+   * para `writeProject`, o `null` si se cerró sin elegir nada.
+   */
+  chooseSaveFile(defaultPath?: string): Promise<string | null>;
   /**
    * Lee el proyecto completo de `dir` (ya autorizada por `chooseFolder`): modelo, escenarios
    * crudos (con `problems` para los que no se pudieron interpretar) y corridas guardadas.
@@ -156,8 +181,10 @@ export type MenuAction =
   | 'ajustes'
   | 'nuevo'
   | 'abrir'
+  | 'abrirArchivo'
   | 'guardar'
   | 'guardarComo'
+  | 'guardarComoCarpeta'
   | { readonly openRecent: string };
 
 export interface WriteProjectOptions {

@@ -343,11 +343,48 @@ que lo pida. `ResourceManager` sigue sin ser API pública. *(prueba: LILA-034, L
 
 ---
 
+## ADR-027 — `.lila`: la carpeta de proyecto, zipeada
+
+**Estado:** Aceptada
+
+Un archivo `.lila` es la **carpeta** de proyecto de ADR-018 **comprimida en ZIP**, con la misma
+disposición y los mismos nombres de archivo (`lila-project.json`, `model.bpmn`,
+`<nombre>.scenario.json`, `runs/<id>.result.json`). Un `zip -r` de una carpeta de proyecto ya
+existente es un `.lila` válido, y un `unzip` de un `.lila` es una carpeta de proyecto válida; no
+hay conversión ni migración. El manifiesto gana un único campo opcional, `engine`, que nombra la
+versión del motor que escribió las corridas. MIME `application/vnd.lila-modeler+zip`; ver
+`docs/PROJECT_FORMAT.md`.
+
+Por qué un contenedor: la carpeta es lo correcto para git y lo equivocado para entregarle el
+trabajo a alguien — la demo en línea solo podía descargar un `.lila.json` que ninguna instalación
+de escritorio sabía abrir, y «mándame tu modelo» significaba un zip hecho a mano sin garantía de
+qué llevaba dentro. Por qué la carpeta zipeada y no un formato nuevo: la carpeta ya es el contrato
+que escriben todas las modalidades, así que el contenedor cuesta un lector y un escritor en vez de
+una segunda definición de qué es un proyecto, y cualquiera puede inspeccionar o reparar un `.lila`
+con la herramienta de descompresión que ya trae su sistema.
+
+`fflate` es la única dependencia nueva (MIT, ~30 KB, sin dependencias transitivas, funciona igual
+en Node y en el worker del navegador) — un DEFLATE hecho a mano no es algo que este proyecto deba
+mantener, y las alternativas o asumen Node (`node:zlib`, inservible en la SPA) o arrastran un árbol
+de paquetes. Los tipos de documento compartidos se mudaron a `@lila/engine/project`, con lo que
+termina la copia a mano que `apps/desktop/src/projectTypes.ts` mantenía de la de `apps/web`.
+
+Las entradas desconocidas dentro de un `.lila` (`notes.md`, `attachments/…`) se reportan en
+`problems` y se descartan, no se conservan: guardarlas metería bytes opacos dentro de
+`ProjectDocument`, que cruza `structuredClone` por IPC y `JSON.stringify` hacia el espejo en
+`localStorage` del navegador. La forma de carpeta sí las deja en paz. Se revisará si alguien quiere
+adjuntos de verdad — eso es una decisión de formato (un área `attachments/` declarada, con su
+entrada en el manifiesto), no un truco de serialización. *(pruebas:
+`packages/engine/test/project/lila.test.ts`, `apps/desktop/src/lilaFile.test.ts`)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).
 - `docs/BIZAGI_PARITY.md` — tabla de paridad referenciada por ADR-021.
 - `docs/BPMN_EXTENSION.md` — implementación operativa de ADR-012 y ADR-014.
 - `docs/RESULTS_FORMAT.md` — implementación operativa de la parte de calendarios/utilización de ADR-016.
+- `docs/PROJECT_FORMAT.md` — implementación operativa de ADR-018 y ADR-027 (la carpeta de proyecto y el contenedor `.lila`).
 - `docs/DECISIONS-corpus-previo.md` — texto original de ADR-001 a ADR-008 (corpus previo, proyecto entonces llamado *Open Process Platform*).
 - `BACKLOG.md` — desglose en épicas y tickets por hito.

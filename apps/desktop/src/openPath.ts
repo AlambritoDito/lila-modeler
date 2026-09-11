@@ -11,6 +11,27 @@ export function isBpmnPath(p: string): boolean {
 }
 
 /**
+ * `true` si `p` termina en `.lila`, el contenedor de proyecto de ADR-027 (insensible a mayúsculas,
+ * mismo criterio que `isBpmnPath`). Vive aquí, en el módulo puro, porque lo necesitan tanto
+ * `main.ts` como `lilaFile.ts` y este es el único que no arrastra `node:fs`.
+ */
+export function isLilaPath(p: string): boolean {
+  return p.toLowerCase().endsWith('.lila');
+}
+
+/**
+ * La ruta que el diálogo nativo de «Guardar como» devolvió, con la extensión `.lila` puesta si le
+ * faltaba (ADR-027). Windows y Linux añaden la extensión del filtro solo a veces, y en macOS el
+ * usuario puede quitarla a mano en el campo del nombre; sin esto, el archivo resultante se
+ * guardaría con el formato correcto y un nombre que ni `isLilaPath` ni el sistema reconocen, así
+ * que al reabrirlo no sería un proyecto. Una ruta que ya termina en `.lila` (en cualquier
+ * combinación de mayúsculas) se devuelve tal cual.
+ */
+export function withLilaExtension(p: string): string {
+  return isLilaPath(p) ? p : `${p}.lila`;
+}
+
+/**
  * El `model.bpmn` de un proyecto Lila (el mismo `MODEL_FILE` de `projectIO.ts`, repetido aquí
  * porque este módulo es puro y no importa nada).
  */
@@ -44,7 +65,7 @@ export function isMiscasedModelFile(name: string): boolean {
 export function findBpmnArg(argv: readonly string[], skip: number): string | null {
   for (let i = skip; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg !== undefined && !arg.startsWith('-') && isBpmnPath(arg)) return arg;
+    if (arg !== undefined && !arg.startsWith('-') && (isBpmnPath(arg) || isLilaPath(arg))) return arg;
   }
   return null;
 }

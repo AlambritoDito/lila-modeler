@@ -134,7 +134,10 @@ de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
 
 **Pruébala en el navegador**: <https://alambritodito.github.io/lila-modeler/> — la app entera, con
 el proceso `examples/pedido` ya cargado. Guarda el proyecto en el almacenamiento local de la
-pestaña y abre y guarda archivos como descargas normales; no se sube nada a ningún sitio. (El
+pestaña y abre y guarda archivos como descargas normales; no se sube nada a ningún sitio.
+«Guardar proyecto» descarga un `.lila`: la carpeta de proyecto zipeada, el mismo archivo que abre
+la app de escritorio (ver [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)). Los proyectos
+guardados antes, en `.lila.json`, se siguen abriendo. (El
 enlace empieza a funcionar cuando se habilite GitHub Pages en el repositorio; lo publica
 `.github/workflows/pages.yml`.)
 
@@ -166,9 +169,12 @@ empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se dist
 repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
 en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
 intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
-como editor de `.bpmn`: doble clic sobre un archivo (o un arranque en frío con él) lo abre en el
-editor; si el archivo no está dentro de una carpeta de proyecto Lila, se guarda solo ese `.bpmn`
-hasta que se use «Guardar como». Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
+como editor de `.bpmn` y de `.lila`: doble clic sobre un archivo (o un arranque en frío con él) lo
+abre en el editor; si el `.bpmn` no está dentro de una carpeta de proyecto Lila, se guarda solo ese
+archivo hasta que se use «Guardar como». Un `.lila` es el proyecto entero en un archivo y se guarda
+sobre sí mismo; para abrir uno desde el menú, Archivo → «Abrir archivo de proyecto (.lila)…», y
+«Guardar como…» crea uno nuevo (la carpeta de proyecto de ADR-018 sigue a un menú de distancia,
+Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
 dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
 deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 

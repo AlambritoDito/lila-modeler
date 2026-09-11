@@ -22,12 +22,14 @@ import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/
 import path from 'node:path';
 import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
+import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
-import { findBpmnArg, isBpmnPath } from './openPath.js';
-import { hasProjectModel, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import { findBpmnArg, isBpmnPath, isLilaPath, withLilaExtension } from './openPath.js';
+import { readLilaFile, writeLilaFile } from './lilaFile.js';
+import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
@@ -87,27 +89,14 @@ async function e2eLog(event: string, data: object = {}): Promise<void> {
 
 /**
  * Valida `dir` contra `authorizedFolders` (que guarda siempre `realpath`, ver `chooseFolder`/
- * `acceptOpenPath`) y, además, vuelve a resolver su `realpath` en este momento: si difiere de sí
- * misma, la carpeta cambió de identidad (p. ej. la reemplazó un symlink) entre la autorización y
- * este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71).
+ * `acceptOpenPath`/`chooseSaveFile`) y, además, vuelve a resolver su identidad en este momento:
+ * si difiere de sí misma, la ruta cambió de identidad (p. ej. la reemplazó un symlink) entre la
+ * autorización y este uso — TOCTOU que `resolveWithin` por sí solo no cubre (issue #71). Un
+ * `.lila` recién elegido en «Guardar como…» todavía no existe: su identidad es la de su carpeta
+ * contenedora más el nombre (ver `authorizedPaths.ts`).
  */
 async function requireAuthorizedDir(dir: unknown): Promise<string> {
-  if (typeof dir !== 'string' || dir.length === 0) {
-    throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
-  }
-  if (!authorizedFolders.has(dir)) {
-    throw new Error('E-NO-AUTORIZADO: la carpeta no fue autorizada por un diálogo.');
-  }
-  let real: string;
-  try {
-    real = await realpath(dir);
-  } catch {
-    throw new Error('E-NO-AUTORIZADO: la carpeta autorizada ya no existe.');
-  }
-  if (real !== dir) {
-    throw new Error('E-NO-AUTORIZADO: la carpeta cambió de identidad desde que se autorizó (symlink).');
-  }
-  return dir;
+  return requireAuthorizedPath(authorizedFolders, dir);
 }
 
 /**
@@ -321,7 +310,8 @@ async function recordRecent(dir: string, name: string): Promise<void> {
 }
 
 /**
- * `recordRecent` solo si en `dir` hay un `model.bpmn` que reabrir (hallazgos 6 y 9 del QA):
+ * `recordRecent` solo si `dir` es reabrible como proyecto (hallazgos 6 y 9 del QA; `.lila` lo es
+ * siempre, ver `isRecordableProject`):
  * recientes guarda CARPETAS y el menú Archivo las reabre por su `model.bpmn`, así que anotar la
  * carpeta de un `.bpmn` suelto prometería un proyecto que no existe (`E-SIN-MODELO` al reabrir).
  * Un proyecto Lila de verdad abierto por su `ventas.bpmn` SÍ entra: su `model.bpmn` sigue ahí y
@@ -329,7 +319,7 @@ async function recordRecent(dir: string, name: string): Promise<void> {
  * sensible a mayúsculas y dejaba fuera ese caso legítimo.
  */
 async function recordRecentIfProject(dir: string, name: string): Promise<void> {
-  if (await hasProjectModel(dir)) await recordRecent(dir, name);
+  if (await isRecordableProject(dir)) await recordRecent(dir, name);
 }
 
 /**
@@ -371,7 +361,9 @@ function scheduleSaveBounds(win: BrowserWindow): void {
 }
 
 function registerIpcHandlers(win: BrowserWindow): void {
-  guardedHandle(win, 'lila:chooseFolder', async (): Promise<string | null> => {
+  guardedHandle(win, 'lila:chooseFolder', async (_event, soloArchivoArg: unknown): Promise<string | null> => {
+    // `true` cuando el renderer pide explícitamente un `.lila` (menú «Abrir proyecto .lila…»).
+    const soloArchivo = soloArchivoArg === true;
     if (e2e.folder !== undefined) {
       // Seam E2E (`LILA_E2E_FOLDER`, ver `e2e.ts`): sin diálogo nativo.
       if (e2e.folder === null) {
@@ -385,8 +377,20 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return dir;
     }
 
+    // Un proyecto puede ser una CARPETA (ADR-018) o un `.lila`, que es esa misma carpeta zipeada
+    // (ADR-027), así que el diálogo tiene que ofrecer las dos cosas. macOS es el único sistema
+    // cuyo diálogo nativo permite de verdad elegir archivo O carpeta en el mismo panel; en
+    // Windows y Linux, Electron ignora `openFile` cuando también se pide `openDirectory` y solo
+    // deja elegir carpetas. Por eso el menú Archivo lleva además «Abrir proyecto .lila…»
+    // (`menu.ts`, acción `abrirArchivo`), que abre este mismo diálogo SIN `openDirectory`: es la
+    // única forma de abrir un `.lila` fuera de macOS, y en macOS tampoco estorba.
     const result = await dialog.showOpenDialog(win, {
-      properties: ['openDirectory', 'createDirectory'],
+      properties: soloArchivo
+        ? ['openFile']
+        : process.platform === 'darwin'
+          ? ['openFile', 'openDirectory', 'createDirectory']
+          : ['openDirectory', 'createDirectory'],
+      filters: [{ name: 'Lila Modeler Project', extensions: ['lila'] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
@@ -397,10 +401,51 @@ function registerIpcHandlers(win: BrowserWindow): void {
     return dir;
   });
 
+  /**
+   * «Guardar como» hacia un `.lila` NUEVO (ADR-027, hallazgo 4 del QA a #323). `chooseFolder` solo
+   * abre `showOpenDialog`, que en el mejor de los casos (macOS) deja elegir un `.lila` que YA
+   * existe: no había forma de crear uno. Lo que se autoriza es el `realpath` de la carpeta
+   * contenedora —el archivo todavía no existe, así que no tiene `realpath` propio— más el archivo
+   * dentro de ella, que es lo que `requireAuthorizedDir` va a recibir después en
+   * `readProject`/`writeProject`, igual que hace `acceptOpenPath` con un `.lila` abierto por doble
+   * clic.
+   */
+  guardedHandle(win, 'lila:chooseSaveFile', async (_event, defaultPathArg: unknown): Promise<string | null> => {
+    const defaultPath = typeof defaultPathArg === 'string' && defaultPathArg.length > 0 ? defaultPathArg : undefined;
+    let chosen: string;
+    if (e2e.saveFile !== undefined) {
+      // Seam E2E (`LILA_E2E_SAVE_FILE`, ver `e2e.ts`): sin diálogo nativo.
+      if (e2e.saveFile === null) {
+        await e2eLog('chooseSaveFile', { result: null });
+        return null;
+      }
+      await mkdir(path.dirname(e2e.saveFile), { recursive: true });
+      chosen = e2e.saveFile;
+    } else {
+      const result = await dialog.showSaveDialog(win, {
+        filters: [{ name: 'Lila project', extensions: ['lila'] }],
+        ...(defaultPath === undefined ? {} : { defaultPath }),
+      });
+      if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
+      chosen = result.filePath;
+    }
+    const file = withLilaExtension(chosen);
+    const dir = await realpath(path.dirname(file));
+    const real = path.join(dir, path.basename(file));
+    authorizedFolders.add(real);
+    await e2eLog('chooseSaveFile', { result: real });
+    return real;
+  });
+
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
-      const { document, problems, loose } = await readProjectFolder(dir);
+      // Un `.lila` es un proyecto entero en un archivo (ADR-027): mismo documento, misma respuesta
+      // IPC, otro contenedor. Lo decide la extensión de la ruta ya autorizada, no un argumento
+      // nuevo del puente — el renderer guarda esa ruta y la devuelve tal cual al guardar.
+      const { document, problems, loose } = isLilaPath(dir)
+        ? await readLilaFile(dir)
+        : await readProjectFolder(dir);
       await recordRecent(dir, document.name);
       return { ...document, problems, loose };
     } catch (error) {
@@ -418,7 +463,10 @@ function registerIpcHandlers(win: BrowserWindow): void {
       const options = requireWriteOptions(dir, optionsArg);
       requireSafeFileNames(dir, document);
       try {
-        await writeProjectFolder(dir, document, options);
+        // Mismas `options` que el escritor de carpeta: un `.lila` se guarda con las mismas
+        // guardias (`E-CARPETA-OCUPADA`, `E-CAMBIO-EXTERNO`), no con menos (ADR-027).
+        if (isLilaPath(dir)) await writeLilaFile(dir, document, options);
+        else await writeProjectFolder(dir, document, options);
         // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
         // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
         await recordRecentIfProject(dir, document.name);
@@ -479,6 +527,19 @@ function registerIpcHandlers(win: BrowserWindow): void {
       return null;
     }
     authorizedFolders.add(real);
+    if (isLilaPath(real)) {
+      // El `file` del puente nombra el `.bpmn` a abrir dentro de una CARPETA; un `.lila` no tiene
+      // carpeta que recorrer, así que se ignora (`acceptOpenPath` manda el propio nombre del
+      // archivo, que no es un `.bpmn` y `requireBpmnName` rechazaría).
+      try {
+        const { document, problems, loose } = await readLilaFile(real);
+        await recordRecent(real, document.name);
+        return { ...document, problems, loose };
+      } catch (error) {
+        if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
+        throw error;
+      }
+    }
     const file = requireBpmnName(real, fileArg);
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
@@ -557,13 +618,16 @@ let windowLoaded = false;
  * comandos que no nos interesa).
  */
 async function acceptOpenPath(filePath: string): Promise<void> {
-  if (!isBpmnPath(filePath)) return;
+  if (!isBpmnPath(filePath) && !isLilaPath(filePath)) return;
   try {
     await stat(filePath);
   } catch {
     return;
   }
-  const dir = await realpath(path.dirname(filePath));
+  // Un `.lila` ES el proyecto: lo que se autoriza y se manda al renderer es el archivo, no su
+  // carpeta (que puede ser `~/Descargas` entera). Un `.bpmn` sigue autorizando su carpeta, que es
+  // donde viven el manifiesto, los escenarios y las corridas.
+  const dir = isLilaPath(filePath) ? await realpath(filePath) : await realpath(path.dirname(filePath));
   authorizedFolders.add(dir);
   const request: OpenPathRequest = { dir, file: path.basename(filePath) };
   if (process.env.LILA_DEBUG === '1') {

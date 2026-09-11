@@ -137,8 +137,11 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 - **Abrir proyecto**: selector de carpeta nativo; carga el proyecto que haya ahí.
 - **Guardar proyecto**: guarda en la carpeta activa (la del último "Nuevo"/"Abrir"/"Guardar como"
   con éxito).
-- **Guardar como**: pide una carpeta nueva (mismas reglas de `E-CARPETA-OCUPADA` que "Nuevo
-  proyecto").
+- **Guardar como…**: pide dónde crear un **`.lila`** nuevo —el proyecto entero en un archivo
+  (ADR-027), la forma de mandárselo a alguien—. **Guardar como carpeta…** hace lo mismo hacia una
+  carpeta de proyecto, que es la forma que conviene para versionar con git. Las dos aplican las
+  mismas reglas de `E-CARPETA-OCUPADA` que "Nuevo proyecto": un destino que ya contiene *otro*
+  proyecto se rechaza sin tocarlo.
 - La barra superior muestra `<nombre del proyecto> · Sin guardar` o `· Guardado` según haya
   cambios pendientes (`apps/web/src/App.tsx`).
 - **Cerrar con cambios sin guardar**: la ventana (botón rojo, Cmd+Q, o cerrarla desde el Dock)

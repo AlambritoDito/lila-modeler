@@ -24,6 +24,10 @@
       "types": "./dist/messages/index.d.ts",
       "default": "./dist/messages/index.js"
     },
+    "./project": {
+      "types": "./dist/project/index.d.ts",
+      "default": "./dist/project/index.js"
+    },
     "./cli-shared": {
       "types": "./dist/cli-shared.d.ts",
       "default": "./dist/cli-shared.js"

@@ -661,6 +661,13 @@ export const en = {
     errorDiagnostico: 'Invalid project diagnosis.',
     errorCorrida: 'Invalid saved run.',
     errorEntradasCorrida: 'The inputs of the saved run are invalid.',
+
+    /** The five failures of the `.lila` CONTAINER (ADR-027), as opposed to the document's. */
+    errorZip: 'This file is not a readable .lila (it could not be decompressed).',
+    errorSinManifiesto: 'The file has no "lila-project.json": it is not a .lila project.',
+    errorManifiesto: 'The file\u2019s "lila-project.json" is invalid or of an unsupported version.',
+    errorSinModelo: 'The file has no "model.bpmn": it is not a .lila project.',
+    errorEntrada: 'The .lila file holds an entry whose path is not valid inside a project.',
   },
 
   almacen: {
