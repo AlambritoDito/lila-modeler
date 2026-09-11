@@ -194,7 +194,7 @@ is saved until «Guardar como» (Save as) is used. A `.lila` is the whole projec
 ([project format](docs/PROJECT_FORMAT.md)) and saves back over itself; to open one from the menu,
 File → «Open project file (.lila)…», and «Save as…» creates a new one (the project folder of
 ADR-018 is still one entry away, File → «Save as folder…»). Pushing a `v*` tag
-(`git tag v0.0.1 && git push origin v0.0.1`) triggers the `Desktop` workflow, which builds the three
+(`git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1`) triggers the `Desktop` workflow, which builds the three
 installers (`.dmg`, `.exe`, `.AppImage`) and leaves them in a GitHub Release **as a draft**, to be
 published by hand.
 

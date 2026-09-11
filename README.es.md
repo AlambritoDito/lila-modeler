@@ -188,7 +188,7 @@ abre en el editor; si el `.bpmn` no está dentro de una carpeta de proyecto Lila
 archivo hasta que se use «Guardar como». Un `.lila` es el proyecto entero en un archivo y se guarda
 sobre sí mismo; para abrir uno desde el menú, Archivo → «Abrir archivo de proyecto (.lila)…», y
 «Guardar como…» crea uno nuevo (la carpeta de proyecto de ADR-018 sigue a un menú de distancia,
-Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v0.0.1 && git push origin v0.0.1`)
+Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1`)
 dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
 deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
 

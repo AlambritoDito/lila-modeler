@@ -20,7 +20,7 @@ explícitamente en «Limitaciones de esta beta».
 ## Dónde está el instalador y cómo abrirlo sin firma
 
 El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila/desktop`),
-por ejemplo `Lila Modeler-0.0.1-mac-arm64.dmg`. No se distribuye dentro del repositorio (la carpeta
+por ejemplo `Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg`. No se distribuye dentro del repositorio (la carpeta
 `apps/desktop/release/` está en `.gitignore`): hay que compilarlo (ver más abajo) o recibirlo por
 el canal que use el equipo.
 
@@ -250,10 +250,10 @@ npm run dist:mac -w @lila/desktop   # tsc + copia dist/web + electron-builder --
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (versión actual en `apps/desktop/package.json`: `0.0.1`):
+`apps/desktop/release/` (versión actual en `apps/desktop/package.json`: `1.0.0-alpha.1`):
 
-- `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila Modeler-0.0.1-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,
