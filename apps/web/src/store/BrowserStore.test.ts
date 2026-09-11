@@ -13,6 +13,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeLila, encodeLila } from '@lila/engine/project';
+import { es } from '../strings.es';
+import { getPreferencia, setLocale } from '../i18n';
 import { BrowserStore } from './BrowserStore';
 import type { ProcessData } from './ProjectStore';
 
@@ -215,6 +217,22 @@ describe('BrowserStore', () => {
       elegirArchivo(new File([encodeLila(DOC)], 'Pedido.lila'));
 
       await expect(promesa).resolves.toEqual(DOC);
+    });
+
+    it('un .lila ilegible se reporta en el idioma de la UI, no en el del motor', async () => {
+      // `BrowserStore` llamaba a `decodeLila` directamente y se saltaba el catálogo, así que un
+      // `.lila` corrupto salía en inglés con la UI en español (hallazgo 5 del QA a #323).
+      const previa = getPreferencia();
+      setLocale('es');
+      try {
+        const store = new BrowserStore();
+        const promesa = store.openProject();
+        elegirArchivo(new File([new Uint8Array([1, 2, 3, 4, 5])], 'Pedido.lila'));
+
+        await expect(promesa).rejects.toThrow(es.proyecto.errorZip);
+      } finally {
+        setLocale(previa);
+      }
     });
 
     it('openProject sigue abriendo el .lila.json de antes de ADR-027', async () => {

@@ -1,7 +1,7 @@
 import { resolveScenarioPath } from '@lila/engine/schema';
 import { marcarExportador } from '@lila/engine/bpmn';
 import type { ProcessIR } from '@lila/engine';
-import { ProjectFormatError, readProjectDocument } from '@lila/engine/project';
+import { decodeLila, ProjectFormatError, readProjectDocument } from '@lila/engine/project';
 import type { ProjectErrorCode } from '@lila/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
@@ -17,22 +17,46 @@ export function projectStore(store: ProjectStore): ProjectSessionStore | null {
  * cannot disagree about what a project is; what stays here is the wording, keyed by the stable
  * `code` each failure carries instead of by its English message.
  */
-const MENSAJES: Partial<Record<ProjectErrorCode, (S: ReturnType<typeof strings>) => string>> = {
+const MENSAJES: Record<ProjectErrorCode, (S: ReturnType<typeof strings>) => string> = {
   'LILA-DOCUMENT': (S) => S.proyecto.errorDocumento,
   'LILA-PROBLEMS': (S) => S.proyecto.errorDiagnostico,
   'LILA-RUN': (S) => S.proyecto.errorCorrida,
   'LILA-RUN-INPUTS': (S) => S.proyecto.errorEntradasCorrida,
+  'LILA-ZIP': (S) => S.proyecto.errorZip,
+  'LILA-NO-MANIFEST': (S) => S.proyecto.errorSinManifiesto,
+  'LILA-MANIFEST': (S) => S.proyecto.errorManifiesto,
+  'LILA-NO-MODEL': (S) => S.proyecto.errorSinModelo,
+  'LILA-ENTRY-PATH': (S) => S.proyecto.errorEntrada,
 };
+
+/**
+ * `Record` and not `Partial<Record<…>>` on purpose: the map is the app's coverage of the engine's
+ * codes, so a new one there has to fail the typecheck here instead of leaking the engine's English
+ * message into a Spanish UI (finding 5 of the QA on #323).
+ */
+function localizado(error: unknown): never {
+  if (error instanceof ProjectFormatError) throw new Error(MENSAJES[error.code](strings()));
+  throw error;
+}
 
 export function readProject(value: unknown): ProjectDocument {
   try {
     return readProjectDocument(value);
   } catch (error) {
-    if (error instanceof ProjectFormatError) {
-      const mensaje = MENSAJES[error.code];
-      throw new Error(mensaje === undefined ? error.message : mensaje(strings()));
-    }
-    throw error;
+    localizado(error);
+  }
+}
+
+/**
+ * `decodeLila` with the same localized wording as `readProject` — the only way this app should
+ * open a `.lila`. Calling `decodeLila` straight from a store bypasses the catalog and shows the
+ * engine's English text.
+ */
+export function readLila(bytes: Uint8Array): ProjectDocument {
+  try {
+    return decodeLila(bytes);
+  } catch (error) {
+    localizado(error);
   }
 }
 

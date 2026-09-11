@@ -687,6 +687,12 @@ export const es: Strings = {
     errorDiagnostico: 'Diagnóstico de proyecto inválido.',
     errorCorrida: 'Corrida guardada inválida.',
     errorEntradasCorrida: 'Las entradas de la corrida guardada son inválidas.',
+
+    errorZip: 'Este archivo no es un .lila legible (no se pudo descomprimir).',
+    errorSinManifiesto: 'Al archivo le falta "lila-project.json": no es un proyecto .lila.',
+    errorManifiesto: 'El "lila-project.json" del archivo es inválido o de una versión no soportada.',
+    errorSinModelo: 'Al archivo le falta "model.bpmn": no es un proyecto .lila.',
+    errorEntrada: 'El archivo .lila tiene una entrada con una ruta que no es válida dentro de un proyecto.',
   },
 
   almacen: {

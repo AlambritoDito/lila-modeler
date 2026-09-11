@@ -14,8 +14,8 @@
  */
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
-import { decodeLila, encodeLila } from '@lila/engine/project';
-import { readProject } from '../project';
+import { encodeLila } from '@lila/engine/project';
+import { readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
 /**
@@ -218,7 +218,7 @@ export class BrowserStore implements ProjectSessionStore {
     const file = await elegirArchivo('.lila,.lila.json,.json');
     if (file === null) return null;
     if (file.name.toLowerCase().endsWith('.lila')) {
-      return decodeLila(new Uint8Array(await file.arrayBuffer()));
+      return readLila(new Uint8Array(await file.arrayBuffer()));
     }
     return readProject(JSON.parse(await file.text()) as unknown);
   }
