@@ -1,6 +1,7 @@
 import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, test } from 'vitest';
 
 /**
@@ -10,6 +11,7 @@ import { describe, expect, test } from 'vitest';
  */
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 
 interface EngineManifest {
   readonly exports: Record<string, string | Record<string, string>>;
@@ -63,5 +65,23 @@ describe('lo que se publica', () => {
     const bin = join(PACKAGE_ROOT, manifest.bin['lila'] ?? '');
     expect(readFileSync(bin, 'utf8').startsWith('#!/usr/bin/env node')).toBe(true);
     expect(() => accessSync(bin, constants.X_OK)).not.toThrow();
+  });
+
+  test('el tarball no arrastra .map colgantes', () => {
+    // `process.execPath` + el entry point JS de npm, no el shell script `npm`:
+    // el she-bang de `npm` falla cuando la ruta del repo trae espacios (como aquí).
+    const npmCli = process.env.npm_execpath;
+    expect(npmCli, 'corre este test vía npm/npx, no invocando vitest a pelo').toBeTruthy();
+    const result = spawnSync(
+      process.execPath,
+      [npmCli as string, 'pack', '--workspace', '@lila/engine', '--dry-run', '--json'],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const [{ files }] = JSON.parse(result.stdout) as [{ files: { path: string }[] }];
+    const paths = files.map((f) => f.path);
+    expect(paths.filter((path) => path.endsWith('.map'))).toEqual([]);
+    expect(paths).toContain('dist/index.js');
+    expect(paths).toContain('bin/lila.js');
   });
 });
