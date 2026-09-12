@@ -387,8 +387,9 @@ de la tarjeta de crédito), sin introducir variables de caso ni un lenguaje de e
   nodo sigue siendo el campo reservado de §15 (`E-RESERVADO`, con el texto de siempre) y en
   cualquier otro flujo es `E-CAMPO-NO-APLICA`. Un `flowTaken` que no es un flujo del modelo es
   `E-REF-DESCONOCIDA`; un `flowTaken` que no puede preceder al gateway —no se alcanza recorriendo
-  el IR hacia atrás desde él— es aviso `W-COND-INALCANZABLE`, y la condición simplemente no aplica
-  nunca. Una `probability` fuera de `[0, 1]` es `E-PROB-RANGO`, como cualquier otra (R-XOR-6).
+  el IR hacia atrás desde él— es aviso `W-COND-INALCANZABLE`: por ningún camino secuencial aplica
+  la condición, pero una rama paralela (AND) sí puede recorrer el flujo, así que el aviso es una
+  heurística. Una `probability` fuera de `[0, 1]` es `E-PROB-RANGO`, como cualquier otra (R-XOR-6).
   *(prueba: E22)*
 - **R-COND-5 — Un sorteo, el mismo stream.** La compuerta sigue sacando un **único** uniforme de su
   propio stream (R-XOR-7); `conditions` cambia los pesos, nunca cuántos números aleatorios se

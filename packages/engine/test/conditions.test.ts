@@ -181,7 +181,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       path: 'elements.Flow_CauseBureau.conditions[0].flowTaken',
       severity: 'warning',
       message:
-        'elements.Flow_CauseBureau.conditions[0].flowTaken: Flow_CauseDebt cannot have been traversed before Gateway_Cause; the condition never applies.',
+        'elements.Flow_CauseBureau.conditions[0].flowTaken: Flow_CauseDebt cannot be reached before Gateway_Cause on any sequential path; the condition only applies if a parallel branch traverses it.',
     });
     // It is a warning: the scenario still runs.
     expect(scenarioErrors(problems)).toEqual([]);

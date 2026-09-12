@@ -575,6 +575,7 @@ export const en = {
       probability: 'Between 0 and 1. Without it the gateway splits evenly.',
       conditions: 'Only on a flow leaving a diverging exclusive gateway: the probability to use when the case already took the flow named here. The first match wins; with none, the plain probability applies.',
       flowTaken: 'Id of a sequence flow of the diagram, upstream of this gateway.',
+      'conditions.probability': 'Between 0 and 1. The weight this flow takes when the condition matches; it replaces the plain probability, it does not add to it.',
       fixedCost: 'Cost per token completed at this element.',
       costPerHour: 'Cost per busy hour, not per available hour.',
       capacity: 'Units of the pool available at the same time.',

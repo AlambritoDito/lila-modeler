@@ -129,7 +129,7 @@ export const es: Catalog = {
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
       `${path}: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} no puede haberse recorrido antes de ${gatewayId}; la condición nunca aplica.`,
+      `${path}: ${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre.`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },

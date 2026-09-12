@@ -126,7 +126,7 @@ export const en: Catalog = {
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
       `${path}: the element exists in the model and has no parameters; it takes its defaults.`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} cannot have been traversed before ${gatewayId}; the condition never applies.`,
+      `${path}: ${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it.`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },

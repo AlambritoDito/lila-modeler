@@ -394,7 +394,8 @@ pair), without introducing case variables or an expression language.
   it is the reserved field of §15 (`E-RESERVADO`, same text as always), and on any other flow it
   is `E-CAMPO-NO-APLICA`. A `flowTaken` that is not a flow of the model is `E-REF-DESCONOCIDA`; a
   `flowTaken` that cannot precede the gateway — it is not reachable walking the IR backwards from
-  it — is warning `W-COND-INALCANZABLE`, and the condition simply never applies. A `probability`
+  it — is warning `W-COND-INALCANZABLE`: on any sequential path the condition never applies, but a
+  parallel (AND) branch can still traverse the flow, so the warning is a heuristic. A `probability`
   outside `[0, 1]` is `E-PROB-RANGO`, like any other (R-XOR-6). *(test: E22)*
 - **R-COND-5 — One draw, same stream.** The gateway still draws a **single** uniform from its own
   stream (R-XOR-7); `conditions` change the weights, never how many random numbers are consumed.
