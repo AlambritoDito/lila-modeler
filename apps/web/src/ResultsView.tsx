@@ -49,6 +49,11 @@ export interface ResultsViewProps {
    * (`results-demo.tsx`) has no shell to switch: without it the button is not painted.
    */
   onAnimar?: (() => void) | undefined;
+  /**
+   * `true` when that run has no event log in memory (it was reopened from a `.lila`): the button
+   * is painted but disabled, because the replay mode would only say «run it again» (#331).
+   */
+  sinLog?: boolean | undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -595,7 +600,7 @@ export function buildResultCsvExports(
   };
 }
 
-export function ResultsView({ ir, scenario, result, onAnimar }: ResultsViewProps): ReactNode {
+export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: ResultsViewProps): ReactNode {
   const S = useStrings();
   const [tab, setTab] = useState<Tab>('elements');
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
@@ -611,7 +616,8 @@ export function ResultsView({ ir, scenario, result, onAnimar }: ResultsViewProps
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
       {onAnimar !== undefined && (
-        <button type="button" className="boton primario" style={{ float: 'right' }} onClick={onAnimar}>
+        <button type="button" className="boton primario" style={{ float: 'right' }} onClick={onAnimar}
+          disabled={sinLog} title={sinLog ? S.animacion.sinLog : undefined}>
           {S.animacion.reproducirDesdeResultados}
         </button>
       )}

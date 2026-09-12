@@ -32,10 +32,26 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('buildReplay over examples/tarjeta-credito', () => {
-  it('counts every element the log carries', () => {
-    // Only tasks and timers emit rows; this example has thirteen tasks and no timer.
-    expect(replay.elementIds).toHaveLength(13);
+  it('counts every element the log carries plus the ones inferred from the graph', () => {
+    // Thirteen tasks emit rows (no timer here); the start event, the two gateways and the three
+    // end events emit nothing and are recovered from the inferred paths: nineteen in total, the
+    // same nineteen `result.elements` has.
+    expect(replay.elementIds).toHaveLength(19);
+    expect([...replay.elementIds].sort()).toEqual(Object.keys(result.elements).sort());
     expect(replay.horizon).toBeGreaterThan(0);
+  });
+
+  it('counts the start and every end event exactly like the engine', () => {
+    const final = stateAt(replay, replay.horizon);
+    const ends = Object.keys(ir.nodes).filter((id) => ir.nodes[id]?.type === 'end');
+    const starts = Object.keys(ir.nodes).filter((id) => ir.nodes[id]?.type === 'start');
+    expect(ends.length).toBeGreaterThan(1);
+    for (const id of [...starts, ...ends]) {
+      expect([id, final.elements[id]?.started, final.elements[id]?.completed])
+        .toEqual([id, result.elements[id]?.started, result.elements[id]?.completed]);
+    }
+    // The headline number of the ticket: cards delivered with seed 42 and one replication.
+    expect(final.elements['End_CardDelivered']?.completed).toBe(20);
   });
 
   it('ends with the engine counters for every element of the log', () => {

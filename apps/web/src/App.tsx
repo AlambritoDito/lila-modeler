@@ -790,6 +790,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setIr(ir);
       const runId = crypto.randomUUID();
       logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT });
+      // Only the last ten runs keep their log: ten thousand rows each is too much to hold for a
+      // whole session of runs nobody will animate again (insertion order, so the oldest go first).
+      for (const viejo of [...logs.current.keys()].slice(0, -10)) logs.current.delete(viejo);
       setRuns((previous) => [...previous, {
         id: runId, scenarioName: escenarioId, result,
         inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
@@ -1013,7 +1016,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'resultados' && (
         <section className="zona-resultados">
           {corrida !== null && ir !== null
-            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} />
+            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null} />
             : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}

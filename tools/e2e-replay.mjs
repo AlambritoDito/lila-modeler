@@ -6,13 +6,15 @@
  * What it proves, in one pass over the published demo (`_site`, served at `/lila-modeler/`):
  * open a `.lila` built from `examples/tarjeta-credito` with a single replication, run the
  * simulation, press «Play» in the results, jump the replay to the end with the «Instant» speed,
- * and read the counters the overlay wrote on every element of the diagram. Those counters must be
+ * and read the counters the overlay wrote on every element of the diagram — tasks, and also the
+ * start event, the gateways and the end events, whose counters the model infers (#331 follow-up). Those counters must be
  * exactly `elements[id].started/completed` of the run that was just stored — which is read back
  * from the `.lila` the app saves, not from anything the page says about itself.
  *
  *   npm run build:pages && node tools/e2e-replay.mjs
  *
- * `CHROME_PATH` overrides the browser (the default is the macOS Google Chrome bundle).
+ * `CHROME_PATH` overrides the browser (the default is the macOS Google Chrome bundle), and
+ * `LILA_E2E_PORT` / `LILA_E2E_CDP_PORT` move the static server and the debugging port.
  * Prints a JSON report and exits non-zero on the first failed expectation.
  */
 import { spawn } from 'node:child_process';
@@ -28,6 +30,8 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SITE = join(ROOT, '_site');
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.LILA_E2E_PORT ?? 8788);
+/** Debugging port of the throw-away Chrome; `LILA_E2E_CDP_PORT` frees it when one is already taken. */
+const CDP_PORT = Number(process.env.LILA_E2E_CDP_PORT ?? 9334);
 const BASE = `http://127.0.0.1:${PORT}/lila-modeler/app/`;
 /** `examples/tarjeta-credito` with seed 42 and one replication: 20 cards delivered. */
 const CARDS_DELIVERED = 20;
@@ -132,13 +136,13 @@ async function main() {
   const server = await serve();
   const profile = join(work, 'profile');
   const chrome = spawn(CHROME, [
-    '--headless=new', '--remote-debugging-port=9334', `--user-data-dir=${profile}`,
+    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${profile}`,
     '--no-first-run', '--disable-gpu', '--window-size=1440,900', 'about:blank',
   ], { stdio: 'ignore' });
 
   let targets;
   for (let i = 0; i < 60; i++) {
-    try { targets = await (await fetch('http://127.0.0.1:9334/json/list')).json(); break; } catch { await sleep(250); }
+    try { targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json(); break; } catch { await sleep(250); }
   }
   const page = targets.find((t) => t.type === 'page');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -260,8 +264,13 @@ async function main() {
       }
     }
     check('every counter matches elements[id].started/completed', mismatches.length === 0, mismatches);
-    check('the log covered every task of the model',
-      Object.keys(counters).length === 13, Object.keys(counters).sort());
+    check('every element of the model got a counter',
+      Object.keys(counters).length === Object.keys(run.result.elements).length,
+      { overlay: Object.keys(counters).sort(), engine: Object.keys(run.result.elements).sort() });
+    // The headline number of the ticket, read on the diagram and not in the stored result: the
+    // end event emits no log row, its counter comes from the path the model infers per case.
+    check(`the End_CardDelivered counter on the diagram is ${CARDS_DELIVERED} with seed 42`,
+      counters.End_CardDelivered?.completed === CARDS_DELIVERED, counters.End_CardDelivered);
     check(`End_CardDelivered completed is ${CARDS_DELIVERED} with seed 42`,
       run.result.process.byEndEvent?.End_CardDelivered?.completed === CARDS_DELIVERED,
       run.result.process.byEndEvent?.End_CardDelivered?.completed);

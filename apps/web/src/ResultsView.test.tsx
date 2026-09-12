@@ -17,7 +17,7 @@ import type { ResolvedScenario } from '@lila/engine/schema';
 import type { BottleneckEntry, ProcessIR, RunResult } from '@lila/engine';
 
 import { buildResultCsvExports, ResultsView, sortRows, type ColumnDef } from './ResultsView.js';
-import { setLocale } from './i18n';
+import { setLocale, strings } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
 // LILA-210, so the locale is set here instead of depending on the machine's.
@@ -259,5 +259,19 @@ describe('ResultsView (LILA-062)', () => {
     );
 
     expect(html).toContain('Sin espera por recurso detectada.');
+  });
+
+  it('el botón de animar se deshabilita cuando la corrida no tiene event log en memoria (#331)', async () => {
+    const ir = await loadIr();
+    const result = loadGolden();
+    const props = { ir, result, scenario: scenarioWithUnit('min'), onAnimar: () => {} };
+
+    const conLog = renderToStaticMarkup(<ResultsView {...props} />);
+    expect(conLog).toContain(strings().animacion.reproducirDesdeResultados);
+    expect(conLog).not.toContain('disabled');
+
+    const sinLog = renderToStaticMarkup(<ResultsView {...props} sinLog />);
+    expect(sinLog).toContain('disabled');
+    expect(sinLog).toContain(strings().animacion.sinLog);
   });
 });
