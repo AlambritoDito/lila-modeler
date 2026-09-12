@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import type { Flow, Node, NodeType, ProcessIR } from '../../src/core/ir.js';
+import { aggregateReplication } from '../../src/core/metrics.js';
 import { runReplication, type ReplicationRun, type SimScenario } from '../../src/core/sim.js';
 
 /**
@@ -324,5 +325,111 @@ describe('triggerCount sin interTriggerTimer = N llegadas en t = 0 (R-ARR-1)', (
     expect(run.warnings).toContain(
       'W-START-SIN-LLEGADAS: Start: the start declares neither interTriggerTimer nor triggerCount and generates no cases.',
     );
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * (#345) `done` huérfanos: los eventos de una tarea ya cerrada no mueven el reloj
+ * ------------------------------------------------------------------ */
+
+describe('(#345) el `done` de una tarea muerta no adelanta el reloj', () => {
+  /**
+   * Dos starts independientes. El caso del `Start_Kill` abre dos tareas en paralelo (100 s y
+   * 200 s) y un timer de 10 s que lo mata con un `terminate` (R-EVT-5); el caso del `Start_Vivo`
+   * es una tarea de 30 s que nadie interrumpe. Los `done` previstos en 100 y 200 ya no son
+   * eventos del modelo, así que la corrida para en el último evento real: 30.
+   */
+  const ir = makeIr(
+    {
+      Start_Kill: 'start',
+      Fork: 'and',
+      Task_Larga: 'task',
+      Task_Mas_Larga: 'task',
+      Bomba: 'timer',
+      Kill: 'terminate',
+      End_Larga: 'end',
+      End_Mas_Larga: 'end',
+      Start_Vivo: 'start',
+      Task_Viva: 'task',
+      End_Vivo: 'end',
+    },
+    {
+      Flow_SK_F: ['Start_Kill', 'Fork'],
+      Flow_F_L: ['Fork', 'Task_Larga'],
+      Flow_F_ML: ['Fork', 'Task_Mas_Larga'],
+      Flow_F_B: ['Fork', 'Bomba'],
+      Flow_L_E: ['Task_Larga', 'End_Larga'],
+      Flow_ML_E: ['Task_Mas_Larga', 'End_Mas_Larga'],
+      Flow_B_K: ['Bomba', 'Kill'],
+      Flow_SV_TV: ['Start_Vivo', 'Task_Viva'],
+      Flow_TV_E: ['Task_Viva', 'End_Vivo'],
+    },
+  );
+  const elements = {
+    Start_Kill: { triggerCount: 1 },
+    Start_Vivo: { triggerCount: 1 },
+    Task_Larga: { processingTime: { type: 'constant' as const, value: 100 } },
+    Task_Mas_Larga: { processingTime: { type: 'constant' as const, value: 200 } },
+    Bomba: { processingTime: { type: 'constant' as const, value: 10 } },
+    Task_Viva: { processingTime: { type: 'constant' as const, value: 30 } },
+  };
+
+  test('con dos tareas abiertas, la corrida para en el último evento real', () => {
+    const run = runReplication(ir, { run: { seed: SEED }, elements });
+    expect(run.stoppedAt).toBe(30);
+    expect(run.statisticsDuration).toBe(30);
+    const muertas = run.rows.filter((row) => row.status === 'terminated').map((row) => row.elementId);
+    expect(muertas.sort()).toEqual(['Task_Larga', 'Task_Mas_Larga']);
+    expect(run.rows.find((row) => row.elementId === 'Task_Viva')?.endedAt).toBe(30);
+  });
+});
+
+describe('(#345) la utilización de un pool tras un `terminate` mide la ventana corta', () => {
+  /**
+   * `Task_Cara` ocupa la única unidad de `w` de 0 a 8, cuando el `terminate` la mata. El otro
+   * caso —`Task_Libre`, sin recurso— cierra en 10, así que la ventana es [0, 10]: 8 / 10 = 80 %.
+   * Con el `done` huérfano de la tarea muerta estirando `stoppedAt` hasta 120 la utilización
+   * salía ≈ 6,7 %, un pool saturado que parecía ocioso.
+   */
+  const ir = makeIr(
+    {
+      Start_Kill: 'start',
+      Fork: 'and',
+      Task_Cara: 'task',
+      Bomba: 'timer',
+      Kill: 'terminate',
+      End_Cara: 'end',
+      Start_Vivo: 'start',
+      Task_Libre: 'task',
+      End_Vivo: 'end',
+    },
+    {
+      Flow_SK_F: ['Start_Kill', 'Fork'],
+      Flow_F_C: ['Fork', 'Task_Cara'],
+      Flow_F_B: ['Fork', 'Bomba'],
+      Flow_C_E: ['Task_Cara', 'End_Cara'],
+      Flow_B_K: ['Bomba', 'Kill'],
+      Flow_SV_TL: ['Start_Vivo', 'Task_Libre'],
+      Flow_TL_E: ['Task_Libre', 'End_Vivo'],
+    },
+  );
+  const scenario: SimScenario = {
+    run: { seed: SEED },
+    resources: { w: { capacity: 1 } },
+    elements: {
+      Start_Kill: { triggerCount: 1 },
+      Start_Vivo: { triggerCount: 1 },
+      Task_Cara: { processingTime: { type: 'constant', value: 120 }, resources: [{ ref: 'w' }] },
+      Bomba: { processingTime: { type: 'constant', value: 8 } },
+      Task_Libre: { processingTime: { type: 'constant', value: 10 } },
+    },
+  };
+
+  test('busy / ventana corta, no busy / el fin previsto de la tarea muerta', () => {
+    const run = runReplication(ir, scenario);
+    expect(run.stoppedAt).toBe(10);
+    const result = aggregateReplication(ir, run, scenario);
+    expect(result.resources.w?.busyTime).toBeCloseTo(8, 10);
+    expect(result.resources.w?.utilization).toBeCloseTo(0.8, 10);
   });
 });

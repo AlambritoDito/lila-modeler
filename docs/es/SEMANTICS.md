@@ -477,7 +477,8 @@ de la tarjeta de crédito), sin introducir variables de caso ni un lenguaje de e
   contadores de join y sus marcas de activación OR, cancela sus eventos futuros y **libera de
   inmediato los recursos que el caso tuviera ocupados**, cargando el costo por hora hasta ese
   instante. El caso cuenta como `completed` con `endedAt` = ese instante. `terminate` **no** afecta
-  a otros casos ni detiene la corrida. *(prueba: LILA-026)*
+  a otros casos ni detiene la corrida. Los `done` pendientes de las actividades que mató se consumen
+  sin adelantar el reloj, como en R-BND-9. *(prueba: LILA-026, #345)*
 - **R-EVT-6 — Tareas en curso al morir el caso.** La tarea interrumpida por `terminate` cuenta como
   `started` y no como `completed` en su elemento; no aporta a las estadísticas de `processing`.
   *(prueba: LILA-026, LILA-028)*
@@ -515,7 +516,8 @@ de la tarjeta de crédito), sin introducir variables de caso ni un lenguaje de e
   produce el aviso `W-BORDE-SIN-TIEMPO`, citando el borde y su host. *(prueba: #81)*
 - **R-BND-9 — Un vencimiento muerto no mueve el reloj.** Un evento de vencimiento cuya actividad
   ya está cerrada se consume sin adelantar el reloj, así que una corrida sin `run.duration` no se
-  estira hasta un plazo que nunca iba a vencer (R-ARR-3). *(prueba: #81)*
+  estira hasta un plazo que nunca iba a vencer (R-ARR-3). El `done` del propio host, que queda
+  pendiente tras la interrupción, se consume igual. *(prueba: #81, #345)*
 
 ---
 

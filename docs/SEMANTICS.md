@@ -485,7 +485,8 @@ pair), without introducing case variables or an expression language.
   join counters and its OR activation marks, cancels its future events and **immediately releases
   the resources the case had occupied**, charging the hourly cost up to that instant. The case
   counts as `completed` with `endedAt` = that instant. `terminate` does **not** affect other cases
-  and does not stop the run. *(test: LILA-026)*
+  and does not stop the run. The pending `done` events of the activities it killed are consumed
+  without advancing the clock, as in R-BND-9. *(test: LILA-026, #345)*
 - **R-EVT-6 — Tasks in progress when a case dies.** The task interrupted by `terminate` counts as
   `started` and not as `completed` on its element; it does not contribute to `processing`
   statistics. *(test: LILA-026, LILA-028)*
@@ -524,7 +525,8 @@ pair), without introducing case variables or an expression language.
   #81)*
 - **R-BND-9 — A dead firing does not move the clock.** A firing event whose activity is already
   closed is consumed without advancing the clock, so a run without `run.duration` does not
-  stretch `stoppedAt` up to a deadline that was never going to fire (R-ARR-3). *(test: #81)*
+  stretch `stoppedAt` up to a deadline that was never going to fire (R-ARR-3). The host's own
+  `done`, left pending after the interruption, is consumed the same way. *(test: #81, #345)*
 
 ---
 

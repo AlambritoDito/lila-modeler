@@ -988,6 +988,17 @@ export function runReplication(
       const pending = activities.get(next.activityInstanceId);
       if (pending === undefined || pending.closed) continue;
     }
+    // R-EVT-5 / R-BND-9: el `done` de una actividad que ya cerró otro evento —el `terminate` que
+    // mató el caso, o el borde que interrumpió al host— tampoco es un evento del modelo. Se
+    // consume sin tocar el reloj por lo mismo que el borde zombi: una corrida sin `run.duration`
+    // no debe estirar `stoppedAt` —y con él la ventana de todas las métricas (R-CAL-9)— hasta el
+    // fin previsto de una tarea que ya nunca va a terminar (R-ARR-3).
+    if (next.kind === 'done') {
+      const pending = activities.get(next.activityInstanceId);
+      if (pending === undefined || pending.closed) continue;
+      const owner = caseStates[next.caseId - 1];
+      if (owner === undefined || !owner.alive) continue;
+    }
     clock = next.t;
     options.onStep?.(clock);
     if (isAborted()) {
