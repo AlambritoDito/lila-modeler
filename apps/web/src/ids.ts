@@ -14,7 +14,7 @@
  */
 
 /** Modes of the top bar, in the order they are painted. */
-export const MODO_IDS = ['modelar', 'simular', 'resultados', 'comparar', 'rutas'] as const;
+export const MODO_IDS = ['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas'] as const;
 export type ModoId = (typeof MODO_IDS)[number];
 
 /** Tabs of the right panel, in the order they are painted. */

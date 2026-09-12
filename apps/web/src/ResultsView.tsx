@@ -44,6 +44,11 @@ export interface ResultsViewProps {
   ir: ProcessIR;
   scenario: ResolvedScenario;
   result: RunResult;
+  /**
+   * Switches the shell to the «Animate» mode (#331). Optional because the demo page
+   * (`results-demo.tsx`) has no shell to switch: without it the button is not painted.
+   */
+  onAnimar?: (() => void) | undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -590,7 +595,7 @@ export function buildResultCsvExports(
   };
 }
 
-export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNode {
+export function ResultsView({ ir, scenario, result, onAnimar }: ResultsViewProps): ReactNode {
   const S = useStrings();
   const [tab, setTab] = useState<Tab>('elements');
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
@@ -605,6 +610,11 @@ export function ResultsView({ ir, scenario, result }: ResultsViewProps): ReactNo
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
+      {onAnimar !== undefined && (
+        <button type="button" className="boton primario" style={{ float: 'right' }} onClick={onAnimar}>
+          {S.animacion.reproducirDesdeResultados}
+        </button>
+      )}
       <p style={{ color: 'var(--fg-muted)', margin: '0 0 12px' }}>
         {S.resultados.cabecera(
           scenario.name,

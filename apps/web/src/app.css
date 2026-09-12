@@ -377,6 +377,48 @@ body {
   padding: 0;
 }
 
+/* Panel de la reproducción del event log (#331): misma retícula que la pestaña «Simulación»,
+   más la tabla de pools. Los colores de los contadores y de los puntos que recorren los flujos
+   viven en `ReplayOverlay.ts`, que es quien los escribe sobre el lienzo. */
+.replay {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.replay h3 {
+  color: var(--fg-muted);
+  font-size: var(--font-size-base);
+  margin: 0;
+}
+
+.replay .vacio {
+  padding: 0;
+}
+
+.replay .acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.replay-recursos {
+  border-collapse: collapse;
+  color: var(--fg-primary);
+  width: 100%;
+}
+
+.replay-recursos th, .replay-recursos td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.replay-recursos th {
+  color: var(--fg-muted);
+  font-weight: normal;
+}
+
 .campo {
   align-items: center;
   color: var(--fg-muted);

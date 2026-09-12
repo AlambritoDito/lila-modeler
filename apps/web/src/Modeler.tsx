@@ -39,6 +39,7 @@ import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOver
 // Misma frontera que el overlay de cuellos: los marcadores de validación (LILA-209) reciben el
 // `Modeler` desde aquí y el shell solo llama a `Modelador.validacion`.
 import { sincronizarMarcadores, type Validacion } from './ValidationMarkers';
+import { limpiarReplay, sincronizarReplay, type ReplayPintura } from './replay/ReplayOverlay';
 import {
   autorizarExportacion,
   finalizarExportacion,
@@ -151,6 +152,12 @@ export interface Modelador {
    * no acumula nada, así que el shell puede llamarla en cada render.
    */
   validacion(validacion: Validacion | null): void;
+  /**
+   * Replay of the engine event log (#331). `null` clears it; a frame paints the counters and the
+   * tokens of that instant. Idempotent and called once per animation frame, so it is the shell
+   * that owns the clock and this is only the brush.
+   */
+  replay(pintura: ReplayPintura | null): void;
   /**
    * Activa o desactiva la animación de tokens de `bpmn-js-token-simulation` (LILA-065). No tiene
    * relación con el motor DES: solo anima el recorrido de tokens sobre las figuras del diagrama
@@ -360,6 +367,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           anterior.off(suscripcion.eventos, suscripcion.escuchar);
         }
         clearOverlay(anterior);
+        limpiarReplay(anterior);
         anterior.destroy();
       }
       staging.remove();
@@ -429,6 +437,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       validacion: (validacion) => {
         if (activo !== null) sincronizarMarcadores(activo, validacion);
+      },
+      replay: (pintura) => {
+        if (activo !== null) sincronizarReplay(activo, pintura);
       },
       simulacionTokens: (activa) => {
         if (activo !== null) activo.get<{ toggleMode(activa: boolean): void }>('toggleMode').toggleMode(activa);
