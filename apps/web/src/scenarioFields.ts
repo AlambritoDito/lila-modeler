@@ -171,3 +171,41 @@ export function componerInstante(fechaHora: string, desfase: string): string {
   if (limpio === '') return '';
   return `${limpio.length === 16 ? `${limpio}:00` : limpio}${desfase}`;
 }
+
+/* ------------------------------------------------------------------ *
+ * XOR split (§ 6 of `docs/SEMANTICS.md`, R-XOR-1…5)
+ * ------------------------------------------------------------------ */
+
+/** What an XOR split really weighs, once the undeclared flows take their share. */
+export interface RepartoXor {
+  /** Effective weight of each outgoing flow, in the order given. */
+  pesos: number[];
+  /** Their sum: what the gateway view shows as `Total`. */
+  total: number;
+  /** Whether R-XOR-4 would normalise the split (and warn). */
+  avisa: boolean;
+}
+
+/**
+ * The weights R-XOR-1…4 give an XOR split, from the `probability` each outgoing flow declares
+ * (`undefined` = not declared, the `isDefault` flow included: the engine does not treat it
+ * specially, it is just a flow without a number).
+ *
+ * Mirrors `packages/engine/src/scenario.ts::checkXorGateway` (R-XOR-4), which in turn mirrors
+ * `core/sim.ts::xorWeights`: no declaration at all ⇒ `1/n` each (R-XOR-1); otherwise every
+ * undeclared flow takes `max(0, 1 − declaredSum) / missing` (R-XOR-2 for one, R-XOR-3 for
+ * several), and only then is the sum compared to 1. Summing just the declared numbers — which is
+ * what the panel did before — warned about splits the engine never normalises, so the gateway
+ * view and the validation list right below it disagreed.
+ */
+export function repartoXor(declaradas: readonly (number | undefined)[]): RepartoXor {
+  const n = declaradas.length;
+  const faltan = declaradas.filter((p) => p === undefined).length;
+  const sumaDeclarada = declaradas.reduce<number>((acc, p) => acc + (p ?? 0), 0);
+  const parte =
+    faltan === 0 ? 0 : faltan === n ? 1 / n : Math.max(0, 1 - sumaDeclarada) / faltan;
+  const pesos = declaradas.map((p) => redondear(p ?? parte));
+  const total = redondear(declaradas.reduce<number>((acc, p) => acc + (p ?? parte), 0));
+  // R-XOR-5 (sum 0) is an error of its own, `E-XOR-SUMA-CERO`; the engine does not warn there.
+  return { pesos, total, avisa: total > 0 && Math.abs(total - 1) > 1e-9 };
+}

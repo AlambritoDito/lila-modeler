@@ -60,6 +60,7 @@ import {
   esUnidadTiempo,
   fieldsForKind,
   partesInstante,
+  repartoXor,
   type ClaseElemento,
   type UnidadTiempo,
 } from './scenarioFields.js';
@@ -210,6 +211,24 @@ export function valorVacio(esquema: EsquemaJson): unknown {
     default:
       return null;
   }
+}
+
+/**
+ * A new item of an array: `valorVacio` plus the defaults the schema declares for its properties,
+ * so that adding `resources[]` writes `quantity: 1` (§ 2.5) instead of leaving the box empty and
+ * the form reading differently from the file that is saved.
+ *
+ * Only array items: adding a key to an object map (a pool, a calendar) keeps writing the bare
+ * minimum, so a scenario written from the panel does not grow keys nobody typed.
+ */
+function itemVacio(esquema: EsquemaJson): unknown {
+  const base = valorVacio(esquema);
+  if (esquema.type !== 'object' || !esObjeto(base)) return base;
+  const salida: Record<string, unknown> = { ...base };
+  for (const [clave, sub] of Object.entries(esquema.properties ?? {})) {
+    if (sub.default !== undefined && salida[clave] === undefined) salida[clave] = sub.default;
+  }
+  return salida;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1170,7 +1189,7 @@ export function Campo({
           type="button"
           className="boton"
           onClick={() => {
-            ctx.editar([...ruta, lista.length], valorVacio(items));
+            ctx.editar([...ruta, lista.length], itemVacio(items));
           }}
         >
           {S.escenario.anadirEtiqueta(etiqueta)}
@@ -1295,29 +1314,43 @@ function VistaCompuerta({
   const salientes = ir.nodes[id]?.outgoing ?? [];
   if (salientes.length === 0) return <p className="vacio">{S.escenario.compuertaSinSalientes}</p>;
 
-  // El `isDefault` se lleva el resto (R10): darle una casilla sería ofrecer un número que el
-  // motor no mira. Por eso tampoco entra en la suma.
-  const conValor = salientes.filter((f) => ir.flows[f]?.isDefault !== true);
-  const suma = conValor.reduce((acc, f) => {
+  // R-XOR-4: the split is computed the way the engine does (`scenarioFields.ts::repartoXor`),
+  // not by adding up only what is declared. A flow without a number — the `isDefault` one
+  // included — takes its share of the remainder, so `Total` is the number the engine compares
+  // with 1 and the warning appears exactly when the engine would warn.
+  const declaradas = salientes.map((f) => {
     const p = leer(ctx.resuelto, ['elements', f, 'probability']);
-    return typeof p === 'number' ? acc + p : acc;
-  }, 0);
-  const algunaDeclarada = conValor.some(
-    (f) => leer(ctx.resuelto, ['elements', f, 'probability']) !== undefined,
-  );
-  const redondeada = Math.round(suma * 1e6) / 1e6;
+    return typeof p === 'number' ? p : undefined;
+  });
+  // R-OR-2: on an inclusive gateway each path is independent, a flow without `probability`
+  // weighs 1, and there is no remainder to share nor a sum to normalise.
+  const reparto =
+    clase === 'xor'
+      ? repartoXor(declaradas)
+      : {
+          pesos: declaradas.map((p) => p ?? 1),
+          total: Math.round(declaradas.reduce<number>((acc, p) => acc + (p ?? 1), 0) * 1e6) / 1e6,
+          avisa: false,
+        };
 
   return (
     <fieldset className="entrada">
       <legend>{S.escenario.seccionCompuerta}</legend>
-      {salientes.map((flujo) => {
+      {salientes.map((flujo, i) => {
         const ruta: Ruta = ['elements', flujo, 'probability'];
         const idCampo = `campo-${rutaTexto(ruta)}`;
+        // What a flow with no declared number contributes: without showing it, `Total` would
+        // come from somewhere that is not on screen.
+        const implicito =
+          declaradas[i] === undefined && clase === 'xor' ? (
+            <span className="etiqueta">{S.escenario.compuertaImplicita(reparto.pesos[i]!)}</span>
+          ) : null;
         if (ir.flows[flujo]?.isDefault === true) {
           return (
             <div key={flujo} className="campo-schema">
               <span className="etiqueta">{rotuloFlujo(ir, S, flujo)}</span>
               <span className="aviso">{S.escenario.compuertaPorDefecto}</span>
+              {implicito}
             </div>
           );
         }
@@ -1330,14 +1363,14 @@ function VistaCompuerta({
               ctx={ctx}
               id={idCampo}
             />
+            {implicito}
             <Problemas ruta={ruta} ctx={ctx} />
           </div>
         );
       })}
-      <p className="etiqueta">{S.escenario.compuertaSuma(redondeada)}</p>
+      <p className="etiqueta">{S.escenario.compuertaSuma(reparto.total)}</p>
       {clase === 'xor'
-        ? algunaDeclarada &&
-          redondeada !== 1 && <p className="aviso">{S.escenario.compuertaSumaAviso}</p>
+        ? reparto.avisa && <p className="aviso">{S.escenario.compuertaSumaAviso}</p>
         : clase === 'or' && <p className="aviso">{S.escenario.compuertaIndependiente}</p>}
     </fieldset>
   );

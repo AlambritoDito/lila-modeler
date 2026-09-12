@@ -21,6 +21,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import type { ProcessIR } from '@lila/engine';
 import { parseBpmn } from '@lila/engine/bpmn';
+import { parseScenario, validateScenario } from '@lila/engine/schema';
 
 import { ScenarioPanel } from './ScenarioPanel.js';
 import { setLocale } from './i18n';
@@ -135,13 +136,13 @@ const SELECCIONAR = 'sel:';
 
 let ultimo: Json = {};
 
-function Anfitrion({ inicial }: { inicial: Json }): React.JSX.Element {
+function Anfitrion({ inicial, ir: irUsado = ir }: { inicial: Json; ir?: ProcessIR }): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>({
     [ARCHIVO]: inicial,
   });
   const [seleccion, setSeleccion] = useState<string | null>(null);
   ultimo = escenarios[ARCHIVO] ?? {};
-  const ids = [...Object.keys(ir.nodes), ...Object.keys(ir.flows)];
+  const ids = [...Object.keys(irUsado.nodes), ...Object.keys(irUsado.flows)];
   return (
     <>
       {ids.map((id) => (
@@ -164,7 +165,7 @@ function Anfitrion({ inicial }: { inicial: Json }): React.JSX.Element {
         }}
         onGuardar={() => {}}
         onDuplicar={() => {}}
-        ir={ir}
+        ir={irUsado}
         seleccion={seleccion}
         onSeleccionar={setSeleccion}
       />
@@ -185,6 +186,15 @@ function base(extra: Json = {}): Json {
     run: { start: '2026-09-07T08:00:00-06:00', duration: 28_800, baseTimeUnit: 'min' },
     ...extra,
   };
+}
+
+/** Los códigos XOR que el motor saca del mismo escenario: el contraste del aviso del panel. */
+function avisosXorDelMotor(escenario: Json): string[] {
+  const parsed = parseScenario(escenario);
+  if (!parsed.success) throw new Error(`el escenario del test no parsea: ${parsed.error.message}`);
+  return validateScenario(parsed.data, ir)
+    .filter((p) => p.code.includes('XOR'))
+    .map((p) => p.code);
 }
 
 /* ------------------------------------------------------------------ *
@@ -270,6 +280,54 @@ describe('vista de compuerta', () => {
     seleccionar('Gateway_Debt');
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
   });
+
+  // R-XOR-2: una rama declarada y la otra sin número no es un escenario mal escrito; el motor le
+  // da el residuo a la que falta y no avisa. El panel tiene que decir lo mismo que la lista de
+  // validación que sale tres líneas más abajo, que es la del motor.
+  it('una rama declarada y la otra sin número suman 1, sin aviso, como el motor', () => {
+    const escenario = base({ elements: { Flow_BureauBad: { probability: 0.4 } } });
+    montar(<Anfitrion inicial={escenario} />);
+    seleccionar('Gateway_Bureau');
+    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+    expect(document.body.textContent).toContain(es.escenario.compuertaImplicita(0.6));
+    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(avisosXorDelMotor(escenario)).toEqual([]);
+  });
+
+  it('con flujo por defecto el resto es suyo: total 1 y ningún aviso', () => {
+    const conDefecto: ProcessIR = {
+      ...ir,
+      flows: { ...ir.flows, Flow_BureauGood: { ...ir.flows['Flow_BureauGood']!, isDefault: true } },
+    };
+    const escenario = base({ elements: { Flow_BureauBad: { probability: 0.4 } } });
+    montar(<Anfitrion inicial={escenario} ir={conDefecto} />);
+    seleccionar('Gateway_Bureau');
+    expect(document.body.textContent).toContain(es.escenario.compuertaPorDefecto);
+    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+  });
+
+  it('avisa cuando las declaradas se pasan de 1, igual que el motor', () => {
+    const escenario = base({
+      elements: { Flow_BureauBad: { probability: 0.5 }, Flow_BureauGood: { probability: 0.6 } },
+    });
+    montar(<Anfitrion inicial={escenario} />);
+    seleccionar('Gateway_Bureau');
+    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1.1));
+    expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
+    expect(avisosXorDelMotor(escenario)).toEqual(['W-XOR-NORMALIZADA']);
+  });
+
+  it('todas declaradas y sumando 1 no avisa', () => {
+    const escenario = base({
+      elements: { Flow_BureauBad: { probability: 0.4 }, Flow_BureauGood: { probability: 0.6 } },
+    });
+    montar(<Anfitrion inicial={escenario} />);
+    seleccionar('Gateway_Bureau');
+    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(avisosXorDelMotor(escenario)).toEqual([]);
+  });
 });
 
 /* ------------------------------------------------------------------ *
@@ -290,8 +348,9 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
     expect(opciones(id)).toEqual(['', 'executive', 'analyst']);
     elegir(id, 'analyst');
     expect(ultimo['elements']).toEqual({
-      // `quantity` no se escribe: su valor por defecto es 1 y el esquema lo pone al resolver.
-      Task_FillApplication: { resources: [{ ref: 'analyst' }] },
+      // Añadir la fila escribe ya el `quantity: 1` del § 2.5: el formulario enseña el mismo
+      // número que acabará en el archivo, en vez de una casilla vacía.
+      Task_FillApplication: { resources: [{ ref: 'analyst', quantity: 1 }] },
     });
   });
 

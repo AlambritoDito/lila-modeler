@@ -568,6 +568,8 @@ export const es: Strings = {
     seccionCompuerta: 'Flujos salientes',
     compuertaSinSalientes: 'Esta compuerta no tiene flujos salientes.',
     compuertaPorDefecto: 'flujo por defecto: se lleva el resto',
+    /** #332: lo que aporta a la suma de la XOR un flujo sin `probability` (R-XOR-1…3). */
+    compuertaImplicita: (parte: number): string => `(implícito: ${parte})`,
     compuertaSuma: (suma: number): string => `Total: ${suma}`,
     compuertaSumaAviso: 'Las probabilidades de una compuerta XOR se normalizan a 1 con un aviso.',
     compuertaIndependiente: 'En una compuerta inclusiva cada camino es independiente: no tienen por qué sumar 1.',

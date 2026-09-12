@@ -16,6 +16,7 @@ import {
   esUnidadTiempo,
   fieldsForKind,
   partesInstante,
+  repartoXor,
 } from './scenarioFields';
 
 describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
@@ -162,5 +163,40 @@ describe('run.start (R8)', () => {
     expect(DESFASES).toContain('+05:30');
     expect(DESFASES).toContain('-06:00');
     expect(new Set(DESFASES).size).toBe(DESFASES.length);
+  });
+});
+
+describe('repartoXor (R-XOR-1…4, el reparto que hace el motor)', () => {
+  it('sin ninguna declarada reparte por igual y no avisa (R-XOR-1)', () => {
+    expect(repartoXor([undefined, undefined])).toEqual({ pesos: [0.5, 0.5], total: 1, avisa: false });
+  });
+
+  it('una declarada y otra sin número: la que falta se lleva el resto (R-XOR-2)', () => {
+    expect(repartoXor([0.4, undefined])).toEqual({ pesos: [0.4, 0.6], total: 1, avisa: false });
+  });
+
+  it('dos sin número se reparten el residuo por igual (R-XOR-3)', () => {
+    expect(repartoXor([0.4, undefined, undefined])).toEqual({
+      pesos: [0.4, 0.3, 0.3],
+      total: 1,
+      avisa: false,
+    });
+  });
+
+  it('todas declaradas y sumando 1: nada que normalizar', () => {
+    expect(repartoXor([0.4, 0.6]).avisa).toBe(false);
+  });
+
+  it('solo avisa cuando los números declarados se pasan o se quedan cortos (R-XOR-4)', () => {
+    expect(repartoXor([0.5, 0.6])).toEqual({ pesos: [0.5, 0.6], total: 1.1, avisa: true });
+    expect(repartoXor([0.4, 0.4])).toEqual({ pesos: [0.4, 0.4], total: 0.8, avisa: true });
+  });
+
+  it('declaradas por encima de 1 no dejan residuo negativo a la que falta', () => {
+    expect(repartoXor([0.7, 0.8, undefined])).toEqual({ pesos: [0.7, 0.8, 0], total: 1.5, avisa: true });
+  });
+
+  it('suma cero no avisa: es E-XOR-SUMA-CERO, que el linter da como error aparte (R-XOR-5)', () => {
+    expect(repartoXor([0, 0])).toEqual({ pesos: [0, 0], total: 0, avisa: false });
   });
 });

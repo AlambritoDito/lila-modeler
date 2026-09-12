@@ -582,6 +582,8 @@ export const en = {
     seccionCompuerta: 'Outgoing flows',
     compuertaSinSalientes: 'This gateway has no outgoing flows.',
     compuertaPorDefecto: 'default flow: takes the remainder',
+    /** #332: what a flow with no `probability` contributes to the XOR total (R-XOR-1…3). */
+    compuertaImplicita: (parte: number): string => `(implied: ${parte})`,
     compuertaSuma: (suma: number): string => `Total: ${suma}`,
     compuertaSumaAviso: 'The probabilities of an XOR gateway are normalised to 1 with a warning.',
     compuertaIndependiente: 'On an inclusive gateway each path is independent: they need not add up to 1.',
