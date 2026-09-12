@@ -447,6 +447,14 @@ type SimEvent =
       readonly caseId: number;
       readonly nodeId: string;
     }
+  /** R-BND-4: vence el temporizador de borde `nodeId` sobre la actividad `activityInstanceId`. */
+  | {
+      readonly t: number;
+      readonly kind: 'boundary';
+      readonly activityInstanceId: string;
+      readonly caseId: number;
+      readonly nodeId: string;
+    }
   /** R-CAL-11: la capacidad del pool acaba de subir; hay que despertar su cola. */
   | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string };
 
@@ -573,6 +581,13 @@ export function runReplication(
   for (const flowId of Object.keys(ir.flows)) flows[flowId] = 0;
   const elements: Record<string, ElementCounters> = {};
   for (const nodeId of Object.keys(ir.nodes)) elements[nodeId] = { started: 0, completed: 0 };
+
+  /** R-BND-1: temporizadores de borde de cada tarea, en orden de documento. */
+  const boundariesByHost = new Map<string, string[]>();
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    if (node.attachedTo === undefined) continue;
+    boundariesByHost.set(node.attachedTo, [...(boundariesByHost.get(node.attachedTo) ?? []), nodeId]);
+  }
 
   const rows: EventLogRow[] = [];
   const caseStates: CaseState[] = [];
@@ -920,6 +935,14 @@ export function runReplication(
       pendingCapacity.delete(next.poolId);
       continue;
     }
+    // R-BND-9: un borde cuya actividad ya se cerró (completó antes, o la mató un `terminate`) no
+    // es un evento del modelo. Se consume sin tocar el reloj, por lo mismo que la subida de
+    // capacidad: una corrida sin `run.duration` no debe estirar `stoppedAt` hasta un temporizador
+    // que nunca iba a disparar (R-ARR-3).
+    if (next.kind === 'boundary') {
+      const pending = activities.get(next.activityInstanceId);
+      if (pending === undefined || pending.closed) continue;
+    }
     clock = next.t;
     options.onStep?.(clock);
     if (isAborted()) {
@@ -1001,6 +1024,29 @@ export function runReplication(
       continue;
     }
 
+    if (next.kind === 'boundary') {
+      const activity = activities.get(next.activityInstanceId);
+      if (activity === undefined || activity.closed) continue;
+      // R-BND-4/5: el borde cierra **esa** instancia de la tarea sin completarla (el host ya
+      // contó `started`, nunca cuenta `completed`, como en R-EVT-6), suelta o cancela su
+      // solicitud de recurso y sigue por su propia salida con las marcas OR que traía el host.
+      if (isMeasuredCase(next.caseId)) {
+        counters.started++;
+        counters.completed++;
+      }
+      closeActivity(activity, next.t, 'interrupted');
+      if (activity.requestId !== undefined) {
+        startAllocations(resourceManager.cancel([activity.requestId], next.t));
+      }
+      forward(node, next.caseId, activity.marks, next.t);
+      if (isAborted()) {
+        cancelled = true;
+        stoppedAt = clock;
+        break simulation;
+      }
+      continue;
+    }
+
     if (isMeasuredCase(next.caseId)) counters.started++;
 
     switch (node.type) {
@@ -1059,6 +1105,29 @@ export function runReplication(
         };
         activities.set(activity.id, activity);
         state.activityIds.add(activity.id);
+        // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
+        // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
+        // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
+        // instante, el desempate por orden de inserción lo gane la interrupción.
+        for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
+          const boundaryDist = spec[boundaryId]?.processingTime;
+          // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
+          if (boundaryDist === undefined) {
+            warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, next.nodeId)));
+            continue;
+          }
+          const delay = Math.max(0, sample(boundaryDist, rngFor(boundaryId)));
+          const boundaryCalendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
+          heap.push({
+            t: boundaryCalendar === undefined
+              ? next.t + delay
+              : addWorkingTime(boundaryCalendar, nextOpen(boundaryCalendar, next.t), delay),
+            kind: 'boundary',
+            activityInstanceId: activity.id,
+            caseId: next.caseId,
+            nodeId: boundaryId,
+          });
+        }
         if (requirements.length === 0) {
           heap.push({
             t: calendar === undefined ? next.t + duration : addWorkingTime(calendar, startedAt!, duration),

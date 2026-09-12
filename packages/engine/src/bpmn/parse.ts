@@ -72,13 +72,49 @@ const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
   'bpmn:SubConversation': 'conversationDiagram',
 };
 
+const NO_OUTGOING: ReadonlySet<ModdleElement> = new Set();
+
+/**
+ * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1), o `undefined`
+ * si el boundary se queda fuera: no interrumpe, no es de tiempo, trae más de un disparador,
+ * cuelga de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no
+ * tiene ni un flujo de salida por el que continuar el token.
+ *
+ * `cancelActivity` lo omite el XML cuando interrumpe: moddle lo da por `true`.
+ */
+function boundaryTimerHost(
+  el: ModdleElement,
+  hasOutgoing: ReadonlySet<ModdleElement>,
+): ModdleElement | undefined {
+  const definitions = eventDefinitionsOf(el);
+  const host = el.attachedToRef;
+  if (
+    el.cancelActivity === false ||
+    el.parallelMultiple === true ||
+    definitions.length !== 1 ||
+    definitions[0]?.$type !== 'bpmn:TimerEventDefinition' ||
+    host === undefined ||
+    !TASK_TYPES.has(host.$type) ||
+    unsupportedConstruction(host) !== undefined ||
+    !hasOutgoing.has(el)
+  ) {
+    return undefined;
+  }
+  return host;
+}
+
 /**
  * Devuelve la primera construcción no soportada del elemento siguiendo el orden del catálogo.
  * R-NOSOP-3 exige un solo error por elemento: boundary y throw describen al evento completo;
  * después, los disparadores concretos ganan a los diagnósticos genéricos de start/end.
  */
-function unsupportedConstruction(el: ModdleElement): UnsupportedConstruction | undefined {
-  if (el.$type === 'bpmn:BoundaryEvent') return 'boundaryEvent';
+function unsupportedConstruction(
+  el: ModdleElement,
+  hasOutgoing: ReadonlySet<ModdleElement> = NO_OUTGOING,
+): UnsupportedConstruction | undefined {
+  if (el.$type === 'bpmn:BoundaryEvent') {
+    return boundaryTimerHost(el, hasOutgoing) === undefined ? 'boundaryEvent' : undefined;
+  }
   if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
 
   const definitions = eventDefinitionsOf(el);
@@ -139,6 +175,10 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       return hasEventDefinition(el, 'bpmn:TerminateEventDefinition') ? 'terminate' : 'end';
     case 'bpmn:IntermediateCatchEvent':
       return hasEventDefinition(el, 'bpmn:TimerEventDefinition') ? 'timer' : undefined;
+    // Solo llega aquí el boundary que ya pasó por `boundaryTimerHost` (R-BND-1): es un retardo
+    // más, con la diferencia de que su token lo arma el host en vez de un flujo entrante.
+    case 'bpmn:BoundaryEvent':
+      return 'timer';
     default:
       return undefined;
   }
@@ -191,6 +231,8 @@ interface Collector {
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
+  /** `id del boundary -> elemento moddle del host`, para resolver `attachedTo` tras el recorrido. */
+  boundaryHosts: Map<string, ModdleElement>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -249,6 +291,13 @@ function collectLanes(laneSets: readonly ModdleElement[], laneOf: Map<string, st
 function walk(container: ModdleElement, subprocessId: string | undefined, c: Collector): void {
   collectLanes(container.laneSets ?? [], c.laneOf);
 
+  // Un boundary solo entra al perfil si tiene por dónde seguir (R-BND-1), y sus flujos viven en
+  // este mismo contenedor. Los `<bpmn:outgoing>` del elemento no sirven: son opcionales en el XML.
+  const hasOutgoing = new Set<ModdleElement>();
+  for (const el of container.flowElements ?? []) {
+    if (el.$type === 'bpmn:SequenceFlow' && el.sourceRef !== undefined) hasOutgoing.add(el.sourceRef);
+  }
+
   for (const el of container.flowElements ?? []) {
     c.order.set(el, c.order.size);
 
@@ -258,7 +307,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     }
     if (el.default) c.defaultFlowIds.add(el.default.id);
 
-    const construction = unsupportedConstruction(el);
+    const construction = unsupportedConstruction(el, hasOutgoing);
 
     // Solo se aplana el subproceso embebido sin ningún detalle fuera de perfil. En particular,
     // los marcadores y quantities deben sobrevivir hasta `validate` como E-NOSOP (LILA-163).
@@ -300,6 +349,9 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       incoming: [],
       outgoing: [],
     };
+    if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
+      c.boundaryHosts.set(id, el.attachedToRef);
+    }
   }
 }
 
@@ -580,6 +632,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     boxIds: new Set(),
     order: new Map(),
     unsupportedEls: new Set(),
+    boundaryHosts: new Map(),
     unsupported: [],
   };
 
@@ -617,6 +670,15 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   }
 
   for (const box of c.boxes) flattenBox(box, c);
+
+  // `attachedTo` se resuelve con el mapa de ids ya completo: el host puede aparecer en el
+  // documento después del boundary, y aplanar un subproceso no cambia el id de sus tareas.
+  // ponytail: si el host no acabó en el grafo, el boundary se queda sin `attachedTo` y
+  // `validate` lo marca inalcanzable, que es exactamente el diagnóstico que toca.
+  for (const [id, hostEl] of c.boundaryHosts) {
+    const hostId = c.idOf.get(hostEl);
+    if (hostId !== undefined && c.nodes[hostId] !== undefined) c.nodes[id]!.attachedTo = hostId;
+  }
 
   // `incoming`/`outgoing` se derivan al final, con los flujos ya recableados, en orden de
   // aparición en el documento.

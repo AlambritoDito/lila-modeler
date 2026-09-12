@@ -71,7 +71,7 @@ Bizagi Modeler does not distinguish `resourceWait` from `offHoursWait` (see sect
 
 ### Partial lifecycle: what goes into the aggregates *(decision from LILA-036)*
 
-`terminated` and `inFlight` rows keep, in the raw log, the wait **observed** up to
+`terminated`, `interrupted` and `inFlight` rows keep, in the raw log, the wait **observed** up to
 `observedUntil` (section 7). In the aggregates the criterion is uniform and does not depend on
 the element:
 
@@ -171,7 +171,7 @@ interface Percentiles {
 - **`completed`** — number of cases that reached an end event (or were consumed by a `terminate`).
 - **`inFlight`** — `started − completed` at the moment the run was cut off (cases that neither completed nor were discarded).
 - **`cycleTime.*`** — statistics of a case's total lifetime (`caseEndedAt − caseEnabledAt`, summing every element it passed through); `p50`/`p90`/`p95` are the empirical 50th, 90th, and 95th percentiles (linear interpolation over the sorted sample) of the same set of durations. Computed only over **completed** cases.
-- **`waitTime.*`** — the same statistics and percentiles, over the sum of `resourceWait + offHoursWait` of the activities that completed processing in the case, and only over **completed** cases. A `terminated`/`inFlight` row does not enter this metric even though its raw lifecycle keeps the observed wait: this is the partial-lifecycle rule set by LILA-036 (section 2). *(test: LILA-036)*
+- **`waitTime.*`** — the same statistics and percentiles, over the sum of `resourceWait + offHoursWait` of the activities that completed processing in the case, and only over **completed** cases. A `terminated`/`interrupted`/`inFlight` row does not enter this metric even though its raw lifecycle keeps the observed wait: this is the partial-lifecycle rule set by LILA-036 (section 2). *(test: LILA-036)*
 - **`throughputPerHour`** — `completed / (effective run duration in hours)`, where the effective duration excludes `warmup` (see section 8).
 - **`costPerCase`** — average of `Σ row.cost` over completed cases. In-flight cases' costs are part of `totalCost`, but not of this average (R-COST-4). *(test: LILA-028)*
 - **`totalCost`** — sum of `fixedCostTotal` across every element plus `totalCost` across every resource (the scenario's total cost in the replication).
@@ -245,7 +245,7 @@ size; the other two bound it by the peak of **one** replication.
 | `resourceId` | string \| null | — | `id` of the pool actually assigned; `null` in the sentinel of an activity with no resource, or one that was still waiting. |
 | `allocationIndex` | integer \| null | — | Position of the assignment in the element's `resources` array; `null` for the sentinel. |
 | `resourceQuantity` | integer \| null | units | Quantity occupied of the pool; `null` for the sentinel. |
-| `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Observable closing reason: normal end, BPMN `terminate`, or stop/cancellation. `startedAt = null` distinguishes an unassigned wait. |
+| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Observable closing reason: normal end, BPMN `terminate`, an interrupting boundary timer (`SEMANTICS.md` R-BND-5), or stop/cancellation. `startedAt = null` distinguishes an unassigned wait. |
 | `enabledAt` | number | seconds since `run.start` | Instant the token reached the element and became enabled to start. |
 | `startedAt` | number \| null | seconds since `run.start` | Instant processing began; `null` if the activity was closed out while still queued. Never later than `observedUntil`: a grant that falls in closed time points to the next opening, and if that opening lies beyond the run's cutoff, the row reports the cutoff, not a future instant. |
 | `endedAt` | number \| null | seconds since `run.start` | Instant it ended normally; only exists with `status = "completed"`. |

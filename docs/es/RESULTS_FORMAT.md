@@ -71,7 +71,7 @@ Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fu
 
 ### Lifecycle parcial: qué entra en los agregados *(decisión de LILA-036)*
 
-Las filas `terminated` e `inFlight` conservan en el log crudo la espera **observada** hasta
+Las filas `terminated`, `interrupted` e `inFlight` conservan en el log crudo la espera **observada** hasta
 `observedUntil` (sección 7). En los agregados el criterio es uniforme y no depende del elemento:
 
 - Las estadísticas **por instancia** — `processing`, `resourceWait`, `offHoursWait` de esta
@@ -162,7 +162,7 @@ interface Percentiles {
 - **`completed`** — número de casos que llegaron a un end event (o fueron consumidos por un `terminate`).
 - **`inFlight`** — `started − completed` al momento de cortar la corrida (casos que ni completaron ni fueron descartados).
 - **`cycleTime.*`** — estadísticas del tiempo total de vida de un caso (`caseEndedAt − caseEnabledAt`, sumando todos los elementos por los que pasó); `p50`/`p90`/`p95` son los percentiles 50, 90 y 95 empíricos (interpolación lineal sobre la muestra ordenada) del mismo conjunto de duraciones. Solo se calculan sobre casos **completados**.
-- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso, y solo sobre casos **completados**. Una fila `terminated`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada: es la regla de lifecycle parcial fijada por LILA-036 (sección 2). *(prueba: LILA-036)*
+- **`waitTime.*`** — mismas estadísticas y percentiles, sobre la suma de `resourceWait + offHoursWait` de las actividades que completaron processing en el caso, y solo sobre casos **completados**. Una fila `terminated`/`interrupted`/`inFlight` no entra en esta métrica aunque su lifecycle raw conserve la espera observada: es la regla de lifecycle parcial fijada por LILA-036 (sección 2). *(prueba: LILA-036)*
 - **`throughputPerHour`** — `completed / (duración efectiva de la corrida en horas)`, donde la duración efectiva excluye el `warmup` (ver sección 8).
 - **`costPerCase`** — media de `Σ row.cost` sobre los casos completados. Los costos de casos en vuelo sí forman parte de `totalCost`, pero no de esta media (R-COST-4). *(prueba: LILA-028)*
 - **`totalCost`** — suma de `fixedCostTotal` de todos los elementos más `totalCost` de todos los recursos (costo total del escenario en la replicación).
@@ -232,7 +232,7 @@ log; los otros dos la acotan por el pico de **una** replicación.
 | `resourceId` | string \| null | — | `id` del pool efectivamente asignado; `null` en la sentinel de una actividad sin recurso o que seguía esperando. |
 | `allocationIndex` | integer \| null | — | Posición de la asignación en el array `resources` del elemento; `null` para sentinel. |
 | `resourceQuantity` | integer \| null | unidades | Cantidad ocupada del pool; `null` para el sentinel. |
-| `status` | `"completed"` \| `"terminated"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
+| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, un temporizador de borde interruptor (`SEMANTICS.md` R-BND-5), o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
 | `enabledAt` | number | segundos desde `run.start` | Instante en que el token llegó al elemento y quedó habilitado para empezar. |
 | `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` si la actividad se cerró todavía en cola. Nunca es posterior a `observedUntil`: una concesión que cae en tiempo cerrado apunta a la siguiente apertura, y si esa apertura queda más allá del corte de la corrida la fila informa el corte, no un futuro. |
 | `endedAt` | number \| null | segundos desde `run.start` | Instante en que terminó normalmente; solo existe con `status = "completed"`. |

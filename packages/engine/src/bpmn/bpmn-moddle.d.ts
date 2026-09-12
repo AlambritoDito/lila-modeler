@@ -32,6 +32,9 @@ declare module 'bpmn-moddle' {
     eventDefinitions?: ModdleElement[];
     eventDefinitionRef?: ModdleElement[];
     parallelMultiple?: boolean;
+    /** `bpmn:BoundaryEvent` */
+    attachedToRef?: ModdleElement;
+    cancelActivity?: boolean;
     /** `bpmn:Activity` */
     loopCharacteristics?: ModdleElement;
     startQuantity?: number;

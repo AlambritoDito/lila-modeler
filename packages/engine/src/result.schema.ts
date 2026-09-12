@@ -100,7 +100,7 @@ export const eventLogRowSchema = z.object({
   resourceId: z.string().nullable(),
   allocationIndex: z.number().int().nonnegative().nullable(),
   resourceQuantity: z.number().int().positive().nullable(),
-  status: z.enum(['completed', 'terminated', 'inFlight']),
+  status: z.enum(['completed', 'terminated', 'interrupted', 'inFlight']),
   enabledAt: z.number(),
   startedAt: z.number().nullable(),
   endedAt: z.number().nullable(),
@@ -122,7 +122,7 @@ export const eventLogRowSchema = z.object({
     context.addIssue({ code: 'custom', path: ['status'], message: 'completed exige startedAt y endedAt.' });
   }
   if (row.status !== 'completed' && row.endedAt !== null) {
-    context.addIssue({ code: 'custom', path: ['status'], message: 'terminated/inFlight exigen endedAt null.' });
+    context.addIssue({ code: 'custom', path: ['status'], message: 'terminated/interrupted/inFlight exigen endedAt null.' });
   }
   if (row.startedAt === null && row.resourceId !== null) {
     context.addIssue({ code: 'custom', path: ['resourceId'], message: 'sin startedAt todavía no existe asignación: exige sentinel.' });

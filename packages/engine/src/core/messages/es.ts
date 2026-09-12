@@ -75,6 +75,8 @@ export const coreEs: CoreCatalog = {
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
       `${flowId}: sale de un gateway paralelo (${gatewayId}); probability se ignora.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: sin processingTime; retarda 0 segundos.`,
+    'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
+      `${nodeId}: temporizador de borde sin processingTime; nunca interrumpe ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de fork; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

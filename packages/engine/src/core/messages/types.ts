@@ -77,6 +77,7 @@ export interface CoreCodeMessages {
   'W-START-SIN-LLEGADAS': (nodeId: string) => string;
   'W-PROB-IGNORADA': (flowId: string, gatewayId: string) => string;
   'W-TIMER-SIN-TIEMPO': (nodeId: string) => string;
+  'W-BORDE-SIN-TIEMPO': (nodeId: string, hostId: string) => string;
   'W-OR-JOIN-SIN-FORK': (nodeId: string) => string;
   'W-JOIN-BLOQUEADO': (nodeId: string, cases: number) => string;
 

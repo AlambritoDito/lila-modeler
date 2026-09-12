@@ -169,7 +169,7 @@ export interface EventLogRow {
   /** Unidades del pool; null en la fila sentinel. */
   resourceQuantity: number | null;
   /** Estado observable al emitir la fila. */
-  status: 'completed' | 'terminated' | 'inFlight';
+  status: 'completed' | 'terminated' | 'interrupted' | 'inFlight';
   enabledAt: number;
   startedAt: number | null;
   endedAt: number | null;

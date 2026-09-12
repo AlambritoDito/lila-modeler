@@ -60,6 +60,7 @@ definida; todo lo demás cae en la sección 3 de este documento.
 | `bpmn:endEvent` sin disparador (*none*) | `end` | consume el token (§9) |
 | `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
+| `bpmn:boundaryEvent` interruptor, con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` | plazo que corta la tarea (§9) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
@@ -127,7 +128,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
 | Construcción detectada | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` (cualquier disparador) | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `bpmn:boundaryEvent` que no sea un temporizador interruptor con una salida adjunto a una tarea: no interruptor, de mensaje/error/…, sobre un subproceso o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
 | `messageEventDefinition` en cualquier evento | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
@@ -320,7 +321,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-TOK-6 — Identidad y lifecycle de actividad.** Cada entrada a una tarea o timer crea un
   `activityInstanceId` opaco y único dentro de la replicación, derivado de un contador. Todas las asignaciones de pools
   de esa ocurrencia comparten el id y los mismos instantes. Al cierre normal se emite
-  `status = "completed"`; `terminate` emite `status = "terminated"`, y la parada o cancelación
+  `status = "completed"`; `terminate` emite `status = "terminated"`, un temporizador de borde
+  interruptor emite `status = "interrupted"` (§9, R-BND-5), y la parada o cancelación
   emite `status = "inFlight"`. En los dos últimos, `startedAt = null` distingue una instancia que
   seguía en cola de una ya iniciada y `endedAt = null`; `observedUntil` fija el corte.
   *(decisión: ADR-025; prueba: LILA-033, LILA-037)*
@@ -445,6 +447,41 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 - **R-EVT-6 — Tareas en curso al morir el caso.** La tarea interrumpida por `terminate` cuenta como
   `started` y no como `completed` en su elemento; no aporta a las estadísticas de `processing`.
   *(prueba: LILA-026, LILA-028)*
+- **R-BND-1 — Temporizador de borde interruptor.** Un `bpmn:boundaryEvent` con exactamente un
+  `timerEventDefinition`, interruptor (`cancelActivity` ausente o `true`), adjunto a una tarea
+  soportada —nunca a un subproceso embebido, que se aplana (§4)— y con al menos un flujo de
+  salida, entra al perfil como nodo `timer` con `attachedTo` = el id del host y **sin**
+  `incoming`: su token lo crea el host, no un flujo. Es alcanzable exactamente cuando lo es su
+  host, así que nunca es `E-INALCANZABLE` por sí solo. Cualquier otro boundary event sigue siendo
+  `E-NOSOP` con la construcción `boundaryEvent` (§3). *(prueba: #81)*
+- **R-BND-2 — El plazo cuenta desde que se habilita el host.** Se mide desde el `enabledAt` de la
+  actividad host, no desde que consigue sus recursos: un token que espera en la cola de un pool
+  ocupado ya está consumiendo su plazo. *(prueba: #81)*
+- **R-BND-3 — Tiempo de reloj y flujo de aleatorios propio.** El retardo transcurre 24×7 salvo que
+  el borde declare `elements[id].calendar`, igual que cualquier otro timer (R-EVT-3). Se muestrea
+  del flujo del id **del propio borde**, así que añadir un borde no desplaza los sorteos de
+  ningún otro elemento (§16). *(prueba: #81)*
+- **R-BND-4 — Solo dispara mientras la actividad host siga abierta.** Si el host ya completó, lo
+  mató un `terminate` o lo cortó la parada de la corrida, el evento de vencimiento se descarta al
+  salir del heap. *(prueba: #81)*
+- **R-BND-5 — Qué le hace el vencimiento al host.** La actividad host se cierra con
+  `status = "interrupted"`, `endedAt = null` y `observedUntil` = el instante del corte; su
+  solicitud de recurso se libera si estaba concedida y se retira si seguía en cola, cobrando el
+  costo por hora hasta ese instante; el `fixedCost` del elemento **no** se cobra, porque solo lo
+  cobra una actividad completada (§13). El host cuenta `started` y nunca `completed`, igual que
+  con `terminate` (R-EVT-6). *(prueba: #81)*
+- **R-BND-6 — El token sigue por el borde.** El borde cuenta un `started` y un `completed` en el
+  mismo instante (no consume tiempo, como un gateway) y el token sale por su primer flujo de
+  salida con las marcas de activación OR que traía el token del host, de modo que un OR join
+  aguas abajo sigue cerrando. El borde **no** emite fila propia en el event log. *(prueba: #81)*
+- **R-BND-7 — Empate: gana la interrupción.** El evento de vencimiento se encola **antes** que el
+  `done` del host, así que con instantes iguales `(t, seq)` (R-TOK-3) saca primero al borde: un
+  plazo exactamente igual a la duración de la tarea la interrumpe. *(prueba: #81)*
+- **R-BND-8 — Un borde sin tiempo nunca vence.** Un borde sin `processingTime` no agenda nada y
+  produce el aviso `W-BORDE-SIN-TIEMPO`, citando el borde y su host. *(prueba: #81)*
+- **R-BND-9 — Un vencimiento muerto no mueve el reloj.** Un evento de vencimiento cuya actividad
+  ya está cerrada se consume sin adelantar el reloj, así que una corrida sin `run.duration` no se
+  estira hasta un plazo que nunca iba a vencer (R-ARR-3). *(prueba: #81)*
 
 ---
 
@@ -847,7 +884,7 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 57 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 58 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
 Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
@@ -921,7 +958,8 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
-`W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+`W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
+interrumpe a su host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
 `isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
@@ -1068,6 +1106,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-EVT-3 | timer 24×7 salvo calendario propio | LILA-041 |
 | R-EVT-4 | end consume token; caso termina con 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
+| R-BND-1 … R-BND-9 | temporizador de borde interruptor | #81 |
 | R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |

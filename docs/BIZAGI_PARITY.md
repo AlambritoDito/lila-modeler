@@ -53,7 +53,8 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | **Later** | | | | |
 | Live-counter animation | ✓ | token-simulation (MIT) covers the didactic part; live DES counters are not a priority | — | Not planned (v1) |
 | Start quantity / completion quantity | ✓ | reserved | — | Not planned (v1) |
-| Message/signal/link events, boundary events, event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (v1) |
+| Interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, first slice: `SEMANTICS.md` R-BND-1…9) |
+| Message/signal/link events, non-interrupting or non-timer boundary events, event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (v1) |
 | Parameters from event logs (Bizagi 4.0 process mining) | ✓ | mining phase (separate Python process) | — | Not planned (v1) |
 | **No** (Bizagi does not simulate these either) | | | | |
 | Multi-instance, complex gateway, choreography/conversation, transactional, ad-hoc; reading the proprietary `.bpm` | ✗ | ✗ | — | Out of scope |
