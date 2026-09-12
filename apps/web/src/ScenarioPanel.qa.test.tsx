@@ -138,6 +138,21 @@ function pulsar(texto: string): void {
   });
 }
 
+/**
+ * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
+ */
+function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+  pulsar(
+    {
+      validation: '1 · Validación del proceso',
+      times: '2 · Análisis de tiempos',
+      resources: '3 · Análisis de recursos',
+      calendars: '4 · Análisis de calendarios',
+    }[paso],
+  );
+}
+
 function pulsarNodo(destino: HTMLElement): void {
   act(() => {
     destino.click();
@@ -236,6 +251,7 @@ describe('uniones sobre un escenario que hereda', () => {
     );
 
     pulsar('Task_TomarPedido');
+    irAPaso('times');
     const campo = 'campo-elements.Task_TomarPedido.processingTime';
     // El rótulo de la variante sale del catálogo desde #332, no de la ortografía del archivo.
     elegir(campo, opcion(campo, es.escenario.distribuciones['normal']!));
@@ -346,8 +362,9 @@ describe('registros', () => {
       />,
     );
 
-    // El segundo `.anadir` del panel es el de «Recursos» (el primero es el de «Calendarios»).
-    const anadir = document.querySelectorAll('.anadir')[1] as HTMLElement;
+    // #333: en el paso 3 la única sección con `.anadir` es la de «Recursos».
+    irAPaso('resources');
+    const anadir = document.querySelectorAll('.anadir')[0] as HTMLElement;
     tecleaEn(anadir.querySelector('input') as HTMLInputElement, 'cajero');
     pulsarNodo(anadir.querySelector('button') as HTMLButtonElement);
     pulsar('Guardar');
@@ -387,6 +404,7 @@ describe('selección del lienzo', () => {
       />,
     );
 
+    irAPaso('resources');
     const campo = document.querySelector('input[id$=".fixedCost"]') as HTMLInputElement;
     expect(campo).not.toBe(null);
     tecleaEn(campo, '5');
@@ -426,6 +444,9 @@ describe('rutas de los problemas', () => {
 
   it('R14 se marca en el propio campo `selection`', () => {
     montarEn('Timer_Reposo');
+    // `selection` es del paso 3; en un timer no aplica, pero el escenario ya lo trae escrito y
+    // por eso se sigue dibujando —con su error— en el paso al que pertenece.
+    irAPaso('resources');
     expect(
       document.getElementById('campo-elements.Timer_Reposo.selection')?.closest('.campo-schema')
         ?.textContent,

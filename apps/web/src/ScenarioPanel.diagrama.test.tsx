@@ -114,6 +114,21 @@ function pulsar(texto: string): void {
   });
 }
 
+/**
+ * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
+ */
+function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+  pulsar(
+    {
+      validation: '1 · Validación del proceso',
+      times: '2 · Análisis de tiempos',
+      resources: '3 · Análisis de recursos',
+      calendars: '4 · Análisis de calendarios',
+    }[paso],
+  );
+}
+
 /** El texto del `<option>` elegido de un `<select>`, por su id. */
 function opciones(id: string): string[] {
   const campo = document.getElementById(id);
@@ -205,6 +220,9 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('una tarea ofrece tiempo y recursos, y no las llegadas ni la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_FillApplication');
+    // #333: el tiempo de proceso vive en el paso 2; lo que este test fija es que en ese paso la
+    // tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
+    irAPaso('times');
     expect(hay('campo-elements.Task_FillApplication.processingTime')).toBe(true);
     expect(hay('campo-elements.Task_FillApplication.interTriggerTimer')).toBe(false);
     expect(hay('campo-elements.Task_FillApplication.probability')).toBe(false);
@@ -213,9 +231,14 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('un inicio ofrece las llegadas y no el tiempo de proceso', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('StartEvent_Application');
+    // #333: las dos llegadas se reparten entre dos pasos —cuántos casos es validación del
+    // proceso (paso 1) y cada cuánto llegan es análisis de tiempos (paso 2)—, así que el
+    // «ofrece» de este test se comprueba en el paso de cada uno.
+    irAPaso('times');
     expect(hay('campo-elements.StartEvent_Application.interTriggerTimer')).toBe(true);
-    expect(hay('campo-elements.StartEvent_Application.triggerCount')).toBe(true);
     expect(hay('campo-elements.StartEvent_Application.processingTime')).toBe(false);
+    irAPaso('validation');
+    expect(hay('campo-elements.StartEvent_Application.triggerCount')).toBe(true);
   });
 
   it('un flujo solo ofrece la probabilidad', () => {
@@ -229,6 +252,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('un fin solo ofrece su coste fijo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('End_CardDelivered');
+    irAPaso('resources');
     expect(hay('campo-elements.End_CardDelivered.fixedCost')).toBe(true);
     expect(hay('campo-elements.End_CardDelivered.processingTime')).toBe(false);
   });
@@ -343,6 +367,7 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
   it('resources[].ref ofrece los grupos del escenario, no una caja de texto', () => {
     montar(<Anfitrion inicial={conPools} />);
     seleccionar('Task_FillApplication');
+    irAPaso('resources');
     pulsar(es.escenario.anadirEtiqueta(es.escenario.campos['resources']!));
     const id = 'campo-elements.Task_FillApplication.resources[0].ref';
     expect(opciones(id)).toEqual(['', 'executive', 'analyst']);
@@ -357,6 +382,7 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
   it('elements[].calendar y resources[].calendar ofrecen los calendarios declarados', () => {
     montar(<Anfitrion inicial={conPools} />);
     seleccionar('Task_FillApplication');
+    irAPaso('calendars');
     expect(opciones('campo-elements.Task_FillApplication.calendar')).toEqual(['', 'tienda']);
     elegir('campo-elements.Task_FillApplication.calendar', 'tienda');
     expect(ultimo['elements']).toEqual({ Task_FillApplication: { calendar: 'tienda' } });
@@ -372,6 +398,7 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
       />,
     );
     seleccionar('Task_FillApplication');
+    irAPaso('calendars');
     expect(opciones('campo-elements.Task_FillApplication.calendar')).toEqual([
       '',
       'almacen',
@@ -388,6 +415,7 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
   it('con baseTimeUnit «min», teclear 5 guarda 300', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_FillApplication');
+    irAPaso('times');
     // `constant` es la primera variante del `discriminatedUnion`.
     elegir('campo-elements.Task_FillApplication.processingTime', '0');
     teclear('campo-elements.Task_FillApplication.processingTime.value', '5');
@@ -406,10 +434,13 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
       />,
     );
     seleccionar('Task_FillApplication');
+    irAPaso('times');
     const campo = document.getElementById(
       'campo-elements.Task_FillApplication.processingTime.value',
     ) as HTMLInputElement;
     expect(campo.value).toBe('5');
+    // `run.baseTimeUnit` se teclea en el paso 1, que es donde vive la corrida entera.
+    irAPaso('validation');
     elegir('campo-run.baseTimeUnit', 'h');
     expect((ultimo['elements'] as Json)['Task_FillApplication']).toEqual({
       processingTime: { type: 'constant', value: 300 },

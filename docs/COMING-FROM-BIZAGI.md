@@ -33,9 +33,17 @@ Two things work differently from Bizagi, and both in your favour:
   back to step 1 after step 4 without redoing anything, and the validation list at the bottom of
   the panel is live in every step.
 
-If your build still shows the Simulate panel as one long list (Run · Calendars · Resources ·
-Selected element · Validation), the fields are exactly the same ones, only not grouped under the
-four names yet.
+The four steps are a bar at the top of the Simulate panel, labelled **1 · Process validation**,
+**2 · Time analysis**, **3 · Resource analysis** and **4 · Calendar analysis**. It opens on
+step 1, the step you are on survives picking elements on the canvas and running the simulation,
+and two things are there in every step: the validation list and **Advanced: scenario JSON**, which
+is where the scenario `name`, its `description` and anything the form does not draw are edited.
+
+Steps 2 and 3 also list the elements they are about — every task, timer and start event with the
+time it has, every task with the pool it takes — so “what is still missing” is one look and not a
+tour of the diagram; clicking a row selects that element on the canvas. The resource pools appear
+in step 3 **and** in step 4, because a pool's calendar and its capacity per shift are edited inside
+the pool and they are level 4, not level 3.
 
 ## Screen by screen
 
@@ -47,7 +55,7 @@ this section is the screen-level version of it.
 
 | Bizagi | Lila |
 |---|---|
-| Scenario name, Description | Simulate → step 1, `name` / `description` |
+| Scenario name, Description | `name` / `description`, in **Advanced: scenario JSON** (the name is the panel's heading) |
 | Start date | step 1, `run.start` (ISO 8601 **with offset**) |
 | Duration | step 1, `run.duration`; may be left empty, then the run ends when the last case drains |
 | Base time unit, Currency | step 1, `run.baseTimeUnit`, `run.currency` |

@@ -169,8 +169,9 @@ npm run dev -w @lila/web    # compila el motor si hace falta + arranca Vite en h
 Arranca con `examples/pedido/model.bpmn` cargado. La barra superior tiene cinco modos:
 
 - **Modelar** — editor bpmn-js: crear, editar y exportar el `.bpmn`.
-- **Simular** — panel de escenario (recursos, calendarios, parámetros por elemento) y botón
-  Simular con progreso y cancelar.
+- **Simular** — panel de escenario en cuatro pasos —validación del proceso, análisis de tiempos,
+  de recursos y de calendarios, los cuatro niveles de Bizagi— y botón Simular con progreso y
+  cancelar.
 - **Resultados** — las tablas estilo Bizagi más las extras de Lila (cuellos de botella, costo por
   caso), con exportación CSV por tabla.
 - **Comparar** — dos o más escenarios ya simulados lado a lado, con marca de significancia (IC95).

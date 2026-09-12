@@ -429,6 +429,32 @@ export const en = {
     hereda: (padre: string): string =>
       `Inherits from ${padre}: resolved values are shown and only the delta is edited.`,
 
+    /**
+     * #333 â the four steps of the Simulate panel, which are Bizagi's four levels of simulation
+     * in the same order. The number is part of the label on purpose: it is the number the Bizagi
+     * documentation, this guide and the people who ask for help all use.
+     */
+    pasos: 'Steps',
+    paso: {
+      validation: '1 · Process validation',
+      times: '2 · Time analysis',
+      resources: '3 · Resource analysis',
+      calendars: '4 · Calendar analysis',
+    } as Record<string, string>,
+    pasoAyuda: {
+      validation:
+        'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
+      times: 'How long each arrival and each piece of work takes.',
+      resources: 'Who does the work: pools, how many units, and which task takes which pool.',
+      calendars: 'When the work is possible: weekly calendars, and the capacity of each shift.',
+    } as Record<string, string>,
+
+    /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
+    listaTiempos: 'Times by element',
+    listaRecursos: 'Resources by element',
+    sinResumen: '—',
+    resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
+
     seccionCorrida: 'Run',
     seccionCalendarios: 'Calendars',
     seccionRecursos: 'Resources',

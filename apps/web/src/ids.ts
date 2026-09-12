@@ -30,3 +30,15 @@ export type VerboPerdida = 'exportar' | 'guardar';
 /** Density preference (LILA-113); the id is what goes to `localStorage`/`estado.json`. */
 export const DENSIDAD_IDS = ['compacta', 'normal', 'comoda'] as const;
 export type Densidad = (typeof DENSIDAD_IDS)[number];
+
+/**
+ * Steps of the Simulate panel (#333), in the order they are painted.
+ *
+ * They are Bizagi's four levels of simulation — process validation, time analysis, resource
+ * analysis, calendar analysis — kept in the same order and with the same vocabulary, because the
+ * people this app is for learned the workflow there (`docs/COMING-FROM-BIZAGI.md`). They are a
+ * reading order, not a wizard: there is no "enable level N" switch anywhere, every step writes
+ * into the same scenario document, and going back to step 1 after step 4 costs nothing.
+ */
+export const PASO_IDS = ['validation', 'times', 'resources', 'calendars'] as const;
+export type PasoId = (typeof PASO_IDS)[number];

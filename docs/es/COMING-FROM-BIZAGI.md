@@ -32,9 +32,18 @@ Dos cosas funcionan distinto que en Bizagi, y las dos a tu favor:
   volver al paso 1 después del paso 4 sin rehacer nada, y la lista de validación del pie del panel
   está viva en todos los pasos.
 
-Si tu build todavía muestra el panel de Simulate como una lista larga (Run · Calendars · Resources ·
-Selected element · Validation), los campos son exactamente los mismos, solo que aún no agrupados
-bajo los cuatro nombres.
+Los cuatro pasos son una barra en la cabecera del panel de Simulate, rotulados **1 · Validación
+del proceso**, **2 · Análisis de tiempos**, **3 · Análisis de recursos** y **4 · Análisis de
+calendarios**. Abre en el paso 1, el paso en el que estás sobrevive a seleccionar elementos en el
+lienzo y a correr la simulación, y dos cosas están en todos los pasos: la lista de validación y
+**Avanzado: JSON del escenario**, que es donde se editan el `name` del escenario, su `description`
+y todo lo que el formulario no dibuja.
+
+Los pasos 2 y 3 listan además los elementos de los que hablan —cada tarea, temporizador e inicio
+con el tiempo que tiene; cada tarea con el pool que toma—, así que «qué falta» es un vistazo y no un
+recorrido por el diagrama; pulsar una fila selecciona ese elemento en el lienzo. Los pools de
+recursos salen en el paso 3 **y** en el paso 4, porque el calendario de un pool y su capacidad por
+turno se editan dentro del pool y son nivel 4, no nivel 3.
 
 ## Pantalla por pantalla
 
@@ -45,7 +54,7 @@ en [`SCENARIO_FORMAT.md` § 8](SCENARIO_FORMAT.md); esta sección es su versión
 
 | Bizagi | Lila |
 |---|---|
-| Scenario name, Description | Simulate → paso 1, `name` / `description` |
+| Scenario name, Description | `name` / `description`, en **Avanzado: JSON del escenario** (el nombre es la cabecera del panel) |
 | Start date | paso 1, `run.start` (ISO 8601 **con offset**) |
 | Duration | paso 1, `run.duration`; se puede dejar vacío y la corrida termina cuando drena el último caso |
 | Base time unit, Currency | paso 1, `run.baseTimeUnit`, `run.currency` |

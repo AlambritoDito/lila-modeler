@@ -416,6 +416,32 @@ export const es: Strings = {
     hereda: (padre: string): string =>
       `Hereda de ${padre}: se muestran los valores resueltos y se edita solo el delta.`,
 
+    /**
+     * #333 — los cuatro pasos del panel de simulación, que son los cuatro niveles de Bizagi en
+     * el mismo orden. El número forma parte del rótulo a propósito: es el número que usan la
+     * documentación de Bizagi, esta guía y quien pide ayuda.
+     */
+    pasos: 'Pasos',
+    paso: {
+      validation: '1 · Validación del proceso',
+      times: '2 · Análisis de tiempos',
+      resources: '3 · Análisis de recursos',
+      calendars: '4 · Análisis de calendarios',
+    } as Record<string, string>,
+    pasoAyuda: {
+      validation:
+        'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
+      times: 'Cuánto tarda cada llegada y cada trabajo.',
+      resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
+      calendars: 'Cuándo se puede trabajar: calendarios semanales y la capacidad de cada turno.',
+    } as Record<string, string>,
+
+    /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
+    listaTiempos: 'Tiempos por elemento',
+    listaRecursos: 'Recursos por elemento',
+    sinResumen: '—',
+    resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
+
     seccionCorrida: 'Corrida',
     seccionCalendarios: 'Calendarios',
     seccionRecursos: 'Recursos',

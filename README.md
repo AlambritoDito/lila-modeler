@@ -171,8 +171,8 @@ It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes. 
 language in Settings:
 
 - **Model** — bpmn-js editor: create, edit and export the `.bpmn`.
-- **Simulate** — scenario panel (resource pools, calendars, per-element parameters) and a
-  Simulate button with progress and cancel.
+- **Simulate** — scenario panel in four steps — process validation, time, resource and calendar
+  analysis, Bizagi's four levels — and a Simulate button with progress and cancel.
 - **Results** — the Bizagi-style tables plus Lila's extras (bottlenecks, cost per
   case), with per-table CSV export.
 - **Compare** — two or more already-simulated scenarios side by side, with a
