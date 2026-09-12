@@ -291,12 +291,18 @@ describe('W-RECURSO-SATURADO (LILA-191)', () => {
 
 describe('el criterio de W-RECURSO-SATURADO es una función de las cantidades promediadas', () => {
   /** Un pool cuya cola atribuida se duplica entre mitades y deja pendiente el 60 % de lo servido. */
-  const SATURADA: PoolLoad = { demand: 200, served: 100, pending: 60, capacity: 1, firstHalf: 10, secondHalf: 40 };
+  const SATURADA: PoolLoad = {
+    demand: 200, served: 100, pending: 60, capacity: 1, firstHalf: 10, secondHalf: 40, utilization: 0.99,
+  };
   /** M/M/1 con ρ = 0,8: cola larga (Lq = 3,2) pero estacionaria y sin pendientes al corte. */
-  const ESTABLE: PoolLoad = { demand: 80, served: 100, pending: 1, capacity: 1, firstHalf: 4, secondHalf: 4 };
+  const ESTABLE: PoolLoad = {
+    demand: 80, served: 100, pending: 1, capacity: 1, firstHalf: 4, secondHalf: 4, utilization: 0.8,
+  };
 
   function meanLoad(loads: readonly PoolLoad[]): PoolLoad {
-    const total: PoolLoad = { demand: 0, served: 0, pending: 0, capacity: 0, firstHalf: 0, secondHalf: 0 };
+    const total: PoolLoad = {
+      demand: 0, served: 0, pending: 0, capacity: 0, firstHalf: 0, secondHalf: 0, utilization: 0,
+    };
     for (const load of loads) {
       total.demand += load.demand / loads.length;
       total.served += load.served / loads.length;
@@ -304,6 +310,7 @@ describe('el criterio de W-RECURSO-SATURADO es una función de las cantidades pr
       total.capacity += load.capacity / loads.length;
       total.firstHalf += load.firstHalf / loads.length;
       total.secondHalf += load.secondHalf / loads.length;
+      total.utilization += load.utilization / loads.length;
     }
     return total;
   }
@@ -321,7 +328,15 @@ describe('el criterio de W-RECURSO-SATURADO es una función de las cantidades pr
   });
 
   test('ρ por debajo de 1,1 no avisa aunque la cola crezca', () => {
-    expect(saturationWarning('p', { ...SATURADA, demand: 100 })).toBeUndefined();
+    expect(saturationWarning('p', { ...SATURADA, demand: 100, utilization: 0.8 })).toBeUndefined();
+  });
+
+  test('ρ por debajo de 1,1 avisa igual si la ocupación llega al 90 % (#320)', () => {
+    // El pool que se autoestrangula frena su propia demanda atribuida: ρ se queda en 1,0 con la
+    // cola creciendo y el pool lleno. La variante del mensaje habla de ocupación, no de ρ.
+    expect(saturationWarning('p', { ...SATURADA, demand: 100, utilization: 0.95 })).toBe(
+      'W-RECURSO-SATURADO: p: the queue grows without settling (utilization ≈ 95 %)',
+    );
   });
 
   test('el pendiente al corte basta sin crecimiento entre mitades', () => {

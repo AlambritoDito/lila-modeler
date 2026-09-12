@@ -186,6 +186,8 @@ export interface PoolLoad {
   /** Instancias atribuidas en cola, en media sobre el tiempo que el pool estuvo lleno. */
   firstHalf: number;
   secondHalf: number;
+  /** Ocupación publicada del pool: `busyTime / disponible`, la misma de `resources[poolId]`. */
+  utilization: number;
 }
 
 /** ρ ≥ este valor: por debajo, la demanda atribuida no supera al rendimiento y no hay saturación. */
@@ -194,6 +196,13 @@ const SATURATION_RHO = 1.1;
 const SATURATION_GROWTH = 1.5;
 /** …o quedar pendiente esta fracción de lo atendido, que es el mismo hecho medido al corte. */
 const SATURATION_PENDING = 0.25;
+/**
+ * Ocupación a partir de la cual el pool avisa aunque ρ se quede corto (#320). Un pool que se
+ * autoestrangula —la mayoría de sus tareas van detrás de otra tarea servida por él mismo— frena
+ * su propia demanda atribuida y nunca llega a ρ ≥ 1,1 por saturado que esté; la ocupación sí lo
+ * ve. Con la cola creciendo (o el pendiente al corte), 90 % ya no es «justo al límite».
+ */
+const SATURATION_UTILIZATION = 0.9;
 
 /**
  * El aviso de LILA-191, o `undefined` si el pool alcanza estado estacionario.
@@ -213,13 +222,24 @@ export function saturationWarning(
 ): string | undefined {
   if (load.served <= 0 || load.capacity <= 0) return undefined;
   const rho = load.demand / load.served;
-  if (rho < SATURATION_RHO) return undefined;
+  if (rho < SATURATION_RHO && load.utilization < SATURATION_UTILIZATION) return undefined;
   const growing = load.secondHalf > load.capacity && load.secondHalf >= SATURATION_GROWTH * load.firstHalf;
   // …y la cola no puede estar drenando: con todas las llegadas en `t = 0` (R-ARR-1) queda mucho
   // pendiente al corte mientras la cola **baja**, que es un lote despachándose, no un pool sin
   // estado estacionario.
   const backlogged = load.pending >= SATURATION_PENDING * load.served && load.secondHalf >= load.firstHalf;
   if (!growing && !backlogged) return undefined;
+  // Con ρ por debajo del umbral el aviso sale por ocupación: imprimir «λ/μ·c ≈ 1,0» al lado de
+  // «la cola crece» se leería como una contradicción, así que la variante habla de ocupación.
+  if (rho < SATURATION_RHO) {
+    return coded(
+      'W-RECURSO-SATURADO',
+      coreMessages(locale).codes['W-RECURSO-SATURADO/utilizacion'](
+        poolId,
+        (load.utilization * 100).toFixed(0),
+      ),
+    );
+  }
   return coded(
     'W-RECURSO-SATURADO',
     coreMessages(locale).codes['W-RECURSO-SATURADO'](poolId, rho.toFixed(1)),
@@ -641,6 +661,7 @@ export function aggregateReplication(
         // pool significa algo, y deja fuera el `offHoursWait` sin tener que restarlo aparte.
         firstHalf: fullFirst > 0 ? (firstHalfByPool.get(poolId) ?? 0) / fullFirst : 0,
         secondHalf: fullSecond > 0 ? (secondHalfByPool.get(poolId) ?? 0) / fullSecond : 0,
+        utilization,
       };
       loads?.set(poolId, load);
       // Con una sola replicación esta es ya la decisión final; `simulate` rehace la cuenta sobre

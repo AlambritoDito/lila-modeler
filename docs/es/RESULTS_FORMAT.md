@@ -333,7 +333,11 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
   con la duración de la corrida y no son comparables con los de un pool estable. `X` es el ρ
   estimado del propio log: la demanda atribuida al pool —solo las esperas en que **él** estuvo
   lleno, no las que comparte por AND o por OR— entre las unidades que concedió, promediado entre
-  replicaciones. El criterio completo está en `SEMANTICS.md` § 17. *(LILA-191)*
+  replicaciones. Un pool que se autoestrangula frena su propia demanda atribuida, así que una
+  `resources[poolId].utilization` media ≥ 0,9 es la segunda puerta al mismo aviso; entonces
+  imprime `W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)` en su
+  lugar, con la ocupación en porcentaje entero. El criterio completo está en `SEMANTICS.md` § 17.
+  *(LILA-191, #320)*
 
 ---
 
