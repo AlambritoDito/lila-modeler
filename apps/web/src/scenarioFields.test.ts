@@ -38,7 +38,7 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
       'calendar',
       'fixedCost',
     ]);
-    expect(fieldsForKind('flow')).toEqual(['probability']);
+    expect(fieldsForKind('flow')).toEqual(['probability', 'conditions']);
   });
 
   it('un temporizador tiene tiempo pero no recursos, y un fin solo su coste fijo', () => {
@@ -121,7 +121,9 @@ describe('fieldsForStep (#333: los cuatro niveles de Bizagi como cuatro pasos)',
   });
 
   it('un flujo lleva su probabilidad al paso 1, que es donde se valida el reparto', () => {
+    // `conditions` va al mismo paso: también decide el reparto (ADR-028).
     expect(sinReservados(fieldsForStep('validation', 'flow'))).toEqual(['probability']);
+    expect(fieldsForStep('validation', 'flow')).toContain('conditions');
     for (const paso of ['times', 'resources', 'calendars'] as const) {
       expect(fieldsForStep(paso, 'flow')).toEqual([]);
     }

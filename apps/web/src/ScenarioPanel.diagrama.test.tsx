@@ -249,6 +249,43 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
     expect(hay('campo-elements.Flow_BureauGood.resources')).toBe(false);
   });
 
+  it('un flujo con `conditions` las edita como lista, no como campo reservado (ADR-028)', () => {
+    montar(
+      <Anfitrion
+        inicial={base({
+          elements: {
+            Flow_BureauGood: { conditions: [{ flowTaken: 'Flow_BureauBad', probability: 1 }] },
+          },
+        })}
+      />,
+    );
+    seleccionar('Flow_BureauGood');
+    // Los dos campos de la entrada, con su ruta: si cayera en `CampoReservado` no existiría
+    // ninguno de los dos y el único gesto posible sería borrar el campo entero.
+    expect(hay('campo-elements.Flow_BureauGood.conditions[0].flowTaken')).toBe(true);
+    expect(hay('campo-elements.Flow_BureauGood.conditions[0].probability')).toBe(true);
+  });
+
+  it('en un nodo `conditions` sigue siendo reservado y se puede borrar (OP-11)', () => {
+    montar(
+      <Anfitrion
+        inicial={base({
+          elements: {
+            Task_FillApplication: {
+              conditions: [{ flowTaken: 'Flow_BureauBad', probability: 1 }],
+            },
+          },
+        })}
+      />,
+    );
+    seleccionar('Task_FillApplication');
+    // El editor de lista no aparece: en una tarea el motor sigue diciendo `E-RESERVADO`, así que
+    // lo único que ofrece el panel es el widget con su botón de borrar.
+    expect(hay('campo-elements.Task_FillApplication.conditions[0].flowTaken')).toBe(false);
+    pulsar(es.escenario.quitar);
+    expect((ultimo['elements'] as Json)['Task_FillApplication']).toEqual({});
+  });
+
   it('un fin solo ofrece su coste fijo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('End_CardDelivered');

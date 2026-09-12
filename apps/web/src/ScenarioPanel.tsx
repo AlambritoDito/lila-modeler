@@ -407,6 +407,11 @@ export interface Contexto {
   /** Deshace un `quitar()` sobre un reservado eliminado: borra el `null` propio, no lo escribe. */
   restaurar?(ruta: Ruta): void;
   /**
+   * El IR vigente, para los campos cuya aplicabilidad depende del elemento y no del esquema:
+   * hoy solo `conditions` (ADR-028). Opcional: las sondas de test que no lo tocan no lo pasan.
+   */
+  ir?: ProcessIR | null;
+  /**
    * Varias ediciones en **una sola** escritura del delta (LILA-334). `editar` una por una
    * funcionaría en la app —cada llamada trae el delta nuevo por props— pero no en un anfitrión
    * que agrupe los cambios, y dejaría trece pasos de deshacer donde la acción fue una. Las rutas
@@ -494,7 +499,9 @@ function unidadBase(ctx: Contexto): UnidadTiempo {
 }
 
 /* ------------------------------------------------------------------ *
- * Campos reservados (§ 4): priority, preempt, batch, conditions, holidays, timezone.
+ * Campos reservados (§ 4): priority, preempt, batch, holidays, timezone. `conditions` dejó de
+ * serlo en un flujo que sale de una XOR divergente (ADR-028); en cualquier otro elemento sigue
+ * cayendo aquí, y lo hace por `esCondicionesReservadas`, no por tener esquema vacío.
  * ------------------------------------------------------------------ */
 
 type EstadoReservado = 'ausente' | 'heredado' | 'propio' | 'eliminado';
@@ -947,13 +954,30 @@ function Propiedades({
               requerido={requeridos.has(clave)}
               ctx={ctx}
             />
-            {S.escenario.ayudas[clave] !== undefined && (
-              <p className="ayuda">{S.escenario.ayudas[clave]}</p>
+            {ayudaDe(S, ruta, clave) !== undefined && (
+              <p className="ayuda">{ayudaDe(S, ruta, clave)}</p>
             )}
           </Fragment>
         ))}
     </>
   );
+}
+
+/**
+ * La ayuda de un campo. Va por clave, salvo dentro de una entrada de `conditions`, donde
+ * `probability` significa otra cosa que la del flujo (ADR-028) y se busca antes como
+ * `conditions.<clave>`.
+ */
+function ayudaDe(
+  S: ReturnType<typeof useStrings>,
+  ruta: Ruta,
+  clave: string,
+): string | undefined {
+  if (ruta.at(-2) === 'conditions') {
+    const propia = S.escenario.ayudas[`conditions.${clave}`];
+    if (propia !== undefined) return propia;
+  }
+  return S.escenario.ayudas[clave];
 }
 
 /**
@@ -1009,6 +1033,25 @@ function AnadirClave({
  * Un campo del formulario, dibujado a partir de su sub-esquema. Es la única función que sabe
  * traducir JSON Schema a controles, y se llama a sí misma para objetos, arrays y registros.
  */
+/**
+ * `elements[id].conditions` en un elemento que **no** es un flujo saliente de una XOR divergente:
+ * ahí el campo tiene esquema (ADR-028) pero el motor lo sigue rechazando —`E-RESERVADO` en un
+ * nodo, `E-CAMPO-NO-APLICA` en otro flujo—, así que el editor de lista dejaría el escenario sin
+ * forma de borrarlo y con la simulación bloqueada (OP-11). La condición es la misma que aplica
+ * `validateScenario`: nodo origen `xor` con dos o más salientes.
+ *
+ * Sin IR no se puede decidir, y se deja pasar al editor: es lo que hacen las sondas de test.
+ */
+function esCondicionesReservadas(ruta: Ruta, ctx: Contexto): boolean {
+  if (ruta.length !== 3 || ruta[0] !== 'elements' || ruta[2] !== 'conditions') return false;
+  const ir = ctx.ir ?? null;
+  if (ir === null) return false;
+  const flujo = ir.flows[String(ruta[1])];
+  if (flujo === undefined) return true;
+  const origen = ir.nodes[flujo.from];
+  return origen?.type !== 'xor' || origen.outgoing.length < 2;
+}
+
 export function Campo({
   esquema,
   ruta,
@@ -1038,6 +1081,12 @@ export function Campo({
   // calendarios ya declarados, no como el formulario genérico de un `{calendar, capacity}` suelto.
   if (esCapacidadRecurso(ruta, esquema)) {
     return <CampoCapacidadRecurso esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
+
+  // ADR-028: `conditions` solo se edita donde el motor la acepta; en el resto de elementos es un
+  // reservado más y lo único que se puede hacer con ella es borrarla (OP-11).
+  if (esCondicionesReservadas(ruta, ctx)) {
+    return <CampoReservado ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
   }
 
   // `calendars[clave].intervals` (LILA-203): la rejilla semanal en vez de la lista genérica de
@@ -1271,10 +1320,11 @@ export function Campo({
   }
 
   // Esquema vacío (`{}`): los campos reservados de § 4 (`priority`, `preempt`, `batch`,
-  // `conditions`, `holidays`, `timezone`). El motor los rechaza con error, así que el panel no
-  // ofrece forma de crearlos, pero si llegan heredados o propios hace falta poder borrarlos
-  // (OP-11): `CampoReservado` enseña el estado y el botón; el problema sigue saliendo también en
-  // la cabecera vía `Problemas`.
+  // `holidays`, `timezone`). `conditions` ya tiene esquema propio (ADR-028) y no llega hasta
+  // aquí: cuando no aplica la desvía arriba `esCondicionesReservadas`. El motor los rechaza con
+  // error, así que el panel no ofrece forma de crearlos, pero si llegan heredados o propios hace
+  // falta poder borrarlos (OP-11): `CampoReservado` enseña el estado y el botón; el problema
+  // sigue saliendo también en la cabecera vía `Problemas`.
   return <CampoReservado ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
 }
 
@@ -1706,6 +1756,7 @@ export function ScenarioPanel({
     problemas: indice,
     delta,
     padre,
+    ir,
     restaurar(ruta) {
       // Deshace el `null` propio del reservado eliminado: se quita del hijo, no se reescribe.
       onCambio(archivo, borrar(delta, ruta));

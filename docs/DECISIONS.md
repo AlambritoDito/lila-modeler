@@ -381,6 +381,55 @@ serialization trick. *(tests: `packages/engine/test/project/lila.test.ts`,
 
 ---
 
+## ADR-028 — Routing conditioned on the case's previous outcome (`conditions`)
+
+**Status:** Accepted
+
+A sequence flow leaving a **diverging** XOR may declare
+`conditions: [{ flowTaken, probability }]`. When a token reaches the gateway, each outgoing flow's
+declared probability is the `probability` of the first entry whose `flowTaken` the case has
+already traversed, and the plain `probability` otherwise; from there R-XOR-1…5 apply unchanged to
+that per-case vector, and the gateway still draws **one** uniform from its own stream
+(`SEMANTICS.md` § 6.1, R-COND-1…5). On any element that is not such a flow, `conditions` stays the
+reserved field of § 15, with the same `E-RESERVADO` text as before.
+
+Context: v1 routes on probability only, so a model that merges two branches cannot tell them apart
+again downstream. The credit card example (`examples/tarjeta-credito`) duplicates the whole denial
+path — deny and inform, twice — for no reason other than to keep the two rejection causes
+countable. That duplication is what every Bizagi user hits first, and it is the cheapest gap in
+epic #335 to close.
+
+Why not case variables: an expression language over case data means a data model, an evaluator, a
+type system and a debugger for it, and it would make the engine's state per case unbounded. The
+flows a case took are state the engine already has, they are named by ids the scenario already
+uses, and they cover the duplication that motivated the ticket. Bizagi itself only offers this at
+its level 4 through "gateway conditions" over attributes; this is the 10 % of that which removes
+90 % of the duplication.
+
+Ceilings, all deliberate:
+
+- **A set, not a history.** `flowsTaken` has set semantics: a loop does not reset it and the
+  second pass through a flow is indistinguishable from the first (R-COND-3). Routing by *how many
+  times* something happened is not expressible.
+- **The lint cannot fully anticipate the run.** Substituting probabilities happens per case, so
+  the static check of R10 cannot predict `W-XOR-NORMALIZADA` or `E-XOR-SUMA-CERO` for a
+  substituted vector. The engine emits the normalization warning at run time, once per signature,
+  and a substituted vector summing to 0 falls into R-XOR-7's discard path (the last flow with
+  `p > 0`, or the last flow) rather than aborting.
+- **`W-COND-INALCANZABLE` is reachability, not concurrency.** It walks the IR backwards from the
+  gateway through `incoming`. A flow on a **parallel** branch of an AND fork is not backwards
+  reachable and warns, even though a token could in fact have traversed it. It is a warning
+  precisely because the analysis is the cheap one; the run behaves correctly either way.
+- **`extends` replaces the whole array.** `deepMerge` replaces arrays, so a delta that declares
+  `conditions` replaces the inherited list; there is no per-entry merge.
+- **No UI for picking a flow id.** The scenario panel renders `flowTaken` as a text input, not a
+  select of the model's flows: a wrong id shows up as `E-REF-DESCONOCIDA` under its own path.
+
+*(tests: `packages/engine/test/conditions.test.ts`, fixture
+`packages/engine/test/fixtures/tarjeta-shared-denial.bpmn`)*
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).

@@ -340,11 +340,16 @@ function buildSchemas(locale: Locale) {
     // `E-PROB-RANGO` del catálogo (§ 17) con su código y su ruta, en vez del defecto genérico de
     // zod que no lleva código (LILA-198).
     probability: z.number().optional(),
+    // ADR-028 — ruteo condicionado al desenlace previo del caso (R-COND-1…5). Solo en un flujo
+    // que sale de un XOR divergente; en cualquier otro elemento sigue reservado (R-RES-1) y lo
+    // rechaza `validateScenario` con el mismo `E-RESERVADO` de siempre.
+    conditions: z
+      .array(z.strictObject({ flowTaken: z.string(), probability: z.number() }))
+      .optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
     batch: z.unknown().optional(),
-    conditions: z.unknown().optional(),
   });
 
 
@@ -462,6 +467,7 @@ export type ScenarioProblemCode =
   | 'W-ELEMENTO-SIN-PARAMETROS'
   | 'W-XOR-NORMALIZADA'
   | 'W-XOR-RESIDUO-COMPARTIDO'
+  | 'W-COND-INALCANZABLE'
   | 'W-NORMAL-NEGATIVA'
   | 'W-USER-NORMALIZADA';
 
@@ -478,7 +484,9 @@ const RESERVED = {
   run: ['timezone'],
   calendars: ['holidays', 'timezone'],
   resources: ['priority', 'preempt'],
-  elements: ['priority', 'preempt', 'batch', 'conditions'],
+  // `conditions` no está aquí: es reservado solo fuera de un flujo de XOR divergente, y esa
+  // rama la resuelve el bucle de elementos (ADR-028).
+  elements: ['priority', 'preempt', 'batch'],
 } as const;
 
 /** R-RES-3: un reservado borrado por `extends` (valor `null`) no dispara el error. */
@@ -600,6 +608,28 @@ function checkElementDistributions(
       });
     }
   }
+}
+
+/**
+ * Flujos que un caso puede haber recorrido **antes** de llegar a `gatewayId`: BFS hacia atrás por
+ * `incoming` desde el gateway. Un `flowTaken` que no está en este conjunto no puede preceder al
+ * gateway, así que su condición no se cumpliría nunca (`W-COND-INALCANZABLE`, R-COND-4).
+ */
+function flowsBefore(ir: ProcessIR, gatewayId: string): Set<string> {
+  const flows = new Set<string>();
+  const visited = new Set<string>([gatewayId]);
+  const pending = [gatewayId];
+  while (pending.length > 0) {
+    for (const flowId of ir.nodes[pending.pop()!]?.incoming ?? []) {
+      flows.add(flowId);
+      const from = ir.flows[flowId]?.from;
+      if (from !== undefined && !visited.has(from)) {
+        visited.add(from);
+        pending.push(from);
+      }
+    }
+  }
+  return flows;
 }
 
 /**
@@ -728,6 +758,62 @@ export function validateScenario(
         severity: 'error',
         message: M['E-PROB-RANGO'](`elements.${id}.probability`, element.probability),
       });
+    }
+
+    // ADR-028 / R-COND-1…5 — `conditions` solo en un flujo que sale de un XOR divergente. En
+    // cualquier nodo sigue siendo reservado (R-RES-1) y sale con el mismo `E-RESERVADO` de antes.
+    if (element.conditions !== undefined) {
+      const source = flow === undefined ? undefined : ir.nodes[flow.from];
+      if (source?.type !== 'xor' || source.outgoing.length < 2) {
+        problems.push(
+          node !== undefined
+            ? {
+                code: 'E-RESERVADO',
+                path: `elements.${id}.conditions`,
+                severity: 'error',
+                message: M['E-RESERVADO'](`elements.${id}.conditions`),
+              }
+            : {
+                code: 'E-CAMPO-NO-APLICA',
+                path: `elements.${id}.conditions`,
+                severity: 'error',
+                message: M['E-CAMPO-NO-APLICA/solo-flujo-xor'](`elements.${id}.conditions`),
+              },
+        );
+      } else {
+        const anteriores = flowsBefore(ir, flow!.from);
+        for (const [i, condition] of element.conditions.entries()) {
+          const ruta = `elements.${id}.conditions[${i}].flowTaken`;
+          if (ir.flows[condition.flowTaken] === undefined) {
+            problems.push({
+              code: 'E-REF-DESCONOCIDA',
+              path: ruta,
+              severity: 'error',
+              message: M['E-REF-DESCONOCIDA/flujo'](ruta, condition.flowTaken),
+            });
+          } else if (!anteriores.has(condition.flowTaken)) {
+            // R-COND-4: aguas abajo del gateway (o en otra rama): la condición nunca se cumple.
+            problems.push({
+              code: 'W-COND-INALCANZABLE',
+              path: ruta,
+              severity: 'warning',
+              message: M['W-COND-INALCANZABLE'](ruta, condition.flowTaken, flow!.from),
+            });
+          }
+          // R-XOR-6 vale igual para la probabilidad sustituida.
+          if (condition.probability < 0 || condition.probability > 1) {
+            problems.push({
+              code: 'E-PROB-RANGO',
+              path: `elements.${id}.conditions[${i}].probability`,
+              severity: 'error',
+              message: M['E-PROB-RANGO'](
+                `elements.${id}.conditions[${i}].probability`,
+                condition.probability,
+              ),
+            });
+          }
+        }
+      }
     }
 
     // R5 — llegadas solo en starts (el start con timer ya es `start` en el IR).

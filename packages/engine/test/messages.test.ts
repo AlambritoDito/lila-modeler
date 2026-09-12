@@ -30,7 +30,7 @@ const SEMANTICS = readFileSync(
 );
 
 /**
- * Los 58 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
+ * Los 59 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
  * sobre ninguno: un código nuevo sin su fila aquí no compila, y una fila de un código que ya no
  * existe tampoco.
  */
@@ -74,6 +74,7 @@ const COVERAGE: Record<ProblemCode, true> = {
   'E-XOR-SUMA-CERO': true,
   'W-BORDE-SIN-TIEMPO': true,
   'W-COND': true,
+  'W-COND-INALCANZABLE': true,
   'W-ELEMENTO-SIN-PARAMETROS': true,
   'W-JOIN-BLOQUEADO': true,
   'W-MSGFLOW': true,
@@ -117,13 +118,13 @@ function callWithDummies(fn: (...args: unknown[]) => string): string {
 }
 
 describe('catálogo de mensajes (LILA-211)', () => {
-  test('el catálogo cubre exactamente los 58 códigos del motor', () => {
-    expect(CODES).toHaveLength(58);
+  test('el catálogo cubre exactamente los 59 códigos del motor', () => {
+    expect(CODES).toHaveLength(59);
     const fromCatalog = new Set(Object.keys(en.codes).map(codeOf));
     expect([...fromCatalog].sort()).toEqual(CODES);
   });
 
-  test('los 58 códigos son los que aparecen en `packages/engine/src`', () => {
+  test('los 59 códigos son los que aparecen en `packages/engine/src`', () => {
     const found = new Set<string>();
     for (const file of typeScriptFiles(ENGINE_SRC)) {
       for (const [code] of readFileSync(file, 'utf8').matchAll(/[EW]-[A-Z][A-Z0-9-]*/g)) {
@@ -184,7 +185,7 @@ describe('catálogo de mensajes (LILA-211)', () => {
     );
     const público = CODES.filter((code) => !INTERNAL_CODES.has(code));
 
-    expect(público).toHaveLength(47);
+    expect(público).toHaveLength(48);
     expect(INTERNAL_CODES.size).toBe(11);
     expect(público.filter((code) => !documented.has(code))).toEqual([]);
     expect([...documented].filter((code) => !CODES.includes(code as ProblemCode))).toEqual([]);

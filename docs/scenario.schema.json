@@ -945,10 +945,28 @@
           "probability": {
             "type": "number"
           },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flowTaken": {
+                  "type": "string"
+                },
+                "probability": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "flowTaken",
+                "probability"
+              ],
+              "additionalProperties": false
+            }
+          },
           "priority": {},
           "preempt": {},
-          "batch": {},
-          "conditions": {}
+          "batch": {}
         },
         "additionalProperties": false
       }

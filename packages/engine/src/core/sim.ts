@@ -65,6 +65,11 @@ export interface SimElement {
   selection?: 'and' | 'or' | undefined;
   /** Calendario propio del elemento (llegadas, timer o tarea); se intersecta con el de sus pools. */
   calendar?: string | undefined;
+  /**
+   * ADR-028 (R-COND-1…5): probabilidad de este flujo **según lo que ya recorrió el caso**. Solo
+   * en una salida de un XOR divergente; gana la primera entrada cuyo `flowTaken` esté recorrido.
+   */
+  conditions?: readonly { readonly flowTaken: string; readonly probability: number }[] | undefined;
 }
 
 /** Un tramo de `resources[pool].capacity` por intervalos: `capacity` unidades durante `calendar`. */
@@ -492,6 +497,11 @@ interface CaseState {
   orCounts: Map<string, number>;
   /** Instancias abiertas para que terminate libere/cierre recursos del caso. */
   activityIds: Set<string>;
+  /**
+   * R-COND-3: flujos que el caso ya recorrió, con semántica de conjunto. Solo existe si el
+   * escenario declara algún `conditions`; sin eso no se crea ni se toca (R-DEG-2).
+   */
+  flowsTaken?: Set<string> | undefined;
 }
 
 const NO_MARKS: readonly number[] = [];
@@ -539,6 +549,8 @@ export function runReplication(
   // Sin calendarios ni siquiera se llama a `calendarFor`: el camino caliente de M2 no gana un
   // solo `map` ni una sola llamada (R-DEG-2, y el benchmark de LILA-031 no se mueve).
   const hasCalendars = calendars.size > 0;
+  // ADR-028: un escenario sin `conditions` no paga ni el `Set` por caso ni la firma por sorteo.
+  const hasConditions = Object.values(spec).some((element) => element.conditions !== undefined);
   const calendarCache = new Map<string, Calendar | undefined>();
   const calendarFor = (nodeId: string, poolIds: readonly string[]): Calendar | undefined => {
     const key = poolIds.length === 0 ? nodeId : `${nodeId}\u0000${poolIds.join('\u0000')}`;
@@ -762,10 +774,33 @@ export function runReplication(
   /* --- ramaje: pesos por gateway, calculados una vez --------------- */
 
   const xorCache = new Map<string, number[]>();
-  const xorWeights = (gatewayId: string, outs: readonly string[]): number[] => {
-    const cached = xorCache.get(gatewayId);
-    if (cached !== undefined) return cached;
-    const declared = outs.map((flowId) => spec[flowId]?.probability);
+  /**
+   * R-COND-1: índice de la condición que aplica en cada salida, o `-1` si ninguna. Es la firma
+   * que distingue los vectores de pesos de un mismo gateway (`Gateway#-1,0` ≠ `Gateway#0,-1`).
+   */
+  const conditionSignature = (
+    outs: readonly string[],
+    taken: ReadonlySet<string> | undefined,
+  ): number[] =>
+    outs.map((flowId) => {
+      const conditions = spec[flowId]?.conditions;
+      return conditions === undefined
+        ? -1
+        : conditions.findIndex((condition) => taken?.has(condition.flowTaken) === true);
+    });
+
+  const xorWeights = (
+    gatewayId: string,
+    outs: readonly string[],
+    key: string,
+    matched: readonly number[] | undefined,
+  ): number[] => {
+    // R-COND-2: la declarada efectiva es la de la condición que aplica; si no aplica ninguna, la
+    // `probability` a secas. De ahí en adelante manda R-XOR-1…5 sin un solo caso especial.
+    const declared = outs.map((flowId, i) => {
+      const index = matched?.[i] ?? -1;
+      return index < 0 ? spec[flowId]?.probability : spec[flowId]!.conditions![index]!.probability;
+    });
     const missing = declared.filter((p) => p === undefined).length;
     const declaredSum = declared.reduce<number>((acc, p) => acc + (p ?? 0), 0);
     // R-XOR-1: ninguna declarada ⇒ 1/n. R-XOR-2: |U| = 1 ⇒ ese flujo recibe el residuo (es el
@@ -791,7 +826,7 @@ export function runReplication(
       warn(coded('W-XOR-NORMALIZADA', M['W-XOR-NORMALIZADA'](gatewayId, total)));
       for (let i = 0; i < weights.length; i++) weights[i] = weights[i]! / total;
     }
-    xorCache.set(gatewayId, weights);
+    xorCache.set(key, weights);
     return weights;
   };
 
@@ -810,8 +845,16 @@ export function runReplication(
   };
 
   /** R-XOR-7: un uniforme del stream del gateway y probabilidad acumulada en orden de documento. */
-  const drawXor = (gatewayId: string, outs: readonly string[]): string => {
-    const weights = xorWeights(gatewayId, outs);
+  const drawXor = (
+    gatewayId: string,
+    outs: readonly string[],
+    taken: ReadonlySet<string> | undefined,
+  ): string => {
+    // R-COND-5: la firma solo se construye si el escenario declara condiciones; si no, la clave
+    // es el gateway a secas y el camino es literalmente el de M2 (R-DEG-2).
+    const matched = hasConditions ? conditionSignature(outs, taken) : undefined;
+    const key = matched === undefined ? gatewayId : `${gatewayId}#${matched.join(',')}`;
+    const weights = xorCache.get(key) ?? xorWeights(gatewayId, outs, key, matched);
     const u = rngFor(gatewayId).next();
     let acc = 0;
     for (let i = 0; i < outs.length; i++) {
@@ -845,6 +888,8 @@ export function runReplication(
   const emit = (flowIds: readonly string[], caseId: number, marks: readonly number[], t: number): void => {
     for (const flowId of flowIds) {
       if (isMeasuredCase(caseId)) flows[flowId] = (flows[flowId] ?? 0) + 1;
+      // R-COND-3: se anota siempre, también en los casos de warm-up: ellos también ramifican.
+      if (hasConditions) caseStates[caseId - 1]?.flowsTaken?.add(flowId);
       const to = ir.flows[flowId]?.to;
       if (to !== undefined) heap.push({ t, kind: 'enter', caseId, nodeId: to, marks });
     }
@@ -964,6 +1009,7 @@ export function runReplication(
         andCounts: new Map(),
         orCounts: new Map(),
         activityIds: new Set(),
+        flowsTaken: hasConditions ? new Set() : undefined,
       });
       heap.push({ t: next.t, kind: 'enter', caseId, nodeId: next.startId, marks: NO_MARKS });
 
@@ -1157,7 +1203,7 @@ export function runReplication(
         if (isMeasuredCase(next.caseId)) counters.completed++;
         // R-PERF-2: un XOR convergente (una sola salida) es una mezcla sin espera.
         if (node.outgoing.length <= 1) forward(node, next.caseId, next.marks, next.t);
-        else emit([drawXor(next.nodeId, node.outgoing)], next.caseId, next.marks, next.t);
+        else emit([drawXor(next.nodeId, node.outgoing, state.flowsTaken)], next.caseId, next.marks, next.t);
         break;
 
       case 'and': {
