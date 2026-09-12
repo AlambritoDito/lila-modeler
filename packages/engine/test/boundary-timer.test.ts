@@ -160,6 +160,46 @@ test('un `terminate` cierra la tarea antes del plazo y el borde zombi no mueve e
   expect(stoppedAt).toBe(50);
 });
 
+test('un borde sobre una tarea dentro de un subproceso sobrevive al aplanado', async () => {
+  // R-PLAN-1 no toca los ids de las tareas, así que `attachedTo` sigue apuntando al host y el
+  // flujo del borde se recablea a la salida del subproceso como cualquier otro.
+  const ir = await irOf(`<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test">
+  <bpmn:process id="Process_Sub" isExecutable="true">
+    <bpmn:startEvent id="Start_Proceso" />
+    <bpmn:sequenceFlow id="Flow_Start_Sub" sourceRef="Start_Proceso" targetRef="Sub_Revision" />
+    <bpmn:subProcess id="Sub_Revision">
+      <bpmn:startEvent id="Sub_Start" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revisar" sourceRef="Sub_Start" targetRef="Task_Revisar" />
+      <bpmn:task id="Task_Revisar" name="Revisar" />
+      <bpmn:sequenceFlow id="Flow_Revisar_Sub_Fin" sourceRef="Task_Revisar" targetRef="Sub_End" />
+      <bpmn:boundaryEvent id="Boundary_3a1f" attachedToRef="Task_Revisar">
+        <bpmn:timerEventDefinition id="Timer_Plazo" />
+      </bpmn:boundaryEvent>
+      <bpmn:sequenceFlow id="Flow_Boundary_Sub_Fin" sourceRef="Boundary_3a1f" targetRef="Sub_End" />
+      <bpmn:endEvent id="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_Sub_Fin" sourceRef="Sub_Revision" targetRef="End_Proceso" />
+    <bpmn:endEvent id="End_Proceso" />
+  </bpmn:process>
+</bpmn:definitions>`);
+
+  expect(ir.nodes['Boundary_3a1f']).toMatchObject({ type: 'timer', attachedTo: 'Task_Revisar', incoming: [] });
+
+  const result = simulate(ir, {
+    run: { seed: 42, replications: 1 },
+    elements: {
+      Start_Proceso: { triggerCount: 1 },
+      Task_Revisar: { processingTime: seconds(200) },
+      Boundary_3a1f: { processingTime: seconds(100) },
+    },
+  });
+
+  expect(result.elements['Task_Revisar']).toMatchObject({ started: 1, completed: 0 });
+  expect(result.elements['Boundary_3a1f']).toMatchObject({ started: 1, completed: 1 });
+  expect(result.process.byEndEvent['End_Proceso']?.completed).toBe(1);
+});
+
 test('un borde sin `processingTime` avisa una vez y nunca interrumpe', async () => {
   const ir = await model();
   const result = simulate(ir, {
