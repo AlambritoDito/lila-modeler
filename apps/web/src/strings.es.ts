@@ -460,6 +460,126 @@ export const es: Strings = {
      */
     claves: { capacity: 'capacity', calendar: 'calendar', intervals: 'intervals' },
 
+    /**
+     * #332 — el rótulo de cada campo del escenario. La clave es la ortografía de
+     * `docs/SCENARIO_FORMAT.md`; una clave que no esté aquí se rotula con su propio nombre.
+     */
+    campos: {
+      // run (§ 2.2)
+      start: 'Inicio',
+      duration: 'Duración',
+      warmup: 'Calentamiento',
+      replications: 'Réplicas',
+      seed: 'Semilla',
+      baseTimeUnit: 'Unidad de tiempo',
+      currency: 'Moneda',
+      serviceLevel: 'Nivel de servicio',
+      // calendars (§ 2.3)
+      intervals: 'Franjas',
+      days: 'Días',
+      from: 'Desde',
+      to: 'Hasta',
+      // resources (§ 2.4)
+      name: 'Nombre',
+      type: 'Tipo',
+      capacity: 'Capacidad',
+      costPerHour: 'Coste por hora',
+      // elements (§ 2.5)
+      processingTime: 'Tiempo de proceso',
+      resources: 'Recursos',
+      selection: 'Selección de recursos',
+      fixedCost: 'Coste fijo',
+      interTriggerTimer: 'Tiempo entre llegadas',
+      triggerCount: 'Llegadas máximas',
+      calendar: 'Calendario',
+      probability: 'Probabilidad',
+      ref: 'Grupo',
+      quantity: 'Cantidad',
+      // parámetros de las distribuciones (§ 3)
+      value: 'Valor',
+      min: 'Mínimo',
+      mode: 'Moda',
+      max: 'Máximo',
+      mean: 'Media',
+      sd: 'Desviación típica',
+      shape: 'Forma',
+      scale: 'Escala',
+      k: 'Fases (k)',
+      alpha: 'Alfa',
+      beta: 'Beta',
+      n: 'Intentos (n)',
+      p: 'Probabilidad de éxito (p)',
+      points: 'Puntos',
+      // reservados (§ 4)
+      priority: 'Prioridad',
+      preempt: 'Expulsión',
+      batch: 'Lote',
+      conditions: 'Condiciones',
+      holidays: 'Festivos',
+      timezone: 'Zona horaria',
+    } as Record<string, string>,
+
+    /** Ayuda breve bajo un campo, solo donde la unidad o el valor por defecto no se ven. */
+    ayudas: {
+      start: 'Instante cero del reloj virtual; su desfase es la zona en que se leen los calendarios.',
+      duration: 'Cuánto corre el reloj simulado.',
+      warmup: 'Los casos empezados antes de esto no cuentan en las estadísticas.',
+      serviceLevel: 'Tiempo de ciclo objetivo; solo para el informe, no cambia la simulación.',
+      baseTimeUnit: 'Solo presentación: los tiempos se guardan siempre en segundos.',
+      replications: 'Corridas independientes; lo habitual es recomendar 30.',
+      processingTime: 'Duración del trabajo.',
+      interTriggerTimer: 'Tiempo entre llegadas en este evento de inicio.',
+      triggerCount: 'Número máximo de casos que genera este inicio.',
+      probability: 'Entre 0 y 1. Sin ella la compuerta reparte por igual.',
+      fixedCost: 'Coste por token completado en este elemento.',
+      costPerHour: 'Coste por hora ocupada, no por hora disponible.',
+      capacity: 'Unidades del grupo disponibles a la vez.',
+      quantity: 'Unidades del grupo que toma esta tarea.',
+      selection: 'and: espera a todos los grupos. or: toma el primero que quede libre.',
+      calendar: 'Sin calendario el elemento está disponible 24×7.',
+    } as Record<string, string>,
+
+    /** Las 13 distribuciones de BPSim más la constante y la empírica (§ 3). */
+    distribuciones: {
+      constant: 'Constante',
+      uniform: 'Uniforme',
+      triangular: 'Triangular',
+      exponential: 'Exponencial',
+      normal: 'Normal',
+      truncatedNormal: 'Normal truncada',
+      lognormal: 'Lognormal',
+      gamma: 'Gamma',
+      erlang: 'Erlang',
+      weibull: 'Weibull',
+      beta: 'Beta',
+      poisson: 'Poisson',
+      binomial: 'Binomial',
+      user: 'Empírica (puntos)',
+    } as Record<string, string>,
+
+    /** Unidad en que se teclean los tiempos del panel; se enseña junto a cada duración. */
+    unidades: { s: 'seg', min: 'min', h: 'h', day: 'días' } as Record<string, string>,
+
+    /** `run.start` (R8): fecha y hora más el desfase UTC, en vez de un ISO escrito a mano. */
+    fechaHora: 'Fecha y hora',
+    desfase: 'Desfase UTC',
+
+    /** Vista de compuerta (#332): las probabilidades de sus flujos salientes, juntas. */
+    seccionCompuerta: 'Flujos salientes',
+    compuertaSinSalientes: 'Esta compuerta no tiene flujos salientes.',
+    compuertaPorDefecto: 'flujo por defecto: se lleva el resto',
+    /** #332: lo que aporta a la suma de la XOR un flujo sin `probability` (R-XOR-1…3). */
+    compuertaImplicita: (parte: number): string => `(implícito: ${parte})`,
+    compuertaSuma: (suma: number): string => `Total: ${suma}`,
+    compuertaSumaAviso: 'Las probabilidades de una compuerta XOR se normalizan a 1 con un aviso.',
+    compuertaIndependiente: 'En una compuerta inclusiva cada camino es independiente: no tienen por qué sumar 1.',
+
+    /** Vista avanzada: el delta crudo del archivo en edición (§ 6), para lo que el formulario no da. */
+    seccionJson: 'Avanzado: JSON del escenario',
+    aplicarJson: 'Aplicar',
+    jsonInvalido: (mensaje: string): string => `No es JSON válido: ${mensaje}`,
+    jsonNoEsObjeto: 'El escenario tiene que ser un objeto JSON.',
+
     /** `resources[pool].capacity` (LILA-164): fija o por turnos. */
     capacidadFija: 'Fija',
     capacidadPorTurno: 'Por turno',

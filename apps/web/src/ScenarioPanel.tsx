@@ -27,8 +27,17 @@
  *    aceptación literal del ticket. Guardar es explícito y no automático porque en `BrowserStore`
  *    `putScenario` **descarga un archivo**: guardar en cada tecla sería una descarga por tecla.
  *    El escenario que simula la app es el editado en el panel, sin necesidad de guardar.
+ *
+ * 4. **Lo que se ofrece depende de lo seleccionado** (#332). El esquema dice qué campos existen;
+ *    el **IR** dice cuáles significan algo en el elemento que hay marcado en el lienzo, y es la
+ *    tabla de `scenarioFields.ts` (la columna "Applies to" de § 2.5) la que decide cuáles se
+ *    dibujan. Una compuerta no tiene campos propios: lo que se parametriza son las
+ *    probabilidades de sus salientes, y eso es una vista distinta del mismo
+ *    `elements[flowId].probability`. Las duraciones se teclean en `run.baseTimeUnit` y se
+ *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
+ *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 
 import type { ProcessIR } from '@lila/engine';
 import {
@@ -42,6 +51,19 @@ import {
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { LaneAssign } from './LaneAssign.js';
+import {
+  DESFASES,
+  aSegundos,
+  aUnidad,
+  componerInstante,
+  esTiempoEnSegundos,
+  esUnidadTiempo,
+  fieldsForKind,
+  partesInstante,
+  repartoXor,
+  type ClaseElemento,
+  type UnidadTiempo,
+} from './scenarioFields.js';
 import { getLocale, strings, useLocale, useStrings, type Locale } from './i18n';
 
 /* ------------------------------------------------------------------ *
@@ -154,7 +176,10 @@ export function etiquetaVariante(variante: EsquemaJson, indice: number): string 
   const discriminador = Object.values(variante.properties ?? {}).find(
     (sub) => typeof sub.const === 'string',
   );
-  if (discriminador !== undefined) return String(discriminador.const);
+  if (discriminador !== undefined) {
+    const tipo = String(discriminador.const);
+    return S.escenario.distribuciones[tipo] ?? tipo;
+  }
   if (variante.type !== undefined) return S.escenario.tiposJson[variante.type] ?? variante.type;
   return S.escenario.opcionN(indice + 1);
 }
@@ -186,6 +211,24 @@ export function valorVacio(esquema: EsquemaJson): unknown {
     default:
       return null;
   }
+}
+
+/**
+ * A new item of an array: `valorVacio` plus the defaults the schema declares for its properties,
+ * so that adding `resources[]` writes `quantity: 1` (§ 2.5) instead of leaving the box empty and
+ * the form reading differently from the file that is saved.
+ *
+ * Only array items: adding a key to an object map (a pool, a calendar) keeps writing the bare
+ * minimum, so a scenario written from the panel does not grow keys nobody typed.
+ */
+function itemVacio(esquema: EsquemaJson): unknown {
+  const base = valorVacio(esquema);
+  if (esquema.type !== 'object' || !esObjeto(base)) return base;
+  const salida: Record<string, unknown> = { ...base };
+  for (const [clave, sub] of Object.entries(esquema.properties ?? {})) {
+    if (sub.default !== undefined && salida[clave] === undefined) salida[clave] = sub.default;
+  }
+  return salida;
 }
 
 /* ------------------------------------------------------------------ *
@@ -393,20 +436,29 @@ function Problemas({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Elem
  * un `input[type=number]` los reporta como cadena vacía, o sea borraría el campo a media tecla.
  * Se guarda el texto tal cual hasta el `blur`; lo que no es número finito se escribe como texto
  * y lo marca el validador (la escritura no se bloquea nunca).
+ *
+ * With `unidad` (#332) the field is a **duration**: it is shown and typed in `run.baseTimeUnit`
+ * and written to the file in seconds, which is the only unit the format knows (R1, R2). The text
+ * buffer is what keeps the conversion from fighting the keyboard: while typing, what is on screen
+ * is what was typed, not the round trip through seconds.
  */
 function EntradaNumero({
   valor,
   ruta,
   ctx,
   id,
+  unidad,
 }: {
   valor: unknown;
   ruta: Ruta;
   ctx: Contexto;
   id: string;
+  unidad?: UnidadTiempo | null;
 }): React.JSX.Element {
   const [texto, setTexto] = useState<string | null>(null);
-  const mostrado = texto ?? (valor === undefined || valor === null ? '' : String(valor));
+  const enPantalla = unidad != null && typeof valor === 'number' ? aUnidad(valor, unidad) : valor;
+  const mostrado =
+    texto ?? (enPantalla === undefined || enPantalla === null ? '' : String(enPantalla));
   return (
     <input
       id={id}
@@ -420,7 +472,8 @@ function EntradaNumero({
         if (limpio === '') ctx.quitar(ruta);
         else {
           const numero = Number(limpio);
-          ctx.editar(ruta, Number.isFinite(numero) && limpio !== '' ? numero : limpio);
+          if (!Number.isFinite(numero)) ctx.editar(ruta, limpio);
+          else ctx.editar(ruta, unidad == null ? numero : aSegundos(numero, unidad));
         }
       }}
       onBlur={() => {
@@ -428,6 +481,13 @@ function EntradaNumero({
       }}
     />
   );
+}
+
+/** `run.baseTimeUnit` del escenario resuelto, o `'s'`: la unidad en que se enseñan los tiempos. */
+function unidadBase(ctx: Contexto): UnidadTiempo {
+  const run = ctx.resuelto['run'];
+  const unidad = esObjeto(run) ? run['baseTimeUnit'] : undefined;
+  return esUnidadTiempo(unidad) ? unidad : 's';
 }
 
 /* ------------------------------------------------------------------ *
@@ -696,30 +756,189 @@ function CampoIntervalos({
   );
 }
 
-/** Las propiedades de un objeto, saltándose los `const` (los enseña el selector de variante). */
+/* ------------------------------------------------------------------ *
+ * #332: las referencias a otra sección del escenario, como selector
+ * ------------------------------------------------------------------ */
+
+/** `elements[id].resources[i].ref`: la clave tiene que existir en `resources` (R9). */
+function esRefRecurso(ruta: Ruta): boolean {
+  return ruta.length === 5 && ruta[0] === 'elements' && ruta[2] === 'resources' && ruta[4] === 'ref';
+}
+
+/** `elements[id].calendar` y `resources[pool].calendar`: la clave existe en `calendars` (R9). */
+function esRefCalendario(ruta: Ruta): boolean {
+  return (
+    ruta.length === 3 &&
+    (ruta[0] === 'elements' || ruta[0] === 'resources') &&
+    ruta[2] === 'calendar'
+  );
+}
+
+/**
+ * Una referencia a una clave de otra sección, dibujada como selector de lo ya declarado.
+ *
+ * Escrita a mano —que es como estaba— cualquier errata sale del panel como un `E-REF-DESCONOCIDA`
+ * a posteriori, y no hay forma de saber desde el campo qué grupos o calendarios existen. Un valor
+ * que no está entre las claves se conserva como opción extra: si el escenario ya trae una
+ * referencia rota hay que poder verla y borrarla, no que el control la cambie sola.
+ */
+function CampoClave({
+  ruta,
+  etiqueta,
+  seccion,
+  ctx,
+}: {
+  ruta: Ruta;
+  etiqueta: string;
+  seccion: 'resources' | 'calendars';
+  ctx: Contexto;
+}): React.JSX.Element {
+  const S = useStrings();
+  const id = `campo-${rutaTexto(ruta)}`;
+  const valor = leer(ctx.resuelto, ruta);
+  const declaradas = esObjeto(ctx.resuelto[seccion]) ? Object.keys(ctx.resuelto[seccion]) : [];
+  const opciones =
+    typeof valor === 'string' && valor !== '' && !declaradas.includes(valor)
+      ? [valor, ...declaradas]
+      : declaradas;
+  return (
+    <div className="campo-schema">
+      <label htmlFor={id}>{etiqueta}</label>
+      <select
+        id={id}
+        value={typeof valor === 'string' ? valor : ''}
+        onChange={(e) => {
+          if (e.target.value === '') ctx.quitar(ruta);
+          else ctx.editar(ruta, e.target.value);
+        }}
+      >
+        <option value="">{S.escenario.sinDefinir}</option>
+        {opciones.map((clave) => (
+          <option key={clave} value={clave}>
+            {clave}
+          </option>
+        ))}
+      </select>
+      <Problemas ruta={ruta} ctx={ctx} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * #332: `run.start` (R8), con fecha y desfase en vez de un ISO a mano
+ * ------------------------------------------------------------------ */
+
+function esInstanteDeCorrida(ruta: Ruta): boolean {
+  return ruta.length === 2 && ruta[0] === 'run' && ruta[1] === 'start';
+}
+
+/**
+ * `YYYY-MM-DDTHH:MM:SS±HH:MM` compuesto por un `datetime-local` y el desfase UTC.
+ *
+ * El desfase no es decorativo: R8 lo exige y es lo que fija la zona en que se leen los calendarios
+ * (§ 2.3). Se guarda aparte en estado local para que elegirlo **antes** de la fecha no se pierda;
+ * sin fecha no hay nada que escribir, porque medio instante no pasa el esquema.
+ *
+ * Un valor que no encaja en ese molde no llega aquí: `Campo` cae a la entrada de texto, que es la
+ * única forma de arreglar a mano un `start` escrito por otra herramienta.
+ */
+function CampoInstante({
+  ruta,
+  etiqueta,
+  ctx,
+}: {
+  ruta: Ruta;
+  etiqueta: string;
+  ctx: Contexto;
+}): React.JSX.Element {
+  const S = useStrings();
+  const valor = leer(ctx.resuelto, ruta);
+  const partes = partesInstante(valor);
+  const [desfaseLocal, setDesfaseLocal] = useState<string | null>(null);
+  const desfase = partes?.desfase ?? desfaseLocal ?? '+00:00';
+  const fechaHora = partes?.fechaHora ?? '';
+  const id = `campo-${rutaTexto(ruta)}`;
+  const idDesfase = `${id}-desfase`;
+  return (
+    <div className="campo-schema">
+      <label htmlFor={id}>{etiqueta}</label>
+      <input
+        id={id}
+        type="datetime-local"
+        step="1"
+        value={fechaHora}
+        onChange={(e) => {
+          if (e.target.value === '') ctx.quitar(ruta);
+          else ctx.editar(ruta, componerInstante(e.target.value, desfase));
+        }}
+      />
+      <label htmlFor={idDesfase}>{S.escenario.desfase}</label>
+      <select
+        id={idDesfase}
+        value={desfase}
+        onChange={(e) => {
+          setDesfaseLocal(e.target.value);
+          if (fechaHora !== '') ctx.editar(ruta, componerInstante(fechaHora, e.target.value));
+        }}
+      >
+        {DESFASES.map((d) => (
+          <option key={d} value={d}>
+            {d}
+          </option>
+        ))}
+      </select>
+      <Problemas ruta={ruta} ctx={ctx} />
+    </div>
+  );
+}
+
+/**
+ * Las propiedades de un objeto, saltándose los `const` (los enseña el selector de variante).
+ *
+ * `visibles` (#332) es la columna "Applies to" de § 2.5: con ella, una tarea deja de ofrecer
+ * `interTriggerTimer` y un flujo deja de ofrecer `processingTime`. Lo que **ya está escrito** en
+ * el escenario se enseña aunque no aplique, con su error del linter al lado: si no, un campo mal
+ * puesto se volvería invisible y no habría forma de borrarlo desde el panel.
+ *
+ * El rótulo sale del catálogo (`S.escenario.campos`); una clave sin traducir se rotula con su
+ * propio nombre, que es como estaba todo antes de este ticket.
+ */
 function Propiedades({
   esquema,
   ruta,
   ctx,
+  visibles,
 }: {
   esquema: EsquemaJson;
   ruta: Ruta;
   ctx: Contexto;
+  visibles?: readonly string[] | null;
 }): React.JSX.Element {
+  const S = useStrings();
   const requeridos = new Set(esquema.required ?? []);
   return (
     <>
       {Object.entries(esquema.properties ?? {})
         .filter(([, sub]) => sub.const === undefined)
+        .filter(
+          ([clave]) =>
+            visibles == null ||
+            visibles.includes(clave) ||
+            leer(ctx.resuelto, [...ruta, clave]) !== undefined,
+        )
         .map(([clave, sub]) => (
-          <Campo
-            key={clave}
-            esquema={sub}
-            ruta={[...ruta, clave]}
-            etiqueta={clave}
-            requerido={requeridos.has(clave)}
-            ctx={ctx}
-          />
+          <Fragment key={clave}>
+            <Campo
+              esquema={sub}
+              ruta={[...ruta, clave]}
+              etiqueta={S.escenario.campos[clave] ?? clave}
+              requerido={requeridos.has(clave)}
+              ctx={ctx}
+            />
+            {S.escenario.ayudas[clave] !== undefined && (
+              <p className="ayuda">{S.escenario.ayudas[clave]}</p>
+            )}
+          </Fragment>
         ))}
     </>
   );
@@ -813,6 +1032,19 @@ export function Campo({
   // objetos. El `sufijo` corta la recursión: la vista de lista vuelve a entrar aquí ya marcada.
   if (sufijo === '' && esIntervalosCalendario(ruta)) {
     return <CampoIntervalos esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
+
+  // #332: las dos referencias del formato (R9) como selector de lo ya declarado, y `run.start`
+  // (R8) como fecha + desfase. Un `start` que no encaje en el molde ISO cae a la entrada de texto
+  // de más abajo, que es la única forma de arreglar a mano lo que escribió otra herramienta.
+  if (esRefRecurso(ruta)) {
+    return <CampoClave ruta={ruta} etiqueta={etiqueta} seccion="resources" ctx={ctx} />;
+  }
+  if (esRefCalendario(ruta)) {
+    return <CampoClave ruta={ruta} etiqueta={etiqueta} seccion="calendars" ctx={ctx} />;
+  }
+  if (esInstanteDeCorrida(ruta) && (valor === undefined || partesInstante(valor) !== null)) {
+    return <CampoInstante ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
   }
 
   // Unión: selector de variante + cuerpo de la elegida. Con esto las 14 distribuciones y la
@@ -957,7 +1189,7 @@ export function Campo({
           type="button"
           className="boton"
           onClick={() => {
-            ctx.editar([...ruta, lista.length], valorVacio(items));
+            ctx.editar([...ruta, lista.length], itemVacio(items));
           }}
         >
           {S.escenario.anadirEtiqueta(etiqueta)}
@@ -995,10 +1227,14 @@ export function Campo({
   }
 
   if (esquema.type === 'number' || esquema.type === 'integer') {
+    // #332: una duración se teclea en `run.baseTimeUnit` y se guarda en segundos (R1, R2); la
+    // unidad se enseña al lado, que es lo único que distingue «5» de «5 minutos» en pantalla.
+    const unidad = esTiempoEnSegundos(ruta) ? unidadBase(ctx) : null;
     return (
       <div className="campo-schema">
         <label htmlFor={id}>{etiqueta}</label>
-        <EntradaNumero valor={valor} ruta={ruta} ctx={ctx} id={id} />
+        <EntradaNumero valor={valor} ruta={ruta} ctx={ctx} id={id} unidad={unidad} />
+        {unidad !== null && <span className="unidad">{S.escenario.unidades[unidad]}</span>}
         <Problemas ruta={ruta} ctx={ctx} />
       </div>
     );
@@ -1028,6 +1264,183 @@ export function Campo({
   // (OP-11): `CampoReservado` enseña el estado y el botón; el problema sigue saliendo también en
   // la cabecera vía `Problemas`.
   return <CampoReservado ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
+}
+
+/* ------------------------------------------------------------------ *
+ * #332: la compuerta, con las probabilidades de sus salientes juntas
+ * ------------------------------------------------------------------ */
+
+/** La clase del elemento seleccionado: el tipo de nodo del IR, o `'flow'` si es un flujo. */
+export function claseDeElemento(ir: ProcessIR | null, id: string | null): ClaseElemento | null {
+  if (ir === null || id === null) return null;
+  if (ir.flows[id] !== undefined) return 'flow';
+  return ir.nodes[id]?.type ?? null;
+}
+
+/** Lo que se lee de un flujo: su nombre BPMN si lo tiene, y si no el de su destino; más el id. */
+function rotuloFlujo(ir: ProcessIR, S: ReturnType<typeof useStrings>, id: string): string {
+  const flujo = ir.flows[id];
+  if (flujo === undefined) return id;
+  const nombre = flujo.name !== '' ? flujo.name : (ir.nodes[flujo.to]?.name ?? '');
+  return nombre === '' ? id : `${nombre}${S.escenario.nombreEntreParentesis(id)}`;
+}
+
+/**
+ * La vista que hace de una compuerta algo que se parametriza desde el diagrama: sus flujos
+ * salientes con su `probability`, la suma, y el aviso cuando no da 1.
+ *
+ * Sin ella la probabilidad de una rama solo se editaba seleccionando **el flujo**, que en el
+ * lienzo es una línea de tres píxeles y que además obliga a recordar cuál es la otra rama para
+ * que sumen. La ruta que se escribe es la misma de siempre (`elements[flowId].probability`): esto
+ * es otra vista del mismo campo, no un campo nuevo.
+ *
+ * Solo para XOR e inclusiva: en una AND salen todos los caminos y la probabilidad no significa
+ * nada (por eso `fieldsForKind` no la ofrece tampoco en el flujo… que sí la acepta, porque el
+ * mismo flujo podría colgar de otra compuerta). La suma se avisa únicamente en la XOR, que es la
+ * que R10 normaliza; en la inclusiva cada camino es independiente y no tiene que sumar 1.
+ */
+function VistaCompuerta({
+  ir,
+  id,
+  clase,
+  ctx,
+}: {
+  ir: ProcessIR;
+  id: string;
+  clase: ClaseElemento;
+  ctx: Contexto;
+}): React.JSX.Element {
+  const S = useStrings();
+  const salientes = ir.nodes[id]?.outgoing ?? [];
+  if (salientes.length === 0) return <p className="vacio">{S.escenario.compuertaSinSalientes}</p>;
+
+  // R-XOR-4: the split is computed the way the engine does (`scenarioFields.ts::repartoXor`),
+  // not by adding up only what is declared. A flow without a number — the `isDefault` one
+  // included — takes its share of the remainder, so `Total` is the number the engine compares
+  // with 1 and the warning appears exactly when the engine would warn.
+  const declaradas = salientes.map((f) => {
+    const p = leer(ctx.resuelto, ['elements', f, 'probability']);
+    return typeof p === 'number' ? p : undefined;
+  });
+  // R-OR-2: on an inclusive gateway each path is independent, a flow without `probability`
+  // weighs 1, and there is no remainder to share nor a sum to normalise.
+  const reparto =
+    clase === 'xor'
+      ? repartoXor(declaradas)
+      : {
+          pesos: declaradas.map((p) => p ?? 1),
+          total: Math.round(declaradas.reduce<number>((acc, p) => acc + (p ?? 1), 0) * 1e6) / 1e6,
+          avisa: false,
+        };
+
+  return (
+    <fieldset className="entrada">
+      <legend>{S.escenario.seccionCompuerta}</legend>
+      {salientes.map((flujo, i) => {
+        const ruta: Ruta = ['elements', flujo, 'probability'];
+        const idCampo = `campo-${rutaTexto(ruta)}`;
+        // What a flow with no declared number contributes: without showing it, `Total` would
+        // come from somewhere that is not on screen.
+        const implicito =
+          declaradas[i] === undefined && clase === 'xor' ? (
+            <span className="etiqueta">{S.escenario.compuertaImplicita(reparto.pesos[i]!)}</span>
+          ) : null;
+        if (ir.flows[flujo]?.isDefault === true) {
+          return (
+            <div key={flujo} className="campo-schema">
+              <span className="etiqueta">{rotuloFlujo(ir, S, flujo)}</span>
+              <span className="aviso">{S.escenario.compuertaPorDefecto}</span>
+              {implicito}
+            </div>
+          );
+        }
+        return (
+          <div key={flujo} className="campo-schema">
+            <label htmlFor={idCampo}>{rotuloFlujo(ir, S, flujo)}</label>
+            <EntradaNumero
+              valor={leer(ctx.resuelto, ruta)}
+              ruta={ruta}
+              ctx={ctx}
+              id={idCampo}
+            />
+            {implicito}
+            <Problemas ruta={ruta} ctx={ctx} />
+          </div>
+        );
+      })}
+      <p className="etiqueta">{S.escenario.compuertaSuma(reparto.total)}</p>
+      {clase === 'xor'
+        ? reparto.avisa && <p className="aviso">{S.escenario.compuertaSumaAviso}</p>
+        : clase === 'or' && <p className="aviso">{S.escenario.compuertaIndependiente}</p>}
+    </fieldset>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * #332: la vista avanzada, que es el JSON crudo del archivo en edición
+ * ------------------------------------------------------------------ */
+
+/**
+ * El delta del archivo (§ 6) en un `<textarea>`, plegado y al final del panel.
+ *
+ * El formulario es la vista principal desde este ticket, pero el JSON no desaparece: es lo que
+ * permite pegar un escenario entero, moverlo entre máquinas o tocar algo que el formulario
+ * todavía no dibuja. Se aplica de golpe con el botón, no al teclear: un JSON a medio escribir no
+ * parsea y aplicarlo en cada tecla borraría el escenario entre dos llaves.
+ */
+function VistaJson({
+  delta,
+  onAplicar,
+}: {
+  delta: Record<string, unknown>;
+  onAplicar: (escenario: Record<string, unknown>) => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const [texto, setTexto] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const mostrado = texto ?? JSON.stringify(delta, null, 2);
+  return (
+    <details>
+      <summary>{S.escenario.seccionJson}</summary>
+      <textarea
+        className="json-escenario"
+        aria-label={S.escenario.seccionJson}
+        rows={16}
+        value={mostrado}
+        onChange={(e) => {
+          setTexto(e.target.value);
+          setError(null);
+        }}
+      />
+      {error !== null && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        className="boton"
+        onClick={() => {
+          let leido: unknown;
+          try {
+            leido = JSON.parse(mostrado);
+          } catch (e) {
+            setError(S.escenario.jsonInvalido(e instanceof Error ? e.message : String(e)));
+            return;
+          }
+          if (!esObjeto(leido)) {
+            setError(S.escenario.jsonNoEsObjeto);
+            return;
+          }
+          setError(null);
+          setTexto(null);
+          onAplicar(leido);
+        }}
+      >
+        {S.escenario.aplicarJson}
+      </button>
+    </details>
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -1184,6 +1597,9 @@ export function ScenarioPanel({
     return enIr?.[0] ?? seleccion;
   }, [seleccion, ir]);
 
+  /** Qué es lo seleccionado (#332): decide qué campos se ofrecen y si sale la vista de compuerta. */
+  const clase = claseDeElemento(ir, idSeleccionado);
+
   const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
   const heredaDe = typeof delta['extends'] === 'string' ? delta['extends'] : null;
 
@@ -1290,11 +1706,22 @@ export function ScenarioPanel({
               esquema={esquemaEntrada(esquemaDe('elements'))}
               ruta={['elements', idSeleccionado]}
               ctx={ctx}
+              visibles={fieldsForKind(clase)}
             />
             <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
+            {ir !== null && (clase === 'xor' || clase === 'or') && (
+              <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} />
+            )}
           </>
         )}
       </details>
+
+      <VistaJson
+        delta={delta}
+        onAplicar={(escenario) => {
+          onCambio(archivo, escenario);
+        }}
+      />
 
       {problemas.length > 0 && (
         <details>

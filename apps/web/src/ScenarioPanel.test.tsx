@@ -408,8 +408,11 @@ describe('uniones del esquema', () => {
     const selector = document.getElementById(
       'campo-elements.Task_TomarPedido.processingTime',
     ) as HTMLSelectElement;
-    // La variante activa se detecta por el discriminador `type`, no por el orden.
-    expect(selector.options[Number(selector.value) + 1]?.textContent).toBe('triangular');
+    // La variante activa se detecta por el discriminador `type`, no por el orden. El rótulo es
+    // el del catálogo desde #332, no la ortografía del archivo.
+    expect(selector.options[Number(selector.value) + 1]?.textContent).toBe(
+      es.escenario.distribuciones['triangular'],
+    );
     expect(document.getElementById('campo-elements.Task_TomarPedido.processingTime.mode')).not.toBe(
       null,
     );
