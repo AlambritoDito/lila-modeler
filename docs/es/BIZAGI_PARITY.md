@@ -54,7 +54,8 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | **Después** | | | | |
 | Animación con contadores en vivo | ✓ | token-simulation (MIT) cubre la parte didáctica; contadores DES en vivo no son prioridad | — | No planificado (v1) |
 | Start quantity / completion quantity | ✓ | reservado | — | No planificado (v1) |
-| Message/signal/link events, boundary events, event-based gateway | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (v1) |
+| Temporizador de borde interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, primera tajada: `SEMANTICS.md` R-BND-1…9) |
+| Message/signal/link events, boundary events no interruptores o que no son de tiempo, event-based gateway | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (v1) |
 | Parámetros desde event logs (Bizagi 4.0 process mining) | ✓ | fase minería (proceso Python separado) | — | No planificado (v1) |
 | **No** (Bizagi tampoco los simula) | | | | |
 | Multi-instancia, complex gateway, choreography/conversation, transaccional, ad-hoc; leer `.bpm` propietario | ✗ | ✗ | — | Fuera de alcance |

@@ -222,19 +222,27 @@ function parseWarningNotice(
   return { code: 'W-PARSE', id, message: catalog.codes['W-PARSE/inofensivo'](id, w.message) };
 }
 
-/** Ids alcanzables siguiendo los flujos salientes desde cada `start`. */
+/**
+ * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary interruptor no
+ * tiene flujo entrante: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
+ */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
+  const attached = new Map<string, string[]>();
+  for (const [id, node] of Object.entries(ir.nodes)) {
+    if (node.attachedTo === undefined) continue;
+    attached.set(node.attachedTo, [...(attached.get(node.attachedTo) ?? []), id]);
+  }
   const seen = new Set<string>(starts);
   const pending = [...starts];
+  const visit = (next: string | undefined): void => {
+    if (next === undefined || seen.has(next)) return;
+    seen.add(next);
+    pending.push(next);
+  };
   while (pending.length > 0) {
     const id = pending.pop()!;
-    for (const flowId of ir.nodes[id]?.outgoing ?? []) {
-      const next = ir.flows[flowId]?.to;
-      if (next !== undefined && !seen.has(next)) {
-        seen.add(next);
-        pending.push(next);
-      }
-    }
+    for (const flowId of ir.nodes[id]?.outgoing ?? []) visit(ir.flows[flowId]?.to);
+    for (const boundaryId of attached.get(id) ?? []) visit(boundaryId);
   }
   return seen;
 }

@@ -61,6 +61,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:endEvent` with no trigger (*none*) | `end` | consumes the token (§9) |
 | `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
+| `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
@@ -128,7 +129,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` (any trigger) | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `bpmn:boundaryEvent` other than an interrupting timer with one outgoing flow attached to a task: non-interrupting, message/error/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
 | `messageEventDefinition` in any event | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
@@ -326,8 +327,9 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 - **R-TOK-6 — Activity identity and lifecycle.** Every entry into a task or timer creates an
   opaque `activityInstanceId`, unique within the replication and derived from a counter. All the
   pool assignments of that occurrence share the id and the same instants. On normal closure,
-  `status = "completed"` is emitted; `terminate` emits `status = "terminated"`, and a stop or
-  cancellation emits `status = "inFlight"`. In the last two, `startedAt = null` distinguishes an
+  `status = "completed"` is emitted; `terminate` emits `status = "terminated"`, an interrupting
+  boundary timer emits `status = "interrupted"` (§9, R-BND-5), and a stop or cancellation emits
+  `status = "inFlight"`. In the last two, `startedAt = null` distinguishes an
   instance that was still queued from one already started, and `endedAt = null`; `observedUntil`
   fixes the cutoff. *(decision: ADR-025; test: LILA-033, LILA-037)*
 
@@ -454,6 +456,42 @@ the XML, preserved in `ir.nodes[g].outgoing`), and let `p(fi)` be the `probabili
 - **R-EVT-6 — Tasks in progress when a case dies.** The task interrupted by `terminate` counts as
   `started` and not as `completed` on its element; it does not contribute to `processing`
   statistics. *(test: LILA-026, LILA-028)*
+- **R-BND-1 — Interrupting boundary timer.** A `bpmn:boundaryEvent` with exactly one
+  `timerEventDefinition`, interrupting (`cancelActivity` absent or `true`), attached to a
+  supported task — never to an embedded sub-process, which is flattened away (§4) — and with at
+  least one outgoing flow, enters the profile as a `timer` node with `attachedTo` = the host's
+  id and **no** `incoming`: its token is created by the host, not by a flow. It is reachable
+  exactly when its host is, so it is never `E-INALCANZABLE` on its own. Any other boundary event
+  stays `E-NOSOP` with construction `boundaryEvent` (§3). *(test: #81)*
+- **R-BND-2 — The deadline starts when the host is enabled.** It is measured from the host
+  activity's `enabledAt`, not from the instant it acquires its resources: a token queuing for a
+  busy pool is already burning its deadline. *(test: #81)*
+- **R-BND-3 — Clock time, and its own random stream.** The delay elapses 24×7 unless the boundary
+  declares `elements[id].calendar`, exactly like any other timer (R-EVT-3). It is drawn from the
+  stream of the **boundary's own** id, so adding a boundary shifts no other element's draws
+  (§16). *(test: #81)*
+- **R-BND-4 — It only fires while the host activity is open.** If the host already completed, was
+  killed by a `terminate` or was cut off by the run's stop, the firing event is discarded when it
+  leaves the heap. *(test: #81)*
+- **R-BND-5 — What the firing does to the host.** The host activity closes with
+  `status = "interrupted"`, `endedAt = null` and `observedUntil` = the firing instant; its
+  resource request is released if it had been granted and dropped if it was still queued,
+  charging hourly cost up to that instant; the element's `fixedCost` is **not** charged, because
+  only a completed activity charges it (§13). The host counts `started` and never `completed`, as
+  with `terminate` (R-EVT-6). *(test: #81)*
+- **R-BND-6 — The token continues along the boundary.** The boundary counts one `started` and one
+  `completed` in the same instant (it consumes no time, like a gateway) and the token leaves
+  through its first outgoing flow carrying the OR activation marks the host's token had, so an OR
+  join downstream still closes. The boundary emits **no** event-log row of its own. *(test: #81)*
+- **R-BND-7 — Tie: the interruption wins.** The firing event is queued **before** the host's
+  `done`, so with equal instants `(t, seq)` (R-TOK-3) takes the boundary out first: a deadline
+  exactly as long as the task's duration interrupts it. *(test: #81)*
+- **R-BND-8 — A boundary with no time never fires.** A boundary with no `processingTime` schedules
+  nothing and produces warning `W-BORDE-SIN-TIEMPO`, citing the boundary and its host. *(test:
+  #81)*
+- **R-BND-9 — A dead firing does not move the clock.** A firing event whose activity is already
+  closed is consumed without advancing the clock, so a run without `run.duration` does not
+  stretch `stoppedAt` up to a deadline that was never going to fire (R-ARR-3). *(test: #81)*
 
 ---
 
@@ -863,7 +901,7 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 57 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 58 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
 Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1):
@@ -940,7 +978,8 @@ per occurrence):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
-`W-TIMER-SIN-TIEMPO`, `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+`W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
+interrupts its host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
 ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`.
@@ -1087,6 +1126,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-EVT-3 | timer runs 24×7 unless it has its own calendar | LILA-041 |
 | R-EVT-4 | end consumes the token; case ends at 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
+| R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |

@@ -22,6 +22,11 @@ export interface Node {
   lane?: string;
   /** Id del `bpmn:subProcess` embebido del que proviene, tras aplanar (R-PLAN-1). */
   subprocessId?: string;
+  /**
+   * Solo en un `timer` que nació de un boundary event interruptor: id de la tarea a la que
+   * está adjunto (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
+   */
+  attachedTo?: string;
   /** Ids de los flujos entrantes, en orden de aparición. */
   incoming: string[];
   /** Ids de los flujos salientes, en orden de aparición. */

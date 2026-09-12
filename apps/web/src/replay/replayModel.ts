@@ -131,6 +131,15 @@ function outgoing(ir: ProcessIR): ReadonlyMap<string, readonly { flowId: string;
     list.push({ flowId, to: flow.to });
     map.set(flow.from, list);
   }
+  // An interrupting boundary timer has no incoming flow (R-BND-1): its branch hangs off the host
+  // task. Registering its outgoing flows under the host too keeps the replay hop from the task to
+  // the cancel branch findable.
+  for (const [nodeId, node] of Object.entries(ir.nodes ?? {})) {
+    if (node.attachedTo === undefined) continue;
+    const list = map.get(node.attachedTo) ?? [];
+    list.push(...(map.get(nodeId) ?? []));
+    map.set(node.attachedTo, list);
+  }
   return map;
 }
 
