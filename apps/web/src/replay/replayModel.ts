@@ -10,8 +10,11 @@
  *
  * Two things the log does NOT carry and this module infers from the IR graph:
  *
- * - **Flows.** Only tasks and timers emit rows; start/end events, gateways and sequence flows
- *   emit nothing. The path a token took between two consecutive elements of a case is recovered
+ * - **Flows, and the counters of the nodes that emit no rows.** Only tasks and timers emit rows;
+ *   start/end events, gateways and sequence flows emit nothing, so their counters are derived
+ *   from the inferred path of each case (`passages`): the start when the first activity of the
+ *   case is enabled, a gateway when a path crosses it, an end event when the last *completed*
+ *   activity of the case hands the token over. The path a token took between two consecutive elements of a case is recovered
  *   with a BFS over `ir.flows`, which is the shortest route through the gateways in between.
  *   // ponytail: BFS = the shortest path, not necessarily the one the case really took when two
  *   // routes join the same pair of tasks. Upgrade path: an `onEvent` that also emits flows.
@@ -40,6 +43,13 @@ export interface ReplayActivity {
   allocations: readonly { resourceId: string; quantity: number }[];
 }
 
+/** A case crossing a node that emits no log row: a start event, a gateway or an end event. */
+export interface ReplayPassage {
+  elementId: string;
+  /** Instant the token is counted at; these nodes have no duration, so started === completed. */
+  at: number;
+}
+
 /** A token walking a path of sequence flows between two points of the graph. */
 export interface ReplayMove {
   flows: readonly string[];
@@ -50,6 +60,8 @@ export interface ReplayMove {
 export interface Replay {
   activities: readonly ReplayActivity[];
   moves: readonly ReplayMove[];
+  /** Crossings of the nodes that emit no rows, recovered from the same inferred paths. */
+  passages: readonly ReplayPassage[];
   /** Elements that appear in the log, in first-seen order: the ones that get a counter. */
   elementIds: readonly string[];
   /** Capacity per pool referenced by the log. */
@@ -60,6 +72,8 @@ export interface Replay {
   startMs: number | null;
   /** `run.replications` of the scenario: the replay is always replication 1 of these. */
   replications: number;
+  /** Log rows the replay was built from: what the truncation notice has to quote. */
+  rows: number;
   /** `true` when the log sample hit its row cap and the tail of the replication is missing. */
   truncated: boolean;
 }
@@ -210,9 +224,24 @@ export function buildReplay(
     .map(([id]) => id);
 
   const moves: ReplayMove[] = [];
+  const passages: ReplayPassage[] = [];
+  /** Counts one crossing of `id`, and gives it a counter on the diagram if it had none. */
+  const cruzar = (id: string, at: number): void => {
+    if (ir.nodes[id] === undefined) return;
+    if (!elementIds.includes(id)) elementIds.push(id);
+    passages.push({ at, elementId: id });
+  };
   const hop = (flows: readonly string[] | null, from: number, to: number): void => {
     if (flows === null || flows.length === 0) return;
     moves.push({ flows, from, to: Math.max(to, from + travel) });
+    // Every node in the middle of the path is a gateway (or another pass-through node) the case
+    // went by: it is counted when the token reaches the far end of the hop. The two ends of the
+    // path are NOT counted here — they are the activities, or the start/end events the callers
+    // below count once each.
+    for (const flowId of flows.slice(0, -1)) {
+      const middle = ir.flows[flowId]?.to;
+      if (middle !== undefined) cruzar(middle, to);
+    }
   };
 
   const byCase = new Map<string, ReplayActivity[]>();
@@ -226,7 +255,9 @@ export function buildReplay(
     const first = list[0] as ReplayActivity;
     for (const start of starts) {
       const flows = between(start, first.elementId);
-      if (flows !== null) { hop(flows, first.enabledAt, first.enabledAt); break; }
+      // The start event has no duration: the case is counted there the instant its first
+      // activity is enabled, which is the same instant the token leaves the start.
+      if (flows !== null) { cruzar(start, first.enabledAt); hop(flows, first.enabledAt, first.enabledAt); break; }
     }
     for (let i = 1; i < list.length; i++) {
       const previous = list[i - 1] as ReplayActivity;
@@ -234,7 +265,20 @@ export function buildReplay(
       hop(between(previous.elementId, next.elementId), previous.endAt, next.enabledAt);
     }
     const last = list[list.length - 1] as ReplayActivity;
-    if (last.completed) hop(toEnd(last.elementId), last.endAt, last.endAt);
+    // Only a case whose last activity completed reached an end event: one still in flight (or
+    // terminated) at the horizon must never bump an end counter.
+    if (last.completed) {
+      const flows = toEnd(last.elementId);
+      // `flows` ends at the end event itself, which `hop` leaves out of the middle nodes.
+      // // ponytail: with several reachable ends the BFS takes the first one, so a diagram whose
+      // // last task can reach two ends splits the cases by a guess. In `examples/tarjeta-credito`
+      // // every end is reachable from exactly one last task, so the counters there are exact.
+      // // Gateways count one crossing per case, so an AND join shows fewer `started` than the
+      // // engine (which counts one per incoming token); `completed` and the end counters match.
+      const end = flows === null || flows.length === 0 ? undefined : ir.flows[flows[flows.length - 1] as string]?.to;
+      if (end !== undefined) cruzar(end, last.endAt);
+      hop(flows, last.endAt, last.endAt);
+    }
   }
 
   const startMs = scenario.run.start === undefined ? null : Date.parse(scenario.run.start);
@@ -244,8 +288,10 @@ export function buildReplay(
     elementIds,
     horizon,
     moves,
+    passages,
     pools,
     replications: scenario.run.replications,
+    rows: rows.length,
     startMs: startMs === null || Number.isNaN(startMs) ? null : startMs,
     truncated: options.truncated ?? false,
   };
@@ -277,6 +323,14 @@ export function stateAt(replay: Replay, t: number): ReplayState {
       state.queue += 1;
     }
     if (activity.completed && t >= activity.endAt) state.completed += 1;
+  }
+
+  // The nodes with no duration: crossing one counts as started and completed at the same instant.
+  for (const passage of replay.passages) {
+    const state = elements[passage.elementId];
+    if (state === undefined || t < passage.at) continue;
+    state.started += 1;
+    state.completed += 1;
   }
 
   const tokens: { flowId: string; progress: number }[] = [];

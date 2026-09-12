@@ -142,6 +142,9 @@ export function limpiarReplay(modeler: Modeler): void {
   estado.marcados.clear();
   for (const punto of estado.puntos) punto.remove();
   estado.puntos = [];
+  // The `<g>` itself belongs to diagram-js and getting it back is `getLayer`; hiding it is enough
+  // to leave nothing of the replay visible in the canvas after the mode is left.
+  if (estado.capa !== null) canvas.hideLayer(LAYER);
   estado.capa = null;
 }
 
@@ -204,7 +207,10 @@ export function sincronizarReplay(modeler: Modeler, pintura: ReplayPintura | nul
   }
 
   // The dots. `getLayer` creates the `<g>` the first time and returns the same one afterwards.
-  estado.capa ??= canvas.getLayer(LAYER, 1) as unknown as SVGElement;
+  if (estado.capa === null) {
+    estado.capa = canvas.getLayer(LAYER, 1) as unknown as SVGElement;
+    canvas.showLayer(LAYER);
+  }
   const capa = estado.capa;
   const tokens = pintura.state.tokens;
   while (estado.puntos.length < tokens.length) {

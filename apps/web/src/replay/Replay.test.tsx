@@ -61,7 +61,7 @@ function elegir(valor: string): void {
 const progreso = (): string | null =>
   document.querySelector('[data-replay-progress]')?.getAttribute('data-replay-progress') ?? null;
 
-/** One task, one pool, one hop: enough to exercise the clock without running the engine. */
+/** One task, one start crossing, one pool, one hop: enough to exercise the clock without the engine. */
 function modelo(): ReplayModel {
   return {
     activities: [{
@@ -73,11 +73,13 @@ function modelo(): ReplayModel {
       endAt: 100,
       startedAt: 10,
     }],
-    elementIds: ['Task_A'],
+    elementIds: ['Task_A', 'Start_1'],
     horizon: 100,
     moves: [{ flows: ['Flow_1'], from: 100, to: 120 }],
+    passages: [{ at: 0, elementId: 'Start_1' }],
     pools: { analyst: 2 },
     replications: 1,
+    rows: 3,
     startMs: Date.parse('2026-09-07T14:00:00.000Z'),
     truncated: false,
   };
@@ -115,8 +117,10 @@ it('paints a frame on the canvas and shows the pool with its capacity', async ()
   montar(<Replay modelador={modelador} replay={modelo()} originalIds={{}} motivo="x" />);
   await act(async () => { await new Promise((ok) => setTimeout(ok, 80)); });
   const ultima = pinturas.filter((p) => p !== null).pop();
-  expect(ultima?.elementIds).toEqual(['Task_A']);
+  expect(ultima?.elementIds).toEqual(['Task_A', 'Start_1']);
   expect(ultima?.state.elements['Task_A']).toEqual({ completed: 0, queue: 1, running: 0, started: 1 });
+  // The start event has no duration: crossing it counts as started and completed at once.
+  expect(ultima?.state.elements['Start_1']).toEqual({ completed: 1, queue: 0, running: 0, started: 1 });
   expect(document.querySelector('[data-pool="analyst"]')?.textContent).toContain('2');
 });
 

@@ -22,6 +22,7 @@ function modeladorFalso(ids: readonly string[], flujos: Readonly<Record<string, 
   for (const [id, waypoints] of Object.entries(flujos)) elementos.set(id, { id, waypoints });
   const marcadores = new Map<string, Set<string>>();
   const capa = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  let capaVisible = true;
   let etiquetas: Etiqueta[] = [];
 
   const servicios: Readonly<Record<string, unknown>> = {
@@ -32,10 +33,12 @@ function modeladorFalso(ids: readonly string[], flujos: Readonly<Record<string, 
         marcadores.set(id, clases);
       },
       getLayer: () => capa,
+      hideLayer: () => { capaVisible = false; },
       removeMarker: (id: string, clase: string) => {
         marcadores.get(id)?.delete(clase);
         if (marcadores.get(id)?.size === 0) marcadores.delete(id);
       },
+      showLayer: () => { capaVisible = true; },
     },
     elementRegistry: { get: (id: string) => elementos.get(id) },
     overlays: {
@@ -46,6 +49,7 @@ function modeladorFalso(ids: readonly string[], flujos: Readonly<Record<string, 
   };
   return {
     capa,
+    get capaVisible() { return capaVisible; },
     get etiquetas() { return etiquetas; },
     marcadores,
     modeler: { get: (nombre: string) => servicios[nombre] } as unknown as Modeler,
@@ -106,4 +110,5 @@ it('moves a dot along the waypoints of the flow and clears everything afterwards
   expect(falso.etiquetas).toEqual([]);
   expect(falso.marcadores.size).toBe(0);
   expect(falso.capa.querySelector('circle')).toBe(null);
+  expect(falso.capaVisible).toBe(false);
 });

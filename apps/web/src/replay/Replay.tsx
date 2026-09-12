@@ -176,7 +176,7 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
         </table>
       </>}
       {replay.replications > 1 && <p className="vacio">{S.animacion.replicacion(replay.replications)}</p>}
-      {replay.truncated && <p role="alert" className="aviso">{S.animacion.truncado(replay.activities.length)}</p>}
+      {replay.truncated && <p role="alert" className="aviso">{S.animacion.truncado(replay.rows)}</p>}
     </div>
   );
 }
