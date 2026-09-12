@@ -293,6 +293,10 @@ costs, and the two costs move to −2.08% and +3.96%.
 
 ---
 
+See also: [`docs/COMING-FROM-BIZAGI.md`](COMING-FROM-BIZAGI.md) (the user-facing guide for people
+arriving from Bizagi Modeler: the four levels as four steps, screen-by-screen map, and the
+differences above in plain language).
+
 See also: `docs/RESULTS_FORMAT.md` (definition of the output columns mentioned in "Per-element
 outputs"/"Per-resource outputs"), `docs/BPMN_EXTENSION.md` (`lila:` namespace and ids),
 `docs/DECISIONS.md` (the ADRs behind these decisions), and `BACKLOG.md` (breakdown into tickets per

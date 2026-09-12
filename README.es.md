@@ -49,6 +49,11 @@ sistemas de escritorio bloquean el primer arranque:
 
 Todavía no se publica nada en el registro de npm; la CLI sale de un clon del repo, como arriba.
 
+**¿Vienes de Bizagi Modeler?** [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md)
+mapea cada pantalla y cada campo de Bizagi a su sitio aquí, conserva los cuatro niveles como los
+cuatro pasos de la vista Simulate y explica cómo reproducir el ejemplo de nivel 3 que Bizagi
+publica.
+
 ## Simular el benchmark en 3 comandos
 
 `examples/pedido` es el benchmark de referencia del repo: un proceso de restaurante con paralelo
@@ -235,6 +240,8 @@ cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md
 - [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — perfil BPMN soportado y semántica exacta del motor.
 - [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — formato del escenario JSON.
 - [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — formato del resultado y de los CSV.
+- [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía para quien llega desde
+  Bizagi Modeler: los cuatro niveles como cuatro pasos y el mapa pantalla por pantalla.
 - [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — checklist de comportamiento de referencia
   contra la documentación pública de Bizagi Modeler (validación contra ejemplos públicos), por
   nivel.

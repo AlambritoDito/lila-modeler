@@ -295,4 +295,8 @@ con los costos publicados, y los dos costos pasan a −2,08 % y +3,96 %.
 
 ---
 
+Ver también: [`docs/es/COMING-FROM-BIZAGI.md`](COMING-FROM-BIZAGI.md) (la guía de usuario para
+quien llega desde Bizagi Modeler: los cuatro niveles como cuatro pasos, el mapa pantalla por
+pantalla y estas diferencias en lenguaje llano).
+
 Ver también: `docs/RESULTS_FORMAT.md` (definición de las columnas de salida mencionadas en "Salidas por elemento"/"Salidas por recurso"), `docs/BPMN_EXTENSION.md` (namespace `lila:` e ids), `docs/DECISIONS.md` (ADR que sustentan estas decisiones) y `BACKLOG.md` (desglose en tickets por hito).
