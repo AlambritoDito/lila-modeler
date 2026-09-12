@@ -131,6 +131,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `triggerCount` | integer ≥ 1 | starts (incluido el start con timer) | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
 | `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3), temporizadores de borde incluidos (R-BND-3). |
 | `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. El rango lo comprueba el lint (`E-PROB-RANGO`), no el esquema. |
+| `conditions` | array de `{ flowTaken, probability }` | sequence flow que sale de un **XOR divergente** | — | Probabilidad de tomar el flujo **según lo que el caso ya hizo** (ADR-028, R-COND-1…5). La primera entrada cuyo `flowTaken` el caso ya recorrió sustituye la probabilidad declarada de este flujo; si no coincide ninguna, aplica la `probability` a secas. `flowTaken` es el id de un sequence flow del modelo (`E-REF-DESCONOCIDA` si no, `W-COND-INALCANZABLE` si no puede preceder al gateway). En cualquier otro elemento el campo sigue reservado (§ 4). |
 
 Asignar un carril entero: el panel web puede rellenar `resources` en **todas las tareas de un carril** en una sola acción (sección de recursos, «Asignar carril»). Es una edición en bloque de este mismo campo por tarea —el carril es una etiqueta del diagrama (`docs/SEMANTICS.md` § 2) y no se guarda nunca en el escenario— y las tareas que ya tienen `resources` se listan y piden confirmación antes de reemplazarlas.
 
@@ -172,7 +173,7 @@ Estos campos **están en el esquema** (se aceptan sintácticamente, se documenta
 | `priority` | `elements[task]` | Prioridad en la cola del recurso, en lugar de FIFO puro. |
 | `preempt` | `elements[task]` | Si una tarea de mayor prioridad puede desalojar a una en curso. |
 | `batch` | `elements[task]` | Agrupación de tokens para procesarlos juntos. |
-| `conditions` | `elements[flow]`, `elements[task]` | Ramificación por expresión sobre datos del caso, en vez de por probabilidad. |
+| `conditions` | `elements[task]` y cualquier elemento que no sea un flujo que sale de un XOR divergente | Ramificación por expresión sobre datos del caso. En un flujo que sale de un XOR divergente está **implementado** desde ADR-028 (§ 2.5): rutea por los flujos que el caso ya recorrió, no por sus datos. |
 | `holidays` | `calendars[*]` | Fechas concretas cerradas, además del patrón semanal (ADR-016). |
 | `timezone` | `calendars[*]`, `run` | Zona horaria propia con DST, en vez del offset fijo de `run.start` (ADR-016). |
 
@@ -198,6 +199,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | R10 | Las probabilidades de las salidas de un mismo gateway XOR: si faltan, reparto equitativo; si no suman 1, se **normalizan con warning**; el flujo `isDefault` recibe el residuo. En OR cada salida es independiente y no se normaliza. |
 | R11 | Los parámetros de cada distribución deben cumplir sus restricciones (§ 3). `normal` con `P(x < 0) > 1 %` produce **warning**, no error. |
 | R12 | Los campos reservados (§ 4) producen error explícito. |
+| R17 | `conditions` solo en un **sequence flow que sale de un XOR divergente** (en otro sitio, `E-RESERVADO` en un nodo y `E-CAMPO-NO-APLICA` en un flujo). Cada `flowTaken` debe ser un sequence flow del modelo (`E-REF-DESCONOCIDA`) que pueda preceder al gateway (`W-COND-INALCANZABLE` si no), y cada `probability` estar en `[0, 1]` (`E-PROB-RANGO`). Ver `SEMANTICS.md` § 6.1 y ADR-028. |
 | R13 | `intervals[].to > intervals[].from`; una ventana que cruza medianoche se declara como dos intervalos. `to` admite además `"24:00"` (medianoche del día siguiente); `from` no. |
 | R14 | `selection` solo tiene sentido con `resources`; declararlo sin recursos es error. |
 | R15 | `extends`: la ruta debe resolver a un archivo existente y la cadena no puede tener ciclos (§ 6). |
@@ -205,7 +207,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
-Los defectos del **esquema** (los que caza zod antes de R3–R16: tipo equivocado, fuera de rango, clave desconocida, variante inexistente) salen en español y citan la ruta — `run.warmup: debe ser ≥ 0` —, con el mismo texto en la CLI, en el MCP y en el panel de escenario. El catálogo es `erroresEnEspanol` en `packages/engine/src/scenario.ts`, y `parseScenario` es la única puerta que lo aplica; lo que ese mapa no traduce cae en la locale `es` de zod. Única excepción: la clave desconocida sale en la CLI con el texto de § 17 (`E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: …`, que pone `schemaIssueLines`), porque el catálogo de § 17 manda sobre el mapa. Los mensajes propios de este documento (R8, R11, R13, `E-CAL-VACIO`…) los escribe el esquema y mandan sobre el mapa. Los errores y avisos **semánticos** son otra cosa: los define el catálogo § 17 de `docs/SEMANTICS.md`.
+Los defectos del **esquema** (los que caza zod antes de R3–R17: tipo equivocado, fuera de rango, clave desconocida, variante inexistente) salen en español y citan la ruta — `run.warmup: debe ser ≥ 0` —, con el mismo texto en la CLI, en el MCP y en el panel de escenario. El catálogo es `erroresEnEspanol` en `packages/engine/src/scenario.ts`, y `parseScenario` es la única puerta que lo aplica; lo que ese mapa no traduce cae en la locale `es` de zod. Única excepción: la clave desconocida sale en la CLI con el texto de § 17 (`E-CLAVE-DESCONOCIDA: clave no reconocida por el esquema: …`, que pone `schemaIssueLines`), porque el catálogo de § 17 manda sobre el mapa. Los mensajes propios de este documento (R8, R11, R13, `E-CAL-VACIO`…) los escribe el esquema y mandan sobre el mapa. Los errores y avisos **semánticos** son otra cosa: los define el catálogo § 17 de `docs/SEMANTICS.md`.
 
 ---
 
@@ -348,7 +350,7 @@ Para qué sirve: los adaptadores viven **en los bordes** y solo se escriben cuan
 | **`elements[flow].probability`** | **`bpsim:Probability`** | **`qbp:sequenceFlow/@executionProbability`** | **%** por flujo |
 | `priority` (reservado) | `bpsim:PriorityParameters/bpsim:Priority` † | — | — |
 | `preempt` (reservado) | `bpsim:PriorityParameters/bpsim:Interruptible` † | — | — |
-| `conditions` (reservado) | `bpsim:ControlParameters/bpsim:Condition` † | — | — |
+| `elements[flow].conditions` | `bpsim:ControlParameters/bpsim:Condition` † | — | — (sin equivalente en Bizagi; ADR-028) |
 | `batch`, `holidays`, `timezone` (reservados) | — | — | Festivos (calendario) |
 
 En negrita, los cuatro mapeos ya fijados en el documento de estructura.

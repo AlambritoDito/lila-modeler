@@ -13,7 +13,7 @@
   </bpmn:collaboration>
 
   <bpmn:process id="Process_TarjetaCredito" name="Credit card issuance" isExecutable="false">
-    <bpmn:documentation>Credit card issuance at a department store (LILA-318). Lanes are labels only: resources are assigned task by task in the scenario. Both denial paths are modelled as separate task pairs because the v1 engine routes on probability, never on case data.</bpmn:documentation>
+    <bpmn:documentation>Credit card issuance at a department store (LILA-318). Lanes are labels only: resources are assigned task by task in the scenario. Both denial paths are modelled as separate task pairs so each rejection cause is readable and countable on its own; since ADR-028 a single shared pair is also expressible, with conditions on the flows leaving the final gateway.</bpmn:documentation>
 
     <bpmn:laneSet id="LaneSet_TarjetaCredito">
       <bpmn:lane id="Lane_AccountExecutive" name="Account Executive">

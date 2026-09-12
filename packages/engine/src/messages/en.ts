@@ -100,6 +100,8 @@ export const en: Catalog = {
     'E-RESERVADO': (path) => `${path}: reserved field, not supported by the simulator in v1.`,
     'E-REF-DESCONOCIDA': (path, calendar) =>
       `${path}: the calendar ${calendar} does not exist in calendars.`,
+    'E-REF-DESCONOCIDA/flujo': (path, flowId) =>
+      `${path}: the sequence flow ${flowId} does not exist in the model.`,
     'E-SUBPROC-PARAMETRO': (path, id) =>
       `${path}: ${id} is an embedded subprocess and has no processing time, resources or cost of its own; its time is the sum of what happens inside.`,
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `${path}: the id ${id} does not exist in the model.`,
@@ -108,6 +110,8 @@ export const en: Catalog = {
     'E-CAMPO-NO-APLICA/solo-inicio': (path) => `${path}: only accepted on a start event.`,
     'E-CAMPO-NO-APLICA/solo-tarea': (path) => `${path}: only a task can consume resources.`,
     'E-CAMPO-NO-APLICA/selection': (path) => `${path}: it only makes sense together with resources.`,
+    'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
+      `${path}: only accepted on a sequence flow leaving a diverging exclusive gateway.`,
     'E-TIMER-RECURSO': (path) => `${path}: a timer is a delay and consumes no resources.`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `${path}: the resource ${ref} does not exist in resources.`,
@@ -121,6 +125,8 @@ export const en: Catalog = {
     'W-SIN-SEED': (path) => `${path}: the scenario declares no seed; the run uses seed = 1.`,
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
       `${path}: the element exists in the model and has no parameters; it takes its defaults.`,
+    'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
+      `${path}: ${flowId} cannot have been traversed before ${gatewayId}; the condition never applies.`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },

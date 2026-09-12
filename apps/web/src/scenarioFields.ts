@@ -54,7 +54,9 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     case 'terminate':
       return ['fixedCost'];
     case 'flow':
-      return ['probability'];
+      // ADR-028: `conditions` only means something on a flow leaving a diverging XOR, and the
+      // class alone does not say which; a flow elsewhere gets `E-CAMPO-NO-APLICA` from the lint.
+      return ['probability', 'conditions'];
     case 'xor':
     case 'or':
     case 'and':

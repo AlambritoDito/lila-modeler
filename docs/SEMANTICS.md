@@ -82,7 +82,8 @@ defined semantics; everything else falls into section 3 of this document.
   ignored and produce warning `W-MSGFLOW` once per file, citing how many were ignored. Pools are
   simulated as a single graph: a token never "jumps" between pools. *(test: LILA-021, LILA-163)*
 - **R-PERF-4 — `conditionExpression` is ignored.** Sequence flow conditions are not evaluated in
-  v1 (`conditions` is a reserved field, §15): branching is probabilistic. A flow with a
+  v1: branching is probabilistic, and the scenario's `conditions` (§6.1) route on the flows the
+  case already took, not on its data. A flow with a
   `conditionExpression` produces warning `W-COND` citing the flow's id. *(test: LILA-021,
   LILA-163)*
 - **R-PERF-5 — Several start events are valid.** Each `start` with `interTriggerTimer` or
@@ -368,6 +369,37 @@ the XML, preserved in `ir.nodes[g].outgoing`), and let `p(fi)` be the `probabili
 - **R-XOR-8 — `probability` only on sequence flows.** `probability` on a node is error
   `E-PROB-EN-NODO`; on a flow whose source is neither `xor` nor `or` it is warning
   `W-PROB-IGNORADA`. *(test: LILA-013, LILA-042, LILA-198)*
+
+### 6.1 Routing conditioned on the case's previous outcome (ADR-028)
+
+A flow leaving a **diverging** XOR may declare `conditions: [{ flowTaken, probability }]` instead
+of, or on top of, its plain `probability`. It is the minimum needed to merge two branches that
+were duplicated only to be told apart again further downstream (the credit card example's denial
+pair), without introducing case variables or an expression language.
+
+- **R-COND-1 — Effective declared probability.** When a token reaches a diverging XOR, the
+  declared probability of each outgoing flow `fi` is the `probability` of the **first** entry of
+  `conditions[fi]` whose `flowTaken` the case has already traversed. If no entry matches — or the
+  flow declares no `conditions` — it is the flow's plain `probability`, which may be undefined.
+  *(test: E22)*
+- **R-COND-2 — The rest is R-XOR-1…5, unchanged.** That effective vector, computed **per case**,
+  then goes through the even split, the remainder to the single undeclared flow, the shared
+  remainder with `W-XOR-RESIDUO-COMPARTIDO`, the normalization with `W-XOR-NORMALIZADA` and the
+  sum-of-zero path exactly as declared probabilities do. There is no separate rule for a
+  conditioned gateway. *(test: E22)*
+- **R-COND-3 — "Traversed" is a set.** A flow is traversed as soon as **any** token of the case
+  was emitted along it (R-TOK-4), warm-up cases included. It is a set, not a count and not a
+  stack: a loop does not clear it, and traversing a flow twice is the same as once. *(test: E22)*
+- **R-COND-4 — Where it is accepted.** Only on a sequence flow leaving a diverging XOR: on a node
+  it is the reserved field of §15 (`E-RESERVADO`, same text as always), and on any other flow it
+  is `E-CAMPO-NO-APLICA`. A `flowTaken` that is not a flow of the model is `E-REF-DESCONOCIDA`; a
+  `flowTaken` that cannot precede the gateway — it is not reachable walking the IR backwards from
+  it — is warning `W-COND-INALCANZABLE`, and the condition simply never applies. A `probability`
+  outside `[0, 1]` is `E-PROB-RANGO`, like any other (R-XOR-6). *(test: E22)*
+- **R-COND-5 — One draw, same stream.** The gateway still draws a **single** uniform from its own
+  stream (R-XOR-7); `conditions` change the weights, never how many random numbers are consumed.
+  A scenario that declares no `conditions` therefore produces bit-identical results to one run
+  before ADR-028. *(test: E22, golden)*
 
 ---
 
@@ -817,9 +849,10 @@ is what makes the same model serve as Bizagi level 1 through level 4.
 The scenario schema **accepts** them (so that a file written today keeps validating tomorrow) but
 the engine **rejects** them with a clear error while they are not implemented (ADR-015, LILA-013).
 
-- **R-RES-1 — v1 list:** `priority`, `preempt`, `batch`, `conditions` (section 6 of the structure
-  document) plus `holidays` and `timezone` in `calendars` (ADR-016, LILA-013).
-  *(test: LILA-013)*
+- **R-RES-1 — v1 list:** `priority`, `preempt`, `batch` (section 6 of the structure document)
+  plus `holidays` and `timezone` in `calendars` (ADR-016, LILA-013). `conditions` is reserved
+  only on elements that are **not** a flow leaving a diverging XOR: there it is implemented
+  (§6.1, ADR-028), everywhere else it still raises `E-RESERVADO`. *(test: LILA-013, E22)*
 - **R-RES-2 — Exact error text.**
 
   ```
@@ -980,7 +1013,8 @@ per occurrence):
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
 interrupts its host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
+precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
 ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`.
 
@@ -1119,6 +1153,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identity and partial lifecycle | LILA-033, LILA-037 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: even split, remainder to the default, normalization, draw | LILA-026 (normalization and warnings: LILA-042) |
 | R-XOR-6, R-XOR-8 | range and placement of `probability` | LILA-013, LILA-042, LILA-198 |
+| R-COND-1 … R-COND-5 | routing conditioned on the case's previous outcome (ADR-028) | E22 (`packages/engine/test/conditions.test.ts`) |
 | R-OR-1 … R-OR-7 | OR fork/join, matching and loops | LILA-026 |
 | R-OR-8 | orphan tokens on stop | LILA-026, LILA-028 |
 | R-AND-1 … R-AND-6 | AND fork/join, `(case, join)` counter, loops | LILA-026 |

@@ -74,6 +74,7 @@ const COVERAGE: Record<ProblemCode, true> = {
   'E-XOR-SUMA-CERO': true,
   'W-BORDE-SIN-TIEMPO': true,
   'W-COND': true,
+  'W-COND-INALCANZABLE': true,
   'W-ELEMENTO-SIN-PARAMETROS': true,
   'W-JOIN-BLOQUEADO': true,
   'W-MSGFLOW': true,

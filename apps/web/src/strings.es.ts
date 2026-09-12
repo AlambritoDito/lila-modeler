@@ -536,6 +536,8 @@ export const es: Strings = {
       n: 'Intentos (n)',
       p: 'Probabilidad de éxito (p)',
       points: 'Puntos',
+      // ADR-028: conditions en un flujo que sale de un XOR divergente
+      flowTaken: 'Flujo ya recorrido',
       // reservados (§ 4)
       priority: 'Prioridad',
       preempt: 'Expulsión',
@@ -557,6 +559,8 @@ export const es: Strings = {
       interTriggerTimer: 'Tiempo entre llegadas en este evento de inicio.',
       triggerCount: 'Número máximo de casos que genera este inicio.',
       probability: 'Entre 0 y 1. Sin ella la compuerta reparte por igual.',
+      conditions: 'Solo en un flujo que sale de una compuerta exclusiva divergente: la probabilidad que se usa si el caso ya recorrió el flujo indicado. Gana la primera que coincide; sin ninguna, aplica la probability a secas.',
+      flowTaken: 'Id de un sequence flow del diagrama, aguas arriba de esta compuerta.',
       fixedCost: 'Coste por token completado en este elemento.',
       costPerHour: 'Coste por hora ocupada, no por hora disponible.',
       capacity: 'Unidades del grupo disponibles a la vez.',

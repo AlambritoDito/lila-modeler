@@ -48,10 +48,14 @@ crédito*, *Imprimir la tarjeta*, *Entregar la tarjeta*.
 
 ## Modelling assumptions
 
-- **Duplicated denial path.** The v1 engine routes on probability, never on case data, so
-  "deny and inform" cannot be one shared pair of tasks reached from both gateways: each gateway
-  has its own `Task_Deny…` / `Task_Inform…` pair and its own end event. That is also what makes
-  the two rejection causes countable separately.
+- **Duplicated denial path, by choice now.** Each gateway keeps its own `Task_Deny…` /
+  `Task_Inform…` pair and its own end event, which is what makes the two rejection causes readable
+  on the diagram and countable separately. It is no longer a limitation: since ADR-028 a flow
+  leaving a diverging XOR can declare `conditions` and route on the flow the case already took, so
+  **one** shared pair reached from both gateways ends in the right end event all the same. The
+  shared-pair version of this model is
+  `packages/engine/test/fixtures/tarjeta-shared-denial.bpmn` (rules R-COND-1…5 in
+  `docs/SEMANTICS.md` § 6.1).
 - **No persistent resource identity.** "The same executive who took the application delivers the
   card" is not expressible: pools are interchangeable units, so `Task_DeliverCard` takes whichever
   executive is free.

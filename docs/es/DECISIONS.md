@@ -379,6 +379,56 @@ entrada en el manifiesto), no un truco de serialización. *(pruebas:
 
 ---
 
+## ADR-028 — Ruteo condicionado al desenlace previo del caso (`conditions`)
+
+**Estado:** Aceptada
+
+Un sequence flow que sale de un XOR **divergente** puede declarar
+`conditions: [{ flowTaken, probability }]`. Cuando un token llega a la compuerta, la probabilidad
+declarada de cada salida es la `probability` de la primera entrada cuyo `flowTaken` el caso ya
+recorrió, y la `probability` a secas si no coincide ninguna; de ahí en adelante R-XOR-1…5 se
+aplican sin cambios a ese vector por caso, y la compuerta sigue sacando **un** uniforme de su
+propio stream (`SEMANTICS.md` § 6.1, R-COND-1…5). En cualquier elemento que no sea ese flujo,
+`conditions` sigue siendo el campo reservado de § 15, con el mismo texto `E-RESERVADO` de antes.
+
+Contexto: v1 rutea solo por probabilidad, así que un modelo que fusiona dos ramas no puede volver a
+distinguirlas aguas abajo. El ejemplo de la tarjeta de crédito (`examples/tarjeta-credito`) duplica
+la ruta de rechazo entera —negar e informar, dos veces— sin más motivo que mantener contables las
+dos causas de rechazo. Esa duplicación es lo primero con lo que se topa cualquier usuario de Bizagi
+y es el hueco más barato de cerrar de la épica #335.
+
+Por qué no variables de caso: un lenguaje de expresiones sobre datos del caso implica un modelo de
+datos, un evaluador, un sistema de tipos y un depurador para él, y dejaría sin cota el estado del
+motor por caso. Los flujos que un caso recorrió son estado que el motor ya tiene, se nombran con
+ids que el escenario ya usa y cubren la duplicación que motivó el ticket. Bizagi mismo solo ofrece
+esto en su nivel 4 mediante condiciones de compuerta sobre atributos; esto es el 10 % de aquello
+que quita el 90 % de la duplicación.
+
+Techos, todos deliberados:
+
+- **Un conjunto, no un historial.** `flowsTaken` tiene semántica de conjunto: un bucle no lo
+  reinicia y la segunda pasada por un flujo es indistinguible de la primera (R-COND-3). Rutear por
+  *cuántas veces* pasó algo no se puede expresar.
+- **El lint no puede anticipar del todo la corrida.** La sustitución de probabilidades ocurre por
+  caso, así que la comprobación estática de R10 no puede predecir `W-XOR-NORMALIZADA` ni
+  `E-XOR-SUMA-CERO` para un vector sustituido. El motor emite el aviso de normalización en tiempo
+  de corrida, una vez por firma, y un vector sustituido que sume 0 cae en el descarte de R-XOR-7
+  (el último flujo con `p > 0`, o el último flujo) en vez de abortar.
+- **`W-COND-INALCANZABLE` es alcanzabilidad, no concurrencia.** Recorre el IR hacia atrás desde la
+  compuerta por `incoming`. Un flujo de una rama **paralela** de un AND fork no es alcanzable hacia
+  atrás y avisa, aunque un token sí pudiera haberlo recorrido. Es un aviso justamente porque el
+  análisis es el barato; la corrida se comporta bien en cualquier caso.
+- **`extends` reemplaza el array entero.** `deepMerge` reemplaza arrays, así que un delta que
+  declara `conditions` sustituye la lista heredada; no hay mezcla entrada por entrada.
+- **Sin UI para elegir el id del flujo.** El panel de escenario dibuja `flowTaken` como una entrada
+  de texto, no como un select de los flujos del modelo: un id equivocado sale como
+  `E-REF-DESCONOCIDA` bajo su propia ruta.
+
+*(pruebas: `packages/engine/test/conditions.test.ts`, fixture
+`packages/engine/test/fixtures/tarjeta-shared-denial.bpmn`)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).

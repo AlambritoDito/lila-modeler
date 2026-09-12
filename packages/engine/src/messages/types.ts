@@ -35,6 +35,7 @@ export interface OuterCodeMessages {
   /* --- scenario.ts (lint) ------------------------------------------- */
   'E-RESERVADO': (path: string) => string;
   'E-REF-DESCONOCIDA': (path: string, calendar: string) => string;
+  'E-REF-DESCONOCIDA/flujo': (path: string, flowId: string) => string;
   'E-SUBPROC-PARAMETRO': (path: string, id: string) => string;
   'E-ELEMENTO-DESCONOCIDO': (path: string, id: string) => string;
   'E-PROB-EN-NODO': (path: string) => string;
@@ -42,6 +43,7 @@ export interface OuterCodeMessages {
   'E-CAMPO-NO-APLICA/solo-inicio': (path: string) => string;
   'E-CAMPO-NO-APLICA/solo-tarea': (path: string) => string;
   'E-CAMPO-NO-APLICA/selection': (path: string) => string;
+  'E-CAMPO-NO-APLICA/solo-flujo-xor': (path: string) => string;
   'E-TIMER-RECURSO': (path: string) => string;
   'E-REC-DESCONOCIDO/recurso': (path: string, ref: string) => string;
   'E-REC-DUPLICADO/ref': (path: string, ref: string) => string;
@@ -55,6 +57,7 @@ export interface OuterCodeMessages {
   'E-SIN-PARADA': (path: string) => string;
   'W-SIN-SEED': (path: string) => string;
   'W-ELEMENTO-SIN-PARAMETROS': (path: string) => string;
+  'W-COND-INALCANZABLE': (path: string, flowId: string, gatewayId: string) => string;
 
   /* --- scenario.ts (schema) ----------------------------------------- */
   'E-CLAVE-DESCONOCIDA': (keys: string) => string;

@@ -249,6 +249,23 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
     expect(hay('campo-elements.Flow_BureauGood.resources')).toBe(false);
   });
 
+  it('un flujo con `conditions` las edita como lista, no como campo reservado (ADR-028)', () => {
+    montar(
+      <Anfitrion
+        inicial={base({
+          elements: {
+            Flow_BureauGood: { conditions: [{ flowTaken: 'Flow_BureauBad', probability: 1 }] },
+          },
+        })}
+      />,
+    );
+    seleccionar('Flow_BureauGood');
+    // Los dos campos de la entrada, con su ruta: si cayera en `CampoReservado` no existiría
+    // ninguno de los dos y el único gesto posible sería borrar el campo entero.
+    expect(hay('campo-elements.Flow_BureauGood.conditions[0].flowTaken')).toBe(true);
+    expect(hay('campo-elements.Flow_BureauGood.conditions[0].probability')).toBe(true);
+  });
+
   it('un fin solo ofrece su coste fijo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('End_CardDelivered');

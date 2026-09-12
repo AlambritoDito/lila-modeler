@@ -105,6 +105,8 @@ export const es: Catalog = {
     'E-RESERVADO': (path) => `${path}: campo reservado, no soportado por el simulador en v1.`,
     'E-REF-DESCONOCIDA': (path, calendar) =>
       `${path}: el calendario ${calendar} no existe en calendars.`,
+    'E-REF-DESCONOCIDA/flujo': (path, flowId) =>
+      `${path}: el sequence flow ${flowId} no existe en el modelo.`,
     'E-SUBPROC-PARAMETRO': (path, id) =>
       `${path}: ${id} es un subproceso embebido y no tiene tiempo, recursos ni costo propios; su tiempo es la suma de lo que ocurre dentro.`,
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `${path}: el id ${id} no existe en el modelo.`,
@@ -113,6 +115,8 @@ export const es: Catalog = {
     'E-CAMPO-NO-APLICA/solo-inicio': (path) => `${path}: solo se admite en un evento de inicio.`,
     'E-CAMPO-NO-APLICA/solo-tarea': (path) => `${path}: solo una tarea puede consumir recursos.`,
     'E-CAMPO-NO-APLICA/selection': (path) => `${path}: solo tiene sentido con resources.`,
+    'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
+      `${path}: solo se admite en un sequence flow que sale de una compuerta exclusiva divergente.`,
     'E-TIMER-RECURSO': (path) => `${path}: un timer es un retardo y no consume recursos.`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) => `${path}: el recurso ${ref} no existe en resources.`,
     'E-REC-DUPLICADO/ref': (path, ref) => `${path}: ${ref} aparece más de una vez; usa quantity.`,
@@ -124,6 +128,8 @@ export const es: Catalog = {
     'W-SIN-SEED': (path) => `${path}: el escenario no declara seed; la corrida usa seed = 1.`,
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
       `${path}: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.`,
+    'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
+      `${path}: ${flowId} no puede haberse recorrido antes de ${gatewayId}; la condición nunca aplica.`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },

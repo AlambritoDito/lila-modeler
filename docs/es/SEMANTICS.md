@@ -81,7 +81,8 @@ definida; todo lo demás cae en la sección 3 de este documento.
   ignoran y producen aviso `W-MSGFLOW` una vez por archivo, citando cuántos se ignoraron. Los pools
   se simulan como un único grafo: un token no “salta” de pool. *(prueba: LILA-021, LILA-163)*
 - **R-PERF-4 — `conditionExpression` se ignora.** Las condiciones de los sequence flows no se
-  evalúan en v1 (`conditions` es campo reservado, §15): el ramaje es probabilístico. Un flujo con
+  evalúan en v1: el ramaje es probabilístico, y las `conditions` del escenario (§6.1) rutean por los
+  flujos que el caso ya recorrió, no por sus datos. Un flujo con
   `conditionExpression` produce aviso `W-COND` citando el id del flujo. *(prueba: LILA-021,
   LILA-163)*
 - **R-PERF-5 — Varios start events son válidos.** Cada `start` con `interTriggerTimer` o
@@ -361,6 +362,38 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 - **R-XOR-8 — `probability` solo en sequence flows.** `probability` en un nodo es error
   `E-PROB-EN-NODO`; en un flujo cuyo origen no es `xor` ni `or` es aviso `W-PROB-IGNORADA`.
   *(prueba: LILA-013, LILA-042, LILA-198)*
+
+### 6.1 Ruteo condicionado al desenlace previo del caso (ADR-028)
+
+Un flujo que sale de un XOR **divergente** puede declarar `conditions: [{ flowTaken, probability }]`
+en vez de —o además de— su `probability` a secas. Es lo mínimo necesario para fusionar dos ramas
+que estaban duplicadas solo para volver a distinguirlas más adelante (el par de rechazo del ejemplo
+de la tarjeta de crédito), sin introducir variables de caso ni un lenguaje de expresiones.
+
+- **R-COND-1 — Probabilidad declarada efectiva.** Cuando un token llega a un XOR divergente, la
+  probabilidad declarada de cada salida `fi` es la `probability` de la **primera** entrada de
+  `conditions[fi]` cuyo `flowTaken` el caso ya recorrió. Si no coincide ninguna —o el flujo no
+  declara `conditions`— es la `probability` a secas del flujo, que puede no existir.
+  *(prueba: E22)*
+- **R-COND-2 — Lo demás es R-XOR-1…5, sin cambios.** Ese vector efectivo, calculado **por caso**,
+  pasa por el reparto equitativo, el residuo al único flujo sin declarar, el residuo compartido con
+  `W-XOR-RESIDUO-COMPARTIDO`, la normalización con `W-XOR-NORMALIZADA` y el camino de la suma cero
+  exactamente igual que las probabilidades declaradas. No hay una regla aparte para una compuerta
+  condicionada. *(prueba: E22)*
+- **R-COND-3 — «Recorrido» es un conjunto.** Un flujo está recorrido en cuanto **algún** token del
+  caso se emitió por él (R-TOK-4), casos de warm-up incluidos. Es un conjunto, no un contador ni una
+  pila: un bucle no lo reinicia y recorrer un flujo dos veces es igual que una. *(prueba: E22)*
+- **R-COND-4 — Dónde se admite.** Solo en un sequence flow que sale de un XOR divergente: en un
+  nodo sigue siendo el campo reservado de §15 (`E-RESERVADO`, con el texto de siempre) y en
+  cualquier otro flujo es `E-CAMPO-NO-APLICA`. Un `flowTaken` que no es un flujo del modelo es
+  `E-REF-DESCONOCIDA`; un `flowTaken` que no puede preceder al gateway —no se alcanza recorriendo
+  el IR hacia atrás desde él— es aviso `W-COND-INALCANZABLE`, y la condición simplemente no aplica
+  nunca. Una `probability` fuera de `[0, 1]` es `E-PROB-RANGO`, como cualquier otra (R-XOR-6).
+  *(prueba: E22)*
+- **R-COND-5 — Un sorteo, el mismo stream.** La compuerta sigue sacando un **único** uniforme de su
+  propio stream (R-XOR-7); `conditions` cambia los pesos, nunca cuántos números aleatorios se
+  consumen. Un escenario que no declara `conditions` da, por tanto, resultados idénticos bit a bit
+  a los de antes de ADR-028. *(prueba: E22, golden)*
 
 ---
 
@@ -802,9 +835,10 @@ que hace que el mismo modelo sirva de nivel 1 a nivel 4 de Bizagi.
 El esquema del escenario los **acepta** (para que un archivo escrito hoy siga validando mañana) pero
 el motor los **rechaza** con error claro mientras no estén implementados (ADR-015, LILA-013).
 
-- **R-RES-1 — Lista v1:** `priority`, `preempt`, `batch`, `conditions` (sección 6 del documento de
-  estructura) más `holidays` y `timezone` en `calendars` (ADR-016, LILA-013).
-  *(prueba: LILA-013)*
+- **R-RES-1 — Lista v1:** `priority`, `preempt`, `batch` (sección 6 del documento de estructura)
+  más `holidays` y `timezone` en `calendars` (ADR-016, LILA-013). `conditions` es reservado solo en
+  elementos que **no** son un flujo que sale de un XOR divergente: ahí está implementado (§6.1,
+  ADR-028) y en el resto sigue dando `E-RESERVADO`. *(prueba: LILA-013, E22)*
 - **R-RES-2 — Texto exacto del error.**
 
   ```
@@ -960,7 +994,8 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
 interrumpe a su host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
-`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
+`W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (un `flowTaken` que no puede
+preceder a su gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
 `isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
 `W-RECURSO-SATURADO`.
@@ -1099,6 +1134,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identidad y lifecycle parcial | LILA-033, LILA-037 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: equitativo, residuo al default, normalización, sorteo | LILA-026 (normalización y avisos: LILA-042) |
 | R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042, LILA-198 |
+| R-COND-1 … R-COND-5 | ruteo condicionado al desenlace previo del caso (ADR-028) | E22 (`packages/engine/test/conditions.test.ts`) |
 | R-OR-1 … R-OR-7 | OR fork/join, emparejamiento y loops | LILA-026 |
 | R-OR-8 | tokens huérfanos al parar | LILA-026, LILA-028 |
 | R-AND-1 … R-AND-6 | AND fork/join, contador `(caso, join)`, loops | LILA-026 |

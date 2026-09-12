@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture E22 (ADR-028): the credit card example with ONE shared denial pair.
+     Both rejections reach the same Task_Deny / Task_Inform, and the final XOR Gateway_Cause
+     routes to the right end event with `conditions` over the flow the case already took
+     (R-COND-1…5). No BPMNDI: the engine does not read the diagram layer. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_TarjetaSharedDenial"
+                  targetNamespace="https://lila-modeler.org/bpmn/test"
+                  exporter="Lila Modeler tests"
+                  exporterVersion="0.0.0">
+  <bpmn:process id="Process_TarjetaSharedDenial" name="Credit card issuance, shared denial" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_Application" name="Card application received" />
+    <bpmn:sequenceFlow id="Flow_Start_FillApplication" sourceRef="StartEvent_Application" targetRef="Task_FillApplication" />
+
+    <bpmn:task id="Task_FillApplication" name="Fill in the application" />
+    <bpmn:sequenceFlow id="Flow_FillApplication_CopyId" sourceRef="Task_FillApplication" targetRef="Task_CopyId" />
+
+    <bpmn:task id="Task_CopyId" name="Copy the ID document" />
+    <bpmn:sequenceFlow id="Flow_CopyId_CheckBureau" sourceRef="Task_CopyId" targetRef="Task_CheckBureau" />
+
+    <bpmn:task id="Task_CheckBureau" name="Check the credit bureau" />
+    <bpmn:sequenceFlow id="Flow_CheckBureau_GatewayBureau" sourceRef="Task_CheckBureau" targetRef="Gateway_Bureau" />
+
+    <bpmn:exclusiveGateway id="Gateway_Bureau" name="Bureau record?" />
+    <bpmn:sequenceFlow id="Flow_BureauBad" name="Bad" sourceRef="Gateway_Bureau" targetRef="Gateway_Denied" />
+    <bpmn:sequenceFlow id="Flow_BureauGood" name="Good" sourceRef="Gateway_Bureau" targetRef="Task_AssessDebt" />
+
+    <bpmn:task id="Task_AssessDebt" name="Assess the debt capacity" />
+    <bpmn:sequenceFlow id="Flow_AssessDebt_GatewayDebt" sourceRef="Task_AssessDebt" targetRef="Gateway_Debt" />
+
+    <bpmn:exclusiveGateway id="Gateway_Debt" name="Debt capacity?" />
+    <bpmn:sequenceFlow id="Flow_DebtNotEligible" name="Not eligible" sourceRef="Gateway_Debt" targetRef="Gateway_Denied" />
+    <bpmn:sequenceFlow id="Flow_DebtEligible" name="Eligible" sourceRef="Gateway_Debt" targetRef="Task_OpenAccount" />
+
+    <!-- The merge, the shared pair, and the gateway that tells the two denials apart again. -->
+    <bpmn:exclusiveGateway id="Gateway_Denied" name="Denied" />
+    <bpmn:sequenceFlow id="Flow_Denied_Deny" sourceRef="Gateway_Denied" targetRef="Task_Deny" />
+
+    <bpmn:task id="Task_Deny" name="Deny the application" />
+    <bpmn:sequenceFlow id="Flow_Deny_Inform" sourceRef="Task_Deny" targetRef="Task_Inform" />
+
+    <bpmn:task id="Task_Inform" name="Inform the denial" />
+    <bpmn:sequenceFlow id="Flow_Inform_Cause" sourceRef="Task_Inform" targetRef="Gateway_Cause" />
+
+    <bpmn:exclusiveGateway id="Gateway_Cause" name="Cause of the denial?" />
+    <bpmn:sequenceFlow id="Flow_CauseBureau" name="Bureau" sourceRef="Gateway_Cause" targetRef="End_BureauRejected" />
+    <bpmn:sequenceFlow id="Flow_CauseDebt" name="Debt" sourceRef="Gateway_Cause" targetRef="End_DebtRejected" />
+
+    <bpmn:endEvent id="End_BureauRejected" name="Rejected by the bureau" />
+    <bpmn:endEvent id="End_DebtRejected" name="Rejected for debt capacity" />
+
+    <bpmn:task id="Task_OpenAccount" name="Open the account" />
+    <bpmn:sequenceFlow id="Flow_OpenAccount_ComputePaymentCapacity" sourceRef="Task_OpenAccount" targetRef="Task_ComputePaymentCapacity" />
+
+    <bpmn:task id="Task_ComputePaymentCapacity" name="Compute the payment capacity" />
+    <bpmn:sequenceFlow id="Flow_ComputePaymentCapacity_AssignCreditLimit" sourceRef="Task_ComputePaymentCapacity" targetRef="Task_AssignCreditLimit" />
+
+    <bpmn:task id="Task_AssignCreditLimit" name="Assign the credit limit" />
+    <bpmn:sequenceFlow id="Flow_AssignCreditLimit_PrintCard" sourceRef="Task_AssignCreditLimit" targetRef="Task_PrintCard" />
+
+    <bpmn:task id="Task_PrintCard" name="Print the card" />
+    <bpmn:sequenceFlow id="Flow_PrintCard_DeliverCard" sourceRef="Task_PrintCard" targetRef="Task_DeliverCard" />
+
+    <bpmn:task id="Task_DeliverCard" name="Deliver the card" />
+    <bpmn:sequenceFlow id="Flow_DeliverCard_End" sourceRef="Task_DeliverCard" targetRef="End_CardDelivered" />
+
+    <bpmn:endEvent id="End_CardDelivered" name="Card delivered" />
+  </bpmn:process>
+</bpmn:definitions>

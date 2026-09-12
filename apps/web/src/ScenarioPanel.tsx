@@ -494,7 +494,8 @@ function unidadBase(ctx: Contexto): UnidadTiempo {
 }
 
 /* ------------------------------------------------------------------ *
- * Campos reservados (§ 4): priority, preempt, batch, conditions, holidays, timezone.
+ * Campos reservados (§ 4): priority, preempt, batch, holidays, timezone. `conditions` dejó de
+ * serlo en un flujo de XOR divergente (ADR-028); en un nodo sigue cayendo aquí.
  * ------------------------------------------------------------------ */
 
 type EstadoReservado = 'ausente' | 'heredado' | 'propio' | 'eliminado';
@@ -1271,7 +1272,7 @@ export function Campo({
   }
 
   // Esquema vacío (`{}`): los campos reservados de § 4 (`priority`, `preempt`, `batch`,
-  // `conditions`, `holidays`, `timezone`). El motor los rechaza con error, así que el panel no
+  // `holidays`, `timezone`; `conditions` ya tiene esquema propio, ADR-028). El motor los rechaza con error, así que el panel no
   // ofrece forma de crearlos, pero si llegan heredados o propios hace falta poder borrarlos
   // (OP-11): `CampoReservado` enseña el estado y el botón; el problema sigue saliendo también en
   // la cabecera vía `Problemas`.
