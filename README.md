@@ -48,6 +48,10 @@ the first launch:
 
 Nothing is published to the npm registry yet; the CLI comes from a repository checkout as above.
 
+**Coming from Bizagi Modeler?** [`docs/COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) maps
+each Bizagi screen and field to where it lives here, keeps the four levels as the four steps of the
+Simulate view, and walks through reproducing Bizagi's published level-3 example.
+
 ## Simulate the benchmark in 3 commands
 
 `examples/pedido` is the repo's reference benchmark: a restaurant process with a parallel branch
@@ -167,8 +171,8 @@ It starts with `examples/pedido/model.bpmn` loaded. The top bar has five modes. 
 language in Settings:
 
 - **Model** — bpmn-js editor: create, edit and export the `.bpmn`.
-- **Simulate** — scenario panel (resource pools, calendars, per-element parameters) and a
-  Simulate button with progress and cancel.
+- **Simulate** — scenario panel in four steps — process validation, time, resource and calendar
+  analysis, Bizagi's four levels — and a Simulate button with progress and cancel.
 - **Results** — the Bizagi-style tables plus Lila's extras (bottlenecks, cost per
   case), with per-table CSV export.
 - **Compare** — two or more already-simulated scenarios side by side, with a
@@ -243,6 +247,8 @@ Public contracts and guides are in English, with linked Spanish versions under `
 - [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — supported BPMN profile and the engine's exact semantics.
 - [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the JSON scenario format.
 - [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — the result format and the CSVs.
+- [`docs/COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — guide for users arriving from Bizagi
+  Modeler: the four levels as four steps and a screen-by-screen map.
 - [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist against Bizagi
   Modeler's public documentation (validation against public examples), by level.
 - [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.

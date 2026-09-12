@@ -19,6 +19,8 @@
  */
 
 /** Node kinds of the IR (`packages/engine/src/core/ir.ts`) plus the sequence flow. */
+import type { PasoId } from './ids.js';
+
 export type ClaseElemento =
   | 'start'
   | 'end'
@@ -60,6 +62,48 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     default:
       return null;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * #333: the four steps, and which element fields belong to each
+ * ------------------------------------------------------------------ */
+
+/** § 4: no class declares them, the engine rejects them, the panel only offers to delete them. */
+const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
+
+/**
+ * The element fields each step of the Simulate panel owns, from Bizagi's four levels
+ * (`docs/COMING-FROM-BIZAGI.md`). Every key of `ElementSchema` belongs to exactly one step, so
+ * no field becomes unreachable by hiding the others:
+ *
+ * - `validation`: what makes the model runnable at all — how many cases arrive and which way
+ *   they branch — plus the reserved fields of § 4, which have no step of their own and are only
+ *   ever shown to be deleted.
+ * - `times`, `resources`, `calendars`: one kind of parameter each, in Bizagi's own order.
+ */
+export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
+  validation: ['triggerCount', 'probability', 'priority', 'preempt', 'batch', 'conditions'],
+  times: ['interTriggerTimer', 'processingTime'],
+  resources: ['resources', 'selection', 'fixedCost'],
+  calendars: ['calendar'],
+};
+
+/**
+ * The fields the selected element offers in `paso`: its step's fields, kept only where they mean
+ * something for `clase`. It is `fieldsForKind` composed with the table above, which is why a
+ * task in step 2 offers `processingTime` and nothing else, and a gateway offers nothing at all.
+ *
+ * With `clase === null` (no IR yet, or an id that is not in it) nothing is filtered by class —
+ * same rule as `fieldsForKind` — and the step's own list is what comes out.
+ */
+export function fieldsForStep(paso: PasoId, clase: ClaseElemento | null): readonly string[] {
+  const delPaso = CAMPOS_DE_PASO[paso];
+  const delTipo = fieldsForKind(clase);
+  if (delTipo === null) return delPaso;
+  // The reserved ones (§ 4) apply to no class and are drawn only when they are already written,
+  // so they survive the filter: otherwise an inherited `priority` would have no step to be
+  // deleted from.
+  return delPaso.filter((campo) => delTipo.includes(campo) || RESERVADOS.has(campo));
 }
 
 /* ------------------------------------------------------------------ *

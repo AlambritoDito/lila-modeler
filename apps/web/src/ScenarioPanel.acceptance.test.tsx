@@ -104,6 +104,21 @@ function pulsar(texto: string): void {
   pulsarEn(document, texto);
 }
 
+/**
+ * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
+ */
+function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+  pulsar(
+    {
+      validation: '1 · Validación del proceso',
+      times: '2 · Análisis de tiempos',
+      resources: '3 · Análisis de recursos',
+      calendars: '4 · Análisis de calendarios',
+    }[paso],
+  );
+}
+
 /** El `<details>` cuyo `<summary>` dice `titulo`: es lo que acota «Añadir» a una sección. */
 function seccion(titulo: string): HTMLElement {
   const encontrada = [...document.querySelectorAll('details')].find(
@@ -223,7 +238,9 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
     pulsar(`${SELECCIONAR}${id}`);
   };
 
-  /* --- La corrida. La unidad primero: a partir de ahí los tiempos se teclean en minutos. --- */
+  /* --- Paso 1 · Validación del proceso. La corrida entera, y la unidad primero: a partir de
+         ahí los tiempos se teclean en minutos. --- */
+  irAPaso('validation');
   elegir('campo-run.baseTimeUnit', 'min');
   teclear('campo-run.duration', '480');
   teclear('campo-run.warmup', '0');
@@ -232,7 +249,8 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
   teclear('campo-run.serviceLevel', '30');
   teclear('campo-run.currency', 'MXN');
 
-  /* --- El calendario de la tienda, como lista (L-V de 08:00 a 16:00). --- */
+  /* --- Paso 4 · Análisis de calendarios: el de la tienda, como lista (L-V de 08:00 a 16:00). --- */
+  irAPaso('calendars');
   anadirClave(es.escenario.seccionCalendarios, 'tienda');
   pulsar(es.escenario.editarComoLista);
   pulsar(es.escenario.anadirEtiqueta('intervals'));
@@ -243,7 +261,8 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
   teclear('campo-calendars.tienda.intervals[0].from', '08:00');
   teclear('campo-calendars.tienda.intervals[0].to', '16:00');
 
-  /* --- Los tres grupos de recursos. --- */
+  /* --- Paso 3 · Análisis de recursos: los tres grupos. --- */
+  irAPaso('resources');
   for (const [clave, nombre, capacidad, coste] of GRUPOS) {
     anadirClave(es.escenario.seccionRecursos, clave);
     teclear(`campo-resources.${clave}.name`, nombre);
@@ -253,25 +272,35 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
     elegir(`campo-resources.${clave}.calendar`, 'tienda');
   }
 
-  /* --- El inicio: llegadas exponenciales de media 6 min, en el calendario de la tienda. --- */
+  /* --- Paso 2 · Análisis de tiempos: las llegadas del inicio y las trece tareas. --- */
+  irAPaso('times');
   seleccionar('StartEvent_Application');
   elegirPorTexto(
     'campo-elements.StartEvent_Application.interTriggerTimer',
     es.escenario.distribuciones['exponential']!,
   );
   teclear('campo-elements.StartEvent_Application.interTriggerTimer.mean', '6');
-  elegir('campo-elements.StartEvent_Application.calendar', 'tienda');
-
-  /* --- Las trece tareas: tiempo constante y un grupo de recursos. --- */
-  for (const [id, minutos, grupo] of TAREAS) {
+  for (const [id, minutos] of TAREAS) {
     seleccionar(id);
     elegirPorTexto(`campo-elements.${id}.processingTime`, es.escenario.distribuciones['constant']!);
     teclear(`campo-elements.${id}.processingTime.value`, minutos);
+  }
+
+  /* --- De vuelta al paso 3: qué grupo hace cada tarea. --- */
+  irAPaso('resources');
+  for (const [id, , grupo] of TAREAS) {
+    seleccionar(id);
     pulsar(es.escenario.anadirEtiqueta(es.escenario.campos['resources']!));
     elegir(`campo-elements.${id}.resources[0].ref`, grupo);
   }
 
-  /* --- Las dos compuertas, desde su vista: la probabilidad de cada rama y su suma. --- */
+  /* --- Y al paso 4: el inicio también atiende en el calendario de la tienda. --- */
+  irAPaso('calendars');
+  seleccionar('StartEvent_Application');
+  elegir('campo-elements.StartEvent_Application.calendar', 'tienda');
+
+  /* --- Las dos compuertas, en el paso 1: su reparto es parte de que el modelo corra. --- */
+  irAPaso('validation');
   seleccionar('Gateway_Bureau');
   teclear('campo-elements.Flow_BureauBad.probability', '0.4');
   teclear('campo-elements.Flow_BureauGood.probability', '0.6');

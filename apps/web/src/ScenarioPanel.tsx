@@ -50,6 +50,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+import { PASO_IDS, type PasoId } from './ids.js';
 import { LaneAssign } from './LaneAssign.js';
 import {
   DESFASES,
@@ -58,7 +59,9 @@ import {
   componerInstante,
   esTiempoEnSegundos,
   esUnidadTiempo,
+  CAMPOS_DE_PASO,
   fieldsForKind,
+  fieldsForStep,
   partesInstante,
   repartoXor,
   type ClaseElemento,
@@ -908,11 +911,19 @@ function Propiedades({
   ruta,
   ctx,
   visibles,
+  siDefinido,
 }: {
   esquema: EsquemaJson;
   ruta: Ruta;
   ctx: Contexto;
   visibles?: readonly string[] | null;
+  /**
+   * Which of the already-written fields may still be drawn although `visibles` leaves them out.
+   * Without it the escape hatch below would leak every parameterised field into every step of
+   * #333: a task with `resources` would show them in the time step too. `undefined` means "all
+   * of them", which is the behaviour of #332 and what the sections outside the steps keep.
+   */
+  siDefinido?: readonly string[] | null;
 }): React.JSX.Element {
   const S = useStrings();
   const requeridos = new Set(esquema.required ?? []);
@@ -924,7 +935,8 @@ function Propiedades({
           ([clave]) =>
             visibles == null ||
             visibles.includes(clave) ||
-            leer(ctx.resuelto, [...ruta, clave]) !== undefined,
+            ((siDefinido == null || siDefinido.includes(clave)) &&
+              leer(ctx.resuelto, [...ruta, clave]) !== undefined),
         )
         .map(([clave, sub]) => (
           <Fragment key={clave}>
@@ -1377,6 +1389,149 @@ function VistaCompuerta({
 }
 
 /* ------------------------------------------------------------------ *
+ * #333: the four steps of the Simulate panel
+ * ------------------------------------------------------------------ */
+
+/**
+ * The step bar: Bizagi's four levels of simulation, in order, as the only navigation of the
+ * panel.
+ *
+ * They are buttons and not tabs on purpose — a step is a filter over one document, not a
+ * different document — and each carries `aria-pressed` (this one is the one chosen) plus
+ * `aria-current="step"` (this one is where you are in the sequence), which is what a screen
+ * reader needs to announce "step 3 of 4, pressed".
+ *
+ * ponytail: there are exactly four, with no "All" that shows every section at once. The ceiling
+ * is someone who knew the old single list and wants it back; the upgrade path is a fifth id in
+ * `PASO_IDS` whose `fieldsForStep` is the union of the four, which is a dozen lines the day
+ * anybody actually asks for it.
+ */
+function BarraPasos({
+  paso,
+  onPaso,
+}: {
+  paso: PasoId;
+  onPaso: (paso: PasoId) => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  return (
+    <>
+      <nav className="pasos" aria-label={S.escenario.pasos}>
+        {PASO_IDS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={p === paso ? 'paso activo' : 'paso'}
+            aria-pressed={p === paso}
+            aria-current={p === paso ? 'step' : undefined}
+            onClick={() => {
+              onPaso(p);
+            }}
+          >
+            {S.escenario.paso[p]}
+          </button>
+        ))}
+      </nav>
+      <p className="ayuda">{S.escenario.pasoAyuda[paso]}</p>
+    </>
+  );
+}
+
+/**
+ * A distribution as one line: «Constant 5 min», «Uniform 1 / 5 min», or «—» when there is none.
+ *
+ * The unit is `run.baseTimeUnit` and it is written once at the end, because every time parameter
+ * of the same distribution shares it (R1, R2). Counts and shapes (`k`, `alpha`, `n`) are printed
+ * as they are: `esTiempoEnSegundos` is the same table the form uses to decide what to scale.
+ */
+function resumenDistribucion(
+  id: string,
+  campo: string,
+  valor: unknown,
+  unidad: UnidadTiempo,
+  S: ReturnType<typeof useStrings>,
+): string {
+  if (!esObjeto(valor) || typeof valor['type'] !== 'string') return S.escenario.sinResumen;
+  const etiqueta = S.escenario.distribuciones[valor['type']] ?? valor['type'];
+  let hayTiempo = false;
+  const numeros: string[] = [];
+  for (const [clave, sub] of Object.entries(valor)) {
+    if (clave === 'type' || typeof sub !== 'number') continue;
+    if (esTiempoEnSegundos(['elements', id, campo, clave])) {
+      hayTiempo = true;
+      numeros.push(String(aUnidad(sub, unidad)));
+    } else {
+      numeros.push(String(sub));
+    }
+  }
+  if (numeros.length === 0) return etiqueta;
+  return `${etiqueta} ${numeros.join(' / ')}${hayTiempo ? ` ${S.escenario.unidades[unidad]}` : ''}`;
+}
+
+/** `elements[id].resources` as one line: «cashier ×1, till ×2», or «—» when there is none. */
+function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>): string {
+  if (!Array.isArray(valor) || valor.length === 0) return S.escenario.sinResumen;
+  return valor
+    .map((entrada) => {
+      if (!esObjeto(entrada) || typeof entrada['ref'] !== 'string') return S.escenario.sinResumen;
+      const cantidad = typeof entrada['quantity'] === 'number' ? entrada['quantity'] : 1;
+      return S.escenario.resumenAsignacion(entrada['ref'], cantidad);
+    })
+    .join(', ');
+}
+
+/**
+ * The elements a step is about, with what is already written on each one.
+ *
+ * This is the half of the step the selected-element form cannot give: the form answers "what does
+ * this task take", the list answers "which tasks have nothing yet", which is the question you
+ * actually have while filling in a level. A row selects the element on the canvas, so the list is
+ * also a way of walking the diagram without hunting for boxes.
+ *
+ * The button's text is the **id** and only the id: it is the key of the scenario, and it is what
+ * the tests and the e2e click by.
+ */
+function ListaElementos({
+  titulo,
+  ids,
+  nombre,
+  resumen,
+  seleccion,
+  onSeleccionar,
+}: {
+  titulo: string;
+  ids: readonly string[];
+  nombre: (id: string) => string | null;
+  resumen: (id: string) => string;
+  seleccion: string | null;
+  onSeleccionar: (id: string) => void;
+}): React.JSX.Element | null {
+  if (ids.length === 0) return null;
+  return (
+    <div className="lista-paso">
+      <p className="etiqueta">{titulo}</p>
+      <ul className="ids">
+        {ids.map((id) => (
+          <li key={id} className={id === seleccion ? 'activa' : undefined}>
+            <button
+              type="button"
+              className="enlace"
+              onClick={() => {
+                onSeleccionar(id);
+              }}
+            >
+              {id}
+            </button>
+            {nombre(id) !== null && <span className="nombre"> {nombre(id)}</span>}
+            <span className="resumen">{resumen(id)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * #332: la vista avanzada, que es el JSON crudo del archivo en edición
  * ------------------------------------------------------------------ */
 
@@ -1476,6 +1631,12 @@ export function ScenarioPanel({
   onSeleccionar,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
+  /**
+   * #333: the step being filled in. It lives here and not in the shell because it is a view of
+   * this panel and of nothing else, and because keeping it here is what makes it survive picking
+   * an element on the canvas and a whole run finishing: both of them only re-render the panel.
+   */
+  const [paso, setPaso] = useState<PasoId>('validation');
   // The engine takes the language as a value, not as a catalog: `useLocale()` is what makes the
   // memoised lint below recompute when the app switches language.
   const locale = useLocale();
@@ -1618,6 +1779,16 @@ export function ScenarioPanel({
     return nombre !== undefined && nombre !== '' ? nombre : null;
   }
 
+  /** The ids of the IR whose node type is one of `tipos`, in the order the diagram declares. */
+  function idsPorTipo(tipos: readonly ClaseElemento[]): readonly string[] {
+    if (ir === null) return [];
+    return Object.entries(ir.nodes)
+      .filter(([, nodo]) => tipos.includes(nodo.type as ClaseElemento))
+      .map(([id]) => id);
+  }
+
+  const unidad = unidadBase(ctx);
+
   return (
     <div className="escenario">
       <div className="escenario-cabecera">
@@ -1647,34 +1818,51 @@ export function ScenarioPanel({
       )}
       <Problemas ruta={['extends']} ctx={ctx} />
 
-      <details open>
-        <summary>{S.escenario.seccionCorrida}</summary>
-        <Propiedades esquema={esquemaDe('run')} ruta={['run']} ctx={ctx} />
-        <Problemas ruta={['run']} ctx={ctx} />
-      </details>
+      <BarraPasos paso={paso} onPaso={setPaso} />
 
-      <details>
-        <summary>{S.escenario.seccionCalendarios}</summary>
-        <Campo
-          esquema={esquemaDe('calendars')}
-          ruta={['calendars']}
-          etiqueta="calendars"
-          requerido={false}
-          ctx={ctx}
-        />
-      </details>
+      {/* Step 1 · Process validation: the run window and the arrivals count. `run` is whole here
+          because every one of its fields answers "does this model run and for how long". */}
+      {paso === 'validation' && (
+        <details open>
+          <summary>{S.escenario.seccionCorrida}</summary>
+          <Propiedades esquema={esquemaDe('run')} ruta={['run']} ctx={ctx} />
+          <Problemas ruta={['run']} ctx={ctx} />
+        </details>
+      )}
 
-      <details>
-        <summary>{S.escenario.seccionRecursos}</summary>
-        <Campo
-          esquema={esquemaDe('resources')}
-          ruta={['resources']}
-          etiqueta="resources"
-          requerido={false}
-          ctx={ctx}
-        />
-        <LaneAssign ir={ir} ctx={ctx} />
-      </details>
+      {/* Step 4 · Calendar analysis: the weekly grids. */}
+      {paso === 'calendars' && (
+        <details open>
+          <summary>{S.escenario.seccionCalendarios}</summary>
+          <Campo
+            esquema={esquemaDe('calendars')}
+            ruta={['calendars']}
+            etiqueta="calendars"
+            requerido={false}
+            ctx={ctx}
+          />
+        </details>
+      )}
+
+      {/* The pools belong to step 3, and they show up in step 4 as well because a pool's
+          `calendar` and its per-shift `capacity` are edited inside this same editor — they are
+          Bizagi's «resource × calendar» quantities, which is level 4 and not level 3.
+          ponytail: the ceiling is that step 4 shows the pool's other fields too (its name, its
+          cost); filtering them would mean threading `visibles` through the record branch of
+          `Campo`, which is a lot of plumbing for four fields that nobody is hurt by seeing. */}
+      {(paso === 'resources' || paso === 'calendars') && (
+        <details open>
+          <summary>{S.escenario.seccionRecursos}</summary>
+          <Campo
+            esquema={esquemaDe('resources')}
+            ruta={['resources']}
+            etiqueta="resources"
+            requerido={false}
+            ctx={ctx}
+          />
+          <LaneAssign ir={ir} ctx={ctx} />
+        </details>
+      )}
 
       <details open>
         <summary>{S.escenario.seccionElemento}</summary>
@@ -1706,13 +1894,49 @@ export function ScenarioPanel({
               esquema={esquemaEntrada(esquemaDe('elements'))}
               ruta={['elements', idSeleccionado]}
               ctx={ctx}
-              visibles={fieldsForKind(clase)}
+              visibles={fieldsForStep(paso, clase)}
+              siDefinido={CAMPOS_DE_PASO[paso]}
             />
             <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
-            {ir !== null && (clase === 'xor' || clase === 'or') && (
+            {/* The gateway is where the branching is parameterised, and branching is step 1:
+                what a gateway needs to be runnable is that its outgoing flows add up. */}
+            {paso === 'validation' && ir !== null && (clase === 'xor' || clase === 'or') && (
               <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} />
             )}
           </>
+        )}
+
+        {/* Steps 2 and 3 list the elements they are about with what is already written on each,
+            selected or not: «which task still has no time» is the question of the step, and the
+            form of one element cannot answer it. */}
+        {paso === 'times' && (
+          <ListaElementos
+            titulo={S.escenario.listaTiempos}
+            ids={idsPorTipo(['start', 'task', 'timer'])}
+            nombre={nombreElemento}
+            resumen={(id) => {
+              const campo = ir?.nodes[id]?.type === 'start' ? 'interTriggerTimer' : 'processingTime';
+              return resumenDistribucion(
+                id,
+                campo,
+                leer(resuelto, ['elements', id, campo]),
+                unidad,
+                S,
+              );
+            }}
+            seleccion={idSeleccionado}
+            onSeleccionar={onSeleccionar}
+          />
+        )}
+        {paso === 'resources' && (
+          <ListaElementos
+            titulo={S.escenario.listaRecursos}
+            ids={idsPorTipo(['task'])}
+            nombre={nombreElemento}
+            resumen={(id) => resumenRecursos(leer(resuelto, ['elements', id, 'resources']), S)}
+            seleccion={idSeleccionado}
+            onSeleccionar={onSeleccionar}
+          />
         )}
       </details>
 
@@ -1723,6 +1947,9 @@ export function ScenarioPanel({
         }}
       />
 
+      {/* The validation list is live in **every** step, not only in step 1: a resource you break
+          in step 3 has to be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this
+          ("the validation list at the bottom of the panel is live in every step"). */}
       {problemas.length > 0 && (
         <details>
           <summary>{S.escenario.seccionValidacion(errores)}</summary>

@@ -107,6 +107,21 @@ function pulsar(texto: string): void {
   });
 }
 
+/**
+ * #333: the panel opens on step 1, so a section of another step has to be asked for first. The
+ * label is written by hand —this is a test— and is the English one `setLocale` pins.
+ */
+function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+  pulsar(
+    {
+      validation: '1 · Process validation',
+      times: '2 · Time analysis',
+      resources: '3 · Resource analysis',
+      calendars: '4 · Calendar analysis',
+    }[paso],
+  );
+}
+
 const ARCHIVO = 'as-is.scenario.json';
 
 function Anfitrion({ inicial }: { inicial: Json }): React.JSX.Element {
@@ -150,6 +165,7 @@ describe('acceptance of LILA-334', () => {
     const inicial = sinRecursos(asIs);
     actual = inicial;
     montar(<Anfitrion inicial={inicial} />);
+    irAPaso('resources');
 
     asignar('Account Executive', 'executive');
     asignar('Credit Analyst', 'analyst');
@@ -164,6 +180,7 @@ describe('acceptance of LILA-334', () => {
     const inicial = sinRecursos(asIs);
     actual = inicial;
     montar(<Anfitrion inicial={inicial} />);
+    irAPaso('resources');
     asignar('Credit Analyst', 'analyst');
     for (const id of Object.keys(recursos(actual))) expect(ir.nodes[id]?.type).toBe('task');
   });
@@ -177,6 +194,7 @@ describe('overwriting an assigned lane', () => {
   it('lists the assigned tasks and does nothing until «Overwrite»', () => {
     actual = asIs;
     montar(<Anfitrion inicial={asIs} />);
+    irAPaso('resources');
 
     asignar('Credit Analyst', 'executive');
     // Nothing written yet: the scenario is still the file as it shipped.
@@ -199,6 +217,7 @@ describe('overwriting an assigned lane', () => {
   it('«Cancel» leaves the scenario untouched and closes the list', () => {
     actual = asIs;
     montar(<Anfitrion inicial={asIs} />);
+    irAPaso('resources');
 
     asignar('Credit Analyst', 'executive');
     pulsar(en.escenario.carrilCancelar);
@@ -211,6 +230,7 @@ describe('overwriting an assigned lane', () => {
   it('changing the lane or the pool cancels a pending confirmation', () => {
     actual = asIs;
     montar(<Anfitrion inicial={asIs} />);
+    irAPaso('resources');
 
     asignar('Credit Analyst', 'executive');
     elegir('carril-a-pool-pool', 'analyst');

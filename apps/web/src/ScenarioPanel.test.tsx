@@ -135,6 +135,21 @@ function pulsar(texto: string): void {
 }
 
 /**
+ * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
+ */
+function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+  pulsar(
+    {
+      validation: '1 · Validación del proceso',
+      times: '2 · Análisis de tiempos',
+      resources: '3 · Análisis de recursos',
+      calendars: '4 · Análisis de calendarios',
+    }[paso],
+  );
+}
+
+/**
  * Un trazo de la rejilla semanal: `pointerdown` en la primera celda y, para cada salto, un
  * `pointerout` de la celda anterior con la siguiente en `relatedTarget`. Es de ahí de donde React
  * sintetiza `onPointerEnter`: su plugin de enter/leave se desentiende del `pointerover` cuando el
@@ -259,6 +274,7 @@ describe('aceptación de LILA-061', () => {
       />,
     );
 
+    irAPaso('resources');
     teclear('campo-resources.cajero.capacity', '3');
     pulsar('Guardar');
 
@@ -405,6 +421,7 @@ describe('uniones del esquema', () => {
       />,
     );
     pulsar('Task_TomarPedido');
+    irAPaso('times');
     const selector = document.getElementById(
       'campo-elements.Task_TomarPedido.processingTime',
     ) as HTMLSelectElement;
@@ -496,6 +513,7 @@ describe('extends', () => {
     );
 
     pulsar('Task_TomarPedido');
+    irAPaso('resources');
     teclear('campo-elements.Task_TomarPedido.resources[0].quantity', '2');
     pulsar('Guardar');
 
@@ -593,6 +611,7 @@ describe('capacidad de recursos: Fija y Por turno', () => {
       />,
     );
 
+    irAPaso('resources');
     // `horno` no trae `calendar` de pool (R16 los hace excluyentes): es el candidato limpio.
     const variante = 'campo-resources.horno.capacity-variante';
     elegir(variante, 'turno');
@@ -683,7 +702,9 @@ describe('campos reservados: quitar heredado', () => {
       />,
     );
 
-    // Estado visible antes de tocar nada: heredado del padre, con su valor.
+    // Estado visible antes de tocar nada: heredado del padre, con su valor. `priority` es de un
+    // pool, y los pools viven en el paso 3 desde #333.
+    irAPaso('resources');
     expect(document.body.textContent).toContain('heredado: 1');
 
     pulsar('Quitar heredado');
@@ -780,6 +801,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
 
     // Sábado 09:00 y, arrastrando sin soltar, 10:00: el gesto del artboard, sin librería.
     arrastrar(['SAT 09:00', 'SAT 10:00']);
@@ -819,6 +841,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
     expect(document.body.textContent).toContain(
       'este calendario tiene franjas de minutos; edítalo como lista',
     );
@@ -838,6 +861,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
     expect(document.querySelector('.calendario')).not.toBeNull();
     pulsar('Editar como lista');
     expect(document.querySelector('.calendario')).toBeNull();
@@ -860,6 +884,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
     arrastrarRapido(['SAT 09:00', 'SAT 10:00', 'SAT 11:00', 'SAT 12:00']);
     pulsar('Guardar');
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
@@ -913,6 +938,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
     // El hijo no declara `calendars`: la rejilla enseña el del padre (§ 6, resuelto).
     arrastrar(['SAT 09:00']);
     pulsar('Guardar');
@@ -950,6 +976,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
         irActual={ir}
       />,
     );
+    irAPaso('calendars');
     arrastrar(['MON 09:00']);
     pulsar('Guardar');
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({ intervals: [] });
@@ -1010,6 +1037,7 @@ describe('resto de LILA-203', () => {
         irActual={ir}
       />,
     );
+    irAPaso('resources');
     const selector = document.getElementById('campo-resources.horno.capacity-variante');
     expect(selector).toBeInstanceOf(HTMLSelectElement);
     expect([...(selector as HTMLSelectElement).options].map((o) => o.text)).toEqual([

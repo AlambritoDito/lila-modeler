@@ -792,6 +792,56 @@ body {
   margin-top: 6px;
 }
 
+/* #333: la barra de los cuatro pasos del panel de simulación. Horizontal y compacta, y con
+   `flex-wrap` porque el panel derecho se puede estrechar hasta que los cuatro rótulos no caben:
+   entonces se parten en dos filas en vez de recortarse o desbordar. */
+.escenario .pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 4px;
+}
+
+.escenario .paso {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9em;
+  padding: calc(4px * var(--espacio, 1)) 8px;
+}
+
+.escenario .paso.activa {
+  background: var(--bg-surface);
+  border-color: var(--accent-tertiary);
+  color: var(--fg-primary);
+}
+
+/* Lista de elementos del paso (tiempos, recursos): el resumen a la derecha, alineado. */
+.escenario .lista-paso {
+  margin-top: 8px;
+}
+
+.escenario .lista-paso li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.escenario .lista-paso li.activa {
+  background: var(--bg-elevated);
+}
+
+.escenario .lista-paso .resumen {
+  color: var(--fg-muted);
+  margin-left: auto;
+}
+
+.escenario .lista-paso .nombre {
+  color: var(--fg-muted);
+}
+
 /* #332: la unidad de una duración y la ayuda breve de un campo del escenario. */
 .escenario .unidad {
   color: var(--fg-muted);

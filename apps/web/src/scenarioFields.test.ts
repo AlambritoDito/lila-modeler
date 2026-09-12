@@ -14,10 +14,13 @@ import {
   componerInstante,
   esTiempoEnSegundos,
   esUnidadTiempo,
+  CAMPOS_DE_PASO,
   fieldsForKind,
+  fieldsForStep,
   partesInstante,
   repartoXor,
 } from './scenarioFields';
+import { PASO_IDS } from './ids';
 
 describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
   it('una tarea ofrece su tiempo y sus recursos, y nunca los de un inicio ni la probabilidad', () => {
@@ -93,6 +96,63 @@ describe('unidad de presentación (R1, R2)', () => {
     expect(['s', 'min', 'h', 'day'].every(esUnidadTiempo)).toBe(true);
     expect(esUnidadTiempo('week')).toBe(false);
     expect(esUnidadTiempo(undefined)).toBe(false);
+  });
+});
+
+/** Los reservados de § 4 salen en el paso 1 de cualquier clase (se dibujan solo si están). */
+const RESERVADOS = ['priority', 'preempt', 'batch', 'conditions'];
+
+function sinReservados(campos: readonly string[]): readonly string[] {
+  return campos.filter((campo) => !RESERVADOS.includes(campo));
+}
+
+describe('fieldsForStep (#333: los cuatro niveles de Bizagi como cuatro pasos)', () => {
+  it('una tarea enseña su tiempo en el paso 2 y sus recursos en el 3, nunca a la vez', () => {
+    expect(fieldsForStep('times', 'task')).toEqual(['processingTime']);
+    expect(fieldsForStep('resources', 'task')).toEqual(['resources', 'selection', 'fixedCost']);
+    expect(fieldsForStep('times', 'task')).not.toContain('resources');
+    expect(fieldsForStep('resources', 'task')).not.toContain('processingTime');
+    expect(fieldsForStep('calendars', 'task')).toEqual(['calendar']);
+  });
+
+  it('las dos llegadas de un inicio se reparten: cuántas en el paso 1, cada cuánto en el 2', () => {
+    expect(sinReservados(fieldsForStep('validation', 'start'))).toEqual(['triggerCount']);
+    expect(fieldsForStep('times', 'start')).toEqual(['interTriggerTimer']);
+  });
+
+  it('un flujo lleva su probabilidad al paso 1, que es donde se valida el reparto', () => {
+    expect(sinReservados(fieldsForStep('validation', 'flow'))).toEqual(['probability']);
+    for (const paso of ['times', 'resources', 'calendars'] as const) {
+      expect(fieldsForStep(paso, 'flow')).toEqual([]);
+    }
+  });
+
+  it('una compuerta no tiene campos propios en ningún paso', () => {
+    for (const paso of PASO_IDS) expect(sinReservados(fieldsForStep(paso, 'xor'))).toEqual([]);
+  });
+
+  it('sin IR se ofrece el paso entero: filtrar por una clase que no se conoce sería inventar', () => {
+    for (const paso of PASO_IDS) expect(fieldsForStep(paso, null)).toEqual(CAMPOS_DE_PASO[paso]);
+  });
+
+  it('los reservados de § 4 sobreviven al filtro, o no habría paso desde el que borrarlos', () => {
+    // No los declara ninguna clase, así que sin la excepción se volverían invisibles: un
+    // `priority` heredado se quedaría escrito para siempre, con su error y sin botón.
+    for (const reservado of RESERVADOS) {
+      expect(fieldsForStep('validation', 'task')).toContain(reservado);
+    }
+  });
+
+  it('cada campo del esquema pertenece exactamente a un paso', () => {
+    const delEsquema = Object.keys(ElementSchema.shape);
+    for (const campo of delEsquema) {
+      const pasos = PASO_IDS.filter((paso) => CAMPOS_DE_PASO[paso].includes(campo));
+      expect(pasos, campo).toHaveLength(1);
+    }
+    // Y ningún paso ofrece algo que el esquema no tenga.
+    for (const paso of PASO_IDS) {
+      for (const campo of CAMPOS_DE_PASO[paso]) expect(delEsquema).toContain(campo);
+    }
   });
 });
 
