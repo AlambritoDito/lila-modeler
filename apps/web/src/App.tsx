@@ -27,6 +27,9 @@ import type { SaveOutcome, Ajustes, MenuAction, OpenPathRequest } from '../../de
 import type { Corrida } from './BottleneckOverlay';
 import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
+import { buildReplay, LOG_SAMPLE_LIMIT } from './replay/replayModel';
+import { Replay } from './replay/Replay';
+import type { EventLogRow } from '@lila/engine';
 import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
@@ -325,6 +328,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // resultado llega tarde y pinta el overlay del escenario **anterior** sobre el selector nuevo
   // — justo lo contrario de la aceptación de LILA-064, y verificado en navegador.
   const enVuelo = useRef<AbortController | null>(null);
+  /**
+   * Event log of each run, by run id (#331). It is memory only, on purpose: `StoredRun` and the
+   * `.lila` container carry the `RunResult`, not the log — up to ten thousand rows per run would
+   * multiply the size of a saved project for something only the replay reads.
+   *
+   * // ponytail: reopening a `.lila` therefore animates nothing until the scenario is run again,
+   * // which is what `S.animacion.sinLog` says. Upgrade path: an optional `log.jsonl` entry in
+   * // the container, gated by a setting.
+   */
+  const logs = useRef(new Map<string, { rows: readonly EventLogRow[]; truncated: boolean }>());
 
   const currentToken = changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
   const dirty = currentToken !== savedToken;
@@ -338,11 +351,29 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const ordered = [...latest].sort((a, b) => Number(b.scenarioName === baseId) - Number(a.scenarioName === baseId));
   const comparable = ordered.length >= 2 && ordered.some((r) => r.scenarioName === baseId);
 
+  /** Última corrida válida del escenario elegido: la que pintan el overlay y la animación (#331). */
+  const corridaActual = useMemo(
+    () => [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
+      && r.inputs.scenarioRevision === (scenarioRevisions[escenarioId] ?? 0)),
+    [runs, escenarioId, revision, scenarioRevisions],
+  );
+
   useEffect(() => {
-    const run = [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
-      && r.inputs.scenarioRevision === (scenarioRevisions[escenarioId] ?? 0));
+    const run = corridaActual;
     setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
-  }, [runs, escenarioId, revision, scenarioRevisions, ir]);
+  }, [corridaActual, ir]);
+
+  /**
+   * Replay of that run's event log, or `null` when there is no run for the scenario or the log is
+   * no longer in memory (a project reopened from a file). Rebuilt only when the run changes: it
+   * walks the log once, and the clock of `Replay.tsx` reads it without touching the engine.
+   */
+  const replay = useMemo(() => {
+    const log = corridaActual === undefined ? undefined : logs.current.get(corridaActual.id);
+    if (log === undefined || ir === null || corridaActual === undefined) return null;
+    return buildReplay(log.rows, ir, corridaActual.inputs.scenario as unknown as ResolvedScenario,
+      { truncated: log.truncated });
+  }, [corridaActual, ir]);
 
   useEffect(() => { adapter?.setDirty?.(dirty); }, [adapter, dirty]);
   useEffect(() => {
@@ -509,7 +540,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => {
     // El idioma está en las dependencias porque la etiqueta del overlay se escribe en el lienzo,
     // fuera de React: sin esto se quedaría en el idioma en el que se pintó (LILA-210).
-    modelador?.cuellos(corrida, modo !== 'rutas' && verCuellos);
+    modelador?.cuellos(corrida, modo !== 'rutas' && modo !== 'animar' && verCuellos);
   }, [modelador, corrida, verCuellos, modo, locale]);
 
   /**
@@ -546,7 +577,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Same reason as the overlay for carrying the locale: the `title` of the disc is written by
     // `ValidationMarkers` onto the canvas DOM. The messages inside are the engine's, and since
     // #280 `validacion` is already recomputed in the active locale (see the `useMemo` above).
-    modelador?.validacion(modo === 'rutas' ? null : validacion);
+    modelador?.validacion(modo === 'rutas' || modo === 'animar' ? null : validacion);
   }, [modelador, validacion, modo, locale]);
 
   useEffect(() => {
@@ -746,8 +777,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
       const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
-      const { result: rawResult } = await runInWorker(ir, scenario, {
+      const { result: rawResult, logSample } = await runInWorker(ir, scenario, {
         locale,
+        logSampleLimit: LOG_SAMPLE_LIMIT,
         signal: control.signal,
         onProgress: (progreso) => {
           if (!control.signal.aborted && enVuelo.current === control) setSim({ progreso, tipo: 'simulando' });
@@ -756,8 +788,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (control.signal.aborted || enVuelo.current !== control || modelRevision !== revisionRef.current) return;
       const result = { ...rawResult, warnings: [...new Set([...warnings, ...rawResult.warnings])] };
       setIr(ir);
+      const runId = crypto.randomUUID();
+      logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT });
       setRuns((previous) => [...previous, {
-        id: crypto.randomUUID(), scenarioName: escenarioId, result,
+        id: runId, scenarioName: escenarioId, result,
         inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
       }]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
@@ -979,7 +1013,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'resultados' && (
         <section className="zona-resultados">
           {corrida !== null && ir !== null
-            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} />
+            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} />
             : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}
@@ -1003,6 +1037,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}</p>)}
       </section>}
       <aside className="panel" inert={ioBusy}>
+        {/* En «Animar» el panel entero son los controles de la reproducción: las pestañas de
+            propiedades no tienen nada que decir sobre una corrida que ya terminó (#331). */}
+        {modo === 'animar' ? (
+          <Replay
+            modelador={modelador}
+            replay={replay}
+            originalIds={ir?.source.originalIds ?? {}}
+            motivo={corridaActual === undefined ? S.animacion.sinCorrida : S.animacion.sinLog}
+          />
+        ) : <>
         <nav className="pestanas">
           {PESTANA_IDS.map((p) => (
             <button
@@ -1094,6 +1138,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         ) : (
           <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
         )}
+        </>}
       </aside>
 
       <nav className="diagramas">

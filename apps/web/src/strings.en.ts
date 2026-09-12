@@ -53,6 +53,7 @@ export const en = {
       simular: 'Simulate',
       resultados: 'Results',
       comparar: 'Compare',
+      animar: 'Animate',
       rutas: 'Validate paths',
     },
     /** Label of each tab of the right panel; the id comes from `ids.ts` (`PESTANA_IDS`). */
@@ -699,6 +700,50 @@ export const en = {
       `The scenario points at ${delEscenario}, but the active model is ${activo}.`,
     errorExportacionBloqueada: (detalle: string): string =>
       `Export blocked by lost content:\n${detalle}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Replay of the event log on the diagram (#331)
+   * ------------------------------------------------------------------ */
+  animacion: {
+    titulo: 'Replay',
+    /** Button of the results header that jumps into the replay mode. */
+    reproducirDesdeResultados: 'Play',
+    reproducir: 'Play',
+    pausar: 'Pause',
+    reiniciar: 'Reset',
+    velocidad: 'Speed',
+    /** Simulated seconds per second of real time; `instantanea` jumps straight to the end. */
+    velocidades: {
+      '1': '1x',
+      '10': '10x',
+      '60': '60x',
+      '600': '600x',
+      instantanea: 'Instant',
+    },
+    /** Counter painted over each element: enabled / completed, with the queue in brackets. */
+    contador: (iniciados: number, completados: number, cola: number): string =>
+      `${iniciados}/${completados}${cola > 0 ? ` (${cola})` : ''}`,
+    contadorTitulo: (iniciados: number, completados: number, cola: number, activos: number): string =>
+      `Started ${iniciados} · completed ${completados} · queued ${cola} · in progress ${activos}`,
+    /** Simulated clock: the date of the scenario plus the elapsed time of the replication. */
+    reloj: (fecha: string): string => `Simulated time ${fecha}`,
+    /** Same clock when the scenario has no start date: only the elapsed time. */
+    relojSinFecha: (dia: number, hora: string): string => `Day ${dia}, ${hora} into the run`,
+    recursos: 'Pools',
+    columnaRecurso: 'Pool',
+    columnaOcupados: 'Busy',
+    columnaCapacidad: 'Capacity',
+    /** Which replication is on screen; totals of a multi-replication run are means, this is not. */
+    replicacion: (total: number): string =>
+      `Replication 1 of ${total}: the counters on the diagram are for this replication only.`,
+    truncado: (filas: number): string =>
+      `Only the first ${filas} log rows were kept, so the tail of the replication is missing from the replay.`,
+    /** No run for the selected scenario, or a run whose log is no longer in memory. */
+    sinCorrida: 'Run the simulation to animate the selected scenario.',
+    sinLog: 'This run has no event log in memory (it came from a saved file): run the simulation again to animate it.',
+    fin: 'End of the replication.',
+    progreso: (porcentaje: number): string => `${porcentaje}% of the replication`,
   },
 
   /* ------------------------------------------------------------------ *

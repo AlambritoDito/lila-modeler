@@ -39,6 +39,7 @@ export const es: Strings = {
       simular: 'Simular',
       resultados: 'Resultados',
       comparar: 'Comparar',
+      animar: 'Animar',
       rutas: 'Validar rutas',
     },
     /** Rótulo de cada pestaña del panel derecho; el id lo fija `ids.ts` (`PESTANA_IDS`). */
@@ -724,6 +725,43 @@ export const es: Strings = {
       `El escenario apunta a ${delEscenario}, pero el modelo activo es ${activo}.`,
     errorExportacionBloqueada: (detalle: string): string =>
       `Exportación bloqueada por contenido perdido:\n${detalle}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Animación del event log sobre el diagrama (#331)
+   * ------------------------------------------------------------------ */
+  animacion: {
+    titulo: 'Animación',
+    reproducirDesdeResultados: 'Reproducir',
+    reproducir: 'Reproducir',
+    pausar: 'Pausar',
+    reiniciar: 'Reiniciar',
+    velocidad: 'Velocidad',
+    velocidades: {
+      '1': '1x',
+      '10': '10x',
+      '60': '60x',
+      '600': '600x',
+      instantanea: 'Instantánea',
+    },
+    contador: (iniciados: number, completados: number, cola: number): string =>
+      `${iniciados}/${completados}${cola > 0 ? ` (${cola})` : ''}`,
+    contadorTitulo: (iniciados: number, completados: number, cola: number, activos: number): string =>
+      `Iniciados ${iniciados} · completados ${completados} · en cola ${cola} · en curso ${activos}`,
+    reloj: (fecha: string): string => `Tiempo simulado ${fecha}`,
+    relojSinFecha: (dia: number, hora: string): string => `Día ${dia}, ${hora} de corrida`,
+    recursos: 'Pools',
+    columnaRecurso: 'Pool',
+    columnaOcupados: 'Ocupados',
+    columnaCapacidad: 'Capacidad',
+    replicacion: (total: number): string =>
+      `Replicación 1 de ${total}: los conteos del diagrama son solo de esta replicación.`,
+    truncado: (filas: number): string =>
+      `Solo se guardaron las primeras ${filas} filas del log, así que a la animación le falta el final de la replicación.`,
+    sinCorrida: 'Simula el escenario elegido para poder animarlo.',
+    sinLog: 'Esta corrida no tiene event log en memoria (viene de un archivo guardado): vuelve a simular para animarla.',
+    fin: 'Fin de la replicación.',
+    progreso: (porcentaje: number): string => `${porcentaje}% de la replicación`,
   },
 
   /* ------------------------------------------------------------------ *
