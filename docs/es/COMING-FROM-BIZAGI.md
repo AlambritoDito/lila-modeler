@@ -183,7 +183,7 @@ Cuatro cosas menores que conviene saber antes de comparar números contra una co
   justo eso. Usa 30 réplicas y lee el intervalo de confianza.
 
 Las cuatro están documentadas, con cifras, en
-[el checklist de comportamiento de referencia](BIZAGI_PARITY.md).
+[el checklist de comportamiento de referencia](BIZAGI_PARITY.md#diferencias-documentadas-lila-044-corregidas-en-lila-187).
 
 ## Pruébalo: el ejemplo de nivel 3 publicado por Bizagi
 
@@ -194,10 +194,10 @@ En la app web ([build de Pages](https://alambritodito.github.io/lila-modeler/app
 escritorio el ejemplo se abre como diagrama más un escenario pegado, porque un proyecto `.lila`
 necesita además un manifiesto que el repositorio no trae para este ejemplo:
 
-1. File → **Open .bpmn**, elige `examples/bizagi-levels/level-3/model.bpmn`.
-2. Ve a **Simulate**, abre **Avanzado: JSON del escenario** al final del paso 1, sustituye su texto
+1. Archivo → **Abrir .bpmn**, elige `examples/bizagi-levels/level-3/model.bpmn`.
+2. Ve a **Simular**, abre **Avanzado: JSON del escenario** al final del paso 1, sustituye su texto
    por el contenido de `examples/bizagi-levels/level-3/scenario.json` y pulsa **Aplicar**.
-3. Pon Replications en 30 en el paso 1 y pulsa **Run simulation**.
+3. Pon Réplicas en 30 en el paso 1 y pulsa **Ejecutar simulación**.
 
 La misma corrida desde la CLI, desde la raíz del repositorio:
 
