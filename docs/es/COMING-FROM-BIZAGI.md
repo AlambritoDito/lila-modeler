@@ -48,7 +48,7 @@ turno se editan dentro del pool y son nivel 4, no nivel 3.
 ## Pantalla por pantalla
 
 La correspondencia campo a campo — Lila ↔ BPSim 2.0 ↔ qbp ↔ Bizagi Modeler — está en una sola tabla
-en [`SCENARIO_FORMAT.md` § 8](SCENARIO_FORMAT.md); esta sección es su versión a nivel de pantalla.
+en [`SCENARIO_FORMAT.md` § 8](SCENARIO_FORMAT.md#8-mapeo-campo--bpsim-20--qbp--bizagi); esta sección es su versión a nivel de pantalla.
 
 ### Propiedades del escenario
 
@@ -136,7 +136,7 @@ que puedas comparar números sin traducir encabezados (el mapa completo está en
 | Process elements | mismo nombre; Instances started/completed, tiempo mínimo/máximo/medio/total, las mismas cinco columnas «waiting for resource» y el costo fijo total |
 | Resources | mismo nombre; Utilization (%), Fixed cost, Unit cost, Total cost — una fila por pool, incluidos los que quedan al 0 % |
 | Sequence flows | mismo nombre; instancias completadas por flujo |
-| Process summary | tabla propia de Lila (Bizagi no publica una) |
+| Process (resumen) | tabla propia de Lila (Bizagi no publica una) |
 
 Extras sin columna en Bizagi: p50/p90/p95 del tiempo de ciclo y de la espera, largo medio y máximo
 de cola por actividad, throughput por hora, costo por caso, ranking de cuellos de botella, registro
@@ -191,17 +191,15 @@ Las cuatro están documentadas, con cifras, en
 de Bizagi, reconstruido archivo por archivo, con las cifras publicadas anotadas en `expected.json`.
 
 En la app web ([build de Pages](https://alambritodito.github.io/lila-modeler/app/)) o en la app de
-escritorio, ábrelo como proyecto — un proyecto necesita que su escenario se llame
-`<nombre>.scenario.json`:
+escritorio el ejemplo se abre como diagrama más un escenario pegado, porque un proyecto `.lila`
+necesita además un manifiesto que el repositorio no trae para este ejemplo:
 
-```bash
-cd examples/bizagi-levels/level-3
-cp scenario.json level-3.scenario.json
-zip -r ../level-3.lila model.bpmn level-3.scenario.json
-```
+1. File → **Open .bpmn**, elige `examples/bizagi-levels/level-3/model.bpmn`.
+2. Ve a **Simulate**, abre **Avanzado: JSON del escenario** al final del paso 1, sustituye su texto
+   por el contenido de `examples/bizagi-levels/level-3/scenario.json` y pulsa **Aplicar**.
+3. Pon Replications en 30 en el paso 1 y pulsa **Run simulation**.
 
-Luego File → Open, eliges `level-3.lila`, vas a **Simulate**, pones Replications en 30 en el paso 1
-y corres. La misma corrida desde la CLI:
+La misma corrida desde la CLI, desde la raíz del repositorio:
 
 ```bash
 npx lila run \

@@ -136,7 +136,7 @@ translating headers (the full map is in [`RESULTS_FORMAT.md` § 10](RESULTS_FORM
 | Process elements | same name; Instances started/completed, Minimum/Maximum/Average/Total time, the same five "waiting for resource" columns, Total fixed cost |
 | Resources | same name; Utilization (%), Fixed cost, Unit cost, Total cost — one row per pool, including pools at 0 % |
 | Sequence flows | same name; instances completed per flow |
-| Process summary | Lila's own table (Bizagi does not publish one) |
+| Process (summary) | Lila's own table (Bizagi does not publish one) |
 
 Extras with no Bizagi column: p50/p90/p95 of cycle time and wait, mean and maximum queue length per
 activity, throughput per hour, cost per case, a bottleneck ranking, a per-case event log, and
@@ -189,16 +189,15 @@ All four are documented, with figures, in
 tutorial, reconstructed file by file, with the published figures recorded in `expected.json`.
 
 In the web app ([Pages build](https://alambritodito.github.io/lila-modeler/app/) or the desktop
-app), open it as a project — a project needs its scenario named `<name>.scenario.json`:
+app) the example is opened as a diagram plus a pasted scenario, because a `.lila` project also
+needs a manifest that the repository does not ship for this example:
 
-```bash
-cd examples/bizagi-levels/level-3
-cp scenario.json level-3.scenario.json
-zip -r ../level-3.lila model.bpmn level-3.scenario.json
-```
+1. File → **Open .bpmn**, pick `examples/bizagi-levels/level-3/model.bpmn`.
+2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of step 1, replace its text
+   with the contents of `examples/bizagi-levels/level-3/scenario.json`, and press **Apply**.
+3. Set Replications to 30 in step 1 and press **Run simulation**.
 
-Then File → Open, pick `level-3.lila`, go to **Simulate**, set Replications to 30 in step 1, and
-run. The same run from the CLI:
+The same run from the CLI, from the repository root:
 
 ```bash
 npx lila run \

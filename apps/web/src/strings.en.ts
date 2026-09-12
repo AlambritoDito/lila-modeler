@@ -430,7 +430,7 @@ export const en = {
       `Inherits from ${padre}: resolved values are shown and only the delta is edited.`,
 
     /**
-     * #333 â the four steps of the Simulate panel, which are Bizagi's four levels of simulation
+     * #333 — the four steps of the Simulate panel, which are Bizagi's four levels of simulation
      * in the same order. The number is part of the label on purpose: it is the number the Bizagi
      * documentation, this guide and the people who ask for help all use.
      */
