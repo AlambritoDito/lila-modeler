@@ -805,7 +805,6 @@ body {
 .escenario .paso {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 3px;
   color: var(--fg-muted);
   cursor: pointer;
   font: inherit;
