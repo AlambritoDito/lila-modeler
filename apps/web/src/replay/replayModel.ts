@@ -273,6 +273,8 @@ export function buildReplay(
       // // ponytail: with several reachable ends the BFS takes the first one, so a diagram whose
       // // last task can reach two ends splits the cases by a guess. In `examples/tarjeta-credito`
       // // every end is reachable from exactly one last task, so the counters there are exact.
+      // // Gateways count one crossing per case, so an AND join shows fewer `started` than the
+      // // engine (which counts one per incoming token); `completed` and the end counters match.
       const end = flows === null || flows.length === 0 ? undefined : ir.flows[flows[flows.length - 1] as string]?.to;
       if (end !== undefined) cruzar(end, last.endAt);
       hop(flows, last.endAt, last.endAt);
