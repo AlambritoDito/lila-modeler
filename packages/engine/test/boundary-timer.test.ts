@@ -155,9 +155,28 @@ test('un `terminate` cierra la tarea antes del plazo y el borde zombi no mueve e
   expect(rowsOf(result, 'Task_Revisar')[0]).toMatchObject({ status: 'terminated', observedUntil: 10 });
   expect(result.elements['Boundary_3a1f']?.started).toBe(0);
   expect(result.process.byEndEvent['End_Terminate']?.completed).toBe(1);
-  // El `done` zombi de la tarea sí llega al heap en t = 50 (R-EVT-5 lo descarta allí); lo que
-  // R-BND-9 garantiza es que el borde no estire la corrida hasta su plazo de 100.
-  expect(stoppedAt).toBe(50);
+  // #345 — ni el borde (plazo 100) ni el `done` zombi de la tarea muerta (t = 50) son eventos del
+  // modelo: los dos se consumen sin tocar el reloj, así que la corrida para en el `terminate`.
+  expect(stoppedAt).toBe(10);
+});
+
+test('#345 — el `done` del host interrumpido tampoco estira la corrida', async () => {
+  const ir = await model();
+  const { result, stoppedAt } = runWithStop(ir, {
+    run: { seed: 42, replications: 1 },
+    elements: {
+      Start_Proceso: { triggerCount: 1 },
+      Task_Revisar: { processingTime: seconds(200) },
+      Boundary_3a1f: { processingTime: seconds(100) },
+      Task_Cancelar: { processingTime: seconds(5) },
+    },
+  });
+
+  expect(rowsOf(result, 'Task_Revisar')[0]).toMatchObject({ status: 'interrupted', observedUntil: 100 });
+  expect(result.process.byEndEvent['End_Cancelado']?.completed).toBe(1);
+  // R-BND-9: el borde corta en 100 y la rama de cancelacion cierra en 105. El `done` previsto del
+  // host en 200 ya no existe como evento del modelo y no alarga la ventana de las metricas.
+  expect(stoppedAt).toBe(105);
 });
 
 test('un borde sobre una tarea dentro de un subproceso sobrevive al aplanado', async () => {
