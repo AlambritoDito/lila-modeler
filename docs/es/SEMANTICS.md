@@ -939,6 +939,18 @@ W-RECURSO-SATURADO: <poolId>: the queue grows without settling (λ/μ·c ≈ X)
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
 ```
 
+Cuando el aviso salta por la ocupación del pool y no por ρ (ver más abajo), el mismo código
+imprime la variante que habla de ocupación, para que el número que muestra no contradiga a la
+frase:
+
+```
+W-RECURSO-SATURADO: <poolId>: the queue grows without settling (utilization ≈ Y %)
+```
+
+```
+W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)
+```
+
 La señal es **el pool lleno**: sin unidades libres suficientes para conceder, o sea con menos
 disponibles que la menor `quantity` con que alguna tarea lo pide —un pool de `capacity` 3 pedido de
 dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. El
@@ -954,8 +966,8 @@ alternativa OR libre, en cuya cola la instancia también está (R-REC-6), llegan
 demanda cero: el aviso no puede contradecir a `resources[poolId].utilization`. Una OR reparte
 además su demanda entre las alternativas que sí estaban llenas, porque consume exactamente una.
 
-Sobre esa demanda atribuida se exige `ρ = demanda atribuida / unidades concedidas ≥ 1,1` y, además,
-una de estas dos: que la cola atribuida media en la segunda mitad de `[warmup, t_stop]` supere la
+Sobre esa demanda atribuida se exige `ρ = demanda atribuida / unidades concedidas ≥ 1,1` **o**
+`resources[poolId].utilization ≥ 0,9` y, además, una de estas dos: que la cola atribuida media en la segunda mitad de `[warmup, t_stop]` supere la
 capacidad efectiva del pool (su `Σᵢ capacityᵢ × openTimeᵢ` de R-CAL-9 dividida entre sus propias
 horas abiertas, o sea unidades y no unidades diluidas por el calendario) y sea al menos 1,5 veces
 la de la primera mitad; **o** que las instancias atribuidas que seguían en cola al cortar sean al
@@ -966,10 +978,17 @@ promedian sobre el tiempo en que el pool estuvo lleno, que es el único en que l
 significa algo y deja fuera el `offHoursWait` sin tener que restarlo aparte. Una cola estacionaria larga no avisa: M/M/1 con
 ρ = 0,8 tiene `Lq = 3,2` y sus dos mitades miden lo mismo.
 
+La ocupación es la segunda puerta porque un pool que se **autoestrangula** frena su propia demanda
+atribuida: cuando la mayoría de sus tareas van detrás de otra tarea servida por él mismo, la cola
+de arriba es la que impide que el trabajo llegue, así que ρ se queda justo por debajo del umbral
+mientras el pool está lleno el 95 % del tiempo y la cola crece corrida tras corrida. La ocupación
+no distingue «justo al límite» de «el doble de lo que puede despachar», y por eso no decide sola:
+sigue teniendo que cumplirse el crecimiento o el pendiente de arriba. *(prueba: #320)*
+
 Con varias replicaciones la decisión se toma **una sola vez sobre la media** de esas cantidades, no
 réplica a réplica: la saturación es una propiedad del pool y de la corrida, y deduplicar avisos
 dejaría que una sola réplica que cruza un umbral por azar decidiera por las treinta. `X` es el ρ de
-esa media, con un decimal.
+esa media, con un decimal; `Y` es la ocupación media en porcentaje entero.
 
 Es un aviso, no un error: no cambia ninguna métrica. Lo que señala es que `resourceWait` y
 `bottlenecks` de ese pool son números que crecen con la duración de la corrida y no son comparables

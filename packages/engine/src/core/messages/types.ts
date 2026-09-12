@@ -83,6 +83,11 @@ export interface CoreCodeMessages {
   /* --- core/metrics.ts ---------------------------------------------- */
   /** `rho` arrives already rounded to one decimal so both locales print the same number. */
   'W-RECURSO-SATURADO': (poolId: string, rho: string) => string;
+  /**
+   * #320: variant for the self-gated pool, where ρ stays under the threshold and utilization is
+   * what fires the warning. `percent` arrives already rounded to a whole number.
+   */
+  'W-RECURSO-SATURADO/utilizacion': (poolId: string, percent: string) => string;
   'W-UTILIZACION-MAYOR-UNO': (poolId: string) => string;
 
   /* --- core/distributions.ts ---------------------------------------- */

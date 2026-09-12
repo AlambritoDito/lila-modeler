@@ -12,6 +12,9 @@
  *
  *   npm run build:pages && node tools/e2e-lila.mjs
  *
+ * `LILA_E2E_PORT` (static server) and `LILA_E2E_CDP_PORT` (Chrome's debugging port) move the two
+ * ports when one of them is already taken.
+ *
  * Prints a JSON report and exits non-zero on the first failed expectation.
  */
 import { spawn } from 'node:child_process';
@@ -28,6 +31,8 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SITE = join(ROOT, '_site');
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.LILA_E2E_PORT ?? 8787);
+/** Debugging port of the throw-away Chrome; `LILA_E2E_CDP_PORT` frees it when one is already taken. */
+const CDP_PORT = Number(process.env.LILA_E2E_CDP_PORT ?? 9333);
 const BASE = `http://127.0.0.1:${PORT}/lila-modeler/app/`;
 
 const MIME = {
@@ -122,13 +127,13 @@ async function main() {
   const server = await serve();
   const profile = join(work, 'profile');
   const chrome = spawn(CHROME, [
-    '--headless=new', '--remote-debugging-port=9333', `--user-data-dir=${profile}`,
+    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${profile}`,
     '--no-first-run', '--disable-gpu', '--window-size=1440,900', 'about:blank',
   ], { stdio: 'ignore' });
 
   let targets;
   for (let i = 0; i < 60; i++) {
-    try { targets = await (await fetch('http://127.0.0.1:9333/json/list')).json(); break; } catch { await sleep(250); }
+    try { targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json(); break; } catch { await sleep(250); }
   }
   const page = targets.find((t) => t.type === 'page');
   const ws = new WebSocket(page.webSocketDebuggerUrl);

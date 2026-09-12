@@ -226,9 +226,15 @@ describe('examples/tarjeta-credito', () => {
       expect(toBe.elements['Task_CheckBureau']!.resourceWait.mean).toBeLessThan(
         asIs.elements['Task_CheckBureau']!.resourceWait.mean / 2,
       );
-      // `W-RECURSO-SATURADO` is not asserted: the heuristic (demand/served >= 1.1) never fires for
-      // the self-gated analyst pool, so the absence in TO-BE would be vacuous. Utilization,
-      // bottleneck and inFlight above carry the saturation evidence instead.
+      // #320: the analyst pool is self-gated (most of its tasks sit behind another task it
+      // serves), so it throttles its own attributed demand and ρ stays under 1,1; the 95 %
+      // utilization branch is what catches it. `executive` and `operator` stay well below.
+      const saturated = asIs.warnings
+        .filter((warning) => warning.startsWith('W-RECURSO-SATURADO'))
+        .join('\n');
+      expect(saturated).toContain('analyst');
+      expect(saturated).not.toContain('executive');
+      expect(saturated).not.toContain('operator');
 
       // Las tres salidas se ejercitan en ambos escenarios.
       for (const result of [asIs, toBe]) {

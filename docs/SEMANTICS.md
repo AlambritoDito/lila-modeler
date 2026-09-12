@@ -956,6 +956,18 @@ W-RECURSO-SATURADO: <poolId>: the queue grows without settling (λ/μ·c ≈ X)
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (λ/μ·c ≈ X)
 ```
 
+When the warning fires because of the pool's utilization and not because of ρ (see below), the
+same code prints the variant that states the occupancy, so the number shown never contradicts the
+sentence:
+
+```
+W-RECURSO-SATURADO: <poolId>: the queue grows without settling (utilization ≈ Y %)
+```
+
+```
+W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)
+```
+
 The signal is **the pool being full**: no free units enough to grant, i.e. fewer available than
 the smallest `quantity` any task requests it with — a pool of `capacity` 3 requested two at a
 time is full with two units occupied, because no one can take the third. The threshold belongs
@@ -971,7 +983,8 @@ present (R-REC-6), meet the criterion with zero demand: the warning cannot contr
 `resources[poolId].utilization`. An OR also splits its demand among the alternatives that were
 indeed full, because it consumes exactly one.
 
-On that attributed demand, `ρ = attributed demand / granted units ≥ 1.1` is required, plus one of
+On that attributed demand, `ρ = attributed demand / granted units ≥ 1.1` **or**
+`resources[poolId].utilization ≥ 0.9` is required, plus one of
 these two: that the attributed queue averaged over the second half of `[warmup, t_stop]` exceeds
 the pool's effective capacity (its `Σᵢ capacityᵢ × openTimeᵢ` from R-CAL-9 divided by its own
 open hours, i.e. units, not units diluted by the calendar) and is at least 1.5 times that of the
@@ -983,10 +996,17 @@ pool was full, which is the only time a pool's queue means anything, and it leav
 out without having to subtract it separately. A long stationary queue does not warn: an M/M/1
 with ρ = 0.8 has `Lq = 3.2`, and its two halves measure the same.
 
+Utilization is the second door because a **self-gated** pool throttles its own attributed demand:
+when most of its tasks sit downstream of another task the same pool serves, the queue upstream is
+what keeps the work from arriving, so ρ stalls just under the threshold while the pool is full
+95 % of the time and the queue grows run after run. Utilization does not distinguish "right at the
+limit" from "twice what it can dispatch", which is why it never decides alone: the growth or
+backlog condition above still has to hold. *(test: #320)*
+
 With several replications, the decision is made **once, over the mean** of those quantities, not
 replication by replication: saturation is a property of the pool and of the run, and
 deduplicating warnings would let a single replication that crosses a threshold by chance decide
-for all thirty. `X` is the ρ of that mean, with one decimal.
+for all thirty. `X` is the ρ of that mean, with one decimal; `Y` is the mean utilization as a whole percentage.
 
 It is a warning, not an error: it changes no metric. What it flags is that `resourceWait` and
 `bottlenecks` for that pool are numbers that grow with the run's duration and are not comparable

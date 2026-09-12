@@ -141,7 +141,9 @@ function saturationWarnings(
   const warnings: string[] = [];
   if (loads.length === 0) return warnings;
   for (const poolId of loads[0]!.keys()) {
-    const total: PoolLoad = { demand: 0, served: 0, pending: 0, capacity: 0, firstHalf: 0, secondHalf: 0 };
+    const total: PoolLoad = {
+      demand: 0, served: 0, pending: 0, capacity: 0, firstHalf: 0, secondHalf: 0, utilization: 0,
+    };
     for (const load of loads) {
       const entry = load.get(poolId);
       if (entry === undefined) continue;
@@ -151,11 +153,13 @@ function saturationWarnings(
       total.capacity += entry.capacity;
       total.firstHalf += entry.firstHalf;
       total.secondHalf += entry.secondHalf;
+      total.utilization += entry.utilization;
     }
     // Las medias comparten denominador, así que basta dividir donde el umbral no es una razón.
     total.capacity /= loads.length;
     total.firstHalf /= loads.length;
     total.secondHalf /= loads.length;
+    total.utilization /= loads.length;
     const warning = saturationWarning(poolId, total, locale);
     if (warning !== undefined) warnings.push(warning);
   }

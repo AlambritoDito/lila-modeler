@@ -75,6 +75,8 @@ export const coreEn: CoreCatalog = {
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: the queue grows without settling (λ/μ·c ≈ ${rho})`,
+    'W-RECURSO-SATURADO/utilizacion': (poolId, percent) =>
+      `${poolId}: the queue grows without settling (utilization ≈ ${percent} %)`,
     'W-UTILIZACION-MAYOR-UNO': (poolId) =>
       `${poolId}: the measured occupancy exceeds the integrated available capacity; this can happen when crossing a capacity drop without preemption.`,
 

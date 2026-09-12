@@ -82,6 +82,8 @@ export const coreEs: CoreCatalog = {
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho})`,
+    'W-RECURSO-SATURADO/utilizacion': (poolId, percent) =>
+      `${poolId}: la cola crece sin estabilizarse (ocupación ≈ ${percent} %)`,
     'W-UTILIZACION-MAYOR-UNO': (poolId) =>
       `${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
 

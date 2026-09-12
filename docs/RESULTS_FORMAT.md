@@ -345,8 +345,12 @@ A list of strings, one per non-fatal condition detected during `resolveScenario`
   that pool's tasks and its place in `bottlenecks` (section 6) grow with the run's duration and
   are not comparable to those of a stable pool. `X` is the ρ estimated from the log itself: the
   demand attributed to the pool — only the waits during which **it** was full, not the ones shared
-  through AND or OR — over the units it granted, averaged across replications. The full criterion
-  is in `SEMANTICS.md` § 17. *(LILA-191)*
+  through AND or OR — over the units it granted, averaged across replications. A self-gated pool
+  throttles its own attributed demand, so a mean `resources[poolId].utilization ≥ 0.9` is the
+  second door into the same warning; it then prints
+  `W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)` instead, with
+  the utilization as a whole percentage. The full criterion is in `SEMANTICS.md` § 17.
+  *(LILA-191, #320)*
 
 ---
 
