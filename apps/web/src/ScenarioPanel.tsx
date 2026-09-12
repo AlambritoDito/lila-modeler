@@ -41,6 +41,7 @@ import {
 } from '@lila/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+import { LaneAssign } from './LaneAssign.js';
 import { getLocale, strings, useLocale, useStrings, type Locale } from './i18n';
 
 /* ------------------------------------------------------------------ *
@@ -359,6 +360,14 @@ export interface Contexto {
   padre?: Record<string, unknown> | null;
   /** Deshace un `quitar()` sobre un reservado eliminado: borra el `null` propio, no lo escribe. */
   restaurar?(ruta: Ruta): void;
+  /**
+   * Varias ediciones en **una sola** escritura del delta (LILA-334). `editar` una por una
+   * funcionaría en la app —cada llamada trae el delta nuevo por props— pero no en un anfitrión
+   * que agrupe los cambios, y dejaría trece pasos de deshacer donde la acción fue una. Las rutas
+   * no llevan índice de array: quien escribe una lista entera (los `resources` de una tarea) pasa
+   * el array completo como valor, que es lo que § 6 dice de los arrays.
+   */
+  editarVarios?(cambios: readonly { ruta: Ruta; valor: unknown }[]): void;
 }
 
 function Problemas({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Element | null {
@@ -1139,6 +1148,11 @@ export function ScenarioPanel({
       const arreglo = escribir(leer(resuelto, base), ruta.slice(corte), valor);
       onCambio(archivo, escribir(delta, base, arreglo));
     },
+    editarVarios(cambios) {
+      let siguiente = delta;
+      for (const { ruta, valor } of cambios) siguiente = escribir(siguiente, ruta, valor);
+      onCambio(archivo, siguiente);
+    },
     quitar(ruta) {
       const corte = baseDeArray(ruta);
       if (corte !== -1) {
@@ -1243,6 +1257,7 @@ export function ScenarioPanel({
           requerido={false}
           ctx={ctx}
         />
+        <LaneAssign ir={ir} ctx={ctx} />
       </details>
 
       <details open>

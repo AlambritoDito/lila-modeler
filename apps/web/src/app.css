@@ -738,6 +738,18 @@ body {
   width: auto;
 }
 
+/* «Assign lane to pool» (LILA-334): separated from the pools it edits above it. */
+.carril-a-pool {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.carril-a-pool .boton {
+  margin-right: 6px;
+  margin-top: 6px;
+}
+
 .escenario .anidado {
   border-left: 2px solid var(--border);
   margin-left: 4px;

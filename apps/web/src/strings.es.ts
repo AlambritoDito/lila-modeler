@@ -471,6 +471,17 @@ export const es: Strings = {
     editarComoRejilla: 'Editar como rejilla',
     calendarioConMinutos: 'este calendario tiene franjas de minutos; edítalo como lista',
 
+    /** «Asignar carril a pool» (LILA-334): una edición en bloque de `elements[task].resources`. */
+    carrilCarril: 'Carril',
+    carrilPool: 'Pool',
+    carrilAsignar: 'Asignar carril',
+    carrilAyuda: (tareas: number): string =>
+      `Rellena resources en cada tarea del carril (${tareas}); el carril no se guarda en ninguna parte.`,
+    carrilYaAsignadas: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'tarea ya tiene' : 'tareas ya tienen'} recursos; asignar los reemplaza:`,
+    carrilSobrescribir: 'Sobrescribir',
+    carrilCancelar: 'Cancelar',
+
     /** «Duplicar»: nombre y archivo de la copia (§ 6 de `docs/SCENARIO_FORMAT.md`). */
     sufijoCopia: ' (copia)',
     errorEscenarioDesconocido: (ruta: string): string => `escenario desconocido: ${ruta}`,

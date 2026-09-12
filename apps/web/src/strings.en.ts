@@ -484,6 +484,17 @@ export const en = {
     editarComoRejilla: 'Edit as grid',
     calendarioConMinutos: 'this calendar has minute slots; edit it as a list',
 
+    /** «Assign lane to pool» (LILA-334): a bulk edit of `elements[task].resources`. */
+    carrilCarril: 'Lane',
+    carrilPool: 'Pool',
+    carrilAsignar: 'Assign lane',
+    carrilAyuda: (tareas: number): string =>
+      `Fills resources for every task in the lane (${tareas}); the lane itself is never stored.`,
+    carrilYaAsignadas: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'task' : 'tasks'} already have resources; assigning replaces them:`,
+    carrilSobrescribir: 'Overwrite',
+    carrilCancelar: 'Cancel',
+
     /** «Duplicate»: name and file of the copy (§ 6 of `docs/SCENARIO_FORMAT.md`). */
     sufijoCopia: ' (copy)',
     errorEscenarioDesconocido: (ruta: string): string => `unknown scenario: ${ruta}`,

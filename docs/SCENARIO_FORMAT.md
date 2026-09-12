@@ -133,6 +133,8 @@ Map `BPMN id → parameters`. The keys are diagram ids: nodes (`Task_…`, `Star
 | `calendar` | string (key in `calendars`) | starts, timers, and tasks | — | Arrival calendar: an arrival that falls in closed hours is shifted to the next open instant. It is also allowed on a task, where it is **intersected** with its pools' calendars (R-CAL-4); a `timer` runs 24×7 unless it declares one (R-EVT-3). |
 | `probability` | number in `[0, 1]` | sequence flows | even split | Probability of taking the flow. On XOR it is distributed by cumulative probability; on OR each outgoing path is independent. The range is checked by the linter (`E-PROB-RANGO`), not the schema. |
 
+Assigning a whole lane: the web panel can fill `resources` for **every task of a lane** in one action (resources section, "Assign lane"). It is a bulk edit of this same per-task field — the lane is a label of the diagram (`docs/SEMANTICS.md` § 2) and is never stored in the scenario — and tasks that already have `resources` are listed and require confirmation before being replaced.
+
 Note on absent elements: a diagram element that does not appear in `elements` is valid and takes its defaults (a task with no time or resources, a flow with an even split). `elements` is a map of exceptions, not a mandatory mirror of the model.
 
 ---
