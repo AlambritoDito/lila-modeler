@@ -89,7 +89,7 @@ Los parámetros de simulación (`processingTime`, `resources`, `interTriggerTime
 ### Id de elemento
 
 - El id de cada elemento BPMN (`bpmn:task@id`, `bpmn:sequenceFlow@id`, etc.) es la **única clave** para colgar datos de negocio o de simulación. Nunca el nombre visible (`name`).
-- Formato: **NCName** válido (XML `Name` sin `:`), generado por Lila como `<PrefijoPorTipo>_<sufijo aleatorio>`, p. ej. `Task_7f3k2q1`, `Gateway_a91nc0x`, `Flow_k2m8p1q`. El sufijo aleatorio evita colisiones sin necesitar un contador centralizado.
+- Formato: **NCName** válido (XML `Name` sin `:`), `<PrefijoPorTipo>_<sufijo>`, p. ej. `Task_7f3k2q1`, `Gateway_a91nc0x`, `Flow_k2m8p1q`. Los ids del editor traen el sufijo del propio modelador; cuando es el motor quien tiene que acuñar uno (la rama de colisión del importador), el sufijo es un contador **determinista** comprobado contra los ids ya ocupados (`Task_2`, `Task_3`, …), así que importar dos veces el mismo archivo nunca da ids distintos (#326).
 - Prefijo por tipo (no exhaustivo, crece con el IR): `Start_`, `End_`, `Task_`, `Gateway_` (XOR/OR/AND comparten prefijo; el tipo exacto vive en el IR, no en el id), `Timer_`, `Flow_`, `SubProcess_`.
 - **Nunca se regenera** un id existente al importar, exportar o renombrar el elemento (renombrar cambia `name`, no `id`). Regenerar el id rompería cualquier referencia externa: entradas de `*.scenario.json` keyed por id, filas de event log, referencias de catálogo.
 - **Se genera un id nuevo** al copiar/pegar un elemento — un elemento copiado es una entidad distinta y no debe arrastrar los datos (`lila:*`, escenario) del original bajo el mismo id.

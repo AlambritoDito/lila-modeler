@@ -264,7 +264,7 @@ function claimId(el: ModdleElement, c: Collector): string {
   if (cached !== undefined) return cached;
 
   let id = el.id;
-  if (c.used.has(id)) id = newId(el.$type.replace('bpmn:', ''));
+  if (c.used.has(id)) id = newId(el.$type.replace('bpmn:', ''), c.used);
 
   c.used.add(id);
   c.originalIds[id] = c.sanitizedToOriginal.get(el.id) ?? el.id;

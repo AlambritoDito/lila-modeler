@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseBpmn, validate } from '../../src/bpmn/index.js';
@@ -183,4 +184,36 @@ export function numericDiffs(actual: unknown, expected: unknown, tol: number, pa
     );
   }
   return Object.is(actual, expected) ? [] : [`${path}: ${String(actual)} != ${String(expected)}`];
+}
+
+/**
+ * Informe de una diferencia contra un golden, pensado para el log del CI (#326): un fallo
+ * intermitente aquí solo deja el diff de vitest, que recorta el JSON y no dice si lo que se
+ * movió son bytes de último dígito o un número de verdad. Devuelve el resumen y deja el JSON
+ * producido en un archivo, para poder atacarlo sin volver a correr las 30 réplicas.
+ */
+export function describeGoldenMismatch(actual: string, expected: string, goldenPath: string): string {
+  const dump = join(tmpdir(), `lila-golden-actual-${basename(goldenPath)}`);
+  let dumped = dump;
+  try {
+    writeFileSync(dump, actual, 'utf8');
+  } catch (error) {
+    dumped = `(no se pudo escribir: ${String(error)})`;
+  }
+  let real: string[] = [];
+  let lastBit: string[] = [];
+  try {
+    const actualJson: unknown = JSON.parse(actual);
+    const expectedJson: unknown = JSON.parse(expected);
+    real = numericDiffs(actualJson, expectedJson, 1e-9);
+    lastBit = numericDiffs(actualJson, expectedJson, 0);
+  } catch (error) {
+    return `${goldenPath}: el resultado no es JSON parseable (${String(error)}). Copia en ${dumped}`;
+  }
+  return [
+    `${goldenPath}: ${real.length} rutas fuera de la tolerancia 1e-9 y ${lastBit.length} distintas`
+      + ` en cualquier bit. Copia del resultado en ${dumped}.`,
+    ...(real.length > 0 ? ['Fuera de tolerancia (hasta 10):', ...real.slice(0, 10)] : []),
+    ...(real.length === 0 ? ['Solo deriva de último bit (hasta 5):', ...lastBit.slice(0, 5)] : []),
+  ].join('\n');
 }

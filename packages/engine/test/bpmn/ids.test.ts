@@ -12,13 +12,21 @@ import {
 } from '../../src/bpmn/index.js';
 
 test('10 000 ids generados son NCName únicos', () => {
-  const ids = new Set<string>();
+  const used = new Set<string>();
   for (let i = 0; i < 10_000; i += 1) {
-    const id = newId('Task');
+    const id = newId('Task', used);
     expect(isNCName(id)).toBe(true);
-    ids.add(id);
+    used.add(id);
   }
-  expect(ids.size).toBe(10_000);
+  expect(used.size).toBe(10_000);
+});
+
+// #326: el sufijo salía de `Math.random`, así que el mismo archivo podía parsearse con ids
+// distintos en cada corrida. La unicidad ahora la da `used`, no el azar.
+test('newId es determinista: mismo prefijo y mismo conjunto ocupado, mismo id', () => {
+  expect(newId('Task')).toBe(newId('Task'));
+  expect(newId('Task', new Set(['Task_2']))).toBe('Task_3');
+  expect(newId('Task', new Set(['Task_2', 'Task_3']))).toBe('Task_4');
 });
 
 test('newId antepone el prefijo por tipo', () => {
