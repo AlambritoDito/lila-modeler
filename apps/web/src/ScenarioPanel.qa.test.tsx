@@ -29,6 +29,7 @@ import {
 
 import { ScenarioPanel, duplicarEscenario } from './ScenarioPanel.js';
 import { setLocale } from './i18n';
+import { es } from './strings.es';
 
 // This suite pins the Spanish translation. English is the app's base language since
 // LILA-210, so the locale is set here instead of depending on the machine's.
@@ -236,7 +237,8 @@ describe('uniones sobre un escenario que hereda', () => {
 
     pulsar('Task_TomarPedido');
     const campo = 'campo-elements.Task_TomarPedido.processingTime';
-    elegir(campo, opcion(campo, 'normal'));
+    // El rótulo de la variante sale del catálogo desde #332, no de la ortografía del archivo.
+    elegir(campo, opcion(campo, es.escenario.distribuciones['normal']!));
     pulsar('Guardar');
 
     // El padre define `triangular {min, mode, max}`. Si el hijo solo escribe la variante nueva,

@@ -792,6 +792,26 @@ body {
   margin-top: 6px;
 }
 
+/* #332: la unidad de una duración y la ayuda breve de un campo del escenario. */
+.escenario .unidad {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+.escenario .ayuda {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+  margin: 0 0 4px;
+}
+
+.escenario .json-escenario {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--fg-primary);
+  font-family: var(--font-mono, monospace);
+  width: 100%;
+}
+
 .escenario .anidado {
   border-left: 2px solid var(--border);
   margin-left: 4px;

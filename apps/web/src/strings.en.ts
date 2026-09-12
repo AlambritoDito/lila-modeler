@@ -473,6 +473,125 @@ export const en = {
      */
     claves: { capacity: 'capacity', calendar: 'calendar', intervals: 'intervals' },
 
+    /**
+     * #332 — the label of each scenario field, so the form reads like a form and not like the
+     * file. The key is the spelling of `docs/SCENARIO_FORMAT.md`; a key that is not here falls
+     * back to itself, which is what keeps a field added to the schema tomorrow from disappearing.
+     */
+    campos: {
+      // run (§ 2.2)
+      start: 'Start',
+      duration: 'Duration',
+      warmup: 'Warm-up',
+      replications: 'Replications',
+      seed: 'Seed',
+      baseTimeUnit: 'Time unit',
+      currency: 'Currency',
+      serviceLevel: 'Service level',
+      // calendars (§ 2.3)
+      intervals: 'Intervals',
+      days: 'Days',
+      from: 'From',
+      to: 'To',
+      // resources (§ 2.4)
+      name: 'Name',
+      type: 'Type',
+      capacity: 'Capacity',
+      costPerHour: 'Cost per hour',
+      // elements (§ 2.5)
+      processingTime: 'Processing time',
+      resources: 'Resources',
+      selection: 'Resource selection',
+      fixedCost: 'Fixed cost',
+      interTriggerTimer: 'Time between arrivals',
+      triggerCount: 'Max arrivals',
+      calendar: 'Calendar',
+      probability: 'Probability',
+      ref: 'Pool',
+      quantity: 'Quantity',
+      // distribution parameters (§ 3)
+      value: 'Value',
+      min: 'Minimum',
+      mode: 'Mode',
+      max: 'Maximum',
+      mean: 'Mean',
+      sd: 'Standard deviation',
+      shape: 'Shape',
+      scale: 'Scale',
+      k: 'Phases (k)',
+      alpha: 'Alpha',
+      beta: 'Beta',
+      n: 'Trials (n)',
+      p: 'Success probability (p)',
+      points: 'Points',
+      // reserved (§ 4)
+      priority: 'Priority',
+      preempt: 'Preemption',
+      batch: 'Batch',
+      conditions: 'Conditions',
+      holidays: 'Holidays',
+      timezone: 'Timezone',
+    } as Record<string, string>,
+
+    /** Short help under a field. Only where the file's unit or default is not obvious. */
+    ayudas: {
+      start: 'Zero instant of the virtual clock; its offset is the timezone calendars are read in.',
+      duration: 'How long the simulated clock runs.',
+      warmup: 'Cases started before this are excluded from the statistics.',
+      serviceLevel: 'Target cycle time; reporting only, it does not change the simulation.',
+      baseTimeUnit: 'Presentation only: times are always stored in seconds.',
+      replications: 'Independent runs; 30 is the usual recommendation.',
+      processingTime: 'Duration of the work.',
+      interTriggerTimer: 'Time between arrivals at this start event.',
+      triggerCount: 'Maximum number of cases this start event generates.',
+      probability: 'Between 0 and 1. Without it the gateway splits evenly.',
+      fixedCost: 'Cost per token completed at this element.',
+      costPerHour: 'Cost per busy hour, not per available hour.',
+      capacity: 'Units of the pool available at the same time.',
+      quantity: 'Units of the pool this task takes.',
+      selection: 'and: waits for every pool. or: takes whichever is free first.',
+      calendar: 'Without a calendar the element is available 24×7.',
+    } as Record<string, string>,
+
+    /** The 13 distributions of BPSim plus the constant and the empirical one (§ 3). */
+    distribuciones: {
+      constant: 'Constant',
+      uniform: 'Uniform',
+      triangular: 'Triangular',
+      exponential: 'Exponential',
+      normal: 'Normal',
+      truncatedNormal: 'Truncated normal',
+      lognormal: 'Lognormal',
+      gamma: 'Gamma',
+      erlang: 'Erlang',
+      weibull: 'Weibull',
+      beta: 'Beta',
+      poisson: 'Poisson',
+      binomial: 'Binomial',
+      user: 'Empirical (points)',
+    } as Record<string, string>,
+
+    /** Unit the times of the panel are typed in, shown beside every duration. */
+    unidades: { s: 'sec', min: 'min', h: 'h', day: 'days' } as Record<string, string>,
+
+    /** `run.start` (R8): a date and time plus the UTC offset, instead of a hand-written ISO. */
+    fechaHora: 'Date and time',
+    desfase: 'UTC offset',
+
+    /** Gateway view (#332): the probabilities of its outgoing flows, together. */
+    seccionCompuerta: 'Outgoing flows',
+    compuertaSinSalientes: 'This gateway has no outgoing flows.',
+    compuertaPorDefecto: 'default flow: takes the remainder',
+    compuertaSuma: (suma: number): string => `Total: ${suma}`,
+    compuertaSumaAviso: 'The probabilities of an XOR gateway are normalised to 1 with a warning.',
+    compuertaIndependiente: 'On an inclusive gateway each path is independent: they need not add up to 1.',
+
+    /** Advanced view: the raw delta of the file being edited (§ 6), for when the form is not enough. */
+    seccionJson: 'Advanced: scenario JSON',
+    aplicarJson: 'Apply',
+    jsonInvalido: (mensaje: string): string => `Not valid JSON: ${mensaje}`,
+    jsonNoEsObjeto: 'The scenario has to be a JSON object.',
+
     /** `resources[pool].capacity` (LILA-164): fixed or per shift. */
     capacidadFija: 'Fixed',
     capacidadPorTurno: 'Per shift',
