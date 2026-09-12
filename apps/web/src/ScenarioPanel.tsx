@@ -1400,6 +1400,11 @@ function VistaCompuerta({
  * different document — and each carries `aria-pressed` (this one is the one chosen) plus
  * `aria-current="step"` (this one is where you are in the sequence), which is what a screen
  * reader needs to announce "step 3 of 4, pressed".
+ *
+ * ponytail: there are exactly four, with no "All" that shows every section at once. The ceiling
+ * is someone who knew the old single list and wants it back; the upgrade path is a fifth id in
+ * `PASO_IDS` whose `fieldsForStep` is the union of the four, which is a dozen lines the day
+ * anybody actually asks for it.
  */
 function BarraPasos({
   paso,
