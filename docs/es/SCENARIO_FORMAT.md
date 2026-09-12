@@ -132,6 +132,8 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3). |
 | `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. El rango lo comprueba el lint (`E-PROB-RANGO`), no el esquema. |
 
+Asignar un carril entero: el panel web puede rellenar `resources` en **todas las tareas de un carril** en una sola acción (sección de recursos, «Asignar carril»). Es una edición en bloque de este mismo campo por tarea —el carril es una etiqueta del diagrama (`docs/SEMANTICS.md` § 2) y no se guarda nunca en el escenario— y las tareas que ya tienen `resources` se listan y piden confirmación antes de reemplazarlas.
+
 Nota sobre elementos ausentes: un elemento del diagrama que no aparece en `elements` es válido y toma sus defaults (tarea sin tiempo ni recursos, flujo con reparto equitativo). `elements` es un mapa de excepciones, no un espejo obligatorio del modelo.
 
 ---
