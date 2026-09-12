@@ -491,7 +491,7 @@ export const en = {
     carrilAyuda: (tareas: number): string =>
       `Fills resources for every task in the lane (${tareas}); the lane itself is never stored.`,
     carrilYaAsignadas: (tareas: number): string =>
-      `${tareas} ${tareas === 1 ? 'task' : 'tasks'} already have resources; assigning replaces them:`,
+      `${tareas} ${tareas === 1 ? 'task already has' : 'tasks already have'} resources; assigning replaces them:`,
     carrilSobrescribir: 'Overwrite',
     carrilCancelar: 'Cancel',
 
