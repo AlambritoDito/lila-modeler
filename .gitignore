@@ -1,11 +1,44 @@
+# Dependencies and generated builds
 node_modules/
 dist/
-.DS_Store
-*.log
+*.tsbuildinfo
+/apps/desktop/release/
+*.tgz
+
+# Test output and caches
 coverage/
+*.log
+.cache/
+.vite/
+test-results/
+playwright-report/
+__pycache__/
+*.py[cod]
+.venv/
+
 # GitHub Pages (LILA-067): `_site/` is assembled by the workflow and `site/img/` holds the
 # screenshots copied out of `docs/design/`; neither is committed.
 _site/
 site/img/
-*.tsbuildinfo
-__pycache__/
+
+# Local credentials and per-machine tool settings
+.env
+.env.*
+!.env.example
+!.env.*.example
+.claude/settings.local.json
+
+# Private models, exports and working documents belong here, or outside the repository.
+# Keep BPMN/JSON/CSV and document extensions trackable for reviewed fixtures and docs.
+/local/
+/private/
+/exports/
+
+# Operating-system metadata and editor temporary files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

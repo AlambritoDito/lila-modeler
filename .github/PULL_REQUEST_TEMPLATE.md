@@ -17,5 +17,8 @@ Closes #
 - [ ] No change to `E-*`/`W-*` codes, rule ids (e.g. `R-XOR-1`) or result column names — or, if
       there is one, it's called out explicitly above and justified.
 - [ ] Commit messages are in English.
+- [ ] Examples/fixtures follow `docs/EXAMPLES_POLICY.md`: provenance and validation are documented;
+      no private case statements, coursework answers or personal data are included in files,
+      PR text or attachments.
 - [ ] CI is green.
 - [ ] Adversarial QA posted `QA: OK` on this PR.
