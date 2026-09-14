@@ -392,7 +392,7 @@ propio stream (`SEMANTICS.md` § 6.1, R-COND-1…5). En cualquier elemento que n
 `conditions` sigue siendo el campo reservado de § 15, con el mismo texto `E-RESERVADO` de antes.
 
 Contexto: v1 rutea solo por probabilidad, así que un modelo que fusiona dos ramas no puede volver a
-distinguirlas aguas abajo. El ejemplo de la tarjeta de crédito (`examples/tarjeta-credito`) duplica
+distinguirlas aguas abajo. El ejemplo de la solicitud de servicio (`packages/engine/test/fixtures/service-request`) duplica
 la ruta de rechazo entera —negar e informar, dos veces— sin más motivo que mantener contables las
 dos causas de rechazo. Esa duplicación es lo primero con lo que se topa cualquier usuario de Bizagi
 y es el hueco más barato de cerrar de la épica #335.
@@ -425,7 +425,7 @@ Techos, todos deliberados:
   `E-REF-DESCONOCIDA` bajo su propia ruta.
 
 *(pruebas: `packages/engine/test/conditions.test.ts`, fixture
-`packages/engine/test/fixtures/tarjeta-shared-denial.bpmn`)*
+`packages/engine/test/fixtures/service-shared-denial.bpmn`)*
 
 ---
 

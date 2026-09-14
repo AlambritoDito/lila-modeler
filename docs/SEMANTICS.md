@@ -374,7 +374,7 @@ the XML, preserved in `ir.nodes[g].outgoing`), and let `p(fi)` be the `probabili
 
 A flow leaving a **diverging** XOR may declare `conditions: [{ flowTaken, probability }]` instead
 of, or on top of, its plain `probability`. It is the minimum needed to merge two branches that
-were duplicated only to be told apart again further downstream (the credit card example's denial
+were duplicated only to be told apart again further downstream (the service request example's denial
 pair), without introducing case variables or an expression language.
 
 - **R-COND-1 — Effective declared probability.** When a token reaches a diverging XOR, the

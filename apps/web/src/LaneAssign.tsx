@@ -1,7 +1,7 @@
 /**
  * LILA-334: «assign lane X to pool Y» inside the resources section of the scenario panel.
  *
- * The credit-card example needs thirteen identical `resources` edits, one per task, which is the
+ * The service-request example needs thirteen identical `resources` edits, one per task, which is the
  * whole reason this control exists. It writes exactly what the person would have written by hand
  * —`elements[task].resources = [{ ref: pool, quantity: 1 }]` for every **task** of the lane— in a
  * single change, so one undo step and one `onCambio` cover the lot. The lane is not stored

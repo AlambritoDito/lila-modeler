@@ -160,7 +160,7 @@ enrutamiento por datos del caso: `conditionExpression` se ignora (con aviso `W-C
 es un campo reservado. Cada flujo de salida de una compuerta lleva un porcentaje. La consecuencia
 práctica está en la forma del diagrama: un «rechazar e informar al solicitante» al que pueden
 llegar dos compuertas distintas aparece **una vez por compuerta**, con su propio par de tareas, en
-lugar de ser un único nodo compartido al que enrutan los datos. Mira `examples/tarjeta-credito`,
+lugar de ser un único nodo compartido al que enrutan los datos. Mira `packages/engine/test/fixtures/service-request`,
 modelado exactamente así.
 
 **3. Los recursos no tienen identidad persistente.** Un pool es un conteo de unidades
@@ -213,9 +213,6 @@ costos y el tiempo de ciclo medio quedan igual de cerca. Qué esperar de cada n�
 nivel, y los cuatro puntos donde los dos motores no coinciden, está en
 [`BIZAGI_PARITY.md`](BIZAGI_PARITY.md).
 
-Para un caso completo hecho desde cero en vez de reconstruido — un pool, tres carriles, trece
-tareas, dos ramas de rechazo y un AS-IS contra un TO-BE — mira
-[`examples/tarjeta-credito`](../../examples/tarjeta-credito/README.md).
 
 ---
 

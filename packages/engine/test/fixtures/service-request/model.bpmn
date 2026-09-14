@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_ServiceRequest"
+                  targetNamespace="https://lila-modeler.org/bpmn/service-request"
+                  exporter="Lila Modeler examples (hand-written)"
+                  exporterVersion="0.0.0">
+
+  <bpmn:collaboration id="Collaboration_ServiceRequest">
+    <bpmn:participant id="Participant_ServiceCenta" name="Service center" processRef="Process_ServiceRequest" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Process_ServiceRequest" name="Service-request processing" isExecutable="false">
+    <bpmn:documentation>Synthetic service-request processing. Lanes are labels only: resources are assigned task by task in the scenario. Both denial paths are modelled as separate task pairs so each rejection cause is readable and countable on its own; since ADR-028 a single shared pair is also expressible, with conditions on the flows leaving the final gateway.</bpmn:documentation>
+
+    <bpmn:laneSet id="LaneSet_ServiceRequest">
+      <bpmn:lane id="Lane_Coordinator" name="Service Coordinator">
+        <bpmn:flowNodeRef>StartEvent_Request</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RegisterRequest</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AttachDetails</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_InformScreeningDenial</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_InformEligibilityDenial</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CompleteService</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ScreeningRejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_EligibilityRejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ServiceCompleted</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Reviewer" name="Technical Reviewer">
+        <bpmn:flowNodeRef>Task_CheckScreening</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Screening</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DenyScreening</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AssessEligibility</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Eligibility</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DenyEligibility</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OpenWorkOrder</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_PlanService</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SetServiceScope</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Operator" name="Service Operator">
+        <bpmn:flowNodeRef>Task_PrepareService</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <bpmn:startEvent id="StartEvent_Request" name="Service request received">
+      <bpmn:outgoing>Flow_Start_RegisterRequest</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:sequenceFlow id="Flow_Start_RegisterRequest" sourceRef="StartEvent_Request" targetRef="Task_RegisterRequest" />
+
+    <bpmn:task id="Task_RegisterRequest" name="Register the request">
+      <bpmn:incoming>Flow_Start_RegisterRequest</bpmn:incoming>
+      <bpmn:outgoing>Flow_RegisterRequest_AttachDetails</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_RegisterRequest_AttachDetails" sourceRef="Task_RegisterRequest" targetRef="Task_AttachDetails" />
+
+    <bpmn:task id="Task_AttachDetails" name="Attach request details">
+      <bpmn:incoming>Flow_RegisterRequest_AttachDetails</bpmn:incoming>
+      <bpmn:outgoing>Flow_AttachDetails_CheckScreening</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_AttachDetails_CheckScreening" sourceRef="Task_AttachDetails" targetRef="Task_CheckScreening" />
+
+    <bpmn:task id="Task_CheckScreening" name="Check request prerequisites">
+      <bpmn:incoming>Flow_AttachDetails_CheckScreening</bpmn:incoming>
+      <bpmn:outgoing>Flow_CheckScreening_GatewayScreening</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_CheckScreening_GatewayScreening" sourceRef="Task_CheckScreening" targetRef="Gateway_Screening" />
+
+    <bpmn:exclusiveGateway id="Gateway_Screening" name="Prerequisites met?">
+      <bpmn:incoming>Flow_CheckScreening_GatewayScreening</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScreeningBad</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ScreeningGood</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_ScreeningBad" name="Bad" sourceRef="Gateway_Screening" targetRef="Task_DenyScreening" />
+    <bpmn:sequenceFlow id="Flow_ScreeningGood" name="Good" sourceRef="Gateway_Screening" targetRef="Task_AssessEligibility" />
+
+    <bpmn:task id="Task_DenyScreening" name="Deny for screening record">
+      <bpmn:incoming>Flow_ScreeningBad</bpmn:incoming>
+      <bpmn:outgoing>Flow_DenyScreening_InformScreeningDenial</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_DenyScreening_InformScreeningDenial" sourceRef="Task_DenyScreening" targetRef="Task_InformScreeningDenial" />
+
+    <bpmn:task id="Task_InformScreeningDenial" name="Inform the screening denial">
+      <bpmn:incoming>Flow_DenyScreening_InformScreeningDenial</bpmn:incoming>
+      <bpmn:outgoing>Flow_InformScreeningDenial_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_InformScreeningDenial_End" sourceRef="Task_InformScreeningDenial" targetRef="End_ScreeningRejected" />
+
+    <bpmn:endEvent id="End_ScreeningRejected" name="Rejected by the screening">
+      <bpmn:incoming>Flow_InformScreeningDenial_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:task id="Task_AssessEligibility" name="Assess service eligibility">
+      <bpmn:incoming>Flow_ScreeningGood</bpmn:incoming>
+      <bpmn:outgoing>Flow_AssessEligibility_GatewayEligibility</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_AssessEligibility_GatewayEligibility" sourceRef="Task_AssessEligibility" targetRef="Gateway_Eligibility" />
+
+    <bpmn:exclusiveGateway id="Gateway_Eligibility" name="Eligible for service?">
+      <bpmn:incoming>Flow_AssessEligibility_GatewayEligibility</bpmn:incoming>
+      <bpmn:outgoing>Flow_EligibilityNotEligible</bpmn:outgoing>
+      <bpmn:outgoing>Flow_EligibilityEligible</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:sequenceFlow id="Flow_EligibilityNotEligible" name="Not eligible" sourceRef="Gateway_Eligibility" targetRef="Task_DenyEligibility" />
+    <bpmn:sequenceFlow id="Flow_EligibilityEligible" name="Eligible" sourceRef="Gateway_Eligibility" targetRef="Task_OpenWorkOrder" />
+
+    <bpmn:task id="Task_DenyEligibility" name="Deny for eligibility capacity">
+      <bpmn:incoming>Flow_EligibilityNotEligible</bpmn:incoming>
+      <bpmn:outgoing>Flow_DenyEligibility_InformEligibilityDenial</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_DenyEligibility_InformEligibilityDenial" sourceRef="Task_DenyEligibility" targetRef="Task_InformEligibilityDenial" />
+
+    <bpmn:task id="Task_InformEligibilityDenial" name="Inform the eligibility denial">
+      <bpmn:incoming>Flow_DenyEligibility_InformEligibilityDenial</bpmn:incoming>
+      <bpmn:outgoing>Flow_InformEligibilityDenial_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_InformEligibilityDenial_End" sourceRef="Task_InformEligibilityDenial" targetRef="End_EligibilityRejected" />
+
+    <bpmn:endEvent id="End_EligibilityRejected" name="Rejected for eligibility capacity">
+      <bpmn:incoming>Flow_InformEligibilityDenial_End</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:task id="Task_OpenWorkOrder" name="Open the work order">
+      <bpmn:incoming>Flow_EligibilityEligible</bpmn:incoming>
+      <bpmn:outgoing>Flow_OpenWorkOrder_PlanService</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_OpenWorkOrder_PlanService" sourceRef="Task_OpenWorkOrder" targetRef="Task_PlanService" />
+
+    <bpmn:task id="Task_PlanService" name="Plan the service">
+      <bpmn:incoming>Flow_OpenWorkOrder_PlanService</bpmn:incoming>
+      <bpmn:outgoing>Flow_PlanService_SetServiceScope</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_PlanService_SetServiceScope" sourceRef="Task_PlanService" targetRef="Task_SetServiceScope" />
+
+    <bpmn:task id="Task_SetServiceScope" name="Set the service scope">
+      <bpmn:incoming>Flow_PlanService_SetServiceScope</bpmn:incoming>
+      <bpmn:outgoing>Flow_SetServiceScope_PrepareService</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_SetServiceScope_PrepareService" sourceRef="Task_SetServiceScope" targetRef="Task_PrepareService" />
+
+    <bpmn:task id="Task_PrepareService" name="Prepare the service">
+      <bpmn:incoming>Flow_SetServiceScope_PrepareService</bpmn:incoming>
+      <bpmn:outgoing>Flow_PrepareService_CompleteService</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_PrepareService_CompleteService" sourceRef="Task_PrepareService" targetRef="Task_CompleteService" />
+
+    <bpmn:task id="Task_CompleteService" name="Complete the service">
+      <bpmn:incoming>Flow_PrepareService_CompleteService</bpmn:incoming>
+      <bpmn:outgoing>Flow_CompleteService_End</bpmn:outgoing>
+    </bpmn:task>
+
+    <bpmn:sequenceFlow id="Flow_CompleteService_End" sourceRef="Task_CompleteService" targetRef="End_ServiceCompleted" />
+
+    <bpmn:endEvent id="End_ServiceCompleted" name="Service completed">
+      <bpmn:incoming>Flow_CompleteService_End</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_ServiceRequest">
+    <bpmndi:BPMNPlane id="BPMNPlane_ServiceRequest" bpmnElement="Collaboration_ServiceRequest">
+
+      <bpmndi:BPMNShape id="Participant_ServiceCenta_di" bpmnElement="Participant_ServiceCenta" isHorizontal="true">
+        <dc:Bounds x="140" y="60" width="1790" height="560" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_Coordinator_di" bpmnElement="Lane_Coordinator" isHorizontal="true">
+        <dc:Bounds x="170" y="60" width="1760" height="220" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_Reviewer_di" bpmnElement="Lane_Reviewer" isHorizontal="true">
+        <dc:Bounds x="170" y="280" width="1760" height="220" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Lane_Operator_di" bpmnElement="Lane_Operator" isHorizontal="true">
+        <dc:Bounds x="170" y="500" width="1760" height="120" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="StartEvent_Request_di" bpmnElement="StartEvent_Request">
+        <dc:Bounds x="200" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_RegisterRequest_di" bpmnElement="Task_RegisterRequest">
+        <dc:Bounds x="270" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_AttachDetails_di" bpmnElement="Task_AttachDetails">
+        <dc:Bounds x="420" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_CheckScreening_di" bpmnElement="Task_CheckScreening">
+        <dc:Bounds x="570" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_Screening_di" bpmnElement="Gateway_Screening" isMarkerVisible="true">
+        <dc:Bounds x="730" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_DenyScreening_di" bpmnElement="Task_DenyScreening">
+        <dc:Bounds x="730" y="410" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_InformScreeningDenial_di" bpmnElement="Task_InformScreeningDenial">
+        <dc:Bounds x="880" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_ScreeningRejected_di" bpmnElement="End_ScreeningRejected">
+        <dc:Bounds x="1030" y="212" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_AssessEligibility_di" bpmnElement="Task_AssessEligibility">
+        <dc:Bounds x="830" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Gateway_Eligibility_di" bpmnElement="Gateway_Eligibility" isMarkerVisible="true">
+        <dc:Bounds x="990" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_DenyEligibility_di" bpmnElement="Task_DenyEligibility">
+        <dc:Bounds x="990" y="410" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_InformEligibilityDenial_di" bpmnElement="Task_InformEligibilityDenial">
+        <dc:Bounds x="1140" y="190" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_EligibilityRejected_di" bpmnElement="End_EligibilityRejected">
+        <dc:Bounds x="1290" y="212" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_OpenWorkOrder_di" bpmnElement="Task_OpenWorkOrder">
+        <dc:Bounds x="1090" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_PlanService_di" bpmnElement="Task_PlanService">
+        <dc:Bounds x="1240" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_SetServiceScope_di" bpmnElement="Task_SetServiceScope">
+        <dc:Bounds x="1390" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_PrepareService_di" bpmnElement="Task_PrepareService">
+        <dc:Bounds x="1540" y="540" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="Task_CompleteService_di" bpmnElement="Task_CompleteService">
+        <dc:Bounds x="1690" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="End_ServiceCompleted_di" bpmnElement="End_ServiceCompleted">
+        <dc:Bounds x="1840" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="Flow_Start_RegisterRequest_di" bpmnElement="Flow_Start_RegisterRequest">
+        <di:waypoint x="236" y="140" />
+        <di:waypoint x="270" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_RegisterRequest_AttachDetails_di" bpmnElement="Flow_RegisterRequest_AttachDetails">
+        <di:waypoint x="370" y="140" />
+        <di:waypoint x="420" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_AttachDetails_CheckScreening_di" bpmnElement="Flow_AttachDetails_CheckScreening">
+        <di:waypoint x="520" y="140" />
+        <di:waypoint x="545" y="140" />
+        <di:waypoint x="545" y="360" />
+        <di:waypoint x="570" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_CheckScreening_GatewayScreening_di" bpmnElement="Flow_CheckScreening_GatewayScreening">
+        <di:waypoint x="670" y="360" />
+        <di:waypoint x="730" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ScreeningBad_di" bpmnElement="Flow_ScreeningBad">
+        <di:waypoint x="755" y="385" />
+        <di:waypoint x="755" y="410" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_ScreeningGood_di" bpmnElement="Flow_ScreeningGood">
+        <di:waypoint x="780" y="360" />
+        <di:waypoint x="830" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DenyScreening_InformScreeningDenial_di" bpmnElement="Flow_DenyScreening_InformScreeningDenial">
+        <di:waypoint x="830" y="450" />
+        <di:waypoint x="855" y="450" />
+        <di:waypoint x="855" y="230" />
+        <di:waypoint x="880" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_InformScreeningDenial_End_di" bpmnElement="Flow_InformScreeningDenial_End">
+        <di:waypoint x="980" y="230" />
+        <di:waypoint x="1030" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_AssessEligibility_GatewayEligibility_di" bpmnElement="Flow_AssessEligibility_GatewayEligibility">
+        <di:waypoint x="930" y="360" />
+        <di:waypoint x="990" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_EligibilityNotEligible_di" bpmnElement="Flow_EligibilityNotEligible">
+        <di:waypoint x="1015" y="385" />
+        <di:waypoint x="1015" y="410" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_EligibilityEligible_di" bpmnElement="Flow_EligibilityEligible">
+        <di:waypoint x="1040" y="360" />
+        <di:waypoint x="1090" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_DenyEligibility_InformEligibilityDenial_di" bpmnElement="Flow_DenyEligibility_InformEligibilityDenial">
+        <di:waypoint x="1090" y="450" />
+        <di:waypoint x="1115" y="450" />
+        <di:waypoint x="1115" y="230" />
+        <di:waypoint x="1140" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_InformEligibilityDenial_End_di" bpmnElement="Flow_InformEligibilityDenial_End">
+        <di:waypoint x="1240" y="230" />
+        <di:waypoint x="1290" y="230" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_OpenWorkOrder_PlanService_di" bpmnElement="Flow_OpenWorkOrder_PlanService">
+        <di:waypoint x="1190" y="360" />
+        <di:waypoint x="1240" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_PlanService_SetServiceScope_di" bpmnElement="Flow_PlanService_SetServiceScope">
+        <di:waypoint x="1340" y="360" />
+        <di:waypoint x="1390" y="360" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_SetServiceScope_PrepareService_di" bpmnElement="Flow_SetServiceScope_PrepareService">
+        <di:waypoint x="1490" y="360" />
+        <di:waypoint x="1515" y="360" />
+        <di:waypoint x="1515" y="580" />
+        <di:waypoint x="1540" y="580" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_PrepareService_CompleteService_di" bpmnElement="Flow_PrepareService_CompleteService">
+        <di:waypoint x="1640" y="580" />
+        <di:waypoint x="1665" y="580" />
+        <di:waypoint x="1665" y="140" />
+        <di:waypoint x="1690" y="140" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="Flow_CompleteService_End_di" bpmnElement="Flow_CompleteService_End">
+        <di:waypoint x="1790" y="140" />
+        <di:waypoint x="1840" y="140" />
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</bpmn:definitions>

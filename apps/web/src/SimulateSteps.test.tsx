@@ -30,7 +30,7 @@ setLocale('en');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
-const CASO = 'examples/tarjeta-credito';
+const CASO = 'packages/engine/test/fixtures/service-request';
 
 type Json = Record<string, unknown>;
 
@@ -140,7 +140,7 @@ function seleccionar(id: string): void {
   pulsar(`${SELECCIONAR}${id}`);
 }
 
-/** El AS-IS del caso de la tarjeta, que trae calendario, pools y carriles: el panel completo. */
+/** El AS-IS del fixture de solicitudes, que trae calendario, pools y carriles: el panel completo. */
 function asIs(): Json {
   return JSON.parse(readFileSync(resolve(RAIZ, `${CASO}/as-is.scenario.json`), 'utf8')) as Json;
 }
@@ -196,23 +196,23 @@ describe('los cuatro pasos del panel de simulación', () => {
   it('una tarea en el paso 2 enseña su tiempo y no sus recursos', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('times');
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
 
-    expect(hay('campo-elements.Task_FillApplication.processingTime')).toBe(true);
-    expect(hay('campo-elements.Task_FillApplication.resources[0].ref')).toBe(false);
-    expect(hay('campo-elements.Task_FillApplication.calendar')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(true);
+    expect(hay('campo-elements.Task_RegisterRequest.resources[0].ref')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.calendar')).toBe(false);
 
     // Y en el paso 3, al revés: los mismos datos, la otra mitad de la ficha.
     irAPaso('resources');
-    expect(hay('campo-elements.Task_FillApplication.resources[0].ref')).toBe(true);
-    expect(hay('campo-elements.Task_FillApplication.processingTime')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.resources[0].ref')).toBe(true);
+    expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(false);
   });
 
   it('las probabilidades de una compuerta son del paso 1', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     expect(texto()).toContain(en.escenario.seccionCompuerta);
-    expect(hay('campo-elements.Flow_BureauGood.probability')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
 
     irAPaso('times');
     expect(texto()).not.toContain(en.escenario.seccionCompuerta);
@@ -228,13 +228,13 @@ describe('el paso elegido sobrevive', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('times');
 
-    for (const id of ['Task_FillApplication', 'Task_PrintCard', 'StartEvent_Application']) {
+    for (const id of ['Task_RegisterRequest', 'Task_PrepareService', 'StartEvent_Request']) {
       seleccionar(id);
       expect(boton(en.escenario.paso['times']!).getAttribute('aria-pressed')).toBe('true');
     }
     // El campo que se ve sigue siendo el del paso 2, no el del elemento entero.
-    expect(hay('campo-elements.StartEvent_Application.interTriggerTimer')).toBe(true);
-    expect(hay('campo-elements.StartEvent_Application.triggerCount')).toBe(false);
+    expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
+    expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(false);
   });
 
   it('el JSON avanzado está en los cuatro pasos', () => {
@@ -255,19 +255,19 @@ describe('la lista de elementos del paso', () => {
     // El AS-IS sin el tiempo de una tarea: es exactamente lo que la lista tiene que delatar.
     const escenario = asIs();
     const elementos = { ...(escenario['elements'] as Json) };
-    const sinTiempo = { ...(elementos['Task_PrintCard'] as Json) };
+    const sinTiempo = { ...(elementos['Task_PrepareService'] as Json) };
     delete sinTiempo['processingTime'];
-    elementos['Task_PrintCard'] = sinTiempo;
+    elementos['Task_PrepareService'] = sinTiempo;
     montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
     irAPaso('times');
 
     const filas = [...document.querySelectorAll('.lista-paso li')].map(
       (li) => li.textContent?.trim() ?? '',
     );
-    expect(filas.some((f) => f.startsWith('Task_PrintCard'))).toBe(true);
-    expect(filas.find((f) => f.startsWith('Task_PrintCard'))).toContain(en.escenario.sinResumen);
+    expect(filas.some((f) => f.startsWith('Task_PrepareService'))).toBe(true);
+    expect(filas.find((f) => f.startsWith('Task_PrepareService'))).toContain(en.escenario.sinResumen);
     // La que sí lo tiene lo enseña con el nombre de su distribución.
-    expect(filas.find((f) => f.startsWith('Task_FillApplication'))).toContain(
+    expect(filas.find((f) => f.startsWith('Task_RegisterRequest'))).toContain(
       en.escenario.distribuciones['constant'],
     );
   });
@@ -276,12 +276,12 @@ describe('la lista de elementos del paso', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('resources');
     const fila = [...document.querySelectorAll('.lista-paso li button')].find(
-      (b) => b.textContent?.trim() === 'Task_PrintCard',
+      (b) => b.textContent?.trim() === 'Task_PrepareService',
     ) as HTMLButtonElement;
     expect(fila).toBeInstanceOf(HTMLButtonElement);
     act(() => {
       fila.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(hay('campo-elements.Task_PrintCard.resources[0].ref')).toBe(true);
+    expect(hay('campo-elements.Task_PrepareService.resources[0].ref')).toBe(true);
   });
 });

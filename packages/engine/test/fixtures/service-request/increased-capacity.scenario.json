@@ -1,0 +1,1 @@
+{ "version": 1, "name": "Increased reviewer capacity", "extends": "as-is.scenario.json", "resources": { "analyst": { "capacity": 3 } } }

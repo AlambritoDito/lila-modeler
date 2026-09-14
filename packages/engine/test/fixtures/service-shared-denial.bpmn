@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture E22 (ADR-028): the service request example with ONE shared denial pair.
+     Both rejections reach the same Task_Deny / Task_Inform, and the final XOR Gateway_Cause
+     routes to the right end event with `conditions` over the flow the case already took
+     (R-COND-1…5). No BPMNDI: the engine does not read the diagram layer. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_ServiceSharedDenial"
+                  targetNamespace="https://lila-modeler.org/bpmn/test"
+                  exporter="Lila Modeler tests"
+                  exporterVersion="0.0.0">
+  <bpmn:process id="Process_ServiceSharedDenial" name="Service-request processing, shared denial" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_Request" name="Service request received" />
+    <bpmn:sequenceFlow id="Flow_Start_RegisterRequest" sourceRef="StartEvent_Request" targetRef="Task_RegisterRequest" />
+
+    <bpmn:task id="Task_RegisterRequest" name="Register the request" />
+    <bpmn:sequenceFlow id="Flow_RegisterRequest_AttachDetails" sourceRef="Task_RegisterRequest" targetRef="Task_AttachDetails" />
+
+    <bpmn:task id="Task_AttachDetails" name="Attach request details" />
+    <bpmn:sequenceFlow id="Flow_AttachDetails_CheckScreening" sourceRef="Task_AttachDetails" targetRef="Task_CheckScreening" />
+
+    <bpmn:task id="Task_CheckScreening" name="Check request prerequisites" />
+    <bpmn:sequenceFlow id="Flow_CheckScreening_GatewayScreening" sourceRef="Task_CheckScreening" targetRef="Gateway_Screening" />
+
+    <bpmn:exclusiveGateway id="Gateway_Screening" name="Prerequisites met?" />
+    <bpmn:sequenceFlow id="Flow_ScreeningBad" name="Bad" sourceRef="Gateway_Screening" targetRef="Gateway_Denied" />
+    <bpmn:sequenceFlow id="Flow_ScreeningGood" name="Good" sourceRef="Gateway_Screening" targetRef="Task_AssessEligibility" />
+
+    <bpmn:task id="Task_AssessEligibility" name="Assess service eligibility" />
+    <bpmn:sequenceFlow id="Flow_AssessEligibility_GatewayEligibility" sourceRef="Task_AssessEligibility" targetRef="Gateway_Eligibility" />
+
+    <bpmn:exclusiveGateway id="Gateway_Eligibility" name="Eligible for service?" />
+    <bpmn:sequenceFlow id="Flow_EligibilityNotEligible" name="Not eligible" sourceRef="Gateway_Eligibility" targetRef="Gateway_Denied" />
+    <bpmn:sequenceFlow id="Flow_EligibilityEligible" name="Eligible" sourceRef="Gateway_Eligibility" targetRef="Task_OpenWorkOrder" />
+
+    <!-- The merge, the shared pair, and the gateway that tells the two denials apart again. -->
+    <bpmn:exclusiveGateway id="Gateway_Denied" name="Denied" />
+    <bpmn:sequenceFlow id="Flow_Denied_Deny" sourceRef="Gateway_Denied" targetRef="Task_Deny" />
+
+    <bpmn:task id="Task_Deny" name="Deny the application" />
+    <bpmn:sequenceFlow id="Flow_Deny_Inform" sourceRef="Task_Deny" targetRef="Task_Inform" />
+
+    <bpmn:task id="Task_Inform" name="Inform the denial" />
+    <bpmn:sequenceFlow id="Flow_Inform_Cause" sourceRef="Task_Inform" targetRef="Gateway_Cause" />
+
+    <bpmn:exclusiveGateway id="Gateway_Cause" name="Cause of the denial?" />
+    <bpmn:sequenceFlow id="Flow_CauseScreening" name="Screening" sourceRef="Gateway_Cause" targetRef="End_ScreeningRejected" />
+    <bpmn:sequenceFlow id="Flow_CauseEligibility" name="Eligibility" sourceRef="Gateway_Cause" targetRef="End_EligibilityRejected" />
+
+    <bpmn:endEvent id="End_ScreeningRejected" name="Rejected by the screening" />
+    <bpmn:endEvent id="End_EligibilityRejected" name="Rejected for eligibility capacity" />
+
+    <bpmn:task id="Task_OpenWorkOrder" name="Open the work order" />
+    <bpmn:sequenceFlow id="Flow_OpenWorkOrder_PlanService" sourceRef="Task_OpenWorkOrder" targetRef="Task_PlanService" />
+
+    <bpmn:task id="Task_PlanService" name="Plan the service" />
+    <bpmn:sequenceFlow id="Flow_PlanService_SetServiceScope" sourceRef="Task_PlanService" targetRef="Task_SetServiceScope" />
+
+    <bpmn:task id="Task_SetServiceScope" name="Set the service scope" />
+    <bpmn:sequenceFlow id="Flow_SetServiceScope_PrepareService" sourceRef="Task_SetServiceScope" targetRef="Task_PrepareService" />
+
+    <bpmn:task id="Task_PrepareService" name="Prepare the service" />
+    <bpmn:sequenceFlow id="Flow_PrepareService_CompleteService" sourceRef="Task_PrepareService" targetRef="Task_CompleteService" />
+
+    <bpmn:task id="Task_CompleteService" name="Complete the service" />
+    <bpmn:sequenceFlow id="Flow_CompleteService_End" sourceRef="Task_CompleteService" targetRef="End_ServiceCompleted" />
+
+    <bpmn:endEvent id="End_ServiceCompleted" name="Service completed" />
+  </bpmn:process>
+</bpmn:definitions>

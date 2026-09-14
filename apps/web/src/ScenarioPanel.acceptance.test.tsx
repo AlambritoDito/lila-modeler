@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Aceptación de #332: `examples/tarjeta-credito` se parametriza **entero** desde el panel, sin
+ * Aceptación de #332: `packages/engine/test/fixtures/service-request` se parametriza **entero** desde el panel, sin
  * abrir el JSON ni una vez, y lo que sale es el mismo escenario que `as-is.scenario.json`.
  *
  * El punto de partida es lo que la app tiene en cuanto abres un `.bpmn` y creas un escenario: la
@@ -34,7 +34,7 @@ setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
-const CASO = 'examples/tarjeta-credito';
+const CASO = 'packages/engine/test/fixtures/service-request';
 
 type Json = Record<string, unknown>;
 
@@ -203,31 +203,31 @@ function Anfitrion(): React.JSX.Element {
 
 /** `[id, minutos, grupo]` de cada tarea. Los minutos son lo que se teclea: el archivo va en s. */
 const TAREAS: readonly [string, string, string][] = [
-  ['Task_FillApplication', '5', 'executive'],
-  ['Task_CopyId', '2', 'executive'],
-  ['Task_CheckBureau', '1', 'analyst'],
-  ['Task_DenyBureau', '2', 'analyst'],
-  ['Task_InformBureauDenial', '1', 'executive'],
-  ['Task_AssessDebt', '20', 'analyst'],
-  ['Task_DenyDebt', '2', 'analyst'],
-  ['Task_InformDebtDenial', '1', 'executive'],
-  ['Task_OpenAccount', '3', 'analyst'],
-  ['Task_ComputePaymentCapacity', '2', 'analyst'],
-  ['Task_AssignCreditLimit', '1', 'analyst'],
-  ['Task_PrintCard', '10', 'operator'],
-  ['Task_DeliverCard', '5', 'executive'],
+  ['Task_RegisterRequest', '5', 'executive'],
+  ['Task_AttachDetails', '2', 'executive'],
+  ['Task_CheckScreening', '1', 'analyst'],
+  ['Task_DenyScreening', '2', 'analyst'],
+  ['Task_InformScreeningDenial', '1', 'executive'],
+  ['Task_AssessEligibility', '20', 'analyst'],
+  ['Task_DenyEligibility', '2', 'analyst'],
+  ['Task_InformEligibilityDenial', '1', 'executive'],
+  ['Task_OpenWorkOrder', '3', 'analyst'],
+  ['Task_PlanService', '2', 'analyst'],
+  ['Task_SetServiceScope', '1', 'analyst'],
+  ['Task_PrepareService', '10', 'operator'],
+  ['Task_CompleteService', '5', 'executive'],
 ];
 
 /** `[clave, nombre, capacidad, coste por hora]` de cada grupo; todos con el calendario de tienda. */
 const GRUPOS: readonly [string, string, string, string][] = [
-  ['executive', 'Account Executive', '3', '100'],
-  ['analyst', 'Credit Analyst', '2', '120'],
-  ['operator', 'Production Operator', '1', '80'],
+  ['executive', 'Service Coordinator', '3', '100'],
+  ['analyst', 'Technical Reviewer', '2', '120'],
+  ['operator', 'Service Operator', '1', '80'],
 ];
 
 const DIAS_LABORABLES = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 
-it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin tocar el JSON', () => {
+it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin tocar el JSON', () => {
   contenedor = document.createElement('div');
   document.body.appendChild(contenedor);
   raiz = createRoot(contenedor);
@@ -274,12 +274,12 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
 
   /* --- Paso 2 · Análisis de tiempos: las llegadas del inicio y las trece tareas. --- */
   irAPaso('times');
-  seleccionar('StartEvent_Application');
+  seleccionar('StartEvent_Request');
   elegirPorTexto(
-    'campo-elements.StartEvent_Application.interTriggerTimer',
+    'campo-elements.StartEvent_Request.interTriggerTimer',
     es.escenario.distribuciones['exponential']!,
   );
-  teclear('campo-elements.StartEvent_Application.interTriggerTimer.mean', '6');
+  teclear('campo-elements.StartEvent_Request.interTriggerTimer.mean', '6');
   for (const [id, minutos] of TAREAS) {
     seleccionar(id);
     elegirPorTexto(`campo-elements.${id}.processingTime`, es.escenario.distribuciones['constant']!);
@@ -296,19 +296,19 @@ it('el AS-IS de la tarjeta de crédito se teclea entero desde el panel, sin toca
 
   /* --- Y al paso 4: el inicio también atiende en el calendario de la tienda. --- */
   irAPaso('calendars');
-  seleccionar('StartEvent_Application');
-  elegir('campo-elements.StartEvent_Application.calendar', 'tienda');
+  seleccionar('StartEvent_Request');
+  elegir('campo-elements.StartEvent_Request.calendar', 'tienda');
 
   /* --- Las dos compuertas, en el paso 1: su reparto es parte de que el modelo corra. --- */
   irAPaso('validation');
-  seleccionar('Gateway_Bureau');
-  teclear('campo-elements.Flow_BureauBad.probability', '0.4');
-  teclear('campo-elements.Flow_BureauGood.probability', '0.6');
+  seleccionar('Gateway_Screening');
+  teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
+  teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');
   expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
 
-  seleccionar('Gateway_Debt');
-  teclear('campo-elements.Flow_DebtNotEligible.probability', '0.3');
-  teclear('campo-elements.Flow_DebtEligible.probability', '0.7');
+  seleccionar('Gateway_Eligibility');
+  teclear('campo-elements.Flow_EligibilityNotEligible.probability', '0.3');
+  teclear('campo-elements.Flow_EligibilityEligible.probability', '0.7');
   expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
 
   /* --- Lo tecleado es, semánticamente, el AS-IS del ejemplo. --- */

@@ -1,7 +1,7 @@
 /**
- * LILA-334. The acceptance of the ticket, without any DOM: the three lanes of the credit-card
+ * LILA-334. The acceptance of the ticket, without any DOM: the three lanes of the service-request
  * example, assigned to their three pools, have to produce exactly the `resources` that
- * `examples/tarjeta-credito/as-is.scenario.json` already carries by hand. If the bulk edit and
+ * `packages/engine/test/fixtures/service-request/as-is.scenario.json` already carries by hand. If the bulk edit and
  * the file ever disagree, this is the test that says so.
  */
 import { readFileSync } from 'node:fs';
@@ -24,10 +24,10 @@ let ir: ProcessIR;
 let asIs: Json;
 
 beforeAll(async () => {
-  const xml = readFileSync(resolve(RAIZ, 'examples/tarjeta-credito/model.bpmn'), 'utf8');
+  const xml = readFileSync(resolve(RAIZ, 'packages/engine/test/fixtures/service-request/model.bpmn'), 'utf8');
   ir = (await parseBpmn(xml)).ir;
   asIs = JSON.parse(
-    readFileSync(resolve(RAIZ, 'examples/tarjeta-credito/as-is.scenario.json'), 'utf8'),
+    readFileSync(resolve(RAIZ, 'packages/engine/test/fixtures/service-request/as-is.scenario.json'), 'utf8'),
   ) as Json;
 }, 120_000);
 
@@ -51,18 +51,18 @@ function sinRecursos(escenario: Json): Json {
 }
 
 const POOL_DE_CARRIL: Record<string, string> = {
-  'Account Executive': 'executive',
-  'Credit Analyst': 'analyst',
-  'Production Operator': 'operator',
+  'Service Coordinator': 'executive',
+  'Technical Reviewer': 'analyst',
+  'Service Operator': 'operator',
 };
 
 describe('tasksByLane', () => {
   it('groups only tasks, in IR order, and leaves events and gateways out', () => {
     const porCarril = tasksByLane(ir);
     expect([...porCarril.keys()].sort()).toEqual([
-      'Account Executive',
-      'Credit Analyst',
-      'Production Operator',
+      'Service Coordinator',
+      'Service Operator',
+      'Technical Reviewer',
     ]);
     for (const [, ids] of porCarril) {
       for (const id of ids) expect(ir.nodes[id]?.type).toBe('task');
@@ -82,7 +82,7 @@ describe('tasksByLane', () => {
 });
 
 describe('laneAssignmentDelta', () => {
-  it('three assignments reproduce the resources of the credit-card AS-IS', () => {
+  it('three assignments reproduce the resources of the service-request AS-IS', () => {
     let escenario = sinRecursos(asIs);
     const porCarril = tasksByLane(ir);
     for (const [carril, pool] of Object.entries(POOL_DE_CARRIL)) {
@@ -103,7 +103,7 @@ describe('laneAssignmentDelta', () => {
 
   it('keeps the other fields of the element (processingTime survives)', () => {
     const escenario = sinRecursos(asIs);
-    const ids = tasksByLane(ir).get('Production Operator') ?? [];
+    const ids = tasksByLane(ir).get('Service Operator') ?? [];
     const { fragment } = laneAssignmentDelta(escenario, ids, 'operator');
     const id = ids[0]!;
     expect(Object.keys(fragment.elements[id]!)).toEqual(['resources']);
@@ -111,7 +111,7 @@ describe('laneAssignmentDelta', () => {
   });
 
   it('lists the tasks that already have resources, and only those', () => {
-    const ids = tasksByLane(ir).get('Credit Analyst') ?? [];
+    const ids = tasksByLane(ir).get('Technical Reviewer') ?? [];
     const { alreadyAssigned } = laneAssignmentDelta(asIs, ids, 'executive');
     expect(alreadyAssigned).toEqual(ids);
 

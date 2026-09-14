@@ -2,7 +2,7 @@
   "$schema": "https://lila-modeler.org/schema/scenario/1.json",
   "version": 1,
   "name": "AS-IS",
-  "description": "Current operation: 3 account executives, 2 credit analysts, 1 production operator",
+  "description": "Current operation: 3 service coordinators, 2 technical reviewers, 1 service operator",
   "model": "model.bpmn",
   "run": {
     "start": "2026-09-07T08:00:00-06:00",
@@ -18,68 +18,68 @@
     "tienda": { "intervals": [{ "days": ["MON", "TUE", "WED", "THU", "FRI"], "from": "08:00", "to": "16:00" }] }
   },
   "resources": {
-    "executive": { "name": "Account Executive", "type": "role", "capacity": 3, "costPerHour": 100, "calendar": "tienda" },
-    "analyst": { "name": "Credit Analyst", "type": "role", "capacity": 2, "costPerHour": 120, "calendar": "tienda" },
-    "operator": { "name": "Production Operator", "type": "role", "capacity": 1, "costPerHour": 80, "calendar": "tienda" }
+    "executive": { "name": "Service Coordinator", "type": "role", "capacity": 3, "costPerHour": 100, "calendar": "tienda" },
+    "analyst": { "name": "Technical Reviewer", "type": "role", "capacity": 2, "costPerHour": 120, "calendar": "tienda" },
+    "operator": { "name": "Service Operator", "type": "role", "capacity": 1, "costPerHour": 80, "calendar": "tienda" }
   },
   "elements": {
-    "StartEvent_Application": {
+    "StartEvent_Request": {
       "interTriggerTimer": { "type": "exponential", "mean": 360 },
       "calendar": "tienda"
     },
-    "Task_FillApplication": {
+    "Task_RegisterRequest": {
       "processingTime": { "type": "constant", "value": 300 },
       "resources": [{ "ref": "executive", "quantity": 1 }]
     },
-    "Task_CopyId": {
+    "Task_AttachDetails": {
       "processingTime": { "type": "constant", "value": 120 },
       "resources": [{ "ref": "executive", "quantity": 1 }]
     },
-    "Task_CheckBureau": {
+    "Task_CheckScreening": {
       "processingTime": { "type": "constant", "value": 60 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Flow_BureauBad": { "probability": 0.4 },
-    "Flow_BureauGood": { "probability": 0.6 },
-    "Task_DenyBureau": {
+    "Flow_ScreeningBad": { "probability": 0.4 },
+    "Flow_ScreeningGood": { "probability": 0.6 },
+    "Task_DenyScreening": {
       "processingTime": { "type": "constant", "value": 120 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Task_InformBureauDenial": {
+    "Task_InformScreeningDenial": {
       "processingTime": { "type": "constant", "value": 60 },
       "resources": [{ "ref": "executive", "quantity": 1 }]
     },
-    "Task_AssessDebt": {
+    "Task_AssessEligibility": {
       "processingTime": { "type": "constant", "value": 1200 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Flow_DebtNotEligible": { "probability": 0.3 },
-    "Flow_DebtEligible": { "probability": 0.7 },
-    "Task_DenyDebt": {
+    "Flow_EligibilityNotEligible": { "probability": 0.3 },
+    "Flow_EligibilityEligible": { "probability": 0.7 },
+    "Task_DenyEligibility": {
       "processingTime": { "type": "constant", "value": 120 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Task_InformDebtDenial": {
+    "Task_InformEligibilityDenial": {
       "processingTime": { "type": "constant", "value": 60 },
       "resources": [{ "ref": "executive", "quantity": 1 }]
     },
-    "Task_OpenAccount": {
+    "Task_OpenWorkOrder": {
       "processingTime": { "type": "constant", "value": 180 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Task_ComputePaymentCapacity": {
+    "Task_PlanService": {
       "processingTime": { "type": "constant", "value": 120 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Task_AssignCreditLimit": {
+    "Task_SetServiceScope": {
       "processingTime": { "type": "constant", "value": 60 },
       "resources": [{ "ref": "analyst", "quantity": 1 }]
     },
-    "Task_PrintCard": {
+    "Task_PrepareService": {
       "processingTime": { "type": "constant", "value": 600 },
       "resources": [{ "ref": "operator", "quantity": 1 }]
     },
-    "Task_DeliverCard": {
+    "Task_CompleteService": {
       "processingTime": { "type": "constant", "value": 300 },
       "resources": [{ "ref": "executive", "quantity": 1 }]
     }
