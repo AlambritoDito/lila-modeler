@@ -8,6 +8,7 @@
  * (LILA-066), que es también lo que vigila `strings.test.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { failStartup, finishStartup, setStartupLocale } from './startup';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
@@ -243,6 +244,7 @@ type EstadoSim =
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
+  useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
     elementos: 0,
@@ -251,6 +253,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     refsRotas: [],
     error: null,
   });
+  useEffect(() => { if (modelador === null && estado.error !== null) failStartup(); }, [modelador, estado.error]);
   const [procesoId, setProcesoId] = useState(PROCESO_INICIAL);
   const [projectId, setProjectId] = useState('demo-pedido');
   const [projectName, setProjectName] = useState<string>(S.app.proyectoDemo);
@@ -605,7 +608,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }, [modelador, procesoId, revision]);
 
   useEffect(() => {
-    void preferencias().then(async (guardadas) => {
+    void preferencias().then(async (raw) => {
+      const guardadas = raw && typeof raw === 'object' ? raw : {};
       const mios = saneaTemas(guardadas.temas);
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
@@ -618,6 +622,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
       setIdioma(preferido);
       setLocale(preferido);
+      setStartupLocale(document.documentElement.lang);
       try {
         const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
         aplicarTema(t);
@@ -628,6 +633,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         setAvisoTema(e instanceof Error ? e.message : String(e));
         setTema(null);
       }
+    }).catch(() => {
+      // Malformed preferences must not leave the initial canvas permanently unmounted.
+      setTema(null);
     });
     // Solo al arrancar; los cambios posteriores pasan por `cambiarTema` y por el selector de densidad.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -747,8 +755,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   abrirRutaRef.current = abrirRuta;
   useEffect(() => {
     const abrir = (ruta: OpenPathRequest): void => abrirRutaRef.current(ruta);
+    const unsubscribe = window.lila?.onOpenPath(abrir);
     void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); });
-    return window.lila?.onOpenPath(abrir);
+    return unsubscribe;
   }, []);
   useEffect(() => {
     const ruta = rutaPendiente.current;
@@ -845,8 +854,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </dialog>}
       <header className="barra">
         <div className="identidad">
-          {/* Logo del artefacto: pentágono macizo en `accent.primary`. */}
-          <svg className="logo" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,0 24,9.1 19.7,24 4.3,24 0,9.1" /></svg>
+          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="32" height="32" />
           <div>
             <div className="proyecto">{projectName}</div>
             <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>

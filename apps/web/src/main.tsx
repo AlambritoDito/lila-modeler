@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import { failStartup } from './startup';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { BrowserStore } from './store/BrowserStore';
@@ -19,6 +20,6 @@ import '@fontsource/jetbrains-mono/700.css';
 // Único punto de elección BrowserStore/DesktopStore (OP-01).
 const desktop = typeof window.lila !== 'undefined';
 const store = desktop ? new DesktopStore() : new BrowserStore(new Map([['pedido', { xml: pedido, name: 'model.bpmn' }]]));
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById('root')!, { onUncaughtError: (error) => { console.error(error); failStartup(); } }).render(
   <StrictMode><App store={store} bpmnFilesEnabled={!desktop} /></StrictMode>,
 );

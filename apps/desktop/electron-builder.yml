@@ -5,8 +5,9 @@ directories:
 files:
   - dist/**
   - package.json
+  - resources/icons/**
 asar: true
-# Icono propio (LILA-207, #267): resources/icons/, generado desde docs/design/icono.svg
+# Icono propio (LILA-207, #267): resources/icons/, generado desde docs/design/branding/sources/
 # (ver el script "icons" en package.json para la receta de regeneración).
 mac:
   icon: resources/icons/icon.icns

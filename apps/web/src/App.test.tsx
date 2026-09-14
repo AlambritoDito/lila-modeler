@@ -1,6 +1,7 @@
 import type { SaveOutcome } from '../../desktop/src/bridge.js';
 // @vitest-environment jsdom
-import { act, useEffect } from 'react';
+import { act, StrictMode, useEffect } from 'react';
+import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
@@ -1186,4 +1187,38 @@ it('restores the saved browser project after the canvas becomes ready', async ()
   await remontar();
   expect(mocks.abrir).toHaveBeenCalledWith(saved.model.xml);
   expect(container.textContent).toContain('Restored project');
+});
+
+// Integration: the splash waits for the real shell's readiness callback, including StrictMode.
+it('startup waits for the canvas and does not return after simulation', async () => {
+  await act(async () => root.unmount());
+  container.id = 'root'; container.setAttribute('inert', '');
+  const splash = document.createElement('div'); splash.id = 'startup';
+  splash.innerHTML = '<p id="startup-status"></p><a id="startup-reload" href=""></a>';
+  document.body.append(splash); startStartup();
+  mocks.retrasarLienzo = true;
+  root = createRoot(container);
+  try {
+    await act(async () => root.render(<StrictMode><App store={session} /></StrictMode>));
+    expect(document.getElementById('startup')).not.toBeNull();
+    expect(container.hasAttribute('inert')).toBe(true);
+    await act(async () => mocks.listo());
+    expect(document.getElementById('startup')).toBeNull();
+    expect(container.hasAttribute('inert')).toBe(false);
+    await click(T.app.modos.simular); await click(T.app.ejecutar);
+    expect(document.getElementById('startup')).toBeNull();
+  } finally { finishStartup(); splash.remove(); container.removeAttribute('id'); }
+});
+it('an initial import error offers recovery on the startup screen', async () => {
+  await act(async () => root.unmount());
+  const splash = document.createElement('div'); splash.id = 'startup';
+  splash.innerHTML = '<p id="startup-status"></p><a id="startup-reload" href=""></a>';
+  document.body.append(splash); startStartup(); mocks.retrasarLienzo = true;
+  root = createRoot(container);
+  try {
+    await act(async () => root.render(<App store={session} />));
+    await act(async () => mocks.publicarEstado({ zoom: 1, elementos: 0, avisos: 0, error: 'broken XML', perdidas: [], refsRotas: [] }));
+    expect(splash.dataset['state']).toBe('error');
+    expect(splash.textContent).toContain('could not');
+  } finally { finishStartup(); splash.remove(); }
 });

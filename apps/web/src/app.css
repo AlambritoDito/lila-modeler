@@ -76,10 +76,11 @@ body {
 }
 
 .logo {
-  fill: var(--accent-primary);
   flex: none;
-  height: 22px;
-  width: 22px;
+  height: 32px;
+  width: 32px;
+  border-radius: 7px;
+  object-fit: contain;
 }
 
 .proyecto {

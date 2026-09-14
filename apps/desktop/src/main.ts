@@ -552,12 +552,8 @@ function registerIpcHandlers(win: BrowserWindow): void {
   });
 
   guardedHandle(win, 'lila:pendingOpenPath', async (): Promise<OpenPathRequest | null> => {
-    // Que el renderer pida la ruta pendiente ES la prueba de que ya está vivo y suscrito a
-    // `lila:open-path` (`App.tsx` registra `onOpenPath` en la misma pasada). `did-finish-load`
-    // llega DESPUÉS de esto (es el `load` de la página, tras sus subrecursos), así que sin esta
-    // línea queda una rendija: una ruta que llegue entre esta llamada y `did-finish-load`
-    // —`second-instance` de Windows contra una ventana recién arrancada— se guardaría en
-    // `pendingOpen` cuando ya nadie va a volver a pedirlo, y se perdería en silencio.
+    // Existing handshake: App subscribes before requesting pending paths. The HTML load
+    // event is not readiness: the editor now loads dynamically behind the startup screen.
     windowLoaded = true;
     const result = pendingOpen;
     pendingOpen = null; // se consume una vez.
@@ -602,10 +598,9 @@ let mainWindow: BrowserWindow | null = null;
 /** Ruta `.bpmn` capturada antes de que la ventana pudiera recibirla; `pendingOpenPath()` la consume una vez. */
 let pendingOpen: OpenPathRequest | null = null;
 /**
- * `true` desde que la ventana terminó de cargar su página. `mainWindow !== null` NO basta para
- * mandar `lila:open-path`: en el arranque en frío por argv (Windows/Linux) la ruta se acepta entre
- * `createWindow` y `loadURL`, cuando ya hay ventana pero ningún renderer suscrito, y el `send` se
- * perdería sin dejar nada en `pendingOpen` (hallazgo 2 del QA a LILA-072/074).
+ * True only after the renderer requests pending paths, having subscribed to open-path.
+ * Neither window creation nor HTML load proves the dynamically loaded editor is ready.
+ * Paths received during the startup screen remain pending until that existing handshake.
  */
 let windowLoaded = false;
 
@@ -765,6 +760,8 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   const win = new BrowserWindow({
     ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
+    backgroundColor: '#12101a',
+    icon: path.join(app.getAppPath(), 'resources', 'icons', 'icon.png'),
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
       // "Cannot use import statement outside a module", verificado en el smoke de este
@@ -800,9 +797,9 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
     if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
     void saveBounds(win);
   });
-  // A partir de aquí el renderer existe y `lila:open-path` llega a alguien (ver `windowLoaded`).
-  win.webContents.on('did-finish-load', () => {
-    if (mainWindow === win) windowLoaded = true;
+  // Reload starts a new renderer subscription lifecycle; only pendingOpenPath marks ready.
+  win.webContents.on('did-start-loading', () => {
+    if (mainWindow === win) windowLoaded = false;
   });
   win.on('closed', () => {
     if (mainWindow === win) {
@@ -819,6 +816,8 @@ interface SmokeChecks {
   tema: boolean;
   fuente: boolean;
   puente: boolean;
+  branding: boolean;
+  inicioListo: boolean;
 }
 
 async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise<void> {
@@ -848,6 +847,8 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
     tema: document.documentElement.style.getPropertyValue('--bg-base') !== '',
     fuente: document.fonts.check('12px bpmn'),
     puente: typeof window.lila === 'object' && window.lila !== null && window.lila.platform === 'desktop',
+    branding: !!document.querySelector('.identidad img.logo')?.naturalWidth,
+    inicioListo: !document.getElementById('startup') && !document.getElementById('root')?.inert,
   }))()`)) as SmokeChecks;
 
   const smokeDir = process.env.LILA_SMOKE_DIR ?? path.join(app.getPath('temp'), 'lila-smoke');
@@ -860,6 +861,8 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
     checks.tema &&
     checks.fuente &&
     checks.puente &&
+    checks.branding &&
+    checks.inicioListo &&
     consoleErrors.length === 0 &&
     loadFailure === null;
 

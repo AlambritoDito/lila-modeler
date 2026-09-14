@@ -130,7 +130,7 @@ pre {
   height: 1.6rem;
   flex: none;
   border-radius: 0.45rem;
-  background: linear-gradient(135deg, var(--accent-tertiary), var(--accent-primary));
+  object-fit: contain;
 }
 
 .top nav {
@@ -364,3 +364,6 @@ footer .fine {
     scroll-behavior: auto;
   }
 }
+
+.hero-brand { max-width: 580px; margin-bottom: 1.5rem; }
+.hero-brand img { display: block; width: 100%; height: auto; background: #fff; border-radius: 16px; }

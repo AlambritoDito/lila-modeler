@@ -15,3 +15,5 @@ mkdirSync(output, { recursive: true });
 cpSync(path.join(root, 'site'), output, { recursive: true });
 cpSync(path.join(root, 'apps/web/dist'), path.join(output, 'app'), { recursive: true });
 cpSync(path.join(root, 'docs/design/en'), path.join(output, 'img'), { recursive: true });
+
+cpSync(path.join(root, 'docs/design/branding/web'), path.join(output, 'branding'), { recursive: true });

@@ -42,7 +42,10 @@
 /** Weekdays of the calendar format, in canonical order (`CalendarEditor.DIAS`). */
 const DIAS_SEMANA = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
+export const startupEn = { loading: 'Opening your workspace…', error: 'Lila Modeler could not finish starting. Please reload to try again.', reload: 'Reload' };
+
 export const en = {
+  startup: startupEn,
   /* ------------------------------------------------------------------ *
    * App shell (`App.tsx`)
    * ------------------------------------------------------------------ */

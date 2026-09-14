@@ -1,5 +1,5 @@
 // Aceptación de LILA-207 (#267): el empaquetado tiene icono propio en las tres
-// plataformas y los tres binarios salen del mismo SVG de `docs/design`. No abre
+// plataformas y los tres binarios salen del mismo maestro detallado de `docs/design/branding`. No abre
 // Electron ni construye instaladores: comprueba la configuración y las cabeceras
 // de los ficheros, que es lo que lee electron-builder.
 import { describe, expect, it } from 'vitest';
@@ -64,13 +64,14 @@ describe('icono propio de la app de escritorio (LILA-207)', () => {
     expect(icns.readUInt32BE(4)).toBe(icns.length);
   });
 
-  it('el SVG de origen usa los colores de marca del sistema de temas', () => {
-    const svg = readFileSync(raiz('docs/design/icono.svg'), 'utf8');
-    // `bg.base` de Eva-01 (tokens.css) y `accent.primary` de Papel (themes/papel.json).
-    expect(readFileSync(raiz('apps/web/src/theme/tokens.css'), 'utf8')).toContain('#12101A');
-    expect(readFileSync(raiz('apps/web/src/theme/themes/papel.json'), 'utf8')).toContain('#EC3013');
-    expect(svg).toContain('#12101A');
-    expect(svg).toContain('#EC3013');
-    expect(svg).toContain('viewBox="0 0 1024 1024"');
+  it('el maestro detallado y sus variantes compartidas están versionados', () => {
+    for (const name of ['lila-original.png', 'lila-app-master.png', 'lila-horizontal.png', 'lila-monochrome.png']) {
+      const png = readFileSync(raiz(`docs/design/branding/sources/${name}`));
+      expect(png.subarray(0, 4).toString('latin1')).toBe('\x89PNG');
+    }
+    const exported = readFileSync(raiz('docs/design/branding/web/app-icon.png'));
+    expect(exported.readUInt32BE(16)).toBe(256);
+    expect(exported.readUInt32BE(20)).toBe(256);
+    expect(readFileSync(escritorio('package.json'), 'utf8')).toContain('generate-branding.mjs');
   });
 });

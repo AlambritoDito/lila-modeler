@@ -71,3 +71,9 @@ results and the ranking contract are described in [RESULTS_FORMAT.md](../RESULTS
 The full [historical design decisions and component inventory](https://github.com/AlambritoDito/lila-modeler/blob/a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8/docs/design/README.md)
 are preserved with their original context, including Archivo typography, contrast constraints,
 `fg.onAccent`, the `shadow` color token and schema-generated form rationale.
+
+## Current branding
+
+The approved detailed Lila illustration, app icons and startup branding are documented in
+[branding/README.md](branding/README.md). The former `icono.svg` is historical and is no longer
+the source for application icons.
