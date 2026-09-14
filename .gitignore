@@ -42,3 +42,9 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Staged by Vite from theme sources and approved branding.
+/apps/web/public/
+
+# Local export bundles and review runs; approved sources live in docs/design/branding.
+/output/
