@@ -31,7 +31,7 @@ setLocale('es');
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '../../..');
-const CASO = 'examples/tarjeta-credito';
+const CASO = 'packages/engine/test/fixtures/service-request';
 
 type Json = Record<string, unknown>;
 
@@ -219,34 +219,34 @@ function avisosXorDelMotor(escenario: Json): string[] {
 describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('una tarea ofrece tiempo y recursos, y no las llegadas ni la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     // #333: el tiempo de proceso vive en el paso 2; lo que este test fija es que en ese paso la
     // tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
     irAPaso('times');
-    expect(hay('campo-elements.Task_FillApplication.processingTime')).toBe(true);
-    expect(hay('campo-elements.Task_FillApplication.interTriggerTimer')).toBe(false);
-    expect(hay('campo-elements.Task_FillApplication.probability')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(true);
+    expect(hay('campo-elements.Task_RegisterRequest.interTriggerTimer')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.probability')).toBe(false);
   });
 
   it('un inicio ofrece las llegadas y no el tiempo de proceso', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('StartEvent_Application');
+    seleccionar('StartEvent_Request');
     // #333: las dos llegadas se reparten entre dos pasos —cuántos casos es validación del
     // proceso (paso 1) y cada cuánto llegan es análisis de tiempos (paso 2)—, así que el
     // «ofrece» de este test se comprueba en el paso de cada uno.
     irAPaso('times');
-    expect(hay('campo-elements.StartEvent_Application.interTriggerTimer')).toBe(true);
-    expect(hay('campo-elements.StartEvent_Application.processingTime')).toBe(false);
+    expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
+    expect(hay('campo-elements.StartEvent_Request.processingTime')).toBe(false);
     irAPaso('validation');
-    expect(hay('campo-elements.StartEvent_Application.triggerCount')).toBe(true);
+    expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(true);
   });
 
   it('un flujo solo ofrece la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Flow_BureauGood');
-    expect(hay('campo-elements.Flow_BureauGood.probability')).toBe(true);
-    expect(hay('campo-elements.Flow_BureauGood.processingTime')).toBe(false);
-    expect(hay('campo-elements.Flow_BureauGood.resources')).toBe(false);
+    seleccionar('Flow_ScreeningGood');
+    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.processingTime')).toBe(false);
+    expect(hay('campo-elements.Flow_ScreeningGood.resources')).toBe(false);
   });
 
   it('un flujo con `conditions` las edita como lista, no como campo reservado (ADR-028)', () => {
@@ -254,16 +254,16 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
       <Anfitrion
         inicial={base({
           elements: {
-            Flow_BureauGood: { conditions: [{ flowTaken: 'Flow_BureauBad', probability: 1 }] },
+            Flow_ScreeningGood: { conditions: [{ flowTaken: 'Flow_ScreeningBad', probability: 1 }] },
           },
         })}
       />,
     );
-    seleccionar('Flow_BureauGood');
+    seleccionar('Flow_ScreeningGood');
     // Los dos campos de la entrada, con su ruta: si cayera en `CampoReservado` no existiría
     // ninguno de los dos y el único gesto posible sería borrar el campo entero.
-    expect(hay('campo-elements.Flow_BureauGood.conditions[0].flowTaken')).toBe(true);
-    expect(hay('campo-elements.Flow_BureauGood.conditions[0].probability')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.conditions[0].flowTaken')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.conditions[0].probability')).toBe(true);
   });
 
   it('en un nodo `conditions` sigue siendo reservado y se puede borrar (OP-11)', () => {
@@ -271,37 +271,37 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
       <Anfitrion
         inicial={base({
           elements: {
-            Task_FillApplication: {
-              conditions: [{ flowTaken: 'Flow_BureauBad', probability: 1 }],
+            Task_RegisterRequest: {
+              conditions: [{ flowTaken: 'Flow_ScreeningBad', probability: 1 }],
             },
           },
         })}
       />,
     );
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     // El editor de lista no aparece: en una tarea el motor sigue diciendo `E-RESERVADO`, así que
     // lo único que ofrece el panel es el widget con su botón de borrar.
-    expect(hay('campo-elements.Task_FillApplication.conditions[0].flowTaken')).toBe(false);
+    expect(hay('campo-elements.Task_RegisterRequest.conditions[0].flowTaken')).toBe(false);
     pulsar(es.escenario.quitar);
-    expect((ultimo['elements'] as Json)['Task_FillApplication']).toEqual({});
+    expect((ultimo['elements'] as Json)['Task_RegisterRequest']).toEqual({});
   });
 
   it('un fin solo ofrece su coste fijo', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('End_CardDelivered');
+    seleccionar('End_ServiceCompleted');
     irAPaso('resources');
-    expect(hay('campo-elements.End_CardDelivered.fixedCost')).toBe(true);
-    expect(hay('campo-elements.End_CardDelivered.processingTime')).toBe(false);
+    expect(hay('campo-elements.End_ServiceCompleted.fixedCost')).toBe(true);
+    expect(hay('campo-elements.End_ServiceCompleted.processingTime')).toBe(false);
   });
 
   it('un campo que no aplica pero **ya está escrito** se sigue viendo, con su error', () => {
     // Si no, un `probability` puesto por error en una tarea se volvería invisible y no habría
     // forma de borrarlo desde el panel; el error del linter seguiría ahí para siempre.
-    montar(<Anfitrion inicial={base({ elements: { Task_FillApplication: { probability: 0.5 } } })} />);
-    seleccionar('Task_FillApplication');
-    expect(hay('campo-elements.Task_FillApplication.probability')).toBe(true);
+    montar(<Anfitrion inicial={base({ elements: { Task_RegisterRequest: { probability: 0.5 } } })} />);
+    seleccionar('Task_RegisterRequest');
+    expect(hay('campo-elements.Task_RegisterRequest.probability')).toBe(true);
     // Y sigue saliendo el error del linter (`E-PROB-EN-NODO`) pegado al campo.
-    expect(document.body.textContent).toContain('elements.Task_FillApplication.probability');
+    expect(document.body.textContent).toContain('elements.Task_RegisterRequest.probability');
   });
 });
 
@@ -312,16 +312,16 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
 describe('vista de compuerta', () => {
   it('lista los salientes, escribe elements[flujo].probability y suma', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     // La compuerta no tiene campos propios: lo que se parametriza son sus ramas.
-    expect(hay('campo-elements.Gateway_Bureau.processingTime')).toBe(false);
+    expect(hay('campo-elements.Gateway_Screening.processingTime')).toBe(false);
     expect(document.body.textContent).toContain(es.escenario.seccionCompuerta);
 
-    teclear('campo-elements.Flow_BureauBad.probability', '0.4');
-    teclear('campo-elements.Flow_BureauGood.probability', '0.6');
+    teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
+    teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');
     expect(ultimo['elements']).toEqual({
-      Flow_BureauBad: { probability: 0.4 },
-      Flow_BureauGood: { probability: 0.6 },
+      Flow_ScreeningBad: { probability: 0.4 },
+      Flow_ScreeningGood: { probability: 0.6 },
     });
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
@@ -329,16 +329,16 @@ describe('vista de compuerta', () => {
 
   it('avisa cuando las ramas declaradas de una XOR no suman 1 (R10)', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Gateway_Bureau');
-    teclear('campo-elements.Flow_BureauBad.probability', '0.4');
-    teclear('campo-elements.Flow_BureauGood.probability', '0.4');
+    seleccionar('Gateway_Screening');
+    teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
+    teclear('campo-elements.Flow_ScreeningGood.probability', '0.4');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(0.8));
     expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
   });
 
   it('sin ninguna probabilidad declarada no avisa: el reparto por igual es legítimo', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Gateway_Debt');
+    seleccionar('Gateway_Eligibility');
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
   });
 
@@ -346,9 +346,9 @@ describe('vista de compuerta', () => {
   // da el residuo a la que falta y no avisa. El panel tiene que decir lo mismo que la lista de
   // validación que sale tres líneas más abajo, que es la del motor.
   it('una rama declarada y la otra sin número suman 1, sin aviso, como el motor', () => {
-    const escenario = base({ elements: { Flow_BureauBad: { probability: 0.4 } } });
+    const escenario = base({ elements: { Flow_ScreeningBad: { probability: 0.4 } } });
     montar(<Anfitrion inicial={escenario} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).toContain(es.escenario.compuertaImplicita(0.6));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
@@ -358,11 +358,11 @@ describe('vista de compuerta', () => {
   it('con flujo por defecto el resto es suyo: total 1 y ningún aviso', () => {
     const conDefecto: ProcessIR = {
       ...ir,
-      flows: { ...ir.flows, Flow_BureauGood: { ...ir.flows['Flow_BureauGood']!, isDefault: true } },
+      flows: { ...ir.flows, Flow_ScreeningGood: { ...ir.flows['Flow_ScreeningGood']!, isDefault: true } },
     };
-    const escenario = base({ elements: { Flow_BureauBad: { probability: 0.4 } } });
+    const escenario = base({ elements: { Flow_ScreeningBad: { probability: 0.4 } } });
     montar(<Anfitrion inicial={escenario} ir={conDefecto} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     expect(document.body.textContent).toContain(es.escenario.compuertaPorDefecto);
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
@@ -370,10 +370,10 @@ describe('vista de compuerta', () => {
 
   it('avisa cuando las declaradas se pasan de 1, igual que el motor', () => {
     const escenario = base({
-      elements: { Flow_BureauBad: { probability: 0.5 }, Flow_BureauGood: { probability: 0.6 } },
+      elements: { Flow_ScreeningBad: { probability: 0.5 }, Flow_ScreeningGood: { probability: 0.6 } },
     });
     montar(<Anfitrion inicial={escenario} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1.1));
     expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
     expect(avisosXorDelMotor(escenario)).toEqual(['W-XOR-NORMALIZADA']);
@@ -381,10 +381,10 @@ describe('vista de compuerta', () => {
 
   it('todas declaradas y sumando 1 no avisa', () => {
     const escenario = base({
-      elements: { Flow_BureauBad: { probability: 0.4 }, Flow_BureauGood: { probability: 0.6 } },
+      elements: { Flow_ScreeningBad: { probability: 0.4 }, Flow_ScreeningGood: { probability: 0.6 } },
     });
     montar(<Anfitrion inicial={escenario} />);
-    seleccionar('Gateway_Bureau');
+    seleccionar('Gateway_Screening');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
     expect(avisosXorDelMotor(escenario)).toEqual([]);
@@ -403,26 +403,26 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
 
   it('resources[].ref ofrece los grupos del escenario, no una caja de texto', () => {
     montar(<Anfitrion inicial={conPools} />);
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     irAPaso('resources');
     pulsar(es.escenario.anadirEtiqueta(es.escenario.campos['resources']!));
-    const id = 'campo-elements.Task_FillApplication.resources[0].ref';
+    const id = 'campo-elements.Task_RegisterRequest.resources[0].ref';
     expect(opciones(id)).toEqual(['', 'executive', 'analyst']);
     elegir(id, 'analyst');
     expect(ultimo['elements']).toEqual({
       // Añadir la fila escribe ya el `quantity: 1` del § 2.5: el formulario enseña el mismo
       // número que acabará en el archivo, en vez de una casilla vacía.
-      Task_FillApplication: { resources: [{ ref: 'analyst', quantity: 1 }] },
+      Task_RegisterRequest: { resources: [{ ref: 'analyst', quantity: 1 }] },
     });
   });
 
   it('elements[].calendar y resources[].calendar ofrecen los calendarios declarados', () => {
     montar(<Anfitrion inicial={conPools} />);
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     irAPaso('calendars');
-    expect(opciones('campo-elements.Task_FillApplication.calendar')).toEqual(['', 'tienda']);
-    elegir('campo-elements.Task_FillApplication.calendar', 'tienda');
-    expect(ultimo['elements']).toEqual({ Task_FillApplication: { calendar: 'tienda' } });
+    expect(opciones('campo-elements.Task_RegisterRequest.calendar')).toEqual(['', 'tienda']);
+    elegir('campo-elements.Task_RegisterRequest.calendar', 'tienda');
+    expect(ultimo['elements']).toEqual({ Task_RegisterRequest: { calendar: 'tienda' } });
   });
 
   it('una referencia rota se conserva como opción, para poder verla y quitarla', () => {
@@ -430,13 +430,13 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
       <Anfitrion
         inicial={base({
           calendars: { tienda: { intervals: [{ days: ['MON'], from: '08:00', to: '16:00' }] } },
-          elements: { Task_FillApplication: { calendar: 'almacen' } },
+          elements: { Task_RegisterRequest: { calendar: 'almacen' } },
         })}
       />,
     );
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     irAPaso('calendars');
-    expect(opciones('campo-elements.Task_FillApplication.calendar')).toEqual([
+    expect(opciones('campo-elements.Task_RegisterRequest.calendar')).toEqual([
       '',
       'almacen',
       'tienda',
@@ -451,13 +451,13 @@ describe('grupos y calendarios se eligen de lo declarado', () => {
 describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () => {
   it('con baseTimeUnit «min», teclear 5 guarda 300', () => {
     montar(<Anfitrion inicial={base()} />);
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     irAPaso('times');
     // `constant` es la primera variante del `discriminatedUnion`.
-    elegir('campo-elements.Task_FillApplication.processingTime', '0');
-    teclear('campo-elements.Task_FillApplication.processingTime.value', '5');
+    elegir('campo-elements.Task_RegisterRequest.processingTime', '0');
+    teclear('campo-elements.Task_RegisterRequest.processingTime.value', '5');
     expect(ultimo['elements']).toEqual({
-      Task_FillApplication: { processingTime: { type: 'constant', value: 300 } },
+      Task_RegisterRequest: { processingTime: { type: 'constant', value: 300 } },
     });
     expect(document.body.textContent).toContain(es.escenario.unidades['min']);
   });
@@ -466,20 +466,20 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
     montar(
       <Anfitrion
         inicial={base({
-          elements: { Task_FillApplication: { processingTime: { type: 'constant', value: 300 } } },
+          elements: { Task_RegisterRequest: { processingTime: { type: 'constant', value: 300 } } },
         })}
       />,
     );
-    seleccionar('Task_FillApplication');
+    seleccionar('Task_RegisterRequest');
     irAPaso('times');
     const campo = document.getElementById(
-      'campo-elements.Task_FillApplication.processingTime.value',
+      'campo-elements.Task_RegisterRequest.processingTime.value',
     ) as HTMLInputElement;
     expect(campo.value).toBe('5');
     // `run.baseTimeUnit` se teclea en el paso 1, que es donde vive la corrida entera.
     irAPaso('validation');
     elegir('campo-run.baseTimeUnit', 'h');
-    expect((ultimo['elements'] as Json)['Task_FillApplication']).toEqual({
+    expect((ultimo['elements'] as Json)['Task_RegisterRequest']).toEqual({
       processingTime: { type: 'constant', value: 300 },
     });
   });

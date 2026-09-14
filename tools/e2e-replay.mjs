@@ -4,7 +4,7 @@
  * puppeteer, no playwright, no dependency added for a script that runs by hand and in review.
  *
  * What it proves, in one pass over the published demo (`_site`, served at `/lila-modeler/`):
- * open a `.lila` built from `examples/tarjeta-credito` with a single replication, run the
+ * open a `.lila` built from `packages/engine/test/fixtures/service-request` with a single replication, run the
  * simulation, press «Play» in the results, jump the replay to the end with the «Instant» speed,
  * and read the counters the overlay wrote on every element of the diagram — tasks, and also the
  * start event, the gateways and the end events, whose counters the model infers (#331 follow-up). Those counters must be
@@ -33,8 +33,8 @@ const PORT = Number(process.env.LILA_E2E_PORT ?? 8788);
 /** Debugging port of the throw-away Chrome; `LILA_E2E_CDP_PORT` frees it when one is already taken. */
 const CDP_PORT = Number(process.env.LILA_E2E_CDP_PORT ?? 9334);
 const BASE = `http://127.0.0.1:${PORT}/lila-modeler/app/`;
-/** `examples/tarjeta-credito` with seed 42 and one replication: 20 cards delivered. */
-const CARDS_DELIVERED = 20;
+/** `packages/engine/test/fixtures/service-request` with seed 42 and one replication: 17 services completed. */
+const SERVICES_COMPLETED = 17;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -64,21 +64,21 @@ function serve() {
 }
 
 /**
- * The fixture: `examples/tarjeta-credito` as a `.lila` with no runs and `replications: 1`. One
+ * The fixture: `packages/engine/test/fixtures/service-request` as a `.lila` with no runs and `replications: 1`. One
  * replication is the only case where the replay of the log and the aggregate of the result are
  * the same numbers, which is exactly the acceptance of #331.
  */
 function fixture(path) {
-  const dir = join(ROOT, 'examples/tarjeta-credito');
+  const dir = join(ROOT, 'packages/engine/test/fixtures/service-request');
   const read = (name) => readFileSync(join(dir, name), 'utf8');
   const one = (name) => {
     const scenario = JSON.parse(read(name));
     return [name, { ...scenario, run: { ...scenario.run, replications: 1 } }];
   };
-  const scenarios = Object.fromEntries([one('as-is.scenario.json'), one('to-be-3-analistas.scenario.json')]);
+  const scenarios = Object.fromEntries([one('as-is.scenario.json'), one('increased-capacity.scenario.json')]);
   writeFileSync(path, encodeLila({
-    version: 1, id: 'tarjeta-e2e', name: 'tarjeta-e2e',
-    model: { id: 'Process_TarjetaCredito', name: 'model.bpmn', xml: read('model.bpmn'), revision: 0 },
+    version: 1, id: 'service-e2e', name: 'service-e2e',
+    model: { id: 'Process_ServiceRequest', name: 'model.bpmn', xml: read('model.bpmn'), revision: 0 },
     scenarios, scenarioRevisions: Object.fromEntries(Object.keys(scenarios).map((n) => [n, 0])), runs: [],
   }));
 }
@@ -130,7 +130,7 @@ async function main() {
   const work = mkdtempSync(join(tmpdir(), 'lila-replay-'));
   const downloads = join(work, 'downloads');
   mkdirSync(downloads);
-  const source = join(work, 'tarjeta-e2e.lila');
+  const source = join(work, 'service-e2e.lila');
   fixture(source);
 
   const server = await serve();
@@ -214,7 +214,7 @@ async function main() {
     await cdp.send('Page.navigate', { url: BASE });
     await waitFor(`!!document.querySelector('.lienzo svg')`, 'the canvas');
     await open('Open', source);
-    await waitFor(`document.body.innerText.includes('tarjeta-e2e')`, 'the opened project name');
+    await waitFor(`document.body.innerText.includes('service-e2e')`, 'the opened project name');
 
     // 2. Run the AS-IS the project came with; the app lands on «Results» by itself.
     await click('Run simulation');
@@ -269,11 +269,11 @@ async function main() {
       { overlay: Object.keys(counters).sort(), engine: Object.keys(run.result.elements).sort() });
     // The headline number of the ticket, read on the diagram and not in the stored result: the
     // end event emits no log row, its counter comes from the path the model infers per case.
-    check(`the End_CardDelivered counter on the diagram is ${CARDS_DELIVERED} with seed 42`,
-      counters.End_CardDelivered?.completed === CARDS_DELIVERED, counters.End_CardDelivered);
-    check(`End_CardDelivered completed is ${CARDS_DELIVERED} with seed 42`,
-      run.result.process.byEndEvent?.End_CardDelivered?.completed === CARDS_DELIVERED,
-      run.result.process.byEndEvent?.End_CardDelivered?.completed);
+    check(`the End_ServiceCompleted counter on the diagram is ${SERVICES_COMPLETED} with seed 42`,
+      counters.End_ServiceCompleted?.completed === SERVICES_COMPLETED, counters.End_ServiceCompleted);
+    check(`End_ServiceCompleted completed is ${SERVICES_COMPLETED} with seed 42`,
+      run.result.process.byEndEvent?.End_ServiceCompleted?.completed === SERVICES_COMPLETED,
+      run.result.process.byEndEvent?.End_ServiceCompleted?.completed);
 
     // 5. Pause/Reset still answer after the jump: the controls are not one-shot.
     await click('Reset', '.replay');

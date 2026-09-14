@@ -160,7 +160,7 @@ data in v1 — `conditionExpression` is ignored, with a `W-COND` warning, and `c
 reserved field. Each outgoing flow of a gateway carries a percentage. The practical consequence is
 in the shape of the diagram: a "deny and inform the applicant" step that two different gateways can
 reach appears **once per gateway**, as its own pair of tasks, instead of being one shared node the
-data routes into. See `examples/tarjeta-credito`, which is modelled exactly that way.
+data routes into. See `packages/engine/test/fixtures/service-request`, which is modelled exactly that way.
 
 **3. Resources have no persistent identity.** A pool is a count of interchangeable units, not a
 list of named people: "Nurse, capacity 3" is three anonymous nurses, and a case that comes back
@@ -211,9 +211,6 @@ and the mean cycle time land just as close. What you should expect for each numb
 and the four places where the two engines do not agree, is in
 [`BIZAGI_PARITY.md`](BIZAGI_PARITY.md).
 
-For a complete case built from scratch rather than reconstructed — one pool, three lanes, thirteen
-tasks, two rejection branches, an AS-IS and a TO-BE to compare — see
-[`examples/tarjeta-credito`](../examples/tarjeta-credito/README.md).
 
 ---
 

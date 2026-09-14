@@ -394,7 +394,7 @@ that per-case vector, and the gateway still draws **one** uniform from its own s
 reserved field of § 15, with the same `E-RESERVADO` text as before.
 
 Context: v1 routes on probability only, so a model that merges two branches cannot tell them apart
-again downstream. The credit card example (`examples/tarjeta-credito`) duplicates the whole denial
+again downstream. The service request example (`packages/engine/test/fixtures/service-request`) duplicates the whole denial
 path — deny and inform, twice — for no reason other than to keep the two rejection causes
 countable. That duplication is what every Bizagi user hits first, and it is the cheapest gap in
 epic #335 to close.
@@ -426,7 +426,7 @@ Ceilings, all deliberate:
   select of the model's flows: a wrong id shows up as `E-REF-DESCONOCIDA` under its own path.
 
 *(tests: `packages/engine/test/conditions.test.ts`, fixture
-`packages/engine/test/fixtures/tarjeta-shared-denial.bpmn`)*
+`packages/engine/test/fixtures/service-shared-denial.bpmn`)*
 
 ---
 

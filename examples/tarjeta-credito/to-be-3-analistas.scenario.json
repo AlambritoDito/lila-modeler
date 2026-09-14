@@ -1,1 +1,0 @@
-{ "version": 1, "name": "TO-BE 3 analysts", "extends": "as-is.scenario.json", "resources": { "analyst": { "capacity": 3 } } }

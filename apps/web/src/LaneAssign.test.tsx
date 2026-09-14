@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * LILA-334. The acceptance is a gesture, so it is tested on the panel itself: the credit-card
+ * LILA-334. The acceptance is a gesture, so it is tested on the panel itself: the service-request
  * scenario with its `resources` stripped, three clicks (one per lane), and the result has to be
- * the file that ships in `examples/tarjeta-credito`, with `validateScenario` finding nothing.
+ * the file that ships in `packages/engine/test/fixtures/service-request`, with `validateScenario` finding nothing.
  *
  * Same mounting helpers as `ScenarioPanel.test.tsx` (`react-dom/client` + `act`, native setters):
  * no `@testing-library` is added for this.
@@ -36,10 +36,10 @@ let ir: ProcessIR;
 let asIs: Json;
 
 beforeAll(async () => {
-  const xml = readFileSync(resolve(RAIZ, 'examples/tarjeta-credito/model.bpmn'), 'utf8');
+  const xml = readFileSync(resolve(RAIZ, 'packages/engine/test/fixtures/service-request/model.bpmn'), 'utf8');
   ir = (await parseBpmn(xml)).ir;
   asIs = JSON.parse(
-    readFileSync(resolve(RAIZ, 'examples/tarjeta-credito/as-is.scenario.json'), 'utf8'),
+    readFileSync(resolve(RAIZ, 'packages/engine/test/fixtures/service-request/as-is.scenario.json'), 'utf8'),
   ) as Json;
 }, 120_000);
 
@@ -157,7 +157,7 @@ function asignar(carril: string, pool: string): void {
 }
 
 /* ------------------------------------------------------------------ *
- * 1 — Aceptación: tres clics parametrizan el caso de la tarjeta
+ * 1 — Aceptación: tres clics parametrizan el fixture de solicitudes
  * ------------------------------------------------------------------ */
 
 describe('acceptance of LILA-334', () => {
@@ -167,9 +167,9 @@ describe('acceptance of LILA-334', () => {
     montar(<Anfitrion inicial={inicial} />);
     irAPaso('resources');
 
-    asignar('Account Executive', 'executive');
-    asignar('Credit Analyst', 'analyst');
-    asignar('Production Operator', 'operator');
+    asignar('Service Coordinator', 'executive');
+    asignar('Technical Reviewer', 'analyst');
+    asignar('Service Operator', 'operator');
 
     expect(recursos(actual)).toEqual(recursos(asIs));
     const resuelto = ScenarioSchema.parse(actual) as ResolvedScenario;
@@ -181,7 +181,7 @@ describe('acceptance of LILA-334', () => {
     actual = inicial;
     montar(<Anfitrion inicial={inicial} />);
     irAPaso('resources');
-    asignar('Credit Analyst', 'analyst');
+    asignar('Technical Reviewer', 'analyst');
     for (const id of Object.keys(recursos(actual))) expect(ir.nodes[id]?.type).toBe('task');
   });
 });
@@ -196,15 +196,15 @@ describe('overwriting an assigned lane', () => {
     montar(<Anfitrion inicial={asIs} />);
     irAPaso('resources');
 
-    asignar('Credit Analyst', 'executive');
+    asignar('Technical Reviewer', 'executive');
     // Nothing written yet: the scenario is still the file as it shipped.
     expect(recursos(actual)).toEqual(recursos(asIs));
     const aviso = document.querySelector('.carril-a-pool [role="alert"]');
-    expect(aviso?.textContent).toBe(en.escenario.carrilYaAsignadas(tasksByLane(ir).get('Credit Analyst')!.length));
+    expect(aviso?.textContent).toBe(en.escenario.carrilYaAsignadas(tasksByLane(ir).get('Technical Reviewer')!.length));
     const listados = [...document.querySelectorAll('.carril-a-pool li')].map(
       (li) => li.textContent?.trim().split(' ')[0] ?? '',
     );
-    expect(listados).toEqual(tasksByLane(ir).get('Credit Analyst'));
+    expect(listados).toEqual(tasksByLane(ir).get('Technical Reviewer'));
 
     pulsar(en.escenario.carrilSobrescribir);
     for (const id of listados) {
@@ -219,7 +219,7 @@ describe('overwriting an assigned lane', () => {
     montar(<Anfitrion inicial={asIs} />);
     irAPaso('resources');
 
-    asignar('Credit Analyst', 'executive');
+    asignar('Technical Reviewer', 'executive');
     pulsar(en.escenario.carrilCancelar);
 
     expect(actual).toEqual(asIs);
@@ -232,7 +232,7 @@ describe('overwriting an assigned lane', () => {
     montar(<Anfitrion inicial={asIs} />);
     irAPaso('resources');
 
-    asignar('Credit Analyst', 'executive');
+    asignar('Technical Reviewer', 'executive');
     elegir('carril-a-pool-pool', 'analyst');
     expect(botones(en.escenario.carrilSobrescribir)).toHaveLength(0);
     expect(actual).toEqual(asIs);

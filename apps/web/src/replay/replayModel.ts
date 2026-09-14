@@ -6,7 +6,7 @@
  * The log is the engine's, not a toy walker: every number this module reports comes from
  * `EventLogRow` (docs/RESULTS_FORMAT.md § 7), so the counters at the end of the replay are the
  * same `elements[id].started/completed` the results table shows — that is the invariant
- * `replayModel.test.ts` pins on `examples/tarjeta-credito`.
+ * `replayModel.test.ts` pins on `packages/engine/test/fixtures/service-request`.
  *
  * Two things the log does NOT carry and this module infers from the IR graph:
  *
@@ -280,7 +280,7 @@ export function buildReplay(
       const flows = toEnd(last.elementId);
       // `flows` ends at the end event itself, which `hop` leaves out of the middle nodes.
       // // ponytail: with several reachable ends the BFS takes the first one, so a diagram whose
-      // // last task can reach two ends splits the cases by a guess. In `examples/tarjeta-credito`
+      // // last task can reach two ends splits the cases by a guess. In `packages/engine/test/fixtures/service-request`
       // // every end is reachable from exactly one last task, so the counters there are exact.
       // // Gateways count one crossing per case, so an AND join shows fewer `started` than the
       // // engine (which counts one per incoming token); `completed` and the end counters match.

@@ -80,6 +80,20 @@ Translations are **one plain file per language**, with no i18n library:
 `BACKLOG.md` and `LILA_MODELER_ESTRUCTURA.md` are working documents for this project's own team and
 are kept in Spanish; they are not part of the English-first rule above.
 
+### Examples and regression fixtures
+
+All current and future cases follow the [example policy](docs/EXAMPLES_POLICY.md)
+([Spanish](docs/es/EXAMPLES_POLICY.md)). Public examples teach modelling, simulation and
+interpretation using synthetic inputs or attributed reference material cleared for publication.
+Keep coursework, private case statements and submitted answers outside the public repository,
+including issue/PR text and attachments. Use neutral fixtures for regression coverage; renaming
+a private case alone does not make its content suitable for publication.
+
+For each case, document its provenance, purpose, assumptions and acceptance checks. Keep private
+models and exports outside the repository or in the ignored root `local/`, `private/` or `exports/`
+directories. Review staged files before publishing: `.gitignore` does not protect tracked files
+or text posted to GitHub.
+
 ## Pull request process
 
 - One branch per ticket, opened against `main`.

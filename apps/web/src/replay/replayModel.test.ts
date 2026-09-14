@@ -1,7 +1,7 @@
 /**
  * Acceptance of the replay model (#331): the counters it reports at the end of the replay are
  * the engine's own `elements[id].started/completed`. The log comes from a real `simulate` over
- * `examples/tarjeta-credito` with the scenario as it ships (seed 42) and a single replication —
+ * `packages/engine/test/fixtures/service-request` with the scenario as it ships (seed 42) and a single replication —
  * the only case where a per-replication replay and the aggregate can be compared at all.
  */
 import { readFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { parseBpmn } from '@lila/engine/bpmn';
 import { parseScenario, type ResolvedScenario } from '@lila/engine/schema';
 import { buildReplay, stateAt, type Replay } from './replayModel';
 
-const dir = fileURLToPath(new URL('../../../../examples/tarjeta-credito/', import.meta.url));
+const dir = fileURLToPath(new URL('../../../../packages/engine/test/fixtures/service-request/', import.meta.url));
 
 let ir: ProcessIR;
 let scenario: ResolvedScenario;
@@ -31,7 +31,7 @@ beforeAll(async () => {
   replay = buildReplay(rows, ir, scenario);
 }, 60_000);
 
-describe('buildReplay over examples/tarjeta-credito', () => {
+describe('buildReplay over packages/engine/test/fixtures/service-request', () => {
   it('counts every element the log carries plus the ones inferred from the graph', () => {
     // Thirteen tasks emit rows (no timer here); the start event, the two gateways and the three
     // end events emit nothing and are recovered from the inferred paths: nineteen in total, the
@@ -50,8 +50,8 @@ describe('buildReplay over examples/tarjeta-credito', () => {
       expect([id, final.elements[id]?.started, final.elements[id]?.completed])
         .toEqual([id, result.elements[id]?.started, result.elements[id]?.completed]);
     }
-    // The headline number of the ticket: cards delivered with seed 42 and one replication.
-    expect(final.elements['End_CardDelivered']?.completed).toBe(20);
+    // Seeded count for the synthetic fixture; all counters also match the engine above.
+    expect(final.elements['End_ServiceCompleted']?.completed).toBe(17);
   });
 
   it('ends with the engine counters for every element of the log', () => {
@@ -88,15 +88,15 @@ describe('buildReplay over examples/tarjeta-credito', () => {
     }
   });
 
-  it('walks the gateway between the bureau check and the rejection branch', () => {
-    // `Task_CheckBureau -> Gateway_Bureau -> Task_DenyBureau`: two flows, no shortcut.
+  it('walks the gateway between the prerequisite check and the rejection branch', () => {
+    // `Task_CheckScreening -> Gateway_Screening -> Task_DenyScreening`: two flows, no shortcut.
     const hop = replay.moves.find((move) => {
       const first = ir.flows[move.flows[0] as string];
       const last = ir.flows[move.flows[move.flows.length - 1] as string];
-      return first?.from === 'Task_CheckBureau' && last?.to === 'Task_DenyBureau';
+      return first?.from === 'Task_CheckScreening' && last?.to === 'Task_DenyScreening';
     });
     expect(hop?.flows).toHaveLength(2);
-    expect(ir.flows[hop?.flows[0] as string]?.to).toBe('Gateway_Bureau');
+    expect(ir.flows[hop?.flows[0] as string]?.to).toBe('Gateway_Screening');
   });
 
   it('puts a token on a flow while the hop lasts and nowhere after it', () => {

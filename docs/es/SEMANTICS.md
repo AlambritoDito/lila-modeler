@@ -368,7 +368,7 @@ conservado en `ir.nodes[g].outgoing`), y `p(fi)` el `probability` declarado en
 Un flujo que sale de un XOR **divergente** puede declarar `conditions: [{ flowTaken, probability }]`
 en vez de —o además de— su `probability` a secas. Es lo mínimo necesario para fusionar dos ramas
 que estaban duplicadas solo para volver a distinguirlas más adelante (el par de rechazo del ejemplo
-de la tarjeta de crédito), sin introducir variables de caso ni un lenguaje de expresiones.
+de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de expresiones.
 
 - **R-COND-1 — Probabilidad declarada efectiva.** Cuando un token llega a un XOR divergente, la
   probabilidad declarada de cada salida `fi` es la `probability` de la **primera** entrada de
