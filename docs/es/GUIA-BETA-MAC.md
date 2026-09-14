@@ -2,8 +2,8 @@
 
 > Leer en: [English](../BETA-MAC-GUIDE.md)
 
-Esta guía describe únicamente lo que existe y se ha verificado sobre el SHA `358353d`
-(2026-09-07), el artefacto final de la beta: `DesktopStore` ya está conectado en `main.tsx`
+Esta guía parte de la beta verificada sobre el SHA `358353d` (2026-09-07),
+con el branding y la instalación actualizados el 2026-09-14: `DesktopStore` ya está conectado en `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore"), con guardado
 transaccional, cierre seguro con diálogo nativo, recientes y el seam de pruebas E2E descritos
 abajo. No incluye nada prometido o planificado: donde algo todavía no está conectado, se dice
@@ -27,8 +27,7 @@ el canal que use el equipo.
 La app **no está firmada ni notarizada** (`identity: null` en `electron-builder.yml`, beta local).
 Si macOS bloquea una copia recibida de otra máquina, revisa su procedencia y usa las opciones de apertura que ofrezca el sistema. Esta entrega local se probó sin cambiar protecciones globales ni eliminar atributos de cuarentena.
 
-Sin icono propio todavía (issue #76): la app usa el icono por defecto de Electron en el Dock y en
-el Finder.
+La app utiliza el icono ilustrado detallado de Lila en el Dock y en el Finder.
 
 ## Qué muestra la ventana al abrir
 
@@ -298,3 +297,10 @@ forma no puede tocar). No son una API pública ni deben usarse en un uso normal 
 Sin ninguna de las tres, el comportamiento de la app es exactamente el mismo que si no existieran.
 **Advertencia**: son un atajo para pruebas, no algo que un usuario final deba fijar nunca — dejan
 la app respondiendo diálogos por sí sola sin intervención humana.
+
+## Branding e instalación registrada
+
+El arranque del editor web y de escritorio muestra el logo detallado de Lila y la
+versión del manifiesto hasta que el lienzo esté listo, con recuperación ante errores.
+La decisión visual y la instalación de validación del 14 de septiembre de 2026 están
+registradas en [BRANDING.md](BRANDING.md).

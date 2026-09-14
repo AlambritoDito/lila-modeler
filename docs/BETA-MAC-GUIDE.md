@@ -33,6 +33,12 @@ The app uses the Lila icon in the Dock and in Finder.
 
 ## What the window shows on launch
 
+Browser and desktop startup show the detailed horizontal Lila logo and manifest
+version until the initial canvas is ready. Startup offers localized reload recovery
+on failure and respects reduced motion. See the [branding decision](design/branding/DECISION.md)
+and the [2026-09-14 local installation record](design/branding/INSTALLATION-2026-09-14.md).
+
+
 The app always starts with the same example diagram bundled with it: the `pedido` process from
 `examples/pedido/model.bpmn` (imported directly in `apps/web/src/main.tsx`, not an external file).
 It shows with the **Eva-01** theme (dark background, light text, the bpmn-js palette on the left,

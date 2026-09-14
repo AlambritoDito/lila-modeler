@@ -1,5 +1,10 @@
 # Lila Modeler — detailed illustrated branding
 
+> Read this in: [Español](../../es/BRANDING.md)
+
+See the [accepted decision](DECISION.md) and the dated
+[local installation record](INSTALLATION-2026-09-14.md).
+
 Lila is a white chihuahua with a tilted head, asymmetrical folded ears, bright eyes,
 and detailed nose and fur. The owner selected this illustrated design in September
 2026. Do not substitute the simplified or faceted experiments. These are raster PNG
