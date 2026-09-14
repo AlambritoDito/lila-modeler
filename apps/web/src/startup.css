@@ -1,0 +1,22 @@
+/* Available before React and the editor stylesheet; the illustration is never animated. */
+html, body { margin: 0; background: #12101a; }
+#startup {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: #12101a;
+  color: #ece9f5;
+  font: 15px/1.5 system-ui, sans-serif;
+}
+.startup-content { width: min(560px, calc(100vw - 48px)); text-align: center; }
+.startup-logo { display: block; width: 100%; height: auto; border-radius: 18px; background: #fff; }
+.startup-version { margin: 24px 0 12px; color: #b9b1ce; font: 13px/1.5 ui-monospace, monospace; }
+#startup-status { margin: 12px 0; }
+.startup-indicator { display: inline-block; width: 18px; height: 18px; border: 2px solid #4e3f7a; border-top-color: #c5a8ff; border-radius: 50%; animation: startup-spin 1s linear infinite; }
+#startup[data-state="error"] .startup-indicator { display: none; }
+#startup-reload { display: inline-block; color: #c5a8ff; padding: 8px 16px; text-underline-offset: 4px; }
+#startup-reload:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+@keyframes startup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .startup-indicator { animation: none; } }

@@ -1,15 +1,44 @@
 import { fileURLToPath } from 'node:url';
+import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-// ponytail: los temas viven en `src/theme/themes/` (fuente única, la que leen los tests)
-// y esa carpeta es el `publicDir` de Vite, así que se sirven tal cual en `/eva-01.json`
-// y se copian verbatim a `dist/`. Editar un valor del JSON y recargar cambia la UI sin
-// recompilar, que es la aceptación de LILA-112. Si algún día hacen falta otros assets
-// estáticos, se crea `apps/web/public/` y se mueven los temas a `public/themes/`.
+// Stage local assets without moving theme sources or changing their public URLs.
+const here = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
+const webVersion = (JSON.parse(readFileSync(here('./package.json'), 'utf8')) as { version: string }).version;
+const desktopVersion = (JSON.parse(readFileSync(here('../desktop/package.json'), 'utf8')) as { version: string }).version;
+if (webVersion !== desktopVersion) throw new Error('Web and desktop versions must match before building.');
+mkdirSync(here('./public'), { recursive: true });
+cpSync(here('./src/theme/themes'), here('./public'), { recursive: true });
+cpSync(here('../../docs/design/branding/web'), here('./public/branding'), { recursive: true });
+
 export default defineConfig({
-  plugins: [react()],
-  publicDir: 'src/theme/themes',
+  plugins: [react(), {
+    name: 'lila-branding',
+    transformIndexHtml: (html) => html.replaceAll('%LILA_APP_VERSION%', webVersion),
+    configureServer(server) {
+      // Preserve live theme editing: refreshing must read the edited source JSON.
+      const sources = [
+        [here('./src/theme/themes'), here('./public')],
+        [here('../../docs/design/branding/web'), here('./public/branding')],
+      ] as const;
+      for (const [source, target] of sources) {
+        server.watcher.add(source);
+        const sync = (file: string, removed = false) => {
+          const rel = relative(source, file);
+          if (!rel || rel.startsWith(`..${sep}`) || rel === '..') return;
+          const dest = resolve(target, rel);
+          if (removed) rmSync(dest, { force: true });
+          else { mkdirSync(dirname(dest), { recursive: true }); cpSync(file, dest); }
+        };
+        server.watcher.on('change', file => sync(file));
+        server.watcher.on('add', file => sync(file));
+        server.watcher.on('unlink', file => sync(file, true));
+      }
+    },
+  }],
+  publicDir: 'public',
   // The default `/` is what the desktop needs: Electron loads `lila://app/index.html`, so the
   // bundle has to keep referencing its assets from the root of that custom scheme. The GitHub
   // Pages demo (LILA-067) is served from a sub-path instead

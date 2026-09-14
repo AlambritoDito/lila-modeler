@@ -4,9 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lila Modeler</title>
+    <link rel="icon" href="%BASE_URL%branding/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%branding/icon-32.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%branding/icon-180.png" />
+    <link rel="stylesheet" href="/src/startup.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="startup" aria-label="Lila Modeler">
+      <div class="startup-content">
+        <img class="startup-logo" src="%BASE_URL%branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" />
+        <p class="startup-version">v%LILA_APP_VERSION%</p>
+        <span class="startup-indicator" aria-hidden="true"></span>
+        <p id="startup-status" role="status" aria-live="polite">Opening your workspace…</p>
+        <a id="startup-reload" href="">Reload</a>
+        <noscript>JavaScript is required. / Se necesita JavaScript.</noscript>
+      </div>
+    </div>
+    <div id="root" inert aria-hidden="true" aria-busy="true"></div>
+    <script type="module" src="/src/startup-entry.ts"></script>
   </body>
 </html>

@@ -28,7 +28,10 @@ import type { Strings } from './strings.types';
 /** Días de la semana del formato de calendarios, en el orden canónico (`CalendarEditor.DIAS`). */
 const DIAS_SEMANA = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
+export const startupEs: Strings['startup'] = { loading: 'Preparando tu espacio de trabajo…', error: 'Lila Modeler no pudo terminar de iniciar. Recarga para intentarlo de nuevo.', reload: 'Recargar' };
+
 export const es: Strings = {
+  startup: startupEs,
   /* ------------------------------------------------------------------ *
    * Shell de la app (`App.tsx`)
    * ------------------------------------------------------------------ */
