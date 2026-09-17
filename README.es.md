@@ -54,7 +54,7 @@ proyecto que se mantiene estable.
   escenario ni produce resultados.
 - **Archivo de proyecto `.lila`** — la carpeta de proyecto zipeada. Guardar/abrir desde la app web
   (descarga), doble clic en el escritorio.
-- **Temas** — `eva-01` (oscuro, por defecto) y `papel` (claro), archivos JSON.
+- **Temas** — `eva-01` (oscuro, por defecto), `papel` (claro), `tieso` (claro, azules del ITESO), `akira` (oscuro, Neo-Tokio) y `montana` (claro, rosa y dorado), archivos JSON.
 - **Inglés y español** en la app, la CLI y el servidor MCP.
 - **Pantalla de bienvenida de escritorio** con proyectos recientes (solo Electron).
 - **Servidor MCP** con cinco tools, para que un agente valide, describa, corra, compare y parchee.

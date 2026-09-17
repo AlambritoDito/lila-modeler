@@ -67,7 +67,7 @@ export const en = {
     },
 
     /** Visible name of each built-in theme (`src/theme/themes/*.json`). */
-    temas: { 'eva-01': 'Eva-01', papel: 'Paper' },
+    temas: { 'eva-01': 'Eva-01', papel: 'Paper', tieso: 'Tieso', akira: 'Akira', montana: 'Montana' },
     /** Visible name of each density; the id (`ids.ts`) is what goes to `localStorage`. */
     densidades: { compacta: 'Compact', normal: 'Normal', comoda: 'Comfortable' },
     /** The name as the status bar reads it («Comfortable density»). */

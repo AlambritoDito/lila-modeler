@@ -52,7 +52,7 @@ stable.
   scenario and produces no results.
 - **`.lila` project file** — the project folder zipped. Save/open from the web app (download),
   double-click on the desktop.
-- **Themes** — `eva-01` (dark, default) and `papel` (light), plain JSON files.
+- **Themes** — `eva-01` (dark, default), `papel` (light), `tieso` (light, ITESO blues), `akira` (dark, Neo-Tokyo) and `montana` (light, pink and gold), plain JSON files.
 - **English and Spanish** in the app, the CLI and the MCP server.
 - **Desktop welcome screen** with recent projects (Electron only).
 - **MCP server** with five tools, so an agent can validate, describe, run, compare and patch.

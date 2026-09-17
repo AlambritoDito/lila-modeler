@@ -11,6 +11,9 @@ const tokensCss = read('./tokens.css');
 const themes: Array<[string, Theme]> = [
   ['eva-01', readTheme('./themes/eva-01.json')],
   ['papel', readTheme('./themes/papel.json')],
+  ['tieso', readTheme('./themes/tieso.json')],
+  ['akira', readTheme('./themes/akira.json')],
+  ['montana', readTheme('./themes/montana.json')],
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;

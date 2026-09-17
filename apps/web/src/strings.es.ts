@@ -53,7 +53,7 @@ export const es: Strings = {
     },
 
     /** Nombre visible de cada tema integrado (`src/theme/themes/*.json`). */
-    temas: { 'eva-01': 'Eva-01', papel: 'Papel' },
+    temas: { 'eva-01': 'Eva-01', papel: 'Papel', tieso: 'Tieso', akira: 'Akira', montana: 'Montana' },
     /** Nombre visible de cada densidad; el id (`ids.ts`) es lo que se guarda en `localStorage`. */
     densidades: { compacta: 'Compacta', normal: 'Normal', comoda: 'Cómoda' },
     /** El mismo nombre en minúscula, para la barra de estado («Densidad cómoda»). */
