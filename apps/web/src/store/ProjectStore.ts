@@ -15,7 +15,7 @@
  * `docs/RESULTS_FORMAT.md`. Ningún método aquí es especulativo: son exactamente los seis que
  * pide el ticket, ni uno más.
  */
-import type { SaveOutcome } from '../../../desktop/src/bridge.js';
+import type { Recent, SaveOutcome } from '../../../desktop/src/bridge.js';
 import type { RunResult } from '@lila/engine';
 import type { Scenario } from '@lila/engine/schema';
 import type { ProjectDocument } from '@lila/engine/project';
@@ -85,4 +85,6 @@ export interface ProjectSessionStore extends ProjectStore {
    * `file` es el `.bpmn` a abrir como modelo cuando no es el `model.bpmn` del proyecto (LILA-072).
    */
   openRecent?(dir: string, file?: string): Promise<ProjectDocument | null>;
+  /** Recientes de la bienvenida (`Bienvenida.tsx`), los mismos del menú nativo. Solo `DesktopStore`. */
+  listRecents?(): Promise<readonly Recent[]>;
 }

@@ -35,6 +35,8 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
+import { Bienvenida } from './Bienvenida';
+import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import type { Strings } from './strings.types';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
@@ -265,6 +267,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
   const [pendingAction, setPendingAction] = useState<ProjectAction | null>(null);
+  /**
+   * Bienvenida de escritorio (artboard 08): se enciende cuando el arranque no trae nada que
+   * abrir por doble clic (`pendingOpenPath` → null) y la apaga `activate()`. En el navegador no
+   * hay `window.lila`, así que nunca sale; lo que ve Pages no cambia.
+   */
+  const [bienvenida, setBienvenida] = useState(false);
+  const [recientes, setRecientes] = useState<readonly Recent[]>([]);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
   const rutaPendiente = useRef<OpenPathRequest | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
@@ -478,7 +487,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : doc.scenarios;
     setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
-    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar');
+    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar'); setBienvenida(false);
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
@@ -756,9 +765,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => {
     const abrir = (ruta: OpenPathRequest): void => abrirRutaRef.current(ruta);
     const unsubscribe = window.lila?.onOpenPath(abrir);
-    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); });
+    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); else setBienvenida(true); });
     return unsubscribe;
   }, []);
+  useEffect(() => {
+    if (bienvenida) void adapter?.listRecents?.().then(setRecientes).catch(() => setRecientes([]));
+  }, [bienvenida, adapter]);
   useEffect(() => {
     const ruta = rutaPendiente.current;
     if (modelador === null || ruta === null) return;
@@ -852,6 +864,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" type="button" onClick={() => responderPerdida(false)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
+      {bienvenida && <Bienvenida
+        recientes={recientes}
+        temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
+        densidadTexto={S.app.densidadEstado(S.app.densidadNombre(densidad))}
+        onAccion={(accion) => { if (accion === 'ejemplo') setBienvenida(false); else void projectAction(accion); }}
+        onAjustes={() => ejecutar('ajustes')}
+      />}
       <header className="barra">
         <div className="identidad">
           <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="32" height="32" />

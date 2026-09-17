@@ -214,6 +214,33 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Desktop welcome (`Bienvenida.tsx`, artboard 08)
+   * ------------------------------------------------------------------ */
+  bienvenida: {
+    titulo: 'Welcome',
+    nombre: 'Lila Modeler',
+    subtitulo: (version: string): string => `v${version} · open source · BPMN 2.0`,
+    empezar: 'Get started',
+    abrirLila: 'Open project (.lila)…',
+    abrirLilaPista: 'a project file with its scenarios and saved runs',
+    abrirCarpeta: 'Open project folder',
+    abrirCarpetaPista: '⌘O · a folder with model.bpmn',
+    nuevo: 'New process',
+    nuevoPista: '⌘N · creates an empty .bpmn',
+    ejemplo: 'Open the example',
+    ejemploPista: 'Restaurant order with AS-IS / TO-BE scenarios',
+    documentacion: 'Documentation',
+    repositorio: 'Repository',
+    recientes: 'Recent',
+    sinRecientes: 'No recent projects yet. Open one or start from the example.',
+    novedades: (version: string): string => `What's new in ${version}`,
+    novedadesTexto: '.lila project files with saved runs, Simulate as four steps, replay of the event log on the diagram, routing on the case\'s previous outcome, and results with the same column names as Bizagi Modeler.',
+    notasVersion: 'Release notes',
+    tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad} ·`,
+    cambiarApariencia: 'change in Settings → Appearance',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Settings → Appearance (`settings/Apariencia.tsx`, LILA-114)
    * ------------------------------------------------------------------ */
   apariencia: {

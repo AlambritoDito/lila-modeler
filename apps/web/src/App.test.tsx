@@ -1222,3 +1222,51 @@ it('an initial import error offers recovery on the startup screen', async () => 
     expect(splash.textContent).toContain('could not');
   } finally { finishStartup(); splash.remove(); }
 });
+
+// ---------- bienvenida de escritorio (artboard 08) ----------
+
+/** Puente falso mínimo: `pendingOpenPath` decide si la bienvenida sale (`null`) o no (una ruta). */
+function puenteBienvenida(pendiente: { dir: string; file: string } | null) {
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => pendiente, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {},
+  });
+}
+it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y «Abrir el ejemplo» solo la cierra', async () => {
+  const doc = { version: 1, id: 'p3', name: 'Click&Go', model: { id: 'Process_3', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
+  puenteBienvenida(null);
+  const listRecents = vi.fn().mockResolvedValue([{ dir: '/p/clickandgo.lila', name: 'Click&Go', openedAt: new Date(Date.now() - 7_200_000).toISOString() }]);
+  const openRecent = vi.fn().mockResolvedValue(doc);
+  Object.assign(session, { listRecents, openRecent });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  const bienvenida = container.querySelector('.bienvenida')!;
+  expect(bienvenida).not.toBeNull();
+  expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
+  expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
+  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-alpha.1'));
+  await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
+  expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  expect(container.textContent).toContain('Click&Go');
+
+  // Sin recientes: el hueco lo dice; «Abrir el ejemplo» cierra sin tocar el store.
+  listRecents.mockResolvedValue([]);
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector('.bienvenida')!.textContent).toContain(T.bienvenida.sinRecientes);
+  await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.bienvenida-accion')].find((b) => b.querySelector('strong')!.textContent === T.bienvenida.ejemplo)!.click(); });
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  expect(session.openProject).not.toHaveBeenCalled();
+  expect(openRecent).toHaveBeenCalledOnce();
+});
+it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble clic)', async () => {
+  puenteBienvenida({ dir: '/p/suelto', file: 'ventas.bpmn' });
+  Object.assign(session, { openRecent: vi.fn().mockResolvedValue(null) });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector('.bienvenida')).toBeNull();
+});
