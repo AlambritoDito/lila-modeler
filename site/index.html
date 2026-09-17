@@ -31,6 +31,7 @@
           <a href="#what">What it does</a>
           <a href="#cli">Command line</a>
           <a href="#screenshots">Screenshots</a>
+          <a href="#desktop">Desktop</a>
           <a href="#docs">Docs</a>
           <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
         </nav>
@@ -45,22 +46,23 @@
             Open-source discrete-event simulator and modeler for BPMN processes.
           </p>
           <p class="lede">
-            Draw the process, describe a scenario — resources, calendars, costs, arrival patterns —
-            and run it. You get Bizagi-style result tables, bottlenecks over the diagram, and an
-            AS-IS versus TO-BE comparison with a significance marker. Apache-2.0, no account, no
-            server: the same engine runs in the browser, on the command line and behind an MCP
-            server.
+            Draw the process, fill in the scenario in the same four steps Bizagi Modeler teaches —
+            validation, times, resources, calendars — and run it. You get Bizagi-style result
+            tables, a replay of the run over the diagram, and an AS-IS versus TO-BE comparison with
+            95% confidence intervals. Apache-2.0, no account, no server: the same engine runs in
+            the browser, on the desktop, on the command line and behind an MCP server.
           </p>
           <div class="actions">
             <a class="btn btn-primary" href="app/">Try the demo</a>
+            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases">Download the beta</a>
+            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/COMING-FROM-BIZAGI.md">Coming from Bizagi?</a>
             <a class="btn" href="https://github.com/AlambritoDito/lila-modeler">Source on GitHub</a>
-            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases">Releases</a>
           </div>
           <p class="note">
             The demo is the whole web app running in your browser: it starts with the
-            <code>examples/pedido</code> restaurant process loaded, keeps your work in the
-            browser's local storage when you choose Save project, and opens and saves <code>.bpmn</code> and project files as
-            ordinary downloads. Nothing is uploaded anywhere.
+            <code>examples/pedido</code> restaurant process loaded, keeps a copy of your work in the
+            browser's local storage, and opens and saves <code>.bpmn</code> files and
+            <code>.lila</code> projects as ordinary downloads. Nothing is uploaded anywhere.
           </p>
         </div>
       </div>
@@ -82,11 +84,20 @@
               </p>
             </li>
             <li>
-              <h3>Scenarios</h3>
+              <h3>Simulate in four steps</h3>
               <p>
-                Resource pools with costs and shift calendars, per-element processing times and
-                probability distributions, gateway probabilities, arrival patterns. Scenarios are
-                plain JSON files and can extend one another.
+                The Simulate panel follows Bizagi's four levels as four steps: process validation,
+                time analysis, resource analysis and calendar analysis. Arrivals, processing times
+                (the 13 BPSim distributions, the empirical one included, or a constant), resource pools with costs, weekly
+                shift calendars. Scenarios are plain JSON files and can extend one another.
+              </p>
+            </li>
+            <li>
+              <h3>Projects</h3>
+              <p>
+                A project is a folder — <code>model.bpmn</code>, scenarios, results — and a
+                <code>.lila</code> file is that folder zipped. The browser downloads it, the desktop
+                app opens it with a double-click, and the CLI reads the same files.
               </p>
             </li>
             <li>
@@ -100,8 +111,16 @@
               <h3>Results</h3>
               <p>
                 Process, element, resource and flow tables in the layout Bizagi Modeler users
-                already read, plus Lila's own extras: ranked bottlenecks and cost per case. Every
-                table exports to CSV.
+                already read, plus Lila's own extras: ranked bottlenecks, percentiles and cost per
+                case. Export to CSV or to a multi-sheet XLSX workbook.
+              </p>
+            </li>
+            <li>
+              <h3>Animate</h3>
+              <p>
+                Replay the event log of a run over the diagram: a live counter on every task,
+                gateway and end event, tokens walking the flows, the pools' occupancy and a
+                simulated clock, from 1× to instant. No re-run, no second engine.
               </p>
             </li>
             <li>
@@ -112,11 +131,26 @@
               </p>
             </li>
             <li>
+              <h3>Routing on earlier outcomes</h3>
+              <p>
+                A flow out of an exclusive gateway can take a different probability depending on
+                which flow the same case took earlier — the "already rejected once" kind of rule —
+                without splitting the diagram.
+              </p>
+            </li>
+            <li>
+              <h3>Themes and languages</h3>
+              <p>
+                Eva-01 (dark) and Papel (light) ship with the app; a theme is a JSON file you can
+                edit or add. The interface is available in English and Spanish.
+              </p>
+            </li>
+            <li>
               <h3>CLI and MCP</h3>
               <p>
                 <code>lila validate</code>, <code>lila run</code> and <code>lila compare</code> for
-                scripts and CI, with JSON and CSV output — and <code>lila mcp</code>, an MCP server
-                that hands the same five tools to an agent.
+                scripts and CI, with JSON, CSV and XLSX output — and <code>lila mcp</code>, an MCP
+                server that hands the same five tools to an agent.
               </p>
             </li>
           </ul>
@@ -154,8 +188,9 @@
           </div>
 
           <p class="note">
-            There is no <code>lila</code> package on the npm registry yet: <code>npx</code> resolves
-            the workspace's own binary after <code>npm ci</code> and <code>npm run build</code>, with no registry lookup and no global
+            Lila is not published to npm (the <code>lila</code> package on the registry is an unrelated
+            project): inside the checkout, after <code>npm ci</code> and <code>npm run build</code>,
+            <code>npx</code> resolves the workspace's own binary with no registry lookup and no global
             install.
           </p>
         </div>
@@ -191,8 +226,21 @@
                 alt="The simulation view with the scenario editor beside the restaurant process."
               />
               <figcaption>
-                <b>Scenario.</b> Run settings, resource pools and shift calendars, edited as a
-                weekly grid or as a plain list of intervals.
+                <b>Simulate, in four steps.</b> Run settings, times, resource pools and shift
+                calendars, in the order Bizagi users already know.
+              </figcaption>
+            </figure>
+            <figure>
+              <img
+                src="img/animate.png"
+                width="1440"
+                height="900"
+                loading="lazy"
+                alt="The Animate view: the restaurant diagram with a started/completed counter on every element, tokens on the flows, and the replay controls with the simulated clock and the pools' occupancy."
+              />
+              <figcaption>
+                <b>Animate.</b> The event log of a run replayed over the diagram, with live
+                counters per element and the occupancy of each pool.
               </figcaption>
             </figure>
             <figure>
@@ -218,13 +266,42 @@
               />
               <figcaption>
                 <b>Results.</b> Bizagi-style tables for elements, resources, the process and the
-                flows, each one exportable to CSV, plus the run's warnings in full.
+                flows, exportable to CSV and XLSX, plus the run's warnings in full.
               </figcaption>
             </figure>
           </div>
           <p class="note">
             These captures show the English interface. Spanish is available in Settings.
           </p>
+        </div>
+      </section>
+
+      <section id="desktop">
+        <div class="wrap">
+          <h2>Desktop beta</h2>
+          <p class="section-lede">
+            The same app packaged with Electron: projects live as folders on your disk,
+            <code>.lila</code> and <code>.bpmn</code> files open with a double-click, and a welcome
+            screen lists your recent projects. The beta is built for macOS on Apple Silicon and
+            is <b>not signed or notarized</b>: on first launch, right-click the app and choose
+            Open. <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BETA-MAC-GUIDE.md">The beta guide</a>
+            walks through installing it and reading the results.
+          </p>
+          <div class="shots">
+            <figure>
+              <img
+                src="img/welcome.png"
+                width="1440"
+                height="868"
+                loading="lazy"
+                alt="The desktop welcome screen: the Lila mark, buttons to open a project, open a folder, start a new project or open the example, and a list of recent projects."
+              />
+              <figcaption>
+                <b>Welcome.</b> Open a <code>.lila</code> file or a project folder, start a new one,
+                or go back to a recent project.
+              </figcaption>
+            </figure>
+          </div>
         </div>
       </section>
 
@@ -255,6 +332,38 @@
                 >
               </b>
               The MCP server, its five tools and how to register it.
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/COMING-FROM-BIZAGI.md"
+                  >docs/COMING-FROM-BIZAGI.md</a
+                >
+              </b>
+              Where each Bizagi screen and field lives here, and how to reproduce a published example.
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/PROJECT_FORMAT.md"
+                  >docs/PROJECT_FORMAT.md</a
+                >
+              </b>
+              The project folder and the <code>.lila</code> file.
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BETA-MAC-GUIDE.md"
+                  >docs/BETA-MAC-GUIDE.md</a
+                >
+              </b>
+              Installing and using the unsigned macOS beta.
+            </li>
+            <li>
+              <b>
+                <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/DECISIONS.md"
+                  >docs/DECISIONS.md</a
+                >
+              </b>
+              The architecture decision log (ADR-001 to ADR-028).
             </li>
           </ul>
         </div>

@@ -1,6 +1,6 @@
 {
-  "sourceCommit": "a0eb97409c91d2af5e8a6e2fae351aaa83fe13e8",
-  "browser": "153.0.8010.36",
+  "sourceCommit": "3c4e8bd6cd6f878b0d6a4ec68052ea9859444d58",
+  "browser": "153.0.8010.48",
   "locale": "en-US",
   "timezone": "America/Mexico_City",
   "theme": "Eva-01",
@@ -66,6 +66,16 @@
     },
     {
       "file": "results-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "animate.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "animate-1920.png",
       "width": 1920,
       "height": 1080
     },
