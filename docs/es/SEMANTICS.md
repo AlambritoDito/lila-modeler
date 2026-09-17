@@ -1027,6 +1027,13 @@ W-RECURSO-SATURADO: <poolId>: the queue grows without settling (utilization ≈ 
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)
 ```
 
+`λ/μ·c` es la notación de colas para la **forma** de la razón —llegadas sobre capacidad de
+servicio— y no la carga teórica de la demanda que declara el escenario: las dos cantidades se leen
+del log del horizonte simulado (la demanda atribuida al pool sobre las unidades que concedió, ver
+más abajo), así que el número se mueve con la duración de la corrida y con el estrangulamiento que
+el propio modelo produce. Las superficies que muestran el aviso lo dicen al lado, porque la
+notación invita a la otra lectura *(#357)*; el texto de arriba no cambia.
+
 La señal es **el pool lleno**: sin unidades libres suficientes para conceder, o sea con menos
 disponibles que la menor `quantity` con que alguna tarea lo pide —un pool de `capacity` 3 pedido de
 dos en dos está lleno con dos unidades ocupadas, porque la tercera no la puede tomar nadie—. El

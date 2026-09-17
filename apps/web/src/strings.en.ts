@@ -734,6 +734,33 @@ export const en = {
       ` — total wait ${espera} ${unidad}, utilization ${utilizacion}%`,
 
     avisos: 'Warnings',
+
+    /**
+     * Footnote of the Process tab (#358). `process.costPerCase` is the mean cost of the cases
+     * that **completed** (`docs/RESULTS_FORMAT.md` § 5), so it is not `Total cost / Instances
+     * completed`: dividing one by the other gives a third, meaningless number.
+     */
+    notaCostoPorCaso:
+      'Cost per case is the mean cost of the cases that completed, not Total cost divided by ' +
+      'Instances completed: the cost of the cases still in flight is part of Total cost and not ' +
+      'of this mean.',
+    /**
+     * Footnote of the Resources tab (#358): the two cost readings the workbook puts side by side
+     * (§ 4 and § 12) answer different questions, and neither is an estimate of the other.
+     */
+    notaCostoRecursos:
+      'Unit cost charges only the hours the pool was actually occupied. The Payroll cost of the ' +
+      'exported workbook charges availability instead — capacity × cost per hour × the open ' +
+      'hours of the run, busy or idle.',
+    /**
+     * Footnote under the warnings when a pool reported `W-RECURSO-SATURADO` (#357). The engine
+     * prints the ratio as `λ/(μ·c)`, which reads as the theoretical load of all external demand;
+     * what it holds is the demand observed over the simulated horizon over what the pool served.
+     */
+    notaSaturacion:
+      'In the saturation warning the ratio is observed, not theoretical: it is the demand this ' +
+      'pool received over the simulated horizon divided by what it served, and the warning also ' +
+      'fires on a utilization of 90 % or more. It is not the load of all external demand.',
   },
 
   /* ------------------------------------------------------------------ *
