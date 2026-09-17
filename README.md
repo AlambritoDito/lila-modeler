@@ -92,17 +92,24 @@ npm run build
 `npx lila` resolves the workspace's own binary (`packages/engine/bin/lila.js`), with no registry
 lookup. Three commands on the reference benchmark:
 
-```bash
-# 1. Validate the model
-npx lila validate examples/pedido/model.bpmn
+1. Validate the model:
 
-# 2. Simulate the AS-IS scenario: tables on stdout + JSON + CSV + XLSX
+```bash
+npx lila validate examples/pedido/model.bpmn
+```
+
+2. Simulate the AS-IS scenario: tables on stdout + JSON + CSV + XLSX:
+
+```bash
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
   --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
+```
 
-# 3. Compare AS-IS against TO-BE (one more cashier) side by side
+3. Compare AS-IS against TO-BE (one more cashier) side by side:
+
+```bash
 npx lila compare \
   examples/pedido/model.bpmn \
   examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json \

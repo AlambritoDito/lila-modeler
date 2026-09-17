@@ -97,17 +97,24 @@ npm run build
 `npx lila` resuelve el binario del propio workspace (`packages/engine/bin/lila.js`), sin consultar
 el registro. Tres comandos sobre el benchmark de referencia:
 
-```bash
-# 1. Validar el modelo
-npx lila validate examples/pedido/model.bpmn
+1. Validar el modelo:
 
-# 2. Simular el escenario AS-IS: tablas en stdout + JSON + CSV + XLSX
+```bash
+npx lila validate examples/pedido/model.bpmn
+```
+
+2. Simular el escenario AS-IS: tablas en stdout + JSON + CSV + XLSX:
+
+```bash
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
   --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
+```
 
-# 3. Comparar AS-IS contra TO-BE (un cajero más) lado a lado
+3. Comparar AS-IS contra TO-BE (un cajero más) lado a lado:
+
+```bash
 npx lila compare \
   examples/pedido/model.bpmn \
   examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json \
