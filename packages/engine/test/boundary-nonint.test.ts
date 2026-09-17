@@ -511,6 +511,22 @@ test('(f bis) `cancelActivity="0"` is the non-interrupting form, exactly like `"
   expect(result).toEqual(await runLiteral('false'));
 });
 
+test('(f quater) a raw `>` or a decoy `cancelActivity` inside another attribute value does not hide the literal', async () => {
+  // A `>` inside a value is valid XML; the decoy lives inside `name`, before the real attribute.
+  const decoy = (literal: string): string =>
+    definitions(
+      AVISO_BODY.replace(
+        'name="Vence el plazo" attachedToRef="Task_Revisar" cancelActivity="false"',
+        `name='Plazo > 2 dias cancelActivity="0"' attachedToRef="Task_Revisar" cancelActivity="${literal}"`,
+      ),
+    );
+  const canonical = await runLiteral('true');
+  expect(simulate(await irOf(decoy('1')), PLAZO)).toEqual({ ...canonical });
+  expect((await irOf(decoy('0'))).nodes['Boundary_Aviso']?.interrupting).toBe(false);
+  const { ir, unsupported } = await parseBpmn(decoy('TRUE'));
+  expect(validate(ir, { unsupported }).errors.map((p) => p.code)).toContain('E-NOSOP');
+});
+
 test.each(['TRUE', '', 'no'])(
   '(f ter) `cancelActivity="%s"` is outside `xsd:boolean` and stays `E-NOSOP`',
   async (literal) => {

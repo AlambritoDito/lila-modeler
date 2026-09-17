@@ -533,14 +533,19 @@ const NO_ES_MARKUP = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g;
 /** `id` del `<…:process>`, con comillas dobles o simples (las dos son XML válido). */
 const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
 
-/** Apertura de un `<…boundaryEvent …>`, con sus atributos capturados y con cualquier prefijo. */
-const BOUNDARY_TAG = /<(?:[\w.-]+:)?boundaryEvent(?![\w.-])([^>]*)>/g;
+/**
+ * Apertura de un `<…boundaryEvent …>`, con sus atributos capturados y con cualquier prefijo. La
+ * captura entiende las comillas: un `>` crudo dentro de un valor (`name="Plazo > 2 días"`) es XML
+ * válido y no cierra la etiqueta (hallazgo del QA de #361).
+ */
+const BOUNDARY_TAG = /<(?:[\w.-]+:)?boundaryEvent(?![\w.-])((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
 
-/** Un atributo suelto dentro de esos atributos, en cualquier orden y con cualquier comilla. */
-const attrRegex = (name: string): RegExp =>
-  new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`);
-const ID_ATTR = attrRegex('id');
-const CANCEL_ACTIVITY_ATTR = attrRegex('cancelActivity');
+/**
+ * Los atributos de esa apertura, uno a uno y en orden: `name="…"` o `name='…'`. Se recorren en
+ * secuencia (no se busca el nombre suelto) para que un `cancelActivity="…"` escrito dentro del
+ * valor de otro atributo no pase por el real.
+ */
+const ATTR = /([\w.:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /**
  * `id del boundary -> literal en bruto de `cancelActivity``, en un solo barrido del XML **ya
@@ -554,10 +559,14 @@ const CANCEL_ACTIVITY_ATTR = attrRegex('cancelActivity');
 function boundaryCancelLiterals(xml: string): Map<string, string> {
   const literals = new Map<string, string>();
   for (const [, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(BOUNDARY_TAG)) {
-    const id = ID_ATTR.exec(attrs);
-    const cancel = CANCEL_ACTIVITY_ATTR.exec(attrs);
-    if (id === null || cancel === null) continue;
-    literals.set(id[1] ?? id[2] ?? '', cancel[1] ?? cancel[2] ?? '');
+    let id: string | undefined;
+    let cancel: string | undefined;
+    for (const [, name, dq, sq] of attrs.matchAll(ATTR)) {
+      if (name === 'id') id ??= dq ?? sq;
+      else if (name === 'cancelActivity') cancel ??= dq ?? sq;
+    }
+    if (id === undefined || cancel === undefined) continue;
+    literals.set(id, cancel);
   }
   return literals;
 }
