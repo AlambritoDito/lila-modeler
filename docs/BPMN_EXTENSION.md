@@ -279,7 +279,7 @@ Correspondence with the referenced catalog (`catalog.json`, outside this documen
 ## 6. Consistency with the ADRs
 
 - **ADR-012** (element and process identity): implemented in section 3 of this document — NCName with a type prefix, never regenerated, new on copy, reversible sanitization, process key = `process@id` + `versionTag`, `exporter`/`exporterVersion` in `definitions`.
-- **ADR-014** (a single namespace, defined once): implemented in sections 1, 2, and 4 — a single IRI, a single descriptor shared by editor/CLI/server, elements (not attributes at the insertion point) to allow lists, additive growth, a round-trip verification plan in M4 with a fallback to `annotations.json`.
+- **ADR-014** (a single namespace, defined once): implemented in sections 1, 2, and 4 — a single IRI, a single descriptor shared by editor/CLI/server, elements (not attributes at the insertion point) to allow lists, additive growth, round-trip verified headless in section 8 (the `annotations.json` fallback was not needed).
 
 If in the future some decision in this document conflicts with a new or revised ADR, the ADR wins and this document is updated to reflect it (never the other way around).
 
