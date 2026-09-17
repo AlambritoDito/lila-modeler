@@ -61,7 +61,7 @@ definida; todo lo demás cae en la sección 3 de este documento.
 | `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
 | `bpmn:boundaryEvent` interruptor, con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` | plazo que corta la tarea (§9) |
-| `bpmn:boundaryEvent` no interruptor (`cancelActivity="false"`), con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` e `interrupting: false` | plazo que crea un token en paralelo y deja la tarea corriendo (§9) |
+| `bpmn:boundaryEvent` no interruptor (`cancelActivity="false"` o `"0"`), con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` e `interrupting: false` | plazo que crea un token en paralelo y deja la tarea corriendo (§9) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
@@ -521,7 +521,10 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   pendiente tras la interrupción, se consume igual. *(prueba: #81, #345)*
 - **R-BND-10 — Temporizador de borde no interruptor.** El mismo boundary event de R-BND-1 pero
   con `cancelActivity="false"`: exactamente un `timerEventDefinition`, adjunto a una tarea
-  soportada y con al menos un flujo de salida. Entra al perfil como el mismo nodo `timer` con
+  soportada y con al menos un flujo de salida. Solo se lee el léxico propio de `xsd:boolean`, y
+  del texto del XML: `cancelActivity` ausente, `"true"` o `"1"` interrumpe, `"false"` o `"0"` no
+  interrumpe, y cualquier otro literal (`"TRUE"`, `""`, una errata) no está soportado y sigue
+  siendo `E-NOSOP` con construcción `boundaryEvent` (§3). Entra al perfil como el mismo nodo `timer` con
   `attachedTo` y sin `incoming`, marcado `interrupting: false` (ausente es interruptor, que es el
   valor por omisión de `cancelActivity` en BPMN). R-BND-2 (el plazo cuenta desde el `enabledAt`
   del host), R-BND-3 (tiempo de reloj y flujo de aleatorios propio), R-BND-4 (solo dispara

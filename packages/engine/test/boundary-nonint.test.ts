@@ -461,3 +461,72 @@ test('a `terminate` kills the non-interrupting boundary along with the rest of t
   expect(result.process.byEndEvent['End_Terminate']?.completed).toBe(1);
   expect(stoppedAt).toBe(10);
 });
+
+/**
+ * `cancelActivity` is `xsd:boolean`, whose lexical space is `{true, false, 1, 0}`, and
+ * bpmn-moddle collapses the whole of it with `s === 'true'`. The parser therefore reads the raw
+ * attribute out of the XML text (R-BND-10), so `"1"` keeps the interrupting semantics BPMN gives
+ * it instead of silently selecting the non-interrupting profile, and anything outside that
+ * lexical space stays out of the profile with the same `E-NOSOP` as before #81.
+ */
+const withCancelActivity = (literal: string): string =>
+  definitions(AVISO_BODY.replace('cancelActivity="false"', `cancelActivity="${literal}"`));
+
+/** The run of test (a): the deadline expires while the host is still open. */
+const PLAZO: Scenario = {
+  run: { seed: 42, replications: 1 },
+  elements: {
+    Start_Proceso: { triggerCount: 1 },
+    Task_Revisar: { processingTime: seconds(200) },
+    Boundary_Aviso: { processingTime: seconds(100) },
+    Task_Avisar: { processingTime: seconds(5) },
+  },
+};
+
+const runLiteral = async (literal: string): Promise<RunResult> =>
+  simulate(await irOf(withCancelActivity(literal)), PLAZO);
+
+test('(f) `cancelActivity="1"` is the interrupting form, exactly like `"true"`', async () => {
+  const ir = await irOf(withCancelActivity('1'));
+  expect(ir.nodes['Boundary_Aviso']?.interrupting).toBeUndefined();
+
+  // The host is cut short at the deadline and only the boundary's branch reaches an end.
+  const result = await runLiteral('1');
+  expect(rowsOf(result, 'Task_Revisar')[0]).toMatchObject({
+    status: 'interrupted',
+    observedUntil: 100,
+  });
+  expect(result.elements['Task_Revisar']).toMatchObject({ started: 1, completed: 0 });
+  expect(result.process.byEndEvent['End_Avisado']?.completed).toBe(1);
+  // Byte for byte the run of the canonical literal.
+  expect(result).toEqual(await runLiteral('true'));
+});
+
+test('(f bis) `cancelActivity="0"` is the non-interrupting form, exactly like `"false"`', async () => {
+  const ir = await irOf(withCancelActivity('0'));
+  expect(ir.nodes['Boundary_Aviso']?.interrupting).toBe(false);
+
+  const result = await runLiteral('0');
+  expect(rowsOf(result, 'Task_Revisar')[0]).toMatchObject({ status: 'completed', endedAt: 200 });
+  expect(result).toEqual(await runLiteral('false'));
+});
+
+test.each(['TRUE', '', 'no'])(
+  '(f ter) `cancelActivity="%s"` is outside `xsd:boolean` and stays `E-NOSOP`',
+  async (literal) => {
+    const { ir, unsupported } = await parseBpmn(withCancelActivity(literal));
+    const { errors } = validate(ir, { unsupported });
+
+    // The same code, construction and text as on the base branch, where every literal other than
+    // `false` was rejected here.
+    expect(errors.filter((problem) => problem.code === 'E-NOSOP')).toEqual([
+      {
+        code: 'E-NOSOP',
+        id: 'Boundary_Aviso',
+        message:
+          'Boundary_Aviso (bpmn:boundaryEvent, "Vence el plazo"): event attached to an activity (boundary event) not supported by the simulator.',
+      },
+    ]);
+    expect(ir.nodes['Boundary_Aviso']).toBeUndefined();
+  },
+);

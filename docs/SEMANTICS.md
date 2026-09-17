@@ -62,7 +62,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
-| `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
+| `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"` or `"0"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
@@ -530,7 +530,10 @@ pair), without introducing case variables or an expression language.
   `done`, left pending after the interruption, is consumed the same way. *(test: #81, #345)*
 - **R-BND-10 — Non-interrupting boundary timer.** The same boundary event as R-BND-1 but with
   `cancelActivity="false"`: exactly one `timerEventDefinition`, attached to a supported task and
-  with at least one outgoing flow. It enters the profile as the same `timer` node with
+  with at least one outgoing flow. Only `xsd:boolean`'s own lexical space is read, straight from
+  the XML text: `cancelActivity` absent, `"true"` or `"1"` is interrupting, `"false"` or `"0"` is
+  non-interrupting, and any other literal (`"TRUE"`, `""`, a typo) is unsupported and stays
+  `E-NOSOP` with construction `boundaryEvent` (§3). It enters the profile as the same `timer` node with
   `attachedTo` and no `incoming`, marked `interrupting: false` (absent means interrupting, which
   is `cancelActivity`'s own BPMN default). R-BND-2 (the deadline starts at the host's
   `enabledAt`), R-BND-3 (clock time and its own random stream), R-BND-4 (it only fires while the

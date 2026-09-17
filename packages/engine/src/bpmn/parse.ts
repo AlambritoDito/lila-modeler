@@ -75,18 +75,53 @@ const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
 const NO_OUTGOING: ReadonlySet<ModdleElement> = new Set();
 
 /**
+ * Literales que BPMN admite en `cancelActivity` (el léxico de `xsd:boolean`) y la semántica que
+ * pide cada uno. Cualquier otro literal deja al borde fuera del perfil, con el mismo `E-NOSOP`
+ * de siempre: no hay forma de saber si el modelador quería interrumpir o no.
+ *
+ * ponytail: el valor hay que leerlo **en bruto** del texto del XML (`boundaryCancelLiterals`)
+ * porque bpmn-moddle colapsa los `xsd:boolean` con `s === 'true'`, así que `"1"` (que en BPMN
+ * interrumpe), `"TRUE"`, `""` y cualquier errata llegan al árbol ya convertidos en `false`,
+ * indistinguibles del `"false"` canónico. Un Map, no un objeto: así `cancelActivity="constructor"`
+ * no hereda nada del prototipo.
+ */
+const CANCEL_ACTIVITY = new Map<string, boolean>([
+  ['true', true],
+  ['1', true],
+  ['false', false],
+  ['0', false],
+]);
+
+const NO_RAW_CANCEL: ReadonlyMap<string, string> = new Map();
+
+/**
+ * ¿El borde interrumpe? `undefined` si `cancelActivity` trae un literal fuera de
+ * `CANCEL_ACTIVITY`. Si el XML no declara el atributo manda el default de BPMN (interrumpe),
+ * que es justo lo que da moddle.
+ */
+function interruptingOf(
+  el: ModdleElement,
+  rawCancel: ReadonlyMap<string, string>,
+): boolean | undefined {
+  const raw = rawCancel.get(el.id);
+  return raw === undefined ? el.cancelActivity !== false : CANCEL_ACTIVITY.get(raw);
+}
+
+/**
  * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1, R-BND-10), o
  * `undefined` si el boundary se queda fuera: no es de tiempo, trae más de un disparador, cuelga
  * de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no tiene ni
  * un flujo de salida por el que continuar el token.
  *
  * Interrumpir o no da igual aquí: las dos formas entran al perfil y se distinguen con
- * `node.interrupting`. `cancelActivity` lo omite el XML cuando interrumpe: moddle lo da por
- * `true`, así que solo el `"false"` explícito es un borde no interruptor.
+ * `node.interrupting`. El `"false"` (o `"0"`) explícito es el borde no interruptor y su ausencia
+ * —como `"true"` o `"1"`— el interruptor; lo que sí deja al borde fuera es un `cancelActivity`
+ * con cualquier otro literal (R-BND-10).
  */
 function boundaryTimerHost(
   el: ModdleElement,
   hasOutgoing: ReadonlySet<ModdleElement>,
+  rawCancel: ReadonlyMap<string, string> = NO_RAW_CANCEL,
 ): ModdleElement | undefined {
   const definitions = eventDefinitionsOf(el);
   const host = el.attachedToRef;
@@ -97,7 +132,8 @@ function boundaryTimerHost(
     host === undefined ||
     !TASK_TYPES.has(host.$type) ||
     unsupportedConstruction(host) !== undefined ||
-    !hasOutgoing.has(el)
+    !hasOutgoing.has(el) ||
+    interruptingOf(el, rawCancel) === undefined
   ) {
     return undefined;
   }
@@ -112,9 +148,12 @@ function boundaryTimerHost(
 function unsupportedConstruction(
   el: ModdleElement,
   hasOutgoing: ReadonlySet<ModdleElement> = NO_OUTGOING,
+  rawCancel: ReadonlyMap<string, string> = NO_RAW_CANCEL,
 ): UnsupportedConstruction | undefined {
   if (el.$type === 'bpmn:BoundaryEvent') {
-    return boundaryTimerHost(el, hasOutgoing) === undefined ? 'boundaryEvent' : undefined;
+    return boundaryTimerHost(el, hasOutgoing, rawCancel) === undefined
+      ? 'boundaryEvent'
+      : undefined;
   }
   if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
 
@@ -234,6 +273,8 @@ interface Collector {
   unsupportedEls: Set<ModdleElement>;
   /** `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido. */
   boundaryHosts: Map<string, { host: ModdleElement; interrupting: boolean }>;
+  /** `id del boundary -> literal en bruto de `cancelActivity``, leído del texto del XML. */
+  rawCancel: ReadonlyMap<string, string>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -311,7 +352,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     }
     if (el.default) c.defaultFlowIds.add(el.default.id);
 
-    const construction = unsupportedConstruction(el, hasOutgoing);
+    const construction = unsupportedConstruction(el, hasOutgoing, c.rawCancel);
 
     // Solo se aplana el subproceso embebido sin ningún detalle fuera de perfil. En particular,
     // los marcadores y quantities deben sobrevivir hasta `validate` como E-NOSOP (LILA-163).
@@ -354,7 +395,10 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       outgoing: [],
     };
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
-      c.boundaryHosts.set(id, { host: el.attachedToRef, interrupting: el.cancelActivity !== false });
+      c.boundaryHosts.set(id, {
+        host: el.attachedToRef,
+        interrupting: interruptingOf(el, c.rawCancel) !== false,
+      });
     }
   }
 }
@@ -488,6 +532,35 @@ const NO_ES_MARKUP = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g;
 
 /** `id` del `<…:process>`, con comillas dobles o simples (las dos son XML válido). */
 const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+
+/** Apertura de un `<…boundaryEvent …>`, con sus atributos capturados y con cualquier prefijo. */
+const BOUNDARY_TAG = /<(?:[\w.-]+:)?boundaryEvent(?![\w.-])([^>]*)>/g;
+
+/** Un atributo suelto dentro de esos atributos, en cualquier orden y con cualquier comilla. */
+const attrRegex = (name: string): RegExp =>
+  new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`);
+const ID_ATTR = attrRegex('id');
+const CANCEL_ACTIVITY_ATTR = attrRegex('cancelActivity');
+
+/**
+ * `id del boundary -> literal en bruto de `cancelActivity``, en un solo barrido del XML **ya
+ * saneado** (así los ids coinciden con los de moddle). Los bordes que no declaran el atributo no
+ * aparecen en el mapa, que es lo que `interruptingOf` lee como "ausente".
+ *
+ * ponytail: existe solo porque moddle colapsa los literales de `xsd:boolean` y el original ya no
+ * se puede recuperar del árbol — `$attrs` guarda los atributos desconocidos y `cancelActivity`
+ * está en el metamodelo, así que ahí tampoco queda.
+ */
+function boundaryCancelLiterals(xml: string): Map<string, string> {
+  const literals = new Map<string, string>();
+  for (const [, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(BOUNDARY_TAG)) {
+    const id = ID_ATTR.exec(attrs);
+    const cancel = CANCEL_ACTIVITY_ATTR.exec(attrs);
+    if (id === null || cancel === null) continue;
+    literals.set(id[1] ?? id[2] ?? '', cancel[1] ?? cancel[2] ?? '');
+  }
+  return literals;
+}
 
 /**
  * Apertura (con sus atributos capturados) o cierre de un `<…:process …>` **de BPMN**, con el
@@ -637,6 +710,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     order: new Map(),
     unsupportedEls: new Set(),
     boundaryHosts: new Map(),
+    rawCancel: boundaryCancelLiterals(xml),
     unsupported: [],
   };
 
