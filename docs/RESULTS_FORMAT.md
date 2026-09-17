@@ -352,7 +352,8 @@ A list of strings, one per non-fatal condition detected during `resolveScenario`
   the utilization as a whole percentage. The full criterion is in `SEMANTICS.md` § 17.
   `λ/μ·c` is the queueing shorthand for the shape of the ratio, not a claim about the scenario's
   declared demand: the number is measured over the simulated horizon, so the web app prints a note
-  next to the warning saying which two quantities it divides *(#357)*.
+  next to the warning stating the criterion above and what the number shown is — that ratio, or
+  the utilization when the warning comes through the second door *(#357)*.
   *(LILA-191, #320)*
 
 ---
@@ -602,8 +603,8 @@ Number formats are presentation only — the cell keeps the full double:
 
 | Format | Where |
 |---|---|
-| `0.###` | every numeric cell of the five sheets and of `Comparison`, so a mean prints `42.857` instead of `42.857142857142854` |
-| `0.00%` | the relative delta of `Comparison`, whose value is a fraction (`0.153` shows as `15.30%`) |
+| `0.###` | every numeric cell of the five sheets and of `Comparison` other than the fractions below, so a mean prints `42.857` instead of `42.857142857142854` |
+| `0.00%` | the fractions: the relative delta of `Comparison` and the `Within service level` rows of `Summary` (`0.153` shows as `15.30%`). They are the only per-**row** format of the workbook, because `Summary`'s `Value` column holds counts, seconds and money as well; under `0.###` a service level of `0.001004` would show as `0.001` and anything below `0.0005` as the `0` section 5 forbids reading as "0 % met" |
 | general | the header row, the `Notes` texts and every other text or boolean cell |
 
 `Utilization (%)` is not a percentage cell: its value is already multiplied by 100 and the column

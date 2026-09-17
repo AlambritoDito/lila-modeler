@@ -753,14 +753,20 @@ export const en = {
       'exported workbook charges availability instead — capacity × cost per hour × the open ' +
       'hours of the run, busy or idle.',
     /**
-     * Footnote under the warnings when a pool reported `W-RECURSO-SATURADO` (#357). The engine
-     * prints the ratio as `λ/(μ·c)`, which reads as the theoretical load of all external demand;
-     * what it holds is the demand observed over the simulated horizon over what the pool served.
+     * Footnote under the warnings when a pool reported `W-RECURSO-SATURADO` (#357). Two things the
+     * warning's own text cannot say: the criterion behind it (`docs/SEMANTICS.md` § 17 — neither
+     * door decides alone), and that the number it shows is read off the log of the simulated
+     * horizon, not the theoretical load `λ/(μ·c)` invites. It covers both variants of the warning,
+     * the one that prints the ratio and the one that prints the utilization, so it never claims
+     * the number beside it is a ratio.
      */
     notaSaturacion:
-      'In the saturation warning the ratio is observed, not theoretical: it is the demand this ' +
-      'pool received over the simulated horizon divided by what it served, and the warning also ' +
-      'fires on a utilization of 90 % or more. It is not the load of all external demand.',
+      'The warning fires when attributed demand divided by what the pool served reaches 1.1, or ' +
+      'its utilization reaches 90 %, and in addition the queue grows or work is left pending: ' +
+      'neither number decides alone. Attributed demand counts only the instances that waited ' +
+      'while the pool was full, so the number the warning shows — that ratio, or the utilization ' +
+      'when it fires through that door — is observed over the simulated horizon, not the load of ' +
+      'all external demand.',
   },
 
   /* ------------------------------------------------------------------ *

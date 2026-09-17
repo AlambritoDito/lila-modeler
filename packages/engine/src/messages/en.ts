@@ -247,8 +247,10 @@ export const en: Catalog = {
     xlsxSectionNotes: () => 'Notes',
     xlsxNoteDurations: () => 'Durations',
     xlsxNoteSeconds: () =>
-      'Every duration in the Elements, Flows and Resources sheets is in seconds, whatever base ' +
-      'time unit the scenario declares; the app converts them for display, this workbook does not.',
+      'Every duration in the Elements and Resources sheets is in seconds, the Busy time column ' +
+      'of Resources included, whatever base time unit the scenario declares; the app converts ' +
+      'them for display, this workbook does not.',
+    xlsxCostPerCase: () => 'Cost per case',
     xlsxNoteCostPerCase: () =>
       'Cost per case is the mean cost of the cases that completed, not Total cost divided by ' +
       'Instances completed: the cost of the cases still in flight is part of Total cost and not ' +

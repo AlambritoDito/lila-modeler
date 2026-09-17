@@ -126,6 +126,22 @@ function metricLabel(metric: string): string {
   return columnHeader('process', metric, 's');
 }
 
+/** Formats of a tall sheet's five columns: text, text, text, text and the one `Value` column. */
+const VALUE_NUMBER: readonly (CellFormat | undefined)[] = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  'number',
+];
+const VALUE_PERCENT: readonly (CellFormat | undefined)[] = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  'percent',
+];
+
 /**
  * `Summary`: the process table of `lila run` in tall form (one metric per row, so it stays
  * readable next to the per-outcome and payroll blocks), the completed cases per end event when the
@@ -141,6 +157,13 @@ export function summarySheet(
 ): SheetSpec {
   const C = messages(locale).cli;
   const rows: CellValue[][] = [];
+  // `Within service level` is a fraction in a `Value` column full of counts, seconds and money, so
+  // it takes its own percentage cell: `0.###` would show `0.001004` as `0.001` and anything under
+  // `0.0005` as the `0` section 5 forbids reading as "0 % met" (#359).
+  const rowFormats: (readonly (CellFormat | undefined)[] | undefined)[] = [];
+  const percentValue = (): void => {
+    rowFormats[rows.length] = VALUE_PERCENT;
+  };
   const table = processRows(result);
   const values = table.rows[0] ?? [];
 
@@ -150,6 +173,7 @@ export function summarySheet(
     // on the global row) so its columns stay fixed; a tall sheet has no column to keep, so a row
     // with nothing to say is left out instead of written blank.
     if (value === null) return;
+    if (metric === 'withinServiceLevel') percentValue();
     rows.push([C.xlsxSectionProcess(), '', '', metricLabel(metric), value]);
   });
 
@@ -160,6 +184,7 @@ export function summarySheet(
     rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('completed'), outcome.completed]);
     rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('cycleTime.mean'), outcome.cycleTime.mean]);
     if (outcome.withinServiceLevel !== undefined) {
+      percentValue();
       rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('withinServiceLevel'), outcome.withinServiceLevel]);
     }
   }
@@ -180,19 +205,22 @@ export function summarySheet(
   // `Notes` (#358, #359): the three readings a workbook opened away from the app gets wrong —
   // the unit of the source sheets, what `Cost per case` averages over, and payroll against
   // actual use. Text in the `Value` column; no metric, no number.
+  // Every label of the block comes from the catalog, so the Spanish workbook reads in Spanish:
+  // `metricLabel('costPerCase')` is English by contract (section 10) and mixed the two languages
+  // in the same block.
   rows.push([C.xlsxSectionNotes(), '', '', C.xlsxNoteDurations(), C.xlsxNoteSeconds()]);
-  rows.push([C.xlsxSectionNotes(), '', '', metricLabel('costPerCase'), C.xlsxNoteCostPerCase()]);
+  rows.push([C.xlsxSectionNotes(), '', '', C.xlsxCostPerCase(), C.xlsxNoteCostPerCase()]);
   if (payroll.length > 0) {
     rows.push([C.xlsxSectionNotes(), '', '', C.xlsxPayrollCost(), C.xlsxNotePayroll()]);
   }
 
   return {
-    // Only the `Value` column holds numbers, and it holds every kind of them, so it takes the
-    // readable format and no percentage: a fraction (`Within service level`) shares the column
-    // with counts, seconds and money.
-    formats: [undefined, undefined, undefined, undefined, 'number'],
+    // Only the `Value` column holds numbers, and it holds every kind of them, so the column takes
+    // the readable format and the fraction rows override it above.
+    formats: VALUE_NUMBER,
     headers: [C.xlsxColumnSection(), ID_COLUMN, NAME_COLUMN, METRIC_COLUMN, C.xlsxColumnValue()],
     name: C.xlsxSheetSummary(),
+    rowFormats,
     rows,
   };
 }

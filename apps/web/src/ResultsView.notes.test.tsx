@@ -107,7 +107,7 @@ describe('footnotes of the results view (#357, #358)', () => {
     expect(text()).not.toContain(en.resultados.notaCostoPorCaso);
   });
 
-  it('explains the saturation ratio only when a pool reported it', () => {
+  it('states the saturation criterion only when a pool reported it, for both variants', () => {
     setLocale('en');
     const saturated: RunResult = {
       ...golden,
@@ -115,9 +115,52 @@ describe('footnotes of the results view (#357, #358)', () => {
     };
     mount(saturated);
     expect(text()).toContain(en.resultados.notaSaturacion);
-    // And it does not explain a ratio nobody is looking at.
+
+    // The criterion as `docs/SEMANTICS.md` § 17 fixes it: two doors, and neither of them alone.
+    const note = en.resultados.notaSaturacion;
+    expect(note).toContain('reaches 1.1');
+    expect(note).toContain('utilization reaches 90 %');
+    expect(note).toContain('the queue grows or work is left pending');
+    expect(note).toContain('neither number decides alone');
+    // Attributed demand, § 17's term: only the instances that waited while the pool was full, not
+    // everything the pool received (#357).
+    expect(note).toContain('Attributed demand counts only the instances that waited');
+    expect(note).toContain('while the pool was full');
+    expect(note).not.toContain('the demand this pool received');
+    // And it never calls the number beside it a ratio, because one variant shows a percentage.
+    expect(note).not.toMatch(/the ratio is/);
+
+    // The utilization variant prints no ratio at all: the same note has to read correctly under a
+    // warning whose only number is `96 %`.
+    const byUtilization: RunResult = {
+      ...golden,
+      warnings: ['W-RECURSO-SATURADO: cajero: the queue grows without settling (utilization ≈ 96 %)'],
+    };
+    act(() => root!.render(<ResultsView ir={ir} scenario={scenario} result={byUtilization} />));
+    expect(text()).toContain('utilization ≈ 96 %');
+    expect(text()).toContain(note);
+
+    // And it does not explain a warning nobody is looking at.
     act(() => root!.render(<ResultsView ir={ir} scenario={scenario} result={{ ...golden, warnings: ['W-SIN-SEED: run.seed'] }} />));
     expect(text()).toContain('W-SIN-SEED');
+    expect(text()).not.toContain(note);
+  });
+
+  it('the saturation note says the same criterion in Spanish', () => {
+    setLocale('es');
+    const saturated: RunResult = {
+      ...golden,
+      warnings: ['W-RECURSO-SATURADO: cajero: la cola crece sin estabilizarse (ocupación ≈ 96 %)'],
+    };
+    mount(saturated);
+    const note = es.resultados.notaSaturacion;
+    expect(text()).toContain(note);
     expect(text()).not.toContain(en.resultados.notaSaturacion);
+    expect(note).toContain('llega a 1,1');
+    expect(note).toContain('ocupación llega al 90 %');
+    expect(note).toContain('la cola crece o queda trabajo pendiente');
+    expect(note).toContain('ningún número decide solo');
+    expect(note).toContain('La demanda atribuida cuenta solo las instancias que esperaron');
+    expect(note).toContain('con el pool lleno');
   });
 });

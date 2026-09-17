@@ -339,7 +339,8 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
   lugar, con la ocupación en porcentaje entero. El criterio completo está en `SEMANTICS.md` § 17.
   `λ/μ·c` es la notación de colas para la forma de la razón, no una afirmación sobre la demanda
   declarada del escenario: el número se mide sobre el horizonte simulado, así que la app web
-  imprime al lado del aviso una nota que dice qué dos cantidades divide *(#357)*.
+  imprime al lado del aviso una nota que dice el criterio de arriba y qué es el número que se ve
+  —esa razón, o la ocupación cuando el aviso sale por la segunda puerta— *(#357)*.
   *(LILA-191, #320)*
 
 ---
@@ -569,8 +570,8 @@ Los formatos de número son solo presentación —la celda conserva el doble com
 
 | Formato | Dónde |
 |---|---|
-| `0.###` | toda celda numérica de las cinco hojas y de `Comparación`, para que una media imprima `42.857` y no `42.857142857142854` |
-| `0.00%` | el delta relativo de `Comparación`, cuyo valor es una fracción (`0.153` se ve como `15.30%`) |
+| `0.###` | toda celda numérica de las cinco hojas y de `Comparación` que no sea una de las fracciones de abajo, para que una media imprima `42.857` y no `42.857142857142854` |
+| `0.00%` | las fracciones: el delta relativo de `Comparación` y las filas `Within service level` de `Resumen` (`0.153` se ve como `15.30%`). Son el único formato por **fila** del libro, porque la columna `Valor` de `Resumen` lleva además conteos, segundos y dinero; con `0.###` un nivel de servicio de `0.001004` se vería `0.001` y cualquiera por debajo de `0.0005` como el `0` que la sección 5 prohíbe leer como «0 % cumplido» |
 | general | la fila de cabecera, los textos de `Notas` y toda otra celda de texto o booleana |
 
 `Utilization (%)` no es una celda de porcentaje: su valor ya viene multiplicado por 100 y el nombre

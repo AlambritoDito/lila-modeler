@@ -250,8 +250,10 @@ export const es: Catalog = {
     xlsxSectionNotes: () => 'Notas',
     xlsxNoteDurations: () => 'Duraciones',
     xlsxNoteSeconds: () =>
-      'Toda duración de las hojas Elementos, Flujos y Recursos está en segundos, cualquiera sea ' +
-      'la unidad base que declare el escenario; la app las convierte para mostrarlas, este libro no.',
+      'Toda duración de las hojas Elementos y Recursos está en segundos, incluida la columna ' +
+      'Busy time de Recursos, cualquiera sea la unidad base que declare el escenario; la app las ' +
+      'convierte para mostrarlas, este libro no.',
+    xlsxCostPerCase: () => 'Costo por caso',
     xlsxNoteCostPerCase: () =>
       'El costo por caso es el costo medio de los casos que terminaron, no el costo total ' +
       'dividido entre las instancias completadas: el costo de los casos en curso forma parte del ' +

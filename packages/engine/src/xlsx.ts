@@ -34,10 +34,10 @@ export type CellValue = string | number | boolean | null | undefined;
  * - `'number'` — `0.###`: a readable three decimals instead of the seventeen digits a double
  *   prints (`42.857142857142854`). The stored value keeps every bit; only the display rounds.
  * - `'percent'` — `0.00%`: the cell holds the fraction (`0.153`) and the reader shows `15.30%`,
- *   which is what a relative delta means.
+ *   which is what a relative delta, or a service level, means.
  *
- * The header row and text/boolean cells always keep the general format, so a format never has to
- * be spelled out per row.
+ * The header row and text/boolean cells always keep the general format. Formats are per column;
+ * `SheetSpec.rowFormats` overrides them on the rows of a tall sheet that need it.
  */
 export type CellFormat = 'number' | 'percent';
 
@@ -52,6 +52,13 @@ export interface SheetSpec {
   rows: readonly (readonly CellValue[])[];
   /** Number format per column, aligned with `headers`; a missing entry means general. */
   formats?: readonly (CellFormat | undefined)[];
+  /**
+   * Per-row override of `formats`, aligned with `rows` and sparse: a row with no entry keeps the
+   * column formats. It exists for the tall sheets, whose single `Value` column holds counts,
+   * seconds, money and the odd fraction, so that fraction can take a percentage cell without the
+   * rest of the column changing (`Within service level`, #359).
+   */
+  rowFormats?: readonly (readonly (CellFormat | undefined)[] | undefined)[];
 }
 
 /**
@@ -162,7 +169,9 @@ export function worksheetXml(sheet: SheetSpec): string {
   const rows: string[] = [];
   let rowNumber = 1;
   if (sheet.headers.length > 0) rows.push(rowXml(sheet.headers, rowNumber++));
-  for (const row of sheet.rows) rows.push(rowXml(row, rowNumber++, sheet.formats));
+  for (const [index, row] of sheet.rows.entries()) {
+    rows.push(rowXml(row, rowNumber++, sheet.rowFormats?.[index] ?? sheet.formats));
+  }
   const data = rows.length === 0 ? '<sheetData/>' : `<sheetData>${rows.join('')}</sheetData>`;
   return `${XML_HEADER}<worksheet xmlns="${MAIN_NS}">${data}</worksheet>`;
 }

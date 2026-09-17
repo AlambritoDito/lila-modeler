@@ -733,9 +733,12 @@ export const es: Strings = {
       'hora × las horas abiertas de la corrida, ocupada u ociosa.',
     /** Nota bajo los avisos cuando algún pool reportó `W-RECURSO-SATURADO` (#357). */
     notaSaturacion:
-      'En el aviso de saturación la razón es observada, no teórica: es la demanda que recibió ' +
-      'este pool en el horizonte simulado dividida entre lo que atendió, y el aviso también ' +
-      'salta con una ocupación del 90 % o más. No es la carga de toda la demanda externa.',
+      'El aviso salta cuando la demanda atribuida dividida entre lo que atendió el pool llega a ' +
+      '1,1, o su ocupación llega al 90 %, y además la cola crece o queda trabajo pendiente: ' +
+      'ningún número decide solo. La demanda atribuida cuenta solo las instancias que esperaron ' +
+      'con el pool lleno, así que el número que muestra el aviso —esa razón, o la ocupación ' +
+      'cuando salta por esa puerta— es observado sobre el horizonte simulado, no la carga de ' +
+      'toda la demanda externa.',
   },
 
   /* ------------------------------------------------------------------ *

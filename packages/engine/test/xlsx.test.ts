@@ -207,6 +207,10 @@ describe('workbook of a run (examples/pedido)', () => {
     const notes = rows.filter((row) => row[0] === 'Notes');
     expect(notes.map((row) => row[3])).toEqual(['Durations', 'Cost per case', 'Payroll cost']);
     expect(notes[0]?.[4]).toContain('seconds');
+    // It names the sheets that do carry seconds: `Flows` has no duration column, `Resources` has
+    // `Busy time` (§ 4).
+    expect(notes[0]?.[4]).toContain('Busy time');
+    expect(notes[0]?.[4]).not.toContain('Flows');
     // #358 — the note says what `Cost per case` averages over, and adds no number of its own.
     expect(notes[1]?.[4]).toContain('mean cost of the cases that completed');
     expect(notes[2]?.[4]).toContain('availability');
@@ -219,6 +223,8 @@ describe('workbook of a run (examples/pedido)', () => {
     const files = parts(scenarioWorkbook(ir, scenario, simulate(ir, scenario, { log: false }), {}, 'es'));
     const notes = sheetRows(files['xl/worksheets/sheet1.xml'] ?? '').filter((row) => row[0] === 'Notas');
     expect(notes).toHaveLength(3);
+    // Every label of the block comes from the `es` catalog: none of them is left in English.
+    expect(notes.map((row) => row[3])).toEqual(['Duraciones', 'Costo por caso', 'Costo de nómina']);
     expect(notes[1]?.[4]).toContain('costo medio de los casos que terminaron');
   });
 
@@ -248,6 +254,44 @@ describe('workbook of a run (examples/pedido)', () => {
     expect(sheetRows(files['xl/worksheets/sheet2.xml'] ?? '')[1]?.[3]).toBe(
       String(Object.values(result.elements)[0]?.started),
     );
+  });
+
+  // #359 — `Within service level` is a fraction living in a `Value` column full of counts, seconds
+  // and money: under the column's `0.###` it showed `0.001004…` as `0.001` and anything below
+  // `0.0005` as the `0` § 5 forbids reading as "0 % met", so the row overrides the column format.
+  test('Within service level is a percentage cell and keeps the fraction', async () => {
+    const ir = await pedidoIr();
+    const base = pedidoScenario('as-is.scenario.json', 1);
+    const scenario: ResolvedScenario = { ...base, run: { ...base.run, serviceLevel: 1800 } };
+    const result = simulate(ir, scenario, { log: false });
+    expect(typeof result.process.withinServiceLevel).toBe('number');
+
+    const files = parts(scenarioWorkbook(ir, scenario, result, { cajero: 'Cashier' }));
+    const sheet = files['xl/worksheets/sheet1.xml'] ?? '';
+    const rows = sheetRows(sheet);
+    const styles = sheetStyles(sheet);
+
+    const process = rows.findIndex((row) => row[0] === 'Process' && row[3] === 'Within service level');
+    expect(process).toBeGreaterThan(0);
+    // `2` is the `0.00%` entry of `cellXfs`; the row above it keeps the column's `0.###` (`1`).
+    expect(styles[process]?.[4]).toBe('2');
+    expect(styles[process - 1]?.[4]).toBe('1');
+    // The cell holds the fraction, not a pre-multiplied percentage: the format only displays it.
+    expect(Number(rows[process]?.[4])).toBe(result.process.withinServiceLevel);
+    expect(Number(rows[process]?.[4])).toBeLessThan(1);
+
+    // Per outcome as well (#316), and only those rows: the payroll and the totals stay `0.###`.
+    const outcome = rows.findIndex(
+      (row) => row[0] === 'Outcomes' && row[3] === 'Within service level',
+    );
+    expect(outcome).toBeGreaterThan(process);
+    expect(styles[outcome]?.[4]).toBe('2');
+    expect(Number(rows[outcome]?.[4])).toBe(
+      Object.values(result.process.byEndEvent ?? {})[0]?.withinServiceLevel,
+    );
+    const payroll = rows.findIndex((row) => row[0] === 'Payroll');
+    expect(payroll).toBeGreaterThan(0);
+    expect(styles[payroll]?.[4]).toBe('1');
   });
 
   test('the five sheets are named and declared once each', async () => {
