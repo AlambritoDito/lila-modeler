@@ -223,8 +223,8 @@ function parseWarningNotice(
 }
 
 /**
- * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary interruptor no
- * tiene flujo entrante: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
+ * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary no tiene flujo
+ * entrante, interrumpa o no: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
  */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
   const attached = new Map<string, string[]>();

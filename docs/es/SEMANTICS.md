@@ -61,6 +61,7 @@ definida; todo lo demás cae en la sección 3 de este documento.
 | `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
 | `bpmn:boundaryEvent` interruptor, con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` | plazo que corta la tarea (§9) |
+| `bpmn:boundaryEvent` no interruptor (`cancelActivity="false"`), con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` e `interrupting: false` | plazo que crea un token en paralelo y deja la tarea corriendo (§9) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
@@ -129,7 +130,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
 | Construcción detectada | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` que no sea un temporizador interruptor con una salida adjunto a una tarea: no interruptor, de mensaje/error/…, sobre un subproceso o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `bpmn:boundaryEvent` que no sea un temporizador con una salida adjunto a una tarea, interrumpa o no: de mensaje/error/señal/…, sobre un subproceso o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
 | `messageEventDefinition` en cualquier evento | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
@@ -518,6 +519,43 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   ya está cerrada se consume sin adelantar el reloj, así que una corrida sin `run.duration` no se
   estira hasta un plazo que nunca iba a vencer (R-ARR-3). El `done` del propio host, que queda
   pendiente tras la interrupción, se consume igual. *(prueba: #81, #345)*
+- **R-BND-10 — Temporizador de borde no interruptor.** El mismo boundary event de R-BND-1 pero
+  con `cancelActivity="false"`: exactamente un `timerEventDefinition`, adjunto a una tarea
+  soportada y con al menos un flujo de salida. Entra al perfil como el mismo nodo `timer` con
+  `attachedTo` y sin `incoming`, marcado `interrupting: false` (ausente es interruptor, que es el
+  valor por omisión de `cancelActivity` en BPMN). R-BND-2 (el plazo cuenta desde el `enabledAt`
+  del host), R-BND-3 (tiempo de reloj y flujo de aleatorios propio), R-BND-4 (solo dispara
+  mientras la actividad host siga abierta), R-BND-8 (sin `processingTime` no dispara) y R-BND-9
+  (un vencimiento muerto no mueve el reloj) valen palabra por palabra. Se agenda un plazo por
+  ocurrencia del host, así que el borde dispara **como máximo una vez** por ocurrencia y nunca se
+  repite: un temporizador de borde cíclico no está en el perfil. *(prueba: #81)*
+- **R-BND-11 — El host sigue corriendo; el vencimiento añade un token.** El vencimiento no toca
+  al host: su actividad no se cierra, conserva su asignación de recursos, completa a su hora y
+  cuenta `completed` con `status = "completed"` — no hay fila `interrupted`. Lo que hace el
+  vencimiento es meter en el caso un token **nuevo**, que sale por el primer flujo saliente del
+  borde. El borde se comporta igual que en R-BND-6: un `started` y un `completed` en el mismo
+  instante, y ni una fila propia en el event log. *(prueba: #81)*
+- **R-BND-12 — El token nuevo no lleva marcas de activación OR.** A diferencia de R-BND-6, donde
+  el token del borde *es* el del host y hereda sus marcas, aquí el host conserva su token y sus
+  marcas. El token que crea el borde no lo activó ningún fork, así que nace con la pila de marcas
+  vacía: un OR join aguas abajo sigue esperando exactamente los `k` tokens que activó su fork
+  (R-OR-5) y sigue cerrando, y el token nuevo que llegue a ese join es una mezcla (R-OR-6, aviso
+  `W-OR-JOIN-SIN-FORK`). Copiar las marcas del host haría que el join contase `k + 1` tokens de
+  una misma activación y se bloquearía. *(prueba: #81)*
+- **R-BND-13 — Empate en el instante exacto del fin del host: el borde dispara.** Exactamente la
+  regla de R-BND-7 y el mismo mecanismo: el evento de vencimiento se encola **antes** que el
+  `done` del host, así que con instantes iguales `(t, seq)` (R-TOK-3) saca primero al borde, que
+  todavía encuentra abierta la actividad host. Un plazo exactamente igual a la duración de la
+  tarea dispara, por tanto, y el host completa en ese mismo instante. *(prueba: #81)*
+- **R-BND-14 — Más tokens a la vez, un solo caso.** Un vencimiento sube el número de tokens vivos
+  del caso, así que el caso no termina cuando el primer token toca un `end`: termina cuando se
+  queda sin tokens (R-EVT-4). Las dos ramas tienen que llegar a un `end` para que el caso cierre;
+  el caso se cuenta **una** vez y su desenlace (`process.byEndEvent`) se atribuye al `end` que
+  consumió el **último** token. Los joins AND y OR no cambian: un AND join sigue esperando un
+  token por flujo entrante (R-AND-2) —que es como la rama del borde se reincorpora a la del
+  host— y un OR join cuenta por marca de activación (R-OR-5, R-BND-12). Un token que siga
+  viajando al parar la corrida deja el caso `inFlight`, como cualquier otro token (R-OR-8,
+  R-AND-4). *(prueba: #81)*
 
 ---
 
@@ -996,7 +1034,7 @@ cuando se repiten por caso, con un contador agregado en vez de una línea por oc
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
-interrumpe a su host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+dispara sobre su host, interrumpa o no, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (un `flowTaken` que no puede
 preceder a su gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
@@ -1146,6 +1184,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-EVT-4 | end consume token; caso termina con 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | temporizador de borde interruptor | #81 |
+| R-BND-10 … R-BND-14 | temporizador de borde no interruptor | #81 |
 | R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |

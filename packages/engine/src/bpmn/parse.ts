@@ -75,12 +75,14 @@ const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
 const NO_OUTGOING: ReadonlySet<ModdleElement> = new Set();
 
 /**
- * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1), o `undefined`
- * si el boundary se queda fuera: no interrumpe, no es de tiempo, trae más de un disparador,
- * cuelga de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no
- * tiene ni un flujo de salida por el que continuar el token.
+ * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1, R-BND-10), o
+ * `undefined` si el boundary se queda fuera: no es de tiempo, trae más de un disparador, cuelga
+ * de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no tiene ni
+ * un flujo de salida por el que continuar el token.
  *
- * `cancelActivity` lo omite el XML cuando interrumpe: moddle lo da por `true`.
+ * Interrumpir o no da igual aquí: las dos formas entran al perfil y se distinguen con
+ * `node.interrupting`. `cancelActivity` lo omite el XML cuando interrumpe: moddle lo da por
+ * `true`, así que solo el `"false"` explícito es un borde no interruptor.
  */
 function boundaryTimerHost(
   el: ModdleElement,
@@ -89,7 +91,6 @@ function boundaryTimerHost(
   const definitions = eventDefinitionsOf(el);
   const host = el.attachedToRef;
   if (
-    el.cancelActivity === false ||
     el.parallelMultiple === true ||
     definitions.length !== 1 ||
     definitions[0]?.$type !== 'bpmn:TimerEventDefinition' ||
@@ -231,8 +232,8 @@ interface Collector {
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
-  /** `id del boundary -> elemento moddle del host`, para resolver `attachedTo` tras el recorrido. */
-  boundaryHosts: Map<string, ModdleElement>;
+  /** `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido. */
+  boundaryHosts: Map<string, { host: ModdleElement; interrupting: boolean }>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -353,7 +354,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       outgoing: [],
     };
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
-      c.boundaryHosts.set(id, el.attachedToRef);
+      c.boundaryHosts.set(id, { host: el.attachedToRef, interrupting: el.cancelActivity !== false });
     }
   }
 }
@@ -678,9 +679,12 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   // documento después del boundary, y aplanar un subproceso no cambia el id de sus tareas.
   // ponytail: si el host no acabó en el grafo, el boundary se queda sin `attachedTo` y
   // `validate` lo marca inalcanzable, que es exactamente el diagnóstico que toca.
-  for (const [id, hostEl] of c.boundaryHosts) {
-    const hostId = c.idOf.get(hostEl);
-    if (hostId !== undefined && c.nodes[hostId] !== undefined) c.nodes[id]!.attachedTo = hostId;
+  for (const [id, { host, interrupting }] of c.boundaryHosts) {
+    const hostId = c.idOf.get(host);
+    if (hostId === undefined || c.nodes[hostId] === undefined) continue;
+    c.nodes[id]!.attachedTo = hostId;
+    // R-BND-10: solo el borde no interruptor lo lleva; ausente es interruptor, como en BPMN.
+    if (!interrupting) c.nodes[id]!.interrupting = false;
   }
 
   // `incoming`/`outgoing` se derivan al final, con los flujos ya recableados, en orden de

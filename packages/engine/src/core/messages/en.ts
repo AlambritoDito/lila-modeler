@@ -69,7 +69,7 @@ export const coreEn: CoreCatalog = {
       `${flowId}: it leaves a parallel gateway (${gatewayId}); probability is ignored.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: no processingTime; it delays 0 seconds.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
-      `${nodeId}: boundary timer without processingTime; it never interrupts ${hostId}.`,
+      `${nodeId}: boundary timer without processingTime; it never fires on ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: a token arrived without a fork mark; it behaves as a merge.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

@@ -124,7 +124,7 @@ Map `BPMN id → parameters`. The keys are diagram ids: nodes (`Task_…`, `Star
 
 | Field | Type | Applies to | Default | Description |
 |---|---|---|---|---|
-| `processingTime` | distribution (§ 3) | tasks, timers (intermediate **and** boundary) | no time (0 s) | Duration of the work, in seconds. On an intermediate timer it is the delay, with no resource. On a boundary timer it is the deadline that interrupts its task; without it the boundary never fires (`SEMANTICS.md` R-BND-8). |
+| `processingTime` | distribution (§ 3) | tasks, timers (intermediate **and** boundary) | no time (0 s) | Duration of the work, in seconds. On an intermediate timer it is the delay, with no resource. On a boundary timer it is the deadline: it cuts its task short when the boundary interrupts (R-BND-1) and spawns a parallel token when it does not (R-BND-10). Without it the boundary never fires (`SEMANTICS.md` R-BND-8). |
 | `resources` | array of `{ ref, quantity }` | tasks | — | `ref` = key in `resources`; `quantity` integer ≥ 1, default `1`. Without `resources` ⇒ infinite capacity. |
 | `selection` | `"and"` \| `"or"` | tasks with `resources` | `"and"` | `and`: starts when **all** pools have capacity simultaneously (checked on every release; no partial resources are held ⇒ no deadlock). `or`: queues on all of them, starts with whichever becomes available first, and withdraws from the others; if several are free at once, the one listed first in `resources` wins (R-REC-6). |
 | `fixedCost` | number ≥ 0 | any node | `0` | Fixed cost per token **completed** at the element. |

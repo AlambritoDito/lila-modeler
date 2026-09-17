@@ -123,7 +123,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 
 | Campo | Tipo | Aplica a | Default | Descripción |
 |---|---|---|---|---|
-| `processingTime` | distribución (§ 3) | tareas, timers (intermedios **y** de borde) | sin tiempo (0 s) | Duración del trabajo, en segundos. En un timer intermedio es el retardo, sin recurso. En un temporizador de borde es el plazo que interrumpe a su tarea; sin él el borde nunca vence (`SEMANTICS.md` R-BND-8). |
+| `processingTime` | distribución (§ 3) | tareas, timers (intermedios **y** de borde) | sin tiempo (0 s) | Duración del trabajo, en segundos. En un timer intermedio es el retardo, sin recurso. En un temporizador de borde es el plazo: corta su tarea cuando el borde interrumpe (R-BND-1) y crea un token en paralelo cuando no (R-BND-10). Sin él el borde nunca dispara (`SEMANTICS.md` R-BND-8). |
 | `resources` | array de `{ ref, quantity }` | tareas | — | `ref` = clave de `resources`; `quantity` integer ≥ 1, default `1`. Sin `resources` ⇒ capacidad infinita. |
 | `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás; si hay varios libres a la vez gana el que aparece primero en `resources` (R-REC-6). |
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |

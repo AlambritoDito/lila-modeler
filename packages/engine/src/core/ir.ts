@@ -23,10 +23,15 @@ export interface Node {
   /** Id del `bpmn:subProcess` embebido del que proviene, tras aplanar (R-PLAN-1). */
   subprocessId?: string;
   /**
-   * Solo en un `timer` que nació de un boundary event interruptor: id de la tarea a la que
-   * está adjunto (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
+   * Solo en un `timer` que nació de un boundary event: id de la tarea a la que está adjunto
+   * (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
    */
   attachedTo?: string;
+  /**
+   * Solo junto a `attachedTo`: `false` en un borde **no interruptor** (`cancelActivity="false"`,
+   * R-BND-10). Ausente es interruptor, que es el valor por omisión de `cancelActivity` en BPMN.
+   */
+  interrupting?: boolean;
   /** Ids de los flujos entrantes, en orden de aparición. */
   incoming: string[];
   /** Ids de los flujos salientes, en orden de aparición. */
