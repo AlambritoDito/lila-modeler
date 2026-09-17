@@ -35,6 +35,9 @@ declare module 'bpmn-moddle' {
     /** `bpmn:BoundaryEvent` */
     attachedToRef?: ModdleElement;
     cancelActivity?: boolean;
+    /** `bpmn:EventBasedGateway` */
+    instantiate?: boolean;
+    eventGatewayType?: string;
     /** `bpmn:Activity` */
     loopCharacteristics?: ModdleElement;
     startQuantity?: number;

@@ -63,6 +63,8 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
 | `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"` or `"0"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
+| `bpmn:eventBasedGateway` exclusive and non-instantiating, every outgoing flow going to a branch catch event | `eventGateway` | races its branches; the first delay to elapse takes the token (§9.1) |
+| `bpmn:intermediateCatchEvent` with `timerEventDefinition` or `messageEventDefinition`, as a branch of that gateway | `timer` | wait with the branch's own time, with no resource (§9.1) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
@@ -132,7 +134,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
 | `bpmn:boundaryEvent` other than a timer with one outgoing flow attached to a task, interrupting or not: message/error/signal/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` in any event | `messageEvent` | `message event` | `evento de mensaje` |
+| `messageEventDefinition` in any event other than a branch catch event of a supported event-based gateway (§9.1) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
 | `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
@@ -142,7 +144,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
 | `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
 | `bpmn:intermediateThrowEvent` (no trigger or with any) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
-| `bpmn:eventBasedGateway` | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
+| `bpmn:eventBasedGateway` other than an exclusive, non-instantiating one whose every outgoing flow goes to a timer or message branch catch event: `instantiate="true"`, `eventGatewayType="Parallel"`, any other branch element, or no outgoing flow | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
 | `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
@@ -567,6 +569,69 @@ pair), without introducing case variables or an expression language.
   incoming flow (R-AND-2) — which is how a boundary branch rejoins the host's — and an OR join
   counts by activation mark (R-OR-5, R-BND-12). A token still travelling when the run stops
   leaves the case `inFlight`, as any other token would (R-OR-8, R-AND-4). *(test: #81)*
+
+### 9.1 Event-based gateway
+
+The gateway that waits for whichever happens first. Bizagi simulates it by giving every
+intermediate event after the gateway a time and letting the first one to elapse win; only a
+gateway followed by none intermediate events or by tasks is left out
+(help.bizagi.com/platform/en/simulation_in_bizagi.htm). Lila follows that convention, which is
+what makes the construct simulable without messages, signals or an event bus.
+
+- **R-EVG-1 — Event-based gateway in the profile.** A `bpmn:eventBasedGateway` enters the profile
+  when all three hold: it is **exclusive** (`eventGatewayType` absent or `"Exclusive"`), it does
+  **not** instantiate the process (`instantiate` absent, `"false"` or `"0"`) and **every** one of
+  its outgoing flows goes to a **branch catch event**: a `bpmn:intermediateCatchEvent` with
+  exactly one trigger, `timerEventDefinition` or `messageEventDefinition`, exactly one incoming
+  flow — the gateway's — and exactly one outgoing flow. The gateway is then an `eventGateway` node
+  and each branch event a `timer` node (§2). As with `cancelActivity` in R-BND-10, only
+  `xsd:boolean`'s own lexical space is read for `instantiate`, straight from the XML text, so
+  `"true"` and `"1"` instantiate and any other literal (`"TRUE"`, `""`, a typo) is unsupported.
+  The rule is all-or-nothing: one branch that is anything else — a task, a none/signal/conditional
+  intermediate event, another gateway, a sub-process — leaves the **whole** gateway out with
+  `E-NOSOP` and construction `eventBasedGateway` (§3), and every element of the branch keeps its
+  own row of the catalog. The single incoming flow is what makes a branch a branch and nothing
+  else: reachable only through its gateway, so no token can enter it as a plain timer. An
+  intermediate message catch event anywhere else stays `E-NOSOP` (§3). *(test: #81)*
+- **R-EVG-2 — Each branch is a delay with its own time.** The delay of a branch event is
+  `elements[<event id>].processingTime`, the same field an intermediate timer uses (R-EVT-1), and
+  it elapses 24×7 unless the event declares `elements[<event id>].calendar` (R-EVT-3). A **message**
+  branch is therefore modelled as a wait of that time: it is the Bizagi convention, and Lila does
+  not simulate the message itself — there is no sender, no correlation and no queue of messages.
+  A branch consumes no resources: declaring `resources` on it is `E-TIMER-RECURSO`, as on any
+  other timer. *(test: #81)*
+- **R-EVG-3 — Every branch is armed at once and only the winner leaves a trace.** When the token
+  reaches the gateway, **every** branch is armed in that same instant, each with one delay drawn
+  from the stream of **its own** id (R-DET-2), so adding or removing a branch shifts no other
+  element's draws (§16). The branch whose firing instant is the earliest wins: its token continues
+  through that event's outgoing flow and the other branches are discarded with no `started`, no
+  `completed`, no event-log row and no flow count. The gateway counts one `started` and one
+  `completed` in the instant the token reaches it, like any other gateway, and emits no row. The
+  winner counts one `started` when it is armed and one `completed` when it fires, and emits the
+  event-log row of any other timer (`enabledAt` = `startedAt` = the gateway's instant, `endedAt` =
+  the firing, no resource). The case's token count does not change: one token in, one token out.
+  A `probability` on the gateway's outgoing flows means nothing here and is ignored: what routes
+  the token is the race, never a draw (unlike R-XOR-1). *(test: #81)*
+- **R-EVG-4 — The race is on instants, and a tie goes to the first flow.** What is compared is the
+  instant each branch **would** fire at, not the raw delay, so a branch with its own calendar
+  races on the same clock as the rest. With two equal instants the winner is the branch listed
+  first in the gateway's `outgoing`, which is the order its flows appear in the document: the same
+  explicit, insertion-ordered tie-break as `(t, seq)` in R-TOK-3, and never a draw. *(test: #81)*
+- **R-EVG-5 — A branch with no time never fires.** A branch event with no `processingTime` has no
+  delay to elapse, so it is left out of the race and produces warning `W-TIMER-SIN-TIEMPO`
+  (the code an intermediate timer with no time already had, with the text of the branch: it never
+  fires, instead of delaying 0 seconds), citing the event and its gateway. The branches that do
+  have a time race as usual. *(test: #81)*
+- **R-EVG-6 — With no branch able to fire the token stays at the gateway.** If **no** branch of the
+  gateway declares a `processingTime`, nothing can ever elapse and the token stays there: the case
+  never reaches an `end` and is counted `inFlight` at the stop, as any other token still travelling
+  (R-OR-8). It is not an error, so a run that only validates routes (no times anywhere, R-DEG-3)
+  still runs; when the replication closes, warning `W-JOIN-BLOQUEADO` — the code for a token that
+  was left waiting — names the **gateway** and how many cases it held. *(test: #81)*
+- **R-EVG-7 — One race per pass.** Nothing is cached between passes: a gateway inside a loop arms
+  its branches again, with a fresh draw per branch, every time a token reaches it, and the races of
+  two different passes (or of two different cases) share nothing but the streams they draw from.
+  *(test: #81)*
 
 ---
 
@@ -1053,8 +1118,12 @@ element involved and, when they repeat per case, with an aggregated counter inst
 per occurrence):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
-`W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
-`W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
+`W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
+(a token left waiting at a join, R-OR-8/R-AND-4, or at an event-based gateway whose branches have
+no time, R-EVG-6: each case has its own text),
+`W-TIMER-SIN-TIEMPO` (an intermediate timer with no `processingTime` delays 0 seconds, R-EVT-2; as
+a branch of an event-based gateway it never fires instead, R-EVG-5),
+`W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
 fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
@@ -1206,6 +1275,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
 | R-BND-10 … R-BND-14 | non-interrupting boundary timer | #81 |
+| R-EVG-1 … R-EVG-7 | event-based gateway with timer and message branches | #81 (`packages/engine/test/event-gateway.test.ts`) |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |

@@ -28,6 +28,7 @@ const NODE_TYPES: Record<string, string> = {
   or: 'OR gateway',
   and: 'AND gateway',
   timer: 'timer',
+  eventGateway: 'event-based gateway',
 };
 
 const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]

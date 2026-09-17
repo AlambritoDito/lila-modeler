@@ -68,12 +68,16 @@ export const coreEn: CoreCatalog = {
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
       `${flowId}: it leaves a parallel gateway (${gatewayId}); probability is ignored.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: no processingTime; it delays 0 seconds.`,
+    'W-TIMER-SIN-TIEMPO/rama': (nodeId, gatewayId) =>
+      `${nodeId}: no processingTime; it never fires as a branch of ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: boundary timer without processingTime; it never fires on ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: a token arrived without a fork mark; it behaves as a merge.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
       `${nodeId}: ${cases} cases were left with tokens waiting at the join.`,
+    'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
+      `${nodeId}: no branch event declares processingTime; ${cases} cases were left with their token waiting at the gateway.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: the queue grows without settling (λ/μ·c ≈ ${rho})`,

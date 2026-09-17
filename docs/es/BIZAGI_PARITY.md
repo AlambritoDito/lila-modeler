@@ -56,7 +56,8 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | Start quantity / completion quantity | ✓ | reservado | — | No planificado (v1) |
 | Temporizador de borde interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, primera tajada: `SEMANTICS.md` R-BND-1…9) |
 | Temporizador de borde no interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, segunda tajada: `SEMANTICS.md` R-BND-10…14) |
-| Message/signal/link events, boundary events que no son de tiempo, boundary events sobre un subproceso, event-based gateway | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (v1) |
+| Event-based gateway (ramas de tiempo y de mensaje) | ✓ | ✓ | — | Implementado (#81, tercera rebanada: `SEMANTICS.md` R-EVG-1…7) |
+| Message/signal/link events sueltos, boundary events que no son de tiempo, boundary events sobre un subproceso, event-based gateway paralelo o que instancia | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (v1) |
 | Parámetros desde event logs (Bizagi 4.0 process mining) | ✓ | fase minería (proceso Python separado) | — | No planificado (v1) |
 | **No** (Bizagi tampoco los simula) | | | | |
 | Multi-instancia, complex gateway, choreography/conversation, transaccional, ad-hoc; leer `.bpm` propietario | ✗ | ✗ | — | Fuera de alcance |

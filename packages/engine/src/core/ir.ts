@@ -12,7 +12,17 @@
 import { coreMessages, type Locale } from './messages/index.js';
 
 /** Tipos de nodo del perfil soportado. Toda variante de tarea se aplana a `task`. */
-export type NodeType = 'start' | 'end' | 'terminate' | 'task' | 'xor' | 'or' | 'and' | 'timer';
+export type NodeType =
+  | 'start'
+  | 'end'
+  | 'terminate'
+  | 'task'
+  | 'xor'
+  | 'or'
+  | 'and'
+  | 'timer'
+  /** Exclusive `bpmn:eventBasedGateway`: it arms its branch events and the first one wins (R-EVG-1). */
+  | 'eventGateway';
 
 /** Nodo del proceso, keyed por su `id` BPMN en `ProcessIR.nodes`. */
 export interface Node {

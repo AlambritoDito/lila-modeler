@@ -168,14 +168,15 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Platforms | Windows only | web app, macOS, Windows, Linux |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
 | Document publishing (Word/PDF/web) | ✓ | ✗ not a documentation suite |
-| Message/signal/link events, event-based gateway | partial | ✗ explicit validation error |
+| Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
+| Standalone message/signal/link events | partial | ✗ explicit validation error |
 | Multi-instance, complex gateway, choreography | ✗ | ✗ out of scope |
 
 ### Known limitations
 
-- **Supported BPMN profile**: start/end (none and terminate), intermediate timer, interrupting
-  boundary timer, tasks (all variants), call activity, embedded subprocess, XOR/OR/AND gateways,
-  lanes and pools. Anything else is an explicit validation error, never a silent failure
+- **Supported BPMN profile**: start/end (none and terminate), intermediate timer, boundary timer
+  (interrupting and not), event-based gateway with timer or message branches, tasks (all
+  variants), call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
   ([`docs/SEMANTICS.md`](docs/SEMANTICS.md) §§ 2–3).
 - **Not on npm yet**: no `npm install @lila/engine`; clone and build as above.
 - **Calendars are weekly**; monthly/annual recurrence and holidays are reserved fields.

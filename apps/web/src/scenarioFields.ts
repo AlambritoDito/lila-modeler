@@ -29,6 +29,7 @@ export type ClaseElemento =
   | 'xor'
   | 'or'
   | 'and'
+  | 'eventGateway'
   | 'timer'
   | 'flow';
 
@@ -60,6 +61,9 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     case 'xor':
     case 'or':
     case 'and':
+    // An event-based gateway takes no parameter of its own either: the race is run with the
+    // `processingTime` of each branch event, which is edited on the event (SEMANTICS R-EVG-2).
+    case 'eventGateway':
       return [];
     default:
       return null;

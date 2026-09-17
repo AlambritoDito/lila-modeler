@@ -75,12 +75,16 @@ export const coreEs: CoreCatalog = {
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
       `${flowId}: sale de un gateway paralelo (${gatewayId}); probability se ignora.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: sin processingTime; retarda 0 segundos.`,
+    'W-TIMER-SIN-TIEMPO/rama': (nodeId, gatewayId) =>
+      `${nodeId}: sin processingTime; nunca dispara como rama de ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: temporizador de borde sin processingTime; nunca dispara sobre ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de fork; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
       `${nodeId}: ${cases} casos quedaron con tokens esperando en el join.`,
+    'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
+      `${nodeId}: ninguna rama declara processingTime; ${cases} casos quedaron con su token esperando en la compuerta.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho})`,

@@ -114,3 +114,70 @@ describe('buildReplay over packages/engine/test/fixtures/service-request', () =>
     expect(replay.truncated).toBe(false);
   });
 });
+
+/**
+ * #81, third slice: the replay has to survive the new path. An event-based gateway emits no log
+ * row of its own, and only the branch that won the race appears in the log at all — the losing
+ * branches are never enabled, so no counter and no hop may be invented for them.
+ */
+describe('buildReplay with an event-based gateway', () => {
+  const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test">
+  <bpmn:process id="Process_Replay" isExecutable="true">
+    <bpmn:startEvent id="Start_Proceso" />
+    <bpmn:sequenceFlow id="Flow_Start_Pedir" sourceRef="Start_Proceso" targetRef="Task_Pedir" />
+    <bpmn:task id="Task_Pedir" name="Pedir" />
+    <bpmn:sequenceFlow id="Flow_Pedir_Espera" sourceRef="Task_Pedir" targetRef="Gateway_Espera" />
+    <bpmn:eventBasedGateway id="Gateway_Espera" name="Espera" />
+    <bpmn:sequenceFlow id="Flow_Espera_Respuesta" sourceRef="Gateway_Espera" targetRef="Event_Respuesta" />
+    <bpmn:sequenceFlow id="Flow_Espera_Plazo" sourceRef="Gateway_Espera" targetRef="Event_Plazo" />
+    <bpmn:intermediateCatchEvent id="Event_Respuesta" name="Llega respuesta">
+      <bpmn:messageEventDefinition id="Trigger_Respuesta" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_Respuesta_Fin" sourceRef="Event_Respuesta" targetRef="End_Respondido" />
+    <bpmn:endEvent id="End_Respondido" name="Respondido" />
+    <bpmn:intermediateCatchEvent id="Event_Plazo" name="Vence el plazo">
+      <bpmn:timerEventDefinition id="Trigger_Plazo" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_Plazo_Fin" sourceRef="Event_Plazo" targetRef="End_Vencido" />
+    <bpmn:endEvent id="End_Vencido" name="Vencido" />
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  const SCENARIO = {
+    version: 1,
+    name: 'event gateway',
+    run: { start: '2026-09-07T08:00:00-06:00', seed: 42, replications: 1, duration: 3600 },
+    elements: {
+      Start_Proceso: { interTriggerTimer: { type: 'constant', value: 600 } },
+      Task_Pedir: { processingTime: { type: 'constant', value: 60 } },
+      Event_Respuesta: { processingTime: { type: 'constant', value: 90 } },
+      Event_Plazo: { processingTime: { type: 'constant', value: 240 } },
+    },
+  };
+
+  it('counts the gateway and the winning branch exactly like the engine', async () => {
+    const parsedIr = (await parseBpmn(XML)).ir;
+    const parsed = parseScenario(SCENARIO);
+    if (!parsed.success) throw new Error('the inline scenario does not parse');
+    const eventScenario = parsed.data as ResolvedScenario;
+    const eventRows: EventLogRow[] = [];
+    const eventResult = simulate(parsedIr, eventScenario, { onEvent: (row) => eventRows.push(row) });
+    const eventReplay = buildReplay(eventRows, parsedIr, eventScenario);
+    const final = stateAt(eventReplay, eventReplay.horizon);
+
+    for (const id of eventReplay.elementIds) {
+      expect([id, final.elements[id]?.started, final.elements[id]?.completed])
+        .toEqual([id, eventResult.elements[id]?.started, eventResult.elements[id]?.completed]);
+    }
+    // The winner is in the log with its wait; the discarded branch is nowhere, neither in the
+    // counters nor as a hop.
+    expect(final.elements['Event_Respuesta']?.completed).toBeGreaterThan(0);
+    expect(eventReplay.elementIds).not.toContain('Event_Plazo');
+    expect(eventReplay.moves.some((move) => move.flows.includes('Flow_Espera_Plazo'))).toBe(false);
+    // And the hop from the task to the winner really walks through the gateway.
+    const hop = eventReplay.moves.find((move) => move.flows.includes('Flow_Espera_Respuesta'));
+    expect(hop?.flows[0]).toBe('Flow_Pedir_Espera');
+    expect(eventReplay.passages.some((passage) => passage.elementId === 'Gateway_Espera')).toBe(true);
+  });
+});
