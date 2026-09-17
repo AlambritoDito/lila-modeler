@@ -57,6 +57,7 @@ import 'bpmn-js/dist/assets/bpmn-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
+import './theme/montana.css';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string };
@@ -308,6 +309,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
+  const [decoratedTheme, setDecoratedTheme] = useState<string | undefined>();
   const [temaId, setTemaId] = useState<string>('eva-01');
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
@@ -635,6 +637,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       try {
         const t = temaDe(id, mios)?.tema ?? (await cargarTema(id as TemaId));
         aplicarTema(t);
+        setDecoratedTheme(id === 'montana' ? id : undefined);
         setTema(t);
       } catch (e: unknown) {
         // Un tema roto no puede dejar la app en blanco: se avisa y se sigue con Eva-01, que
@@ -669,6 +672,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : await cargarTema(id as TemaId);
       if (t === undefined) return;
       aplicarTema(t);
+      setDecoratedTheme(id === 'montana' ? id : undefined);
       // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
       // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
       modelador?.repintar();
@@ -841,7 +845,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   return (
-    <div className="app" data-densidad={densidad}>
+    <div className="app" data-densidad={densidad} data-theme={decoratedTheme}>
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
         <p>{S.app.reemplazoTexto(projectName)}</p>

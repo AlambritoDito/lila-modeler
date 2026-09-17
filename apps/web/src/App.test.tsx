@@ -1270,3 +1270,32 @@ it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble cl
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector('.bienvenida')).toBeNull();
 });
+
+
+it('scopes Montana decoration to successfully applied built-in themes', async () => {
+  const select = selectTema();
+  const choose = async (id: string) => {
+    await act(async () => { select.value = id; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  };
+  const app = () => container.querySelector('.app')!;
+  expect(app().hasAttribute('data-theme')).toBe(false);
+  await choose('montana');
+  expect(app().getAttribute('data-theme')).toBe('montana');
+  vi.mocked(fetch).mockRejectedValueOnce(new Error('Unavailable theme'));
+  await choose('papel');
+  expect(app().getAttribute('data-theme')).toBe('montana');
+  await choose('papel');
+  expect(app().hasAttribute('data-theme')).toBe(false);
+  await choose('montana');
+  await click(T.apariencia.duplicar);
+  expect(app().hasAttribute('data-theme')).toBe(false);
+  expect(select.value).toMatch(/^u:/);
+});
+
+it('restores Montana decoration when the built-in theme was saved', async () => {
+  localStorage.setItem('lila.tema', 'montana');
+  await act(async () => { root.unmount(); });
+  root = createRoot(container);
+  await act(async () => { root.render(<App store={session} />); });
+  expect(container.querySelector('.app')?.getAttribute('data-theme')).toBe('montana');
+});

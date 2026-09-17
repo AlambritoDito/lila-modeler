@@ -177,3 +177,17 @@ that does not hold up either, it drops out of the list and the `tokens.css` defa
 The whole theme is discarded only when there is no way to reconstruct it — no user `id` or no
 `name`. Discarding it at the first broken token, which is what used to happen, turned any edit
 left half-done into the silent loss of the other 39 on reload.
+
+## Montana decoration
+
+The built-in Montana theme takes its purple, bubblegum pink and gold direction from
+[Hannah Montana Linux](https://hannahmontana.sourceforge.net/screenshots.html).
+Its static gradients, sparkles and corner stars are CSS decoration scoped to the
+editor's `data-theme="montana"` attribute, set only after the theme loads successfully.
+Switching to another theme removes that decoration. The Lila branding and startup
+remain unchanged. External canvas labels use a pale fill and plum outline over the
+purple backdrop; BPMN exports retain their original diagram data without CSS decoration.
+
+Duplicating, importing or exporting Montana preserves the existing `{ name, tokens }`
+format and its palette, including a lighter canvas for dark labels. The built-in
+decoration does not travel with custom themes. No new tokens or dependencies are required.
