@@ -182,6 +182,16 @@ export interface CliMessages {
   xlsxWorkingHours: () => string;
   xlsxPayrollCost: () => string;
   xlsxTotal: () => string;
+  /**
+   * `Notes` block of the `Summary` sheet (#358, #359): what the numbers next to it mean, so a
+   * workbook read away from the app does not invite the wrong arithmetic. Text only — the block
+   * adds no metric and changes no value.
+   */
+  xlsxSectionNotes: () => string;
+  xlsxNoteDurations: () => string;
+  xlsxNoteSeconds: () => string;
+  xlsxNoteCostPerCase: () => string;
+  xlsxNotePayroll: () => string;
   /** Column headers of the `Comparison` sheet, one group per compared scenario. */
   xlsxDelta: (scenario: string) => string;
   xlsxDeltaRelative: (scenario: string) => string;

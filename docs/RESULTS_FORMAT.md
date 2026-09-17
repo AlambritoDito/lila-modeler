@@ -350,6 +350,9 @@ A list of strings, one per non-fatal condition detected during `resolveScenario`
   second door into the same warning; it then prints
   `W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)` instead, with
   the utilization as a whole percentage. The full criterion is in `SEMANTICS.md` § 17.
+  `λ/μ·c` is the queueing shorthand for the shape of the ratio, not a claim about the scenario's
+  declared demand: the number is measured over the simulated horizon, so the web app prints a note
+  next to the warning saying which two quantities it divides *(#357)*.
   *(LILA-191, #320)*
 
 ---
@@ -548,9 +551,9 @@ whose bottleneck is the `horno` pool with `capacity 1`, which the TO-BE does not
 `lila run --xlsx book.xlsx`, `lila compare --xlsx book.xlsx` and the "Export XLSX" buttons of the
 web app write a spreadsheet with the same numbers as the CSV. It is a hand-written OOXML file over
 `fflate` (`packages/engine/src/xlsx.ts`): inline strings, numeric cells, no shared string table and
-no styles beyond the default one, which is the subset Excel, LibreOffice, Numbers, pandas and
-openpyxl all read. The bytes are deterministic — the zip entries carry a fixed timestamp, so two
-exports of the same run are identical.
+three number formats, which is the subset Excel, LibreOffice, Numbers, pandas and openpyxl all
+read. The bytes are deterministic — the zip entries carry a fixed timestamp, so two exports of the
+same run are identical.
 
 The tables come from the **same row builders** as the CSV (`elementsRows`, `flowsRows`,
 `resourcesRows`, `processRows` in `packages/engine/src/csv.ts`), so the two exports cannot diverge;
@@ -561,7 +564,7 @@ sheets the workbook adds come from the message catalog (`Summary`/`Resumen`, …
 
 | Sheet | Columns | Content |
 |---|---|---|
-| `Summary` | Section, Id, Name, Metric, Value | the `process` metrics of section 5, one per row (a metric with no value, such as `Within service level` without `run.serviceLevel`, has no row); the completed cases per end event when `process.byEndEvent` exists; and, per declared pool, `Capacity`, `Working hours` and `Payroll cost`, plus the total |
+| `Summary` | Section, Id, Name, Metric, Value | the `process` metrics of section 5, one per row (a metric with no value, such as `Within service level` without `run.serviceLevel`, has no row); the completed cases per end event when `process.byEndEvent` exists; per declared pool, `Capacity`, `Working hours` and `Payroll cost`, plus the total; and a `Notes` block *(#358, #359)* |
 | `Elements` | those of `elements.csv` | identical rows to `elements.csv` |
 | `Flows` | those of `flows.csv` | identical rows to `flows.csv` |
 | `Resources` | those of `resources.csv` | identical rows to `resources.csv` |
@@ -574,6 +577,37 @@ Without `run.duration` the hours are unknown and those cells stay empty.
 
 The event log is **not** a sheet: a run of a few million rows exceeds the 1 048 576 rows a
 worksheet holds. `--csv` keeps writing it in streaming (section 7).
+
+#### Units, formats and the `Notes` block *(#358, #359)*
+
+The workbook never converts: every duration in it is in **seconds** (section 1), whatever
+`run.baseTimeUnit` the scenario declares and whatever the app shows on screen. Where that can be
+said next to the number, it is:
+
+- the `Metric` **labels** of `Summary` carry the unit through the same `columnHeader(scope, metric,
+  unit)` convention the console uses — `Cycle time average (s)`, and nothing on a count, a rate or
+  money;
+- the `Elements`, `Flows` and `Resources` **headers** do not, and will not: they are the column
+  names of section 10 and are pinned to the CSV's, both by this document and by
+  `packages/engine/test/xlsx.test.ts`. Their unit is stated in the `Notes` block instead.
+
+The `Notes` block of `Summary` is the last section of the sheet, one row per note, the text in the
+`Value` column. It adds no metric and changes no value; it answers the three readings a workbook
+opened away from the app gets wrong: the unit of the source sheets, that `Cost per case` is the
+mean cost of the cases that **completed** and not `Total cost / Instances completed` (section 5),
+and that `Payroll cost` charges availability while `Unit cost` charges the hours actually occupied
+(section 4).
+
+Number formats are presentation only — the cell keeps the full double:
+
+| Format | Where |
+|---|---|
+| `0.###` | every numeric cell of the five sheets and of `Comparison`, so a mean prints `42.857` instead of `42.857142857142854` |
+| `0.00%` | the relative delta of `Comparison`, whose value is a fraction (`0.153` shows as `15.30%`) |
+| general | the header row, the `Notes` texts and every other text or boolean cell |
+
+`Utilization (%)` is not a percentage cell: its value is already multiplied by 100 and the column
+name says so, like the CSV's and the console's.
 
 ### `compare --xlsx`: one sheet per scenario plus `Comparison`
 

@@ -247,6 +247,19 @@ export const es: Catalog = {
     xlsxWorkingHours: () => 'Horas laborables',
     xlsxPayrollCost: () => 'Costo de nómina',
     xlsxTotal: () => 'Total',
+    xlsxSectionNotes: () => 'Notas',
+    xlsxNoteDurations: () => 'Duraciones',
+    xlsxNoteSeconds: () =>
+      'Toda duración de las hojas Elementos, Flujos y Recursos está en segundos, cualquiera sea ' +
+      'la unidad base que declare el escenario; la app las convierte para mostrarlas, este libro no.',
+    xlsxNoteCostPerCase: () =>
+      'El costo por caso es el costo medio de los casos que terminaron, no el costo total ' +
+      'dividido entre las instancias completadas: el costo de los casos en curso forma parte del ' +
+      'costo total y no de esta media.',
+    xlsxNotePayroll: () =>
+      'El costo de nómina cobra la disponibilidad (capacidad x costo por hora x las horas ' +
+      'abiertas de la corrida, ocupada u ociosa); el costo unitario de la hoja Recursos cobra ' +
+      'solo las horas realmente ocupadas. Son dos preguntas distintas, no dos estimaciones de una.',
     xlsxDelta: (escenario) => `Delta ${escenario}`,
     xlsxDeltaRelative: (escenario) => `Delta % ${escenario}`,
     xlsxCi95Low: (escenario) => `IC95 inferior ${escenario}`,
