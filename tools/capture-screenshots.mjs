@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { decodeLila } from '@lila/engine/project';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.join(root, 'docs/design/en');
@@ -50,17 +51,16 @@ try {
     const download = await downloadPromise;
     const destination = path.join(temporary, download.suggestedFilename());
     await download.saveAs(destination);
-    return { destination, document: JSON.parse(await readFile(destination, 'utf8')) };
+    return { destination, document: decodeLila(new Uint8Array(await readFile(destination))) };
   }
-  const session = () => page.evaluate(() => JSON.parse(localStorage.getItem('lila.project.v1')).project);
   await page.goto(url); await ready();
   // Set the actual settings through the UI, without overriding application rendering or state.
   await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'eva-01'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
   await selectTask(); await page.getByLabel('Name', { exact: true }).fill('Take order — checked'); await page.getByLabel('Name', { exact: true }).press('Tab');
   await button('Simulate').click();
-  await page.getByLabel('seed', { exact: true }).fill('43'); await page.getByLabel('seed', { exact: true }).press('Tab');
-  assert.equal(await page.getByLabel('seed', { exact: true }).inputValue(), '43');
-  await page.getByLabel('seed', { exact: true }).fill('42'); await page.getByLabel('seed', { exact: true }).press('Tab');
+  await page.getByLabel('Seed', { exact: true }).fill('43'); await page.getByLabel('Seed', { exact: true }).press('Tab');
+  assert.equal(await page.getByLabel('Seed', { exact: true }).inputValue(), '43');
+  await page.getByLabel('Seed', { exact: true }).fill('42'); await page.getByLabel('Seed', { exact: true }).press('Tab');
   await run();
   await button('Simulate').click(); await page.locator('.simulacion > label > select').selectOption({ label: 'TO-BE 3 cashiers' }); await run();
   await button('Compare').click();
@@ -69,7 +69,7 @@ try {
   assert.deepEqual(saved.document.runs.map(r => r.scenarioName).sort(), ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);
   for (const r of saved.document.runs) { assert.equal(r.inputs.scenario.run.seed, 42); assert.equal(r.inputs.scenario.run.replications, 30); assert.ok(Object.keys(r.result.elements).length > 0); } assert.match(saved.document.model.xml, /Take order — checked/);
   assert.equal(saved.document.scenarios['as-is.scenario.json'].run.seed, 42);
-  await page.reload(); await ready(); assert.deepEqual(await session(), saved.document);
+  await page.reload(); await ready(); assert.deepEqual((await save()).document, saved.document);
   await selectTask(); assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Take order — checked');
   await page.getByLabel('Name', { exact: true }).fill('UNSAVED EDIT'); await page.getByLabel('Name', { exact: true }).press('Tab');
   await page.reload(); await ready(); await selectTask(); assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Take order — checked');
@@ -107,11 +107,17 @@ try {
   await selectTask(); await capture('properties');
   await button('Documentation').click(); await capture('documentation');
   await button('Simulate').click(); await capture('simulate');
-  await page.locator('summary').filter({ hasText: /^Run$/ }).click();
-  await page.locator('summary').filter({ hasText: /^Calendars$/ }).click();
-  await capture('calendar');
+  await button('4 · Calendar analysis').click(); await capture('calendar'); // Step 4 of the Simulate panel (#333).
   await page.locator('.djs-container').first().click({ position: { x: 600, y: 650 } });
   await run(); await capture('results', false);
+  // Animate (#331): the replay of the event log, paused mid-run so the counters are readable.
+  await page.locator('.zona-resultados').getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('.replay select').waitFor();
+  await page.locator('.replay select').selectOption('600'); // 600x: ~2.5 simulated hours in 15 s, with cases still in flight.
+  await page.locator('.replay').getByRole('button', { name: 'Play', exact: true }).click();
+  await page.waitForTimeout(15000);
+  await page.locator('.replay').getByRole('button', { name: 'Pause', exact: true }).click();
+  await capture('animate', false);
   await button('Simulate').click(); await capture('overlay');
   await page.locator('.simulacion > label > select').selectOption({ label: 'TO-BE 3 cashiers' }); await run();
   await button('Compare').click(); await save(); await page.reload(); await ready(); await button('Compare').click();

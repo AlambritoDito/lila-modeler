@@ -1,12 +1,17 @@
 # English application screenshots
 
-Real Chromium browser captures, generated on 2026-09-10 from the built application at
-`/lila-modeler/app/`. English is selected explicitly, with the default Eva-01 theme, normal
-density, America/Mexico_City timezone and device scale factor 1. Each state has a 1440×900 PNG and a 1920×1080 PNG.
-The [manifest](capture-manifest.json) records the exact application source commit, browser
-version and dimensions. The source commit precedes the documentation-only #311 integration;
-its application code includes #312 and the English examples from #310. These are local
+Real Chromium browser captures, generated on 2026-09-17 from the built application at
+`/lila-modeler/app/` by `tools/capture-screenshots.mjs`. English is selected explicitly, with the
+default Eva-01 theme, normal density, America/Mexico_City timezone and device scale factor 1.
+Each web state has a 1440×900 PNG and a 1920×1080 PNG. The [manifest](capture-manifest.json)
+records the exact application source commit, browser version and dimensions. These are local
 validation artifacts, not evidence that Pages has been published.
+
+`welcome.png` is the one capture that does not come from the web build: the welcome overlay
+(#351) only exists in the desktop app, so it is taken over CDP from the installed
+`Lila Modeler.app` (`open -g -a "Lila Modeler" --args --remote-debugging-port=<port>`, then
+`Page.captureScreenshot`) at 2880×1736 (a 1440×868 window at device scale factor 2), with a
+throw-away `estado.json` whose recents are neutral names, never a private project.
 
 | State | 1440×900 | 1920×1080 |
 |---|---|---|
@@ -17,9 +22,11 @@ validation artifacts, not evidence that Pages has been published.
 | Weekly calendar editor | [calendar](calendar.png) | [calendar](calendar-1920.png) |
 | AS-IS bottleneck overlay | [overlay](overlay.png) | [overlay](overlay-1920.png) |
 | AS-IS results | [results](results.png) | [results](results-1920.png) |
+| Animate: replay of the AS-IS log, paused mid-run, counters on every element | [animate](animate.png) | [animate](animate-1920.png) |
 | AS-IS versus TO-BE, saved and reloaded | [compare](compare.png) | [compare](compare-1920.png) |
 | Path validation mode (token animation, not simulation) | [routes](routes.png) | [routes](routes-1920.png) |
 | Settings and appearance | [appearance](appearance.png) | [appearance](appearance-1920.png) |
+| Desktop welcome overlay with recents (Electron only, 2880×1736) | [welcome](welcome.png) | — |
 
 The current application uses horizontally scrolling result tables. At 1440 pixels the comparison
 extends beyond the first viewport; the landing page uses the 1920-pixel comparison so both
@@ -62,7 +69,7 @@ The calendar `oficina` is Monday–Friday, 09:00–18:00. No outputs are injecte
 Before capture, the script verifies the browser round-trip through visible controls:
 
 1. Edit `Task_TomarPedido` to “Take order — checked” and the AS-IS seed to 43, then back to 42.
-2. Run both scenarios, open Compare and explicitly save the downloaded `.lila.json` project.
+2. Run both scenarios, open Compare and explicitly save the downloaded `.lila` project.
 3. Assert the saved label, two completed run results and seed/replication inputs; reload and
    compare the restored document with the saved one.
 4. Make an unsaved label edit, reload and verify the saved label wins.
@@ -70,7 +77,8 @@ Before capture, the script verifies the browser round-trip through visible contr
 6. Clear only the disposable browser context's storage and capture the original maintained
    example. Run both scenarios again; explicitly save/reload before capturing Compare.
 
-Validation on 2026-09-10: all round-trip assertions passed, with no browser page errors.
-The 20 PNGs were checked for format/dimensions and visually reviewed for English interface,
-Eva-01, the expected calendar, genuine overlay, numerical results and comparison data.
+Validation on 2026-09-17: all round-trip assertions passed, with no browser page errors.
+The 22 web PNGs were checked for format/dimensions and visually reviewed for English interface,
+Eva-01, the expected calendar, genuine overlay, numerical results and comparison data; the
+desktop welcome was reviewed for neutral recents only.
 See [the historical inventory](../README.md) for all 28 retired or retained image dispositions.
