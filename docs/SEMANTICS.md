@@ -62,6 +62,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
+| `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"` or `"0"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
@@ -130,7 +131,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` other than an interrupting timer with one outgoing flow attached to a task: non-interrupting, message/error/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `bpmn:boundaryEvent` other than a timer with one outgoing flow attached to a task, interrupting or not: message/error/signal/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
 | `messageEventDefinition` in any event | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
@@ -527,6 +528,45 @@ pair), without introducing case variables or an expression language.
   closed is consumed without advancing the clock, so a run without `run.duration` does not
   stretch `stoppedAt` up to a deadline that was never going to fire (R-ARR-3). The host's own
   `done`, left pending after the interruption, is consumed the same way. *(test: #81, #345)*
+- **R-BND-10 — Non-interrupting boundary timer.** The same boundary event as R-BND-1 but with
+  `cancelActivity="false"`: exactly one `timerEventDefinition`, attached to a supported task and
+  with at least one outgoing flow. Only `xsd:boolean`'s own lexical space is read, straight from
+  the XML text: `cancelActivity` absent, `"true"` or `"1"` is interrupting, `"false"` or `"0"` is
+  non-interrupting, and any other literal (`"TRUE"`, `""`, a typo) is unsupported and stays
+  `E-NOSOP` with construction `boundaryEvent` (§3). It enters the profile as the same `timer` node with
+  `attachedTo` and no `incoming`, marked `interrupting: false` (absent means interrupting, which
+  is `cancelActivity`'s own BPMN default). R-BND-2 (the deadline starts at the host's
+  `enabledAt`), R-BND-3 (clock time and its own random stream), R-BND-4 (it only fires while the
+  host activity is open), R-BND-8 (no `processingTime`, no firing) and R-BND-9 (a dead firing
+  does not move the clock) hold word for word. One deadline is scheduled per occurrence of the
+  host, so the boundary fires **at most once** per occurrence and never repeats: a cyclic
+  boundary timer is not in the profile. *(test: #81)*
+- **R-BND-11 — The host keeps running; the firing adds a token.** The firing does not touch the
+  host: its activity is not closed, it keeps its resource allocation, it completes at its own
+  time and counts `completed` with `status = "completed"` — there is no `interrupted` row. What
+  the firing does is put a **new** token in the case, which leaves through the boundary's first
+  outgoing flow. The boundary itself behaves exactly as in R-BND-6: one `started` and one
+  `completed` in the same instant, and no event-log row of its own. *(test: #81)*
+- **R-BND-12 — The new token carries no OR activation marks.** Unlike R-BND-6, where the
+  boundary token *is* the host's token and inherits its marks, here the host keeps its own token
+  and its marks. The token the boundary creates was activated by no fork, so it starts with an
+  empty mark stack: an OR join downstream still expects exactly the `k` tokens its fork activated
+  (R-OR-5) and still closes, and the new token reaching that join is a merge (R-OR-6, warning
+  `W-OR-JOIN-SIN-FORK`). Copying the host's marks instead would make the join count `k + 1`
+  tokens for one activation and block it. *(test: #81)*
+- **R-BND-13 — Tie at the host's exact end instant: the boundary fires.** Exactly the rule of
+  R-BND-7 and the same mechanism: the firing event is queued **before** the host's `done`, so
+  with equal instants `(t, seq)` (R-TOK-3) takes the boundary out first and it still finds the
+  host activity open. A deadline exactly as long as the task's duration therefore fires, and the
+  host completes in that same instant. *(test: #81)*
+- **R-BND-14 — More concurrent tokens, one case.** A firing raises the case's live-token count,
+  so the case does not end when the first token reaches an `end`: it ends when it runs out of
+  tokens (R-EVT-4). Both branches must reach an `end` for the case to close; the case is counted
+  **once**, and its outcome (`process.byEndEvent`) is attributed to the `end` that consumed the
+  **last** token. AND and OR joins are unaffected: an AND join still waits for one token per
+  incoming flow (R-AND-2) — which is how a boundary branch rejoins the host's — and an OR join
+  counts by activation mark (R-OR-5, R-BND-12). A token still travelling when the run stops
+  leaves the case `inFlight`, as any other token would (R-OR-8, R-AND-4). *(test: #81)*
 
 ---
 
@@ -1015,7 +1055,7 @@ per occurrence):
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
 `W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
 `W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
-interrupts its host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
@@ -1165,6 +1205,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-EVT-4 | end consumes the token; case ends at 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
+| R-BND-10 … R-BND-14 | non-interrupting boundary timer | #81 |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |

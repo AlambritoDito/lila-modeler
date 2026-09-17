@@ -1084,18 +1084,34 @@ export function runReplication(
     if (next.kind === 'boundary') {
       const activity = activities.get(next.activityInstanceId);
       if (activity === undefined || activity.closed) continue;
-      // R-BND-4/5: el borde cierra **esa** instancia de la tarea sin completarla (el host ya
-      // contó `started`, nunca cuenta `completed`, como en R-EVT-6), suelta o cancela su
-      // solicitud de recurso y sigue por su propia salida con las marcas OR que traía el host.
+      // R-BND-6: el borde cuenta un disparo entero (un `started` y un `completed` en el mismo
+      // instante) y no emite fila de log propia, interrumpa o no.
       if (isMeasuredCase(next.caseId)) {
         counters.started++;
         counters.completed++;
       }
-      closeActivity(activity, next.t, 'interrupted');
-      if (activity.requestId !== undefined) {
-        startAllocations(resourceManager.cancel([activity.requestId], next.t));
+      if (node.interrupting === false) {
+        // R-BND-11: el host sigue como si nada —su actividad no se cierra, su token no se toca—
+        // y el disparo mete en el caso un token **nuevo**. R-BND-12: ese token no hereda las
+        // marcas OR del host, porque ningún fork lo activó; duplicarlas rompería el conteo del
+        // join que el token del host todavía tiene que cerrar (R-OR-5).
+        //
+        // R-BND-1 exige la salida; el `if` hace explícito que sin ella no se inventa un token
+        // que nadie podría consumir y que dejaría el caso en vuelo para siempre (R-EVT-4).
+        if (node.outgoing[0] !== undefined) {
+          state.tokens += 1;
+          forward(node, next.caseId, NO_MARKS, next.t);
+        }
+      } else {
+        // R-BND-4/5: el borde cierra **esa** instancia de la tarea sin completarla (el host ya
+        // contó `started`, nunca cuenta `completed`, como en R-EVT-6), suelta o cancela su
+        // solicitud de recurso y sigue por su propia salida con las marcas OR que traía el host.
+        closeActivity(activity, next.t, 'interrupted');
+        if (activity.requestId !== undefined) {
+          startAllocations(resourceManager.cancel([activity.requestId], next.t));
+        }
+        forward(node, next.caseId, activity.marks, next.t);
       }
-      forward(node, next.caseId, activity.marks, next.t);
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -1165,7 +1181,8 @@ export function runReplication(
         // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
         // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
         // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
-        // instante, el desempate por orden de inserción lo gane la interrupción.
+        // instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
+        // no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar).
         for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
           const boundaryDist = spec[boundaryId]?.processingTime;
           // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.

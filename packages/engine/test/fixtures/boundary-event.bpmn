@@ -3,8 +3,8 @@
      soportado (docs/SEMANTICS.md § 2 y § 3). El id y el nombre del boundary son los del ejemplo
      literal de R-NOSOP-2, para poder comparar el mensaje carácter a carácter.
      Al descartarse el boundary, su rama de cancelación queda inalcanzable: eso también es error.
-     Desde #81 el borde es **no interruptor** (`cancelActivity="false"`): el interruptor de tiempo
-     sí entra al perfil (R-BND-1) y vive en `boundary-timer.bpmn`. -->
+     Desde #81 el borde es **de mensaje**: el temporizador de borde sobre una tarea entra al
+     perfil, interrumpa (R-BND-1) o no (R-BND-10), y vive en `boundary-timer.bpmn`. -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   id="Definitions_BoundaryEvent"
                   targetNamespace="https://lila-modeler.org/bpmn/test"
@@ -18,7 +18,7 @@
     <bpmn:sequenceFlow id="Flow_Revisar_Fin" sourceRef="Task_Revisar" targetRef="End_Proceso" />
 
     <bpmn:boundaryEvent id="Boundary_3a1f" name="Vence el plazo" attachedToRef="Task_Revisar" cancelActivity="false">
-      <bpmn:timerEventDefinition id="Timer_Plazo" />
+      <bpmn:messageEventDefinition id="Message_Plazo" />
     </bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="Flow_Boundary_Cancelar" sourceRef="Boundary_3a1f" targetRef="Task_Cancelar" />
 
