@@ -39,7 +39,7 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | Calendars: recurrence, start time, duration, validity; resource × calendar matrix with a default calendar | ✓ | ✓ weekly in v1; monthly/annual and holidays reserved | M3 | Implemented (LILA-040, LILA-041, LILA-164). LILA-164 added per-shift capacity within the same pool (`capacity: [{calendar, capacity}]`, R-CAL-11): with it, level 4 matches — mean cycle time, utilization, and cost for all six resources — except for the utilization denominator, which remains open as D7 and has an exact conversion |
 | What-if: several scenarios, side by side, differences highlighted | ✓ | ✓ (`lila compare`) | M3 | Implemented (LILA-038, LILA-047) |
 | Replications (30 recommended) | ✓ only in what-if | ✓ always, with 95% CI | M2 | Implemented (LILA-027) |
-| Results export | Excel | CSV (Excel opens it; XLSX later if requested) | M2 | Implemented (LILA-037, LILA-046) |
+| Results export | Excel | CSV and XLSX | M2 | Implemented (LILA-037, LILA-046, #322) |
 | Import `.bpmn` exported by Bizagi | — | ✓ diagram only: Bizagi **does not export** simulation parameters (verified on 5 real files, only colors in `bizagi:`) | M0 | Implemented (LILA-020) |
 | **Extras Bizagi does not offer** | | | | |
 | p50/p90/p95 of cycle time and wait | ✗ | ✓ | M2 | Implemented (LILA-028) |
@@ -49,9 +49,9 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | Event log per case (CSV; XES later) | ✗ | ✓ | M2 | Implemented (LILA-037) |
 | Off-hours wait separated from resource wait | ✗ (complaint: "too coarse-grained") | ✓ | M3 | Implemented (LILA-041); this was exactly the metric that exposed the half of D7 that LILA-164 closed (the per-shift-pool workaround created an `offHoursWait` that Bizagi does not have; it is now 0 across all four level-4 tasks) |
 | Seed-based determinism, byte for byte | partial | ✓ | M1 | Implemented (LILA-030, LILA-039, LILA-043) |
-| macOS / Linux / browser | ✗ (4.3 is still Windows-only, no web editor) | ✓ | M5 | Pending (web shell in LILA-057 and worker in LILA-059; packaging in M5) |
+| macOS / Linux / browser | ✗ (4.3 is still Windows-only, no web editor) | ✓ | M5 | Implemented: web app, macOS beta, Windows/Linux installers built by CI (unsigned) |
 | **Later** | | | | |
-| Live-counter animation | ✓ | token-simulation (MIT) covers the didactic part; live DES counters are not a priority | — | Not planned (v1) |
+| Live-counter animation | ✓ | ✓ Animate mode replays the event log with per-element counters; token-simulation (MIT) keeps the didactic part | — | Implemented (#331) |
 | Start quantity / completion quantity | ✓ | reserved | — | Not planned (v1) |
 | Interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, first slice: `SEMANTICS.md` R-BND-1…9) |
 | Message/signal/link events, non-interrupting or non-timer boundary events, event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (v1) |

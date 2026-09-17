@@ -21,6 +21,7 @@ jobs:
       - run: npm ci
       # El build va antes de los tests: packages/mcp y apps/web consumen
       # @lila/engine por sus subpaths publicados (dist/), no por las fuentes.
+      - run: npm run check:links
       - run: npm run build
       - run: npm test
       # `tsc --build` solo cubre packages/engine: apps/web es `noEmit` y queda

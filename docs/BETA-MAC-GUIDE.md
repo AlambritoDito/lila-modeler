@@ -241,10 +241,9 @@ trusting this list blindly at a later date)*
 
 - **No signing or notarization**: a received copy may require macOS's opening authorization (see
   above).
-- **No custom icon** (issue #76): uses Electron's default icon.
-- **Only macOS arm64 is built**: Windows (NSIS) and Linux (AppImage/deb) are configured in
-  `electron-builder.yml` and in the CI matrix (`.github/workflows/desktop.yml`), but have not been
-  built or tested on any real runner yet.
+- **Only macOS arm64 is exercised**: the Windows (NSIS) and Linux (AppImage) installers are built by
+  the CI matrix (`.github/workflows/desktop.yml`) and attached to the Release, but nobody on the
+  project has tested them.
 - **`.bpmn` double-click association untested** this round: `open-file`/`argv` handling is covered
   by unit tests and was verified by passing the path on the command line
   (`... npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"`), but it was not exercised by
