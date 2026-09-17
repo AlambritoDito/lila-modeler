@@ -1,5 +1,6 @@
 {
   "name": "@lila/desktop",
+  "productName": "Lila Modeler",
   "private": true,
   "version": "1.0.0-alpha.1",
   "type": "module",

@@ -1437,8 +1437,9 @@ body {
 /* ---------- bienvenida (artboard 08) ---------- */
 
 /* Overlay sobre el shell entero mientras no hay proyecto abierto; por debajo de la pantalla de
-   arranque (`startup.css`, 10000) y de los `<dialog>` (capa superior). Ni un color literal. */
-.bienvenida { position: fixed; inset: 0; z-index: 100; display: flex; background: var(--bg-base); color: var(--fg-primary); overflow: auto; }
+   arranque (`startup.css`, 10000) y de los `<dialog>` (capa superior), por encima del minimapa (175)
+   y de la marca de bpmn.io (100), que si no se cuelan. Ni un color literal. */
+.bienvenida { position: fixed; inset: 0; z-index: 2000; display: flex; background: var(--bg-base); color: var(--fg-primary); overflow: auto; }
 .bienvenida h2 { color: var(--fg-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.16em; margin: 0; text-transform: uppercase; }
 .bienvenida h3 { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; margin: 0; text-transform: uppercase; }
 .bienvenida small, .bienvenida time, .bienvenida-marca span, .bienvenida-tema { color: var(--fg-disabled); font-family: var(--font-mono); font-size: 11px; }

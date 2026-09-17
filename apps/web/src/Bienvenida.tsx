@@ -5,7 +5,8 @@
  * proyecto, venga de aquí, del menú nativo o de un doble clic.
  *
  * ponytail: sin «n diagramas» (el puente no lo sabe) ni «Atajos de teclado» (no hay tal vista);
- * la marca es el icono aprobado en #350, no el pentágono del artboard.
+ * la marca es el icono aprobado en #350, no el pentágono del artboard. Solo seis recientes: el
+ * puente guarda diez y con la tarjeta de novedades no caben en 900 px de alto.
  */
 import type { Recent } from '../../desktop/src/bridge.js';
 import { useLocale, useStrings } from './i18n';
@@ -71,7 +72,7 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
         <h2>{S.recientes}</h2>
         {recientes.length === 0 ? <p className="bienvenida-vacio">{S.sinRecientes}</p> : (
           <ul className="bienvenida-recientes">
-            {recientes.map((r) => (
+            {recientes.slice(0, 6).map((r) => (
               <li key={r.dir}>
                 <button type="button" onClick={() => onAccion({ recent: r.dir })}>
                   <span><strong>{r.name}</strong><small>{r.dir}</small></span>
