@@ -40,7 +40,7 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | Calendarios: recurrencia, hora de inicio, duración, vigencia; matriz recurso × calendario con calendario por defecto | ✓ | ✓ semanal en v1; mensual/anual y festivos reservados | M3 | Implementado (LILA-040, LILA-041, LILA-164). LILA-164 añadió la capacidad por turno dentro de un mismo pool (`capacity: [{calendar, capacity}]`, R-CAL-11): con ella el nivel 4 cuadra —ciclo medio, utilización y costo de los seis recursos— salvo el denominador de la utilización, que sigue vivo como D7 y tiene conversión exacta |
 | What-if: varios escenarios, lado a lado, diferencias resaltadas | ✓ | ✓ (`lila compare`) | M3 | Implementado (LILA-038, LILA-047) |
 | Replicaciones (recomiendan 30) | ✓ solo en what-if | ✓ siempre, con IC 95 % | M2 | Implementado (LILA-027) |
-| Export de resultados | Excel | CSV (Excel lo abre; XLSX después si lo piden) | M2 | Implementado (LILA-037, LILA-046) |
+| Export de resultados | Excel | CSV y XLSX | M2 | Implementado (LILA-037, LILA-046, #322) |
 | Importar `.bpmn` exportado por Bizagi | — | ✓ solo diagrama: Bizagi **no exporta** parámetros de simulación (verificado en 5 archivos reales, solo colores en `bizagi:`) | M0 | Implementado (LILA-020) |
 | **Extras que Bizagi no da** | | | | |
 | p50/p90/p95 de ciclo y espera | ✗ | ✓ | M2 | Implementado (LILA-028) |
@@ -50,9 +50,9 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | Event log por caso (CSV; XES después) | ✗ | ✓ | M2 | Implementado (LILA-037) |
 | Espera fuera de horario separada de espera por recurso | ✗ (queja: "poca granularidad") | ✓ | M3 | Implementado (LILA-041); fue justo la métrica que delató la mitad de D7 que cerró LILA-164 (el workaround de pools por turno creaba una `offHoursWait` que Bizagi no tiene; hoy vale 0 en las cuatro tareas del nivel 4) |
 | Determinismo por semilla, byte a byte | parcial | ✓ | M1 | Implementado (LILA-030, LILA-039, LILA-043) |
-| macOS / Linux / navegador | ✗ (4.3 sigue Windows-only, sin editor web) | ✓ | M5 | Pendiente (shell web en LILA-057 y worker en LILA-059; empaquetado en M5) |
+| macOS / Linux / navegador | ✗ (4.3 sigue Windows-only, sin editor web) | ✓ | M5 | Implementado: app web, beta de macOS, instaladores de Windows/Linux construidos por CI (sin firmar) |
 | **Después** | | | | |
-| Animación con contadores en vivo | ✓ | token-simulation (MIT) cubre la parte didáctica; contadores DES en vivo no son prioridad | — | No planificado (v1) |
+| Animación con contadores en vivo | ✓ | ✓ el modo Animar reproduce el log de eventos con contadores por elemento; token-simulation (MIT) conserva la parte didáctica | — | Implementado (#331) |
 | Start quantity / completion quantity | ✓ | reservado | — | No planificado (v1) |
 | Temporizador de borde interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, primera tajada: `SEMANTICS.md` R-BND-1…9) |
 | Message/signal/link events, boundary events no interruptores o que no son de tiempo, event-based gateway | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (v1) |

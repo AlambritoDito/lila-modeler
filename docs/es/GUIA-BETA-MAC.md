@@ -213,10 +213,9 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 lista a ciegas en una fecha posterior)*
 
 - **Sin firma ni notarización**: una copia recibida puede requerir autorización de apertura de macOS (ver arriba).
-- **Sin icono propio** (issue #76): usa el icono por defecto de Electron.
-- **Solo macOS arm64 compilado**: Windows (NSIS) y Linux (AppImage/deb) están configurados en
-  `electron-builder.yml` y en la matriz de CI (`.github/workflows/desktop.yml`), pero no se han
-  compilado ni probado en ningún runner real todavía.
+- **Solo macOS arm64 está probado**: los instaladores de Windows (NSIS) y Linux (AppImage) los
+  compila la matriz de CI (`.github/workflows/desktop.yml`) y quedan adjuntos al Release, pero nadie
+  del proyecto los ha probado.
 - **Asociación de `.bpmn` por doble clic no probada** en esta ronda: el manejo de `open-file`/
   `argv` está cubierto por pruebas puras y se verificó pasando la ruta por línea de comandos
   (`... npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"`), pero no se ejercitó

@@ -1,121 +1,113 @@
-# Lila Modeler
+<p align="center"><img src="docs/design/branding/web/logo-horizontal.png" width="420" alt="Lila Modeler"></p>
+
+<p align="center">Simulación de eventos discretos open source para procesos BPMN — en el navegador, en el escritorio, desde la CLI o por MCP.</p>
+
+<p align="center">
+  <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases"><img src="https://img.shields.io/badge/Descargar-beta_de_escritorio-0969da" alt="Descargar beta"></a>
+  <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
+  <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Licencia-Apache--2.0-1a7f37" alt="Licencia: Apache-2.0"></a>
+</p>
 
 Leer en: [English](README.md)
 
-Simulador de eventos discretos (DES) para procesos BPMN, open source (Apache-2.0), inspirado en el
-flujo de simulación de herramientas como Bizagi Modeler; los resultados se validan contra ejemplos
-públicos documentados. El proyecto es un monorepo npm:
+## Qué es Lila Modeler
 
-- **Motor + CLI** (`packages/engine`, paquete `@lila/engine`) — parsea `.bpmn`, valida el modelo y
-  simula un escenario. Sin dependencias en su núcleo (`packages/engine/src/core/`): corre igual en
-  Node, en un Web Worker del navegador o detrás de un servidor MCP.
-- **Servidor MCP** (`packages/mcp`, y el subcomando `lila mcp` del propio CLI) — expone el motor a
-  agentes vía [MCP](https://modelcontextprotocol.io).
-- **App web** (`apps/web`, React + [bpmn-js](https://github.com/bpmn-io/bpmn-js)) — modelar,
-  simular, ver resultados y comparar escenarios desde el navegador.
-- **Beta de escritorio** (`apps/desktop`, Electron, solo macOS arm64) — la misma app web
-  empaquetada, con guardado en carpeta de proyecto.
+Lila Modeler es un motor de simulación de eventos discretos (DES) para procesos BPMN. Dibujas el
+proceso, describes un escenario (llegadas, tiempos de proceso, recursos, calendarios, costos), lo
+corres con replicaciones, lees tablas de resultados al estilo Bizagi y comparas escenarios lado a
+lado. Está inspirado en el flujo de simulación de Bizagi Modeler y validado contra sus ejemplos
+públicos documentados; no es un sustituto directo (ver
+[Cómo se compara](#cómo-se-compara-con-bizagi-modeler)).
 
-Los contratos —el IR del proceso, el formato de escenario y el de resultados— están documentados
-en `docs/` antes que el código, y son la parte del proyecto que se mantiene estable.
+El núcleo del motor no tiene dependencias y corre igual en Node, en un Web Worker del navegador y
+detrás de un servidor MCP. Los contratos —el IR del proceso, el formato de escenario y el de
+resultados— están documentados en [`docs/`](docs/) antes que el código, y son la parte del
+proyecto que se mantiene estable.
 
-## Requisitos
+![Modo Modelar: editor bpmn-js con paleta agrupada, minimapa y marcadores de validación](docs/design/en/model.png)
 
-- Node.js **22 o superior** (`engines.node` en `package.json`).
+## Funciones
 
-## Instalar desde el repo
+- **Seis modos en una ventana** — Modelar, Simular, Resultados, Comparar, Animar y Validar rutas.
+- **Simular en cuatro pasos** — validación del proceso, análisis de tiempos, de recursos y de
+  calendarios: los cuatro niveles de Bizagi, en el mismo orden y con el mismo vocabulario.
+- **Distribuciones** — las 13 de BPSim 2.0 (incluida la empírica) más la constante.
+- **Replicaciones con intervalo de confianza del 95 %**, siempre; con semilla, las corridas son
+  deterministas byte a byte.
+- **Recursos y calendarios** — pools con capacidad, costo fijo y por hora; calendarios semanales con
+  capacidad por turno; «Asignar carril» rellena los recursos de todas las tareas de un carril de una
+  vez.
+- **Enrutamiento según el resultado previo del caso** — `conditions: [{ flowTaken, probability }]`
+  en los flujos de una compuerta exclusiva.
+- **Timers de borde interruptores** sobre tareas (primer corte).
+- **Resultados** — los nombres de columna de Bizagi más las extras de Lila: p50/p90/p95, longitud
+  de cola, throughput, costo por caso, ranking de cuellos de botella, espera fuera de horario
+  separada de la espera por recurso. Exportación a CSV y XLSX.
+- **Comparar** — dos o más escenarios con deltas por métrica y marca de significancia (IC 95 % sin
+  solape).
+- **Animar** — reproduce el log de eventos de la corrida sobre el diagrama con contadores por elemento y
+  puntos en los flujos; sin volver a simular.
+- **Validar rutas** — la animación didáctica de tokens de `bpmn-js-token-simulation`; no lee el
+  escenario ni produce resultados.
+- **Archivo de proyecto `.lila`** — la carpeta de proyecto zipeada. Guardar/abrir desde la app web
+  (descarga), doble clic en el escritorio.
+- **Temas** — `eva-01` (oscuro, por defecto) y `papel` (claro), archivos JSON.
+- **Inglés y español** en la app, la CLI y el servidor MCP.
+- **Pantalla de bienvenida de escritorio** con proyectos recientes (solo Electron).
+- **Servidor MCP** con cinco tools, para que un agente valide, describa, corra, compare y parchee.
+
+## Inicio rápido
+
+### Web
+
+Abre [alambritodito.github.io/lila-modeler/app/](https://alambritodito.github.io/lila-modeler/app/).
+Arranca con el ejemplo del restaurante (`examples/pedido`) cargado. **Guardar proyecto** descarga
+un `.lila` y conserva una copia en el navegador para restaurarla al recargar; no se sube nada a
+ningún sitio.
+
+### Beta de escritorio
+
+CI construye instaladores para macOS (`.dmg` arm64), Windows (`.exe`) y Linux (`.AppImage`) y los
+adjunta a los [Releases de GitHub](https://github.com/AlambritoDito/lila-modeler/releases). **No
+están firmados ni notarizados**, así que el primer arranque se bloquea:
+
+- **macOS**: clic derecho sobre la app → **Abrir** y confirma **Abrir**.
+  [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
+- **Windows**: SmartScreen muestra «Windows protegió su PC» → **Más información** → **Ejecutar de
+  todas formas**.
+
+Solo la build de macOS arm64 ha sido ejercitada por el proyecto; las de Windows y Linux se
+construyen pero no se han probado. La app de escritorio se registra como editor de archivos
+`.bpmn` y `.lila`.
+
+### CLI
+
+Requiere Node.js **22 o superior**. Todavía no se publica nada en npm: la CLI sale de un clon.
 
 ```bash
-git clone git@github.com:AlambritoDito/lila-modeler.git
+git clone https://github.com/AlambritoDito/lila-modeler.git
 cd lila-modeler
 npm ci
 npm run build
 ```
 
-`npm run build` compila `packages/engine` y `packages/mcp` (`tsc --build`); es lo que necesitan la
-CLI y el servidor MCP. La app web se compila aparte (ver más abajo).
-
-## Descargar una build 1.0.0-alpha
-
-`1.0.0-alpha.1` es la primera alfa, publicada para validar el flujo de punta a punta; sus
-resultados y formatos de archivo son provisionales. Los instaladores que se adjuntan a un GitHub
-Release `v1.0.0-alpha*` los construye CI y **no están firmados ni notarizados**, así que los dos
-sistemas de escritorio bloquean el primer arranque:
-
-- **macOS**: no hagas doble clic. Clic derecho sobre la app → **Abrir** y confirma **Abrir** en el
-  diálogo. [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
-- **Windows**: SmartScreen muestra «Windows protegió su PC». Pulsa **Más información** →
-  **Ejecutar de todas formas**.
-
-Todavía no se publica nada en el registro de npm; la CLI sale de un clon del repo, como arriba.
-
-**¿Vienes de Bizagi Modeler?** [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md)
-mapea cada pantalla y cada campo de Bizagi a su sitio aquí, conserva los cuatro niveles como los
-cuatro pasos de la vista Simulate y explica cómo reproducir el ejemplo de nivel 3 que Bizagi
-publica.
-
-## Simular el benchmark en 3 comandos
-
-`examples/pedido` es el benchmark de referencia del repo: un proceso de restaurante con paralelo
-(preparar/empacar), una aprobación y un timer, con dos escenarios ya escritos
-(`as-is.scenario.json` y `to-be-3-cajeros.scenario.json`, este último con un cajero más).
-
-Los comandos usan `npx lila`: tras `npm ci`, `npx` resuelve el binario del propio workspace
-(`node_modules/.bin/lila`, ver `package.json` de `@lila/engine`) sin red ni instalación global —
-no hay paquete `lila` publicado en el registro de npm (ver «Límites conocidos»). Equivalente y
-sin depender de `npx`: `node packages/engine/bin/lila.js <comando>`.
-
-**1. Validar el modelo:**
+`npx lila` resuelve el binario del propio workspace (`packages/engine/bin/lila.js`), sin consultar
+el registro. Tres comandos sobre el benchmark de referencia:
 
 ```bash
+# 1. Validar el modelo
 npx lila validate examples/pedido/model.bpmn
-```
 
-```
-Process Process_Restaurante (Restaurant)
-Exported by Lila Modeler examples (hand-written) 0.0.0
-
-Nodes (11): and 2, end 2, start 1, task 4, timer 1, xor 1
-  start     StartEvent_Pedido  Order received
-  ...
-warning  W-MSGFLOW  Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
-0 errors, 1 warnings.
-```
-
-**2. Simular el escenario AS-IS** (tablas de resultados estilo Bizagi + JSON + CSV):
-
-```bash
+# 2. Simular el escenario AS-IS: tablas en stdout + JSON + CSV + XLSX
 npx lila run \
   examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
   --seed 42 --replications 3 \
   --json out/result.json --csv out/csv --xlsx out/as-is.xlsx
-```
 
-```
-Scenario AS-IS
-Process Process_Restaurante (Restaurant)
-Seed 42 · Replications 3 · Time unit min · Currency MXN
-
-Process elements
-Id                  Name                Type   Instances started  Instances completed  ...
-StartEvent_Pedido   Order received     start  2975               2975                 ...
-...
-
-Bottlenecks
-Id                Name               Total time (waiting for resource) (min)  Utilization (%)
-Task_Preparar     Prepare food  4514389.476272                           34.297909
-Task_TomarPedido  Take order       698.32272                                41.234838
-
-Warnings:
-  W-MSGFLOW: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
-  ...
-JSON: /ruta/al/repo/out/result.json
-CSV: /ruta/al/repo/out/csv
-```
-
-**3. Comparar AS-IS contra TO-BE** (un cajero más) lado a lado:
-
-```bash
+# 3. Comparar AS-IS contra TO-BE (un cajero más) lado a lado
 npx lila compare \
   examples/pedido/model.bpmn \
   examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json \
@@ -123,171 +115,142 @@ npx lila compare \
 ```
 
 ```
-Process Process_Restaurante (Restaurant)
-Time unit min (base scenario) · Utilization in %
-
 Compared scenarios
-#  Name             File                                           Seed  Replications
--  ---------------  ---------------------------------------------  ----  ------------
-0  AS-IS (base)     examples/pedido/as-is.scenario.json            42    3
+#  Name              File                                           Seed  Replications
+-  ----------------  ---------------------------------------------  ----  ------------
+0  AS-IS (base)      examples/pedido/as-is.scenario.json            42    3
 1  TO-BE 3 cashiers  examples/pedido/to-be-3-cajeros.scenario.json  42    3
 
 Process elements
-Id                Name              Metric                               AS-IS (base)  TO-BE 3 cashiers
+Id                Name        Metric                               AS-IS (base)  TO-BE 3 cashiers
 ...
-Task_TomarPedido  Take order      Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
-...
+Task_TomarPedido  Take order  Average time (waiting for resource)  0.234564      0.0344 (-85.334633%)*
 ```
 
-La salida sale en inglés por defecto; con `--lang es` (en cualquier posición), `LILA_LANG=es` o
-un `LANG` español, la misma corrida se imprime en español.
+`--json` y `--xlsx` funcionan en `run` y en `compare`; `--csv` solo en `run`; `--all` muestra
+todas las métricas en `compare`. `--lang en|es` (en cualquier posición) elige el idioma de la
+salida; `--help` en cualquier subcomando lista las opciones. Formatos:
+[`docs/es/SCENARIO_FORMAT.md`](docs/es/SCENARIO_FORMAT.md),
+[`docs/es/RESULTS_FORMAT.md`](docs/es/RESULTS_FORMAT.md).
 
-`--json` y `--xlsx` funcionan igual en `run` y en `compare`; `--csv` solo en `run`. `--xlsx`
-escribe un libro de cálculo (Resumen, Elementos, Flujos, Recursos, Parámetros; más una hoja
-Comparación en `compare`) — ver `docs/RESULTS_FORMAT.md` § 12. `--help` en cualquier
-subcomando lista todas las opciones. El formato de escenario está en
-`docs/SCENARIO_FORMAT.md`, el de resultados en `docs/RESULTS_FORMAT.md`, y el mapeo de nombres
-de columna contra Bizagi en `docs/BIZAGI_PARITY.md`.
+### MCP
 
-## App web
-
-**Pruébala en el navegador**: [Lila Modeler](https://alambritodito.github.io/lila-modeler/) —
-[abrir el editor](https://alambritodito.github.io/lila-modeler/app/) con `examples/pedido` cargado.
-**Guardar proyecto** descarga un `.lila`: la carpeta de proyecto zipeada, el mismo archivo que abre
-la app de escritorio (ver [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)). Los proyectos
-guardados antes, en `.lila.json`, se siguen abriendo. Además conserva una copia local para
-restaurarla al recargar; los cambios sin guardar no se conservan automáticamente y no se sube nada
-al servidor. La demo pública fue verificada el 10 de septiembre de 2026. Las publicaciones siguen
-siendo manuales mediante `.github/workflows/pages.yml`.
-
-Para correrla en local:
+`lila mcp` arranca un servidor MCP por stdio con cinco tools sobre el mismo motor:
+`validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`.
 
 ```bash
-npm run dev -w @lila/web    # compila el motor si hace falta + arranca Vite en http://localhost:5173
+claude mcp add lila -- node /ruta/a/lila-modeler/packages/engine/bin/lila.js mcp
 ```
 
-Arranca con `examples/pedido/model.bpmn` cargado. La barra superior tiene cinco modos:
+El repo trae un `.mcp.json` de proyecto, así que abrir Claude Code en la raíz del repo registra el
+servidor solo. Contratos de cada tool y límites conocidos (sin cancelación; todo I/O contra el
+disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md).
 
-- **Modelar** — editor bpmn-js: crear, editar y exportar el `.bpmn`.
-- **Simular** — panel de escenario en cuatro pasos —validación del proceso, análisis de tiempos,
-  de recursos y de calendarios, los cuatro niveles de Bizagi— y botón Simular con progreso y
-  cancelar.
-- **Resultados** — las tablas estilo Bizagi más las extras de Lila (cuellos de botella, costo por
-  caso), con exportación CSV por tabla.
-- **Comparar** — dos o más escenarios ya simulados lado a lado, con marca de significancia (IC95).
-- **Validar rutas** — animación de tokens de `bpmn-js-token-simulation` sobre el diagrama; no es
-  la simulación DES del motor, no lee el escenario ni produce resultados.
+## Cómo se compara con Bizagi Modeler
 
-Detalle de cada modo, textos literales de la interfaz y limitaciones actuales en
-[`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) (escrito para la beta de escritorio, pero describe
-la misma app web).
+Lila reproduce el flujo de simulación de Bizagi y contrasta sus números con los cuatro ejemplos
+que Bizagi publica (niveles 1–4) con una tolerancia de ±5 %
+([test](packages/engine/test/bizagi-parity.test.ts)). Es un criterio interno de validación, no una
+promesa de paridad: el checklist completo, con cada diferencia documentada y su causa, está en
+[`docs/es/BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md); el mapa pantalla por pantalla para
+usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 
-## Beta de escritorio (macOS)
+| Capacidad | Bizagi Modeler | Lila Modeler |
+|---|---|---|
+| Cuatro niveles: validación, tiempos, recursos, calendarios | ✓ | ✓ como los cuatro pasos de Simular; sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7 |
+| Distribuciones | subconjunto no documentado | las 13 de BPSim 2.0 (incl. empírica) + constante |
+| Replicaciones y determinismo | replicaciones solo en what-if; semilla parcial | siempre, con IC 95 %; determinista byte a byte |
+| Comparación what-if | ✓ | ✓ modo Comparar y `lila compare`, con deltas y marca de significancia |
+| Exportación de resultados | Excel | CSV y XLSX |
+| Percentiles, longitud de cola, throughput, costo por caso, ranking de cuellos, espera fuera de horario | ✗ | ✓ |
+| Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
+| Plataformas | solo Windows | app web, macOS, Windows, Linux |
+| Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
+| Publicación de documentos (Word/PDF/web) | ✓ | ✗ no es una suite de documentación |
+| Eventos de mensaje/señal/enlace, compuerta basada en eventos | parcial | ✗ error de validación explícito |
+| Multi-instancia, compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
 
-Hay una beta de `apps/desktop` (Electron, **solo macOS arm64, sin firmar ni notarizar**) que
-empaqueta la app web como `.dmg` con guardado en carpeta de proyecto. No se distribuye dentro del
-repositorio: hay que compilarla con `npm run dist:mac -w @lila/desktop`, lo que deja el instalador
-en `apps/desktop/release/` (carpeta en `.gitignore`). Al no estar firmada, macOS bloquea el primer
-intento de abrirla con doble clic; hay que abrirla con clic derecho → Abrir. La app se registra
-como editor de `.bpmn` y de `.lila`: doble clic sobre un archivo (o un arranque en frío con él) lo
-abre en el editor; si el `.bpmn` no está dentro de una carpeta de proyecto Lila, se guarda solo ese
-archivo hasta que se use «Guardar como». Un `.lila` es el proyecto entero en un archivo y se guarda
-sobre sí mismo; para abrir uno desde el menú, Archivo → «Abrir archivo de proyecto (.lila)…», y
-«Guardar como…» crea uno nuevo (la carpeta de proyecto de ADR-018 sigue a un menú de distancia,
-Archivo → «Guardar como carpeta…»). Empujar un tag `v*` (`git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1`)
-dispara el workflow `Desktop`, que compila los tres instaladores (`.dmg`, `.exe`, `.AppImage`) y los
-deja en un Release de GitHub **en borrador**, pendiente de publicar a mano.
+### Límites conocidos
 
-Guía completa —requisitos, recorrido de uso, cómo reconstruir el `.dmg`, limitaciones conocidas—
-en [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md).
+- **Perfil BPMN soportado**: start/end (none y terminate), timer intermedio, timer de borde
+  interruptor, tareas (todas las variantes), call activity, subproceso embebido, compuertas
+  XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
+  ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
+- **Todavía no está en npm**: no hay `npm install @lila/engine`; clona y compila como arriba.
+- **Los calendarios son semanales**; la recurrencia mensual/anual y los festivos son campos
+  reservados.
 
-## MCP en 3 líneas
+## Estructura del proyecto
 
-`packages/engine` trae el subcomando `lila mcp`, que arranca un servidor MCP por stdio con cinco
-tools sobre el mismo motor (`validate_bpmn`, `describe_process`, `run_simulation`,
-`compare_scenarios`, `patch_scenario`). Para registrarlo en Claude Code:
-
-```bash
-claude mcp add lila -- node /ruta/al/repo/packages/engine/bin/lila.js mcp
-```
-
-El repo trae además un `.mcp.json` de proyecto, así que al abrir Claude Code aquí mismo el
-servidor aparece solo. Detalle de cada tool, cómo probarlo a mano y límites conocidos (sin
-cancelación, todo I/O es contra el disco del proceso servidor) en [`docs/MCP.md`](docs/MCP.md).
-
-## Límites conocidos
-
-- **Perfil BPMN soportado**: start/end (none y terminate), timer, tareas (todas las variantes),
-  call activity, subproceso embebido, XOR/OR/AND, lanes y pools. Lo que queda fuera produce un
-  error de validación explícito, no un fallo silencioso (`docs/SEMANTICS.md` §§1–3).
-- **Sin publicación en npm todavía**: no hay `npx @lila/engine` ni paquete instalable fuera del
-  repo; se usa clonando y compilando como arriba.
-- **Solo la beta de macOS arm64 (`dmg`) está probada**. Windows (`nsis`) y Linux (`AppImage`)
-  están configurados en `apps/desktop/electron-builder.yml`, y el workflow `Desktop`
-  (`.github/workflows/desktop.yml`, manual, en PR que tocan `apps/desktop` o en tags `v*`) compila los tres como
-  artefactos de CI, pero no se han probado ni se distribuyen.
-
-## Estructura del repo
-
-- `packages/engine` — motor de simulación (`src/core/`, sin dependencias externas) + parser BPMN +
-  CLI (`src/cli.ts`, binario `lila`).
-- `packages/mcp` — servidor MCP (`@lila/mcp`, binario `lila-mcp`), capa fina sobre `@lila/engine`.
-- `apps/web` — editor y viewer en React + bpmn-js.
-- `apps/desktop` — empaquetado Electron de `apps/web`.
-- `docs/` — contratos y guías (ver abajo); `examples/` — modelos y escenarios de ejemplo.
+- `packages/engine` — `@lila/engine`: el núcleo del motor (`src/core/`, sin dependencias), el
+  parser BPMN, los esquemas, los escritores CSV/XLSX y la CLI `lila`.
+- `packages/mcp` — `@lila/mcp` (privado): el servidor MCP, capa fina sobre el motor.
+- `apps/web` — editor y visor en React 19 + Vite + bpmn-js.
+- `apps/desktop` — empaquetado Electron de `apps/web`; `.github/workflows/desktop.yml` construye
+  los tres instaladores con tags `v*` y deja un Release en borrador.
+- `examples/` — `pedido` (benchmark de referencia), `bizagi-levels` (los ejemplos publicados por
+  Bizagi), `mm1`, `bizagi-exports` (exportaciones reales de Bizagi del BPMN MIWG).
+- `docs/` — contratos y guías; `tools/` — scripts de build y de comprobación; `site/` — la landing
+  de Pages.
 
 ## Documentación
 
-- [`docs/SEMANTICS.md`](docs/SEMANTICS.md) — perfil BPMN soportado y semántica exacta del motor.
-- [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — formato del escenario JSON.
-- [`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — formato del resultado y de los CSV.
-- [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía para quien llega desde
-  Bizagi Modeler: los cuatro niveles como cuatro pasos y el mapa pantalla por pantalla.
-- [`docs/BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — checklist de comportamiento de referencia
-  contra la documentación pública de Bizagi Modeler (validación contra ejemplos públicos), por
-  nivel.
-- [`docs/BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — namespace `lila:` y política de ids.
-- [`docs/MCP.md`](docs/MCP.md) — servidor MCP, sus cinco tools y cómo registrarlo.
-- [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — beta de escritorio.
-- [`docs/THEMES.md`](docs/THEMES.md) — formato de tema de la app web.
-- `LILA_MODELER_ESTRUCTURA.md` — decisiones (ADR), diseño del motor, hitos.
-- `BACKLOG.md` — desglose del trabajo; los tickets viven en GitHub Issues (`LILA-nnn` = `#nnn`).
+El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 
-## Licencia
+- [`SEMANTICS.md`](docs/es/SEMANTICS.md) — perfil BPMN soportado y semántica exacta del motor.
+- [`SCENARIO_FORMAT.md`](docs/es/SCENARIO_FORMAT.md) — el escenario JSON.
+- [`RESULTS_FORMAT.md`](docs/es/RESULTS_FORMAT.md) — resultados, CSV y XLSX.
+- [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — la carpeta de proyecto y el archivo `.lila`
+  (en inglés).
+- [`BPMN_EXTENSION.md`](docs/es/BPMN_EXTENSION.md) — el namespace `lila:` y la política de ids.
+- [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus cinco tools.
+- [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
+- [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
+  ADR-028).
+- [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
+  diferencias documentadas.
+- [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
+  usuarios de Bizagi.
+- [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — la beta de escritorio.
+- [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),
+  [`PAGES.md`](docs/PAGES.md) — política de ejemplos, oráculos de test, despliegue de Pages (este
+  último en inglés).
+- `LILA_MODELER_ESTRUCTURA.md` — estructura del proyecto e hitos; `BACKLOG.md` — desglose del
+  trabajo (los tickets viven en GitHub Issues).
 
-Apache-2.0. Ver [`LICENSE`](LICENSE). `examples/bizagi-exports/` es CC BY 3.0 del BPMN MIWG (ver su
-README); el resto del repo, Apache-2.0. Titular: Perfer Process (`NOTICE`).
+## Hoja de ruta
 
-El editor de la app web usa [bpmn-js](https://github.com/bpmn-io/bpmn-js) (MIT + cláusula de marca
-de agua): su licencia exige que la marca **"Powered by bpmn.io"** quede visible en el lienzo, y
-Lila Modeler la respeta sin ocultarla. El modo "Validar rutas" usa
-[bpmn-js-token-simulation](https://github.com/bpmn-io/bpmn-js-token-simulation) (MIT). La app web
-es React (MIT) y la beta de escritorio empaqueta Electron. El inventario completo de dependencias
-de tiempo de ejecución, con versión y licencia de cada una, está en
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+Épicas abiertas, en [GitHub Issues](https://github.com/AlambritoDito/lila-modeler/issues?q=is%3Aopen+label%3Aepic):
 
-Bizagi y Bizagi Modeler son marcas de Bizagi. Lila Modeler es un proyecto open source
-independiente, no afiliado a Bizagi ni respaldado por Bizagi.
+- **#335** — semántica pendiente para la paridad numérica con Bizagi: eventos de mensaje, de borde
+  y basados en eventos, saturación, denominador de utilización.
+- **#336** — confianza y adopción: guía de inicio, firma y notarización (#109), publicación de
+  `@lila/engine` en npm (#48), validación de usabilidad.
+- **#125** — servidor autoalojado. **#130** — minería de procesos (parámetros desde logs de
+  eventos).
 
 ## Cómo contribuir
 
-Ver [`CONTRIBUTING.md`](CONTRIBUTING.md) para la guía completa (setup, checks, proceso de PR;
-en inglés) y [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) para el código de conducta del proyecto.
+Ver [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, checks, proceso de PR; en inglés) y
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). Antes de tocar el motor, lee `docs/es/SEMANTICS.md`,
+`docs/es/SCENARIO_FORMAT.md` y `docs/es/RESULTS_FORMAT.md`. Reglas del repo (cabecera de `BACKLOG.md`):
 
-Antes de tocar el motor, lee `docs/SEMANTICS.md`, `docs/SCENARIO_FORMAT.md` y
-`docs/RESULTS_FORMAT.md`. Reglas del repo (cabecera de `BACKLOG.md`):
-
-1. `packages/engine/src/core/` no importa nada fuera de `core/` (ni `bpmn-moddle`, ni `node:*`, ni
-   React).
+1. `packages/engine/src/core/` no importa nada fuera de `core/`.
 2. Ningún ticket/PR cierra sin su prueba de aceptación en verde.
-3. Los nombres de columna de resultados siguen las tablas de resultado públicas de Bizagi Modeler,
-   para que los resultados se puedan comparar con ejemplos publicados (`docs/BIZAGI_PARITY.md`).
+3. Los nombres de columna de resultados siguen las tablas públicas de Bizagi Modeler.
 4. Todo tiempo en segundos, dinero en `run.currency`.
 5. El `id` BPMN es la única clave; el nombre nunca desambigua.
 
-Antes de abrir un PR:
+Antes de abrir un PR: `npm run typecheck && npm test && npm run check:links`.
 
-```bash
-npm run typecheck
-npm test
-```
+## Licencia y NOTICE
+
+Apache-2.0, ver [`LICENSE`](LICENSE). Copyright 2026 Perfer Process; el nombre Lila y sus logos
+están sujetos a [`NOTICE`](NOTICE). `examples/bizagi-exports/` es CC BY 3.0 del BPMN MIWG (ver
+[su README](examples/bizagi-exports/README.md)). Las dependencias de tiempo de ejecución y sus
+licencias están en [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md); el editor es
+[bpmn-js](https://github.com/bpmn-io/bpmn-js), cuya licencia exige que la marca «Powered by
+bpmn.io» quede visible en el lienzo.
+
+Bizagi y Bizagi Modeler son marcas de Bizagi. Lila Modeler es un proyecto open source
+independiente, no afiliado a Bizagi ni respaldado por Bizagi.
