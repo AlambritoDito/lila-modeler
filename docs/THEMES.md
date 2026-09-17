@@ -54,7 +54,7 @@ changing a value in the JSON and reloading changes the UI without recompiling.
 
 ## Choosing a theme (LILA-113, minimal version)
 
-`App.tsx` knows the built-in themes by id (`eva-01`, `papel`), requests `./<id>.json`, and passes it to
+`App.tsx` knows the built-in themes by id (`eva-01`, `papel`, `tieso`, `akira`, `montana`), requests `./<id>.json`, and passes it to
 `applyTheme`. Density (`compacta` / `normal` / `comoda`) is written on top of the theme's `density` token
 and comes out as `data-densidad` on `.app` for the CSS. There is no `ThemeProvider`: with two themes and
 a `useState`, a context would be overkill.
@@ -164,7 +164,7 @@ importing and for rereading what was saved.
 **Where user themes are stored.** In the same place as the rest of the appearance settings
 (LILA-113) and with the same shape in both modes: `ajustes.temas` in `<userData>/estado.json` on
 desktop, `localStorage['lila.temas']` on the web. Each entry is `{ id, tema: { name, tokens },
-origen }`: `id` is `u:<n>` (the built-in ones are `eva-01` and `papel`), and `origen` is the
+origen }`: `id` is `u:<n>` (the built-in ones are `eva-01`, `papel`, `tieso`, `akira` and `montana`), and `origen` is the
 starting tokens, which is all «Restablecer» (Reset) needs — no need to re-fetch the built-in
 theme or trust that its JSON stayed the same, and it works the same way for an imported theme,
 which has no built-in behind it. `id` and `origen` belong to the app: they do not appear in the
