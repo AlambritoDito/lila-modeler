@@ -168,3 +168,18 @@ valor que no vale cae al `origen` del tema y, si ahí tampoco vale, se cae de la
 valor por defecto de `tokens.css`. Solo se descarta el tema entero cuando no hay cómo reconstruirlo
 —sin `id` de usuario o sin `name`—. Descartarlo al primer token roto, que es lo que hacía antes,
 convertía cualquier edición dejada a medias en la pérdida silenciosa de los otros 39 al recargar.
+
+## Decoración de Montana
+
+El tema integrado Montana toma el morado, rosa chicle y dorado de
+[Hannah Montana Linux](https://hannahmontana.sourceforge.net/screenshots.html).
+Los degradados, destellos y estrellas estáticos son decoración CSS limitada al
+atributo `data-theme="montana"` del editor, aplicado solo después de cargar el tema
+correctamente. Al cambiar de tema se retira esa decoración. La identidad de Lila y
+el arranque se conservan. Las etiquetas externas usan texto claro con contorno
+ciruela sobre el fondo morado; los archivos BPMN exportados conservan sus datos
+originales sin decoración CSS.
+
+Duplicar, importar o exportar Montana conserva el formato `{ name, tokens }` y su
+paleta, incluido un lienzo más claro para las etiquetas oscuras. La decoración del
+tema integrado no se transfiere a temas personalizados. No se añaden tokens ni dependencias.
