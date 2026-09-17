@@ -26,7 +26,7 @@ Los tres leen el mismo descriptor: `packages/engine/src/bpmn/lila.moddle.json` (
 
 ### Round-trip
 
-bpmn-moddle preserva namespaces desconocidos al hacer `saveXML` tras `importXML` (verificado con archivos reales de BPSim, qbp y Bizagi — ver `investigacion-2026-09-03/02-bizagi-simulacion.md` y `03-editor-bpmn.md`). Esto es lo que permite que `lila:*` sobreviva a una herramienta que no lo conoce (round-trip por Camunda Modeler, Signavio, ADORIS, etc.) sin que esa herramienta necesite el descriptor. Ese comportamiento se prueba en M4 contra herramientas reales; si alguna no preserva namespaces ajenos, el plan B es un sidecar `annotations.json` keyed por `id` de elemento con el mismo vocabulario (mismos nombres de campo que los elementos `lila:*`), fuera del `.bpmn`.
+bpmn-moddle preserva namespaces desconocidos al hacer `saveXML` tras `importXML` (verificado con archivos reales de BPSim, qbp y Bizagi — ver `investigacion-2026-09-03/02-bizagi-simulacion.md` y `03-editor-bpmn.md`). Esto es lo que permite que `lila:*` sobreviva a una herramienta que no lo conoce (round-trip por Camunda Modeler, Signavio, ADORIS, etc.) sin que esa herramienta necesite el descriptor. Ese comportamiento está verificado para bpmn-moddle y bpmn-js —el núcleo de Camunda Desktop Modeler— en la sección 8, con y sin el descriptor. Si alguna herramienta que importe resultara no preservar namespaces ajenos, el plan B es un sidecar `annotations.json` keyed por `id` de elemento con el mismo vocabulario (mismos nombres de campo que los elementos `lila:*`), fuera del `.bpmn`; nada de lo verificado hasta ahora lo necesita.
 
 ---
 
@@ -324,3 +324,56 @@ sobrevive a abrir-y-exportar (LILA-192, `apps/web/src/modelerXml.ts`):
 
 Nada de esto reescribe el serializador: la fidelidad byte a byte con el archivo de origen no es
 una promesa de la app, y conservar atributos rotos exigiría un serializador propio.
+
+---
+
+## 8. Round-trip en otras herramientas (LILA-068)
+
+Toda la apuesta de ADR-014 —un namespace propio **dentro** del `.bpmn`, en vez de un sidecar— solo
+vale si otra herramienta puede abrir un archivo de Lila, guardarlo y devolver los `lila:` intactos.
+Verificado headless contra el par sobre el que está construido Camunda Desktop Modeler (es Electron
++ bpmn-js; ver `investigacion-2026-09-03/03-editor-bpmn.md`): **bpmn-moddle 10.2.0** y **bpmn-js
+18.28.0**, las versiones que instala este repositorio.
+
+Lo que viaja es `examples/pedido/model.bpmn` con un elemento de cada tipo v1 (sección 2) escrito por
+el propio escritor del motor —doce elementos `lila:` repartidos en tres elementos dueños, con
+repeticiones— y el round-trip corre dos veces: **con** `lila.moddle.json`, que es lo que hacen el
+editor y la CLI de Lila, y **sin** él, que es lo que tiene una herramienta ajena (un namespace sin
+declarar que bpmn-moddle conserva como contenido genérico). En los dos casos, y por las dos
+librerías, el guardado devuelve:
+
+- todos los elementos `lila:`, colgando del mismo elemento dueño y con los mismos valores de
+  atributo;
+- el namespace, declarado una sola vez en `bpmn:definitions`;
+- la `bpmn:documentation` de los elementos anotados, sus ids y el diagrama (`bpmndi`).
+
+También aguanta si la otra herramienta escribe un prefijo propio (solo el IRI es normativo, sección
+1), y el segundo guardado es idéntico al primero: de ahí en adelante el archivo es un punto fijo.
+
+Pruebas: `packages/engine/test/bpmn-roundtrip.test.ts` (bpmn-moddle) y
+`apps/web/src/bpmnRoundtrip.test.ts` (bpmn-js), con el archivo anotado y la comparación en
+`packages/engine/test/bpmn-roundtrip.fixture.ts`. Lo que se compara es un inventario de los
+elementos `lila:` leído del texto del XML, normalizado en prefijo y en orden de atributos, no el
+archivo entero byte a byte: bpmn-moddle reformatea todo lo que reserializa, y la sección 7 ya dice
+que la fidelidad byte a byte no es una promesa.
+
+| Herramienta | Qué lee y escribe su XML | `lila:` tras abrir y guardar | Cómo se comprobó |
+|---|---|---|---|
+| Camunda Desktop Modeler (y cualquier editor construido sobre las librerías de bpmn.io) | bpmn-js 18.28.0 sobre bpmn-moddle 10.2.0 | se conserva | round-trip headless sobre ese mismo núcleo, con y sin el descriptor (`apps/web/src/bpmnRoundtrip.test.ts`) |
+| Cualquier herramienta sobre bpmn-moddle a secas (conversores, servidores, la CLI de Lila) | bpmn-moddle 10.2.0 | se conserva | `packages/engine/test/bpmn-roundtrip.test.ts` |
+| Lila Modeler mismo (web y escritorio) | bpmn-js con `moddleExtensions: { lila }` | se conserva | sección 7, más `apps/web/src/exportar.test.ts` |
+| Signavio | propietaria, SaaS | sin verificar | no hay cuenta disponible |
+| ADONIS | propietaria | sin verificar | no hay licencia disponible |
+| Bizagi Modeler | propietaria | sin verificar | no hay licencia disponible; la dirección opuesta —que Lila conserve un `bizagi:` ajeno al abrir y exportar— la cubren los fixtures de `examples/bizagi-exports` en `apps/web/src/exportar.test.ts` |
+
+**Qué no cubre esto.** No se manejó la interfaz de Camunda Desktop Modeler: la prueba headless pasa
+por la mismísima instancia de moddle con la que bpmn-js lee y escribe el XML (`importXML` es
+`moddle.fromXML`, `saveXML` es `moddle.toXML`, y nada entre ambas toca el árbol que se serializa),
+pero no por su lienzo, que jsdom no sabe dibujar. Signavio y ADONIS no se probaron en absoluto, por
+falta de acceso; si alguna descarta namespaces ajenos, los descarta para todos los elementos `lila:`
+a la vez, que es justo lo que mediría el inventario de arriba.
+
+**El plan B sigue sin escribirse.** El sidecar `annotations.json` que la sección 1 guarda como
+respaldo no hace falta: ninguna herramienta verificada aquí descarta el namespace. Su ticket se
+abre el día que se demuestre que una herramienta que importa lo tira, y el formato del archivo no
+cambia antes de eso.

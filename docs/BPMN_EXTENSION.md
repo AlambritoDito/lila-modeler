@@ -26,7 +26,7 @@ All three read the same descriptor: `packages/engine/src/bpmn/lila.moddle.json` 
 
 ### Round-trip
 
-bpmn-moddle preserves unknown namespaces when doing `saveXML` after `importXML` (verified with real BPSim, qbp, and Bizagi Modeler files — see `investigacion-2026-09-03/02-bizagi-simulacion.md` and `03-editor-bpmn.md`). This is what lets `lila:*` survive a tool that does not know it (a round trip through Camunda Modeler, Signavio, ADORIS, etc.) without that tool needing the descriptor. That behavior is tested in M4 against real tools; if one does not preserve foreign namespaces, plan B is an `annotations.json` sidecar keyed by element `id` with the same vocabulary (the same field names as the `lila:*` elements), outside the `.bpmn`.
+bpmn-moddle preserves unknown namespaces when doing `saveXML` after `importXML` (verified with real BPSim, qbp, and Bizagi Modeler files — see `investigacion-2026-09-03/02-bizagi-simulacion.md` and `03-editor-bpmn.md`). This is what lets `lila:*` survive a tool that does not know it (a round trip through Camunda Modeler, Signavio, ADORIS, etc.) without that tool needing the descriptor. That behavior is verified for bpmn-moddle and bpmn-js — the core of Camunda Desktop Modeler — in section 8, with and without the descriptor. Should a tool that matters turn out not to preserve foreign namespaces, plan B is an `annotations.json` sidecar keyed by element `id` with the same vocabulary (the same field names as the `lila:*` elements), outside the `.bpmn`; nothing verified so far needs it.
 
 ---
 
@@ -326,3 +326,54 @@ survives an open-and-export round trip (LILA-192, `apps/web/src/modelerXml.ts`):
   window-close handler, so the close is cancelled and nothing is lost.
 
 None of this rewrites the serializer: byte-for-byte fidelity with the source file is not a promise the app makes, and preserving broken attributes would require a serializer of its own.
+
+---
+
+## 8. Round-trip in other tools (LILA-068)
+
+The whole bet of ADR-014 — a namespace of our own **inside** the `.bpmn`, instead of a sidecar —
+only pays off if another tool can open a Lila file, save it and give the `lila:` back untouched.
+Verified headless against the pair Camunda Desktop Modeler is built on (it is Electron + bpmn-js;
+see `investigacion-2026-09-03/03-editor-bpmn.md`): **bpmn-moddle 10.2.0** and **bpmn-js 18.28.0**,
+the versions this repository installs.
+
+What travels is `examples/pedido/model.bpmn` with one element of every v1 type (section 2) written
+into it by the engine's own writer — twelve `lila:` elements over three owner elements, with
+repetitions — and the round trip runs twice: **with** `lila.moddle.json`, which is what Lila's
+editor and CLI do, and **without** it, which is what a foreign tool has (an undeclared namespace
+that bpmn-moddle keeps as generic content). In both cases, and through both libraries, the save
+gives back:
+
+- every `lila:` element, hanging off the same owner element and with the same attribute values;
+- the namespace, declared once in `bpmn:definitions`;
+- the annotated elements' `bpmn:documentation`, their ids and the diagram (`bpmndi`).
+
+It also holds when the other tool writes a prefix of its own (only the IRI is normative, section 1),
+and the second save is identical to the first: from there on the file is a fixed point.
+
+Tests: `packages/engine/test/bpmn-roundtrip.test.ts` (bpmn-moddle) and
+`apps/web/src/bpmnRoundtrip.test.ts` (bpmn-js), with the annotated file and the comparison in
+`packages/engine/test/bpmn-roundtrip.fixture.ts`. What is compared is an inventory of the `lila:`
+elements read off the XML text, normalized for prefix and attribute order, not the whole file byte
+for byte: bpmn-moddle reformats whatever it reserializes, and section 7 already says byte fidelity
+is not a promise.
+
+| Tool | What reads and writes its XML | `lila:` after open/save | How it was checked |
+|---|---|---|---|
+| Camunda Desktop Modeler (and any editor built on bpmn.io's libraries) | bpmn-js 18.28.0 over bpmn-moddle 10.2.0 | preserved | headless round trip over that same core, with and without the descriptor (`apps/web/src/bpmnRoundtrip.test.ts`) |
+| Any tool on bpmn-moddle alone (converters, servers, the Lila CLI) | bpmn-moddle 10.2.0 | preserved | `packages/engine/test/bpmn-roundtrip.test.ts` |
+| Lila Modeler itself (web and desktop) | bpmn-js with `moddleExtensions: { lila }` | preserved | section 7, plus `apps/web/src/exportar.test.ts` |
+| Signavio | proprietary, SaaS | not verified | no account available |
+| ADONIS | proprietary | not verified | no licence available |
+| Bizagi Modeler | proprietary | not verified | no licence available; the opposite direction — Lila keeping a foreign `bizagi:` across open/export — is covered by the `examples/bizagi-exports` fixtures in `apps/web/src/exportar.test.ts` |
+
+**What this does not cover.** Camunda Desktop Modeler's user interface was not driven: the headless
+test goes through the very moddle instance bpmn-js reads and writes XML with (`importXML` is
+`moddle.fromXML`, `saveXML` is `moddle.toXML`, and nothing in between touches the tree that gets
+serialized), but not through its canvas, which jsdom cannot draw. Signavio and ADONIS were not
+tried at all, for lack of access; if either turns out to drop foreign namespaces, it drops them for
+every `lila:` element at once, which is what the inventory above would measure.
+
+**Plan B stays unwritten.** The `annotations.json` sidecar that section 1 keeps as a fallback is not
+needed: no tool verified here discards the namespace. Its ticket gets opened the day a tool that
+matters is shown to drop it, and the file format does not change before that.
