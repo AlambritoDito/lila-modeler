@@ -16,30 +16,24 @@ export function isNCName(id: string): boolean {
   return id.length > 0 && NCNAME_START.test(id) && !NCNAME_HAS_INVALID_CHAR.test(id);
 }
 
-const SUFFIX_LENGTH = 12;
-
-// ponytail: el sufijo usa Math.random, no un generador criptográfico ni un contador
-// centralizado. Está bien: este archivo no es parte del motor determinista (esa
-// prohibición de Math.random aplica solo a packages/engine/src/core/), y un id de
-// elemento no necesita ser impredecible, solo no colisionar en la práctica (12
-// caracteres base36 ⇒ colisión en 10 000 ids generados es, en la práctica, imposible).
-function randomSuffix(): string {
-  let suffix = '';
-  while (suffix.length < SUFFIX_LENGTH) {
-    suffix += Math.random().toString(36).slice(2);
-  }
-  return suffix.slice(0, SUFFIX_LENGTH);
-}
-
 /**
- * Genera un id NCName nuevo con prefijo por tipo, p. ej. `newId('Task')` -> `Task_7f3k2q1a9c4`.
- * `type` es el prefijo (sin "_"): `Start`, `End`, `Task`, `Gateway`, `Timer`, `Flow`,
- * `SubProcess`, u otro que el IR necesite (lista no exhaustiva, crece con el IR).
+ * Genera un id NCName nuevo con prefijo por tipo que no esté en `used`, p. ej.
+ * `newId('Task', used)` -> `Task_2` (`Task_3` si `Task_2` ya estaba ocupado). `type` es el
+ * prefijo (sin "_"): `Start`, `End`, `Task`, `Gateway`, `Timer`, `Flow`, `SubProcess`, u otro
+ * que el IR necesite (lista no exhaustiva, crece con el IR).
+ *
+ * Es **determinista**: mismo prefijo y mismo conjunto ocupado, mismo id. Antes el sufijo
+ * salía de `Math.random`, así que dos parseos del mismo archivo podían dar ids distintos
+ * (#326); el contador local, acotado por `used`, da la misma unicidad sin azar.
+ *
  * Nunca se regenera un id existente (ver BPMN_EXTENSION.md sección 3); esta función solo
  * produce ids para elementos nuevos.
  */
-export function newId(type: string): string {
-  return `${type}_${randomSuffix()}`;
+export function newId(type: string, used: ReadonlySet<string> = new Set()): string {
+  for (let attempt = 2; ; attempt += 1) {
+    const id = `${type}_${attempt}`;
+    if (!used.has(id)) return id;
+  }
 }
 
 /**

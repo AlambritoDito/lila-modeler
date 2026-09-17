@@ -8,6 +8,7 @@ import type { SimScenario } from '../src/core/sim.js';
 import { simulate, type EventLogRow } from '../src/index.js';
 import type { ResolvedScenario } from '../src/scenario.js';
 import {
+  describeGoldenMismatch,
   loadPedidoScenario,
   numericDiffs,
   PEDIDO_GOLDEN_PATH,
@@ -121,7 +122,9 @@ describe('degradación semántica (LILA-039)', () => {
 function expectGolden(actual: string, goldenPath: string): void {
   const expected = readFileSync(goldenPath, 'utf8');
   if (process.env.CI !== undefined && process.env.CI !== '' && process.env.CI !== 'false') {
-    expect(actual).toBe(expected);
+    // El informe solo se construye al fallar: dice si lo que se movió son bytes de último
+    // dígito o un número de verdad, y deja el resultado en un archivo (#326).
+    if (actual !== expected) expect(actual, describeGoldenMismatch(actual, expected, goldenPath)).toBe(expected);
     return;
   }
   expect(numericDiffs(JSON.parse(actual), JSON.parse(expected), 1e-9)).toEqual([]);

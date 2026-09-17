@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, test } from 'vitest';
 
 import { runResultSchema } from '../../src/result.schema.js';
-import { PEDIDO_GOLDEN_PATH, renderPedidoGolden } from './pedido.js';
+import { describeGoldenMismatch, PEDIDO_GOLDEN_PATH, renderPedidoGolden } from './pedido.js';
 
 describe('golden determinista de examples/pedido (LILA-030)', () => {
   let seed42 = '';
@@ -16,7 +16,10 @@ describe('golden determinista de examples/pedido (LILA-030)', () => {
   test('seed 42 coincide byte a byte con el JSON versionado', () => {
     const expected = readFileSync(PEDIDO_GOLDEN_PATH, 'utf8');
 
-    expect(seed42).toBe(expected);
+    // Al fallar, el informe dice si el golden se movió en el último bit o de verdad (#326).
+    if (seed42 !== expected) {
+      expect(seed42, describeGoldenMismatch(seed42, expected, PEDIDO_GOLDEN_PATH)).toBe(expected);
+    }
     expect(expected.endsWith('\n')).toBe(true);
     expect(expected).not.toContain('\r');
     expect(runResultSchema.safeParse(JSON.parse(expected)).success).toBe(true);

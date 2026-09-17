@@ -264,7 +264,10 @@ function claimId(el: ModdleElement, c: Collector): string {
   if (cached !== undefined) return cached;
 
   let id = el.id;
-  if (c.used.has(id)) id = newId(el.$type.replace('bpmn:', ''));
+  // Un `Task_2` acuñado aquí le gana el id a un elemento legítimo `Task_2` visitado después (que
+  // pasaría a `Task_3`, con `originalIds` coherente). Hoy la rama es inalcanzable: moddle descarta
+  // los duplicados antes de llegar aquí y `sanitizeIds` reserva los NCName válidos del documento.
+  if (c.used.has(id)) id = newId(el.$type.replace('bpmn:', ''), c.used);
 
   c.used.add(id);
   c.originalIds[id] = c.sanitizedToOriginal.get(el.id) ?? el.id;
