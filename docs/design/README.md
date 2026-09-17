@@ -16,8 +16,8 @@ with PNG filenames; they have been replaced with genuine PNG captures at the req
 
 Every current-state link below has both sizes in the gallery. Paper-theme historical views map
 to the same current modeling state in Eva-01, intentionally following #287's theme requirement.
-The welcome artboard has no equivalent in the current browser app; no invented screenshot is
-provided. The token table, component inventory and React notes are design references, not app views.
+The welcome artboard is implemented as a desktop-only overlay; the browser app has no welcome
+view, so no browser screenshot is provided. The token table, component inventory and React notes are design references, not app views.
 
 | Historical file | Classification | Current state or disposition |
 |---|---|---|
@@ -28,7 +28,7 @@ provided. The token table, component inventory and React notes are design refere
 | [05-resultados.png](05-resultados.png) | Design artboard | [results](en/results.png) / [1920](en/results-1920.png) |
 | [06-comparar.png](06-comparar.png) | Design artboard | [compare](en/compare.png) / [1920](en/compare-1920.png) |
 | [07-validar-rutas.png](07-validar-rutas.png) | Design artboard | [routes](en/routes.png) / [1920](en/routes-1920.png) |
-| [08-bienvenida.png](08-bienvenida.png) | Design artboard | No browser welcome view; retained only as a historical proposal. |
+| [08-bienvenida.png](08-bienvenida.png) | Design artboard | Desktop welcome overlay (`apps/web/src/Bienvenida.tsx`): shown in Electron when startup has nothing to open; never in the browser. |
 | [09-apariencia.png](09-apariencia.png) | Design artboard | [appearance](en/appearance.png) / [1920](en/appearance-1920.png) |
 | [10-modelar-papel.png](10-modelar-papel.png) | Design artboard | [model](en/model.png) / [1920](en/model-1920.png) |
 | [11-tabla-tokens.png](11-tabla-tokens.png) | Design reference | Token table, not an application view; retained as historical reference. |
