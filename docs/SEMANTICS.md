@@ -1084,6 +1084,13 @@ W-RECURSO-SATURADO: <poolId>: the queue grows without settling (utilization ≈ 
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)
 ```
 
+`λ/μ·c` is the queueing shorthand for the **shape** of the ratio — arrivals over service capacity
+— and not the theoretical load of the scenario's declared demand: both quantities are read off the
+log of the simulated horizon (the demand attributed to the pool over the units it granted, see
+below), so the number moves with the run's duration and with the model's own throttling. The
+surfaces that show the warning say so next to it, because the notation invites the other reading
+*(#357)*; the text above does not change.
+
 The signal is **the pool being full**: no free units enough to grant, i.e. fewer available than
 the smallest `quantity` any task requests it with — a pool of `capacity` 3 requested two at a
 time is full with two units occupied, because no one can take the third. The threshold belongs

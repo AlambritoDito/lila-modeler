@@ -118,6 +118,24 @@ const titleRowStyle: CSSProperties = {
 
 export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14, margin: 0 };
 
+/**
+ * Prefix of the saturation warning (`docs/SEMANTICS.md` § 17). The engine prints its ratio with
+ * the queueing notation `λ/(μ·c)`, so whenever the warning is on screen the view explains that
+ * the number is measured over the simulated horizon and not the theoretical load (#357).
+ */
+const SATURATION_CODE = 'W-RECURSO-SATURADO';
+
+/**
+ * Footnote under a table or a list: what the number above means, in the same muted grey as the
+ * header line (#357, #358). It explains, it never carries a value.
+ */
+const notaStyle: CSSProperties = {
+  color: 'var(--fg-muted)',
+  fontSize: 12,
+  margin: '-8px 0 16px',
+  maxWidth: '70ch',
+};
+
 export const exportButtonStyle: CSSProperties = {
   background: 'var(--bg-elevated)',
   border: '1px solid var(--border-strong)',
@@ -682,6 +700,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
           xlsxContents={xlsx}
         />
       )}
+      {tab === 'resources' && <p style={notaStyle}>{S.resultados.notaCostoRecursos}</p>}
       {tab === 'process' && (
         <DataTable
           title={tabLabels().process}
@@ -694,6 +713,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
           xlsxContents={xlsx}
         />
       )}
+      {tab === 'process' && <p style={notaStyle}>{S.resultados.notaCostoPorCaso}</p>}
       {tab === 'process' && outcomes.length > 0 && (
         <DataTable
           title={S.resultados.desenlaces}
@@ -711,6 +731,9 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
               <li key={warning}>{warning}</li>
             ))}
           </ul>
+          {result.warnings.some((warning) => warning.startsWith(SATURATION_CODE)) && (
+            <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaSaturacion}</p>
+          )}
         </section>
       )}
     </div>

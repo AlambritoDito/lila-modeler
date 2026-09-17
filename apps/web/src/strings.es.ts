@@ -720,6 +720,25 @@ export const es: Strings = {
       ` — espera total ${espera} ${unidad}, utilización ${utilizacion}%`,
 
     avisos: 'Avisos',
+
+    /** Nota al pie de la pestaña Proceso (#358). */
+    notaCostoPorCaso:
+      'El costo por caso es el costo medio de los casos que terminaron, no el costo total ' +
+      'dividido entre las instancias completadas: el costo de los casos en curso forma parte ' +
+      'del costo total y no de esta media.',
+    /** Nota al pie de la pestaña Recursos (#358). */
+    notaCostoRecursos:
+      'El costo unitario cobra solo las horas en que el pool estuvo realmente ocupado. El costo ' +
+      'de nómina del libro exportado cobra en cambio la disponibilidad: capacidad × costo por ' +
+      'hora × las horas abiertas de la corrida, ocupada u ociosa.',
+    /** Nota bajo los avisos cuando algún pool reportó `W-RECURSO-SATURADO` (#357). */
+    notaSaturacion:
+      'El aviso salta cuando la demanda atribuida dividida entre lo que atendió el pool llega a ' +
+      '1,1, o su ocupación llega al 90 %, y además la cola crece o queda trabajo pendiente: ' +
+      'ningún número decide solo. La demanda atribuida cuenta solo las instancias que esperaron ' +
+      'con el pool lleno, así que el número que muestra el aviso —esa razón, o la ocupación ' +
+      'cuando salta por esa puerta— es observado sobre el horizonte simulado, no la carga de ' +
+      'toda la demanda externa.',
   },
 
   /* ------------------------------------------------------------------ *

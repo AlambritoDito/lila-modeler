@@ -28,12 +28,37 @@ import { strToU8, zipSync } from 'fflate';
 /** A cell value. `null` and `undefined` are written as an empty cell. */
 export type CellValue = string | number | boolean | null | undefined;
 
+/**
+ * Number format of a column's **numeric** data cells (#359):
+ *
+ * - `'number'` — `0.###`: a readable three decimals instead of the seventeen digits a double
+ *   prints (`42.857142857142854`). The stored value keeps every bit; only the display rounds.
+ * - `'percent'` — `0.00%`: the cell holds the fraction (`0.153`) and the reader shows `15.30%`,
+ *   which is what a relative delta, or a service level, means.
+ *
+ * The header row and text/boolean cells always keep the general format. Formats are per column;
+ * `SheetSpec.rowFormats` overrides them on the rows of a tall sheet that need it.
+ */
+export type CellFormat = 'number' | 'percent';
+
+/** `cellXfs` index of each format inside `STYLES_XML`; `0` is the general format. */
+const STYLE_INDEX: Readonly<Record<CellFormat, number>> = { number: 1, percent: 2 };
+
 /** One sheet of the workbook: a header row plus the data rows, all of them already ordered. */
 export interface SheetSpec {
   /** Visible name of the tab; truncated and sanitized by `sheetName`. */
   name: string;
   headers: readonly string[];
   rows: readonly (readonly CellValue[])[];
+  /** Number format per column, aligned with `headers`; a missing entry means general. */
+  formats?: readonly (CellFormat | undefined)[];
+  /**
+   * Per-row override of `formats`, aligned with `rows` and sparse: a row with no entry keeps the
+   * column formats. It exists for the tall sheets, whose single `Value` column holds counts,
+   * seconds, money and the odd fraction, so that fraction can take a percentage cell without the
+   * rest of the column changing (`Within service level`, #359).
+   */
+  rowFormats?: readonly (readonly (CellFormat | undefined)[] | undefined)[];
 }
 
 /**
@@ -111,20 +136,27 @@ export function columnName(index: number): string {
 }
 
 /** One `<c>` element, or `''` for an empty cell (a missing cell is legal and smaller). */
-function cellXml(value: CellValue, reference: string): string {
+function cellXml(value: CellValue, reference: string, format?: CellFormat): string {
   if (value === null || value === undefined || value === '') return '';
   if (typeof value === 'boolean') return `<c r="${reference}" t="b"><v>${value ? 1 : 0}</v></c>`;
   // A non-finite number has no SpreadsheetML representation: it goes as text so the workbook stays
   // readable and the anomaly stays visible, instead of turning into a corrupt numeric cell.
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return `<c r="${reference}"><v>${value}</v></c>`;
+    const style = format === undefined ? '' : ` s="${STYLE_INDEX[format]}"`;
+    return `<c r="${reference}"${style}><v>${value}</v></c>`;
   }
   const text = typeof value === 'number' ? String(value) : value;
   return `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
 }
 
-function rowXml(values: readonly CellValue[], rowNumber: number): string {
-  const cells = values.map((value, column) => cellXml(value, `${columnName(column)}${rowNumber}`)).join('');
+function rowXml(
+  values: readonly CellValue[],
+  rowNumber: number,
+  formats: readonly (CellFormat | undefined)[] = [],
+): string {
+  const cells = values
+    .map((value, column) => cellXml(value, `${columnName(column)}${rowNumber}`, formats[column]))
+    .join('');
   return `<row r="${rowNumber}">${cells}</row>`;
 }
 
@@ -137,7 +169,9 @@ export function worksheetXml(sheet: SheetSpec): string {
   const rows: string[] = [];
   let rowNumber = 1;
   if (sheet.headers.length > 0) rows.push(rowXml(sheet.headers, rowNumber++));
-  for (const row of sheet.rows) rows.push(rowXml(row, rowNumber++));
+  for (const [index, row] of sheet.rows.entries()) {
+    rows.push(rowXml(row, rowNumber++, sheet.rowFormats?.[index] ?? sheet.formats));
+  }
   const data = rows.length === 0 ? '<sheetData/>' : `<sheetData>${rows.join('')}</sheetData>`;
   return `${XML_HEADER}<worksheet xmlns="${MAIN_NS}">${data}</worksheet>`;
 }
@@ -181,14 +215,24 @@ function workbookRelsXml(count: number): string {
   );
 }
 
-/** The smallest styles part a reader will accept: one font, one fill, one border, one format. */
+/**
+ * The smallest styles part a reader will accept — one font, one fill, one border — plus the three
+ * cell formats `CellFormat` indexes: general (`0`), `0.###` (`1`) and the built-in `0.00%` (`2`).
+ * `numFmtId` 10 is Excel's own percentage format, so no custom code has to be declared for it;
+ * `0.###` does need one, and 164 is the first id reserved for custom formats.
+ */
 const STYLES_XML =
   `${XML_HEADER}<styleSheet xmlns="${MAIN_NS}">` +
+  '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.###"/></numFmts>' +
   '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
   '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
   '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>' +
+  '<cellXfs count="3">' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '</cellXfs>' +
   // Without the named `Normal` style openpyxl warns on every read ("Workbook contains no default
   // style"); it costs one element to keep the export silent for pandas users.
   '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +

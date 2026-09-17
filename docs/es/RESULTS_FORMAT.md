@@ -337,6 +337,10 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
   `resources[poolId].utilization` media ≥ 0,9 es la segunda puerta al mismo aviso; entonces
   imprime `W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)` en su
   lugar, con la ocupación en porcentaje entero. El criterio completo está en `SEMANTICS.md` § 17.
+  `λ/μ·c` es la notación de colas para la forma de la razón, no una afirmación sobre la demanda
+  declarada del escenario: el número se mide sobre el horizonte simulado, así que la app web
+  imprime al lado del aviso una nota que dice el criterio de arriba y qué es el número que se ve
+  —esa razón, o la ocupación cuando el aviso sale por la segunda puerta— *(#357)*.
   *(LILA-191, #320)*
 
 ---
@@ -514,7 +518,7 @@ cuyo cuello de botella es el pool `horno` con `capacity 1`, que el TO-BE no toca
 `lila run --xlsx libro.xlsx`, `lila compare --xlsx libro.xlsx` y los botones "Exportar XLSX" de la
 app web escriben una hoja de cálculo con los mismos números que el CSV. Es un OOXML escrito a mano
 sobre `fflate` (`packages/engine/src/xlsx.ts`): cadenas inline, celdas numéricas, sin tabla de
-cadenas compartidas y sin más estilos que el de por defecto, que es el subconjunto que leen Excel,
+cadenas compartidas y con tres formatos de número, que es el subconjunto que leen Excel,
 LibreOffice, Numbers, pandas y openpyxl. Los bytes son deterministas —las entradas del zip llevan
 una marca de tiempo fija—, así que dos exportaciones de la misma corrida son idénticas.
 
@@ -528,7 +532,7 @@ nombres de las hojas y las etiquetas de las hojas que el libro añade salen del 
 
 | Hoja | Columnas | Contenido |
 |---|---|---|
-| `Resumen` | Sección, Id, Name, Metric, Valor | las métricas de `process` de la sección 5, una por fila; los casos completados por evento de fin cuando existe `process.byEndEvent`; y, por cada pool declarado, `Capacidad`, `Horas laborables` y `Costo de nómina`, más el total |
+| `Resumen` | Sección, Id, Name, Metric, Valor | las métricas de `process` de la sección 5, una por fila; los casos completados por evento de fin cuando existe `process.byEndEvent`; por cada pool declarado, `Capacidad`, `Horas laborables` y `Costo de nómina`, más el total; y un bloque `Notas` *(#358, #359)* |
 | `Elementos` | las de `elements.csv` | filas idénticas a `elements.csv` |
 | `Flujos` | las de `flows.csv` | filas idénticas a `flows.csv` |
 | `Recursos` | las de `resources.csv` | filas idénticas a `resources.csv` |
@@ -541,6 +545,37 @@ las dos lecturas. Sin `run.duration` las horas no se conocen y esas celdas queda
 
 El event log **no** es una hoja: una corrida de millones de filas supera las 1 048 576 filas que
 admite una hoja. `--csv` lo sigue escribiendo en streaming (sección 7).
+
+#### Unidades, formatos y el bloque `Notas` *(#358, #359)*
+
+El libro nunca convierte: toda duración que lleva está en **segundos** (sección 1), cualquiera sea
+el `run.baseTimeUnit` que declare el escenario y cualquiera sea lo que muestre la app en pantalla.
+Donde eso se puede decir al lado del número, se dice:
+
+- las **etiquetas** de `Metric` de `Resumen` llevan la unidad con la misma convención
+  `columnHeader(scope, metric, unit)` que usa la consola —`Cycle time average (s)`, y nada en un
+  conteo, una tasa o dinero—;
+- las **cabeceras** de `Elementos`, `Flujos` y `Recursos` no, y no van a llevarla: son los nombres
+  de columna de la sección 10 y están fijadas a las del CSV, por este documento y por
+  `packages/engine/test/xlsx.test.ts`. Su unidad se declara en el bloque `Notas`.
+
+El bloque `Notas` de `Resumen` es la última sección de la hoja, una fila por nota y el texto en la
+columna `Valor`. No añade ninguna métrica ni cambia ningún valor; responde a las tres lecturas que
+un libro abierto lejos de la app entiende mal: la unidad de las hojas fuente, que el `Cost per
+case` es el costo medio de los casos que **terminaron** y no `Total cost / Instances completed`
+(sección 5), y que el `Costo de nómina` cobra la disponibilidad mientras el `Unit cost` cobra las
+horas realmente ocupadas (sección 4).
+
+Los formatos de número son solo presentación —la celda conserva el doble completo—:
+
+| Formato | Dónde |
+|---|---|
+| `0.###` | toda celda numérica de las cinco hojas y de `Comparación` que no sea una de las fracciones de abajo, para que una media imprima `42.857` y no `42.857142857142854` |
+| `0.00%` | las fracciones: el delta relativo de `Comparación` y las filas `Within service level` de `Resumen` (`0.153` se ve como `15.30%`). Son el único formato por **fila** del libro, porque la columna `Valor` de `Resumen` lleva además conteos, segundos y dinero; con `0.###` un nivel de servicio de `0.001004` se vería `0.001` y cualquiera por debajo de `0.0005` como el `0` que la sección 5 prohíbe leer como «0 % cumplido» |
+| general | la fila de cabecera, los textos de `Notas` y toda otra celda de texto o booleana |
+
+`Utilization (%)` no es una celda de porcentaje: su valor ya viene multiplicado por 100 y el nombre
+de la columna lo dice, igual que en el CSV y en la consola.
 
 ### `compare --xlsx`: una hoja por escenario más `Comparación`
 
