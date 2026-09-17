@@ -88,7 +88,7 @@
               <p>
                 The Simulate panel follows Bizagi's four levels as four steps: process validation,
                 time analysis, resource analysis and calendar analysis. Arrivals, processing times
-                (13 BPSim distributions, constant or empirical), resource pools with costs, weekly
+                (the 13 BPSim distributions, the empirical one included, or a constant), resource pools with costs, weekly
                 shift calendars. Scenarios are plain JSON files and can extend one another.
               </p>
             </li>
@@ -188,8 +188,9 @@
           </div>
 
           <p class="note">
-            There is no <code>lila</code> package on the npm registry yet: <code>npx</code> resolves
-            the workspace's own binary after <code>npm ci</code> and <code>npm run build</code>, with no registry lookup and no global
+            Lila is not published to npm (the <code>lila</code> package on the registry is an unrelated
+            project): inside the checkout, after <code>npm ci</code> and <code>npm run build</code>,
+            <code>npx</code> resolves the workspace's own binary with no registry lookup and no global
             install.
           </p>
         </div>
