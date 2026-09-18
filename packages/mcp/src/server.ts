@@ -111,7 +111,7 @@ function modelXml(
   return { error: toolMessage(tool, M.pathOrXml()) };
 }
 
-const GATEWAY_TYPES = new Set(['xor', 'or', 'and']);
+const GATEWAY_TYPES = new Set(['xor', 'or', 'and', 'eventGateway']);
 
 /** Resumen legible pedido por LILA-053: nodos, gateways, lanes, subprocesos, en `locale`. */
 function describeIr(

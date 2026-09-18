@@ -174,14 +174,15 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Plataformas | solo Windows | app web, macOS, Windows, Linux |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
 | Publicación de documentos (Word/PDF/web) | ✓ | ✗ no es una suite de documentación |
-| Eventos de mensaje/señal/enlace, compuerta basada en eventos | parcial | ✗ error de validación explícito |
+| Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
+| Eventos de mensaje/señal/enlace sueltos | parcial | ✗ error de validación explícito |
 | Multi-instancia, compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
 
 ### Límites conocidos
 
 - **Perfil BPMN soportado**: start/end (none y terminate), timer intermedio, timer de borde
-  interruptor, tareas (todas las variantes), call activity, subproceso embebido, compuertas
-  XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
+  (interruptor o no), compuerta basada en eventos con ramas de tiempo o de mensaje, tareas (todas
+  las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
 - **Todavía no está en npm**: no hay `npm install @lila/engine`; clona y compila como arriba.
 - **Los calendarios son semanales**; la recurrencia mensual/anual y los festivos son campos

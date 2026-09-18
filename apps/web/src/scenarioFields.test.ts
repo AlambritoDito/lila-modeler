@@ -49,7 +49,9 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
   });
 
   it('una compuerta no tiene ningún campo de elemento; sus ramas se editan en su vista', () => {
-    for (const compuerta of ['xor', 'or', 'and'] as const) {
+    // #81: la compuerta basada en eventos tampoco, y su carrera se parametriza en cada evento de
+    // rama, que es un `timer` del IR y por eso ya ofrece `processingTime` (SEMANTICS R-EVG-2).
+    for (const compuerta of ['xor', 'or', 'and', 'eventGateway'] as const) {
       expect(fieldsForKind(compuerta)).toEqual([]);
     }
   });

@@ -144,11 +144,15 @@ async function validateCommand(file: string, json: boolean, locale: Locale): Pro
 
   const nodeIds = Object.keys(ir.nodes);
   console.log(C.nodes(nodeIds.length, countByType(ir.nodes)));
+  // The type column is as wide as the widest type in **this** model, with 9 as the floor: that is
+  // the width every type up to `terminate` had, so a model without an `eventGateway` (12) prints
+  // exactly the same bytes as before (#81).
+  const typeWidth = Math.max(9, ...nodeIds.map((id) => ir.nodes[id]?.type.length ?? 0));
   for (const id of nodeIds) {
     const node = ir.nodes[id];
     if (node === undefined) continue;
     const lane = node.lane === undefined ? '' : `  [${node.lane}]`;
-    console.log(`  ${node.type.padEnd(9)} ${id}${node.name === '' ? '' : `  ${node.name}`}${lane}`);
+    console.log(`  ${node.type.padEnd(typeWidth)} ${id}${node.name === '' ? '' : `  ${node.name}`}${lane}`);
   }
 
   const flowIds = Object.keys(ir.flows);

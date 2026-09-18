@@ -32,6 +32,7 @@ const TIPOS_NODO: Record<string, string> = {
   or: 'gateway OR',
   and: 'gateway AND',
   timer: 'temporizador',
+  eventGateway: 'gateway basado en eventos',
 };
 
 const ES_USAGE = `Uso: lila validate <archivo.bpmn> [--json]

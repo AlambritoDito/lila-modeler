@@ -31,7 +31,16 @@ const GATEWAY_TYPES: Record<string, NodeType> = {
   'bpmn:ExclusiveGateway': 'xor',
   'bpmn:InclusiveGateway': 'or',
   'bpmn:ParallelGateway': 'and',
+  // Only reached by an event-based gateway that `eventGatewayProfile` already let in (R-EVG-1);
+  // any other one is `E-NOSOP` with construction `eventBasedGateway` and never gets a node type.
+  'bpmn:EventBasedGateway': 'eventGateway',
 };
+
+/** Branch triggers R-EVG-1 admits after an event-based gateway: a delay each (R-EVG-2). */
+const BRANCH_EVENT_DEFINITIONS: ReadonlySet<string> = new Set([
+  'bpmn:TimerEventDefinition',
+  'bpmn:MessageEventDefinition',
+]);
 
 /** Definiciones inline y referencias a definiciones globales, ambas vías válidas de BPMN. */
 function eventDefinitionsOf(el: ModdleElement): readonly ModdleElement[] {
@@ -75,28 +84,50 @@ const TYPE_CONSTRUCTIONS: Record<string, UnsupportedConstruction> = {
 const NO_OUTGOING: ReadonlySet<ModdleElement> = new Set();
 
 /**
- * Literales que BPMN admite en `cancelActivity` (el léxico de `xsd:boolean`) y la semántica que
- * pide cada uno. Cualquier otro literal deja al borde fuera del perfil, con el mismo `E-NOSOP`
- * de siempre: no hay forma de saber si el modelador quería interrumpir o no.
+ * Literales que BPMN admite en un `xsd:boolean` (su léxico) y el valor que pide cada uno.
+ * Cualquier otro literal deja al elemento fuera del perfil, con el mismo `E-NOSOP` de siempre:
+ * no hay forma de saber qué quería el modelador.
  *
- * ponytail: el valor hay que leerlo **en bruto** del texto del XML (`boundaryCancelLiterals`)
+ * ponytail: el valor hay que leerlo **en bruto** del texto del XML (`rawAttributeLiterals`)
  * porque bpmn-moddle colapsa los `xsd:boolean` con `s === 'true'`, así que `"1"` (que en BPMN
- * interrumpe), `"TRUE"`, `""` y cualquier errata llegan al árbol ya convertidos en `false`,
+ * es verdadero), `"TRUE"`, `""` y cualquier errata llegan al árbol ya convertidos en `false`,
  * indistinguibles del `"false"` canónico. Un Map, no un objeto: así `cancelActivity="constructor"`
  * no hereda nada del prototipo.
  */
-const CANCEL_ACTIVITY = new Map<string, boolean>([
+const XSD_BOOLEAN = new Map<string, boolean>([
   ['true', true],
   ['1', true],
   ['false', false],
   ['0', false],
 ]);
 
-const NO_RAW_CANCEL: ReadonlyMap<string, string> = new Map();
+const NO_RAW_LITERALS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * What deciding the profile of one element needs from the container around it, gathered once per
+ * `walk`: which elements have an outgoing flow, the raw `xsd:boolean` literals read from the XML
+ * text, and the elements a supported event-based gateway brings into the profile (R-EVG-1).
+ */
+interface ProfileContext {
+  hasOutgoing: ReadonlySet<ModdleElement>;
+  /** `id del boundary -> literal en bruto de `cancelActivity``. */
+  rawCancel: ReadonlyMap<string, string>;
+  /** `id del event gateway -> literal en bruto de `instantiate``. */
+  rawInstantiate: ReadonlyMap<string, string>;
+  /** R-EVG-1: the supported event-based gateways and the branch catch events they arm. */
+  inProfile: ReadonlySet<ModdleElement>;
+}
+
+const NO_CONTEXT: ProfileContext = {
+  hasOutgoing: NO_OUTGOING,
+  rawCancel: NO_RAW_LITERALS,
+  rawInstantiate: NO_RAW_LITERALS,
+  inProfile: new Set(),
+};
 
 /**
  * ¿El borde interrumpe? `undefined` si `cancelActivity` trae un literal fuera de
- * `CANCEL_ACTIVITY`. Si el XML no declara el atributo manda el default de BPMN (interrumpe),
+ * `XSD_BOOLEAN`. Si el XML no declara el atributo manda el default de BPMN (interrumpe),
  * que es justo lo que da moddle.
  */
 function interruptingOf(
@@ -104,7 +135,7 @@ function interruptingOf(
   rawCancel: ReadonlyMap<string, string>,
 ): boolean | undefined {
   const raw = rawCancel.get(el.id);
-  return raw === undefined ? el.cancelActivity !== false : CANCEL_ACTIVITY.get(raw);
+  return raw === undefined ? el.cancelActivity !== false : XSD_BOOLEAN.get(raw);
 }
 
 /**
@@ -120,8 +151,7 @@ function interruptingOf(
  */
 function boundaryTimerHost(
   el: ModdleElement,
-  hasOutgoing: ReadonlySet<ModdleElement>,
-  rawCancel: ReadonlyMap<string, string> = NO_RAW_CANCEL,
+  ctx: ProfileContext = NO_CONTEXT,
 ): ModdleElement | undefined {
   const definitions = eventDefinitionsOf(el);
   const host = el.attachedToRef;
@@ -132,12 +162,75 @@ function boundaryTimerHost(
     host === undefined ||
     !TASK_TYPES.has(host.$type) ||
     unsupportedConstruction(host) !== undefined ||
-    !hasOutgoing.has(el) ||
-    interruptingOf(el, rawCancel) === undefined
+    !ctx.hasOutgoing.has(el) ||
+    interruptingOf(el, ctx.rawCancel) === undefined
   ) {
     return undefined;
   }
   return host;
+}
+
+/**
+ * R-EVG-1: is `el` a branch catch event an event-based gateway may arm? An
+ * `intermediateCatchEvent` with exactly one trigger, timer or message, exactly one incoming flow
+ * (the gateway's) and exactly one outgoing flow to continue through.
+ *
+ * The single incoming flow is what keeps the event a branch and nothing else: reachable only
+ * through its gateway, so no token can ever enter it as a plain timer and a message event never
+ * enters the profile on its own (§3).
+ */
+function isBranchCatchEvent(
+  el: ModdleElement,
+  inDegree: ReadonlyMap<ModdleElement, number>,
+  outDegree: ReadonlyMap<ModdleElement, number>,
+): boolean {
+  const definitions = eventDefinitionsOf(el);
+  return (
+    el.$type === 'bpmn:IntermediateCatchEvent' &&
+    el.parallelMultiple !== true &&
+    definitions.length === 1 &&
+    BRANCH_EVENT_DEFINITIONS.has(definitions[0]!.$type) &&
+    inDegree.get(el) === 1 &&
+    outDegree.get(el) === 1
+  );
+}
+
+/**
+ * R-EVG-1: the `bpmn:eventBasedGateway`s of this container that enter the profile, with the
+ * branch events they arm. A gateway enters only if it is exclusive (`eventGatewayType` absent or
+ * `"Exclusive"`), does not instantiate the process (`instantiate` absent, `"false"` or `"0"`) and
+ * **every** one of its outgoing flows goes to a branch catch event (`isBranchCatchEvent`).
+ *
+ * All-or-nothing on purpose: a gateway with one task among its branches stays `E-NOSOP` whole
+ * (§3), instead of simulating half of it. `instantiate` is read from the raw XML literal for the
+ * same reason as `cancelActivity` (see `XSD_BOOLEAN`): moddle collapses `"1"`, which means
+ * *true*, into `false`.
+ */
+function eventGatewayProfile(
+  container: ModdleElement,
+  targets: ReadonlyMap<ModdleElement, ModdleElement[]>,
+  inDegree: ReadonlyMap<ModdleElement, number>,
+  outDegree: ReadonlyMap<ModdleElement, number>,
+  rawInstantiate: ReadonlyMap<string, string>,
+): Set<ModdleElement> {
+  const inProfile = new Set<ModdleElement>();
+  for (const el of container.flowElements ?? []) {
+    if (el.$type !== 'bpmn:EventBasedGateway') continue;
+    const raw = rawInstantiate.get(el.id);
+    const instantiate = raw === undefined ? el.instantiate === true : XSD_BOOLEAN.get(raw);
+    const branches = targets.get(el) ?? [];
+    if (
+      instantiate !== false ||
+      (el.eventGatewayType !== undefined && el.eventGatewayType !== 'Exclusive') ||
+      branches.length === 0 ||
+      !branches.every((branch) => isBranchCatchEvent(branch, inDegree, outDegree))
+    ) {
+      continue;
+    }
+    inProfile.add(el);
+    for (const branch of branches) inProfile.add(branch);
+  }
+  return inProfile;
 }
 
 /**
@@ -147,13 +240,13 @@ function boundaryTimerHost(
  */
 function unsupportedConstruction(
   el: ModdleElement,
-  hasOutgoing: ReadonlySet<ModdleElement> = NO_OUTGOING,
-  rawCancel: ReadonlyMap<string, string> = NO_RAW_CANCEL,
+  ctx: ProfileContext = NO_CONTEXT,
 ): UnsupportedConstruction | undefined {
+  // R-EVG-1: a supported event-based gateway and the branch events it arms are already in the
+  // profile, so neither the `eventBasedGateway` row nor the `messageEvent` one applies to them.
+  if (ctx.inProfile.has(el)) return undefined;
   if (el.$type === 'bpmn:BoundaryEvent') {
-    return boundaryTimerHost(el, hasOutgoing, rawCancel) === undefined
-      ? 'boundaryEvent'
-      : undefined;
+    return boundaryTimerHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
   }
   if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
 
@@ -213,8 +306,14 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       return 'start';
     case 'bpmn:EndEvent':
       return hasEventDefinition(el, 'bpmn:TerminateEventDefinition') ? 'terminate' : 'end';
+    // R-EVG-2: a branch event of an event-based gateway is a delay too, message or timer alike;
+    // only the branch of a supported gateway gets here with a message trigger (R-EVG-1).
     case 'bpmn:IntermediateCatchEvent':
-      return hasEventDefinition(el, 'bpmn:TimerEventDefinition') ? 'timer' : undefined;
+      return eventDefinitionsOf(el).some((definition) =>
+        BRANCH_EVENT_DEFINITIONS.has(definition.$type),
+      )
+        ? 'timer'
+        : undefined;
     // Solo llega aquí el boundary que ya pasó por `boundaryTimerHost` (R-BND-1): es un retardo
     // más, con la diferencia de que su token lo arma el host en vez de un flujo entrante.
     case 'bpmn:BoundaryEvent':
@@ -275,6 +374,8 @@ interface Collector {
   boundaryHosts: Map<string, { host: ModdleElement; interrupting: boolean }>;
   /** `id del boundary -> literal en bruto de `cancelActivity``, leído del texto del XML. */
   rawCancel: ReadonlyMap<string, string>;
+  /** `id del event gateway -> literal en bruto de `instantiate``, leído del texto del XML. */
+  rawInstantiate: ReadonlyMap<string, string>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -338,10 +439,32 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
 
   // Un boundary solo entra al perfil si tiene por dónde seguir (R-BND-1), y sus flujos viven en
   // este mismo contenedor. Los `<bpmn:outgoing>` del elemento no sirven: son opcionales en el XML.
+  // R-EVG-1 needs more of the same walk over the flows: who each one reaches, and how many flows
+  // enter and leave every element.
   const hasOutgoing = new Set<ModdleElement>();
+  const targets = new Map<ModdleElement, ModdleElement[]>();
+  const inDegree = new Map<ModdleElement, number>();
+  const outDegree = new Map<ModdleElement, number>();
+  const bump = (counts: Map<ModdleElement, number>, el: ModdleElement): void => {
+    counts.set(el, (counts.get(el) ?? 0) + 1);
+  };
   for (const el of container.flowElements ?? []) {
-    if (el.$type === 'bpmn:SequenceFlow' && el.sourceRef !== undefined) hasOutgoing.add(el.sourceRef);
+    if (el.$type !== 'bpmn:SequenceFlow') continue;
+    if (el.sourceRef !== undefined) {
+      hasOutgoing.add(el.sourceRef);
+      bump(outDegree, el.sourceRef);
+    }
+    if (el.targetRef !== undefined) bump(inDegree, el.targetRef);
+    if (el.sourceRef === undefined || el.targetRef === undefined) continue;
+    targets.set(el.sourceRef, [...(targets.get(el.sourceRef) ?? []), el.targetRef]);
   }
+
+  const ctx: ProfileContext = {
+    hasOutgoing,
+    rawCancel: c.rawCancel,
+    rawInstantiate: c.rawInstantiate,
+    inProfile: eventGatewayProfile(container, targets, inDegree, outDegree, c.rawInstantiate),
+  };
 
   for (const el of container.flowElements ?? []) {
     c.order.set(el, c.order.size);
@@ -352,7 +475,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     }
     if (el.default) c.defaultFlowIds.add(el.default.id);
 
-    const construction = unsupportedConstruction(el, hasOutgoing, c.rawCancel);
+    const construction = unsupportedConstruction(el, ctx);
 
     // Solo se aplana el subproceso embebido sin ningún detalle fuera de perfil. En particular,
     // los marcadores y quantities deben sobrevivir hasta `validate` como E-NOSOP (LILA-163).
@@ -534,11 +657,13 @@ const NO_ES_MARKUP = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g;
 const PROCESS_ID_ATTR = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)')/;
 
 /**
- * Apertura de un `<…boundaryEvent …>`, con sus atributos capturados y con cualquier prefijo. La
+ * Apertura de un `<…localName …>`, con sus atributos capturados y con cualquier prefijo. La
  * captura entiende las comillas: un `>` crudo dentro de un valor (`name="Plazo > 2 días"`) es XML
  * válido y no cierra la etiqueta (hallazgo del QA de #361).
  */
-const BOUNDARY_TAG = /<(?:[\w.-]+:)?boundaryEvent(?![\w.-])((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+function startTagRegex(localName: string): RegExp {
+  return new RegExp(`<(?:[\\w.-]+:)?${localName}(?![\\w.-])((?:[^>"']|"[^"]*"|'[^']*')*)>`, 'g');
+}
 
 /**
  * Los atributos de esa apertura, uno a uno y en orden: `name="…"` o `name='…'`. Se recorren en
@@ -548,25 +673,26 @@ const BOUNDARY_TAG = /<(?:[\w.-]+:)?boundaryEvent(?![\w.-])((?:[^>"']|"[^"]*"|'[
 const ATTR = /([\w.:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /**
- * `id del boundary -> literal en bruto de `cancelActivity``, en un solo barrido del XML **ya
- * saneado** (así los ids coinciden con los de moddle). Los bordes que no declaran el atributo no
- * aparecen en el mapa, que es lo que `interruptingOf` lee como "ausente".
+ * `id del elemento -> literal en bruto de `attribute``, en un solo barrido del XML **ya saneado**
+ * (así los ids coinciden con los de moddle) sobre las aperturas de `<…localName …>`. Los
+ * elementos que no declaran el atributo no aparecen en el mapa, que es lo que `interruptingOf`
+ * (y `eventGatewayProfile`) leen como "ausente".
  *
  * ponytail: existe solo porque moddle colapsa los literales de `xsd:boolean` y el original ya no
  * se puede recuperar del árbol — `$attrs` guarda los atributos desconocidos y `cancelActivity`
- * está en el metamodelo, así que ahí tampoco queda.
+ * e `instantiate` están en el metamodelo, así que ahí tampoco quedan.
  */
-function boundaryCancelLiterals(xml: string): Map<string, string> {
+function rawAttributeLiterals(xml: string, localName: string, attribute: string): Map<string, string> {
   const literals = new Map<string, string>();
-  for (const [, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(BOUNDARY_TAG)) {
+  for (const [, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(startTagRegex(localName))) {
     let id: string | undefined;
-    let cancel: string | undefined;
+    let raw: string | undefined;
     for (const [, name, dq, sq] of attrs.matchAll(ATTR)) {
       if (name === 'id') id ??= dq ?? sq;
-      else if (name === 'cancelActivity') cancel ??= dq ?? sq;
+      else if (name === attribute) raw ??= dq ?? sq;
     }
-    if (id === undefined || cancel === undefined) continue;
-    literals.set(id, cancel);
+    if (id === undefined || raw === undefined) continue;
+    literals.set(id, raw);
   }
   return literals;
 }
@@ -719,7 +845,8 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     order: new Map(),
     unsupportedEls: new Set(),
     boundaryHosts: new Map(),
-    rawCancel: boundaryCancelLiterals(xml),
+    rawCancel: rawAttributeLiterals(xml, 'boundaryEvent', 'cancelActivity'),
+    rawInstantiate: rawAttributeLiterals(xml, 'eventBasedGateway', 'instantiate'),
     unsupported: [],
   };
 

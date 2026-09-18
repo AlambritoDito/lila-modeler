@@ -297,7 +297,12 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     if (node.type === 'start') starts.push(id);
     if (node.type === 'end' || node.type === 'terminate') hasEnd = true;
 
-    if (node.type === 'xor' || node.type === 'or' || node.type === 'and') {
+    if (
+      node.type === 'xor' ||
+      node.type === 'or' ||
+      node.type === 'and' ||
+      node.type === 'eventGateway'
+    ) {
       // Un gateway con una entrada y una salida es pass-through legítimo (R-AND-6, R-PERF-2):
       // solo se exige que tenga al menos una de cada.
       if (node.incoming.length === 0 || node.outgoing.length === 0) {
