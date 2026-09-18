@@ -1068,7 +1068,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       />}
       <header className="barra">
         <div className="identidad">
-          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="26" height="26" />
+          <img className="logo" src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`} alt="" aria-hidden="true" width="26" height="26" />
           {/* En Electron el nombre del producto ya va en la barra de título del sistema
               (diseño 2d): repetirlo aquí encima del icono sería ruido. */}
           {!DESKTOP && <span className="producto">{S.app.marca}</span>}

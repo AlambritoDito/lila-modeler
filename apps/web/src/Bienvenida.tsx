@@ -52,7 +52,7 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
       <div className="bienvenida-izq">
         <div>
           <div className="bienvenida-marca">
-            <img src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" width="38" height="38" />
+            <img src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`} alt="" width="38" height="38" />
             <div><strong>{S.nombre}</strong><span>{S.subtitulo(version)}</span></div>
           </div>
           <h2>{S.empezar}</h2>
