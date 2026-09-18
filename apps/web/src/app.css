@@ -79,7 +79,6 @@ body {
   flex: none;
   height: 32px;
   width: 32px;
-  border-radius: 7px;
   object-fit: contain;
 }
 

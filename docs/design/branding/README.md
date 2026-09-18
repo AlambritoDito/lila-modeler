@@ -10,6 +10,16 @@ and detailed nose and fur. The owner selected this illustrated design in Septemb
 2026. Do not substitute the simplified or faceted experiments. These are raster PNG
 masters, **not vectors**. The brand and associated logos remain subject to NOTICE.
 
+## Downloads
+
+- [Transparent Lila — full resolution, 1254 × 1254 PNG](sources/lila-transparent.png).
+- [Transparent Lila — web, 256 × 256 PNG](web/lila-transparent.png).
+
+Both files are versioned in GitHub. The web export is also included in the product
+site and browser/desktop editor builds at `branding/lila-transparent.png`.
+Changes reach the public site after merge and a successful Pages deployment;
+an installed desktop app receives them with its next build or update.
+
 ## Sources and usage
 
 `sources/lila-original.png` preserves the selected illustration unchanged.
@@ -21,7 +31,17 @@ variants can contain small drawing differences. `explorations/` archives the rej
 simplification for provenance only; it is never used by the application.
 
 - App and favicon: `web/app-icon.png`, `web/icon-*.png`, `web/favicon.ico`.
-- Product header: icon with adjacent text; hero and startup: horizontal logo.
+- Editor toolbar, welcome view and product header: `web/lila-transparent.png`
+  with adjacent text. Hero and startup: horizontal logo on white.
+- `sources/lila-transparent.png` is the 1254 × 1254 transparent PNG approved on
+  2026-09-18, extracted from the original with the built-in image editor. It is a
+  separate raster derivative, not a pixel-identical mask or a vector master.
+  Use it when Lila should sit directly on a surface without the purple tile.
+  The 256 × 256 web export preserves alpha; scale it proportionally without
+  clipping, recoloring, CSS filters, shadows or a rounded container. Check its
+  outline on light and dark surfaces. Use the full-resolution source for larger
+  compositions. Native icons and favicons retain their purple background.
+  Regenerate sizes with the export script, never with another AI edit.
 - Keep the horizontal logo's white background on a white surface. Never recolor the
   face, crop the ears, stretch the image, or animate the character.
 - The app uses the mark at 32 px. The horizontal logo works from about 280 px wide.

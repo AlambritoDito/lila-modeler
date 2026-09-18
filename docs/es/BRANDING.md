@@ -20,6 +20,21 @@ Los originales son raster, no vectores. La variante monocromática es alternativ
 Consulta la [decisión completa](../design/branding/DECISION.md) y la
 [guía de archivos y exportación](../design/branding/README.md).
 
+## Variante transparente — 18 de septiembre de 2026
+
+La variante aprobada `sources/lila-transparent.png` (1254 × 1254 px) contiene solo
+Lila con transparencia real. Se obtuvo del original con el editor de imágenes;
+es un derivado raster independiente, no una máscara idéntica píxel a píxel ni un
+vector. La barra del editor, la bienvenida y la cabecera del sitio utilizan
+`web/lila-transparent.png` (256 × 256 px), sobre la superficie de cada tema.
+
+Conserva las proporciones, el color y el canal alfa; no recortes las orejas ni
+apliques filtros, sombras o contenedores redondeados. Comprueba el contorno sobre
+fondos claros y oscuros. Para composiciones grandes usa el archivo fuente y para
+nuevos tamaños usa `tools/generate-branding.mjs`, sin regenerar el personaje.
+El favicon y los iconos de plataforma mantienen el fondo morado; el logo
+horizontal continúa sobre blanco en la presentación principal y el arranque.
+
 ## Instalación registrada
 
 El 14 de septiembre de 2026 se instaló en `/Applications/Lila Modeler.app` la versión
