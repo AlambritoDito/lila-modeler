@@ -423,10 +423,12 @@ export function compareWorkbook(
 
   const scenarioNames = entries.map((entry) => entry.scenario.name);
   const headers: string[] = ['Kpi', 'Scope', ID_COLUMN, NAME_COLUMN, METRIC_COLUMN];
-  // The five identity columns hold text; each scenario then adds numbers, and the relative delta
-  // is the only fraction of the sheet, so it is the one that goes in a percentage cell (#359).
+  // The five identity columns hold text; each scenario then adds numbers. Relative deltas
+  // always take percentages; service-level values and intervals override the defaults below.
   const formats: (CellFormat | undefined)[] = [undefined, undefined, undefined, undefined, undefined];
+  const serviceLevelColumns: number[] = [];
   for (const [index, name] of scenarioNames.entries()) {
+    serviceLevelColumns.push(headers.length, headers.length + 1, headers.length + 2);
     headers.push(name, C.xlsxCi95Low(name), C.xlsxCi95High(name));
     formats.push('number', 'number', 'number');
     if (index > 0) {
@@ -434,6 +436,19 @@ export function compareWorkbook(
       formats.push('number', 'percent', undefined);
     }
   }
+
+  // rowFormats replaces the entire row, so retain the delta and identity column formats.
+  // Absolute deltas stay in fraction units (value - base), with the existing 0.### display:
+  // small differences may still round visually. Relative deltas remain (value - base) / base
+  // displayed as 0.00%. Neither stored delta changes (#367).
+  const serviceLevelFormats = [...formats];
+  for (const column of serviceLevelColumns) serviceLevelFormats[column] = 'percent';
+  const rowFormats = comparison.rows.map((row) =>
+    row.metric === 'withinServiceLevel' ||
+    (row.metric.startsWith('byEndEvent.') && row.metric.endsWith('.withinServiceLevel'))
+      ? serviceLevelFormats
+      : undefined,
+  );
 
   const ci95Of = (index: number, kpi: string): readonly [number, number] | undefined =>
     entries[index]?.result.replications?.kpis?.[kpi]?.ci95;
@@ -460,5 +475,5 @@ export function compareWorkbook(
     return cells;
   });
 
-  return workbook([...summaries, { formats, headers, name: C.xlsxSheetComparison(), rows }]);
+  return workbook([...summaries, { formats, headers, name: C.xlsxSheetComparison(), rowFormats, rows }]);
 }

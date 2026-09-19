@@ -19,7 +19,7 @@ import { simulate, type ProcessIR, type RunResult } from '../src/index.js';
 import { elementsCsv } from '../src/csv.js';
 import { loadResolvedScenario } from '../src/cli-shared.js';
 import type { ResolvedScenario } from '../src/scenario.js';
-import { escapeXml, sheetName, uniqueSheetNames, workbook } from '../src/xlsx.js';
+import { columnName, escapeXml, sheetName, uniqueSheetNames, workbook } from '../src/xlsx.js';
 import { compareWorkbook, payrollRows, scenarioWorkbook } from '../src/xlsx-report.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -380,8 +380,122 @@ describe('workbook of a comparison', () => {
     expect(Number(row[5])).toBe(comparison.rows[cycleTime]!.values[0]);
   });
 
-  // #359 — the relative delta is a fraction (`0.153`), so it is the one cell of the workbook that
-  // goes in a percentage format; the reader shows `15.30 %` without the value changing.
+  // #367: synthetic export fixtures derived from the public pedido demo. The controlled
+  // fractions and intervals exercise display precision, not the statistical aggregation.
+  test('service-level values and confidence bounds use percentages without rounding stored fractions', async () => {
+    const ir = await pedidoIr();
+    const fractions = [0.001004, 0.000858, 0.0002];
+    const intervals: [number, number][] = [[0.0009, 0.001108], [0.0007, 0.001016], [0.0001, 0.0003]];
+    const entries = fractions.map((fraction, index) => {
+      const base = pedidoScenario('as-is.scenario.json', 3);
+      const scenario = { ...base, name: `Scenario ${index}`, run: { ...base.run, serviceLevel: 1800 } };
+      const result = simulate(ir, scenario, { log: false });
+      result.process.withinServiceLevel = fraction;
+      for (const outcome of Object.values(result.process.byEndEvent ?? {})) {
+        outcome.withinServiceLevel = fraction;
+      }
+      for (const [kpi, summary] of Object.entries(result.replications!.kpis)) {
+        if (kpi.endsWith('.withinServiceLevel')) {
+          result.replications!.kpis[kpi] = { ...summary, mean: fraction, ci95: intervals[index]! };
+        }
+      }
+      return { scenario, result };
+    });
+    const comparison = compare(entries.map((entry) => entry.result));
+    const files = parts(compareWorkbook(ir, entries, comparison));
+    const sheet = files['xl/worksheets/sheet4.xml']!;
+    const rows = sheetRows(sheet);
+    const styles = sheetStyles(sheet);
+    const headers = rows[0]!;
+    expect(headers).toEqual([
+      'Kpi', 'Scope', 'Id', 'Name', 'Metric',
+      ...entries.flatMap(({ scenario: { name } }, index) => [
+        name, `CI95 low ${name}`, `CI95 high ${name}`,
+        ...(index === 0 ? [] : [`Delta ${name}`, `Delta % ${name}`, `CI95 overlap ${name}`]),
+      ]),
+    ]);
+    expect(styles[0]).toEqual(headers.map(() => ''));
+    const xfs = files['xl/styles.xml']!.match(/<cellXfs[^>]*>(.*?)<\/cellXfs>/)![1]!;
+    expect([...xfs.matchAll(/<xf [^>]*numFmtId="(\d+)"[^>]*\/>/g)][2]?.[1]).toBe('10');
+
+    const serviceRows = comparison.rows.filter((row) => row.kpi.endsWith('.withinServiceLevel'));
+    expect(serviceRows.some((row) => row.kpi === 'process.withinServiceLevel')).toBe(true);
+    expect(serviceRows.some((row) => row.kpi.startsWith('process.byEndEvent.'))).toBe(true);
+    for (const row of serviceRows) {
+      const rowIndex = rows.findIndex((cells) => cells[0] === row.kpi);
+      expect(rowIndex).toBeGreaterThan(0);
+      for (const [index, entry] of entries.entries()) {
+        const column = headers.indexOf(entry.scenario.name);
+        const expected = [fractions[index]!, ...intervals[index]!];
+        expected.forEach((value, offset) => {
+          expect(styles[rowIndex]?.[column + offset]).toBe('2');
+          expect(Number(rows[rowIndex]?.[column + offset])).toBe(value);
+          // Exact numeric OOXML: no text conversion, scaling or pre-rounding.
+          expect(sheet).toContain(`<c r="${columnName(column + offset)}${rowIndex + 1}" s="2"><v>${value}</v></c>`);
+        });
+        if (index === 0) continue;
+        const absolute = fractions[index]! - fractions[0]!;
+        expect(styles[rowIndex]?.[column + 3]).toBe('1');
+        expect(Number(rows[rowIndex]?.[column + 3])).toBe(absolute);
+        expect(styles[rowIndex]?.[column + 4]).toBe('2');
+        expect(Number(rows[rowIndex]?.[column + 4])).toBe(absolute / fractions[0]!);
+        expect(styles[rowIndex]?.[column + 5]).toBe('');
+        expect(sheet).toContain(`<c r="${columnName(column + 5)}${rowIndex + 1}" t="b"><v>${index === 1 ? 1 : 0}</v></c>`);
+      }
+    }
+    // Every unrelated metric retains numeric values and its existing column formats.
+    for (const [index, row] of comparison.rows.entries()) {
+      if (row.kpi.endsWith('.withinServiceLevel')) continue;
+      for (const [scenarioIndex, entry] of entries.entries()) {
+        const column = headers.indexOf(entry.scenario.name);
+        expect(styles[index + 1]?.[column]).toBe('1');
+        expect(Number(rows[index + 1]?.[column])).toBe(row.values[scenarioIndex]);
+        expect(styles[index + 1]?.slice(column + 1, column + 3)).toEqual(['1', '1']);
+      }
+    }
+    for (const [index, entry] of entries.entries()) {
+      const summary = files[`xl/worksheets/sheet${index + 1}.xml`]!;
+      const standalone = parts(scenarioWorkbook(ir, entry.scenario, entry.result));
+      expect(summary).toBe(standalone['xl/worksheets/sheet1.xml']);
+      sheetRows(summary).forEach((row, rowIndex) => {
+        if (row[3] !== 'Within service level') return;
+        expect(sheetStyles(summary)[rowIndex]?.[4]).toBe('2');
+        expect(Number(row[4])).toBe(fractions[index]);
+      });
+    }
+  });
+
+  test('service-level comparisons preserve missing intervals and absent metrics', async () => {
+    const ir = await pedidoIr();
+    const entries = [true, true, false].map((withTarget, index) => {
+      const base = pedidoScenario('as-is.scenario.json', 1);
+      const scenario = {
+        ...base, name: `Scenario ${index}`,
+        run: { ...base.run, ...(withTarget ? { serviceLevel: 1800 } : {}) },
+      };
+      return { scenario, result: simulate(ir, scenario, { log: false }) };
+    });
+    const comparison = compare(entries.map((entry) => entry.result));
+    const files = parts(compareWorkbook(ir, entries, comparison));
+    const sheet = files['xl/worksheets/sheet4.xml']!;
+    const rows = sheetRows(sheet);
+    const styles = sheetStyles(sheet);
+    const rowIndex = rows.findIndex((row) => row[0] === 'process.withinServiceLevel');
+    expect(rowIndex).toBeGreaterThan(0);
+    expect(styles[rowIndex]?.[5]).toBe('2');
+    expect(styles[rowIndex]?.[8]).toBe('2');
+    // No CI means absent low/high and overlap cells, never zero or false. The third
+    // scenario has no target, so its value and both deltas must also remain absent.
+    for (const column of [6, 7, 9, 10, 13, 14, 15, 16, 17, 18, 19]) {
+      expect(sheet).not.toContain(`<c r="${columnName(column)}${rowIndex + 1}"`);
+    }
+    const withoutTarget = entries.slice(2);
+    const withoutTargetFiles = parts(compareWorkbook(ir, withoutTarget, compare(withoutTarget.map((entry) => entry.result))));
+    expect(withoutTargetFiles['xl/worksheets/sheet2.xml']).not.toContain('withinServiceLevel');
+    expect(withoutTargetFiles['xl/worksheets/sheet1.xml']).not.toContain('Within service level');
+  });
+
+  // #359 — the relative delta is a fraction (`0.153`), so it takes a percentage format; the reader shows `15.30 %` without the value changing.
   test('the relative delta is a percentage cell and the rest readable numbers', async () => {
     const ir = await pedidoIr();
     const entries = ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json'].map((file) => {
