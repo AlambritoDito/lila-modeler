@@ -520,3 +520,66 @@ test('an event-based gateway inside an embedded sub-process survives flattening'
   expect(result.process).toMatchObject({ started: 1, completed: 1, inFlight: 0 });
   expect(result.process.cycleTime.max).toBe(40);
 });
+
+// #369: synthetic races above isolate routing from the ignored flow probabilities.
+test.each(['timer', 'message'] as const)(
+  'R-EVG-3 — %s race ignores opposite probabilities and warns once per declared flow',
+  async (trigger) => {
+    const ir = await irOf(definitions(carrera(trigger)));
+    for (const locale of ['en', 'es'] as const) {
+      const scenario = escenario(90, 240);
+      scenario.elements!.Start_Proceso = { triggerCount: 3 };
+      const baseline = simulate(ir, scenario, { locale });
+      expect(baseline.warnings.filter((warning) => warning.startsWith('W-PROB-IGNORADA:'))).toEqual([]);
+      const result = simulate(ir, {
+        ...scenario,
+        elements: {
+          ...scenario.elements,
+          Flow_Espera_Respuesta: { probability: 0 },
+          Flow_Espera_Plazo: { probability: 1 },
+        },
+      }, { locale });
+      const warnings = result.warnings.filter((warning) => warning.startsWith('W-PROB-IGNORADA:'));
+      expect(warnings).toEqual(['Flow_Espera_Respuesta', 'Flow_Espera_Plazo'].map((flowId) =>
+        locale === 'en'
+          ? `W-PROB-IGNORADA: ${flowId}: it leaves an event-based gateway (Gateway_Espera); probability is ignored because the event race determines the route.`
+          : `W-PROB-IGNORADA: ${flowId}: sale de un gateway basado en eventos (Gateway_Espera); probability se ignora porque la carrera entre eventos determina la ruta.`,
+      ));
+      expect(result.flows.Flow_Espera_Respuesta?.count).toBe(3);
+      expect(result.flows.Flow_Espera_Plazo?.count).toBe(0);
+      const { warnings: ignoredResultWarnings, ...actual } = result;
+      const { warnings: ignoredBaselineWarnings, ...expected } = baseline;
+      expect(actual).toEqual(expected);
+      expect(ignoredResultWarnings.filter((warning) => !warnings.includes(warning)))
+        .toEqual(ignoredBaselineWarnings);
+    }
+  },
+);
+
+test.each(['parallelGateway', 'exclusiveGateway', 'inclusiveGateway'] as const)(
+  '#369 — %s preserves its probability warning behavior',
+  async (gatewayType) => {
+    const ir = await irOf(definitions(carrera('timer').replace('bpmn:eventBasedGateway', `bpmn:${gatewayType}`)));
+    for (const locale of ['en', 'es'] as const) {
+      const scenario = escenario(90, 240);
+      const baseline = simulate(ir, scenario, { locale });
+      expect(baseline.warnings.filter((warning) => warning.startsWith('W-PROB-IGNORADA:'))).toEqual([]);
+      const result = simulate(ir, {
+        ...scenario,
+        elements: {
+          ...scenario.elements,
+          Flow_Espera_Respuesta: { probability: 0 },
+          Flow_Espera_Plazo: { probability: 1 },
+        },
+      }, { locale });
+      const warnings = result.warnings.filter((warning) => warning.startsWith('W-PROB-IGNORADA:'));
+      expect(warnings).toEqual(gatewayType === 'parallelGateway'
+        ? ['Flow_Espera_Respuesta', 'Flow_Espera_Plazo'].map((flowId) => locale === 'en'
+          ? `W-PROB-IGNORADA: ${flowId}: it leaves a parallel gateway (Gateway_Espera); probability is ignored.`
+          : `W-PROB-IGNORADA: ${flowId}: sale de un gateway paralelo (Gateway_Espera); probability se ignora.`)
+        : []);
+      expect(result.flows.Flow_Espera_Respuesta?.count).toBe(gatewayType === 'parallelGateway' ? 1 : 0);
+      expect(result.flows.Flow_Espera_Plazo?.count).toBe(1);
+    }
+  },
+);

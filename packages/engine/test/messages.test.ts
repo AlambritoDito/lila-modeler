@@ -237,3 +237,19 @@ function typeScriptFiles(root: string): string[] {
   }
   return files.sort();
 }
+
+describe('#369 — blocked-token singular and plural messages', () => {
+  test.each([
+    [1, '1 case was', '1 caso quedó'],
+    [2, '2 cases were', '2 casos quedaron'],
+  ] as const)('%i case(s), both variants and locales', (count, english, spanish) => {
+    expect(en.codes['W-JOIN-BLOQUEADO']('Join', count))
+      .toBe(`Join: ${english} left with tokens waiting at the join.`);
+    expect(es.codes['W-JOIN-BLOQUEADO']('Join', count))
+      .toBe(`Join: ${spanish} con tokens esperando en el join.`);
+    expect(en.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
+      .toBe(`Gateway: no branch event declares processingTime; ${english} left with their token waiting at the gateway.`);
+    expect(es.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
+      .toBe(`Gateway: ninguna rama declara processingTime; ${spanish} con su token esperando en la compuerta.`);
+  });
+});

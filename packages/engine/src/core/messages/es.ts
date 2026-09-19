@@ -74,6 +74,8 @@ export const coreEs: CoreCatalog = {
       `${nodeId}: el start no declara interTriggerTimer ni triggerCount y no genera casos.`,
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
       `${flowId}: sale de un gateway paralelo (${gatewayId}); probability se ignora.`,
+    'W-PROB-IGNORADA/event': (flowId, gatewayId) =>
+      `${flowId}: sale de un gateway basado en eventos (${gatewayId}); probability se ignora porque la carrera entre eventos determina la ruta.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: sin processingTime; retarda 0 segundos.`,
     'W-TIMER-SIN-TIEMPO/rama': (nodeId, gatewayId) =>
       `${nodeId}: sin processingTime; nunca dispara como rama de ${gatewayId}.`,
@@ -82,9 +84,9 @@ export const coreEs: CoreCatalog = {
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de fork; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
-      `${nodeId}: ${cases} casos quedaron con tokens esperando en el join.`,
+      `${nodeId}: ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con tokens esperando en el join.`,
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
-      `${nodeId}: ninguna rama declara processingTime; ${cases} casos quedaron con su token esperando en la compuerta.`,
+      `${nodeId}: ninguna rama declara processingTime; ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con su token esperando en la compuerta.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho})`,

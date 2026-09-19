@@ -76,6 +76,7 @@ export interface CoreCodeMessages {
   'W-OR-VACIO': (gatewayId: string) => string;
   'W-START-SIN-LLEGADAS': (nodeId: string) => string;
   'W-PROB-IGNORADA': (flowId: string, gatewayId: string) => string;
+  'W-PROB-IGNORADA/event': (flowId: string, gatewayId: string) => string;
   'W-TIMER-SIN-TIEMPO': (nodeId: string) => string;
   /** R-EVG-5: variant for a branch event of an event-based gateway, which never fires instead. */
   'W-TIMER-SIN-TIEMPO/rama': (nodeId: string, gatewayId: string) => string;
