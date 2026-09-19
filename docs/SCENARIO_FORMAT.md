@@ -56,6 +56,15 @@ Unknown keys are not accepted at the root (`strict`): a misspelled field is an e
 
 ² At least one of `run.duration` or a `triggerCount` on a `start` in `elements` (rule R6). If both are present, whichever occurs first wins.
 
+### Runtime work protection (#368)
+
+`run.duration` limits simulated time, not the amount of work at one instant. R-TOK-7
+in `SEMANTICS.md` independently limits effective events per case and instant, including
+zero-duration timers, and aborts with `E-LIMITE-SIN-AVANCE` when exceeded. The budget is
+`max(100_000, 1_024 × (IR nodes + IR flows))`, resets on time advancement, and is not a
+scenario field. Exceptionally expensive finite cases can exceed it. Timer defaults and
+R-DEG-3 are unchanged; event-gateway branches without a time still never fire.
+
 ### 2.3 `calendars`
 
 Map `key → { intervals: [...] }`. The key is the identifier cited by `resources[*].calendar` and `elements[*].calendar`. The key `default` is the calendar taken by **every pool** that does not declare its own (R-CAL-10); elements do not inherit it.

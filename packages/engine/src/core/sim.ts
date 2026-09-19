@@ -487,6 +487,9 @@ interface ActivityState {
 
 /** Estado vivo de un caso mientras corre. */
 interface CaseState {
+  /** R-TOK-7: effective events at this case's latest simulated instant. */
+  instant: number;
+  instantEvents: number;
   readonly id: number;
   readonly startId: string;
   readonly startedAt: number;
@@ -544,6 +547,11 @@ export function runReplication(
   const tStop = scenario.run.duration ?? Infinity;
   const seed = scenario.run.seed ?? 1;
   const warmup = scenario.run.warmup ?? 0;
+  // R-TOK-7: independent of arrival count; larger graphs get a larger work budget.
+  const instantEventLimit = Math.max(
+    100_000,
+    1_024 * (Object.keys(ir.nodes).length + Object.keys(ir.flows).length),
+  );
 
   // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
   assertSupportedResourceScenario(scenario, locale);
@@ -1041,6 +1049,8 @@ export function runReplication(
     if (next.kind === 'arrive') {
       const caseId = caseStates.length + 1; // R-TOK-2: entero monótono en orden de llegada.
       caseStates.push({
+        instant: next.t,
+        instantEvents: 0,
         id: caseId,
         startId: next.startId,
         startedAt: next.t,
@@ -1090,6 +1100,18 @@ export function runReplication(
     if (state === undefined || !state.alive) continue;
     const node = ir.nodes[next.nodeId];
     if (node === undefined) continue;
+    // Check only effective case events, after lazy cancellation and node lookup.
+    // Exact comparison preserves every representable advance, however small.
+    if (next.t > state.instant) {
+      state.instant = next.t;
+      state.instantEvents = 0;
+    }
+    if (state.instantEvents >= instantEventLimit) {
+      throw new Error(coded('E-LIMITE-SIN-AVANCE', M['E-LIMITE-SIN-AVANCE'](
+        next.nodeId, next.caseId, replication, next.t, instantEventLimit,
+      )));
+    }
+    state.instantEvents += 1;
     const counters = elements[next.nodeId]!;
 
     if (next.kind === 'done') {

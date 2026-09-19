@@ -7,6 +7,8 @@ import type { CoreCatalog } from './types.js';
 
 export const coreEn: CoreCatalog = {
   codes: {
+    'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
+      `${nodeId}: case ${caseId}, replication ${replication}, time ${instant} s: the limit of ${limit} events without time advancing was reached. Review cycles and processing times.`,
     'E-ID-DUPLICADO': (id) => `${id}: the id is declared both as a node and as a flow.`,
     'E-REF-INEXISTENTE/entrante': (id, flowId) =>
       `${id}: the incoming flow ${flowId} does not exist in the process.`,

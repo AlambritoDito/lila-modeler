@@ -12,6 +12,16 @@ Unidades, salvo que se indique otra cosa:
 
 `RunResult` es la salida de `simulate(ir, scenario, opts)` (`packages/engine/src/core/run.ts`, ver sección 6 del documento de estructura). Se agrega tras correr una o más replicaciones (`scenario.run.replications`) y, cuando hay más de una, cada métrica numérica lleva además su resumen entre replicaciones (`replications`/`ci95`, ver más abajo).
 
+### Fallo durante la ejecución sin avance temporal (#368)
+
+Si R-TOK-7 agota el presupuesto de trabajo de un caso, `runReplication` y `simulate`
+lanzan `E-LIMITE-SIN-AVANCE`. No devuelven `RunResult`, no ejecutan las réplicas siguientes
+y no representan el fallo como `cancelled` ni como advertencia. El mensaje identifica
+nodo BPMN, caso, réplica con índice desde cero, instante simulado en segundos y presupuesto.
+Los callbacks de streaming pueden haber recibido filas o progreso; esas observaciones
+son incompletas y no deben interpretarse como una ejecución exitosa. Los esquemas de
+resultados y log no cambian.
+
 ---
 
 ## 1. Estructura general

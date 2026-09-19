@@ -55,6 +55,16 @@ No se aceptan claves desconocidas en la raíz (`strict`): un campo mal escrito e
 
 ² Al menos uno de `run.duration` o un `triggerCount` en un `start` de `elements` (regla R6). Si están los dos, gana lo primero que ocurra.
 
+### Protección del trabajo durante la ejecución (#368)
+
+`run.duration` limita el tiempo simulado, no el trabajo en un instante. R-TOK-7 de
+`SEMANTICS.md` limita por separado los eventos efectivos por caso e instante, incluidos
+los temporizadores de duración cero, y aborta con `E-LIMITE-SIN-AVANCE` al superarlo.
+El presupuesto es `max(100_000, 1_024 × (nodos IR + flujos IR))`, se reinicia al avanzar
+el tiempo y no es un campo del escenario. Un caso finito excepcionalmente costoso puede
+superarlo. Los valores predeterminados y R-DEG-3 no cambian; las ramas de gateway de
+eventos sin tiempo siguen sin dispararse.
+
 ### 2.3 `calendars`
 
 Mapa `clave → { intervals: [...] }`. La clave es el identificador que citan `resources[*].calendar` y `elements[*].calendar`. La clave `default` es el calendario que toma **todo pool** que no declare el suyo (R-CAL-10); los elementos no la heredan.
