@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions" targetNamespace="urn:lila:replay-test">
+  <bpmn:process id="ConcurrentReplay" isExecutable="true">
+    <bpmn:startEvent id="Start" name="Start" />
+    <bpmn:task id="Host" name="Process request" />
+    <bpmn:boundaryEvent id="Boundary" name="Send reminder" attachedToRef="Host" cancelActivity="false">
+      <bpmn:timerEventDefinition id="Deadline" />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Reminder" name="Deliver reminder" />
+    <bpmn:endEvent id="HostEnd" name="Request processed" />
+    <bpmn:endEvent id="ReminderEnd" name="Reminder delivered" />
+    <bpmn:sequenceFlow id="StartHost" sourceRef="Start" targetRef="Host" />
+    <bpmn:sequenceFlow id="HostDone" sourceRef="Host" targetRef="HostEnd" />
+    <bpmn:sequenceFlow id="BoundaryReminder" sourceRef="Boundary" targetRef="Reminder" />
+    <bpmn:sequenceFlow id="ReminderDone" sourceRef="Reminder" targetRef="ReminderEnd" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="ConcurrentReplay">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="100" y="150" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Host_di" bpmnElement="Host"><dc:Bounds x="240" y="128" width="120" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_di" bpmnElement="Boundary"><dc:Bounds x="300" y="190" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Reminder_di" bpmnElement="Reminder"><dc:Bounds x="420" y="290" width="120" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="HostEnd_di" bpmnElement="HostEnd"><dc:Bounds x="570" y="150" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReminderEnd_di" bpmnElement="ReminderEnd"><dc:Bounds x="570" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="StartHost_di" bpmnElement="StartHost"><di:waypoint x="136" y="168" /><di:waypoint x="240" y="168" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="HostDone_di" bpmnElement="HostDone"><di:waypoint x="360" y="168" /><di:waypoint x="570" y="168" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BoundaryReminder_di" bpmnElement="BoundaryReminder"><di:waypoint x="318" y="226" /><di:waypoint x="318" y="330" /><di:waypoint x="420" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ReminderDone_di" bpmnElement="ReminderDone"><di:waypoint x="540" y="330" /><di:waypoint x="570" y="330" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

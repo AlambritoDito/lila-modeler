@@ -3,23 +3,11 @@
  * scrubbed over. No DOM, no bpmn-js, no React — `ReplayOverlay.ts` paints what this returns and
  * `Replay.tsx` drives the clock.
  *
- * The log is the engine's, not a toy walker: every number this module reports comes from
- * `EventLogRow` (docs/RESULTS_FORMAT.md § 7), so the counters at the end of the replay are the
- * same `elements[id].started/completed` the results table shows — that is the invariant
- * `replayModel.test.ts` pins on `packages/engine/test/fixtures/service-request`.
- *
- * Two things the log does NOT carry and this module infers from the IR graph:
- *
- * - **Flows, and the counters of the nodes that emit no rows.** Only tasks and timers emit rows;
- *   start/end events, gateways and sequence flows emit nothing, so their counters are derived
- *   from the inferred path of each case (`passages`): the start when the first activity of the
- *   case is enabled, a gateway when a path crosses it, an end event when the last *completed*
- *   activity of the case hands the token over. The path a token took between two consecutive elements of a case is recovered
- *   with a BFS over `ir.flows`, which is the shortest route through the gateways in between.
- *   // ponytail: BFS = the shortest path, not necessarily the one the case really took when two
- *   // routes join the same pair of tasks. Upgrade path: an `onEvent` that also emits flows.
- * - **Where a case ended.** The log has no end-event id per case, so the closing hop goes to the
- *   first end event reachable from the last element the case completed.
+ * Activity counters come directly from EventLogRow (docs/RESULTS_FORMAT.md § 7).
+ * Silent transitions are inferred only where the graph and observed activity occurrences
+ * identify them. Each completed occurrence can release a token; a case is not a linear list.
+ * End counters count tokens (result.elements), not case outcomes (process.byEndEvent).
+ * See README.md for the limits of inference without token, flow or boundary rows.
  *
  * State is computed by a full scan of the activities on every `stateAt` call instead of an
  * incremental cursor: 461 rows for the reference example, ~1 000 for a big one, which is nothing
@@ -36,17 +24,20 @@ export interface ReplayActivity {
   enabledAt: number;
   /** `null` while the token never got its resources before the horizon. */
   startedAt: number | null;
-  /** `endedAt` when it completed; `observedUntil` for `inFlight`/`terminated`. */
+  /** `endedAt` when it completed; `observedUntil` for `inFlight`/`terminated`/`interrupted`. */
   endAt: number;
   completed: boolean;
   /** Pool units held between `startedAt` and `endAt`, one entry per allocation row. */
   allocations: readonly { resourceId: string; quantity: number }[];
 }
 
-/** A case crossing a node that emits no log row: a start event, a gateway or an end event. */
+/** A token crossing a silent node: a start, gateway, boundary or end event. */
 export interface ReplayPassage {
   elementId: string;
-  /** Instant the token is counted at; these nodes have no duration, so started === completed. */
+  /** An AND join can receive a token without releasing one. Defaults to one of each. */
+  started?: number;
+  completed?: number;
+  /** Instant the token is counted at. */
   at: number;
 }
 
@@ -62,7 +53,7 @@ export interface Replay {
   moves: readonly ReplayMove[];
   /** Crossings of the nodes that emit no rows, recovered from the same inferred paths. */
   passages: readonly ReplayPassage[];
-  /** Elements that appear in the log, in first-seen order: the ones that get a counter. */
+  /** Observed elements followed by inferred silent nodes: the elements that get a counter. */
   elementIds: readonly string[];
   /** Capacity per pool referenced by the log. */
   pools: Readonly<Record<string, number>>;
@@ -121,52 +112,16 @@ function capacityOf(scenario: ResolvedScenario, id: string): number {
   return 0;
 }
 
-/** `from -> to` adjacency as flow ids, built once per `buildReplay`. */
-function outgoing(ir: ProcessIR): ReadonlyMap<string, readonly { flowId: string; to: string }[]> {
-  const map = new Map<string, { flowId: string; to: string }[]>();
-  // `ir.flows ?? {}`: the shell also builds a replay from whatever `parseBpmn` returned, and an
-  // IR without a graph (a stub, a model that failed to import) must leave the dots empty, not throw.
-  for (const [flowId, flow] of Object.entries(ir.flows ?? {})) {
-    const list = map.get(flow.from) ?? [];
-    list.push({ flowId, to: flow.to });
-    map.set(flow.from, list);
-  }
-  // A boundary timer has no incoming flow (R-BND-1), interrupting or not (R-BND-10): its branch
-  // hangs off the host task. Registering its outgoing flows under the host too keeps the replay
-  // hop from the task to the boundary branch findable.
-  for (const [nodeId, node] of Object.entries(ir.nodes ?? {})) {
-    if (node.attachedTo === undefined) continue;
-    const list = map.get(node.attachedTo) ?? [];
-    list.push(...(map.get(nodeId) ?? []));
-    map.set(node.attachedTo, list);
-  }
-  return map;
+/** Internal lifecycle evidence; the public activity view remains unchanged. */
+interface Occurrence extends ReplayActivity {
+  instanceId: string;
+  status: EventLogRow['status'];
 }
 
-/**
- * Shortest list of flow ids from `from` to `to` (BFS), or `null` when the graph does not connect
- * them — a log row of an element the diagram no longer has, say. `to` as a predicate covers "any
- * end event", which is how a case's closing hop is found.
- */
-function path(
-  edges: ReadonlyMap<string, readonly { flowId: string; to: string }[]>,
-  from: string,
-  reached: (id: string) => boolean,
-): readonly string[] | null {
-  if (reached(from)) return [];
-  const queue: { node: string; flows: string[] }[] = [{ node: from, flows: [] }];
-  const seen = new Set<string>([from]);
-  while (queue.length > 0) {
-    const current = queue.shift() as { node: string; flows: string[] };
-    for (const edge of edges.get(current.node) ?? []) {
-      if (seen.has(edge.to)) continue;
-      seen.add(edge.to);
-      const flows = [...current.flows, edge.flowId];
-      if (reached(edge.to)) return flows;
-      queue.push({ node: edge.to, flows });
-    }
-  }
-  return null;
+/** Only tasks and unattached timers emit rows. A boundary is an instantaneous transition. */
+function emitsRow(ir: ProcessIR, id: string): boolean {
+  const node = ir.nodes[id];
+  return node?.type === 'task' || (node?.type === 'timer' && node.attachedTo === undefined);
 }
 
 /**
@@ -182,7 +137,7 @@ export function buildReplay(
   scenario: ResolvedScenario,
   options: { truncated?: boolean } = {},
 ): Replay {
-  const byInstance = new Map<string, ReplayActivity>();
+  const byInstance = new Map<string, Occurrence>();
   const elementIds: string[] = [];
   const pools: Record<string, number> = {};
 
@@ -191,6 +146,8 @@ export function buildReplay(
     let activity = byInstance.get(row.activityInstanceId);
     if (activity === undefined) {
       activity = {
+        instanceId: row.activityInstanceId,
+        status: row.status,
         allocations: [],
         caseId: row.caseId,
         completed: row.status === 'completed',
@@ -216,77 +173,164 @@ export function buildReplay(
   const activities = [...byInstance.values()];
   const horizon = activities.reduce((max, a) => Math.max(max, a.endAt), 0);
   const travel = Math.max(horizon / TRAVEL_FRACTION, Number.EPSILON);
-  const edges = outgoing(ir);
-  const cache = new Map<string, readonly string[] | null>();
-  const between = (from: string, to: string): readonly string[] | null => {
-    const key = `${from}>${to}`;
-    if (!cache.has(key)) cache.set(key, path(edges, from, (id) => id === to));
-    return cache.get(key) ?? null;
-  };
-  const toEnd = (from: string): readonly string[] | null => {
-    const key = `${from}>*end`;
-    if (!cache.has(key)) cache.set(key, path(edges, from, (id) => ir.nodes[id]?.type === 'end'));
-    return cache.get(key) ?? null;
-  };
-  const starts = Object.entries(ir.nodes ?? {})
-    .filter(([, node]) => node.type === 'start')
-    .map(([id]) => id);
-
   const moves: ReplayMove[] = [];
   const passages: ReplayPassage[] = [];
-  /** Counts one crossing of `id`, and gives it a counter on the diagram if it had none. */
-  const cruzar = (id: string, at: number): void => {
-    if (ir.nodes[id] === undefined) return;
+  const cross = (id: string, at: number, completed = 1): void => {
     if (!elementIds.includes(id)) elementIds.push(id);
-    passages.push({ at, elementId: id });
+    passages.push({ at, elementId: id, completed });
   };
-  const hop = (flows: readonly string[] | null, from: number, to: number): void => {
-    if (flows === null || flows.length === 0) return;
-    moves.push({ flows, from, to: Math.max(to, from + travel) });
-    // Every node in the middle of the path is a gateway (or another pass-through node) the case
-    // went by: it is counted when the token reaches the far end of the hop. The two ends of the
-    // path are NOT counted here — they are the activities, or the start/end events the callers
-    // below count once each.
-    for (const flowId of flows.slice(0, -1)) {
-      const middle = ir.flows[flowId]?.to;
-      if (middle !== undefined) cruzar(middle, to);
-    }
+  const hop = (flows: readonly string[], at: number): void => {
+    if (flows.length > 0) moves.push({ flows, from: at, to: at + travel });
+  };
+  const outputs = (id: string): readonly string[] => {
+    const node = ir.nodes[id];
+    if (node === undefined) return [];
+    const flows = node.outgoing ?? [];
+    return ['and', 'or', 'xor', 'eventGateway'].includes(node.type) ? flows : flows.slice(0, 1);
   };
 
-  const byCase = new Map<string, ReplayActivity[]>();
+  // First observable activities beyond a silent path, with route multiplicity capped at two.
+  // A join is a barrier: downstream enabledAt does not tell us when one input arrived.
+  const frontierCache = new Map<string, ReadonlyMap<string, number>>();
+  const frontier = (id: string): ReadonlyMap<string, number> => {
+    const cached = frontierCache.get(id);
+    if (cached !== undefined) return cached;
+    const found = new Map<string, number>();
+    const visit = (current: string, seen: ReadonlySet<string>): void => {
+      const node = ir.nodes[current];
+      if (node === undefined || seen.has(current)) return;
+      if (emitsRow(ir, current)) {
+        found.set(current, Math.min(2, (found.get(current) ?? 0) + 1));
+        return;
+      }
+      if (node.type === 'end' || node.type === 'terminate'
+        || ((node.type === 'and' || node.type === 'or') && node.incoming.length > 1)) return;
+      const nextSeen = new Set(seen).add(current);
+      for (const flow of outputs(current)) {
+        const target = ir.flows[flow]?.to;
+        if (target !== undefined) visit(target, nextSeen);
+      }
+    };
+    visit(id, new Set());
+    frontierCache.set(id, found);
+    return found;
+  };
+  const reachable = (from: string, to: string): boolean => outputs(from)
+    .some((flow) => frontier(ir.flows[flow]?.to ?? '').has(to));
+
+  const byCase = new Map<string, Occurrence[]>();
   for (const activity of activities) {
     const list = byCase.get(activity.caseId) ?? [];
     list.push(activity);
     byCase.set(activity.caseId, list);
   }
   for (const list of byCase.values()) {
-    list.sort((a, b) => a.enabledAt - b.enabledAt);
-    const first = list[0] as ReplayActivity;
-    for (const start of starts) {
-      const flows = between(start, first.elementId);
-      // The start event has no duration: the case is counted there the instant its first
-      // activity is enabled, which is the same instant the token leaves the start.
-      if (flows !== null) { cruzar(start, first.enabledAt); hop(flows, first.enabledAt, first.enabledAt); break; }
+    const enabledAt = new Map<number, Occurrence[]>();
+    for (const activity of list) {
+      const group = enabledAt.get(activity.enabledAt) ?? [];
+      group.push(activity);
+      enabledAt.set(activity.enabledAt, group);
     }
-    for (let i = 1; i < list.length; i++) {
-      const previous = list[i - 1] as ReplayActivity;
-      const next = list[i] as ReplayActivity;
-      hop(between(previous.elementId, next.elementId), previous.endAt, next.enabledAt);
+    type Source = { id: string; at: number; crossing: boolean };
+    const sources: Source[] = list.filter((a) => a.completed)
+      .map((a) => ({ id: a.elementId, at: a.endAt, crossing: false }));
+    const firstAt = Math.min(...list.map((a) => a.enabledAt));
+    const starts = Object.keys(ir.nodes).filter((id) => ir.nodes[id]?.type === 'start'
+      && enabledAt.get(firstAt)!.some((a) => reachable(id, a.elementId)));
+    if (starts.length === 1) sources.push({ id: starts[0]!, at: firstAt, crossing: true });
+
+    const boundaries = Object.entries(ir.nodes).filter(([, node]) => node.attachedTo !== undefined);
+    const candidates: { host: Occurrence; id: string; at: number; evidence: Occurrence[] }[] = [];
+    for (const host of list) {
+      const attached = boundaries.filter(([, node]) => node.attachedTo === host.elementId);
+      const interrupting = attached.filter(([, node]) => node.interrupting !== false);
+      for (const [id, node] of attached) {
+        const evidence = list.filter((a) => a !== host && a.enabledAt >= host.enabledAt
+          && a.enabledAt <= host.endAt && reachable(id, a.elementId)
+          && (node.interrupting === false || a.enabledAt === host.endAt));
+        if (node.interrupting !== false) {
+          if (host.status !== 'interrupted') continue;
+          // The interruption itself proves the firing when there is only one possible boundary.
+          if (interrupting.length === 1 || evidence.length > 0) {
+            candidates.push({ host, id, at: host.endAt, evidence });
+          }
+        } else {
+          const times = [...new Set(evidence.map((a) => a.enabledAt))];
+          if (times.length === 1) candidates.push({ host, id, at: times[0]!, evidence });
+        }
+      }
     }
-    const last = list[list.length - 1] as ReplayActivity;
-    // Only a case whose last activity completed reached an end event: one still in flight (or
-    // terminated) at the horizon must never bump an end counter.
-    if (last.completed) {
-      const flows = toEnd(last.elementId);
-      // `flows` ends at the end event itself, which `hop` leaves out of the middle nodes.
-      // // ponytail: with several reachable ends the BFS takes the first one, so a diagram whose
-      // // last task can reach two ends splits the cases by a guess. In `packages/engine/test/fixtures/service-request`
-      // // every end is reachable from exactly one last task, so the counters there are exact.
-      // // Gateways count one crossing per case, so an AND join shows fewer `started` than the
-      // // engine (which counts one per incoming token); `completed` and the end counters match.
-      const end = flows === null || flows.length === 0 ? undefined : ir.flows[flows[flows.length - 1] as string]?.to;
-      if (end !== undefined) cruzar(end, last.endAt);
-      hop(flows, last.endAt, last.endAt);
+    for (const candidate of candidates) {
+      const node = ir.nodes[candidate.id]!;
+      if (node.interrupting !== false) {
+        if (candidates.filter((c) => c.host === candidate.host
+          && ir.nodes[c.id]?.interrupting !== false).length !== 1) continue;
+      } else {
+        // A witness must belong uniquely to this firing, not a normal continuation, another
+        // overlapping host occurrence, or a second boundary that reaches the same activity.
+        const unique = candidate.evidence.some((a) =>
+          !sources.some((source) => source.at === a.enabledAt && reachable(source.id, a.elementId))
+          && candidates.filter((c) => c.evidence.includes(a)).length === 1);
+        if (!unique) continue;
+      }
+      sources.push({ id: candidate.id, at: candidate.at, crossing: true });
+    }
+
+    const joins = new Map<string, number>();
+    // Source ties need no invented token order: activities are barriers, and an AND join's
+    // release is independent of the order of equal-time arrivals.
+    sources.sort((a, b) => a.at - b.at);
+    for (const source of sources) {
+      const observations = enabledAt.get(source.at) ?? [];
+      const walk = (id: string, flows: readonly string[], seen: ReadonlySet<string>): void => {
+        const node = ir.nodes[id];
+        if (node === undefined || seen.has(id)) return;
+        if (emitsRow(ir, id)) {
+          if (observations.some((a) => a.elementId === id)) hop(flows, source.at);
+          return;
+        }
+        const nextSeen = new Set(seen).add(id);
+        if (node.type === 'or' && node.incoming.length > 1) {
+          // The log has no OR activation marks. Do not guess how many arrivals release it.
+          hop(flows, source.at);
+          return;
+        }
+        if (node.type === 'and' && node.incoming.length > 1) {
+          hop(flows, source.at);
+          const arrived = (joins.get(id) ?? 0) + 1;
+          const released = arrived === node.incoming.length;
+          joins.set(id, released ? 0 : arrived);
+          cross(id, source.at, released ? 1 : 0);
+          if (released) follow(id, [], nextSeen);
+          return;
+        }
+        cross(id, source.at);
+        if (node.type === 'end' || node.type === 'terminate') hop(flows, source.at);
+        else follow(id, flows, nextSeen);
+      };
+      const follow = (id: string, flows: readonly string[], seen: ReadonlySet<string>): void => {
+        const node = ir.nodes[id]!;
+        let selected = outputs(id);
+        if (selected.length > 1 && node.type !== 'and') {
+          const evidenced = selected.filter((flow) => {
+            const targets = frontier(ir.flows[flow]?.to ?? '');
+            return observations.some((a) => targets.get(a.elementId) === 1
+              // Equal-time sources can share an observation without revealing which token
+              // chose this branch. Do not reuse one witness for both choices.
+              && !sources.some((other) => other !== source && other.at === source.at
+                && reachable(other.id, a.elementId))
+              && selected.filter((other) => frontier(ir.flows[other]?.to ?? '').has(a.elementId)).length === 1);
+          });
+          selected = node.type === 'or' ? evidenced : evidenced.length === 1 ? evidenced : [];
+        }
+        if (selected.length !== 1) hop(flows, source.at);
+        for (const flow of selected) {
+          const target = ir.flows[flow]?.to;
+          if (target !== undefined) walk(target, [...(selected.length === 1 ? flows : []), flow], seen);
+        }
+      };
+      if (source.crossing) cross(source.id, source.at);
+      follow(source.id, [], new Set([source.id]));
     }
   }
 
@@ -308,8 +352,8 @@ export function buildReplay(
 
 /**
  * The whole picture at simulated second `t`: counters per element, busy units per pool and the
- * tokens in flight over the flows. At `t >= horizon` the counters are the final ones, which are
- * the engine's `elements[id].started/completed` for a single-replication run.
+ * tokens in flight over the flows. At `t >= horizon` the counters contain all observed
+ * activities and unambiguous inferred transitions, not aggregate case outcomes.
  */
 export function stateAt(replay: Replay, t: number): ReplayState {
   const elements: Record<string, ElementState> = {};
@@ -334,12 +378,12 @@ export function stateAt(replay: Replay, t: number): ReplayState {
     if (activity.completed && t >= activity.endAt) state.completed += 1;
   }
 
-  // The nodes with no duration: crossing one counts as started and completed at the same instant.
+  // Silent transitions, including AND arrivals that have not released a token yet.
   for (const passage of replay.passages) {
     const state = elements[passage.elementId];
     if (state === undefined || t < passage.at) continue;
-    state.started += 1;
-    state.completed += 1;
+    state.started += passage.started ?? 1;
+    state.completed += passage.completed ?? 1;
   }
 
   const tokens: { flowId: string; progress: number }[] = [];

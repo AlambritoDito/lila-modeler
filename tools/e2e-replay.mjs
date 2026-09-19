@@ -15,6 +15,8 @@
  *
  * `CHROME_PATH` overrides the browser (the default is the macOS Google Chrome bundle), and
  * `LILA_E2E_PORT` / `LILA_E2E_CDP_PORT` move the static server and the debugging port.
+ * `LILA_E2E_CONCURRENT=1` selects the synthetic #363 boundary/fork regression.
+ * `LILA_E2E_SCREENSHOT` saves the final Animate view to the given PNG path.
  * Prints a JSON report and exits non-zero on the first failed expectation.
  */
 import { spawn } from 'node:child_process';
@@ -35,6 +37,8 @@ const CDP_PORT = Number(process.env.LILA_E2E_CDP_PORT ?? 9334);
 const BASE = `http://127.0.0.1:${PORT}/lila-modeler/app/`;
 /** `packages/engine/test/fixtures/service-request` with seed 42 and one replication: 17 services completed. */
 const SERVICES_COMPLETED = 17;
+const CONCURRENT = process.env.LILA_E2E_CONCURRENT === '1';
+const PROJECT_NAME = CONCURRENT ? 'concurrent-replay-e2e' : 'service-e2e';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -69,6 +73,18 @@ function serve() {
  * the same numbers, which is exactly the acceptance of #331.
  */
 function fixture(path) {
+  if (CONCURRENT) {
+    const dir = join(ROOT, 'apps/web/test/fixtures/replay');
+    const scenarioName = 'concurrent-boundary.scenario.json';
+    writeFileSync(path, encodeLila({
+      version: 1, id: PROJECT_NAME, name: PROJECT_NAME,
+      model: { id: 'ConcurrentReplay', name: 'concurrent-boundary.bpmn',
+        xml: readFileSync(join(dir, 'concurrent-boundary.bpmn'), 'utf8'), revision: 0 },
+      scenarios: { [scenarioName]: JSON.parse(readFileSync(join(dir, scenarioName), 'utf8')) },
+      scenarioRevisions: { [scenarioName]: 0 }, runs: [],
+    }));
+    return;
+  }
   const dir = join(ROOT, 'packages/engine/test/fixtures/service-request');
   const read = (name) => readFileSync(join(dir, name), 'utf8');
   const one = (name) => {
@@ -130,7 +146,7 @@ async function main() {
   const work = mkdtempSync(join(tmpdir(), 'lila-replay-'));
   const downloads = join(work, 'downloads');
   mkdirSync(downloads);
-  const source = join(work, 'service-e2e.lila');
+  const source = join(work, `${PROJECT_NAME}.lila`);
   fixture(source);
 
   const server = await serve();
@@ -214,7 +230,7 @@ async function main() {
     await cdp.send('Page.navigate', { url: BASE });
     await waitFor(`!!document.querySelector('.lienzo svg')`, 'the canvas');
     await open('Open', source);
-    await waitFor(`document.body.innerText.includes('service-e2e')`, 'the opened project name');
+    await waitFor(`document.body.innerText.includes(${JSON.stringify(PROJECT_NAME)})`, 'the opened project name');
 
     // 2. Run the AS-IS the project came with; the app lands on «Results» by itself.
     await click('Run simulation');
@@ -267,18 +283,38 @@ async function main() {
     check('every element of the model got a counter',
       Object.keys(counters).length === Object.keys(run.result.elements).length,
       { overlay: Object.keys(counters).sort(), engine: Object.keys(run.result.elements).sort() });
-    // The headline number of the ticket, read on the diagram and not in the stored result: the
-    // end event emits no log row, its counter comes from the path the model infers per case.
-    check(`the End_ServiceCompleted counter on the diagram is ${SERVICES_COMPLETED} with seed 42`,
-      counters.End_ServiceCompleted?.completed === SERVICES_COMPLETED, counters.End_ServiceCompleted);
-    check(`End_ServiceCompleted completed is ${SERVICES_COMPLETED} with seed 42`,
-      run.result.process.byEndEvent?.End_ServiceCompleted?.completed === SERVICES_COMPLETED,
-      run.result.process.byEndEvent?.End_ServiceCompleted?.completed);
+    if (CONCURRENT) {
+      for (const id of ['Boundary', 'HostEnd', 'ReminderEnd']) {
+        check(`${id} counts one token on the diagram`,
+          counters[id]?.started === 1 && counters[id]?.completed === 1, counters[id]);
+      }
+      check('byEndEvent counts the last-token case outcome separately',
+        run.result.process.byEndEvent.HostEnd?.completed === 1
+        && run.result.process.byEndEvent.ReminderEnd?.completed === 0, run.result.process.byEndEvent);
+    } else {
+      check(`the End_ServiceCompleted counter is ${SERVICES_COMPLETED} with seed 42`,
+        counters.End_ServiceCompleted?.completed === SERVICES_COMPLETED, counters.End_ServiceCompleted);
+      check(`End_ServiceCompleted outcome is ${SERVICES_COMPLETED} with seed 42`,
+        run.result.process.byEndEvent?.End_ServiceCompleted?.completed === SERVICES_COMPLETED,
+        run.result.process.byEndEvent?.End_ServiceCompleted?.completed);
+    }
+    if (process.env.LILA_E2E_SCREENSHOT) {
+      const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+      writeFileSync(process.env.LILA_E2E_SCREENSHOT, Buffer.from(screenshot.data, 'base64'));
+      report.screenshot = process.env.LILA_E2E_SCREENSHOT;
+    }
 
     // 5. Pause/Reset still answer after the jump: the controls are not one-shot.
     await click('Reset', '.replay');
     check('Reset takes the clock back to zero', await evaluate(
       `document.querySelector('[data-replay-progress]')?.getAttribute('data-replay-progress') === '0'`));
+    if (CONCURRENT) {
+      check('Reset clears inferred boundary and end counters', await evaluate(
+        `['Boundary', 'HostEnd', 'ReminderEnd'].every((id) => {
+          const counter = document.querySelector('.lila-replay-contador[data-element-id="' + id + '"]');
+          return counter?.dataset.started === '0' && counter?.dataset.completed === '0';
+        })`));
+    }
     // Back to a watchable speed: «Instant» would finish the replication on the first frame and
     // the button would be «Play» again before this check could read it.
     await velocidad('600');
