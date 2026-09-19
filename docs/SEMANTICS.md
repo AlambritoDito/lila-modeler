@@ -62,6 +62,9 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
+| `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"` or `"0"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
+| `bpmn:eventBasedGateway` exclusive and non-instantiating, every outgoing flow going to a branch catch event | `eventGateway` | races its branches; the first delay to elapse takes the token (§9.1) |
+| `bpmn:intermediateCatchEvent` with `timerEventDefinition` or `messageEventDefinition`, as a branch of that gateway | `timer` | wait with the branch's own time, with no resource (§9.1) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
@@ -130,8 +133,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` other than an interrupting timer with one outgoing flow attached to a task: non-interrupting, message/error/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` in any event | `messageEvent` | `message event` | `evento de mensaje` |
+| `bpmn:boundaryEvent` other than a timer with one outgoing flow attached to a task, interrupting or not: message/error/signal/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `messageEventDefinition` in any event other than a branch catch event of a supported event-based gateway (§9.1) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
 | `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
@@ -141,7 +144,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
 | `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
 | `bpmn:intermediateThrowEvent` (no trigger or with any) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
-| `bpmn:eventBasedGateway` | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
+| `bpmn:eventBasedGateway` other than an exclusive, non-instantiating one whose every outgoing flow goes to a timer or message branch catch event: `instantiate="true"`, `eventGatewayType="Parallel"`, any other branch element, or no outgoing flow | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
 | `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
@@ -333,6 +336,18 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   `status = "inFlight"`. In the last two, `startedAt = null` distinguishes an
   instance that was still queued from one already started, and `endedAt = null`; `observedUntil`
   fixes the cutoff. *(decision: ADR-025; test: LILA-033, LILA-037)*
+
+- **R-TOK-7 — Work without time advancement.** Each case may process at most
+  `max(100_000, 1_024 × (number of IR nodes + number of IR flows))` effective `enter`, `done`
+  and `boundary` events at one instant per replication. The next event aborts the simulation
+  with `E-LIMITE-SIN-AVANCE`, identifying its BPMN node, case, zero-based replication, instant
+  in seconds and budget. Cancelled/stale events, arrivals and capacity events do not count.
+  Any strictly greater representable instant resets that case's counter; no epsilon is used.
+  Warm-up cases are protected too. Cases never share a budget, so simultaneous arrivals do
+  not exhaust one global limit. This is a deterministic work limit, not proof of an infinite
+  cycle: an exceptionally expensive finite case at one instant can also exceed it. Review
+  cycles and processing times when it fires. No new random draws or event ordering changes
+  are introduced. *(test: #368)*
 
 ---
 
@@ -527,6 +542,109 @@ pair), without introducing case variables or an expression language.
   closed is consumed without advancing the clock, so a run without `run.duration` does not
   stretch `stoppedAt` up to a deadline that was never going to fire (R-ARR-3). The host's own
   `done`, left pending after the interruption, is consumed the same way. *(test: #81, #345)*
+- **R-BND-10 — Non-interrupting boundary timer.** The same boundary event as R-BND-1 but with
+  `cancelActivity="false"`: exactly one `timerEventDefinition`, attached to a supported task and
+  with at least one outgoing flow. Only `xsd:boolean`'s own lexical space is read, straight from
+  the XML text: `cancelActivity` absent, `"true"` or `"1"` is interrupting, `"false"` or `"0"` is
+  non-interrupting, and any other literal (`"TRUE"`, `""`, a typo) is unsupported and stays
+  `E-NOSOP` with construction `boundaryEvent` (§3). It enters the profile as the same `timer` node with
+  `attachedTo` and no `incoming`, marked `interrupting: false` (absent means interrupting, which
+  is `cancelActivity`'s own BPMN default). R-BND-2 (the deadline starts at the host's
+  `enabledAt`), R-BND-3 (clock time and its own random stream), R-BND-4 (it only fires while the
+  host activity is open), R-BND-8 (no `processingTime`, no firing) and R-BND-9 (a dead firing
+  does not move the clock) hold word for word. One deadline is scheduled per occurrence of the
+  host, so the boundary fires **at most once** per occurrence and never repeats: a cyclic
+  boundary timer is not in the profile. *(test: #81)*
+- **R-BND-11 — The host keeps running; the firing adds a token.** The firing does not touch the
+  host: its activity is not closed, it keeps its resource allocation, it completes at its own
+  time and counts `completed` with `status = "completed"` — there is no `interrupted` row. What
+  the firing does is put a **new** token in the case, which leaves through the boundary's first
+  outgoing flow. The boundary itself behaves exactly as in R-BND-6: one `started` and one
+  `completed` in the same instant, and no event-log row of its own. *(test: #81)*
+- **R-BND-12 — The new token carries no OR activation marks.** Unlike R-BND-6, where the
+  boundary token *is* the host's token and inherits its marks, here the host keeps its own token
+  and its marks. The token the boundary creates was activated by no fork, so it starts with an
+  empty mark stack: an OR join downstream still expects exactly the `k` tokens its fork activated
+  (R-OR-5) and still closes, and the new token reaching that join is a merge (R-OR-6, warning
+  `W-OR-JOIN-SIN-FORK`). Copying the host's marks instead would make the join count `k + 1`
+  tokens for one activation and block it. *(test: #81)*
+- **R-BND-13 — Tie at the host's exact end instant: the boundary fires.** Exactly the rule of
+  R-BND-7 and the same mechanism: the firing event is queued **before** the host's `done`, so
+  with equal instants `(t, seq)` (R-TOK-3) takes the boundary out first and it still finds the
+  host activity open. A deadline exactly as long as the task's duration therefore fires, and the
+  host completes in that same instant. *(test: #81)*
+- **R-BND-14 — More concurrent tokens, one case.** A firing raises the case's live-token count,
+  so the case does not end when the first token reaches an `end`: it ends when it runs out of
+  tokens (R-EVT-4). Both branches must reach an `end` for the case to close; the case is counted
+  **once**, and its outcome (`process.byEndEvent`) is attributed to the `end` that consumed the
+  **last** token. AND and OR joins are unaffected: an AND join still waits for one token per
+  incoming flow (R-AND-2) — which is how a boundary branch rejoins the host's — and an OR join
+  counts by activation mark (R-OR-5, R-BND-12). A token still travelling when the run stops
+  leaves the case `inFlight`, as any other token would (R-OR-8, R-AND-4). *(test: #81)*
+
+### 9.1 Event-based gateway
+
+The gateway that waits for whichever happens first. Bizagi simulates it by giving every
+intermediate event after the gateway a time and letting the first one to elapse win; only a
+gateway followed by none intermediate events or by tasks is left out
+(help.bizagi.com/platform/en/simulation_in_bizagi.htm). Lila follows that convention, which is
+what makes the construct simulable without messages, signals or an event bus.
+
+- **R-EVG-1 — Event-based gateway in the profile.** A `bpmn:eventBasedGateway` enters the profile
+  when all three hold: it is **exclusive** (`eventGatewayType` absent or `"Exclusive"`), it does
+  **not** instantiate the process (`instantiate` absent, `"false"` or `"0"`) and **every** one of
+  its outgoing flows goes to a **branch catch event**: a `bpmn:intermediateCatchEvent` with
+  exactly one trigger, `timerEventDefinition` or `messageEventDefinition`, exactly one incoming
+  flow — the gateway's — and exactly one outgoing flow. The gateway is then an `eventGateway` node
+  and each branch event a `timer` node (§2). As with `cancelActivity` in R-BND-10, only
+  `xsd:boolean`'s own lexical space is read for `instantiate`, straight from the XML text, so
+  `"true"` and `"1"` instantiate and any other literal (`"TRUE"`, `""`, a typo) is unsupported.
+  The rule is all-or-nothing: one branch that is anything else — a task, a none/signal/conditional
+  intermediate event, another gateway, a sub-process — leaves the **whole** gateway out with
+  `E-NOSOP` and construction `eventBasedGateway` (§3), and every element of the branch keeps its
+  own row of the catalog. The single incoming flow is what makes a branch a branch and nothing
+  else: reachable only through its gateway, so no token can enter it as a plain timer. An
+  intermediate message catch event anywhere else stays `E-NOSOP` (§3). *(test: #81)*
+- **R-EVG-2 — Each branch is a delay with its own time.** The delay of a branch event is
+  `elements[<event id>].processingTime`, the same field an intermediate timer uses (R-EVT-1), and
+  it elapses 24×7 unless the event declares `elements[<event id>].calendar` (R-EVT-3). A **message**
+  branch is therefore modelled as a wait of that time: it is the Bizagi convention, and Lila does
+  not simulate the message itself — there is no sender, no correlation and no queue of messages.
+  A branch consumes no resources: declaring `resources` on it is `E-TIMER-RECURSO`, as on any
+  other timer. *(test: #81)*
+- **R-EVG-3 — Every branch is armed at once and only the winner leaves a trace.** When the token
+  reaches the gateway, **every** branch is armed in that same instant, each with one delay drawn
+  from the stream of **its own** id (R-DET-2), so adding or removing a branch shifts no other
+  element's draws (§16). The branch whose firing instant is the earliest wins: its token continues
+  through that event's outgoing flow and the other branches are discarded with no `started`, no
+  `completed`, no event-log row and no flow count. The gateway counts one `started` and one
+  `completed` in the instant the token reaches it, like any other gateway, and emits no row. The
+  winner counts one `started` when it is armed and one `completed` when it fires, and emits the
+  event-log row of any other timer (`enabledAt` = `startedAt` = the gateway's instant, `endedAt` =
+  the firing, no resource). The case's token count does not change: one token in, one token out.
+  A `probability` on the gateway's outgoing flows, including `0`, is ignored and produces
+  `W-PROB-IGNORADA`, citing the flow and gateway: what routes the token is the race, never a draw
+  (unlike R-XOR-1). An absent `probability` produces no such warning. *(test: #81, #369)*
+- **R-EVG-4 — The race is on instants, and a tie goes to the first flow.** What is compared is the
+  instant each branch **would** fire at, not the raw delay, so a branch with its own calendar
+  races on the same clock as the rest. With two equal instants the winner is the branch listed
+  first in the gateway's `outgoing`, which is the order its flows appear in the document: the same
+  explicit, insertion-ordered tie-break as `(t, seq)` in R-TOK-3, and never a draw. *(test: #81)*
+- **R-EVG-5 — A branch with no time never fires.** A branch event with no `processingTime` has no
+  delay to elapse, so it is left out of the race and produces warning `W-TIMER-SIN-TIEMPO`
+  (the code an intermediate timer with no time already had, with the text of the branch: it never
+  fires, instead of delaying 0 seconds), citing the event and its gateway. The branches that do
+  have a time race as usual. *(test: #81)*
+- **R-EVG-6 — With no branch able to fire the token stays at the gateway.** If **no** branch of the
+  gateway declares a `processingTime`, nothing can ever elapse and the token stays there: the case
+  never reaches an `end` and is counted `inFlight` at the stop, as any other token still travelling
+  (R-OR-8). It is not an error, so a run that only validates routes (no times anywhere, R-DEG-3)
+  still runs; when the replication closes, warning `W-JOIN-BLOQUEADO` — the code for a token that
+  was left waiting — names the **gateway** and how many cases it held. *(test: #81)*
+- **R-EVG-7 — One race per pass.** Nothing is cached between passes: a gateway inside a loop arms
+  its branches again, with a fresh draw per branch, every time a token reaches it, and the races of
+  two different passes (or of two different cases) share nothing but the streams they draw from.
+  *(test: #81)*
 
 ---
 
@@ -937,10 +1055,10 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 59 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 60 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
-Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1):
+Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
 
 | Code | When |
 |---|---|
@@ -950,6 +1068,7 @@ Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1)
 | `E-ID-DUPLICADO` | two elements with the same `id` |
 | `E-GATEWAY-SIN-ARISTAS` | gateway with no incoming or no outgoing flows |
 | `E-INALCANZABLE` | node unreachable from any `start` |
+| `E-LIMITE-SIN-AVANCE` | runtime work budget exceeded for one case at one instant (R-TOK-7); aborts `runReplication` and `simulate` |
 | `E-SIN-START` / `E-SIN-END` | process with no start, or with neither `end` nor `terminate` |
 | `E-ELEMENTO-DESCONOCIDO` | `elements` key that does not exist in the IR |
 | `E-CLAVE-DESCONOCIDA` | key not recognized by the schema |
@@ -996,7 +1115,8 @@ by the zod schema with its generic message, and `E-REC-CAPACIDAD` is `core/`'s g
 builds the scenario by hand. It is the only mismatch that remains; see this section's final
 paragraph.
 
-Every error in the table comes from the lint (`validateScenario`) or from the IR validator,
+`E-LIMITE-SIN-AVANCE` is a runtime error; it can occur after callbacks have run.
+Other errors in the table come from the lint (`validateScenario`) or from the IR validator,
 except `E-CLAVE-DESCONOCIDA`, which is caught by the closed schema before the lint: the code goes
 ahead of the message on the line the CLI prints, formatted by `schemaIssueLines` (LILA-198).
 
@@ -1013,9 +1133,15 @@ element involved and, when they repeat per case, with an aggregated counter inst
 per occurrence):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
-`W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`,
-`W-TIMER-SIN-TIEMPO`, `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
-interrupts its host, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+`W-PROB-IGNORADA` (declared probability on an AND or event-based gateway output, R-AND-1/R-EVG-3;
+the `/event` catalog variant uses the same public code and explains that the event race routes),
+`W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
+(a token left waiting at a join, R-OR-8/R-AND-4, or at an event-based gateway whose branches have
+no time, R-EVG-6: each case has its own text),
+`W-TIMER-SIN-TIEMPO` (an intermediate timer with no `processingTime` delays 0 seconds, R-EVT-2; as
+a branch of an event-based gateway it never fires instead, R-EVG-5),
+`W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
+fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
@@ -1043,6 +1169,13 @@ W-RECURSO-SATURADO: <poolId>: the queue grows without settling (utilization ≈ 
 ```
 W-RECURSO-SATURADO: <poolId>: la cola crece sin estabilizarse (ocupación ≈ Y %)
 ```
+
+`λ/μ·c` is the queueing shorthand for the **shape** of the ratio — arrivals over service capacity
+— and not the theoretical load of the scenario's declared demand: both quantities are read off the
+log of the simulated horizon (the demand attributed to the pool over the units it granted, see
+below), so the number moves with the run's duration and with the model's own throttling. The
+surfaces that show the warning say so next to it, because the notation invites the other reading
+*(#357)*; the text above does not change.
 
 The signal is **the pool being full**: no free units enough to grant, i.e. fewer available than
 the smallest `quantity` any task requests it with — a pool of `capacity` 3 requested two at a
@@ -1154,6 +1287,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
 | R-TOK-4 | instantaneous transit and `flows.count` | LILA-028 |
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identity and partial lifecycle | LILA-033, LILA-037 |
+| R-TOK-7 | per-case work budget without time advancement | #368 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: even split, remainder to the default, normalization, draw | LILA-026 (normalization and warnings: LILA-042) |
 | R-XOR-6, R-XOR-8 | range and placement of `probability` | LILA-013, LILA-042, LILA-198 |
 | R-COND-1 … R-COND-5 | routing conditioned on the case's previous outcome (ADR-028) | E22 (`packages/engine/test/conditions.test.ts`) |
@@ -1165,6 +1299,8 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-EVT-4 | end consumes the token; case ends at 0 tokens | LILA-026, LILA-028 |
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
+| R-BND-10 … R-BND-14 | non-interrupting boundary timer | #81 |
+| R-EVG-1 … R-EVG-7 | event-based gateway with timer and message branches | #81 (`packages/engine/test/event-gateway.test.ts`) |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |

@@ -30,7 +30,7 @@ const SEMANTICS = readFileSync(
 );
 
 /**
- * Los 59 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
+ * Los 60 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
  * sobre ninguno: un código nuevo sin su fila aquí no compila, y una fila de un código que ya no
  * existe tampoco.
  */
@@ -47,6 +47,7 @@ const COVERAGE: Record<ProblemCode, true> = {
   'E-GATEWAY-SIN-ARISTAS': true,
   'E-ID-DUPLICADO': true,
   'E-INALCANZABLE': true,
+  'E-LIMITE-SIN-AVANCE': true,
   'E-KPI-INCONSISTENTE': true,
   'E-KPI-NO-FINITO': true,
   'E-NOSOP': true,
@@ -118,13 +119,13 @@ function callWithDummies(fn: (...args: unknown[]) => string): string {
 }
 
 describe('catálogo de mensajes (LILA-211)', () => {
-  test('el catálogo cubre exactamente los 59 códigos del motor', () => {
-    expect(CODES).toHaveLength(59);
+  test('el catálogo cubre exactamente los 60 códigos del motor', () => {
+    expect(CODES).toHaveLength(60);
     const fromCatalog = new Set(Object.keys(en.codes).map(codeOf));
     expect([...fromCatalog].sort()).toEqual(CODES);
   });
 
-  test('los 59 códigos son los que aparecen en `packages/engine/src`', () => {
+  test('los 60 códigos son los que aparecen en `packages/engine/src`', () => {
     const found = new Set<string>();
     for (const file of typeScriptFiles(ENGINE_SRC)) {
       for (const [code] of readFileSync(file, 'utf8').matchAll(/[EW]-[A-Z][A-Z0-9-]*/g)) {
@@ -185,7 +186,7 @@ describe('catálogo de mensajes (LILA-211)', () => {
     );
     const público = CODES.filter((code) => !INTERNAL_CODES.has(code));
 
-    expect(público).toHaveLength(48);
+    expect(público).toHaveLength(49);
     expect(INTERNAL_CODES.size).toBe(11);
     expect(público.filter((code) => !documented.has(code))).toEqual([]);
     expect([...documented].filter((code) => !CODES.includes(code as ProblemCode))).toEqual([]);
@@ -237,3 +238,19 @@ function typeScriptFiles(root: string): string[] {
   }
   return files.sort();
 }
+
+describe('#369 — blocked-token singular and plural messages', () => {
+  test.each([
+    [1, '1 case was', '1 caso quedó'],
+    [2, '2 cases were', '2 casos quedaron'],
+  ] as const)('%i case(s), both variants and locales', (count, english, spanish) => {
+    expect(en.codes['W-JOIN-BLOQUEADO']('Join', count))
+      .toBe(`Join: ${english} left with tokens waiting at the join.`);
+    expect(es.codes['W-JOIN-BLOQUEADO']('Join', count))
+      .toBe(`Join: ${spanish} con tokens esperando en el join.`);
+    expect(en.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
+      .toBe(`Gateway: no branch event declares processingTime; ${english} left with their token waiting at the gateway.`);
+    expect(es.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
+      .toBe(`Gateway: ninguna rama declara processingTime; ${spanish} con su token esperando en la compuerta.`);
+  });
+});

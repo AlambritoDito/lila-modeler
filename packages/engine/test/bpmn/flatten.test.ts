@@ -144,7 +144,7 @@ test('devuelve los elementos fuera del perfil en orden de documento, sin formate
     <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1" />
     <bpmn:task id="Task_1" name="Revisar" />
     <bpmn:boundaryEvent id="Boundary_1" name="Vence el plazo" attachedToRef="Task_1" cancelActivity="false">
-      <bpmn:timerEventDefinition id="TED_1" />
+      <bpmn:messageEventDefinition id="MED_1" />
     </bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="Flow_Boundary" sourceRef="Boundary_1" targetRef="End_1" />
     <bpmn:eventBasedGateway id="Gateway_Eventos" />

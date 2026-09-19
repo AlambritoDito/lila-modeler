@@ -182,6 +182,22 @@ export interface CliMessages {
   xlsxWorkingHours: () => string;
   xlsxPayrollCost: () => string;
   xlsxTotal: () => string;
+  /**
+   * `Notes` block of the `Summary` sheet (#358, #359): what the numbers next to it mean, so a
+   * workbook read away from the app does not invite the wrong arithmetic. Text only — the block
+   * adds no metric and changes no value.
+   */
+  xlsxSectionNotes: () => string;
+  xlsxNoteDurations: () => string;
+  xlsxNoteSeconds: () => string;
+  /**
+   * Label of the `Cost per case` note. It is a catalog string and not `columnHeader`'s label,
+   * which is English by contract (`docs/RESULTS_FORMAT.md` § 10) and left the Spanish `Notas`
+   * block half translated.
+   */
+  xlsxCostPerCase: () => string;
+  xlsxNoteCostPerCase: () => string;
+  xlsxNotePayroll: () => string;
   /** Column headers of the `Comparison` sheet, one group per compared scenario. */
   xlsxDelta: (scenario: string) => string;
   xlsxDeltaRelative: (scenario: string) => string;

@@ -31,6 +31,7 @@ los casos actuales y futuros, incluyendo documentación, capturas, textos de Iss
 | `examples/bizagi-exports/` | Fixtures de interoperabilidad BPMN MIWG sin modificar, con commit de origen y atribución CC BY 3.0. |
 | `packages/engine/test/fixtures/service-request/` | Datos neutrales de regresión para recursos, desenlaces, interfaz y replay. |
 | `packages/engine/test/fixtures/service-shared-denial.bpmn` | Fixture neutral de ruta compartida para invariantes del enrutamiento condicionado. |
+| `packages/engine/test/fixtures/zero-time-driver.ts` | Modelos sintéticos de ciclos sin avance temporal y controles finitos para #368; ejecutados en procesos hijos con timeout externo. |
 
 Este inventario describe el propósito mantenido de los casos; revisar nuevamente procedencia y
 permisos cuando se agregue o sustituya material de origen. Actualizar el inventario al incorporar

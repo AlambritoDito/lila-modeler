@@ -31,14 +31,15 @@ function message(id: string, qname: string, construction: string): string {
 
 export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
   {
-    // Desde #81 el interruptor de tiempo con una salida sí entra al perfil (R-BND-1); la fila
-    // del catálogo la sigue cubriendo cualquier otro borde, aquí el no interruptor.
-    row: 'bpmn:boundaryEvent que no sea un temporizador interruptor',
+    // Desde #81 el temporizador de borde con una salida sobre una tarea sí entra al perfil,
+    // interrumpa (R-BND-1) o no (R-BND-10); la fila del catálogo la sigue cubriendo cualquier
+    // otro borde, aquí el de mensaje.
+    row: 'bpmn:boundaryEvent que no sea un temporizador sobre una tarea',
     xml: processWith(
       'Boundary_1',
       `<bpmn:task id="Task_1" />
     <bpmn:boundaryEvent id="Boundary_1" name="Vence el plazo" attachedToRef="Task_1" cancelActivity="false">
-      <bpmn:timerEventDefinition id="TimerDef_1" />
+      <bpmn:messageEventDefinition id="MessageDef_1" />
     </bpmn:boundaryEvent>`,
     ),
     messages: [

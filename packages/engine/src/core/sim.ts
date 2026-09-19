@@ -444,6 +444,12 @@ type SimEvent =
       readonly caseId: number;
       readonly nodeId: string;
       readonly marks: readonly number[];
+      /**
+       * R-EVG-3: delay already drawn by the event-based gateway that armed this node, so the
+       * branch that won the race waits exactly the time it won it with instead of drawing again.
+       * Absent everywhere else, which is every token that did not come out of one.
+       */
+      readonly duration?: number;
     }
   | {
       readonly t: number;
@@ -481,6 +487,9 @@ interface ActivityState {
 
 /** Estado vivo de un caso mientras corre. */
 interface CaseState {
+  /** R-TOK-7: effective events at this case's latest simulated instant. */
+  instant: number;
+  instantEvents: number;
   readonly id: number;
   readonly startId: string;
   readonly startedAt: number;
@@ -538,6 +547,11 @@ export function runReplication(
   const tStop = scenario.run.duration ?? Infinity;
   const seed = scenario.run.seed ?? 1;
   const warmup = scenario.run.warmup ?? 0;
+  // R-TOK-7: independent of arrival count; larger graphs get a larger work budget.
+  const instantEventLimit = Math.max(
+    100_000,
+    1_024 * (Object.keys(ir.nodes).length + Object.keys(ir.flows).length),
+  );
 
   // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
   assertSupportedResourceScenario(scenario, locale);
@@ -593,6 +607,13 @@ export function runReplication(
   for (const flowId of Object.keys(ir.flows)) flows[flowId] = 0;
   const elements: Record<string, ElementCounters> = {};
   for (const nodeId of Object.keys(ir.nodes)) elements[nodeId] = { started: 0, completed: 0 };
+
+  /**
+   * R-EVG-6: cases whose token reached an event-based gateway where no branch declared a
+   * `processingTime`. That token can never leave, so the case is left in flight and the gateway
+   * is named at the end of the replication, together with the joins that stayed blocked.
+   */
+  const blockedGateways = new Map<string, Set<number>>();
 
   /** R-BND-1: temporizadores de borde de cada tarea, en orden de documento. */
   const boundariesByHost = new Map<string, string[]>();
@@ -884,14 +905,32 @@ export function runReplication(
 
   /* --- movimiento de tokens ---------------------------------------- */
 
-  /** Recorre los flujos (0 segundos, R-TOK-4) y encola la llegada al nodo destino. */
-  const emit = (flowIds: readonly string[], caseId: number, marks: readonly number[], t: number): void => {
+  /**
+   * Recorre los flujos (0 segundos, R-TOK-4) y encola la llegada al nodo destino. `duration` solo
+   * lo pasa el event gateway, con el retardo que ya sorteó para la rama ganadora (R-EVG-3).
+   */
+  const emit = (
+    flowIds: readonly string[],
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+    duration?: number,
+  ): void => {
     for (const flowId of flowIds) {
       if (isMeasuredCase(caseId)) flows[flowId] = (flows[flowId] ?? 0) + 1;
       // R-COND-3: se anota siempre, también en los casos de warm-up: ellos también ramifican.
       if (hasConditions) caseStates[caseId - 1]?.flowsTaken?.add(flowId);
       const to = ir.flows[flowId]?.to;
-      if (to !== undefined) heap.push({ t, kind: 'enter', caseId, nodeId: to, marks });
+      if (to !== undefined) {
+        heap.push({
+          t,
+          kind: 'enter',
+          caseId,
+          nodeId: to,
+          marks,
+          ...(duration === undefined ? {} : { duration }),
+        });
+      }
     }
   };
 
@@ -936,12 +975,13 @@ export function runReplication(
     if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
 
-  // R-AND-1: `probability` en las salidas de un AND no se usa.
+  // R-AND-1 / R-EVG-3: outgoing probabilities do not route AND or event-based gateways.
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
-    if (node.type !== 'and') continue;
+    if (node.type !== 'and' && node.type !== 'eventGateway') continue;
+    const message = node.type === 'eventGateway' ? M['W-PROB-IGNORADA/event'] : M['W-PROB-IGNORADA'];
     for (const flowId of node.outgoing) {
       if (spec[flowId]?.probability !== undefined) {
-        warn(coded('W-PROB-IGNORADA', M['W-PROB-IGNORADA'](flowId, nodeId)));
+        warn(coded('W-PROB-IGNORADA', message(flowId, nodeId)));
       }
     }
   }
@@ -1010,6 +1050,8 @@ export function runReplication(
     if (next.kind === 'arrive') {
       const caseId = caseStates.length + 1; // R-TOK-2: entero monótono en orden de llegada.
       caseStates.push({
+        instant: next.t,
+        instantEvents: 0,
         id: caseId,
         startId: next.startId,
         startedAt: next.t,
@@ -1059,6 +1101,18 @@ export function runReplication(
     if (state === undefined || !state.alive) continue;
     const node = ir.nodes[next.nodeId];
     if (node === undefined) continue;
+    // Check only effective case events, after lazy cancellation and node lookup.
+    // Exact comparison preserves every representable advance, however small.
+    if (next.t > state.instant) {
+      state.instant = next.t;
+      state.instantEvents = 0;
+    }
+    if (state.instantEvents >= instantEventLimit) {
+      throw new Error(coded('E-LIMITE-SIN-AVANCE', M['E-LIMITE-SIN-AVANCE'](
+        next.nodeId, next.caseId, replication, next.t, instantEventLimit,
+      )));
+    }
+    state.instantEvents += 1;
     const counters = elements[next.nodeId]!;
 
     if (next.kind === 'done') {
@@ -1084,18 +1138,34 @@ export function runReplication(
     if (next.kind === 'boundary') {
       const activity = activities.get(next.activityInstanceId);
       if (activity === undefined || activity.closed) continue;
-      // R-BND-4/5: el borde cierra **esa** instancia de la tarea sin completarla (el host ya
-      // contó `started`, nunca cuenta `completed`, como en R-EVT-6), suelta o cancela su
-      // solicitud de recurso y sigue por su propia salida con las marcas OR que traía el host.
+      // R-BND-6: el borde cuenta un disparo entero (un `started` y un `completed` en el mismo
+      // instante) y no emite fila de log propia, interrumpa o no.
       if (isMeasuredCase(next.caseId)) {
         counters.started++;
         counters.completed++;
       }
-      closeActivity(activity, next.t, 'interrupted');
-      if (activity.requestId !== undefined) {
-        startAllocations(resourceManager.cancel([activity.requestId], next.t));
+      if (node.interrupting === false) {
+        // R-BND-11: el host sigue como si nada —su actividad no se cierra, su token no se toca—
+        // y el disparo mete en el caso un token **nuevo**. R-BND-12: ese token no hereda las
+        // marcas OR del host, porque ningún fork lo activó; duplicarlas rompería el conteo del
+        // join que el token del host todavía tiene que cerrar (R-OR-5).
+        //
+        // R-BND-1 exige la salida; el `if` hace explícito que sin ella no se inventa un token
+        // que nadie podría consumir y que dejaría el caso en vuelo para siempre (R-EVT-4).
+        if (node.outgoing[0] !== undefined) {
+          state.tokens += 1;
+          forward(node, next.caseId, NO_MARKS, next.t);
+        }
+      } else {
+        // R-BND-4/5: el borde cierra **esa** instancia de la tarea sin completarla (el host ya
+        // contó `started`, nunca cuenta `completed`, como en R-EVT-6), suelta o cancela su
+        // solicitud de recurso y sigue por su propia salida con las marcas OR que traía el host.
+        closeActivity(activity, next.t, 'interrupted');
+        if (activity.requestId !== undefined) {
+          startAllocations(resourceManager.cancel([activity.requestId], next.t));
+        }
+        forward(node, next.caseId, activity.marks, next.t);
       }
-      forward(node, next.caseId, activity.marks, next.t);
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -1124,7 +1194,10 @@ export function runReplication(
             warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/elemento'](next.nodeId)));
           }
         }
-        const duration = dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId)));
+        // R-EVG-3: the winning branch of an event-based gateway arrives with its delay already
+        // drawn — the very draw that won the race — so it is not sampled a second time here.
+        const duration =
+          next.duration ?? (dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId))));
         const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
         // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
         // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
@@ -1165,7 +1238,8 @@ export function runReplication(
         // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
         // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
         // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
-        // instante, el desempate por orden de inserción lo gane la interrupción.
+        // instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
+        // no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar).
         for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
           const boundaryDist = spec[boundaryId]?.processingTime;
           // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
@@ -1216,6 +1290,48 @@ export function runReplication(
         if (node.outgoing.length <= 1) forward(node, next.caseId, next.marks, next.t);
         else emit([drawXor(next.nodeId, node.outgoing, state.flowsTaken)], next.caseId, next.marks, next.t);
         break;
+
+      case 'eventGateway': {
+        if (isMeasuredCase(next.caseId)) counters.completed++;
+        // R-EVG-2/R-EVG-3: every branch is armed in this same instant, each with a delay drawn
+        // from its **own** stream (§ 16), and R-EVG-4 gives the race to the earliest firing
+        // instant. The comparison is strict, so a tie goes to the branch listed first in
+        // `outgoing`, which is the document order of the gateway's flows (R-TOK-3).
+        let winner: { flowId: string; delay: number; at: number } | undefined;
+        for (const flowId of node.outgoing) {
+          const eventId = ir.flows[flowId]?.to;
+          if (eventId === undefined) continue;
+          const dist = spec[eventId]?.processingTime;
+          // R-EVG-5: a branch with no time has no delay to elapse, so it never fires.
+          if (dist === undefined) {
+            warn(coded('W-TIMER-SIN-TIEMPO', M['W-TIMER-SIN-TIEMPO/rama'](eventId, next.nodeId)));
+            continue;
+          }
+          const delay = Math.max(0, sample(dist, rngFor(eventId)));
+          // R-EVT-3: the branch waits 24×7 unless it declares its own calendar, so the race
+          // compares the instants the branches would really fire at, not the raw delays. The
+          // formula is the timer path's, which is what makes the winner's `done` land exactly on
+          // the instant it won with.
+          const calendar = hasCalendars ? calendarFor(eventId, NO_POOLS) : undefined;
+          const at =
+            calendar === undefined
+              ? next.t + delay
+              : addWorkingTime(calendar, nextOpen(calendar, next.t), delay);
+          if (winner === undefined || at < winner.at) winner = { flowId, delay, at };
+        }
+        // R-EVG-6: with no branch able to fire the token stays at the gateway for good; the case
+        // is counted as in flight and the gateway is named when the replication closes.
+        if (winner === undefined) {
+          const cases = blockedGateways.get(next.nodeId) ?? new Set<number>();
+          cases.add(next.caseId);
+          blockedGateways.set(next.nodeId, cases);
+          break;
+        }
+        // R-EVG-3: one token, one branch. The losing branches are discarded without a trace: no
+        // `started`, no `completed` and no flow count.
+        emit([winner.flowId], next.caseId, next.marks, next.t, winner.delay);
+        break;
+      }
 
       case 'and': {
         if (node.incoming.length > 1) {
@@ -1331,10 +1447,23 @@ export function runReplication(
     for (const key of state.orCounts.keys()) joins.add(key.slice(0, key.lastIndexOf('#')));
     for (const joinId of joins) blocked.set(joinId, (blocked.get(joinId) ?? 0) + 1);
   }
+  // R-EVG-6: a token stuck at an event gateway whose branches have no time can never leave, so
+  // its case is one more case left in flight. Same code as the blocked join, its own text.
+  const stuck = new Map<string, number>();
+  for (const [gatewayId, cases] of blockedGateways) {
+    let affected = 0;
+    for (const caseId of cases) if (caseStates[caseId - 1]?.endedAt === null) affected += 1;
+    if (affected > 0) stuck.set(gatewayId, affected);
+  }
+
   for (const nodeId of Object.keys(ir.nodes)) {
     const affected = blocked.get(nodeId);
     if (affected !== undefined) {
       warn(coded('W-JOIN-BLOQUEADO', M['W-JOIN-BLOQUEADO'](nodeId, affected)));
+    }
+    const held = stuck.get(nodeId);
+    if (held !== undefined) {
+      warn(coded('W-JOIN-BLOQUEADO', M['W-JOIN-BLOQUEADO/evento'](nodeId, held)));
     }
   }
 

@@ -56,6 +56,15 @@ Unknown keys are not accepted at the root (`strict`): a misspelled field is an e
 
 ² At least one of `run.duration` or a `triggerCount` on a `start` in `elements` (rule R6). If both are present, whichever occurs first wins.
 
+### Runtime work protection (#368)
+
+`run.duration` limits simulated time, not the amount of work at one instant. R-TOK-7
+in `SEMANTICS.md` independently limits effective events per case and instant, including
+zero-duration timers, and aborts with `E-LIMITE-SIN-AVANCE` when exceeded. The budget is
+`max(100_000, 1_024 × (IR nodes + IR flows))`, resets on time advancement, and is not a
+scenario field. Exceptionally expensive finite cases can exceed it. Timer defaults and
+R-DEG-3 are unchanged; event-gateway branches without a time still never fire.
+
 ### 2.3 `calendars`
 
 Map `key → { intervals: [...] }`. The key is the identifier cited by `resources[*].calendar` and `elements[*].calendar`. The key `default` is the calendar taken by **every pool** that does not declare its own (R-CAL-10); elements do not inherit it.
@@ -124,7 +133,7 @@ Map `BPMN id → parameters`. The keys are diagram ids: nodes (`Task_…`, `Star
 
 | Field | Type | Applies to | Default | Description |
 |---|---|---|---|---|
-| `processingTime` | distribution (§ 3) | tasks, timers (intermediate **and** boundary) | no time (0 s) | Duration of the work, in seconds. On an intermediate timer it is the delay, with no resource. On a boundary timer it is the deadline that interrupts its task; without it the boundary never fires (`SEMANTICS.md` R-BND-8). |
+| `processingTime` | distribution (§ 3) | tasks, timers (intermediate **and** boundary), branch catch events of an event-based gateway | no time (0 s) | Duration of the work, in seconds. On an intermediate timer it is the delay, with no resource. On a boundary timer it is the deadline: it cuts its task short when the boundary interrupts (R-BND-1) and spawns a parallel token when it does not (R-BND-10). Without it the boundary never fires (`SEMANTICS.md` R-BND-8). On a branch catch event of an event-based gateway — timer **or** message, the message being modelled as a wait of this time — it is what the branch races with, and without it that branch never fires (R-EVG-2, R-EVG-5). |
 | `resources` | array of `{ ref, quantity }` | tasks | — | `ref` = key in `resources`; `quantity` integer ≥ 1, default `1`. Without `resources` ⇒ infinite capacity. |
 | `selection` | `"and"` \| `"or"` | tasks with `resources` | `"and"` | `and`: starts when **all** pools have capacity simultaneously (checked on every release; no partial resources are held ⇒ no deadlock). `or`: queues on all of them, starts with whichever becomes available first, and withdraws from the others; if several are free at once, the one listed first in `resources` wins (R-REC-6). |
 | `fixedCost` | number ≥ 0 | any node | `0` | Fixed cost per token **completed** at the element. |

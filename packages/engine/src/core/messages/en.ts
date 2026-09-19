@@ -7,6 +7,8 @@ import type { CoreCatalog } from './types.js';
 
 export const coreEn: CoreCatalog = {
   codes: {
+    'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
+      `${nodeId}: case ${caseId}, replication ${replication}, time ${instant} s: the limit of ${limit} events without time advancing was reached. Review cycles and processing times.`,
     'E-ID-DUPLICADO': (id) => `${id}: the id is declared both as a node and as a flow.`,
     'E-REF-INEXISTENTE/entrante': (id, flowId) =>
       `${id}: the incoming flow ${flowId} does not exist in the process.`,
@@ -67,13 +69,19 @@ export const coreEn: CoreCatalog = {
       `${nodeId}: the start declares neither interTriggerTimer nor triggerCount and generates no cases.`,
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
       `${flowId}: it leaves a parallel gateway (${gatewayId}); probability is ignored.`,
+    'W-PROB-IGNORADA/event': (flowId, gatewayId) =>
+      `${flowId}: it leaves an event-based gateway (${gatewayId}); probability is ignored because the event race determines the route.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: no processingTime; it delays 0 seconds.`,
+    'W-TIMER-SIN-TIEMPO/rama': (nodeId, gatewayId) =>
+      `${nodeId}: no processingTime; it never fires as a branch of ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
-      `${nodeId}: boundary timer without processingTime; it never interrupts ${hostId}.`,
+      `${nodeId}: boundary timer without processingTime; it never fires on ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: a token arrived without a fork mark; it behaves as a merge.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
-      `${nodeId}: ${cases} cases were left with tokens waiting at the join.`,
+      `${nodeId}: ${cases} ${cases === 1 ? 'case was' : 'cases were'} left with tokens waiting at the join.`,
+    'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
+      `${nodeId}: no branch event declares processingTime; ${cases} ${cases === 1 ? 'case was' : 'cases were'} left with their token waiting at the gateway.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: the queue grows without settling (λ/μ·c ≈ ${rho})`,

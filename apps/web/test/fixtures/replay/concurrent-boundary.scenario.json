@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "Concurrent replay regression",
+  "run": {
+    "seed": 42,
+    "replications": 1,
+    "start": "2026-09-19T00:00:00Z"
+  },
+  "elements": {
+    "Start": {
+      "triggerCount": 1
+    },
+    "Host": {
+      "processingTime": {
+        "type": "constant",
+        "value": 200
+      }
+    },
+    "Boundary": {
+      "processingTime": {
+        "type": "constant",
+        "value": 100
+      }
+    },
+    "Reminder": {
+      "processingTime": {
+        "type": "constant",
+        "value": 5
+      }
+    }
+  },
+  "model": "concurrent-boundary.bpmn"
+}

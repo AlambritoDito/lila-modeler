@@ -223,8 +223,8 @@ function parseWarningNotice(
 }
 
 /**
- * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary interruptor no
- * tiene flujo entrante: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
+ * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary no tiene flujo
+ * entrante, interrumpa o no: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
  */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
   const attached = new Map<string, string[]>();
@@ -297,7 +297,12 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     if (node.type === 'start') starts.push(id);
     if (node.type === 'end' || node.type === 'terminate') hasEnd = true;
 
-    if (node.type === 'xor' || node.type === 'or' || node.type === 'and') {
+    if (
+      node.type === 'xor' ||
+      node.type === 'or' ||
+      node.type === 'and' ||
+      node.type === 'eventGateway'
+    ) {
       // Un gateway con una entrada y una salida es pass-through legítimo (R-AND-6, R-PERF-2):
       // solo se exige que tenga al menos una de cada.
       if (node.incoming.length === 0 || node.outgoing.length === 0) {

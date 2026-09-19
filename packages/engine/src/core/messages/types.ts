@@ -21,6 +21,7 @@ export type Locale = 'en' | 'es';
 
 /** Message bodies of the codes emitted from `core/`. */
 export interface CoreCodeMessages {
+  'E-LIMITE-SIN-AVANCE': (nodeId: string, caseId: number, replication: number, instant: number, limit: number) => string;
   /* --- core/ir.ts --------------------------------------------------- */
   'E-ID-DUPLICADO': (id: string) => string;
   'E-REF-INEXISTENTE/entrante': (id: string, flowId: string) => string;
@@ -76,10 +77,15 @@ export interface CoreCodeMessages {
   'W-OR-VACIO': (gatewayId: string) => string;
   'W-START-SIN-LLEGADAS': (nodeId: string) => string;
   'W-PROB-IGNORADA': (flowId: string, gatewayId: string) => string;
+  'W-PROB-IGNORADA/event': (flowId: string, gatewayId: string) => string;
   'W-TIMER-SIN-TIEMPO': (nodeId: string) => string;
+  /** R-EVG-5: variant for a branch event of an event-based gateway, which never fires instead. */
+  'W-TIMER-SIN-TIEMPO/rama': (nodeId: string, gatewayId: string) => string;
   'W-BORDE-SIN-TIEMPO': (nodeId: string, hostId: string) => string;
   'W-OR-JOIN-SIN-FORK': (nodeId: string) => string;
   'W-JOIN-BLOQUEADO': (nodeId: string, cases: number) => string;
+  /** R-EVG-6: variant for the token an event-based gateway with no armable branch keeps. */
+  'W-JOIN-BLOQUEADO/evento': (nodeId: string, cases: number) => string;
 
   /* --- core/metrics.ts ---------------------------------------------- */
   /** `rho` arrives already rounded to one decimal so both locales print the same number. */

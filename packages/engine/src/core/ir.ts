@@ -12,7 +12,17 @@
 import { coreMessages, type Locale } from './messages/index.js';
 
 /** Tipos de nodo del perfil soportado. Toda variante de tarea se aplana a `task`. */
-export type NodeType = 'start' | 'end' | 'terminate' | 'task' | 'xor' | 'or' | 'and' | 'timer';
+export type NodeType =
+  | 'start'
+  | 'end'
+  | 'terminate'
+  | 'task'
+  | 'xor'
+  | 'or'
+  | 'and'
+  | 'timer'
+  /** Exclusive `bpmn:eventBasedGateway`: it arms its branch events and the first one wins (R-EVG-1). */
+  | 'eventGateway';
 
 /** Nodo del proceso, keyed por su `id` BPMN en `ProcessIR.nodes`. */
 export interface Node {
@@ -23,10 +33,15 @@ export interface Node {
   /** Id del `bpmn:subProcess` embebido del que proviene, tras aplanar (R-PLAN-1). */
   subprocessId?: string;
   /**
-   * Solo en un `timer` que nació de un boundary event interruptor: id de la tarea a la que
-   * está adjunto (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
+   * Solo en un `timer` que nació de un boundary event: id de la tarea a la que está adjunto
+   * (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
    */
   attachedTo?: string;
+  /**
+   * Solo junto a `attachedTo`: `false` en un borde **no interruptor** (`cancelActivity="false"`,
+   * R-BND-10). Ausente es interruptor, que es el valor por omisión de `cancelActivity` en BPMN.
+   */
+  interrupting?: boolean;
   /** Ids de los flujos entrantes, en orden de aparición. */
   incoming: string[];
   /** Ids de los flujos salientes, en orden de aparición. */

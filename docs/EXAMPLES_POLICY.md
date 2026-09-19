@@ -31,6 +31,7 @@ cases, including documentation, screenshots, issue/PR text and attachments.
 | `examples/bizagi-exports/` | Unmodified BPMN MIWG interoperability fixtures, with upstream commit and CC BY 3.0 attribution. |
 | `packages/engine/test/fixtures/service-request/` | Neutral regression inputs for resource, outcome, UI and replay checks. |
 | `packages/engine/test/fixtures/service-shared-denial.bpmn` | Neutral shared-path fixture for conditional-routing invariants. |
+| `packages/engine/test/fixtures/zero-time-driver.ts` | Synthetic zero-time loop and finite-control regression models for #368; executed in timeout-protected child processes. |
 
 This inventory describes the maintained purpose of the cases; provenance and permissions must
 be reviewed again when source material is added or replaced. Update the inventory when adding a

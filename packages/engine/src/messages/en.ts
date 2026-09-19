@@ -28,6 +28,7 @@ const NODE_TYPES: Record<string, string> = {
   or: 'OR gateway',
   and: 'AND gateway',
   timer: 'timer',
+  eventGateway: 'event-based gateway',
 };
 
 const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]
@@ -244,6 +245,21 @@ export const en: Catalog = {
     xlsxWorkingHours: () => 'Working hours',
     xlsxPayrollCost: () => 'Payroll cost',
     xlsxTotal: () => 'Total',
+    xlsxSectionNotes: () => 'Notes',
+    xlsxNoteDurations: () => 'Durations',
+    xlsxNoteSeconds: () =>
+      'Every duration in the Elements and Resources sheets is in seconds, the Busy time column ' +
+      'of Resources included, whatever base time unit the scenario declares; the app converts ' +
+      'them for display, this workbook does not.',
+    xlsxCostPerCase: () => 'Cost per case',
+    xlsxNoteCostPerCase: () =>
+      'Cost per case is the mean cost of the cases that completed, not Total cost divided by ' +
+      'Instances completed: the cost of the cases still in flight is part of Total cost and not ' +
+      'of this mean.',
+    xlsxNotePayroll: () =>
+      'Payroll cost charges availability (capacity x cost per hour x the open hours of the run, ' +
+      'busy or idle); the Unit cost of the Resources sheet charges only the hours actually ' +
+      'occupied. They are two different questions, not two estimates of one.',
     xlsxDelta: (scenario) => `Delta ${scenario}`,
     xlsxDeltaRelative: (scenario) => `Delta % ${scenario}`,
     xlsxCi95Low: (scenario) => `CI95 low ${scenario}`,

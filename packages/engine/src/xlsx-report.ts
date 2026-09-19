@@ -19,10 +19,10 @@ import type { CompareResult } from './core/compare.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
 import { PROCESS_COLUMNS, elementsRows, flowsRows, processRows, resourcesRows } from './csv.js';
-import { columnLabel } from './format.js';
+import { columnHeader, columnLabel } from './format.js';
 import { messages, type Locale } from './messages/index.js';
 import type { Distribution, ResolvedScenario } from './scenario.js';
-import { workbook, type CellValue, type SheetSpec } from './xlsx.js';
+import { workbook, type CellFormat, type CellValue, type SheetSpec } from './xlsx.js';
 
 export { XLSX_MIME_TYPE } from './xlsx.js';
 
@@ -113,9 +113,40 @@ const NAME_COLUMN = 'Name';
 const METRIC_COLUMN = 'Metric';
 
 /**
+ * Metric label of the `Summary` sheet, with the unit of the value it names (#359).
+ *
+ * The sheet is tall — the metric travels as a **label**, not as a column header — so the unit can
+ * go next to it with the project's usual `columnHeader` convention (`Cycle time average (s)`,
+ * exactly as the console prints `Cycle time average (min)`). The Elements / Flows / Resources
+ * sheets cannot do the same: their headers are the Bizagi contract and are pinned to the CSV's
+ * (`docs/RESULTS_FORMAT.md` § 12), so the unit of those sheets is stated in the `Notes` block
+ * instead. Durations are always seconds here — the workbook never converts (§ 1).
+ */
+function metricLabel(metric: string): string {
+  return columnHeader('process', metric, 's');
+}
+
+/** Formats of a tall sheet's five columns: text, text, text, text and the one `Value` column. */
+const VALUE_NUMBER: readonly (CellFormat | undefined)[] = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  'number',
+];
+const VALUE_PERCENT: readonly (CellFormat | undefined)[] = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  'percent',
+];
+
+/**
  * `Summary`: the process table of `lila run` in tall form (one metric per row, so it stays
  * readable next to the per-outcome and payroll blocks), the completed cases per end event when the
- * result carries them, and the payroll of every declared pool with its total.
+ * result carries them, the payroll of every declared pool with its total, and a `Notes` block that
+ * says what the numbers above mean (#358, #359).
  */
 export function summarySheet(
   ir: ProcessIR,
@@ -126,6 +157,13 @@ export function summarySheet(
 ): SheetSpec {
   const C = messages(locale).cli;
   const rows: CellValue[][] = [];
+  // `Within service level` is a fraction in a `Value` column full of counts, seconds and money, so
+  // it takes its own percentage cell: `0.###` would show `0.001004` as `0.001` and anything under
+  // `0.0005` as the `0` section 5 forbids reading as "0 % met" (#359).
+  const rowFormats: (readonly (CellFormat | undefined)[] | undefined)[] = [];
+  const percentValue = (): void => {
+    rowFormats[rows.length] = VALUE_PERCENT;
+  };
   const table = processRows(result);
   const values = table.rows[0] ?? [];
 
@@ -135,17 +173,19 @@ export function summarySheet(
     // on the global row) so its columns stay fixed; a tall sheet has no column to keep, so a row
     // with nothing to say is left out instead of written blank.
     if (value === null) return;
-    rows.push([C.xlsxSectionProcess(), '', '', columnLabel('process', metric), value]);
+    if (metric === 'withinServiceLevel') percentValue();
+    rows.push([C.xlsxSectionProcess(), '', '', metricLabel(metric), value]);
   });
 
   // Per-outcome block (#316): completed cases, mean cycle time and, with `run.serviceLevel`, the
   // fraction met, one row per metric like the process block above.
   for (const [id, outcome] of Object.entries(result.process.byEndEvent ?? {})) {
     const name = ir.nodes[id]?.name ?? '';
-    rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'completed'), outcome.completed]);
-    rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'cycleTime.mean'), outcome.cycleTime.mean]);
+    rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('completed'), outcome.completed]);
+    rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('cycleTime.mean'), outcome.cycleTime.mean]);
     if (outcome.withinServiceLevel !== undefined) {
-      rows.push([C.xlsxSectionOutcomes(), id, name, columnLabel('process', 'withinServiceLevel'), outcome.withinServiceLevel]);
+      percentValue();
+      rows.push([C.xlsxSectionOutcomes(), id, name, metricLabel('withinServiceLevel'), outcome.withinServiceLevel]);
     }
   }
 
@@ -162,9 +202,25 @@ export function summarySheet(
     rows.push([C.xlsxSectionPayroll(), '', '', `${C.xlsxTotal()} — ${C.xlsxPayrollCost()}`, total]);
   }
 
+  // `Notes` (#358, #359): the three readings a workbook opened away from the app gets wrong —
+  // the unit of the source sheets, what `Cost per case` averages over, and payroll against
+  // actual use. Text in the `Value` column; no metric, no number.
+  // Every label of the block comes from the catalog, so the Spanish workbook reads in Spanish:
+  // `metricLabel('costPerCase')` is English by contract (section 10) and mixed the two languages
+  // in the same block.
+  rows.push([C.xlsxSectionNotes(), '', '', C.xlsxNoteDurations(), C.xlsxNoteSeconds()]);
+  rows.push([C.xlsxSectionNotes(), '', '', C.xlsxCostPerCase(), C.xlsxNoteCostPerCase()]);
+  if (payroll.length > 0) {
+    rows.push([C.xlsxSectionNotes(), '', '', C.xlsxPayrollCost(), C.xlsxNotePayroll()]);
+  }
+
   return {
+    // Only the `Value` column holds numbers, and it holds every kind of them, so the column takes
+    // the readable format and the fraction rows override it above.
+    formats: VALUE_NUMBER,
     headers: [C.xlsxColumnSection(), ID_COLUMN, NAME_COLUMN, METRIC_COLUMN, C.xlsxColumnValue()],
     name: C.xlsxSheetSummary(),
+    rowFormats,
     rows,
   };
 }
@@ -275,6 +331,7 @@ export function parametersSheet(
   }
 
   return {
+    formats: [undefined, undefined, undefined, undefined, 'number'],
     headers: [C.xlsxColumnSection(), ID_COLUMN, NAME_COLUMN, C.xlsxColumnParameter(), C.xlsxColumnValue()],
     name: C.xlsxSheetParameters(),
     rows,
@@ -299,11 +356,20 @@ export function scenarioSheets(
   const resources = resourcesRows(result, names);
   return [
     summarySheet(ir, scenario, result, names, locale),
-    { headers: elements.headers, name: C.xlsxSheetElements(), rows: elements.rows },
-    { headers: flows.headers, name: C.xlsxSheetFlows(), rows: flows.rows },
-    { headers: resources.headers, name: C.xlsxSheetResources(), rows: resources.rows },
+    { formats: numericAfter(elements.headers, 3), headers: elements.headers, name: C.xlsxSheetElements(), rows: elements.rows },
+    { formats: numericAfter(flows.headers, 4), headers: flows.headers, name: C.xlsxSheetFlows(), rows: flows.rows },
+    { formats: numericAfter(resources.headers, 2), headers: resources.headers, name: C.xlsxSheetResources(), rows: resources.rows },
     parametersSheet(ir, scenario, locale),
   ];
+}
+
+/**
+ * `'number'` for every column after the `leading` identity ones (`Id`, `Name`, `Type`, …), which
+ * is the shape of the three tables that come from `csv.ts`: identifiers first, then nothing but
+ * numbers. Formats only reach numeric cells, so a wrong guess here would be invisible anyway.
+ */
+function numericAfter(headers: readonly string[], leading: number): (CellFormat | undefined)[] {
+  return headers.map((_, index) => (index < leading ? undefined : 'number'));
 }
 
 /**
@@ -357,10 +423,32 @@ export function compareWorkbook(
 
   const scenarioNames = entries.map((entry) => entry.scenario.name);
   const headers: string[] = ['Kpi', 'Scope', ID_COLUMN, NAME_COLUMN, METRIC_COLUMN];
+  // The five identity columns hold text; each scenario then adds numbers. Relative deltas
+  // always take percentages; service-level values and intervals override the defaults below.
+  const formats: (CellFormat | undefined)[] = [undefined, undefined, undefined, undefined, undefined];
+  const serviceLevelColumns: number[] = [];
   for (const [index, name] of scenarioNames.entries()) {
+    serviceLevelColumns.push(headers.length, headers.length + 1, headers.length + 2);
     headers.push(name, C.xlsxCi95Low(name), C.xlsxCi95High(name));
-    if (index > 0) headers.push(C.xlsxDelta(name), C.xlsxDeltaRelative(name), C.xlsxOverlap(name));
+    formats.push('number', 'number', 'number');
+    if (index > 0) {
+      headers.push(C.xlsxDelta(name), C.xlsxDeltaRelative(name), C.xlsxOverlap(name));
+      formats.push('number', 'percent', undefined);
+    }
   }
+
+  // rowFormats replaces the entire row, so retain the delta and identity column formats.
+  // Absolute deltas stay in fraction units (value - base), with the existing 0.### display:
+  // small differences may still round visually. Relative deltas remain (value - base) / base
+  // displayed as 0.00%. Neither stored delta changes (#367).
+  const serviceLevelFormats = [...formats];
+  for (const column of serviceLevelColumns) serviceLevelFormats[column] = 'percent';
+  const rowFormats = comparison.rows.map((row) =>
+    row.metric === 'withinServiceLevel' ||
+    (row.metric.startsWith('byEndEvent.') && row.metric.endsWith('.withinServiceLevel'))
+      ? serviceLevelFormats
+      : undefined,
+  );
 
   const ci95Of = (index: number, kpi: string): readonly [number, number] | undefined =>
     entries[index]?.result.replications?.kpis?.[kpi]?.ci95;
@@ -387,5 +475,5 @@ export function compareWorkbook(
     return cells;
   });
 
-  return workbook([...summaries, { headers, name: C.xlsxSheetComparison(), rows }]);
+  return workbook([...summaries, { formats, headers, name: C.xlsxSheetComparison(), rowFormats, rows }]);
 }

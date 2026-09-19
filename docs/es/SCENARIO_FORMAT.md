@@ -55,6 +55,16 @@ No se aceptan claves desconocidas en la raíz (`strict`): un campo mal escrito e
 
 ² Al menos uno de `run.duration` o un `triggerCount` en un `start` de `elements` (regla R6). Si están los dos, gana lo primero que ocurra.
 
+### Protección del trabajo durante la ejecución (#368)
+
+`run.duration` limita el tiempo simulado, no el trabajo en un instante. R-TOK-7 de
+`SEMANTICS.md` limita por separado los eventos efectivos por caso e instante, incluidos
+los temporizadores de duración cero, y aborta con `E-LIMITE-SIN-AVANCE` al superarlo.
+El presupuesto es `max(100_000, 1_024 × (nodos IR + flujos IR))`, se reinicia al avanzar
+el tiempo y no es un campo del escenario. Un caso finito excepcionalmente costoso puede
+superarlo. Los valores predeterminados y R-DEG-3 no cambian; las ramas de gateway de
+eventos sin tiempo siguen sin dispararse.
+
 ### 2.3 `calendars`
 
 Mapa `clave → { intervals: [...] }`. La clave es el identificador que citan `resources[*].calendar` y `elements[*].calendar`. La clave `default` es el calendario que toma **todo pool** que no declare el suyo (R-CAL-10); los elementos no la heredan.
@@ -123,7 +133,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 
 | Campo | Tipo | Aplica a | Default | Descripción |
 |---|---|---|---|---|
-| `processingTime` | distribución (§ 3) | tareas, timers (intermedios **y** de borde) | sin tiempo (0 s) | Duración del trabajo, en segundos. En un timer intermedio es el retardo, sin recurso. En un temporizador de borde es el plazo que interrumpe a su tarea; sin él el borde nunca vence (`SEMANTICS.md` R-BND-8). |
+| `processingTime` | distribución (§ 3) | tareas, timers (intermedios **y** de borde), eventos de rama de un gateway basado en eventos | sin tiempo (0 s) | Duración del trabajo, en segundos. En un timer intermedio es el retardo, sin recurso. En un temporizador de borde es el plazo: corta su tarea cuando el borde interrumpe (R-BND-1) y crea un token en paralelo cuando no (R-BND-10). Sin él el borde nunca dispara (`SEMANTICS.md` R-BND-8). En un evento de rama de un gateway basado en eventos —de tiempo **o** de mensaje, que se modela como una espera de este tiempo— es aquello con lo que la rama corre la carrera, y sin él esa rama nunca dispara (R-EVG-2, R-EVG-5). |
 | `resources` | array de `{ ref, quantity }` | tareas | — | `ref` = clave de `resources`; `quantity` integer ≥ 1, default `1`. Sin `resources` ⇒ capacidad infinita. |
 | `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás; si hay varios libres a la vez gana el que aparece primero en `resources` (R-REC-6). |
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |

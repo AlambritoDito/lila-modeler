@@ -734,6 +734,39 @@ export const en = {
       ` — total wait ${espera} ${unidad}, utilization ${utilizacion}%`,
 
     avisos: 'Warnings',
+
+    /**
+     * Footnote of the Process tab (#358). `process.costPerCase` is the mean cost of the cases
+     * that **completed** (`docs/RESULTS_FORMAT.md` § 5), so it is not `Total cost / Instances
+     * completed`: dividing one by the other gives a third, meaningless number.
+     */
+    notaCostoPorCaso:
+      'Cost per case is the mean cost of the cases that completed, not Total cost divided by ' +
+      'Instances completed: the cost of the cases still in flight is part of Total cost and not ' +
+      'of this mean.',
+    /**
+     * Footnote of the Resources tab (#358): the two cost readings the workbook puts side by side
+     * (§ 4 and § 12) answer different questions, and neither is an estimate of the other.
+     */
+    notaCostoRecursos:
+      'Unit cost charges only the hours the pool was actually occupied. The Payroll cost of the ' +
+      'exported workbook charges availability instead — capacity × cost per hour × the open ' +
+      'hours of the run, busy or idle.',
+    /**
+     * Footnote under the warnings when a pool reported `W-RECURSO-SATURADO` (#357). Two things the
+     * warning's own text cannot say: the criterion behind it (`docs/SEMANTICS.md` § 17 — neither
+     * door decides alone), and that the number it shows is read off the log of the simulated
+     * horizon, not the theoretical load `λ/(μ·c)` invites. It covers both variants of the warning,
+     * the one that prints the ratio and the one that prints the utilization, so it never claims
+     * the number beside it is a ratio.
+     */
+    notaSaturacion:
+      'The warning fires when attributed demand divided by what the pool served reaches 1.1, or ' +
+      'its utilization reaches 90 %, and in addition the queue grows or work is left pending: ' +
+      'neither number decides alone. Attributed demand counts only the instances that waited ' +
+      'while the pool was full, so the number the warning shows — that ratio, or the utilization ' +
+      'when it fires through that door — is observed over the simulated horizon, not the load of ' +
+      'all external demand.',
   },
 
   /* ------------------------------------------------------------------ *
