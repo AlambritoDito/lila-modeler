@@ -30,6 +30,7 @@ try {
     }, { data, width, height, rounded });
     return Buffer.from(result, 'base64');
   }
+  writeFileSync(join(web, 'lila-transparent.png'), await render('lila-transparent.png', 256, 256));
   writeFileSync(join(web, 'app-icon.png'), await render('lila-app-master.png', 256, 256));
   writeFileSync(join(web, 'logo-horizontal.png'), await render('lila-horizontal.png', 1086, 362));
   for (const size of [16, 32, 48, 180, 192, 512]) {

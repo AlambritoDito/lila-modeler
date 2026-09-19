@@ -41,3 +41,11 @@ website deployment, or publication of a new release.
 Revisit this decision when the owner explicitly requests a redesign, or when a
 platform adaptation requires a new export. An export requirement alone is not
 permission to change the character's expression.
+
+## Transparent companion — 2026-09-18
+
+The owner accepted the isolated Lila PNG and requested project integration.
+Use the transparent companion in the editor toolbar, welcome view and product
+header, where the character sits alongside text on the current surface. Preserve
+the detailed illustration and alpha channel. The horizontal hero/startup lockup
+and purple platform icons remain the approved applications described above.

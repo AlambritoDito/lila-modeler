@@ -877,7 +877,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       />}
       <header className="barra">
         <div className="identidad">
-          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="32" height="32" />
+          <img className="logo" src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`} alt="" aria-hidden="true" width="32" height="32" />
           <div>
             <div className="proyecto">{projectName}</div>
             <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>

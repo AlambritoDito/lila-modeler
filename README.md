@@ -238,6 +238,14 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, checks, PR process) and
 
 Before opening a PR: `npm run typecheck && npm test && npm run check:links`.
 
+## Brand assets
+
+Download the [transparent Lila PNG (1254 × 1254)](docs/design/branding/sources/lila-transparent.png)
+or the [web PNG (256 × 256)](docs/design/branding/web/lila-transparent.png).
+See the [branding guide](docs/design/branding/README.md) for approved usage and
+reproducible exports. The site and editor builds include the web asset at
+`branding/lila-transparent.png`.
+
 ## License and NOTICE
 
 Apache-2.0, see [`LICENSE`](LICENSE). Copyright 2026 Perfer Process; the Lila name and logos are
