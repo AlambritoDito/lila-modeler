@@ -177,8 +177,7 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
   test('los avisos de modelo y escenario de `lila run` no se pierden en `lila compare`', async () => {
     const a = writeScenario('a.scenario.json', { name: 'A', withoutResources: true });
     const b = writeScenario('b.scenario.json', { name: 'B', withoutResources: true });
-    // Sin la tarea en `elements` no hay processingTime (W-TAREA-SIN-TIEMPO) y quedan dos elementos
-    // del modelo sin parámetros (W-ELEMENTO-SIN-PARAMETROS dos veces, con textos distintos).
+    // #360: only the missing task in A needs a default warning; end events do not.
     const raw = JSON.parse(readFileSync(a, 'utf8')) as { elements: Record<string, unknown> };
     delete raw.elements[LONG_ID];
     writeFileSync(a, JSON.stringify(raw), 'utf8');
@@ -192,8 +191,9 @@ describe('QA LILA-047 · ataque 1: coherencia con `lila run` y trato de los cale
     const sinTiempo = all.split('\n').filter((line) => line.includes('W-TAREA-SIN-TIEMPO'));
     expect(sinTiempo).toHaveLength(1);
     const sinParametros = all.split('\n').filter((line) => line.includes('W-ELEMENTO-SIN-PARAMETROS'));
-    expect(sinParametros).toHaveLength(2);
-    expect(sinParametros.find((line) => line.includes('"A"'))).toContain('+1 more warning with the same code');
+    expect(sinParametros).toHaveLength(1);
+    expect(sinParametros[0]).toContain('"A"');
+    expect(sinParametros[0]).not.toContain('more warning');
   });
 });
 

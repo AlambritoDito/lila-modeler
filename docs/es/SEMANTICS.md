@@ -1141,6 +1141,12 @@ preceder a su gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
 `W-RECURSO-SATURADO`, `W-REPLICACIONES-SIN-OBSERVACIONES` (R-ARR-9).
 
+`W-ELEMENTO-SIN-PARAMETROS` (R3, #360) solo avisa cuando falta la entrada de una tarea,
+temporizador o start, o la de un XOR/OR divergente sin `probability` ni `conditions` no vacías
+en ninguna salida. Un `probability: 0` cuenta como configuración. No avisa por finales,
+terminate, AND, gateways de eventos ni gateways de paso/convergencia. Las reglas específicas
+de probabilidades y los avisos de tiempo ausente siguen aplicándose; no cambia ningún cálculo.
+
 `W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
 del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool
 y por corrida:

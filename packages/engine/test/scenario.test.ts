@@ -155,10 +155,12 @@ describe('validateScenario contra el IR', () => {
     expect(errors[0]?.message).toContain('Task_NoExiste');
   });
 
-  test('un elemento del IR sin parámetros es warning, no error (R3)', () => {
+  test('a missing task still warns; a gateway configured through flows does not (#360)', () => {
     const scenario = ScenarioSchema.parse(clone(AS_IS));
+    delete scenario.elements!.Task_TomarPedido;
     const problems = validateScenario(scenario, pedidoIr());
-    const warning = problems.find((p) => p.path === 'elements.Gateway_Revision');
+    expect(problems.some((p) => p.path === 'elements.Gateway_Revision')).toBe(false);
+    const warning = problems.find((p) => p.path === 'elements.Task_TomarPedido');
     expect(warning?.severity).toBe('warning');
     expect(warning?.code).toBe('W-ELEMENTO-SIN-PARAMETROS');
   });
