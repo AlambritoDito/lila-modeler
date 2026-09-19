@@ -603,9 +603,10 @@ hace simulable la construcción sin mensajes, señales ni bus de eventos.
   gateway, y no emite fila. La ganadora cuenta un `started` al armarse y un `completed` al
   disparar, y emite la fila del event log de cualquier otro timer (`enabledAt` = `startedAt` = el
   instante del gateway, `endedAt` = el disparo, sin recurso). El número de tokens del caso no
-  cambia: entra uno, sale uno. Una `probability` en los flujos de salida del gateway no significa
-  nada aquí y se ignora: lo que enruta el token es la carrera, nunca un sorteo (al contrario que en
-  R-XOR-1). *(prueba: #81)*
+  cambia: entra uno, sale uno. Una `probability` en los flujos de salida del gateway, incluido `0`,
+  se ignora y produce `W-PROB-IGNORADA`, citando el flujo y el gateway: lo que enruta el token es
+  la carrera, nunca un sorteo (al contrario que en R-XOR-1). La ausencia de `probability` no
+  produce este aviso. *(prueba: #81, #369)*
 - **R-EVG-4 — La carrera es de instantes, y el empate lo gana el primer flujo.** Lo que se compara
   es el instante en que **dispararía** cada rama, no el retardo en bruto, así que una rama con su
   propio calendario corre en el mismo reloj que las demás. Con dos instantes iguales gana la rama
@@ -1104,7 +1105,9 @@ Avisos (no abortan; viajan en `RunResult.warnings[]`, siempre con el id del elem
 cuando se repiten por caso, con un contador agregado en vez de una línea por ocurrencia):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
-`W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
+`W-PROB-IGNORADA` (probabilidad declarada en una salida de AND o gateway basado en eventos,
+R-AND-1/R-EVG-3; la variante `/event` del catálogo conserva el código público y explica que
+enruta la carrera entre eventos), `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
 (un token que quedó esperando en un join, R-OR-8/R-AND-4, o en un gateway basado en eventos cuyas
 ramas no tienen tiempo, R-EVG-6: cada caso tiene su propio texto),
 `W-TIMER-SIN-TIEMPO` (un timer intermedio sin `processingTime` retarda 0 segundos, R-EVT-2; como

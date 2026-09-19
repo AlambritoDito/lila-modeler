@@ -967,12 +967,13 @@ export function runReplication(
     if (first < tStop) heap.push({ t: first, kind: 'arrive', startId: nodeId });
   }
 
-  // R-AND-1: `probability` en las salidas de un AND no se usa.
+  // R-AND-1 / R-EVG-3: outgoing probabilities do not route AND or event-based gateways.
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
-    if (node.type !== 'and') continue;
+    if (node.type !== 'and' && node.type !== 'eventGateway') continue;
+    const message = node.type === 'eventGateway' ? M['W-PROB-IGNORADA/event'] : M['W-PROB-IGNORADA'];
     for (const flowId of node.outgoing) {
       if (spec[flowId]?.probability !== undefined) {
-        warn(coded('W-PROB-IGNORADA', M['W-PROB-IGNORADA'](flowId, nodeId)));
+        warn(coded('W-PROB-IGNORADA', message(flowId, nodeId)));
       }
     }
   }

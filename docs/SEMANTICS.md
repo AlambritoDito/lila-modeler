@@ -610,8 +610,9 @@ what makes the construct simulable without messages, signals or an event bus.
   winner counts one `started` when it is armed and one `completed` when it fires, and emits the
   event-log row of any other timer (`enabledAt` = `startedAt` = the gateway's instant, `endedAt` =
   the firing, no resource). The case's token count does not change: one token in, one token out.
-  A `probability` on the gateway's outgoing flows means nothing here and is ignored: what routes
-  the token is the race, never a draw (unlike R-XOR-1). *(test: #81)*
+  A `probability` on the gateway's outgoing flows, including `0`, is ignored and produces
+  `W-PROB-IGNORADA`, citing the flow and gateway: what routes the token is the race, never a draw
+  (unlike R-XOR-1). An absent `probability` produces no such warning. *(test: #81, #369)*
 - **R-EVG-4 — The race is on instants, and a tie goes to the first flow.** What is compared is the
   instant each branch **would** fire at, not the raw delay, so a branch with its own calendar
   races on the same clock as the rest. With two equal instants the winner is the branch listed
@@ -1118,7 +1119,9 @@ element involved and, when they repeat per case, with an aggregated counter inst
 per occurrence):
 
 `W-MSGFLOW`, `W-COND`, `W-START-SIN-LLEGADAS`, `W-XOR-RESIDUO-COMPARTIDO`, `W-XOR-NORMALIZADA`,
-`W-PROB-IGNORADA`, `W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
+`W-PROB-IGNORADA` (declared probability on an AND or event-based gateway output, R-AND-1/R-EVG-3;
+the `/event` catalog variant uses the same public code and explains that the event race routes),
+`W-OR-SIN-PROBABILIDAD`, `W-OR-VACIO`, `W-OR-JOIN-SIN-FORK`, `W-JOIN-BLOQUEADO`
 (a token left waiting at a join, R-OR-8/R-AND-4, or at an event-based gateway whose branches have
 no time, R-EVG-6: each case has its own text),
 `W-TIMER-SIN-TIEMPO` (an intermediate timer with no `processingTime` delays 0 seconds, R-EVT-2; as
