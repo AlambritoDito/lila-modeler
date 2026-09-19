@@ -65,13 +65,11 @@ describe.each(levels)('QA LILA-187 · examples/bizagi-levels/level-%i', (level) 
     const { ir } = await parseBpmn(leer(level, 'model.bpmn'));
     const problemas = validateScenario(escenarioDe(level), ir);
     expect(problemas.filter((p) => p.severity === 'error')).toEqual([]);
-    // Los avisos admisibles son el del elemento del modelo que el escenario no parametriza
-    // (gateways y ends, que no llevan parámetros; en el nivel 1, además, las tareas sin tiempo) y
-    // `W-SIN-SEED`: ninguno de los cuatro niveles declara `run.seed` (R-DEG-4, LILA-198).
-    expect([...new Set(problemas.map((p) => p.code))].sort()).toEqual([
-      'W-ELEMENTO-SIN-PARAMETROS',
-      'W-SIN-SEED',
-    ]);
+    // #360: only level 1 omits actionable task parameters. Ends and configured
+    // gateways no longer warn; all four examples still omit the seed.
+    expect([...new Set(problemas.map((p) => p.code))].sort()).toEqual(
+      level === 1 ? ['W-ELEMENTO-SIN-PARAMETROS', 'W-SIN-SEED'] : ['W-SIN-SEED'],
+    );
   });
 
   test('ataque 11: toda clave de `elements` existe en el IR (R3) y las de flujo son sequence flows', async () => {
