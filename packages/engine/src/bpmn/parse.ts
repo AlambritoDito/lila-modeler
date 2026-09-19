@@ -105,11 +105,14 @@ const NO_RAW_LITERALS: ReadonlyMap<string, string> = new Map();
 
 /**
  * What deciding the profile of one element needs from the container around it, gathered once per
- * `walk`: which elements have an outgoing flow, the raw `xsd:boolean` literals read from the XML
- * text, and the elements a supported event-based gateway brings into the profile (R-EVG-1).
+ * `walk`: which elements have an outgoing flow and their incoming counts, the raw `xsd:boolean`
+ * literals read from the XML text, and the elements a supported event-based gateway brings into
+ * the profile (R-EVG-1).
  */
 interface ProfileContext {
   hasOutgoing: ReadonlySet<ModdleElement>;
+  /** Counts actual sequence-flow targets, independently of optional XML `incoming` children. */
+  inDegree: ReadonlyMap<ModdleElement, number>;
   /** `id del boundary -> literal en bruto de `cancelActivity``. */
   rawCancel: ReadonlyMap<string, string>;
   /** `id del event gateway -> literal en bruto de `instantiate``. */
@@ -120,6 +123,7 @@ interface ProfileContext {
 
 const NO_CONTEXT: ProfileContext = {
   hasOutgoing: NO_OUTGOING,
+  inDegree: new Map(),
   rawCancel: NO_RAW_LITERALS,
   rawInstantiate: NO_RAW_LITERALS,
   inProfile: new Set(),
@@ -163,6 +167,8 @@ function boundaryTimerHost(
     !TASK_TYPES.has(host.$type) ||
     unsupportedConstruction(host) !== undefined ||
     !ctx.hasOutgoing.has(el) ||
+    // R-BND-1/R-BND-10: only the host may activate a boundary, never an incoming flow.
+    (ctx.inDegree.get(el) ?? 0) !== 0 ||
     interruptingOf(el, ctx.rawCancel) === undefined
   ) {
     return undefined;
@@ -461,6 +467,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
 
   const ctx: ProfileContext = {
     hasOutgoing,
+    inDegree,
     rawCancel: c.rawCancel,
     rawInstantiate: c.rawInstantiate,
     inProfile: eventGatewayProfile(container, targets, inDegree, outDegree, c.rawInstantiate),
