@@ -199,7 +199,7 @@ The first six are taken verbatim from the structure document; the rest are deriv
 |---|---|
 | **R1** | All times are in **seconds**, except `run.start`. |
 | **R2** | `baseTimeUnit` **only affects presentation**. |
-| **R3** | The keys of `elements` **must exist in the IR**: if one is missing, **error** citing the `id`; if the IR has an element without parameters, **warning**. |
+| **R3** | The keys of `elements` **must exist in the IR**: if one is missing, **error** citing the `id`; an absent entry produces a **warning** only for tasks, timers, starts and diverging XOR/OR gateways without outgoing probabilities or nonempty conditions (SEMANTICS §17, #360). |
 | **R4** | `probability` only on **sequence flows** (on a node it is `E-PROB-EN-NODO`). |
 | **R5** | `interTriggerTimer` / `triggerCount` only on **starts**, including the `bpmn:startEvent` with `timerEventDefinition` (which `SEMANTICS.md` § 2 maps to `start`). A `bpmn:intermediateCatchEvent` with a timer is a delay, never a generator: both fields there are `E-CAMPO-NO-APLICA`. A `triggerCount` without `interTriggerTimer` means `triggerCount` arrivals at `t = 0` (R-ARR-1), not a mute start. |
 | **R6** | At least one of `run.duration` or a `triggerCount` **on a start** (one on a non-generating element does not count as a stop condition). With `triggerCount` alone, the run ends when the heap empties. |

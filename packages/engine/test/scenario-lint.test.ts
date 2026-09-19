@@ -332,7 +332,7 @@ describe('R3 — sobrante es aviso, faltante es error (QA LILA-042)', () => {
       code: 'E-ELEMENTO-DESCONOCIDO',
       severity: 'error',
     });
-    expect(problems.find((p) => p.path === 'elements.Gateway_X')).toMatchObject({
+    expect(problems.find((p) => p.path === 'elements.Start')).toMatchObject({
       code: 'W-ELEMENTO-SIN-PARAMETROS',
       severity: 'warning',
     });
@@ -583,5 +583,48 @@ describe('§ 17 — los seis códigos del catálogo (LILA-198)', () => {
     // El resto de defectos del esquema conserva el mensaje de zod tal cual (LILA-232 los traduce).
     const otro = ScenarioSchema.safeParse({ ...BASE, version: 2 });
     expect(schemaIssueLines(otro.error?.issues ?? []).join('\n')).not.toContain('E-CLAVE-DESCONOCIDA');
+  });
+});
+
+
+describe('#360 — actionable missing-parameter warnings', () => {
+  function warnings(ir: ProcessIR, elements: Record<string, unknown> = {}) {
+    return validateScenario(ScenarioSchema.parse({ ...BASE, elements }), ir)
+      .filter((p) => p.code === 'W-ELEMENTO-SIN-PARAMETROS').map((p) => p.path);
+  }
+
+  test.each(['xor', 'or'] as const)('%s split respects flow parameters, including zero', (type) => {
+    const ir = xorIr(['Flow_A', 'Flow_B']);
+    ir.nodes.Gateway_X!.type = type;
+    expect(warnings(ir)).toEqual(['elements.Start', 'elements.Gateway_X']);
+    expect(warnings(ir, { Flow_A: { probability: 0 } })).toEqual(['elements.Start']);
+    expect(warnings(ir, { Flow_A: { probability: 0.5 }, Flow_B: { probability: 0.5 } }))
+      .toEqual(['elements.Start']);
+  });
+
+  test('conditional routing is configuration; an empty conditions array is not', () => {
+    const ir = xorIr(['Flow_A', 'Flow_B']);
+    expect(warnings(ir, { Flow_A: { conditions: [{ flowTaken: 'Flow_Start', probability: 1 }] } }))
+      .toEqual(['elements.Start']);
+    expect(warnings(ir, { Flow_A: { conditions: [] } })).toContain('elements.Gateway_X');
+  });
+
+  test.each(['and', 'eventGateway', 'end', 'terminate'] as const)('%s needs no node entry', (type) => {
+    const ir = xorIr();
+    ir.nodes.Gateway_X!.type = type;
+    expect(warnings(ir)).toEqual(['elements.Start']);
+  });
+
+  test.each(['xor', 'or'] as const)('%s merge/pass-through needs no routing parameters', (type) => {
+    const ir = xorIr(['Flow_A']);
+    ir.nodes.Gateway_X!.type = type;
+    expect(warnings(ir)).toEqual(['elements.Start']);
+  });
+
+  test.each(['task', 'timer', 'start'] as const)('retains missing %s warnings and honors explicit entries', (type) => {
+    const ir = xorIr();
+    ir.nodes.Gateway_X!.type = type;
+    expect(warnings(ir)).toEqual(['elements.Start', 'elements.Gateway_X']);
+    expect(warnings(ir, { Gateway_X: {} })).toEqual(['elements.Start']);
   });
 });

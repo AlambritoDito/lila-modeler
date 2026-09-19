@@ -1147,6 +1147,12 @@ precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
 ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`.
 
+`W-ELEMENTO-SIN-PARAMETROS` (R3, #360) only warns about an absent task, timer or start
+entry, or a diverging XOR/OR with neither `probability` nor nonempty `conditions` on any
+outgoing flow. Explicit `probability: 0` counts as configuration. Ends, terminate, AND,
+event gateways and pass-through/merge gateways do not receive this warning. Specific
+probability rules and missing-time warnings still apply; simulation calculations do not change.
+
 `W-RECURSO-SATURADO` warns that a pool never reaches a steady state: more work arrives than it
 can dispatch, and its queue grows with the run's duration. Exact text, once per pool and per run:
 

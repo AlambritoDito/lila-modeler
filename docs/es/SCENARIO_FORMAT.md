@@ -199,7 +199,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 |---|---|
 | **R1** | Todos los tiempos van en **segundos**, salvo `run.start`. |
 | **R2** | `baseTimeUnit` **solo afecta a la presentación**. |
-| **R3** | Las claves de `elements` **deben existir en el IR**: si falta, **error** citando el `id`; si sobra en el IR (elemento del modelo sin parámetros), **warning**. |
+| **R3** | Las claves de `elements` **deben existir en el IR**: si falta, **error** citando el `id`; una entrada ausente genera **warning** solo para tareas, temporizadores, starts y XOR/OR divergentes sin probabilidades ni condiciones no vacías en sus salidas (SEMANTICS §17, #360). |
 | **R4** | `probability` solo en **sequence flows** (en un nodo es `E-PROB-EN-NODO`). |
 | **R5** | `interTriggerTimer` / `triggerCount` solo en **starts**, incluido el `bpmn:startEvent` con `timerEventDefinition` (que `SEMANTICS.md` § 2 mapea a `start`). Un `bpmn:intermediateCatchEvent` con timer es retardo, nunca generador: los dos campos ahí son `E-CAMPO-NO-APLICA`. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
 | **R6** | Al menos uno de `run.duration` o un `triggerCount` **en un start** (el de un elemento que no genera no cuenta como parada). Con `triggerCount` a solas la corrida termina al vaciarse el heap. |

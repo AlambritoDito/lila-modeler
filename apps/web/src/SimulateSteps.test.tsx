@@ -161,7 +161,8 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(hay('campo-run.duration')).toBe(true);
     expect(hay('campo-run.replications')).toBe(true);
     expect(hay('campo-run.start')).toBe(true);
-    expect(texto()).toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
+    // #360: this fully configured fixture has no actionable lint warnings.
+    expect(texto()).not.toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
 
     // Y nada de los pasos 3 y 4: no plegado, fuera del DOM.
     expect(texto()).not.toContain(en.escenario.seccionCalendarios);
