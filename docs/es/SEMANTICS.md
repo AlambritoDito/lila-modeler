@@ -331,6 +331,18 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   seguía en cola de una ya iniciada y `endedAt = null`; `observedUntil` fija el corte.
   *(decisión: ADR-025; prueba: LILA-033, LILA-037)*
 
+- **R-TOK-7 — Trabajo sin avance temporal.** Cada caso puede procesar como máximo
+  `max(100_000, 1_024 × (número de nodos IR + número de flujos IR))` eventos efectivos `enter`,
+  `done` y `boundary` en un instante por réplica. El siguiente evento aborta la simulación
+  con `E-LIMITE-SIN-AVANCE`, indicando nodo BPMN, caso, réplica con índice desde cero, instante
+  en segundos y presupuesto. No cuentan eventos cancelados/obsoletos, llegadas ni cambios de
+  capacidad. Cualquier instante representable estrictamente mayor reinicia el contador del
+  caso, sin epsilon. También se protegen los casos de warmup. Los casos no comparten
+  presupuesto: las llegadas simultáneas no agotan un límite global. Es un límite determinista
+  de trabajo, no una prueba de ciclo infinito: un caso finito excepcionalmente costoso en un
+  instante también puede superarlo. Revisa ciclos y tiempos de procesamiento. No introduce
+  sorteos ni cambios de orden de eventos. *(test: #368)*
+
 ---
 
 ## 6. Gateway exclusivo (XOR) divergente
@@ -1032,10 +1044,10 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 59 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 60 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
-Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
+Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecución se lanzan; la CLI sale con 1):
 
 | Código | Cuándo |
 |---|---|
@@ -1045,6 +1057,7 @@ Errores (abortan; `validate` los devuelve en `errors[]`, la CLI sale con 1):
 | `E-ID-DUPLICADO` | dos elementos con el mismo `id` |
 | `E-GATEWAY-SIN-ARISTAS` | gateway sin entradas o sin salidas |
 | `E-INALCANZABLE` | nodo no alcanzable desde ningún `start` |
+| `E-LIMITE-SIN-AVANCE` | presupuesto de trabajo agotado para un caso en un instante durante la ejecución (R-TOK-7); aborta `runReplication` y `simulate` |
 | `E-SIN-START` / `E-SIN-END` | proceso sin start, o sin `end` ni `terminate` |
 | `E-ELEMENTO-DESCONOCIDO` | clave de `elements` que no existe en el IR |
 | `E-CLAVE-DESCONOCIDA` | clave no reconocida por el esquema |
@@ -1090,7 +1103,8 @@ un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esq
 mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
 mano. Es el único desajuste que queda; ver el párrafo final de esta sección.
 
-Todos los errores de la tabla salen del lint (`validateScenario`) o del validador del IR, salvo
+`E-LIMITE-SIN-AVANCE` es un error de ejecución y puede ocurrir después de emitir callbacks; no es un error del validador estático.
+Los demás errores de la tabla salen del lint (`validateScenario`) o del validador del IR, salvo
 `E-CLAVE-DESCONOCIDA`, que lo caza el esquema cerrado antes del lint: el código va delante del
 mensaje en la línea que imprime la CLI, y lo formatea `schemaIssueLines` (LILA-198).
 
@@ -1259,6 +1273,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
 | R-TOK-4 | tránsito instantáneo y `flows.count` | LILA-028 |
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identidad y lifecycle parcial | LILA-033, LILA-037 |
+| R-TOK-7 | presupuesto por caso sin avance temporal | #368 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: equitativo, residuo al default, normalización, sorteo | LILA-026 (normalización y avisos: LILA-042) |
 | R-XOR-6, R-XOR-8 | rango y ubicación de `probability` | LILA-013, LILA-042, LILA-198 |
 | R-COND-1 … R-COND-5 | ruteo condicionado al desenlace previo del caso (ADR-028) | E22 (`packages/engine/test/conditions.test.ts`) |

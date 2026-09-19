@@ -21,6 +21,7 @@ export type Locale = 'en' | 'es';
 
 /** Message bodies of the codes emitted from `core/`. */
 export interface CoreCodeMessages {
+  'E-LIMITE-SIN-AVANCE': (nodeId: string, caseId: number, replication: number, instant: number, limit: number) => string;
   /* --- core/ir.ts --------------------------------------------------- */
   'E-ID-DUPLICADO': (id: string) => string;
   'E-REF-INEXISTENTE/entrante': (id: string, flowId: string) => string;

@@ -10,6 +10,8 @@ import type { CoreCatalog } from './types.js';
 
 export const coreEs: CoreCatalog = {
   codes: {
+    'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
+      `${nodeId}: caso ${caseId}, réplica ${replication}, instante ${instant} s: se alcanzó el límite de ${limit} eventos sin avance temporal. Revisa los ciclos y los tiempos de procesamiento.`,
     'E-ID-DUPLICADO': (id) => `${id}: el id está declarado a la vez como nodo y como flujo.`,
     'E-REF-INEXISTENTE/entrante': (id, flowId) =>
       `${id}: el flujo entrante ${flowId} no existe en el proceso.`,

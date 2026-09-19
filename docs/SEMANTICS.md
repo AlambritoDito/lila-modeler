@@ -337,6 +337,18 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   instance that was still queued from one already started, and `endedAt = null`; `observedUntil`
   fixes the cutoff. *(decision: ADR-025; test: LILA-033, LILA-037)*
 
+- **R-TOK-7 — Work without time advancement.** Each case may process at most
+  `max(100_000, 1_024 × (number of IR nodes + number of IR flows))` effective `enter`, `done`
+  and `boundary` events at one instant per replication. The next event aborts the simulation
+  with `E-LIMITE-SIN-AVANCE`, identifying its BPMN node, case, zero-based replication, instant
+  in seconds and budget. Cancelled/stale events, arrivals and capacity events do not count.
+  Any strictly greater representable instant resets that case's counter; no epsilon is used.
+  Warm-up cases are protected too. Cases never share a budget, so simultaneous arrivals do
+  not exhaust one global limit. This is a deterministic work limit, not proof of an infinite
+  cycle: an exceptionally expensive finite case at one instant can also exceed it. Review
+  cycles and processing times when it fires. No new random draws or event ordering changes
+  are introduced. *(test: #368)*
+
 ---
 
 ## 6. Exclusive gateway (XOR), diverging
@@ -1043,10 +1055,10 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 59 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 60 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
-Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1):
+Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
 
 | Code | When |
 |---|---|
@@ -1056,6 +1068,7 @@ Errors (they abort; `validate` returns them in `errors[]`, the CLI exits with 1)
 | `E-ID-DUPLICADO` | two elements with the same `id` |
 | `E-GATEWAY-SIN-ARISTAS` | gateway with no incoming or no outgoing flows |
 | `E-INALCANZABLE` | node unreachable from any `start` |
+| `E-LIMITE-SIN-AVANCE` | runtime work budget exceeded for one case at one instant (R-TOK-7); aborts `runReplication` and `simulate` |
 | `E-SIN-START` / `E-SIN-END` | process with no start, or with neither `end` nor `terminate` |
 | `E-ELEMENTO-DESCONOCIDO` | `elements` key that does not exist in the IR |
 | `E-CLAVE-DESCONOCIDA` | key not recognized by the schema |
@@ -1102,7 +1115,8 @@ by the zod schema with its generic message, and `E-REC-CAPACIDAD` is `core/`'s g
 builds the scenario by hand. It is the only mismatch that remains; see this section's final
 paragraph.
 
-Every error in the table comes from the lint (`validateScenario`) or from the IR validator,
+`E-LIMITE-SIN-AVANCE` is a runtime error; it can occur after callbacks have run.
+Other errors in the table come from the lint (`validateScenario`) or from the IR validator,
 except `E-CLAVE-DESCONOCIDA`, which is caught by the closed schema before the lint: the code goes
 ahead of the message on the line the CLI prints, formatted by `schemaIssueLines` (LILA-198).
 
@@ -1273,6 +1287,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
 | R-TOK-4 | instantaneous transit and `flows.count` | LILA-028 |
 | R-TOK-5, R-TOK-6 | `enabled`/`started`/`ended`; identity and partial lifecycle | LILA-033, LILA-037 |
+| R-TOK-7 | per-case work budget without time advancement | #368 |
 | R-XOR-1 … R-XOR-5, R-XOR-7 | XOR: even split, remainder to the default, normalization, draw | LILA-026 (normalization and warnings: LILA-042) |
 | R-XOR-6, R-XOR-8 | range and placement of `probability` | LILA-013, LILA-042, LILA-198 |
 | R-COND-1 … R-COND-5 | routing conditioned on the case's previous outcome (ADR-028) | E22 (`packages/engine/test/conditions.test.ts`) |

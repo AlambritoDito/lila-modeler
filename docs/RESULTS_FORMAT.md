@@ -12,6 +12,16 @@ Units, unless stated otherwise:
 
 `RunResult` is the output of `simulate(ir, scenario, opts)` (`packages/engine/src/core/run.ts`, see section 6 of the structure document). It is aggregated after running one or more replications (`scenario.run.replications`) and, when there is more than one, every numeric metric also carries its cross-replication summary (`replications`/`ci95`, see below).
 
+### Runtime failure without time advancement (#368)
+
+If R-TOK-7 exhausts a case’s work budget, `runReplication` and `simulate` throw
+`E-LIMITE-SIN-AVANCE`. No `RunResult` is returned, later replications do not run, and
+this failure is not represented as `cancelled` or a warning. The message identifies the
+BPMN node, case, zero-based replication, simulated instant in seconds and budget.
+Streaming callbacks may already have received rows or progress; those observations are
+incomplete and must not be treated as a successful run. Existing result and log schemas
+are unchanged.
+
 ---
 
 ## 1. Overall structure
