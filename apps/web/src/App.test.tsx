@@ -767,7 +767,7 @@ it('in Settings, «About Lila Modeler» closes Settings and opens the About wind
     expect(v.hijo.document.querySelector('.ventana-titulo')).toBeNull();
   } finally { v.quitar(); }
 });
-it('el menú nativo despacha "acerca" y abre la ventana Acerca de (#408, LILA-381)', async () => {
+it('the native menu dispatches "acerca" and opens the About window (#408, LILA-381)', async () => {
   const menu = await remontarConMenu();
   const v = ventanaAcercaFalsa();
   try {
@@ -795,6 +795,15 @@ it('six clicks reveal the key form; Esc closes the window and reopening starts t
     await v.clicarImagen(1);
     expect(v.hijo.document.querySelector('.acerca-clave')).not.toBeNull();
   } finally { v.quitar(); }
+});
+it('a blocked About popup says so with its own message (QA of #427, S1)', async () => {
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    expect(abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.any(String));
+    expect(container.textContent).toContain(T.app.acercaBloqueada);
+    expect(container.textContent).not.toContain(T.app.ventanaBloqueada);
+  } finally { abrir.mockRestore(); }
 });
 it('«scuba» in the About window opens its YouTube link through the main window (#408)', async () => {
   const v = ventanaAcercaFalsa();
@@ -1609,9 +1618,16 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(bienvenida.querySelector('.bienvenida-novedades h3')!.textContent).toBe(T.bienvenida.novedades(version));
   expect(__LILA_NOVEDADES__).not.toBe('');
   expect(bienvenida.querySelector('.bienvenida-novedades p')!.textContent).toBe(__LILA_NOVEDADES__);
+  // One flex item after the swatch: text and link wrap inline together, and the «·» travels with
+  // the link inside a `nowrap` span, so no line can end with it (QA of #427, M1).
   const lineaTema = bienvenida.querySelector('.bienvenida-tema')!;
-  expect(lineaTema.firstChild!.nextSibling!.textContent!.trim()).not.toMatch(/·$/);
-  expect(lineaTema.textContent).toMatch(/ · [^·]+$/);
+  expect([...lineaTema.children].map((hijo) => hijo.tagName)).toEqual(['SPAN', 'SPAN']);
+  const texto = lineaTema.children[1]!;
+  expect(texto.firstChild!.textContent!.trim()).not.toMatch(/·$/);
+  const enlace = texto.querySelector('.enlace-tema')!;
+  expect(enlace.parentElement).toBe(texto);
+  expect(enlace.textContent).toBe(`· ${T.bienvenida.cambiarApariencia}`);
+  expect(enlace.querySelector('button.enlace')!.textContent).toBe(T.bienvenida.cambiarApariencia);
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();

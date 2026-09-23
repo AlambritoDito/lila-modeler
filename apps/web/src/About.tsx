@@ -64,8 +64,8 @@ const KARAOKE_DURACION_EPICA_MS = 400;
 const KARAOKE_ESPERA_MS = 1500;
 const KARAOKE_TOTAL_PALABRAS = KARAOKE_PALABRAS_1.length + KARAOKE_PALABRAS_2.length;
 const KARAOKE_RETRASO_EPICA_MS = KARAOKE_TOTAL_PALABRAS * KARAOKE_RETRASO_MS;
-/** Cuánto tarda el karaoke completo, de montarse a llamar `onTerminar` y abrir el enlace: lo que tarda en aterrizar la
- * última palabra más la espera final. `About.test.tsx` avanza los temporizadores falsos por esto. */
+/** How long the whole karaoke lasts, from mounting to calling `onTerminar` and opening the link:
+ * the time the last word takes to land plus the final hold. `About.test.tsx` advances fake timers by it. */
 export const KARAOKE_DURACION_TOTAL_MS = KARAOKE_RETRASO_EPICA_MS + KARAOKE_DURACION_EPICA_MS + KARAOKE_ESPERA_MS;
 
 /**
@@ -88,7 +88,8 @@ export function Karaoke({ onTerminar }: { readonly onTerminar: () => void }) {
     const raiz = document.getElementById('root');
     raiz?.setAttribute('inert', '');
     const reloj = setTimeout(() => { terminar.current(); abrirEnlace(URL_BRITO); }, KARAOKE_DURACION_TOTAL_MS);
-    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') terminar.current(); };
+    // Esc stops the clock here too: the link must not open even if the parent keeps it mounted.
+    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') { clearTimeout(reloj); terminar.current(); } };
     window.addEventListener('keydown', teclas);
     return () => { clearTimeout(reloj); window.removeEventListener('keydown', teclas); raiz?.removeAttribute('inert'); };
   }, []);
@@ -113,6 +114,14 @@ export function Karaoke({ onTerminar }: { readonly onTerminar: () => void }) {
   );
 }
 
+/**
+ * The pulse and the key-form shake end on `animationend`, which never fires under reduced motion,
+ * so their classes are not added at all then (they would stay on and replay if the setting changed).
+ */
+function sinMovimiento(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
 export function About({ onCerrar, onKaraoke }: {
   /** Closes the About window. */
   readonly onCerrar: () => void;
@@ -132,7 +141,7 @@ export function About({ onCerrar, onKaraoke }: {
     if (valor === 'brito') onKaraoke();
     else if (valor === 'scuba') abrirEnlace(URL_SCUBA);
     // Not a hint of which keys exist: a shake and that is all.
-    else setTiembla(true);
+    else setTiembla(!sinMovimiento());
   }
 
   return (
@@ -142,11 +151,11 @@ export function About({ onCerrar, onKaraoke }: {
           while the pulse is still playing (it just does not restart it). */}
       <img
         className={`acerca-icono${pulso ? ' pulso' : ''}`}
-        src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`}
+        src={`${import.meta.env.BASE_URL}branding/app-icon.png`}
         alt=""
         width="120"
         height="120"
-        onClick={() => { setClics((c) => c + 1); setPulso(true); }}
+        onClick={() => { setClics((c) => c + 1); setPulso(!sinMovimiento()); }}
         onAnimationEnd={() => setPulso(false)}
       />
       <strong id="acerca-nombre">{S.bienvenida.nombre}</strong>

@@ -125,6 +125,7 @@ export const en = {
     enVentanaAparte: 'Scenario in its own window ↗',
     mostrarVentana: 'Show',
     ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
+    acercaBloqueada: 'The About window was blocked; allow pop-ups for this site.',
     tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
 
     /** Canvas zoom controls. */

@@ -89,7 +89,9 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
         </div>
         <p className="bienvenida-tema">
           <span className="muestra" aria-hidden="true" />
-          {S.tema(temaNombre, densidadTexto)}{' · '}<button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button>
+          {/* One flex item (#425) so the text and the link wrap inline together, and the «·» is
+              glued to the link (`nowrap`): a narrow column breaks before it, never after it. */}
+          <span>{S.tema(temaNombre, densidadTexto)}{' '}<span className="enlace-tema">{'· '}<button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button></span></span>
         </p>
       </div>
     </section>

@@ -44,6 +44,12 @@ simplification for provenance only; it is never used by the application.
   Regenerate sizes with the export script, never with another AI edit.
 - Keep the horizontal logo's white background on a white surface. Never recolor the
   face, crop the ears, stretch the image, or animate the character.
+- Owner exception (#408, 2026-09-23), for the About window only: it shows
+  `web/app-icon.png` (the illustration on its fixed brand purple, never a theme
+  color) with 24 px rounded corners, and a click plays a short grow-then-shrink
+  pulse (`transform: scale`, about 300 ms, off under `prefers-reduced-motion`).
+  The transparent asset keeps the no-rounded-container rule, and nothing else in
+  the product rounds or animates the character.
 - The editor toolbar uses the mark at 26 px and the welcome view at 38 px. The
   horizontal logo works from about 280 px wide.
   At 16 px the silhouette is recognizable but fine illustrated detail is lost.

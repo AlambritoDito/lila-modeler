@@ -113,6 +113,7 @@ export const es: Strings = {
     enVentanaAparte: 'Escenario en ventana aparte ↗',
     mostrarVentana: 'Mostrar',
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
+    acercaBloqueada: 'Se bloqueó la ventana Acerca de; permite ventanas emergentes para este sitio.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
 
     /** Controles de zoom del lienzo. */

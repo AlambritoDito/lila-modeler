@@ -37,7 +37,7 @@ async function montarKaraoke(onTerminar: () => void = () => {}): Promise<void> {
   await act(async () => root.render(<Karaoke onTerminar={onTerminar} />));
 }
 
-/** Los seis clics que destapan la clave (LILA-381): uno por uno, envueltos en `act`. */
+/** The clicks that reveal the key (LILA-381): one by one, each wrapped in `act`. */
 async function clicarIcono(veces: number): Promise<void> {
   const icono = container.querySelector<HTMLImageElement>('.acerca-icono')!;
   for (let i = 0; i < veces; i += 1) {
@@ -45,8 +45,8 @@ async function clicarIcono(veces: number): Promise<void> {
   }
 }
 
-/** Teclea la clave en el campo (input controlado: hay que disparar `input`, no solo `.value =`) y
- * envía el formulario pulsando «Entrar». */
+/** Types the key into the field (a controlled input: it needs an `input` event, not just
+ * `.value =`) and submits the form with «Entrar». */
 async function enviarClave(texto: string): Promise<void> {
   const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
   const receptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
@@ -63,29 +63,29 @@ beforeEach(() => { setLocale('en'); vi.stubGlobal('open', vi.fn()); });
 const BRITO = 'https://www.youtube.com/watch?v=r7GBGZ004vQ&list=RDr7GBGZ004vQ&start_radio=1&t=203s';
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
-it('shows the rounded transparent Lila image, the name in bold and the version from package.json', async () => {
+it('shows the rounded Lila app icon, the name in bold and the version from package.json', async () => {
   await montar();
   const img = container.querySelector('img')!;
-  expect(img.getAttribute('src')).toContain('branding/lila-transparent.png');
+  expect(img.getAttribute('src')).toContain('branding/app-icon.png');
   expect(img.classList.contains('acerca-icono')).toBe(true);
   expect(container.querySelector('dialog')).toBeNull();
   expect(container.querySelector('strong')?.textContent).toBe('Lila Modeler');
   expect(container.querySelector('.acerca-version')?.textContent).toBe(`v${version}`);
 });
 
-it('las dos líneas de marca son exactas en inglés', async () => {
+it('the two brand lines are exact with the UI in English', async () => {
   setLocale('en');
   await montar();
   const lineas = [...container.querySelectorAll('.acerca-marca')].map((p) => p.textContent);
   expect(lineas).toEqual(['Lila Modeler® — Hecho en México 🇲🇽', 'De Tabachines para el mundo.']);
 });
 
-it('las dos líneas de marca son exactas en español (no dependen del idioma)', async () => {
+it('the two brand lines are exact with the UI in Spanish (they do not depend on the language)', async () => {
   setLocale('es');
   await montar();
   const lineas = [...container.querySelectorAll('.acerca-marca')].map((p) => p.textContent);
   expect(lineas).toEqual(['Lila Modeler® — Hecho en México 🇲🇽', 'De Tabachines para el mundo.']);
-  // Y el nombre, que sí sale del catálogo, sigue siendo el mismo nombre propio en los dos.
+  // The name does come from the catalog, and it is the same proper noun in both.
   expect(container.querySelector('strong')?.textContent).toBe('Lila Modeler');
 });
 
@@ -95,9 +95,9 @@ it('the close button asks to close the window', async () => {
   expect(onCerrar).toHaveBeenCalledOnce();
 });
 
-// ---------- huevo de pascua (LILA-381, pedido del dueño 2026-09-22) ----------
+// ---------- Easter egg (LILA-381, owner request 2026-09-22) ----------
 
-it('cinco clics en el icono no destapan nada', async () => {
+it('five clicks on the image reveal nothing', async () => {
   await montar();
   await clicarIcono(5);
   expect(container.querySelector('.acerca-clave')).toBeNull();
@@ -120,30 +120,30 @@ it('every click pulses the image and counts, even while the pulse is still playi
   expect(container.querySelector('.acerca-clave')).not.toBeNull();
 });
 
-it('el sexto clic destapa el formulario de la clave, sin ninguna pista', async () => {
+it('the sixth click reveals the key form, without any hint', async () => {
   await montar();
   await clicarIcono(6);
   const form = container.querySelector('.acerca-clave')!;
   expect(form).not.toBeNull();
   expect(form.querySelector('label')?.textContent).toBe('Clave secreta');
   expect(form.querySelector('button[type="submit"]')?.textContent).toBe('Entrar');
-  // Ni un atributo de pista (placeholder, title…) en el campo.
+  // Not a single hint attribute (placeholder, title…) on the field.
   const campo = form.querySelector('input')!;
   expect(campo.getAttribute('placeholder')).toBeNull();
   expect(campo.getAttribute('title')).toBeNull();
 });
 
-it('una clave equivocada no abre nada ni dice qué claves existen', async () => {
+it('a wrong key opens nothing and does not tell which keys exist', async () => {
   await montar();
   await clicarIcono(6);
   await enviarClave('lo que sea');
   expect(window.open).not.toHaveBeenCalled();
   expect(onKaraoke).not.toHaveBeenCalled();
-  // El campo se limpia: no se queda el intento a la vista.
+  // The field is cleared: the attempt does not stay in view.
   expect(container.querySelector<HTMLInputElement>('.acerca-clave input')!.value).toBe('');
 });
 
-it('«scuba» (con mayúsculas y espacios) abre su enlace al instante', async () => {
+it('«scuba» (with capitals and spaces) opens its link at once', async () => {
   await montar();
   await clicarIcono(6);
   await enviarClave('  Scuba  ');
@@ -158,7 +158,7 @@ it('«brito» hands over to the karaoke and opens nothing itself', async () => {
   expect(window.open).not.toHaveBeenCalled();
 });
 
-it('el campo de la clave no ofrece autocompletar ni corrector (QA de #387, Low)', async () => {
+it('the key field offers no autocomplete or spellcheck (QA of #387, Low)', async () => {
   await montar();
   await clicarIcono(6);
   const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
@@ -182,7 +182,7 @@ it('the karaoke shows the three lines and only at the end opens its link and fin
   expect(onTerminar).toHaveBeenCalledOnce();
 });
 
-it('el temporizador del karaoke sobrevive a que se vuelva a renderizar (QA de #387, Medium)', async () => {
+it('the karaoke timer survives re-renders (QA of #387, Medium)', async () => {
   // Before the fix the callbacks were dependencies of the effect that arms the `setTimeout`: any
   // unrelated render — a running simulation's progress, in the real app — restarted it.
   vi.useFakeTimers();
@@ -201,7 +201,7 @@ it('el temporizador del karaoke sobrevive a que se vuelva a renderizar (QA de #3
   expect(window.open).toHaveBeenCalledWith(BRITO, '_blank', 'noopener,noreferrer');
 });
 
-it('el overlay es `role="presentation"`/`aria-live="polite"` y deja `#root` inerte mientras suena (QA de #387, Low)', async () => {
+it('the overlay is `role="presentation"`/`aria-live="polite"` and makes `#root` inert while it plays (QA of #387, Low)', async () => {
   const raiz = document.createElement('div');
   raiz.id = 'root';
   document.body.append(raiz);
@@ -222,11 +222,22 @@ it('el overlay es `role="presentation"`/`aria-live="polite"` y deja `#root` iner
   }
 });
 
-it('Escape durante el karaoke lo termina sin abrir el enlace', async () => {
+it('Escape during the karaoke ends it and the link never opens, even if it stays mounted', async () => {
   vi.useFakeTimers();
   const onTerminar = vi.fn();
   await montarKaraoke(onTerminar);
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
   expect(onTerminar).toHaveBeenCalledOnce();
+  // `onTerminar` is a spy here, so the overlay stays mounted: only its own `clearTimeout` stops it.
+  await act(async () => { vi.advanceTimersByTime(KARAOKE_DURACION_TOTAL_MS); });
   expect(window.open).not.toHaveBeenCalled();
+  expect(onTerminar).toHaveBeenCalledOnce();
+});
+
+it('under reduced motion a click still counts but adds no pulse class (#408)', async () => {
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener() {}, removeEventListener() {} }));
+  await montar();
+  await clicarIcono(6);
+  expect(container.querySelector('.acerca-icono')!.classList.contains('pulso')).toBe(false);
+  expect(container.querySelector('.acerca-clave')).not.toBeNull();
 });

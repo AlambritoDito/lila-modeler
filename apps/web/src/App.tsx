@@ -911,7 +911,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       x: Math.round(window.screenX + (window.outerWidth - 440) / 2),
       y: Math.round(window.screenY + (window.outerHeight - 600) / 2),
     });
-    if (ventana === null) { setIoError(S.app.ventanaBloqueada); return; }
+    if (ventana === null) { setIoError(S.app.acercaBloqueada); return; }
     setVentanaAcerca(ventana);
   }
   /** Idempotent: the child's own `pagehide` lands here too. Unmounting `About` resets its egg. */
