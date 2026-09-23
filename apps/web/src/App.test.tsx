@@ -1610,13 +1610,15 @@ it.each([
   ['#fff', true],
   ['#FFFFFF', true],
   ['#000', false],
-  // Los cinco temas integrados (`theme/themes/*.json`): Papel, Tieso y Montana son claros;
-  // Eva-01 y Akira, oscuros.
+  // Los siete temas integrados (`theme/themes/*.json`): Papel, Tieso, Montana y Lila Light son
+  // claros; Eva-01, Akira y Lila Dark, oscuros.
   ['#12101A', false], // eva-01
   ['#F3F2F2', true], // papel
   ['#EEF3F8', true], // tieso
   ['#0B0A14', false], // akira
   ['#EBC7FA', true], // montana
+  ['#FAF8EE', true], // lila-light
+  ['#1C0F2E', false], // lila-dark
 ] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
   expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
 });

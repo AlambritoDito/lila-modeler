@@ -14,6 +14,8 @@ const themes: Array<[string, Theme]> = [
   ['tieso', readTheme('./themes/tieso.json')],
   ['akira', readTheme('./themes/akira.json')],
   ['montana', readTheme('./themes/montana.json')],
+  ['lila-light', readTheme('./themes/lila-light.json')],
+  ['lila-dark', readTheme('./themes/lila-dark.json')],
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
