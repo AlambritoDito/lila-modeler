@@ -19,7 +19,8 @@ import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
 import { PanelPropiedades } from './PropertiesPanel';
-import { problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
@@ -105,6 +106,8 @@ async function preferencias(): Promise<Ajustes> {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
     const idioma = localStorage.getItem('lila.idioma');
+    // Empty or blank is "never saved" (320 by default), not 0 clamped up to 300 (QA of #390).
+    const panelAncho = Number(localStorage.getItem('lila.panelAncho')?.trim() || NaN);
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -118,6 +121,7 @@ async function preferencias(): Promise<Ajustes> {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
       ...(idioma === null ? {} : { idioma }),
+      ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
     };
   } catch { return {}; }
@@ -137,6 +141,7 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
+    if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
@@ -187,6 +192,11 @@ function atajo(tecla: string, soloDesktop = false): string {
 function serviciosDe(modelador: Modelador | null): Servicios | null {
   try { return modelador?.servicios ?? null; } catch { return null; }
 }
+
+/** Right panel width limits, in px (design 2a, `docs/design/COMPARACION-2026-09-07.md`). */
+const PANEL_MIN = 300;
+const PANEL_MAX = 520;
+const anchoPanel = (px: number): number => Math.min(PANEL_MAX, Math.max(PANEL_MIN, Math.round(px)));
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
@@ -315,6 +325,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
+  const [panelAncho, setPanelAncho] = useState(320);
+  const arrastre = useRef<{ x: number; ancho: number } | null>(null);
   /**
    * Preferencia de idioma (LILA-210): `auto` sigue al sistema. Se guarda la preferencia y no el
    * idioma resuelto, y el idioma vivo lo lleva `i18n.ts` —de ahí `useLocale()`, que es lo que
@@ -555,6 +568,55 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSim({ tipo: 'inactivo' });
   }
 
+  /**
+   * Cambiar de escenario invalida el resultado anterior: el overlay se limpia aquí y se vuelve a
+   * pintar cuando termine la corrida nueva. La corrida en vuelo es del escenario viejo, así que se
+   * mata: si no, terminaría después y pintaría sus cuellos de botella bajo el nombre del nuevo.
+   */
+  function elegirEscenario(id: string): void {
+    setEscenarioId(id);
+    cancelarCorrida();
+    const run = latest.find((r) => r.scenarioName === id);
+    setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
+  }
+
+  /** A new scenario (a duplicate, from the panel or the rail) becomes the active one. */
+  function anadirEscenario(archivo: string, escenario: Record<string, unknown>): void {
+    setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+    // Cualquier padre extends editado invalida también sus descendientes.
+    setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+    setEscenarioId(archivo);
+    cancelarCorrida();
+    setCorrida(null);
+  }
+
+  /**
+   * Divider of the right panel: primary-button drag and arrow keys, persisted when the gesture
+   * ends. Arrows follow the ARIA splitter convention: they move the divider, so ArrowLeft widens
+   * the panel on its right.
+   */
+  function divisorPanel(): React.HTMLAttributes<HTMLDivElement> {
+    const mover = (x: number): number => anchoPanel(arrastre.current!.ancho + arrastre.current!.x - x);
+    const fijar = (px: number): void => { setPanelAncho(px); recordar({ panelAncho: px }); };
+    // A cancelled or lost capture ends the drag where the last move left it.
+    const soltar = (): void => { if (arrastre.current !== null) { arrastre.current = null; fijar(panelAncho); } };
+    return {
+      onPointerDown: (e) => {
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        arrastre.current = { x: e.clientX, ancho: panelAncho };
+      },
+      onPointerMove: (e) => { if (arrastre.current !== null) setPanelAncho(mover(e.clientX)); },
+      onPointerUp: (e) => { if (arrastre.current !== null) { fijar(mover(e.clientX)); arrastre.current = null; } },
+      onPointerCancel: soltar,
+      onLostPointerCapture: soltar,
+      onKeyDown: (e) => {
+        const paso = e.key === 'ArrowLeft' ? 16 : e.key === 'ArrowRight' ? -16 : 0;
+        if (paso !== 0) { e.preventDefault(); fijar(anchoPanel(panelAncho + paso)); }
+      },
+    };
+  }
+
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
   // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
   // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
@@ -636,6 +698,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
       // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
       // mano— cae en `auto`, que es arrancar en el idioma del sistema.
       const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
@@ -861,7 +924,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   return (
-    <div className="app" data-densidad={densidad} data-theme={decoratedTheme}>
+    <div className="app" data-densidad={densidad} data-theme={decoratedTheme} style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}>
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
         <p>{S.app.reemplazoTexto(projectName)}</p>
@@ -1014,9 +1077,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
-          pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
-          pinta y su columna de la retícula se encoge a 0. */}
-      {(modo === 'modelar' || modo === 'simular') && <Paleta servicios={serviciosDe(modelador)} />}
+          pinta dentro del contenedor (escondidos en `app.css`). In Simulate the same column is the
+          scenario rail (design 2a); in the other modes nothing is drawn and it shrinks to 0. */}
+      {modo === 'simular' ? (
+        <RailEscenarios
+          escenarios={escenarios}
+          activo={escenarioId}
+          corridas={latest}
+          validacion={validacion}
+          onElegir={elegirEscenario}
+          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}); anadirEscenario(copia.archivo, copia.escenario); }}
+          onProblema={(id) => modelador?.seleccionar?.(id)}
+          enVentana={null}
+        />
+      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} /> : null}
 
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
@@ -1098,7 +1172,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
         )}</p>)}
       </section>}
-      <aside className="panel" inert={ioBusy}>
+      <div className="divisor" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarPanel}
+        aria-valuemin={PANEL_MIN} aria-valuemax={PANEL_MAX} aria-valuenow={panelAncho} {...divisorPanel()} />
+      <aside className={panelAncho >= 440 ? 'panel ancho' : 'panel'} inert={ioBusy}>
         {/* En «Animar» el panel entero son los controles de la reproducción: las pestañas de
             propiedades no tienen nada que decir sobre una corrida que ya terminó (#331). */}
         {modo === 'animar' ? (
@@ -1125,29 +1201,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </nav>
         {pestana === 'simulacion' ? (
           <div className="simulacion">
-            <label className="campo">
-              {S.app.escenario}
-              <select
-                value={escenarioId}
-                onChange={(e) => {
-                  setEscenarioId(e.target.value);
-                  // Cambiar de escenario invalida el resultado anterior: el overlay se limpia
-                  // aquí y se vuelve a pintar cuando termine la corrida nueva. La corrida en
-                  // vuelo es del escenario viejo, así que se mata: si no, terminaría después y
-                  // pintaría sus cuellos de botella bajo el nombre del escenario nuevo.
-                  cancelarCorrida();
-                  const run = latest.find((r) => r.scenarioName === e.target.value);
-                  setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
-                  setSim({ tipo: 'inactivo' });
-                }}
-              >
-                {Object.keys(escenarios).map((id) => (
-                  <option key={id} value={id}>
-                    {etiquetaEscenario(id, escenarios)}
-                  </option>
-                ))}
-              </select>
-            </label>
             {/* Correr, el progreso y cancelar viven en la barra superior (#237): la acción
                 primaria de la app es una sola y está siempre a la vista. */}
             {sim.tipo === 'error' && (
@@ -1184,14 +1237,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 setCorrida(null);
               }}
               onGuardar={() => { void guardar(); }}
-              onDuplicar={(archivo, escenario) => {
-                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-                // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-                setEscenarioId(archivo);
-                cancelarCorrida();
-                setCorrida(null);
-              }}
+              onDuplicar={anadirEscenario}
               ir={ir}
               seleccion={seleccion}
               onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}

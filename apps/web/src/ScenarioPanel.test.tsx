@@ -587,6 +587,26 @@ describe('duplicar', () => {
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
   });
 
+  it('la cabecera dice «Escenario …», BASE solo sin extends, y la línea archivo · padre (diseño 2a)', () => {
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    const cabecera = (): string => document.querySelector('.escenario-cabecera')!.textContent!;
+    const archivo = (): string => document.querySelector('.escenario-archivo')!.textContent!;
+    expect(cabecera()).toContain(es.escenario.titulo('AS-IS'));
+    expect(cabecera()).toContain(es.rail.base);
+    expect(archivo()).toBe(es.escenario.archivoHereda('as-is.scenario.json', null));
+
+    pulsar('Duplicar');
+    expect(cabecera()).not.toContain(es.rail.base);
+    expect(archivo()).toBe(es.escenario.archivoHereda('as-is (copia).scenario.json', 'as-is.scenario.json'));
+  });
+
   it('duplicarEscenario no depende del DOM', () => {
     expect(duplicarEscenario('to-be.scenario.json', { name: 'TO-BE' })).toEqual({
       archivo: 'to-be (copia).scenario.json',
