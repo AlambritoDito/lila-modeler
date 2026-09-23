@@ -1129,7 +1129,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </button>
         </div>
         {(pestana === 'simulacion' || ventanaEscenario !== null) && (
-          <button ref={toggleEscenario} type="button" className="boton desacoplar" aria-pressed={ventanaEscenario !== null}
+          <button ref={toggleEscenario} type="button" className="boton icono desacoplar" aria-pressed={ventanaEscenario !== null}
             aria-label={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             title={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
