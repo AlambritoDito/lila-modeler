@@ -113,3 +113,13 @@ it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de valida
   // esquina sin decir por qué (el comentario que acompaña al 50% es el sitio para esa excepción).
   expect(radios.filter((r) => r !== '0')).toEqual(['50%']);
 });
+
+it('no select rule uses the `background` shorthand, which would wipe the themed chevron (seam of #391 and #392)', () => {
+  // `.app select` (design 2d) draws the arrow as a `background-image`; a later `background: …`
+  // on a more specific select rule (the detached window's fields, #391) reset it to none.
+  const sinComentarios = appCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const reglas = [...sinComentarios.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => /\bselect\b/.test(m[1]!) && /(^|[;\s])background:/.test(m[2]!))
+    .map((m) => m[1]!.trim());
+  expect(reglas).toEqual([]);
+});

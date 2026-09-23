@@ -17,7 +17,7 @@ interface Props {
   readonly onNuevo: () => void;
   /** Jump to the first element with problems, like the chips over the canvas. */
   readonly onProblema: (id: string) => void;
-  /** Scenario open in its own window (W1); `null` until that exists. */
+  /** Scenario open in the detached window (design 2c), or `null` while it is docked. */
   readonly enVentana?: string | null;
 }
 

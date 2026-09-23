@@ -324,11 +324,10 @@ body {
   display: flex;
   /* `flex: 0 1 210px` en vez de un ancho fijo (QA de la ronda 1 de #392): 210 px es el ancho de
      fábrica, pero el campo es el único inerte de la barra (LILA-066), así que es el primero que
-     cede sitio cuando algo no cabe, antes de que la identidad o los modos se envuelvan. */
+     cede sitio cuando algo no cabe —el conmutador de escenario de #391 incluido—, antes de que la
+     identidad o los modos se envuelvan. */
   flex: 0 1 210px;
   gap: 8px;
-  /* 210 px, but the first thing to give way when the bar runs short (the scenario toggle, #391). */
-  flex: 0 1 210px;
   height: 30px;
   min-width: 0;
   padding: 0 10px;
@@ -2104,7 +2103,9 @@ body {
 
 .ventana-flotante .campo-schema input:not([type='checkbox']),
 .ventana-flotante .campo-schema select {
-  background: var(--bg-elevated);
+  /* `background-color`, not the shorthand: the shorthand resets the `background-image` chevron
+     that the shared `.app select` rule (design 2d) draws. */
+  background-color: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--fg-primary);
   border-radius: 0;

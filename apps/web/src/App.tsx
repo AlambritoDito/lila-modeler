@@ -1026,12 +1026,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     />
   );
 
+  /** Light or dark native controls (design 2d); the detached window copies it like the theme. */
+  const esquema = temaClaro(tema) ? 'claro' : 'oscuro';
+
   return (
     <div
       className="app"
       data-densidad={densidad}
       data-theme={decoratedTheme}
-      data-esquema={temaClaro(tema) ? 'claro' : 'oscuro'}
+      data-esquema={esquema}
       style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}
     >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
@@ -1204,6 +1207,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           ventana={ventanaEscenario}
           titulo={S.app.tituloVentanaEscenario(etiquetaEscenario(escenarioId, escenarios))}
           tema={decoratedTheme}
+          esquema={esquema}
           densidad={densidad}
           inert={ioBusy}
           onAcoplar={acoplar}
@@ -1226,7 +1230,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           onElegir={elegirEscenario}
           onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}); anadirEscenario(copia.archivo, copia.escenario); }}
           onProblema={(id) => modelador?.seleccionar?.(id)}
-          enVentana={null}
+          enVentana={ventanaEscenario !== null ? escenarioId : null}
         />
       ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} /> : null}
 

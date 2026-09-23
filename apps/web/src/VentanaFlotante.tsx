@@ -81,6 +81,7 @@ export function VentanaFlotante({
   ventana,
   titulo,
   tema,
+  esquema,
   densidad,
   inert,
   onAcoplar,
@@ -92,6 +93,9 @@ export function VentanaFlotante({
   titulo: string;
   /** `data-theme` of the main `.app` (decorated themes such as Montana). */
   tema: string | undefined;
+  /** `data-esquema` of the main `.app` (`claro`/`oscuro`): the themed native controls and their
+   *  `color-scheme` (design 2d) key off it, so the popup needs it too. */
+  esquema?: string;
   densidad: string;
   /** Same as the aside of the main window: nothing is edited while a project is being saved or opened. */
   inert?: boolean;
@@ -158,7 +162,7 @@ export function VentanaFlotante({
   }, [ventana]);
 
   return createPortal(
-    <div className="app ventana-flotante" data-theme={tema} data-densidad={densidad}>
+    <div className="app ventana-flotante" data-theme={tema} data-esquema={esquema} data-densidad={densidad}>
       <header className="ventana-titulo">
         <span>{titulo}</span>
         <button type="button" className="acoplar" onClick={onAcoplar}>

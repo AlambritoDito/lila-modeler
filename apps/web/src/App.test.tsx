@@ -1529,6 +1529,40 @@ it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2
   }
 });
 
+it('the rail marks the detached scenario and the popup gets data-esquema (seams of #390, #391, #392)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const sub = (nombre: string): string => filaRail(nombre).querySelector('.rail-sub')!.textContent!;
+  try {
+    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    await click(T.app.escenarioAcoplado);
+    // Only the scenario that lives in the window says so.
+    expect(sub('AS-IS')).toBe(T.rail.enVentana);
+    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
+    // The window follows the active scenario, and the subtitle follows the window.
+    await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
+    expect(sub('TO-BE 3 cashiers')).toBe(T.rail.enVentana);
+    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    // Themed native controls (design 2d) key off `data-esquema`: the popup copies it like the theme.
+    const esquema = container.querySelector('.app')!.getAttribute('data-esquema');
+    expect(esquema).toMatch(/^(claro|oscuro)$/);
+    expect(hijo.document.querySelector('.app.ventana-flotante')!.getAttribute('data-esquema')).toBe(esquema);
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    await act(async () => {
+      acoplar!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
+    expect(container.querySelector('.rail-escenarios')!.textContent).not.toContain(T.rail.enVentana);
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
 it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
