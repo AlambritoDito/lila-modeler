@@ -28,7 +28,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readAnnotations } from '../../../packages/engine/src/bpmn/annotate.js';
 import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { type: 'json' };
-import type { Modelador } from './Modeler.js';
+import type { Modelador, Servicios } from './Modeler.js';
 import {
   anadirExtension,
   editarExtension,
@@ -131,11 +131,22 @@ async function banco(xml: string): Promise<Banco> {
     },
   };
 
+  // Solo para la cabecera sin selección (diseño 2d): no hace falta que las cuentas sean exactas
+  // aquí —ningún test de este archivo las mira—, solo que `PanelVacio` no reviente al deseleccionar
+  // sobre una raíz que no es `bpmn:Process` (la de Bizagi, un `Collaboration`).
+  const elementRegistry: Servicios['elementRegistry'] = {
+    filter: (prueba) =>
+      [...figuras.values()]
+        .filter((f) => f.id !== raiz.id)
+        .map((f) => ({ type: f.type, parent: {} }))
+        .filter(prueba),
+  };
+
   const modelador = {
     abrir: () => Promise.resolve(true),
     exportar: async () => (await moddle.toXML(definitions, { format: true })).xml,
     ajustar: () => undefined,
-    servicios: { ...escritor, selection, rootElement: () => raiz },
+    servicios: { ...escritor, selection, rootElement: () => raiz, elementRegistry },
     suscribir: (eventos: string[], escuchar: () => void) => {
       eventBus.on(eventos, escuchar);
       return () => {
@@ -529,8 +540,10 @@ describe('QA adversarial del panel de propiedades', () => {
     expect(propiedades.querySelectorAll('input')).toHaveLength(0);
     expect(documentacion.textContent).toContain('2 elementos seleccionados');
 
+    // La raíz de `PEDIDO` es un `bpmn:Collaboration` (tiene pools): deseleccionar del todo cae en
+    // la cabecera rica sin selección (diseño 2d), no en el mensaje suelto de antes.
     clicEnElFondo();
-    expect(propiedades.textContent).toContain('Selecciona un elemento del lienzo');
+    expect(propiedades.textContent).toContain('Nada seleccionado');
   });
 
   it('el id se enseña tal cual viene del archivo y el panel no lo deja tocar', async () => {

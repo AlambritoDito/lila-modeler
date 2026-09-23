@@ -19,7 +19,8 @@ import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
 import { PanelPropiedades } from './PropertiesPanel';
-import { problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation } from './simulationGate';
@@ -36,6 +37,7 @@ import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
 import { About } from './About';
+import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
@@ -105,6 +107,8 @@ async function preferencias(): Promise<Ajustes> {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
     const idioma = localStorage.getItem('lila.idioma');
+    // Empty or blank is "never saved" (320 by default), not 0 clamped up to 300 (QA of #390).
+    const panelAncho = Number(localStorage.getItem('lila.panelAncho')?.trim() || NaN);
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -114,11 +118,16 @@ async function preferencias(): Promise<Ajustes> {
     // la densidad, que son texto y no pueden romperse.
     let temas: unknown = null;
     try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
+    let ventana: unknown = null;
+    try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
       ...(idioma === null ? {} : { idioma }),
+      ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+      ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
     };
   } catch { return {}; }
 }
@@ -137,12 +146,38 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
+    if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
+    if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
 function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
   return validas.includes(valor as T) ? (valor as T) : porDefecto;
 }
+/**
+ * Si el tema se lee claro (letra oscura sobre fondo claro) — Papel, Tieso y Montana lo son hoy,
+ * Eva-01 y Akira no. Decide qué `color-scheme` llevan los controles nativos (diseño 2d): sin
+ * eso el `<select>` pinta sus `<option>` y el selector de fecha con los colores que trae por
+ * fábrica el navegador, que son los de un tema oscuro, y salen ilegibles sobre uno claro.
+ *
+ * Ningún tema trae una marca «soy claro» (`docs/THEMES.md`) — ninguno la necesitaba antes de
+ * esto—, así que se calcula del mismo `bg.base` que ya trae cada uno, con la misma caída a
+ * Eva-01 que usa `aplicarTema` para el token que falte.
+ * ponytail: umbral de luminancia relativa, no la fórmula de contraste completa — alcanza para
+ * decidir claro/oscuro, no para medir accesibilidad.
+ */
+export function temaClaro(t: Theme | null | undefined): boolean {
+  const crudo = (t?.tokens?.['bg.base'] ?? '#12101A').replace('#', '');
+  // `#RGB`, `#RRGGBB` o `#RRGGBBAA` son los tres formatos válidos (`theme/temas.ts`, `HEX`); un
+  // `#RGB` corto se expande antes de leerlo (QA de la ronda 1 de #392: sin esto, `#fff` no casaba
+  // con la expresión de 6 dígitos de abajo y `temaClaro` lo daba por oscuro).
+  const seis = crudo.length === 3 ? [...crudo].map((c) => c + c).join('') : crudo;
+  const hex = /^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(seis);
+  if (hex === null) return false;
+  const canal = (i: number): number => Number.parseInt(hex[i] ?? '00', 16) / 255;
+  return 0.2126 * canal(1) + 0.7152 * canal(2) + 0.0722 * canal(3) > 0.5;
+}
+
 /**
  * Aplica el tema y borra las variables en línea que el anterior dejó puestas y este no trae. Sin
  * eso, `docs/THEMES.md` mentía: un tema parcial (legal, y lo que sale de «Importar») heredaba en
@@ -187,6 +222,11 @@ function atajo(tecla: string, soloDesktop = false): string {
 function serviciosDe(modelador: Modelador | null): Servicios | null {
   try { return modelador?.servicios ?? null; } catch { return null; }
 }
+
+/** Right panel width limits, in px (design 2a, `docs/design/COMPARACION-2026-09-07.md`). */
+const PANEL_MIN = 300;
+const PANEL_MAX = 520;
+const anchoPanel = (px: number): number => Math.min(PANEL_MAX, Math.max(PANEL_MIN, Math.round(px)));
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
@@ -315,6 +355,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
+  const [panelAncho, setPanelAncho] = useState(320);
+  const arrastre = useRef<{ x: number; ancho: number } | null>(null);
   /**
    * Preferencia de idioma (LILA-210): `auto` sigue al sistema. Se guarda la preferencia y no el
    * idioma resuelto, y el idioma vivo lo lleva `i18n.ts` —de ahí `useLocale()`, que es lo que
@@ -331,6 +374,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * repintado por esto, y así tampoco reinicia el temporizador del propio karaoke (mismo QA). */
   const karaokeActivo = useRef(false);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
+  /**
+   * The scenario panel detached to its own window (design 2c), or `null` while docked. It is the
+   * `Window` itself: `VentanaFlotante` portals into it from this same tree, so there is no state
+   * to sync between the two.
+   */
+  const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
+  /** Last known geometry of that window; read with the preferences, written when it moves away. */
+  const geomEscenario = useRef<Geometria | undefined>(undefined);
+  const toggleEscenario = useRef<HTMLButtonElement>(null);
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
@@ -555,6 +607,55 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSim({ tipo: 'inactivo' });
   }
 
+  /**
+   * Cambiar de escenario invalida el resultado anterior: el overlay se limpia aquí y se vuelve a
+   * pintar cuando termine la corrida nueva. La corrida en vuelo es del escenario viejo, así que se
+   * mata: si no, terminaría después y pintaría sus cuellos de botella bajo el nombre del nuevo.
+   */
+  function elegirEscenario(id: string): void {
+    setEscenarioId(id);
+    cancelarCorrida();
+    const run = latest.find((r) => r.scenarioName === id);
+    setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
+  }
+
+  /** A new scenario (a duplicate, from the panel or the rail) becomes the active one. */
+  function anadirEscenario(archivo: string, escenario: Record<string, unknown>): void {
+    setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+    // Cualquier padre extends editado invalida también sus descendientes.
+    setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+    setEscenarioId(archivo);
+    cancelarCorrida();
+    setCorrida(null);
+  }
+
+  /**
+   * Divider of the right panel: primary-button drag and arrow keys, persisted when the gesture
+   * ends. Arrows follow the ARIA splitter convention: they move the divider, so ArrowLeft widens
+   * the panel on its right.
+   */
+  function divisorPanel(): React.HTMLAttributes<HTMLDivElement> {
+    const mover = (x: number): number => anchoPanel(arrastre.current!.ancho + arrastre.current!.x - x);
+    const fijar = (px: number): void => { setPanelAncho(px); recordar({ panelAncho: px }); };
+    // A cancelled or lost capture ends the drag where the last move left it.
+    const soltar = (): void => { if (arrastre.current !== null) { arrastre.current = null; fijar(panelAncho); } };
+    return {
+      onPointerDown: (e) => {
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        arrastre.current = { x: e.clientX, ancho: panelAncho };
+      },
+      onPointerMove: (e) => { if (arrastre.current !== null) setPanelAncho(mover(e.clientX)); },
+      onPointerUp: (e) => { if (arrastre.current !== null) { fijar(mover(e.clientX)); arrastre.current = null; } },
+      onPointerCancel: soltar,
+      onLostPointerCapture: soltar,
+      onKeyDown: (e) => {
+        const paso = e.key === 'ArrowLeft' ? 16 : e.key === 'ArrowRight' ? -16 : 0;
+        if (paso !== 0) { e.preventDefault(); fijar(anchoPanel(panelAncho + paso)); }
+      },
+    };
+  }
+
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
   // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
   // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
@@ -636,6 +737,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
+      geomEscenario.current = guardadas.ventanaEscenario;
       // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
       // mano— cae en `auto`, que es arrancar en el idioma del sistema.
       const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
@@ -735,20 +838,56 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   const ejecutarRef = useRef(ejecutar);
   ejecutarRef.current = ejecutar;
+  // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
+  // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux. It lives at
+  // component scope because the detached scenario window listens with it too (design 2c); it only
+  // reads the ref, so the copy the effect below captured on mount is as good as any later one.
+  const teclas = (e: KeyboardEvent): void => {
+    if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+    const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
+    if (accion === undefined) return;
+    e.preventDefault();
+    ejecutarRef.current(accion);
+  };
+  /**
+   * From the detached window only Save and Save as are forwarded (QA of #391): Open would click the
+   * file input of the MAIN document with the popup's user activation, the browser refuses the
+   * chooser without ever settling it and the app stays busy until reload; Settings would open
+   * modal behind the window the user is looking at.
+   */
+  const teclasHija = (e: KeyboardEvent): void => { if (e.key.toLowerCase() === 's') teclas(e); };
   useEffect(() => {
-    // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
-    // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux.
-    const teclas = (e: KeyboardEvent) => {
-      if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
-      if (accion === undefined) return;
-      e.preventDefault();
-      ejecutarRef.current(accion);
-    };
     window.addEventListener('keydown', teclas);
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
     return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Only a sane size counts: a window already gone reports zeros. */
+  function recordarGeometria(geometria: Geometria): void {
+    if (!geometriaValida(geometria)) return;
+    geomEscenario.current = geometria;
+    recordar({ ventanaEscenario: geometria });
+  }
+  /** Detach the scenario panel (design 2c). A blocked popup leaves it docked and says why. */
+  function desacoplar(): void {
+    const ventana = abrirVentanaFlotante('lila-escenario', geomEscenario.current);
+    if (ventana === null) { setIoError(S.app.ventanaBloqueada); return; }
+    setVentanaEscenario(ventana);
+  }
+  /** Back to the panel. Idempotent: the child's own `pagehide` lands here too. */
+  function acoplar(): void {
+    const ventana = ventanaEscenario;
+    if (ventana === null) return;
+    if (!ventana.closed) { recordarGeometria(geometriaDe(ventana)); ventana.close(); }
+    setVentanaEscenario(null);
+    window.focus();
+    toggleEscenario.current?.focus();
+  }
+  const acoplarRef = useRef(acoplar);
+  acoplarRef.current = acoplar;
+  // Another project (or the app going away) docks the window: it was editing the previous one.
+  useEffect(() => () => acoplarRef.current(), [projectId]);
 
   /**
    * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074), o un
@@ -860,8 +999,44 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
+  /**
+   * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
+   * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
+   * on goes back to the first one; lift `paso` to the shell if anybody minds.
+   */
+  const panelEscenario = (
+    <ScenarioPanel
+      enVentana={ventanaEscenario !== null}
+      archivo={escenarioId}
+      escenarios={escenarios}
+      onCambio={(archivo, escenario) => {
+        setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+        // Cualquier padre extends editado invalida también sus descendientes.
+        setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+        // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
+        // que al cambiar de escenario en el selector (LILA-064).
+        cancelarCorrida();
+        setCorrida(null);
+      }}
+      onGuardar={() => { void guardar(); }}
+      onDuplicar={anadirEscenario}
+      ir={ir}
+      seleccion={seleccion}
+      onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
+    />
+  );
+
+  /** Light or dark native controls (design 2d); the detached window copies it like the theme. */
+  const esquema = temaClaro(tema) ? 'claro' : 'oscuro';
+
   return (
-    <div className="app" data-densidad={densidad} data-theme={decoratedTheme}>
+    <div
+      className="app"
+      data-densidad={densidad}
+      data-theme={decoratedTheme}
+      data-esquema={esquema}
+      style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}
+    >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
         <p>{S.app.reemplazoTexto(projectName)}</p>
@@ -893,7 +1068,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       />}
       <header className="barra">
         <div className="identidad">
-          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="32" height="32" />
+          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="26" height="26" />
+          {/* En Electron el nombre del producto ya va en la barra de título del sistema
+              (diseño 2d): repetirlo aquí encima del icono sería ruido. */}
+          {!DESKTOP && <span className="producto">{S.app.marca}</span>}
+          <span className="separador" aria-hidden="true" />
           <div>
             <div className="proyecto">{projectName}</div>
             <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>
@@ -949,6 +1128,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 15.5-6.4L21 13" /></svg>
           </button>
         </div>
+        {(pestana === 'simulacion' || ventanaEscenario !== null) && (
+          <button ref={toggleEscenario} type="button" className="boton desacoplar" aria-pressed={ventanaEscenario !== null}
+            aria-label={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
+            title={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
+            onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
+            {/* Below 1280 px only the icon is left (`app.css`), or Run and ⚙ leave the bar. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
+            <span>{ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}</span>
+          </button>
+        )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
             el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo. */}
         {sim.tipo === 'simulando' ? (
@@ -1013,10 +1202,37 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
       <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
 
+      {ventanaEscenario !== null && (
+        <VentanaFlotante
+          ventana={ventanaEscenario}
+          titulo={S.app.tituloVentanaEscenario(etiquetaEscenario(escenarioId, escenarios))}
+          tema={decoratedTheme}
+          esquema={esquema}
+          densidad={densidad}
+          inert={ioBusy}
+          onAcoplar={acoplar}
+          onGeometria={recordarGeometria}
+          onTecla={teclasHija}
+        >
+          {panelEscenario}
+        </VentanaFlotante>
+      )}
+
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
-          pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
-          pinta y su columna de la retícula se encoge a 0. */}
-      {(modo === 'modelar' || modo === 'simular') && <Paleta servicios={serviciosDe(modelador)} />}
+          pinta dentro del contenedor (escondidos en `app.css`). In Simulate the same column is the
+          scenario rail (design 2a); in the other modes nothing is drawn and it shrinks to 0. */}
+      {modo === 'simular' ? (
+        <RailEscenarios
+          escenarios={escenarios}
+          activo={escenarioId}
+          corridas={latest}
+          validacion={validacion}
+          onElegir={elegirEscenario}
+          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}); anadirEscenario(copia.archivo, copia.escenario); }}
+          onProblema={(id) => modelador?.seleccionar?.(id)}
+          enVentana={ventanaEscenario !== null ? escenarioId : null}
+        />
+      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} /> : null}
 
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
@@ -1098,7 +1314,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
         )}</p>)}
       </section>}
-      <aside className="panel" inert={ioBusy}>
+      <div className="divisor" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarPanel}
+        aria-valuemin={PANEL_MIN} aria-valuemax={PANEL_MAX} aria-valuenow={panelAncho} {...divisorPanel()} />
+      <aside className={panelAncho >= 440 ? 'panel ancho' : 'panel'} inert={ioBusy}>
         {/* En «Animar» el panel entero son los controles de la reproducción: las pestañas de
             propiedades no tienen nada que decir sobre una corrida que ya terminó (#331). */}
         {modo === 'animar' ? (
@@ -1125,29 +1343,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </nav>
         {pestana === 'simulacion' ? (
           <div className="simulacion">
-            <label className="campo">
-              {S.app.escenario}
-              <select
-                value={escenarioId}
-                onChange={(e) => {
-                  setEscenarioId(e.target.value);
-                  // Cambiar de escenario invalida el resultado anterior: el overlay se limpia
-                  // aquí y se vuelve a pintar cuando termine la corrida nueva. La corrida en
-                  // vuelo es del escenario viejo, así que se mata: si no, terminaría después y
-                  // pintaría sus cuellos de botella bajo el nombre del escenario nuevo.
-                  cancelarCorrida();
-                  const run = latest.find((r) => r.scenarioName === e.target.value);
-                  setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
-                  setSim({ tipo: 'inactivo' });
-                }}
-              >
-                {Object.keys(escenarios).map((id) => (
-                  <option key={id} value={id}>
-                    {etiquetaEscenario(id, escenarios)}
-                  </option>
-                ))}
-              </select>
-            </label>
             {/* Correr, el progreso y cancelar viven en la barra superior (#237): la acción
                 primaria de la app es una sola y está siempre a la vista. */}
             {sim.tipo === 'error' && (
@@ -1171,34 +1366,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
                   S.app.cuellosSinEspera)}
             </p>
-            <ScenarioPanel
-              archivo={escenarioId}
-              escenarios={escenarios}
-              onCambio={(archivo, escenario) => {
-                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-                // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-                // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
-                // que al cambiar de escenario en el selector (LILA-064).
-                cancelarCorrida();
-                setCorrida(null);
-              }}
-              onGuardar={() => { void guardar(); }}
-              onDuplicar={(archivo, escenario) => {
-                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-                // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-                setEscenarioId(archivo);
-                cancelarCorrida();
-                setCorrida(null);
-              }}
-              ir={ir}
-              seleccion={seleccion}
-              onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
-            />
+            {ventanaEscenario === null ? panelEscenario : (
+              <div className="panel-desacoplado">
+                <p>{S.app.enVentanaAparte}</p>
+                <button type="button" className="boton" onClick={() => ventanaEscenario.focus()}>{S.app.mostrarVentana}</button>
+                <button type="button" className="boton" onClick={acoplar}>{S.app.acoplar}</button>
+              </div>
+            )}
           </div>
         ) : (
-          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
+          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} avisos={validacion.avisos} />
         )}
         </>}
       </aside>

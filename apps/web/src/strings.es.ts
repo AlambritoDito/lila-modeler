@@ -36,6 +36,9 @@ export const es: Strings = {
    * Shell de la app (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
+    /** Nombre del producto en la marca de la barra superior (`.identidad`, diseño 2d); no se
+     * pinta en Electron, donde ya lo lleva la barra de título del sistema. */
+    marca: 'Lila Modeler',
     /** Rótulo de cada modo de la barra superior; el id lo fija `ids.ts` (`MODO_IDS`). */
     modos: {
       modelar: 'Modelar',
@@ -84,9 +87,12 @@ export const es: Strings = {
     tituloGuardar: 'Guardar proyecto',
     tituloGuardarComo: 'Guardar como',
 
-    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). */
+    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
+     * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
+     * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»
+     * (QA de la ronda 2 de #392). */
     buscar: 'Buscar actividad',
-    buscarPista: 'Buscar actividad…',
+    buscarPista: 'Buscar…',
     buscarPendiente: 'La búsqueda y la paleta de comandos llegan en LILA-066',
 
     deshacer: 'Deshacer',
@@ -99,6 +105,15 @@ export const es: Strings = {
     preparando: 'Preparando…',
     replicacion: (actual: number, total: number): string => `Replicación ${actual} de ${total}`,
     porCiento: (n: number): string => `${n} %`,
+
+    /** Ventana desacoplable del escenario (diseño 2c): el interruptor de la barra y lo que queda en el panel. */
+    escenarioAcoplado: 'Escenario acoplado ↗',
+    escenarioDesacoplado: 'En ventana aparte',
+    acoplar: 'Acoplar',
+    enVentanaAparte: 'Escenario en ventana aparte ↗',
+    mostrarVentana: 'Mostrar',
+    ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
+    tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
 
     /** Controles de zoom del lienzo. */
     acercar: 'Acercar',
@@ -170,6 +185,8 @@ export const es: Strings = {
     cerrarDiagrama: 'Cerrar diagrama',
     cerrarArchivo: (archivo: string): string => `Cerrar ${archivo}`,
     nuevoDiagrama: 'Nuevo diagrama',
+    /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
+    redimensionarPanel: 'Redimensionar el panel derecho',
 
     /** Barra de estado. */
     semilla: (valor: string): string => `Semilla ${valor}`,
@@ -346,6 +363,18 @@ export const es: Strings = {
       `${n} elementos seleccionados: las acciones sobre varios a la vez todavía no están. ` +
       'Selecciona uno solo para editarlo.',
 
+    /* Cabecera del panel derecho sin nada seleccionado (diseño "Turno 2", bloque 2d). */
+    nadaSeleccionado: 'Nada seleccionado',
+    pistaSeleccion: 'Elige una figura para editarla, o empieza por el proceso.',
+    proceso: 'Proceso',
+    elementos: 'Elementos',
+    // «Pools / carriles» (QA de la ronda 1 de #392): un ejemplo con pools pero sin carriles
+    // internos leía «Carriles 0» con dos pools a la vista; esta fila cuenta los dos (ver `PanelVacio`).
+    carriles: 'Pools / carriles',
+    avisos: 'Avisos',
+    atajos: 'Atajos',
+    renombrar: 'Renombrar',
+
     textoAnotacion: 'Texto de la anotación',
     nombre: 'Nombre',
     sinNombre: 'Sin nombre',
@@ -435,18 +464,36 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Raíl de escenarios de Simular (`RailEscenarios.tsx`, diseño 2a)
+   * ------------------------------------------------------------------ */
+  rail: {
+    titulo: 'Escenarios',
+    nuevo: 'Duplicar el escenario activo',
+    base: 'BASE',
+    sinCorrer: 'sin correr',
+    corrida: (semilla: string, repl: string): string => `semilla ${semilla} · ${repl} repl.`,
+    hereda: (padre: string): string => `hereda ${padre}`,
+    enVentana: 'en ventana aparte ↗',
+    validacion: 'Validación',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Panel de escenario (`ScenarioPanel.tsx`)
    * ------------------------------------------------------------------ */
   escenario: {
     guardar: 'Guardar',
     duplicar: 'Duplicar',
+    /** Pie de la ventana desacoplada, junto a Duplicar y Guardar. */
+    pieVentana: 'los cambios se ven en el lienzo al instante',
     /** Cabecera: errores y avisos del escenario en edición. */
     conteo: (errores: number, avisos: number): string =>
       `${errores} ${errores === 1 ? 'error' : 'errores'} · ${avisos} ${
         avisos === 1 ? 'aviso' : 'avisos'
       }`,
-    hereda: (padre: string): string =>
-      `Hereda de ${padre}: se muestran los valores resueltos y se edita solo el delta.`,
+    titulo: (nombre: string): string => `Escenario ${nombre}`,
+    /** Línea mono bajo la cabecera: el archivo y su padre `extends`, «—» si es base. */
+    archivoHereda: (archivo: string, padre: string | null): string =>
+      `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
      * #333 — los cuatro pasos del panel de simulación, que son los cuatro niveles de Bizagi en

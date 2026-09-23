@@ -121,8 +121,15 @@ export interface Servicios {
 
 interface Punto { x: number; y: number }
 interface Rectangulo extends Punto { width: number; height: number }
-/** Lo mínimo de un elemento del diagrama para saber si un punto cae dentro. */
-export interface Elemento { x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown }
+/**
+ * Lo mínimo de un elemento del diagrama para saber si un punto cae dentro (`Paleta.tsx`), más
+ * `type` y `parent`, que hacen falta para el resumen del panel de propiedades sin selección: quién
+ * es un carril y quién no tiene padre —la raíz— (`PropertiesPanel.tsx`, diseño 2d). `waypoints`
+ * es lo que de verdad distingue una figura de una conexión ahí: bpmn-js le da a una conexión un
+ * `width`/`height` de fábrica (el de su caja envolvente), así que ese par por sí solo no basta
+ * (QA de la ronda 2 de #392).
+ */
+export interface Elemento { x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown; type?: string; parent?: unknown; waypoints?: unknown }
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {

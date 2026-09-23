@@ -50,6 +50,9 @@ export const en = {
    * App shell (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
+    /** Product name in the top-bar lockup (`.identidad`, design 2d); hidden in Electron, where
+     * the OS title bar already carries it. */
+    marca: 'Lila Modeler',
     /** Label of each mode of the top bar; the id comes from `ids.ts` (`MODO_IDS`). */
     modos: {
       modelar: 'Model',
@@ -114,6 +117,15 @@ export const en = {
     preparando: 'Preparing…',
     replicacion: (actual: number, total: number): string => `Replication ${actual} of ${total}`,
     porCiento: (n: number): string => `${n} %`,
+
+    /** Detachable scenario window (design 2c): toggle in the top bar and the docked panel's stand-in. */
+    escenarioAcoplado: 'Scenario docked ↗',
+    escenarioDesacoplado: 'In its own window',
+    acoplar: 'Dock',
+    enVentanaAparte: 'Scenario in its own window ↗',
+    mostrarVentana: 'Show',
+    ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
+    tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
 
     /** Canvas zoom controls. */
     acercar: 'Zoom in',
@@ -185,6 +197,8 @@ export const en = {
     cerrarDiagrama: 'Close diagram',
     cerrarArchivo: (archivo: string): string => `Close ${archivo}`,
     nuevoDiagrama: 'New diagram',
+    /** Divider between the canvas and the right panel (design 2a). */
+    redimensionarPanel: 'Resize the right panel',
 
     /** Status bar. */
     semilla: (valor: string): string => `Seed ${valor}`,
@@ -359,6 +373,18 @@ export const en = {
       `${n} elements selected: acting on several at once is not there yet. ` +
       'Select a single one to edit it.',
 
+    /* Right-panel header with nothing selected (design "Turno 2", block 2d). */
+    nadaSeleccionado: 'Nothing selected',
+    pistaSeleccion: 'Pick a shape to edit it, or start with the process.',
+    proceso: 'Process',
+    elementos: 'Elements',
+    // «Pools / lanes» (QA of round 1 of #392): a sample with pools but no internal lanes used to
+    // read «Lanes 0» with two pools plainly on screen; this row counts both (see `PanelVacio`).
+    carriles: 'Pools / lanes',
+    avisos: 'Warnings',
+    atajos: 'Shortcuts',
+    renombrar: 'Rename',
+
     textoAnotacion: 'Annotation text',
     nombre: 'Name',
     sinNombre: 'No name',
@@ -448,18 +474,36 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Scenario rail of Simulate (`RailEscenarios.tsx`, design 2a)
+   * ------------------------------------------------------------------ */
+  rail: {
+    titulo: 'Scenarios',
+    nuevo: 'Duplicate the active scenario',
+    base: 'BASE',
+    sinCorrer: 'not run',
+    corrida: (semilla: string, repl: string): string => `seed ${semilla} · ${repl} reps`,
+    hereda: (padre: string): string => `inherits ${padre}`,
+    enVentana: 'in its own window ↗',
+    validacion: 'Validation',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Scenario panel (`ScenarioPanel.tsx`)
    * ------------------------------------------------------------------ */
   escenario: {
     guardar: 'Save',
     duplicar: 'Duplicate',
+    /** Footer of the detached window, next to Duplicate and Save. */
+    pieVentana: 'changes show on the canvas instantly',
     /** Header: errors and warnings of the scenario being edited. */
     conteo: (errores: number, avisos: number): string =>
       `${errores} ${errores === 1 ? 'error' : 'errors'} · ${avisos} ${
         avisos === 1 ? 'warning' : 'warnings'
       }`,
-    hereda: (padre: string): string =>
-      `Inherits from ${padre}: resolved values are shown and only the delta is edited.`,
+    titulo: (nombre: string): string => `Scenario ${nombre}`,
+    /** Mono line under the header: the file and its `extends` parent, «—» for a base scenario. */
+    archivoHereda: (archivo: string, padre: string | null): string =>
+      `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
      * #333 — the four steps of the Simulate panel, which are Bizagi's four levels of simulation

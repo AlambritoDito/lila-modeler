@@ -15,9 +15,12 @@ import { expect, it } from 'vitest';
 const ruta = './app.css';
 const appCss = readFileSync(new URL(ruta, import.meta.url), 'utf8');
 
+/** Escapa lo que un selector CSS puede traer y un `RegExp` no puede leer literal (`[`, `]`, `'`…). */
+const escaparRegex = (texto: string): string => texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Cuerpo de la primera regla con ese selector exacto. */
 const bloque = (selector: string): string =>
-  new RegExp(`${selector.replaceAll('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
+  new RegExp(`${escaparRegex(selector)}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
 
 it('la pila de zoom deja libre la esquina de la marca de agua', () => {
   // «Powered by bpmn.io» es obligatoria por la licencia de bpmn.io: es un enlace absoluto a
@@ -51,4 +54,109 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
     const reglas = appCss.match(new RegExp(`[^}]*\\.${mando}[^{]*\\{[^}]*\\}`, 'g')) ?? [];
     expect(reglas.filter((r) => /display:\s*none|visibility:\s*hidden/.test(r))).toEqual([]);
   }
+});
+
+it('below 1500 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
+  // Measured over CDP: with its label, the toggle pushed Run and ⚙ off the bar below ~1150 px.
+  const media = /@media \(max-width: 1500px\) \{([\s\S]*?)\n\}/g;
+  const bloques = [...appCss.matchAll(media)].map((m) => m[1]!).join('\n');
+  expect(bloques).toMatch(/\.boton\.desacoplar span \{\s*display: none;/);
+  expect(bloques).toMatch(/\.boton\.desacoplar \{[^}]*width: 30px;/);
+});
+
+it('el select, la casilla y la fecha nativos pierden el aspecto del navegador (diseño 2d)', () => {
+  const select = bloque('.app select');
+  expect(select).toContain('appearance: none');
+  expect(select).toContain('border-radius: 0');
+
+  const casilla = bloque(".app input[type='checkbox']");
+  expect(casilla).toContain('appearance: none');
+  expect(casilla).toContain('border-radius: 0');
+
+  const fecha = bloque(".app input[type='datetime-local']");
+  expect(fecha).toContain('border-radius: 0');
+  // Sin esto el borde suma 2 px al alto de contenido y el campo sale de 32 px, no 30 como el
+  // resto (QA de la ronda 1 de #392).
+  expect(fecha).toContain('box-sizing: border-box');
+});
+
+it('el glifo del selector de fecha no se invierte por encima de `color-scheme: dark` (QA de la ronda 1 de #392)', () => {
+  // `color-scheme: dark` ya hace que el navegador pinte el glifo en claro sobre este control
+  // oscuro; invertirlo aquí encima lo devolvía a oscuro sobre oscuro (negro sobre negro en
+  // Eva-01/Akira). La regla sigue viva —solo la opacidad—, así que se busca por su selector
+  // exacto y se comprueba que no trae ningún `filter`.
+  const glifo = bloque("input[type='datetime-local']::-webkit-calendar-picker-indicator");
+  expect(glifo).not.toEqual('');
+  expect(glifo).not.toContain('filter');
+});
+
+it('los modos no se envuelven: son de lo primero que tiene que caber en la barra (QA de la ronda 1 de #392)', () => {
+  // Sin esto, «Validate paths»/«Validar rutas» se parte en dos líneas antes de que el buscador
+  // inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece de 53 px a 60-67.
+  expect(bloque('.modo')).toContain('white-space: nowrap');
+
+  const buscador = bloque('.buscador');
+  // Shrinks before the brand lockup (flex-shrink 1): the project name stays whole above 1280 px.
+  expect(buscador).toContain('flex: 0 99 210px');
+  // And goes away below 1320 px, where even at its minimum it left the Spanish project name short
+  // (QA of #393).
+  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.buscador \{\s*display: none;/);
+  expect(buscador).toContain('min-width: 0');
+  // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
+  // solo el `flex`, no los dos.
+  expect(buscador).not.toContain('width: 210px');
+});
+
+it('el nombre del proyecto y el del archivo se recortan con «…» en vez de desbordar la barra (QA de la ronda 2 de #392)', () => {
+  // `.identidad { flex: none }` (ronda 1) evitaba el envuelto, pero le impedía encogerse y sacaba
+  // la página por el borde en angosto: `flex: 0 1 auto` dentro, `min-width: 0` en la identidad y
+  // en el `<div>` de proyecto/archivo (el mínimo de fábrica de un flex item es `auto`, y con eso
+  // ninguno de los dos encoge) es lo que deja que sea el texto el que se recorte.
+  const identidad = bloque('.identidad');
+  expect(identidad).toContain('flex: 0 1 auto');
+  expect(identidad).toContain('min-width: 0');
+  expect(identidad).not.toContain('flex: none');
+  expect(bloque('.identidad > div')).toContain('min-width: 0');
+
+  const recorte = bloque('.proyecto,\n.archivo');
+  expect(recorte).toContain('overflow: hidden');
+  expect(recorte).toContain('text-overflow: ellipsis');
+  expect(recorte).toContain('white-space: nowrap');
+});
+
+it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de que le toque al proyecto (QA de la ronda 2 de #392)', () => {
+  // `bloque()` no sirve aquí: para en la primera `}` que encuentra, y dentro de un `@media` esa
+  // es la de la primera regla anidada (`.buscador`), no la del bloque entero. Se toma todo lo que
+  // hay entre el `@media (max-width: 1280px)` y su `}` de cierre —sin indentar, a diferencia del
+  // de sus reglas anidadas, que sí lo están— y se busca la regla de `.producto` ahí dentro.
+  const desdeMedia = appCss.slice(appCss.indexOf('@media (max-width: 1280px)'));
+  const cierre = desdeMedia.indexOf('\n}');
+  expect(cierre).toBeGreaterThan(0);
+  const bloqueMedia = desdeMedia.slice(0, cierre);
+  expect(bloqueMedia).toMatch(/\.producto,\s*\n\s*\.identidad \.separador\s*\{\s*\n\s*display: none;/);
+});
+
+it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de validación', () => {
+  const radios = [...appCss.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => (m[1] ?? '').trim());
+  // Si esto falla con algo que no sea «50%» es que una regla nueva volvió a redondear una
+  // esquina sin decir por qué (el comentario que acompaña al 50% es el sitio para esa excepción).
+  expect(radios.filter((r) => r !== '0')).toEqual(['50%']);
+});
+
+it('no select rule uses the `background` shorthand, which would wipe the themed chevron (seam of #391 and #392)', () => {
+  // `.app select` (design 2d) draws the arrow as a `background-image`; a later `background: …`
+  // on a more specific select rule (the detached window's fields, #391) reset it to none.
+  const sinComentarios = appCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const reglas = [...sinComentarios.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter((m) => /\bselect\b/.test(m[1]!) && /(^|[;\s])background:/.test(m[2]!))
+    .map((m) => m[1]!.trim());
+  expect(reglas).toEqual([]);
+});
+
+it('text fields of the scenario and properties forms are 30 px like the themed select (QA of #393)', () => {
+  // At 22 px a text field sat lower than the select or date beside it in the two-column form.
+  expect(bloque(".campo-schema input[type='text']")).toContain('height: 30px');
+  const propiedades = bloque(".campos input:not([type='checkbox'])");
+  expect(propiedades).toContain('height: 30px');
+  expect(propiedades).toContain('box-sizing: border-box');
 });

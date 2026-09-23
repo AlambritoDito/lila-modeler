@@ -587,6 +587,26 @@ describe('duplicar', () => {
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
   });
 
+  it('la cabecera dice «Escenario …», BASE solo sin extends, y la línea archivo · padre (diseño 2a)', () => {
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+      />,
+    );
+    const cabecera = (): string => document.querySelector('.escenario-cabecera')!.textContent!;
+    const archivo = (): string => document.querySelector('.escenario-archivo')!.textContent!;
+    expect(cabecera()).toContain(es.escenario.titulo('AS-IS'));
+    expect(cabecera()).toContain(es.rail.base);
+    expect(archivo()).toBe(es.escenario.archivoHereda('as-is.scenario.json', null));
+
+    pulsar('Duplicar');
+    expect(cabecera()).not.toContain(es.rail.base);
+    expect(archivo()).toBe(es.escenario.archivoHereda('as-is (copia).scenario.json', 'as-is.scenario.json'));
+  });
+
   it('duplicarEscenario no depende del DOM', () => {
     expect(duplicarEscenario('to-be.scenario.json', { name: 'TO-BE' })).toEqual({
       archivo: 'to-be (copia).scenario.json',
@@ -1044,5 +1064,36 @@ describe('resto de LILA-203', () => {
       'Fija',
       'Por turno',
     ]);
+  });
+});
+
+describe('ventana desacoplada (diseño 2c)', () => {
+  it('Duplicar y Guardar pasan de la cabecera al pie, con Guardar como acción primaria', () => {
+    const guardados: Guardado[] = [];
+    const panel = (enVentana: boolean): React.JSX.Element => (
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': asIsCorto() }}
+        onCambio={() => {}}
+        onGuardar={() => guardados.push({ archivo: 'as-is.scenario.json', escenario: {} })}
+        onDuplicar={() => {}}
+        ir={ir}
+        seleccion={null}
+        onSeleccionar={() => {}}
+        enVentana={enVentana}
+      />
+    );
+    montar(panel(false));
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.guardar);
+    expect(document.querySelector('.escenario-pie')).toBeNull();
+    act(() => raiz!.render(panel(true)));
+    const pie = document.querySelector('.escenario-pie')!;
+    expect(pie.textContent).toContain(es.escenario.pieVentana);
+    expect(pie.querySelector('.boton.primario')!.textContent).toBe(es.escenario.guardar);
+    // Duplicate, then Save: DOM order is the order Tab visits and the order on screen.
+    expect([...pie.querySelectorAll('button')].map((b) => b.textContent)).toEqual([es.escenario.duplicar, es.escenario.guardar]);
+    expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
+    pulsar(es.escenario.guardar);
+    expect(guardados).toHaveLength(1);
   });
 });

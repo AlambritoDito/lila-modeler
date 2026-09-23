@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { ProcessIR } from '@lila/engine';
 import {
@@ -52,6 +52,7 @@ import {
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { LaneAssign } from './LaneAssign.js';
+import { esEscenarioBase } from './RailEscenarios.js';
 import {
   DESFASES,
   aSegundos,
@@ -946,7 +947,8 @@ function Propiedades({
               leer(ctx.resuelto, [...ruta, clave]) !== undefined),
         )
         .map(([clave, sub]) => (
-          <Fragment key={clave}>
+          // One box per field and its help, so the wide panel (design 2a) can lay them out in a grid.
+          <div key={clave} className="propiedad">
             <Campo
               esquema={sub}
               ruta={[...ruta, clave]}
@@ -957,7 +959,7 @@ function Propiedades({
             {ayudaDe(S, ruta, clave) !== undefined && (
               <p className="ayuda">{ayudaDe(S, ruta, clave)}</p>
             )}
-          </Fragment>
+          </div>
         ))}
     </>
   );
@@ -1668,6 +1670,8 @@ export interface ScenarioPanelProps {
   /** Id del elemento seleccionado en el lienzo, o `null`. */
   seleccion: string | null;
   onSeleccionar: (id: string | null) => void;
+  /** Drawn inside the detached window (design 2c): Duplicate and Save move to a footer. */
+  enVentana?: boolean;
 }
 
 export function ScenarioPanel({
@@ -1679,6 +1683,7 @@ export function ScenarioPanel({
   ir,
   seleccion,
   onSeleccionar,
+  enVentana = false,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -1840,33 +1845,37 @@ export function ScenarioPanel({
 
   const unidad = unidadBase(ctx);
 
+  const guardarBoton = (
+    <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
+      {S.escenario.guardar}
+    </button>
+  );
+  const duplicarBoton = (
+    <button
+      type="button"
+      className="boton"
+      onClick={() => {
+        const copia = duplicarEscenario(archivo, delta);
+        onDuplicar(copia.archivo, copia.escenario);
+      }}
+    >
+      {S.escenario.duplicar}
+    </button>
+  );
+
   return (
     <div className="escenario">
       <div className="escenario-cabecera">
-        <strong>{typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo}</strong>
+        <strong>{S.escenario.titulo(typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo)}</strong>
+        {esEscenarioBase(delta) && <span className="insignia-base">{S.rail.base}</span>}
         <span className={errores > 0 ? 'error' : 'aviso'}>
           {S.escenario.conteo(errores, avisos)}
         </span>
-        <button type="button" className="boton" onClick={onGuardar}>
-          {S.escenario.guardar}
-        </button>
-        <button
-          type="button"
-          className="boton"
-          onClick={() => {
-            const copia = duplicarEscenario(archivo, delta);
-            onDuplicar(copia.archivo, copia.escenario);
-          }}
-        >
-          {S.escenario.duplicar}
-        </button>
+        {!enVentana && guardarBoton}
+        {!enVentana && duplicarBoton}
       </div>
 
-      {heredaDe !== null && (
-        <p className="vacio">
-          {S.escenario.hereda(heredaDe)}
-        </p>
-      )}
+      <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
       <Problemas ruta={['extends']} ctx={ctx} />
 
       <BarraPasos paso={paso} onPaso={setPaso} />
@@ -2012,6 +2021,15 @@ export function ScenarioPanel({
             ))}
           </ul>
         </details>
+      )}
+
+      {enVentana && (
+        <footer className="escenario-pie">
+          <span>{S.escenario.pieVentana}</span>
+          {/* Duplicate, then Save: the order they are painted in is the order Tab visits. */}
+          {duplicarBoton}
+          {guardarBoton}
+        </footer>
       )}
     </div>
   );

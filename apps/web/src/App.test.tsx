@@ -1,5 +1,8 @@
 import type { SaveOutcome } from '../../desktop/src/bridge.js';
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, StrictMode, useEffect } from 'react';
 import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
@@ -8,7 +11,7 @@ import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { newModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
-import { App } from './App';
+import { App, temaClaro } from './App';
 import { applyTheme } from './theme/applyTheme';
 // The app boots in English (jsdom's `navigator.language` is `en-US`), so the texts this suite
 // clicks and reads come from the base catalog instead of being written by hand: a literal here
@@ -49,7 +52,8 @@ vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
 vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
   ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
-    return null;
+    // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
+    return <div data-mock="escenario" />;
   } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
@@ -948,7 +952,8 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
     ];
     mocks.scenarioChange();
   });
-  const chips = [...container.querySelectorAll('.chips-validacion .chip')].map((c) => c.textContent);
+  // The canvas chips; the rail of Simulate repeats them in its footer (design 2a).
+  const chips = [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
   expect(chips).toEqual([T.app.errores(1), T.app.avisos(1)]);
   // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
   const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
@@ -959,7 +964,8 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
 });
 
 it('sin problemas no hay chips', () => {
-  expect(container.querySelector('.chips-validacion')).toBeNull();
+  // Over the canvas only: the rail footer always shows its two counts (design 2a).
+  expect(container.querySelector('.zona-modelo .chips-validacion')).toBeNull();
 });
 
 // --- «Validar rutas» (LILA-065) ---
@@ -1066,8 +1072,8 @@ it('el pie lleva errores, avisos, escenario y semilla heredada del escenario act
   expect(pie.textContent).toContain(T.app.escenario);
   expect(pie.textContent).toContain('AS-IS');
   expect(pie.textContent).toContain(T.app.semilla('42'));
-  const select = container.querySelector<HTMLSelectElement>('.simulacion select')!;
-  await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // The scenario is picked in the rail of Simulate now (design 2a), not in a `<select>`.
+  await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
   expect(pie.textContent).toContain('TO-BE 3 cashiers');
   expect(pie.textContent).toContain(T.app.semilla('42'));
 });
@@ -1081,9 +1087,15 @@ function teclear(campo: HTMLInputElement, texto: string): void {
   });
 }
 
+/** A row of the scenario rail (design 2a), by the scenario's name. */
+const filaRail = (nombre: string): HTMLButtonElement =>
+  [...container.querySelectorAll<HTMLButtonElement>('.rail-fila')].find((b) => b.querySelector('.rail-nombre')!.firstChild!.textContent === nombre)!;
+
 const figuras = (): HTMLButtonElement[] => [...container.querySelectorAll<HTMLButtonElement>('.paleta .figura')];
 
 it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se compacta', async () => {
+  // The palette is Model's only since design 2a: in Simulate its column is the scenario rail.
+  await click(T.app.modos.modelar);
   const tarea = figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario);
   expect(tarea).toBeDefined();
   // `Enter` sobre un ítem es la activación por defecto del `<button>`; jsdom no la ejecuta
@@ -1112,6 +1124,86 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
   expect(figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario)).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+// --- Design 2a: scenario rail and resizable right panel ---
+
+it('in Simulate the rail replaces the palette; a row picks the scenario and clears the result', async () => {
+  expect(container.querySelector('.rail-escenarios')).not.toBeNull();
+  expect(container.querySelector('.paleta')).toBeNull();
+  expect(container.querySelector('.simulacion select')).toBeNull();
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click(T.app.ejecutar);
+  await click(T.app.modos.simular);
+  expect(ultimoOverlay()[0]).not.toBeNull();
+  await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
+  expect(filaRail('TO-BE 3 cashiers').getAttribute('aria-current')).toBe('true');
+  expect(filaRail('AS-IS').hasAttribute('aria-current')).toBe(false);
+  expect(ultimoOverlay()[0]).toBeNull();
+  expect(container.textContent).toContain(T.app.cuellosSinCorrida);
+  // Back in Model the palette returns.
+  await click(T.app.modos.modelar);
+  expect(container.querySelector('.paleta')).not.toBeNull();
+  expect(container.querySelector('.rail-escenarios')).toBeNull();
+});
+
+it('the divider resizes the right panel between 300 and 520 px and remembers it', async () => {
+  const app = container.querySelector<HTMLElement>('.app')!;
+  const divisor = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
+  const ancho = () => app.style.getPropertyValue('--panel-ancho');
+  const puntero = (tipo: string, clientX: number, button = 0) => act(async () => {
+    divisor.dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX, button }));
+  });
+  expect(ancho()).toBe('320px');
+  // Only the primary button drags.
+  await puntero('pointerdown', 1000, 2); await puntero('pointermove', 900);
+  expect(ancho()).toBe('320px');
+  // Dragging left widens the panel: it grows from the right edge.
+  await puntero('pointerdown', 1000); await puntero('pointermove', 900);
+  expect(ancho()).toBe('420px');
+  await puntero('pointermove', 100);
+  expect(ancho()).toBe('520px');
+  await puntero('pointermove', 1500);
+  expect(ancho()).toBe('300px');
+  await puntero('pointermove', 880); await puntero('pointerup', 880);
+  expect(ancho()).toBe('440px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('440');
+  expect(container.querySelector('.panel.ancho')).not.toBeNull();
+  // Moving without a pointerdown does nothing.
+  await puntero('pointermove', 0);
+  expect(ancho()).toBe('440px');
+  // ARIA splitter convention: the arrow moves the divider, so ArrowLeft widens the panel.
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+  expect(ancho()).toBe('456px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('456');
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+  expect(ancho()).toBe('440px');
+  // A cancelled pointer ends the drag where the last move left it, and saves that.
+  await puntero('pointerdown', 1000); await puntero('pointermove', 1040); await puntero('pointercancel', 0);
+  expect(ancho()).toBe('400px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('400');
+  await puntero('pointermove', 0);
+  expect(ancho()).toBe('400px');
+});
+
+it('the divider stays below the File menu (QA of #390)', () => {
+  const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'app.css'), 'utf8');
+  const zIndex = (selector: string) => Number(new RegExp(`^${selector.replace(/[.>]/g, '\\$&')} \\{[^}]*z-index: (\\d+)`, 'm').exec(css)![1]);
+  expect(zIndex('.divisor')).toBeLessThan(zIndex('.menu-archivo > div'));
+});
+
+it('the panel width saved in the browser is restored, clamped', async () => {
+  await act(async () => root.unmount());
+  localStorage.setItem('lila.panelAncho', '9999');
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('520px');
+  // Blank means never saved: the 320 default, not 0 clamped to 300.
+  await act(async () => root.unmount());
+  localStorage.setItem('lila.panelAncho', '  ');
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('320px');
 });
 
 // --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---
@@ -1404,4 +1496,127 @@ it('restores Montana decoration when the built-in theme was saved', async () => 
   root = createRoot(container);
   await act(async () => { root.render(<App store={session} />); });
   expect(container.querySelector('.app')?.getAttribute('data-theme')).toBe('montana');
+});
+
+it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2c)', async () => {
+  // The child is an `about:blank` iframe's window: same origin and its own document, like the popup.
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  // jsdom's `close()` empties the body (its own teardown) under React's feet; a browser closes
+  // asynchronously and keeps the nodes, so here it is only watched.
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await click(T.app.escenarioAcoplado);
+    expect(abrir).toHaveBeenCalledWith('', 'lila-escenario', expect.stringMatching(/popup/));
+    expect(hijo.document.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.querySelector('[data-mock="escenario"]')).toBeNull();
+    expect(container.querySelector('aside')!.textContent).toContain(T.app.enVentanaAparte);
+    expect(hijo.document.title).toBe(T.app.tituloVentanaEscenario('AS-IS'));
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    expect(acoplar).toBeDefined();
+    await act(async () => {
+      acoplar!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.textContent).not.toContain(T.app.enVentanaAparte);
+    expect(cerrar).toHaveBeenCalled();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('the rail marks the detached scenario and the popup gets data-esquema (seams of #390, #391, #392)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const sub = (nombre: string): string => filaRail(nombre).querySelector('.rail-sub')!.textContent!;
+  try {
+    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    await click(T.app.escenarioAcoplado);
+    // Only the scenario that lives in the window says so.
+    expect(sub('AS-IS')).toBe(T.rail.enVentana);
+    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
+    // The window follows the active scenario, and the subtitle follows the window.
+    await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
+    expect(sub('TO-BE 3 cashiers')).toBe(T.rail.enVentana);
+    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    // Themed native controls (design 2d) key off `data-esquema`: the popup copies it like the theme.
+    const esquema = container.querySelector('.app')!.getAttribute('data-esquema');
+    expect(esquema).toMatch(/^(claro|oscuro)$/);
+    expect(hijo.document.querySelector('.app.ventana-flotante')!.getAttribute('data-esquema')).toBe(esquema);
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    await act(async () => {
+      acoplar!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
+    expect(container.querySelector('.rail-escenarios')!.textContent).not.toContain(T.rail.enVentana);
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await click(T.app.escenarioAcoplado);
+    expect(container.textContent).toContain(T.app.ventanaBloqueada);
+    expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.textContent).not.toContain(T.app.enVentanaAparte);
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
+it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni Ajustes (QA de #391)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const tecla = (key: string) => act(async () => {
+    hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
+  });
+  try {
+    await click(T.app.escenarioAcoplado);
+    // Open would click the main page's file input with the popup's activation: the browser never
+    // settles it and the app stays busy. Settings would open behind the window.
+    await tecla('o');
+    await tecla('n');
+    await tecla(',');
+    expect(session.openProject).not.toHaveBeenCalled();
+    expect(session.createProject).not.toHaveBeenCalled();
+    expect(container.querySelector('dialog.confirmar-reemplazo')).toBeNull();
+    expect(container.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(false);
+    await tecla('s');
+    expect(session.saveProject).toHaveBeenCalledOnce();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+// QA de la ronda 1 de #392: `#fff` no casaba con la expresión de 6 dígitos que lee
+// `temaClaro` y el tema se daba por oscuro sin serlo. Un `it.each` corto en vez de una función
+// por caso: mismo assert, solo cambia el hex y lo que se espera.
+it.each([
+  ['#fff', true],
+  ['#FFFFFF', true],
+  ['#000', false],
+  // Los cinco temas integrados (`theme/themes/*.json`): Papel, Tieso y Montana son claros;
+  // Eva-01 y Akira, oscuros.
+  ['#12101A', false], // eva-01
+  ['#F3F2F2', true], // papel
+  ['#EEF3F8', true], // tieso
+  ['#0B0A14', false], // akira
+  ['#EBC7FA', true], // montana
+] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
+  expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
 });
