@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { compare, simulate } from '@lila/engine';
 import { parseBpmn } from '@lila/engine/bpmn';
-import { defaultScenarios, newModelXml, nextScenarioRevisions, readProject } from './project';
+import { defaultScenarios, newModelXml, nextScenarioRevisions, readProject, seedModelXml } from './project';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument } from './store/ProjectStore';
 import { setLocale } from './i18n';
@@ -10,7 +10,9 @@ import { setLocale } from './i18n';
 // LILA-210, so the locale is set here instead of depending on the machine's.
 setLocale('es');
 it('modelo propio → dos escenarios → simular → snapshot JSON → reabrir → comparar', async () => {
-  const xml = newModelXml(); const { ir } = await parseBpmn(xml); const scenarios = defaultScenarios(ir);
+  // `newModelXml()` (#409) is an empty process now; this round-trip needs a real start→task→end
+  // model to simulate, so it uses the fixture from `seedModelXml()` instead.
+  const xml = seedModelXml(); const { ir } = await parseBpmn(xml); const scenarios = defaultScenarios(ir);
   const runs = await Promise.all(Object.keys(scenarios).map(async (name) => {
     const prepared = await prepareSimulation(xml, name, scenarios);
     return { id: name, scenarioName: name, result: simulate(prepared.ir, prepared.scenario),
@@ -26,8 +28,13 @@ it('modelo propio → dos escenarios → simular → snapshot JSON → reabrir �
   const again = await prepareSimulation(reopened.model.xml, 'as-is.scenario.json', reopened.scenarios);
   expect(simulate(again.ir, again.scenario)).toEqual(runs[0]!.result);
 });
-it('nuevo diagrama usa ids únicos y tres nodos conectados', async () => {
+it('nuevo diagrama (#409) es un proceso vacío con id único y sin avisos de importar', async () => {
   const a = (await parseBpmn(newModelXml())).ir, b = (await parseBpmn(newModelXml())).ir;
+  expect(a.id).not.toBe(b.id); expect(Object.keys(a.nodes)).toHaveLength(0); expect(Object.keys(a.flows)).toHaveLength(0);
+  expect(a.source.warnings).toEqual([]);
+});
+it('la plantilla sembrada (fixture de pruebas) usa ids únicos y tres nodos conectados', async () => {
+  const a = (await parseBpmn(seedModelXml())).ir, b = (await parseBpmn(seedModelXml())).ir;
   expect(a.id).not.toBe(b.id); expect(Object.keys(a.nodes)).toHaveLength(3); expect(Object.keys(a.flows)).toHaveLength(2);
 });
 it('solo invalida el escenario editado y sus descendientes', () => {

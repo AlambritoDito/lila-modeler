@@ -9,7 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila/engine/bpmn';
-import { newModelXml } from './project';
+import { newModelXml, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';
 import { applyTheme } from './theme/applyTheme';
@@ -117,8 +117,10 @@ beforeEach(async () => {
   // El reparseo diferido de `App.tsx` (150 ms tras montar) sustituye `ir` por el del XML
   // exportado. Para que ese XML nombre la misma tarea que el `ir` falso de `gate` —y el test no
   // dependa de terminar antes del temporizador— la tarea del modelo nuevo pasa a ser
-  // `Task_Preparar` («Preparar alimento»); ver `ir` arriba.
-  mocks.exportXml.mockResolvedValue(newModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar').replace(/(<bpmn:task id="Task_Preparar" name=")[^"]*/, '$1Preparar alimento'));
+  // `Task_Preparar` («Preparar alimento»); ver `ir` arriba. `newModelXml()` (#409) ya no tiene
+  // tareas —es un proceso vacío—, así que este fixture usa `seedModelXml()`, la plantilla
+  // inicio→tarea→fin de antes de #409 conservada solo para pruebas.
+  mocks.exportXml.mockResolvedValue(seedModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar').replace(/(<bpmn:task id="Task_Preparar" name=")[^"]*/, '$1Preparar alimento'));
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
   mocks.crearFigura.mockImplementation((figura: object) => figura);
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn(), putProcess: vi.fn(async () => {}) } as unknown as ProjectSessionStore;
@@ -254,6 +256,25 @@ it('nuevo proyecto reemplaza escenarios del ejemplo por ids propios', async () =
   expect(JSON.stringify(doc.scenarios)).not.toContain('cajero');
   expect(Object.keys(doc.scenarios)).toHaveLength(2);
   expect(container.textContent).toContain(T.app.proyectoNuevo);
+});
+it('nuevo proyecto (#409) crea un diagrama vacío sin marcar E-SIN-START/E-SIN-END', async () => {
+  await click(T.app.nuevo);
+  const doc = vi.mocked(session.createProject).mock.calls[0]![0];
+  expect(doc.model.xml).not.toContain('bpmn:startEvent');
+  expect(doc.model.xml).not.toContain('bpmn:task');
+  expect(doc.model.xml).not.toContain('bpmn:endEvent');
+  expect(Object.keys(doc.scenarios)).toHaveLength(2);
+  for (const escenario of Object.values(doc.scenarios) as Array<{ elements?: unknown }>) {
+    expect(escenario.elements ?? {}).toEqual({});
+  }
+  // Un proceso sin figuras no es un error hasta que se dibuje la primera (ver el `ponytail` en
+  // `App.tsx`, `validacion`): ni el chip flotante ni la cuenta del pie muestran errores o avisos.
+  expect(container.querySelector('.chips-validacion')).toBeNull();
+  expect(container.querySelector('.chip.error')).toBeNull();
+  expect(container.textContent).not.toContain('E-SIN-START');
+  expect(container.textContent).not.toContain('E-SIN-END');
+  expect(container.textContent).toContain(T.app.errores(0));
+  expect(container.textContent).toContain(T.app.avisos(0));
 });
 
 it('editar durante la exportación impide guardar un XML con revisión incorrecta', async () => {
