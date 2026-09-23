@@ -20,16 +20,57 @@ something is not yet wired up, this is stated explicitly under "Limitations of t
 ## Where the installer is and how to open it unsigned
 
 The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila/desktop`),
-for example `Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg`. It is not distributed inside the repository (the
-`apps/desktop/release/` folder is in `.gitignore`): you have to build it (see below) or receive it
-through whatever channel the team uses.
+named `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` for this release (hyphens, no spaces, matching the
+`SHA256SUMS` file's entry). Download both from
+[the `v1.0.0-beta.1` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
+— not `/releases/latest`, since GitHub excludes prereleases from that link. Only the macOS arm64
+`.dmg` and `SHA256SUMS` are attached to Beta 1; there is no Windows or Linux installer on this
+release (CI still builds them, but as untested artifacts — see "Limitations" below). The `.dmg` is
+not distributed inside the repository (the `apps/desktop/release/` folder is in `.gitignore`): you
+can also build it yourself (see below).
 
-The app is **not signed or notarized** (`identity: null` in `electron-builder.yml`, local beta). If
-macOS blocks a copy received from another machine, check where it came from and use whatever
-opening options the system offers. This local build was tested without changing any global
-protections or removing quarantine attributes.
+**Verify the download** before opening it, with both files in the same folder:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+The app is **not signed or notarized** (`identity: null` in `electron-builder.yml`).
+
+### Unsigned first launch (macOS 15 and newer)
+
+On recent macOS (Sequoia 15, and the 26/27 line), the first double-click of the downloaded app is
+blocked outright, with no direct "Open anyway" option in the block dialog:
+
+1. Go to **System Settings ▸ Privacy & Security**, scroll to the security message naming "Lila
+   Modeler", and click **Open Anyway**. Then launch the app again (double-click, or Control-click ▸
+   **Open**) and confirm **Open** in the dialog that follows.
+2. On older macOS, Control-click (right-click) the app in Finder ▸ **Open** ▸ **Open** works
+   directly, without needing System Settings.
+
+Either way, this authorization is a one-time step per copy of the app — it is how macOS is
+designed to treat software from outside the App Store that isn't notarized. Do not disable
+Gatekeeper to work around it. `<VERIFY-GATEKEEPER>`
 
 The app uses the Lila icon in the Dock and in Finder.
+
+## Project files: `.lila` vs `.bpmn`
+
+Two file types register with Finder and double-click to open in this app (Beta 1 verification: see
+`<VERIFY-FINDER>` under Limitations):
+
+- **`.lila`** is the whole project container: the model, its scenarios, revisions and saved runs,
+  zipped into one file (see [`PROJECT_FORMAT.md`](PROJECT_FORMAT.md)). This is the form to hand to
+  somebody else — it is everything they need, self-contained.
+- **`.bpmn`** on its own is the diagram only, with no scenarios or runs attached. Opening a loose
+  `.bpmn` and saving (`⌘S`) writes that same `.bpmn` file back in place; it does not create a
+  project folder or a `.lila` unless you explicitly use **Save as…** (see "Save and restore"
+  below).
+
+**Backup guidance**: keep a copy of the `.lila` (or the project folder) before large edits — the
+app does not version your work for you beyond the "Save as…" workflow. The web demo's browser-local
+storage is not a backup: it lives only in that browser's storage on that machine, and is lost if
+you clear site data or switch browsers or profiles. Treat a downloaded `.lila` as the durable copy.
 
 ## What the window shows on launch
 
@@ -53,7 +94,8 @@ from `eva-01.json`.
 
 ## Usage walkthrough
 
-The top bar has five modes: **Model**, **Simulate**, **Results**, **Compare**, and **Validate routes**.
+The top bar has six modes: **Model**, **Simulate**, **Results**, **Compare**, **Animate**, and
+**Validate paths**.
 English is the base language and Spanish is available as a translation. The app follows the system
 language unless you select English or Spanish in Settings. The native File menu and close dialogs
 follow that same setting. This walkthrough uses the English labels.
@@ -61,7 +103,8 @@ follow that same setting. This walkthrough uses the English labels.
 ### Model («Modelar»)
 
 - On desktop you work with **New project** and **Open project**
-  by folder. You can also open a loose `.bpmn` by double click. Use **Save as** to retain
+  by folder. You can also open a loose `.bpmn` by double click (see `<VERIFY-FINDER>` under
+  Limitations). Use **Save as** to retain
   its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
   like any bpmn.io editor.
@@ -118,7 +161,7 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
   changed relative to the baseline. If warning 3 above applies, this section repeats it and no
   asterisk is drawn at all.
 
-### Validate routes («Validar rutas»)
+### Validate paths («Validar rutas»)
 
 - **This is not the engine's DES simulation**: it animates `bpmn-js-token-simulation` tokens on top
   of the open diagram. It does not read the active scenario or produce results, and the tab itself
@@ -227,8 +270,9 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 ### Settings («Ajustes»)
 
 - `⌘,` (or the ⚙ button in the bar, or «Tema: …» — Theme: … — in the status bar) opens **Ajustes →
-  Apariencia** (Settings → Appearance): theme (Eva-01 dark, Papel light) and density
-  (compacta/normal/cómoda — compact/normal/comfortable). The theme change is immediate, it repaints
+  Apariencia** (Settings → Appearance): one of five themes (Eva-01 dark, Papel light, Tieso light,
+  Akira dark, Montana purple) and density (compacta/normal/cómoda —
+  compact/normal/comfortable). The theme change is immediate, it repaints
   the diagram too, and it is remembered across launches (the app's localStorage, under `lila://`).
   Switching themes remounts the canvas, so it clears the undo stack; the diagram and any unsaved
   changes are kept.
@@ -236,18 +280,18 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 2026-09-07, SHA `358353d`; check whether any of these has already been resolved before
+*(as of 1.0.0-beta.1, SHA `<RC-SHA>`; check whether any of these has already been resolved before
 trusting this list blindly at a later date)*
 
-- **No signing or notarization**: a received copy may require macOS's opening authorization (see
-  above).
-- **Only macOS arm64 is exercised**: the Windows (NSIS) and Linux (AppImage) installers are built by
-  the CI matrix (`.github/workflows/desktop.yml`) and attached to the Release, but nobody on the
-  project has tested them.
-- **`.bpmn` double-click association untested** this round: `open-file`/`argv` handling is covered
-  by unit tests and was verified by passing the path on the command line
-  (`... npx electron apps/desktop "$(pwd)/examples/pedido/model.bpmn"`), but it was not exercised by
-  actually double-clicking a `.bpmn` in Finder.
+- **No signing or notarization**: a received copy requires macOS's opening authorization (see
+  "Unsigned first launch" above). This is expected; do not disable Gatekeeper to work around it.
+- **Only macOS arm64 is offered and exercised**: the Windows (NSIS) and Linux (AppImage) installers
+  are built by the CI matrix (`.github/workflows/desktop.yml`) as untested artifacts; they are not
+  attached to the Beta 1 release and nobody on the project has tested them.
+- **`.lila` and `.bpmn` Finder double-click: verified by the lead on macOS 27 arm64 for Beta 1** —
+  see release notes. `<VERIFY-FINDER>`
+- **Saving a `.lila` opened by double-click or launch argument is fixed in Beta 1 (#378)**.
+  `<VERIFY-378>`
 - **Raw error messages**: some errors reach the interface untranslated — `zod`'s raw validation
   JSON (for example, a scenario that references a nonexistent task id) and Electron's generic
   "Error invoking remote method…" text (for example, when saving into a folder with no
@@ -275,10 +319,10 @@ npm run dist:mac -w @lila/desktop   # tsc + copia dist/web + electron-builder --
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (current version in `apps/desktop/package.json`: `1.0.0-alpha.1`):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.1` for Beta 1):
 
-- `apps/desktop/release/Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila Modeler-1.0.0-alpha.1-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`

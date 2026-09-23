@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases"><img src="https://img.shields.io/badge/Descargar-beta_de_escritorio-0969da" alt="Descargar beta"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1"><img src="https://img.shields.io/badge/Descargar-Beta_1_(macOS)-0969da" alt="Descargar Beta 1"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -64,24 +64,38 @@ proyecto que se mantiene estable.
 ### Web
 
 Abre [alambritodito.github.io/lila-modeler/app/](https://alambritodito.github.io/lila-modeler/app/).
-Arranca con el ejemplo del restaurante (`examples/pedido`) cargado. **Guardar proyecto** descarga
-un `.lila` y conserva una copia en el navegador para restaurarla al recargar; no se sube nada a
-ningún sitio.
+Arranca con el ejemplo del restaurante (`examples/pedido`) cargado. **Archivo ▸ Guardar** (tooltip:
+Guardar proyecto) descarga un `.lila` y conserva una copia en el navegador para restaurarla al
+recargar; no se sube nada a ningún sitio.
+
+### Compartir un proyecto con un colega
+
+Compartir es pasar un archivo `.lila` portable, no edición simultánea — no hay cuenta, backend ni
+sincronización en tiempo real. Usa **Archivo ▸ Guardar** (web, tooltip: Guardar proyecto) o
+**Guardar como…** (escritorio) para obtener un `.lila`, envíalo como enviarías cualquier archivo,
+y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la demo web, **Archivo ▸ Abrir proyecto…** en la app de
+escritorio, o con doble clic en el Finder (verificado para la Beta 1: `<VERIFY-FINDER>`).
+¿Encontraste un problema reproducible en el camino?
+[Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
+— la plantilla de bug pide un archivo `.bpmn` mínimo o un escenario que lo muestre.
 
 ### Beta de escritorio
 
-CI construye instaladores para macOS (`.dmg` arm64), Windows (`.exe`) y Linux (`.AppImage`) y los
-adjunta a los [Releases de GitHub](https://github.com/AlambritoDito/lila-modeler/releases). **No
-están firmados ni notarizados**, así que el primer arranque se bloquea:
+La Beta 1 adjunta un solo instalador al release: `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` para
+macOS en Apple Silicon, más un archivo `SHA256SUMS` para verificarlo —
+[Beta 1 en GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
+(no `/releases/latest`: GitHub excluye los prereleases de ese enlace). **No está firmada ni
+notarizada**, así que el primer arranque se bloquea. Tras el primer intento bloqueado (doble clic
+en la app), ve a **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todas formas**
+junto al mensaje que nombra la app, luego confirma **Abrir**. En macOS más antiguo, Control-clic
+sobre la app ▸ **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar
+esto. `<VERIFY-GATEKEEPER>`
+[`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
+verificación del checksum.
 
-- **macOS**: clic derecho sobre la app → **Abrir** y confirma **Abrir**.
-  [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
-- **Windows**: SmartScreen muestra «Windows protegió su PC» → **Más información** → **Ejecutar de
-  todas formas**.
-
-Solo la build de macOS arm64 ha sido ejercitada por el proyecto; las de Windows y Linux se
-construyen pero no se han probado. La app de escritorio se registra como editor de archivos
-`.bpmn` y `.lila`.
+CI también construye instaladores de Windows (`.exe`) y Linux (`.AppImage`), pero son artefactos
+de CI sin probar, no forman parte del release de la Beta 1. La app de escritorio se registra como
+editor de archivos `.bpmn` y `.lila`.
 
 ### CLI
 
