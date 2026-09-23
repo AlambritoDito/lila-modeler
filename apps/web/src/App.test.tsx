@@ -51,6 +51,8 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+// Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
+vi.mock('./replay/Replay', () => ({ Replay: () => null }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
@@ -1769,6 +1771,24 @@ it('a start and a task drawn on an empty process get the defaults in the BASE sc
   // Undo/delete: the untouched seed (Task_C) goes with its node; the edited entry stays.
   await reparsear(modelo(['Start_A'], []));
   expect(Object.keys(asIs()).sort()).toEqual(['Start_A', 'Task_A', 'Task_B']);
+});
+
+it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  const soloTimer = { interTriggerTimer: { type: 'exponential', mean: 30 } };
+  await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { Start_A: soloTimer } }));
+  await reparsear(modelo(['Start_A', 'Start_B'], []));
+  expect(asIs()).toEqual({ Start_A: soloTimer });
+});
+
+it('a failed Run in Animate shows in the status bar (#419)', async () => {
+  mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.modos.animar);
+  await click(T.app.ejecutar);
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
 });
 
 it('opening a project with unconfigured tasks does not modify its scenarios (#420)', async () => {

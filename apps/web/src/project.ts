@@ -61,8 +61,8 @@ export function readLila(bytes: Uint8Array): ProjectDocument {
 }
 
 /**
- * Parameters a start event or a task gets when nobody has configured it yet: 20 arrivals one hour
- * apart, one hour of work. Used by the default scenarios and, since #420, for each start or task
+ * Parameters a start event or a task gets when nobody has configured it yet (times in seconds):
+ * 20 arrivals one minute apart, one minute of work. Used by the default scenarios and, since #420, for each start or task
  * drawn on the canvas, so a process built from «New» runs with numbers and not with zeros.
  */
 export function defaultElement(type: 'start' | 'task'): Record<string, unknown> {

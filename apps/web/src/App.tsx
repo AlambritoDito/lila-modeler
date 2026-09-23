@@ -636,10 +636,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Every write to an existing scenario: the panel (docked or detached) and the #420 seeding. */
   function cambiarEscenario(archivo: string, escenario: Record<string, unknown>): void {
     setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-    // Cualquier padre extends editado invalida también sus descendientes.
+    // Editing an `extends` parent also invalidates its descendants.
     setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-    // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
-    // que al cambiar de escenario en el selector (LILA-064).
+    // The scenario changed, so the result on screen belongs to the previous one: same treatment
+    // as picking another scenario in the selector (LILA-064).
     cancelarCorrida();
     setCorrida(null);
   }
@@ -759,7 +759,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * #420: a start or task drawn on the canvas gets `defaultElement` in each BASE scenario (the
    * ones without `extends`), so a process built from «New» runs with numbers. Only nodes new
    * against the previous IR, only entries that do not exist, and only the first start with
-   * arrivals. A seeded node that goes away (delete, ⌘Z) takes its untouched seed with it: an entry
+   * arrivals (`triggerCount` or `interTriggerTimer`). A seeded node that goes away (delete, ⌘Z) takes its untouched seed with it: an entry
    * for an id that is not in the model is E-ELEMENTO-DESCONOCIDO and would block Run.
    * ponytail: «untouched» is a JSON.stringify comparison with the seed and the seeds are tracked per
    * id, not per scenario; an edit reverted by hand in another key order counts as edited. Move to a
@@ -787,7 +787,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       for (const id of nuevos) {
         const type = ir.nodes[id]!.type;
         if ((type !== 'start' && type !== 'task') || elements[id] !== undefined) continue;
-        if (type === 'start' && Object.entries(elements).some(([otro, e]) => ir.nodes[otro]?.type === 'start' && e['triggerCount'] !== undefined)) continue;
+        if (type === 'start' && Object.entries(elements).some(([otro, e]) => ir.nodes[otro]?.type === 'start' && (e['triggerCount'] !== undefined || e['interTriggerTimer'] !== undefined))) continue;
         elements[id] = defaultElement(type);
         sembrados.current.set(id, elements[id]);
         cambio = true;

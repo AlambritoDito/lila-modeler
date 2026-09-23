@@ -12,6 +12,14 @@ export interface PrepareSimulationOptions {
 }
 
 /**
+ * #419: many engine messages (E-SIN-START, E-SIN-END, E-INALCANZABLE, E-ELEMENTO-DESCONOCIDO…)
+ * already open with the id or path they are about; prefixing it again printed it twice.
+ */
+function sinRepetir(code: string, where: string, message: string): string {
+  return message.startsWith(where) ? `${code}: ${message}` : `${code}: ${where}: ${message}`;
+}
+
+/**
  * La misma frontera de validación que CLI, antes de crear un Worker.
  *
  * Los mensajes que salen de aquí con `code:` delante son del motor (`validateBpmnXml`,
@@ -37,10 +45,8 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
   const problems = validateScenario(scenario, model.ir, { locale });
   const errors = [
-    // #419: several engine messages (E-SIN-START, E-SIN-END, E-INALCANZABLE…) already open with
-    // the id; prefixing it again printed the process id twice.
-    ...model.errors.map((p) => (p.message.startsWith(p.id) ? `${p.code}: ${p.message}` : `${p.code}: ${p.id}: ${p.message}`)),
-    ...problems.filter((p) => p.severity === 'error').map((p) => `${p.code}: ${p.path}: ${p.message}`),
+    ...model.errors.map((p) => sinRepetir(p.code, p.id, p.message)),
+    ...problems.filter((p) => p.severity === 'error').map((p) => sinRepetir(p.code, p.path, p.message)),
   ];
   if (errors.length) throw new Error(errors.join('\n'));
   const warnings = [

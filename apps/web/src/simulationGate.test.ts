@@ -69,3 +69,12 @@ it('an empty process reports E-SIN-START with its id exactly once (#419)', async
   expect(line).toMatch(/^E-SIN-START: Process_vacio: /);
   expect(line.split('Process_vacio')).toHaveLength(2);
 });
+
+// Same guard for scenario problems: E-ELEMENTO-DESCONOCIDO already opens with its path.
+it('a scenario entry for an unknown id cites its path exactly once (#419)', async () => {
+  const elements = { ...(raw['elements'] as Record<string, unknown>), Tarea_fantasma: { processingTime: { type: 'constant', value: 1 } } };
+  const error = await prepareSimulation(xml, 'base', { base: { ...raw, elements } }).catch((e: unknown) => e as Error);
+  const line = (error as Error).message.split('\n').find((l) => l.startsWith('E-ELEMENTO-DESCONOCIDO:')) ?? '';
+  expect(line).toMatch(/^E-ELEMENTO-DESCONOCIDO: elements\.Tarea_fantasma: /);
+  expect(line.split('elements.Tarea_fantasma')).toHaveLength(2);
+});
