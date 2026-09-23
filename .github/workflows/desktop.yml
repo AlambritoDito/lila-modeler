@@ -95,7 +95,7 @@ jobs:
             echo "::error::Release $REF_NAME is already published; assets are not replaced by CI."; exit 1
           fi
           ls -la release
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+      - uses: softprops/action-gh-release@v2 # the repository allowlist only admits this pattern, not a SHA pin
         with:
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
