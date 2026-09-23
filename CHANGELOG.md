@@ -3,6 +3,16 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.4] - 2026-09-23
+
+### Added
+
+- **Documentation on the website**: every public guide and reference under `docs/`, `docs/es/`
+  and `docs/releases/` is rendered to HTML at `docs/` on the GitHub Pages site, with an index in
+  English and Spanish. New Markdown files appear automatically; links between docs stay on the site
+  and links to source files go to GitHub. The landing's Docs section and «Coming from Bizagi?» now
+  open those pages instead of GitHub.
+
 ## [1.0.0-beta.3] - 2026-09-23
 
 Lote A: identity and first launch. No installer is attached to this version; the browser app and

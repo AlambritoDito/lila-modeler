@@ -2,7 +2,7 @@ name: Pages
 
 on:
   pull_request:
-    paths: ['apps/web/**', 'packages/engine/**', 'examples/**', 'site/**', 'docs/design/en/**', 'docs/design/branding/**', 'tools/build-pages.mjs', 'package*.json', '.github/workflows/pages.yml']
+    paths: ['apps/web/**', 'packages/engine/**', 'examples/**', 'site/**', 'docs/**', 'tools/build-pages.mjs', 'tools/build-docs.mjs', 'package*.json', '.github/workflows/pages.yml']
   push:
     branches: [main]
   workflow_dispatch:
