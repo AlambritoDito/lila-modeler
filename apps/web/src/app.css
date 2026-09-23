@@ -183,15 +183,22 @@ body {
 
 /* Marca sin caja (diseño 2d): el icono aprobado a 26 px sobre la superficie de la barra, sin
    fondo ni borde propios, una regla de 1 px separa el nombre del producto del proyecto.
-   `flex: none` + `white-space: nowrap` (QA de la ronda 1 de #392): sin ellos, «Lila Modeler» y el
-   nombre de archivo se envuelven en dos líneas antes de que el buscador inerte ceda su sitio, y
-   eso crece la barra de 53 px a 60-67 (probado a 1400/1280/1180). */
+   `flex: none` (QA de la ronda 1 de #392) evitaba que «Lila Modeler» y el nombre de archivo se
+   envolvieran en dos líneas, pero eso mismo le impedía encogerse y sacaba la barra por el borde
+   de la ventana en angosto (QA de la ronda 2): `flex: 0 1 auto` dentro, `min-width: 0` fuera y
+   dentro (aquí y en el `<div>` de proyecto/archivo, o el `min-width` de fábrica de un flex item
+   —`auto`— gana y no deja encoger nada) para que sea el nombre del proyecto y el del archivo los
+   que se recorten con `…` (abajo), en vez de que la barra entera se desborde o se envuelva. */
 .identidad {
   align-items: center;
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   gap: 10px;
-  white-space: nowrap;
+  min-width: 0;
+}
+
+.identidad > div {
+  min-width: 0;
 }
 
 .logo {
@@ -202,6 +209,7 @@ body {
 }
 
 .producto {
+  flex: none;
   font: 800 13px var(--font-ui);
 }
 
@@ -210,6 +218,13 @@ body {
   flex: none;
   height: 22px;
   width: 1px;
+}
+
+.proyecto,
+.archivo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .proyecto {
@@ -357,9 +372,17 @@ body {
 /* El artboard está dibujado a 1440 y a 1920. Por debajo de eso la barra no cabe entera y, sin
    esto, el ⚙ y parte de la acción primaria se salían de la ventana y el documento cogía scroll
    horizontal (a 1024 la barra medía 1137 px). Lo primero que se va es el campo de búsqueda, que
-   además es el único inerte; el resto —modos, deshacer/rehacer, ejecutar y ⚙— es alcanzable. */
+   además es el único inerte; el resto —modos, deshacer/rehacer, ejecutar y ⚙— es alcanzable.
+   El nombre del producto y la regla que lo separa del proyecto son lo segundo (QA de la ronda 2
+   de #392): con el buscador ya fuera, ceder ese sitio es lo que evita que el nombre del proyecto
+   se recorte de más antes de que le toque a los modos. */
 @media (max-width: 1280px) {
   .buscador {
+    display: none;
+  }
+
+  .producto,
+  .identidad .separador {
     display: none;
   }
 }

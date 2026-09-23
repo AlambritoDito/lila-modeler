@@ -87,9 +87,12 @@ export const es: Strings = {
     tituloGuardar: 'Guardar proyecto',
     tituloGuardarComo: 'Guardar como',
 
-    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). */
+    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
+     * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
+     * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»
+     * (QA de la ronda 2 de #392). */
     buscar: 'Buscar actividad',
-    buscarPista: 'Buscar actividad…',
+    buscarPista: 'Buscar…',
     buscarPendiente: 'La búsqueda y la paleta de comandos llegan en LILA-066',
 
     deshacer: 'Deshacer',
