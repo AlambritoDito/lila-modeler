@@ -180,14 +180,19 @@ it('below 1280 px the identity block gives up its file-line floor too, so the ba
   expect(bloqueMedia).toMatch(/\.archivo\s*\{\s*\n\s*min-width: 0;/);
 });
 
-it('the mode tabs give up some padding below 1345 px, not just 1280 (QA of #417)', () => {
+it('the mode tabs give up some padding below 1365 px, not just 1280 (QA of #417)', () => {
   // Measured worst case: default project name, dirty state («Sin guardar»), Spanish, Simulate —
   // with `.identidad` shrinkable again (#399) and the scenario toggle (#405, 30 px, flex: none)
   // in the bar, the bar overflowed by up to 21 px between 1281 and 1303 px, and by up to 13 px
-  // between 1321 and 1328 px (the search field reappearing at 1321 px eats the same room back).
-  // Reverting this to 1280 alone (the QA's mutation test) reproduces both overflows, so the
+  // between 1321 and 1328 px (the search field reappearing at 1321 px eats the same room back),
+  // and by 12 px at 1346 fading to 1 px at 1357 once `.producto` stopped wrapping (round 2).
+  // Reverting this to 1280 alone (the QA's mutation test) reproduces the overflows, so the
   // wider threshold is load-bearing and not just the file-line fix's leftover.
-  expect(appCss).toMatch(/@media \(max-width: 1345px\) \{\s*\n\s*\.modo \{/);
+  expect(appCss).toMatch(/@media \(max-width: 1365px\) \{\s*\n\s*\.modo \{/);
+});
+
+it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
+  expect(bloqueDeLinea('.producto')).toContain('white-space: nowrap');
 });
 
 it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de que le toque al proyecto (QA de la ronda 2 de #392)', () => {
