@@ -18,7 +18,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
-import { appendFile, copyFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
@@ -931,11 +931,6 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
 app.whenReady().then(async () => {
   registerLilaProtocol();
 
-  // ponytail: `productName` en package.json (menú «Salir de Lila Modeler» en vez de «@lila/desktop»)
-  // movió `userData` de «@lila/desktop» a «Lila Modeler»; el estado de la beta anterior (recientes,
-  // idioma, tema) se copia una sola vez, la primera que arranca sin `estado.json` propio.
-  const legacyStatePath = path.join(app.getPath('appData'), '@lila', 'desktop', 'estado.json');
-  try { await stat(sessionStatePath); } catch { await copyFile(legacyStatePath, sessionStatePath).catch(() => {}); }
   sessionState = await readSessionState(sessionStatePath);
   // The shell's language (LILA-213), before the menu is built: the persisted preference wins and,
   // when it says `auto` (or there is none), the system language decides. `app.getLocale()` can
