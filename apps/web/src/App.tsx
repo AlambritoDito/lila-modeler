@@ -742,12 +742,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }, []);
 
   /**
-   * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074): main
-   * captura la ruta —doble clic, `open-file` de macOS, argumento de línea de comandos—, autoriza
-   * su carpeta y la entrega por `pendingOpenPath()` (lo que llegó antes de que la ventana pudiera
-   * recibirla; se consume una vez) o por `onOpenPath` (con la app ya corriendo). Las dos entran
-   * por la MISMA puerta que «Abrir reciente», la única que abre una carpeta ya autorizada sin
-   * selector, pero llevando `ruta.file`: se abre EL archivo pulsado, no un `model.bpmn` fijo.
+   * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074), o un
+   * `.lila` por la misma puerta (issue #378): main captura la ruta —doble clic, `open-file` de
+   * macOS, argumento de línea de comandos—, autoriza su carpeta y la entrega por
+   * `pendingOpenPath()` (lo que llegó antes de que la ventana pudiera recibirla; se consume una
+   * vez) o por `onOpenPath` (con la app ya corriendo). Las dos entran por la MISMA puerta que
+   * «Abrir reciente», la única que abre una carpeta ya autorizada sin selector, llevando
+   * `ruta.file` CUANDO existe: se abre EL `.bpmn` pulsado, no un `model.bpmn` fijo. `ruta.file` NO
+   * existe para un `.lila` (`ruta.dir` es entonces la ruta del propio archivo, no una carpeta que
+   * recorrer — ver el JSDoc de `OpenPathRequest` en `bridge.ts`) y no debe reenviarse: forwarding
+   * incondicional dejaba `DesktopStore.activeModelFile` con un nombre `.lila`, y el siguiente
+   * guardado normal reventaba en `lila:writeProject`/`requireBpmnName`.
    * ponytail: la carpeta del archivo sigue siendo el proyecto (escenarios y corridas salen de
    * ahí); un `.bpmn` suelto abre como proyecto sin escenarios y se coloca con «Guardar como».
    */
@@ -757,12 +762,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) { rutaPendiente.current = ruta; return; }
     // Con una E/S en curso o el diálogo de cambios sin guardar abierto, `projectAction` saldría en
     // silencio o pisaría la acción pendiente (hallazgos 4 y 5): mejor decirlo — el banner se pinta
-    // también dentro del diálogo.
+    // también dentro del diálogo. Sin `ruta.file` (un `.lila`), `ruta.dir` YA es la ruta completa
+    // del archivo pulsado: sirve igual para nombrarlo en el aviso.
     if (ioLock.current || pendingAction !== null) {
-      setIoError(S.app.errorAbrirOcupado(String(ruta.file)));
+      setIoError(S.app.errorAbrirOcupado(ruta.file ?? ruta.dir));
       return;
     }
-    void projectAction({ recent: ruta.dir, file: ruta.file });
+    void projectAction(ruta.file === undefined ? { recent: ruta.dir } : { recent: ruta.dir, file: ruta.file });
   }
   const abrirRutaRef = useRef(abrirRuta);
   abrirRutaRef.current = abrirRuta;

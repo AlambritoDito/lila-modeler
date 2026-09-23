@@ -27,7 +27,7 @@ import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
-import { findBpmnArg, isBpmnPath, isLilaPath, withLilaExtension } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
@@ -624,7 +624,9 @@ async function acceptOpenPath(filePath: string): Promise<void> {
   // donde viven el manifiesto, los escenarios y las corridas.
   const dir = isLilaPath(filePath) ? await realpath(filePath) : await realpath(path.dirname(filePath));
   authorizedFolders.add(dir);
-  const request: OpenPathRequest = { dir, file: path.basename(filePath) };
+  // `openPathRequest` (issue #378) decide si `file` viaja: solo para un `.bpmn` suelto, nunca
+  // para un `.lila` (ver su JSDoc en `openPath.ts` y el de `OpenPathRequest` en `bridge.ts`).
+  const request: OpenPathRequest = openPathRequest(filePath, dir);
   if (process.env.LILA_DEBUG === '1') {
     console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
   }

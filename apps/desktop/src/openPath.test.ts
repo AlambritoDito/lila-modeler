@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findBpmnArg, isBpmnPath, isMiscasedModelFile, withLilaExtension } from './openPath.js';
+import { findBpmnArg, isBpmnPath, isMiscasedModelFile, openPathRequest, withLilaExtension } from './openPath.js';
 
 describe('isBpmnPath', () => {
   it('acepta .bpmn en cualquier combinación de mayúsculas/minúsculas', () => {
@@ -65,5 +65,32 @@ describe('withLilaExtension', () => {
   it('respeta la que ya está, en cualquier combinación de mayúsculas', () => {
     expect(withLilaExtension('/proyectos/pedido.lila')).toBe('/proyectos/pedido.lila');
     expect(withLilaExtension('/proyectos/PEDIDO.LILA')).toBe('/proyectos/PEDIDO.LILA');
+  });
+});
+
+describe('openPathRequest (issue #378)', () => {
+  it('un .bpmn manda dir + file, el nombre plano dentro de la carpeta', () => {
+    expect(openPathRequest('/descargas/ventas.bpmn', '/descargas')).toEqual({
+      dir: '/descargas',
+      file: 'ventas.bpmn',
+    });
+  });
+
+  it('un .lila NO manda file: dir ya es la ruta del propio archivo', () => {
+    expect(openPathRequest('/descargas/launch.lila', '/descargas/launch.lila')).toEqual({
+      dir: '/descargas/launch.lila',
+    });
+    // La forma resultante no tiene la clave "file" en absoluto (ni siquiera `undefined`),
+    // para que `exactOptionalPropertyTypes` y un `JSON.stringify` de IPC se comporten igual.
+    expect(Object.keys(openPathRequest('/descargas/launch.lila', '/descargas/launch.lila'))).toEqual(['dir']);
+  });
+
+  it('un .lila con nombre no-ASCII (regresión) tampoco manda file', () => {
+    const ruta = '/descargas/Trámite de Licencia — Completo.lila';
+    expect(openPathRequest(ruta, ruta)).toEqual({ dir: ruta });
+  });
+
+  it('.bpmn en mayúsculas también manda file (insensible a mayúsculas, como isBpmnPath)', () => {
+    expect(openPathRequest('/carpeta/Model.BPMN', '/carpeta')).toEqual({ dir: '/carpeta', file: 'Model.BPMN' });
   });
 });

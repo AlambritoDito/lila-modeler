@@ -234,7 +234,13 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = problems;
-    this.activeModelFile = file;
+    // Solo un `.bpmn` es un `modelFile` válido para `saveProject` de abajo (issue #378): `file`
+    // puede llegar con un `.lila` (el propio `dir` que `main.ts` acaba de abrir, ver
+    // `acceptOpenPath`/`openPathRequest`) cuando quien llama no es `abrirRuta` de `App.tsx` —
+    // segunda defensa, no la única, por si otro llamador reenvía algo que no filtró. Guardar ese
+    // nombre como `activeModelFile` mandaría `modelFile: '*.lila'` al siguiente guardado normal, y
+    // `lila:writeProject`/`requireBpmnName` lo rechazaría con E-ARGUMENTO.
+    this.activeModelFile = file?.toLowerCase().endsWith('.bpmn') === true ? file : undefined;
     this.activeLoose = raw.loose === true;
     return document;
   }

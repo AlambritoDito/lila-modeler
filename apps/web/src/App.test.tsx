@@ -641,20 +641,20 @@ it('el menú nativo despacha a las mismas acciones y abrir reciente activa el pr
 // ---------- abrir un .bpmn por asociación de archivo / arranque en frío (LILA-072, LILA-074) ----------
 
 /** Puente falso con solo lo que mira este bloque; devuelve el espía de baja de `onOpenPath`. */
-function puenteConRutas(pendiente: { dir: string; file: string } | null) {
+function puenteConRutas(pendiente: { dir: string; file?: string } | null) {
   const quitar = vi.fn();
-  let emitir: ((ruta: { dir: string; file: string }) => void) | null = null;
+  let emitir: ((ruta: { dir: string; file?: string }) => void) | null = null;
   let menu: ((a: unknown) => void) | null = null;
   vi.stubGlobal('lila', {
     pendingOpenPath: vi.fn().mockResolvedValue(pendiente),
-    onOpenPath: (cb: (ruta: { dir: string; file: string }) => void) => { emitir = cb; return quitar; },
+    onOpenPath: (cb: (ruta: { dir: string; file?: string }) => void) => { emitir = cb; return quitar; },
     onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
     readSettings: async () => ({}),
     writeSettings: async () => {},
   });
   return {
     quitar,
-    emitir: (ruta: { dir: string; file: string }) => emitir!(ruta),
+    emitir: (ruta: { dir: string; file?: string }) => emitir!(ruta),
     menu: (accion: unknown) => menu!(accion),
   };
 }
@@ -684,6 +684,47 @@ it('se abre EL .bpmn pulsado, no el model.bpmn de la carpeta (LILA-072)', async 
   puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
   await remontar();
   expect(abrirReciente).toHaveBeenCalledWith('/p/descargas', 'ventas.bpmn');
+});
+
+// ---------- abrir un .lila por asociación de archivo / arranque en frío (issue #378) ----------
+// Un `.lila` llega por la MISMA puerta que un `.bpmn` (arriba), pero SIN `ruta.file`: `ruta.dir`
+// es entonces la ruta del propio `.lila`, no una carpeta que recorrer (ver `OpenPathRequest` en
+// `bridge.ts`). El bug de #378 era reenviar `file` de todos modos con el nombre del `.lila`, lo
+// que dejaba `DesktopStore.activeModelFile` mal puesto y reventaba el siguiente guardado normal
+// en `lila:writeProject`/`requireBpmnName`.
+
+it('una ruta .lila pendiente al arrancar abre el archivo SIN reenviar `file` a openRecent (issue #378)', async () => {
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p14', 'Desde .lila'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  puenteConRutas({ dir: '/descargas/launch.lila' });
+  await remontar();
+  expect(abrirReciente).toHaveBeenCalledWith('/descargas/launch.lila', undefined);
+  expect(container.textContent).toContain('Desde .lila');
+});
+
+it('una ruta .lila que llega con la app abierta también abre sin `file` (issue #378)', async () => {
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p15', 'Segundo .lila'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  const puente = puenteConRutas(null);
+  await remontar();
+  await act(async () => { puente.emitir({ dir: '/descargas/otro.lila' }); });
+  expect(abrirReciente).toHaveBeenCalledWith('/descargas/otro.lila', undefined);
+  expect(container.textContent).toContain('Segundo .lila');
+});
+
+it('una ruta .lila que llega con una E/S en curso avisa usando la ruta como nombre, sin "undefined" (issue #378)', async () => {
+  const guardado = deferred<ProjectDocument | null>();
+  session.saveProject = vi.fn().mockReturnValue(guardado.promise);
+  const abrirReciente = vi.fn().mockResolvedValue(proyecto('p16', 'Nunca'));
+  (session as unknown as { openRecent: unknown }).openRecent = abrirReciente;
+  const puente = puenteConRutas(null);
+  await remontar();
+  await act(async () => { puente.menu('guardar'); }); // toma `ioLock` y no lo suelta.
+  await act(async () => { puente.emitir({ dir: '/descargas/launch.lila' }); });
+  expect(abrirReciente).not.toHaveBeenCalled();
+  expect(container.textContent).toContain(T.app.errorAbrirOcupado('/descargas/launch.lila'));
+  expect(container.textContent).not.toContain('undefined');
+  await act(async () => { guardado.resolve(null); });
 });
 
 it('una ruta .bpmn que llega con la app abierta cambia de proyecto', async () => {

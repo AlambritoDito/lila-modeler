@@ -2,8 +2,11 @@
  * Detección de una ruta `.bpmn` a abrir desde argumentos de línea de comandos (OP-14, incremento
  * 2, "arranque frío y segunda apertura" de OP-12). Pura: sin `electron`, sin tocar el sistema de
  * archivos — `main.ts` decide qué hacer con la ruta encontrada (verificar que existe, autorizar su
- * carpeta) usando `node:fs/promises`.
+ * carpeta) usando `node:fs/promises`. `node:path` sí se usa (solo el nombre de archivo, sin
+ * tocar disco), para que `openPathRequest` de abajo también sea pura.
  */
+import path from 'node:path';
+import type { OpenPathRequest } from './bridge.js';
 
 /** `true` si `p` termina en `.bpmn` (insensible a mayúsculas: `Model.BPMN` también cuenta). */
 export function isBpmnPath(p: string): boolean {
@@ -68,4 +71,18 @@ export function findBpmnArg(argv: readonly string[], skip: number): string | nul
     if (arg !== undefined && !arg.startsWith('-') && (isBpmnPath(arg) || isLilaPath(arg))) return arg;
   }
   return null;
+}
+
+/**
+ * Forma de `lila:open-path` para `filePath` ya autorizado, dado `realDir` (issue #378): para un
+ * `.lila`, `realDir` YA es la ruta del propio archivo (`acceptOpenPath` en `main.ts` lo autoriza
+ * así, no su carpeta) y no hay `.bpmn` suelto que nombrar, así que `file` se omite; para un
+ * `.bpmn`, `realDir` es la carpeta que lo contiene y `file` es su nombre plano dentro de ella.
+ * Mandar `file` para un `.lila` dejaba `DesktopStore.activeModelFile` con un nombre `.lila`, y el
+ * siguiente guardado normal reventaba en `lila:writeProject`/`requireBpmnName` ("file" debe ser
+ * un nombre de archivo .bpmn) — este helper es la única frontera que decide la forma, para que
+ * `main.ts` no pueda volver a mandar los dos campos por accidente.
+ */
+export function openPathRequest(filePath: string, realDir: string): OpenPathRequest {
+  return isLilaPath(filePath) ? { dir: realDir } : { dir: realDir, file: path.basename(filePath) };
 }

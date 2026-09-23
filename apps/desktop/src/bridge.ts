@@ -203,10 +203,17 @@ export interface Recent {
   readonly openedAt: string;
 }
 
-/** `dir` (ya autorizada) y nombre de archivo de un `.bpmn` a abrir (`pendingOpenPath`/`onOpenPath`). */
+/**
+ * `dir` (ya autorizada) y, para un `.bpmn` suelto, el nombre de archivo a abrir dentro de esa
+ * carpeta (`pendingOpenPath`/`onOpenPath`, issue #378). `file` nombra SOLO un `.bpmn` suelto
+ * dentro de `dir` — nunca un `.lila`: un `.lila` es el proyecto entero y `dir` ya es su propia
+ * ruta (ver `acceptOpenPath` en `main.ts`), así que ahí `file` se omite. Reenviarlo de todos
+ * modos activaría `modelFile` en un guardado posterior (`DesktopStore.saveProject`) y
+ * `lila:writeProject` lo rechazaría con `E-ARGUMENTO` porque no es un nombre `.bpmn`.
+ */
 export interface OpenPathRequest {
   readonly dir: string;
-  readonly file: string;
+  readonly file?: string;
 }
 
 declare global {
