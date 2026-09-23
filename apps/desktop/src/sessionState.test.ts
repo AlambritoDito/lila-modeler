@@ -232,6 +232,21 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ temas: 'ninguno' })).toEqual({});
   });
 
+  it('keeps the detached scenario window geometry only when it has the shape of window bounds', () => {
+    const ventanaEscenario = { x: 10, y: 20, width: 560, height: 720 };
+    expect(parseAjustes({ tema: 'papel', ventanaEscenario })).toEqual({ tema: 'papel', ventanaEscenario });
+    expect(parseAjustes({ ventanaEscenario: { x: 10, y: 20, width: '560', height: 720 } })).toEqual({});
+    expect(parseAjustes({ ventanaEscenario: [10, 20, 560, 720] })).toEqual({});
+    // Sane bounds only: below the window's minimum, absurdly large, or not finite.
+    expect(parseAjustes({ ventanaEscenario: { x: 10, y: 20, width: 100, height: 720 } })).toEqual({});
+    expect(parseAjustes({ ventanaEscenario: { x: 10, y: 20, width: 560, height: 99999 } })).toEqual({});
+    expect(parseAjustes({ ventanaEscenario: { x: Number.NaN, y: 20, width: 560, height: 720 } })).toEqual({});
+    // A monitor left of the primary one has negative coordinates.
+    expect(parseAjustes({ ventanaEscenario: { x: -1200, y: 20, width: 560, height: 720 } })).toEqual({
+      ventanaEscenario: { x: -1200, y: 20, width: 560, height: 720 },
+    });
+  });
+
   it('withAjustes fusiona: guardar solo el tema no borra la densidad', () => {
     const conDensidad = withAjustes(defaultSessionState(), { densidad: 'comoda' });
     expect(withAjustes(conDensidad, { tema: 'papel' }).ajustes).toEqual({ densidad: 'comoda', tema: 'papel' });

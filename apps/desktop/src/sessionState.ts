@@ -46,13 +46,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isWindowBounds(value: unknown): value is WindowBounds {
+/** A finite number in `[min, 8192]`: `NaN`, `Infinity` and absurd sizes are not bounds. */
+function isInRange(value: unknown, min: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= 8192;
+}
+
+/** Positions may be negative (a monitor left of the primary one); sizes have to be positive. */
+function isWindowBounds(value: unknown, minWidth = 1, minHeight = 1): value is WindowBounds {
   if (!isPlainObject(value)) return false;
   return (
-    typeof value.x === 'number' &&
-    typeof value.y === 'number' &&
-    typeof value.width === 'number' &&
-    typeof value.height === 'number'
+    isInRange(value.x, -8192) &&
+    isInRange(value.y, -8192) &&
+    isInRange(value.width, minWidth) &&
+    isInRange(value.height, minHeight)
   );
 }
 
@@ -69,7 +75,14 @@ function isRecentEntry(value: unknown): value is RecentEntry {
  */
 export function parseAjustes(value: unknown): Ajustes {
   if (!isPlainObject(value)) return {};
-  const ajustes: { tema?: string; densidad?: string; idioma?: string; temas?: readonly TemaGuardado[]; panelAncho?: number } = {};
+  const ajustes: {
+    tema?: string;
+    densidad?: string;
+    idioma?: string;
+    temas?: readonly TemaGuardado[];
+    panelAncho?: number;
+    ventanaEscenario?: WindowBounds;
+  } = {};
   if (typeof value.tema === 'string') ajustes.tema = value.tema;
   if (typeof value.densidad === 'string') ajustes.densidad = value.densidad;
   // El idioma (LILA-210) es la PREFERENCIA (`auto`/`en`/`es`), no el idioma resuelto; qué valores
@@ -78,6 +91,9 @@ export function parseAjustes(value: unknown): Ajustes {
   if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
   // The right panel width (design 2a): the same 300–520 px the renderer's divider allows.
   if (typeof value.panelAncho === 'number' && value.panelAncho >= 300 && value.panelAncho <= 520) ajustes.panelAncho = value.panelAncho;
+  // Geometry of the detached scenario window (design 2c), no smaller than its `minWidth`/`minHeight`
+  // in `main.ts`, which also recentres it if it no longer fits any display.
+  if (isWindowBounds(value.ventanaEscenario, 420, 360)) ajustes.ventanaEscenario = value.ventanaEscenario;
   return ajustes;
 }
 

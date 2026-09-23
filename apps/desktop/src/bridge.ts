@@ -160,6 +160,12 @@ export interface Ajustes {
   readonly temas?: readonly TemaGuardado[];
   /** Width of the right panel in px (design 2a); the renderer clamps it to 300–520. */
   readonly panelAncho?: number;
+  /**
+   * Last position and size of the detached scenario window (design 2c). Written out instead of
+   * importing `WindowBounds`: this file is also type-checked by the web app, which must not pull
+   * `sessionState.ts` and its `node:` imports in.
+   */
+  readonly ventanaEscenario?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 }
 
 /**

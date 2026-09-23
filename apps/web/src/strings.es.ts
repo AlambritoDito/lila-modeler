@@ -100,6 +100,15 @@ export const es: Strings = {
     replicacion: (actual: number, total: number): string => `Replicación ${actual} de ${total}`,
     porCiento: (n: number): string => `${n} %`,
 
+    /** Ventana desacoplable del escenario (diseño 2c): el interruptor de la barra y lo que queda en el panel. */
+    escenarioAcoplado: 'Escenario acoplado ↗',
+    escenarioDesacoplado: 'En ventana aparte',
+    acoplar: 'Acoplar',
+    enVentanaAparte: 'Escenario en ventana aparte ↗',
+    mostrarVentana: 'Mostrar',
+    ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
+    tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
+
     /** Controles de zoom del lienzo. */
     acercar: 'Acercar',
     alejar: 'Alejar',
@@ -456,6 +465,8 @@ export const es: Strings = {
   escenario: {
     guardar: 'Guardar',
     duplicar: 'Duplicar',
+    /** Pie de la ventana desacoplada, junto a Duplicar y Guardar. */
+    pieVentana: 'los cambios se ven en el lienzo al instante',
     /** Cabecera: errores y avisos del escenario en edición. */
     conteo: (errores: number, avisos: number): string =>
       `${errores} ${errores === 1 ? 'error' : 'errores'} · ${avisos} ${

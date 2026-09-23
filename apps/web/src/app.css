@@ -192,9 +192,11 @@ body {
   color: var(--fg-muted);
   display: flex;
   gap: 8px;
+  /* 210 px, but the first thing to give way when the bar runs short (the scenario toggle, #391). */
+  flex: 0 1 210px;
   height: 30px;
+  min-width: 0;
   padding: 0 10px;
-  width: 210px;
 }
 
 .buscador input {
@@ -357,19 +359,22 @@ body {
   outline: none;
 }
 
-/* Wide panel (≥ 440 px): the scenario form (sections and record entries) goes two columns.
-   The selector is shared with the detached window of W1. Each `.propiedad` (a field and its help, from `Propiedades`) is a cell;
-   everything else (titles, lists, records with nested entries, the calendar grid) takes the row.
-   ponytail: a CSS grid over the generated markup, no layout component. */
-/* The grid goes on `::details-content`: a `<details>` lays its children out inside that slot, so
-   `display: grid` on the element itself only sees two boxes (summary and content). */
+/* Two columns once the panel is wide enough: a wide docked panel (≥ 440 px, design 2a) or the
+   detached window (design 2c) — one rule for both. The grid goes on each section's
+   `::details-content` —a `<details>` lays its children out inside that slot, so `display: grid` on
+   the element itself only sees two boxes (summary and content)— and on each record entry (a pool,
+   a calendar). Browsers without the pseudo-element keep one column. Each `.propiedad` (a field and
+   its help, from `Propiedades`) is a cell; everything else (titles, lists, records with nested
+   entries, the calendar grid) takes the row. `max()` caps it at two columns, and 180 px keeps two
+   of them in a 440 px panel. ponytail: a CSS grid over the generated markup, no layout component. */
 .ventana-flotante .escenario details[open]::details-content,
 .panel.ancho .escenario details[open]::details-content,
 .ventana-flotante .escenario .entrada,
 .panel.ancho .escenario .entrada {
+  align-items: start;
   display: grid;
   gap: 8px 16px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, calc(50% - 8px)), 1fr));
 }
 
 .ventana-flotante .escenario :is(details[open], .entrada) > :not(.propiedad),
@@ -1755,3 +1760,167 @@ body {
 .bienvenida-tema .muestra { background: var(--accent-primary); flex: none; height: 9px; width: 9px; }
 .bienvenida .enlace { background: none; border: 0; color: var(--accent-tertiary); cursor: pointer; font: inherit; padding: 0; }
 @media (max-width: 900px) { .bienvenida { flex-direction: column; } .bienvenida-izq { border-right: 0; border-bottom: 2px solid var(--border); flex: none; } }
+
+/* ---------- escenario desacoplado (diseño 2c) ---------- */
+
+/* The toggle of the top bar, left of Run: outlined in the tertiary accent, the same 30 px box as
+   the icon buttons next to it. */
+.boton.desacoplar {
+  background: none;
+  border-color: var(--accent-tertiary);
+  color: var(--accent-tertiary);
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  height: 30px;
+  letter-spacing: 0.08em;
+  padding: 0 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.boton.desacoplar[aria-pressed='true'] {
+  background: var(--bg-hover);
+}
+
+.boton.desacoplar svg {
+  display: none;
+}
+
+/* Below 1400 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
+   the search field goes away, the mode tabs also lose some air. Without this, Run and ⚙ left the
+   bar below ~1150 px (QA of #391). Measured with no horizontal overflow from 1440 down to 1024 px
+   in English and Spanish, on the Simulation tab. */
+@media (max-width: 1400px) {
+  .boton.desacoplar {
+    display: grid;
+    padding: 0;
+    place-items: center;
+    width: 30px;
+  }
+
+  .boton.desacoplar svg {
+    display: block;
+  }
+
+  .boton.desacoplar span {
+    display: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .modo {
+    padding: calc(2px * var(--espacio, 1)) 10px;
+  }
+}
+
+/* What stays in the docked panel while the scenario lives in its own window. */
+.panel-desacoplado {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: calc(12px * var(--espacio, 1)) 12px;
+}
+
+.panel-desacoplado p {
+  color: var(--fg-muted);
+  margin: 0 auto 0 0;
+}
+
+/* The child window: a column, not the grid of the main `.app` (same classes, so the density and
+   the decorated themes apply there too). */
+.app.ventana-flotante {
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.ventana-titulo {
+  align-items: center;
+  background: var(--bg-elevated);
+  border-bottom: 2px solid var(--border);
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.ventana-titulo > span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ventana-titulo .acoplar {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--accent-tertiary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0.1em;
+  padding: calc(4px * var(--espacio, 1)) 0;
+  text-transform: uppercase;
+}
+
+.panel.ventana-cuerpo {
+  border-left: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ventana-cuerpo .escenario {
+  flex: 1;
+}
+
+/* Labels flush left in small caps, square 30 px fields with mono values (artboard 2c). */
+.ventana-flotante .campo-schema label,
+.ventana-flotante .campo-schema .etiqueta {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ventana-flotante .campo-schema input:not([type='checkbox']),
+.ventana-flotante .campo-schema select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  border-radius: 0;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  height: 30px;
+}
+
+/* Footer of the window: the reminder on the left, Duplicate (outlined) and Save (filled) on the
+   right. Sticky, and pushed to the bottom when the form is short. */
+.escenario-pie {
+  align-items: center;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  margin: auto -12px -12px;
+  padding: calc(8px * var(--espacio, 1)) 12px;
+  position: sticky;
+}
+
+.escenario-pie > span {
+  color: var(--fg-muted);
+  font-size: 10px;
+  margin-right: auto;
+}
+
+.escenario-pie .boton:not(.primario) {
+  background: none;
+}

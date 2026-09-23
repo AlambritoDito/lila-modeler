@@ -10,6 +10,14 @@
  * prefijo de caracteres coincide sin ser el mismo origen). `URL.origin` no sufre esa confusión.
  */
 
+/**
+ * The only child window the renderer may open (design 2c): the detached scenario panel, an empty
+ * `about:blank` the app itself fills through a React portal. Anything else keeps being denied.
+ */
+export function permiteVentanaHija(url: string, frameName: string): boolean {
+  return url === 'about:blank' && frameName === 'lila-escenario';
+}
+
 /** Origen esperado del protocolo empaquetado: `lila://app/...`. */
 const APP_PROTOCOL = 'lila:';
 const APP_HOST = 'app';

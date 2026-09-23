@@ -52,7 +52,8 @@ vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
 vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
   ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
-    return null;
+    // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
+    return <div data-mock="escenario" />;
   } }));
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
@@ -1495,4 +1496,75 @@ it('restores Montana decoration when the built-in theme was saved', async () => 
   root = createRoot(container);
   await act(async () => { root.render(<App store={session} />); });
   expect(container.querySelector('.app')?.getAttribute('data-theme')).toBe('montana');
+});
+
+it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2c)', async () => {
+  // The child is an `about:blank` iframe's window: same origin and its own document, like the popup.
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  // jsdom's `close()` empties the body (its own teardown) under React's feet; a browser closes
+  // asynchronously and keeps the nodes, so here it is only watched.
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await click(T.app.escenarioAcoplado);
+    expect(abrir).toHaveBeenCalledWith('', 'lila-escenario', expect.stringMatching(/popup/));
+    expect(hijo.document.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.querySelector('[data-mock="escenario"]')).toBeNull();
+    expect(container.querySelector('aside')!.textContent).toContain(T.app.enVentanaAparte);
+    expect(hijo.document.title).toBe(T.app.tituloVentanaEscenario('AS-IS'));
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    expect(acoplar).toBeDefined();
+    await act(async () => {
+      acoplar!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.textContent).not.toContain(T.app.enVentanaAparte);
+    expect(cerrar).toHaveBeenCalled();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await click(T.app.escenarioAcoplado);
+    expect(container.textContent).toContain(T.app.ventanaBloqueada);
+    expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
+    expect(container.textContent).not.toContain(T.app.enVentanaAparte);
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
+it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni Ajustes (QA de #391)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const tecla = (key: string) => act(async () => {
+    hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
+  });
+  try {
+    await click(T.app.escenarioAcoplado);
+    // Open would click the main page's file input with the popup's activation: the browser never
+    // settles it and the app stays busy. Settings would open behind the window.
+    await tecla('o');
+    await tecla('n');
+    await tecla(',');
+    expect(session.openProject).not.toHaveBeenCalled();
+    expect(session.createProject).not.toHaveBeenCalled();
+    expect(container.querySelector('dialog.confirmar-reemplazo')).toBeNull();
+    expect(container.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(false);
+    await tecla('s');
+    expect(session.saveProject).toHaveBeenCalledOnce();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
 });
