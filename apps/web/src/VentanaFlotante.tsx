@@ -9,7 +9,7 @@
  * mirrored while it lives.
  *
  * Never a modal: it does not block the canvas, does not trap focus, and closing it docks the panel
- * back. Generic on purpose: Results can reuse it with another `nombre`.
+ * back. Generic on purpose: the About window (#408) reuses it as `lila-acerca`.
  */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -87,6 +87,7 @@ export function VentanaFlotante({
   onAcoplar,
   onGeometria,
   onTecla,
+  cabecera = true,
   children,
 }: {
   ventana: Window;
@@ -105,6 +106,9 @@ export function VentanaFlotante({
   onGeometria?: (geometria: Geometria) => void;
   /** Keys pressed inside the child, so the app shortcuts (⌘S…) work there too. */
   onTecla?: (evento: KeyboardEvent) => void;
+  /** `false` drops the «Acoplar» header: a window that docks nothing (About, #408) has its own
+   *  close button and the OS title bar already shows `titulo`. */
+  cabecera?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   const S = useStrings();
@@ -163,7 +167,7 @@ export function VentanaFlotante({
 
   return createPortal(
     <div className="app ventana-flotante" data-theme={tema} data-esquema={esquema} data-densidad={densidad}>
-      <header className="ventana-titulo">
+      {cabecera && <header className="ventana-titulo">
         <span>{titulo}</span>
         <button type="button" className="acoplar" onClick={onAcoplar}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -172,7 +176,7 @@ export function VentanaFlotante({
           </svg>
           {S.app.acoplar}
         </button>
-      </header>
+      </header>}
       <div className="panel ventana-cuerpo" inert={inert}>{children}</div>
     </div>,
     ventana.document.body,

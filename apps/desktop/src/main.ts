@@ -788,9 +788,12 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   // sistema en vez de crear una `BrowserWindow` sin las mismas protecciones. The one exception is
   // the detached scenario window (design 2c): an empty `about:blank` of the app's own origin that
   // the renderer fills with a React portal, so it needs no preload and gets none. Its size and
-  // position come from the features string of `window.open`.
+  // position come from the features string of `window.open`. The About window (#408) takes the
+  // same path but is a fixed card: its size is pinned here and it cannot be resized, minimised or
+  // maximised.
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     if (permiteVentanaHija(url, frameName)) {
+      const acerca = frameName === 'lila-acerca';
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
@@ -806,9 +809,10 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
           alwaysOnTop: false,
           closable: true,
           movable: true,
-          resizable: true,
-          minimizable: true,
-          maximizable: true,
+          ...(acerca ? { width: 440, height: 600 } : {}),
+          resizable: !acerca,
+          minimizable: !acerca,
+          maximizable: !acerca,
           focusable: true,
           frame: true,
           transparent: false,

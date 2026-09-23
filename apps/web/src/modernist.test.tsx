@@ -27,8 +27,9 @@ describe('Modernist (LILA-206)', () => {
 
   it('no deja ningún radio distinto de 0 en el CSS ni en los estilos en línea', () => {
     for (const nombre of ['app.css', 'theme/tokens.css', 'BottleneckOverlay.ts']) {
-      // The approved brand tile keeps its own silhouette; UI controls remain square.
-      const css = nombre === 'app.css' ? leer(nombre).replace(/^\.logo \{[^}]*\}/m, '') : leer(nombre);
+      // The approved brand tile keeps its own silhouette and the About image is rounded (#408);
+      // UI controls remain square.
+      const css = nombre === 'app.css' ? leer(nombre).replace(/^\.logo \{[^}]*\}/m, '').replace(/^\.acerca-icono \{[^}]*\}/m, '') : leer(nombre);
       const radios = [...css.matchAll(/border-radius:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
       // `50%` es el disco de validación (LILA-209): en el artboard el marcador es un círculo.
       expect(radios.filter((valor) => !/^(0\w*|50%)$/.test(valor)), nombre).toEqual([]);

@@ -36,7 +36,7 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
-import { About } from './About';
+import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
@@ -378,13 +378,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [idioma, setIdioma] = useState<Preferencia>('auto');
   const locale = useLocale();
   const ajustesDialog = useRef<HTMLDialogElement>(null);
-  /** Diálogo «Acerca de» (LILA-381): se abre desde Ajustes y desde el menú nativo (`'acerca'`). */
-  const acercaDialog = useRef<HTMLDialogElement>(null);
-  /** El overlay del karaoke del huevo de pascua (QA de #387, Low): con su `<dialog>` ya cerrado
-   * mientras suena, ni `⌘,` ni el menú nativo pasaban por él para saber que había que esperar, así
-   * que `Ajustes`/`Acerca de` podían abrirse encima. Una `ref`, no un estado: no hace falta un
-   * repintado por esto, y así tampoco reinicia el temporizador del propio karaoke (mismo QA). */
-  const karaokeActivo = useRef(false);
+  /** The About window (#408, LILA-381), or `null` while closed. Same model as the scenario window. */
+  const [ventanaAcerca, setVentanaAcerca] = useState<Window | null>(null);
+  /** The Easter-egg karaoke overlay (QA of #387, Low): while it plays neither ⌘, nor the native
+   * menu may open Settings or About on top of it. `Karaoke` keeps its timer in a `ref`, so the
+   * re-render this state causes does not restart it. */
+  const [karaoke, setKaraoke] = useState(false);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   /**
    * The scenario panel detached to its own window (design 2c), or `null` while docked. It is the
@@ -841,8 +840,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * (`window.lila.onMenu`) llaman a lo mismo que los botones de la barra.
    */
   function ejecutar(accion: MenuAction): void {
-    if (accion === 'ajustes') { if (!karaokeActivo.current && !ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
-    else if (accion === 'acerca') { if (!karaokeActivo.current && !acercaDialog.current?.open) acercaDialog.current?.showModal(); }
+    if (accion === 'ajustes') { if (!karaoke && !ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    else if (accion === 'acerca') abrirAcerca();
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
@@ -898,6 +897,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setVentanaEscenario(null);
     window.focus();
     toggleEscenario.current?.focus();
+  }
+  /**
+   * Opens the About window (#408), centred over the app, or focuses it if it is already open.
+   * Like `desacoplar`, only from a click or a menu action: popup blockers need the gesture.
+   */
+  function abrirAcerca(): void {
+    if (karaoke) return;
+    if (ventanaAcerca !== null && !ventanaAcerca.closed) { ventanaAcerca.focus(); return; }
+    const ventana = abrirVentanaFlotante('lila-acerca', {
+      width: 440,
+      height: 600,
+      x: Math.round(window.screenX + (window.outerWidth - 440) / 2),
+      y: Math.round(window.screenY + (window.outerHeight - 600) / 2),
+    });
+    if (ventana === null) { setIoError(S.app.ventanaBloqueada); return; }
+    setVentanaAcerca(ventana);
+  }
+  /** Idempotent: the child's own `pagehide` lands here too. Unmounting `About` resets its egg. */
+  function cerrarAcerca(): void {
+    if (ventanaAcerca !== null && !ventanaAcerca.closed) ventanaAcerca.close();
+    setVentanaAcerca(null);
+    window.focus();
   }
   const acoplarRef = useRef(acoplar);
   acoplarRef.current = acoplar;
@@ -1185,7 +1206,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               alguien pudo haber dejado un grupo abierto antes de volver a entrar aquí. */}
           <div className="ajustes-encabezado">
             <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
-            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }}>{S.app.acercaDe}</button>
+            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); abrirAcerca(); }}>{S.app.acercaDe}</button>
           </div>
           {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
               toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
@@ -1214,7 +1235,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </form>
       </dialog>
 
-      <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
+      {ventanaAcerca !== null && (
+        <VentanaFlotante
+          ventana={ventanaAcerca}
+          titulo={S.app.acercaDe}
+          tema={decoratedTheme}
+          esquema={esquema}
+          densidad={densidad}
+          cabecera={false}
+          onAcoplar={cerrarAcerca}
+          onTecla={(e) => { if (e.key === 'Escape') cerrarAcerca(); }}
+        >
+          <About onCerrar={cerrarAcerca} onKaraoke={() => { cerrarAcerca(); setKaraoke(true); }} />
+        </VentanaFlotante>
+      )}
+      {karaoke && <Karaoke onTerminar={() => setKaraoke(false)} />}
 
       {ventanaEscenario !== null && (
         <VentanaFlotante

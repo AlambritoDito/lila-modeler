@@ -1,20 +1,16 @@
 /**
- * Diálogo «Acerca de» (LILA-381, pedido del dueño el 2026-09-22): todos sus productos llevan uno,
- * y este es el de Lila Modeler. Sigue el mismo patrón que el diálogo de ajustes (`.ajustes` en
- * `App.tsx`) — un `<dialog>` nativo gobernado por una `ref` desde fuera—, así `Escape` y el
- * backdrop ya funcionan gratis y `App.tsx` no necesita un estado `abierto` aparte.
+ * «About Lila Modeler» (LILA-381, owner request 2026-09-22), in its own window since #408: the
+ * content of a `VentanaFlotante` named `lila-acerca`, which `App.tsx` opens from Settings, the web
+ * File menu and the native desktop menu (action `'acerca'`). The window is not a modal and does not
+ * trap focus; closing it (its OS button, the «×» here or `Escape`) unmounts this component, so the
+ * Easter egg starts over every time it opens.
  *
- * Vive en su propio archivo, y no como una sección más de Ajustes, porque es un diálogo
- * independiente: se abre desde un botón de Ajustes (que cierra Ajustes al hacerlo) y también
- * desde el menú nativo de escritorio (acción `'acerca'`).
- *
- * **Huevo de Pascua (pedido del dueño, 2026-09-22, «fundamental para la Beta»).** Seis clics en el
- * icono destapan un formulario con una clave; «brito» dispara un karaoke a pantalla completa que
- * termina abriendo un enlace de YouTube, y «scuba» abre otro enlace al instante. Cualquier otra
- * cosa no revela nada. El contador de clics se reinicia cuando el diálogo se cierra (evento nativo
- * `close`, no un `onClick` propio: así también cubre el `Escape`).
+ * **Easter egg (owner request, 2026-09-22, «fundamental para la Beta»).** Six clicks on the image
+ * reveal a form with a key; «brito» closes the window and plays a full-screen karaoke in the MAIN
+ * window that ends by opening a YouTube link, and «scuba» opens another link at once. Anything else
+ * reveals nothing. Each click also plays a short pulse on the image, which never swallows a click.
  */
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { version } from '../package.json';
 import { useStrings } from './i18n';
@@ -68,39 +64,33 @@ const KARAOKE_DURACION_EPICA_MS = 400;
 const KARAOKE_ESPERA_MS = 1500;
 const KARAOKE_TOTAL_PALABRAS = KARAOKE_PALABRAS_1.length + KARAOKE_PALABRAS_2.length;
 const KARAOKE_RETRASO_EPICA_MS = KARAOKE_TOTAL_PALABRAS * KARAOKE_RETRASO_MS;
-/** Cuánto tarda el karaoke completo, de montarse a llamar `onFin`: lo que tarda en aterrizar la
+/** Cuánto tarda el karaoke completo, de montarse a llamar `onTerminar` y abrir el enlace: lo que tarda en aterrizar la
  * última palabra más la espera final. `About.test.tsx` avanza los temporizadores falsos por esto. */
 export const KARAOKE_DURACION_TOTAL_MS = KARAOKE_RETRASO_EPICA_MS + KARAOKE_DURACION_EPICA_MS + KARAOKE_ESPERA_MS;
 
 /**
- * Overlay a pantalla completa por encima de todo (LILA-381): un `<dialog>` no sirve porque su
- * «top layer» taparía esto también, así que es un `<div>` normal montado por portal en
- * `document.body` —el diálogo de Acerca de ya se cerró antes de montarlo, y el propio `About`
- * sigue siendo su hermano en el árbol, no su padre—. `Escape` cancela sin abrir el enlace; un
- * clic sobre el overlay no hace nada (a propósito, sin manejador). El temporizador es el único
- * reloj: `prefers-reduced-motion` solo quita la animación CSS (ver `app.css`), no el tiempo de
- * espera, así que `onFin` llega igual de tarde con o sin movimiento.
+ * Full-screen overlay above everything (LILA-381), portalled into the MAIN window's `document.body`:
+ * `App.tsx` mounts it after closing the About window, and this code runs in the opener's realm, so
+ * `document` is the main one. While it plays, `#root` is `inert` (QA of #387, Low). `Escape` cancels
+ * without opening the link; a click on the overlay does nothing (on purpose, no handler). The timer
+ * is the only clock: `prefers-reduced-motion` only removes the CSS animation (see `app.css`).
  *
- * `onFin`/`onCancelar` viven en `ref`s y el efecto corre con `[]` (QA de #387, Medium): son
- * funciones nuevas en cada render de `About`, y `About` se vuelve a renderizar por cosas que no
- * tienen nada que ver con el karaoke —el progreso de una simulación en curso, por ejemplo—. Con
- * esas funciones como dependencias, cada uno de esos renders limpiaba el `setTimeout` y ponía
- * otro desde cero, así que con una simulación corriendo el enlace no llegaba a abrirse nunca.
+ * `onTerminar` lives in a `ref` and the effect runs with `[]` (QA of #387, Medium): `App` re-renders
+ * for reasons unrelated to the karaoke — the progress of a running simulation, for one — and with
+ * the callback as a dependency each of those renders restarted the `setTimeout`, so the link never
+ * opened while a simulation was running.
  */
-function Karaoke({ onFin, onCancelar }: {
-  readonly onFin: () => void;
-  readonly onCancelar: () => void;
-}) {
-  const fin = useRef(onFin);
-  fin.current = onFin;
-  const cancelar = useRef(onCancelar);
-  cancelar.current = onCancelar;
+export function Karaoke({ onTerminar }: { readonly onTerminar: () => void }) {
+  const terminar = useRef(onTerminar);
+  terminar.current = onTerminar;
 
   useEffect(() => {
-    const reloj = setTimeout(() => fin.current(), KARAOKE_DURACION_TOTAL_MS);
-    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') cancelar.current(); };
+    const raiz = document.getElementById('root');
+    raiz?.setAttribute('inert', '');
+    const reloj = setTimeout(() => { terminar.current(); abrirEnlace(URL_BRITO); }, KARAOKE_DURACION_TOTAL_MS);
+    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') terminar.current(); };
     window.addEventListener('keydown', teclas);
-    return () => { clearTimeout(reloj); window.removeEventListener('keydown', teclas); };
+    return () => { clearTimeout(reloj); window.removeEventListener('keydown', teclas); raiz?.removeAttribute('inert'); };
   }, []);
 
   return createPortal(
@@ -123,88 +113,55 @@ function Karaoke({ onFin, onCancelar }: {
   );
 }
 
-export function About({ dialogRef, onKaraoke }: {
-  readonly dialogRef: RefObject<HTMLDialogElement | null>;
-  /** Avisa a `App.tsx` mientras el karaoke está montado (QA de #387, Low): con el `<dialog>` de
-   * Acerca de ya cerrado, ni `⌘,`/`⌘.` ni el menú nativo pasan por su `<dialog>`, así que sin este
-   * aviso podían abrir Ajustes u otra vez Acerca de encima del overlay. */
-  readonly onKaraoke?: (activo: boolean) => void;
+export function About({ onCerrar, onKaraoke }: {
+  /** Closes the About window. */
+  readonly onCerrar: () => void;
+  /** «brito»: `App.tsx` closes this window and then mounts `<Karaoke>` in the main one. */
+  readonly onKaraoke: () => void;
 }) {
   const S = useStrings();
   const [clics, setClics] = useState(0);
   const [clave, setClave] = useState('');
   const [tiembla, setTiembla] = useState(false);
-  const [karaoke, setKaraoke] = useState(false);
-
-  // Mientras el overlay está montado, el resto de la app queda `inert` (QA de #387, Low): sin eso
-  // el `Tab` seguía entrando al `<dialog>` ya cerrado o al lienzo de detrás.
-  useEffect(() => {
-    if (!karaoke) return;
-    const raiz = document.getElementById('root');
-    raiz?.setAttribute('inert', '');
-    return () => raiz?.removeAttribute('inert');
-  }, [karaoke]);
-
-  /** El único sitio que reinicia el huevo de pascua: se cuelga del evento `close` nativo del
-   * `<dialog>`, así que cubre por igual el botón «×», el `Escape` y el `close()` que dispara la
-   * propia clave «brito» antes del karaoke. */
-  function reiniciar(): void {
-    setClics(0);
-    setClave('');
-    setTiembla(false);
-  }
+  const [pulso, setPulso] = useState(false);
 
   function enviarClave(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault();
     const valor = clave.trim().toLowerCase();
     setClave('');
-    if (valor === 'brito') {
-      dialogRef.current?.close();
-      setKaraoke(true);
-      onKaraoke?.(true);
-    } else if (valor === 'scuba') {
-      abrirEnlace(URL_SCUBA);
-    } else {
-      // Ni una pista de qué claves existen: solo un temblor y listo.
-      setTiembla(true);
-    }
+    if (valor === 'brito') onKaraoke();
+    else if (valor === 'scuba') abrirEnlace(URL_SCUBA);
+    // Not a hint of which keys exist: a shake and that is all.
+    else setTiembla(true);
   }
 
   return (
-    <>
-      <dialog ref={dialogRef} className="acerca" aria-labelledby="acerca-nombre" onClose={reiniciar}>
-        <button type="button" className="acerca-cerrar" aria-label={S.app.cerrar} onClick={() => dialogRef.current?.close()}>×</button>
-        {/* `logo` es la misma clase de la marca de la barra (LILA-206, Modernist): comparte su
-            redondeo de 7 px en vez de inventar otro radio en `app.css`, que el design system del
-            artefacto no permite fuera de esa única regla. */}
-        <img
-          className="logo acerca-icono"
-          src={`${import.meta.env.BASE_URL}branding/app-icon.png`}
-          alt=""
-          width="104"
-          height="104"
-          onClick={() => setClics((c) => c + 1)}
-        />
-        <strong id="acerca-nombre">{S.bienvenida.nombre}</strong>
-        <p className="acerca-version">v{version}</p>
-        <p className="acerca-marca">{MARCA_1}</p>
-        <p className="acerca-marca">{MARCA_2}</p>
-        {clics >= CLICS_PARA_REVELAR && (
-          <form className={`acerca-clave${tiembla ? ' tiembla' : ''}`} onSubmit={enviarClave} onAnimationEnd={() => setTiembla(false)}>
-            <label>
-              {CLAVE_ETIQUETA}
-              <input type="text" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="off" spellCheck={false} />
-            </label>
-            <button type="submit" className="boton primario">{CLAVE_BOTON}</button>
-          </form>
-        )}
-      </dialog>
-      {karaoke && (
-        <Karaoke
-          onFin={() => { setKaraoke(false); onKaraoke?.(false); abrirEnlace(URL_BRITO); }}
-          onCancelar={() => { setKaraoke(false); onKaraoke?.(false); }}
-        />
+    <section className="acerca" aria-labelledby="acerca-nombre">
+      <button type="button" className="acerca-cerrar" aria-label={S.app.cerrar} onClick={onCerrar}>×</button>
+      {/* The count and the pulse are separate on purpose: every click counts, even one that lands
+          while the pulse is still playing (it just does not restart it). */}
+      <img
+        className={`acerca-icono${pulso ? ' pulso' : ''}`}
+        src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`}
+        alt=""
+        width="120"
+        height="120"
+        onClick={() => { setClics((c) => c + 1); setPulso(true); }}
+        onAnimationEnd={() => setPulso(false)}
+      />
+      <strong id="acerca-nombre">{S.bienvenida.nombre}</strong>
+      <p className="acerca-version">v{version}</p>
+      <p className="acerca-marca">{MARCA_1}</p>
+      <p className="acerca-marca">{MARCA_2}</p>
+      {clics >= CLICS_PARA_REVELAR && (
+        <form className={`acerca-clave${tiembla ? ' tiembla' : ''}`} onSubmit={enviarClave} onAnimationEnd={() => setTiembla(false)}>
+          <label>
+            {CLAVE_ETIQUETA}
+            <input type="text" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="off" spellCheck={false} />
+          </label>
+          <button type="submit" className="boton primario">{CLAVE_BOTON}</button>
+        </form>
       )}
-    </>
+    </section>
   );
 }
