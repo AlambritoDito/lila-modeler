@@ -82,7 +82,23 @@ export function findBpmnArg(argv: readonly string[], skip: number): string | nul
  * siguiente guardado normal reventaba en `lila:writeProject`/`requireBpmnName` ("file" debe ser
  * un nombre de archivo .bpmn) — este helper es la única frontera que decide la forma, para que
  * `main.ts` no pueda volver a mandar los dos campos por accidente.
+ *
+ * `realDir` es lo que `fs.realpath` devolvió para `filePath` — sigue symlinks. Un symlink
+ * `algo.lila` que en realidad apunta a una CARPETA (o a un archivo que no termina en `.lila`)
+ * hacía, antes de este chequeo, que `main.ts` mandara `{ dir: realDir }` sin `file`: el otro
+ * extremo (`lila:openRecent`/`lila:readProject`) ve una `dir` que no termina en `.lila` y la abre
+ * como carpeta de proyecto — silencioso, y no lo que el nombre `.lila` prometía. Se rechaza aquí,
+ * en la frontera, con el mismo código `E-ARGUMENTO` que ya usa el puente para argumentos con forma
+ * inválida (`requireBpmnName`, `main.ts`): `acceptOpenPath` atrapa esto y ni autoriza la carpeta.
  */
 export function openPathRequest(filePath: string, realDir: string): OpenPathRequest {
-  return isLilaPath(filePath) ? { dir: realDir } : { dir: realDir, file: path.basename(filePath) };
+  if (isLilaPath(filePath)) {
+    if (!isLilaPath(realDir)) {
+      throw new Error(
+        `E-ARGUMENTO: "filePath" debe resolver (symlinks incluidos) a un archivo ".lila" (recibido: ${JSON.stringify(filePath)}, resuelve a ${JSON.stringify(realDir)}).`,
+      );
+    }
+    return { dir: realDir };
+  }
+  return { dir: realDir, file: path.basename(filePath) };
 }

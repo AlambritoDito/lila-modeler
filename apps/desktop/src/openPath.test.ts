@@ -93,4 +93,20 @@ describe('openPathRequest (issue #378)', () => {
   it('.bpmn en mayúsculas también manda file (insensible a mayúsculas, como isBpmnPath)', () => {
     expect(openPathRequest('/carpeta/Model.BPMN', '/carpeta')).toEqual({ dir: '/carpeta', file: 'Model.BPMN' });
   });
+
+  it('un symlink "algo.lila" que resuelve a una CARPETA se rechaza con E-ARGUMENTO, no se abre como carpeta de proyecto', () => {
+    // `realDir` es lo que `fs.realpath` da tras seguir el symlink: una carpeta cualquiera, sin
+    // `.lila` en el nombre. Antes de este chequeo esto devolvía `{ dir: realDir }` sin `file`, y el
+    // otro extremo (`lila:openRecent`/`readProject`, que decide por `isLilaPath(dir)`) la abría en
+    // silencio como carpeta de proyecto — no lo que el nombre `.lila` prometía.
+    expect(() => openPathRequest('/descargas/atajo.lila', '/otra/carpeta')).toThrow(/E-ARGUMENTO/);
+  });
+
+  it('un symlink "algo.lila" que resuelve a un archivo que no es .lila también se rechaza', () => {
+    expect(() => openPathRequest('/descargas/atajo.lila', '/descargas/modelo.bpmn')).toThrow(/E-ARGUMENTO/);
+  });
+
+  it('un .lila cuyo realpath SÍ termina en .lila (el caso normal, sin symlink de por medio) no se rechaza', () => {
+    expect(openPathRequest('/descargas/launch.lila', '/descargas/launch.lila')).toEqual({ dir: '/descargas/launch.lila' });
+  });
 });

@@ -763,9 +763,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Con una E/S en curso o el diálogo de cambios sin guardar abierto, `projectAction` saldría en
     // silencio o pisaría la acción pendiente (hallazgos 4 y 5): mejor decirlo — el banner se pinta
     // también dentro del diálogo. Sin `ruta.file` (un `.lila`), `ruta.dir` YA es la ruta completa
-    // del archivo pulsado: sirve igual para nombrarlo en el aviso.
+    // del archivo pulsado (ver el JSDoc de `OpenPathRequest` en `bridge.ts`): se le recorta a solo
+    // el nombre, igual que el `.bpmn` de al lado, en vez de mostrar la ruta entera en el aviso.
     if (ioLock.current || pendingAction !== null) {
-      setIoError(S.app.errorAbrirOcupado(ruta.file ?? ruta.dir));
+      setIoError(S.app.errorAbrirOcupado(ruta.file ?? ruta.dir.split(/[\\/]/).pop() ?? ruta.dir));
       return;
     }
     void projectAction(ruta.file === undefined ? { recent: ruta.dir } : { recent: ruta.dir, file: ruta.file });

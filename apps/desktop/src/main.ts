@@ -623,10 +623,18 @@ async function acceptOpenPath(filePath: string): Promise<void> {
   // carpeta (que puede ser `~/Descargas` entera). Un `.bpmn` sigue autorizando su carpeta, que es
   // donde viven el manifiesto, los escenarios y las corridas.
   const dir = isLilaPath(filePath) ? await realpath(filePath) : await realpath(path.dirname(filePath));
-  authorizedFolders.add(dir);
   // `openPathRequest` (issue #378) decide si `file` viaja: solo para un `.bpmn` suelto, nunca
-  // para un `.lila` (ver su JSDoc en `openPath.ts` y el de `OpenPathRequest` en `bridge.ts`).
-  const request: OpenPathRequest = openPathRequest(filePath, dir);
+  // para un `.lila` (ver su JSDoc en `openPath.ts` y el de `OpenPathRequest` en `bridge.ts`); y
+  // rechaza (lanza `E-ARGUMENTO`) un symlink `algo.lila` que resuelve a una carpeta o a un archivo
+  // que no es `.lila` de verdad. Ese rechazo pasa ANTES de `authorizedFolders.add`: una ruta que no
+  // es lo que dice ser no autoriza nada, igual que el `.bpmn`/`.lila` inexistente de arriba.
+  let request: OpenPathRequest;
+  try {
+    request = openPathRequest(filePath, dir);
+  } catch {
+    return;
+  }
+  authorizedFolders.add(dir);
   if (process.env.LILA_DEBUG === '1') {
     console.log(`[lila] ruta .bpmn aceptada: ${JSON.stringify(request)}`);
   }

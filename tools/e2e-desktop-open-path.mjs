@@ -9,13 +9,14 @@
  *   npm run build -w @lila/engine && npm run build -w @lila/web && npm run build -w @lila/desktop
  *   PLAYWRIGHT_MODULE=<qa-runtime>/node_modules/playwright/index.mjs node tools/e2e-desktop-open-path.mjs
  *
- * Every profile is a fresh `--user-data-dir` under a temp folder; every fixture lives under a
- * temp "Descargas"-like folder — no real user project is ever touched. Writes a JSON report and
- * screenshots to `LILA_E2E_EVIDENCE_DIR` (default: alongside this script's temp work dir printed
- * at the end) and exits non-zero on the first failed expectation.
+ * Every profile is a fresh `--user-data-dir` under a temp work dir; every fixture lives under a
+ * "Descargas"-like folder inside that SAME temp dir — no real user project is ever touched.
+ * Writes a JSON report and screenshots to `LILA_E2E_EVIDENCE_DIR` (default: an `evidence/`
+ * subfolder of that temp work dir, never anywhere inside or beside the repo checkout) and exits
+ * non-zero on the first failed expectation.
  */
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, chmod, readFile, writeFile, rm, realpath, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, chmod, readdir, readFile, writeFile, rm, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +28,12 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const APP_DIR = join(ROOT, 'apps/desktop');
 const ELECTRON_PATH = require('electron');
 
-const EVIDENCE_DIR = process.env.LILA_E2E_EVIDENCE_DIR || join(ROOT, '..', 'evidence-378-fallback');
+// -- work dir (created FIRST: the evidence-dir default lives inside it, never beside the repo) ---
+const WORK = await realpath(await mkdtemp(join(tmpdir(), 'lila-e2e-378-')));
+const DOWNLOADS = join(WORK, 'Descargas'); // synthetic "Downloads"-like folder — never a real one.
+await mkdir(DOWNLOADS, { recursive: true });
+
+const EVIDENCE_DIR = process.env.LILA_E2E_EVIDENCE_DIR || join(WORK, 'evidence');
 await mkdir(EVIDENCE_DIR, { recursive: true });
 
 const { parseBpmn } = await import('@lila/engine/bpmn');
@@ -84,18 +90,29 @@ async function pedidoRun() {
   return cachedRun;
 }
 
+/** The two `examples/pedido` scenarios, as `{[AS_IS]: ..., [TO_BE]: ...}` — cached, single source
+ *  of truth for both `buildFixture` (what goes IN) and `assertFixtureIntegrity` (what must come
+ *  back OUT unchanged). */
+let cachedScenarios = null;
+async function pedidoScenarios() {
+  if (cachedScenarios !== null) return cachedScenarios;
+  const asIs = JSON.parse(await readFile(join(PEDIDO_DIR, AS_IS), 'utf8'));
+  const toBe = JSON.parse(await readFile(join(PEDIDO_DIR, TO_BE), 'utf8'));
+  cachedScenarios = { [AS_IS]: asIs, [TO_BE]: toBe };
+  return cachedScenarios;
+}
+
 /** Builds a `.lila` at `path` (any Unicode form) from `examples/pedido` with two scenarios and one run. */
 async function buildFixture(path, { taskName } = {}) {
   const xmlRaw = await readFile(join(PEDIDO_DIR, 'model.bpmn'), 'utf8');
   const xml = taskName === undefined ? xmlRaw : xmlRaw.replace('name="Take order"', `name=${JSON.stringify(taskName)}`);
-  const asIs = JSON.parse(await readFile(join(PEDIDO_DIR, AS_IS), 'utf8'));
-  const toBe = JSON.parse(await readFile(join(PEDIDO_DIR, TO_BE), 'utf8'));
+  const scenarios = await pedidoScenarios();
   const run = await pedidoRun();
   const { ir } = await parseBpmn(xml);
   await writeFile(path, encodeLila({
     version: 1, id: 'pedido-e2e-378', name: 'pedido-e2e-378',
     model: { id: ir.id, name: 'model.bpmn', xml, revision: 0 },
-    scenarios: { [AS_IS]: asIs, [TO_BE]: toBe },
+    scenarios,
     scenarioRevisions: { [AS_IS]: 0, [TO_BE]: 0 },
     runs: [run],
   }));
@@ -248,22 +265,30 @@ async function waitSaved(page, timeout = 15_000) {
   }
 }
 
-function assertFixtureIntegrity(bytes, { taskName, runId = 'run-e2e-378' } = {}) {
+async function assertFixtureIntegrity(bytes, { taskName, runId = 'run-e2e-378' } = {}) {
   const doc = decodeLila(bytes);
   if (taskName !== undefined) {
     assert.ok(doc.model.xml.includes(`name=${JSON.stringify(taskName)}`) || doc.model.xml.includes(`name="${taskName}"`),
       `saved XML does not contain the edited task name ${JSON.stringify(taskName)}`);
   }
+  const scenarios = await pedidoScenarios();
   assert.deepEqual(Object.keys(doc.scenarios).sort(), [AS_IS, TO_BE].sort(), 'scenarios not preserved');
+  // Deep, not just the keys: the scenario BODIES (resources, calendars, run config, ...) must
+  // survive the round trip byte-for-byte-equivalent, not just "a scenario with this name exists".
+  assert.deepEqual(doc.scenarios, scenarios, 'scenario contents changed from the original fixture');
+  assert.deepEqual(doc.scenarioRevisions, { [AS_IS]: 0, [TO_BE]: 0 }, 'scenario revisions changed — a plain model edit must not touch scenarios');
   assert.equal(doc.runs.length, 1, 'saved run not preserved');
   assert.equal(doc.runs[0].id, runId, 'saved run id changed');
+  // Editing the model bumps `model.revision` from the fixture's 0 (App.tsx: one commandStack entry
+  // per change → `revisionRef.current += 1`) — a save that silently kept the OLD revision while the
+  // XML changed would be its own (different) bug, worth catching here.
+  if (taskName !== undefined) {
+    assert.ok(doc.model.revision > 0, `model.revision should have advanced past the fixture's 0 after an edit, got ${doc.model.revision}`);
+  } else {
+    assert.equal(doc.model.revision, 0, 'model.revision should stay 0 when no edit was made');
+  }
   return doc;
 }
-
-// -- work dir -------------------------------------------------------------------------------------
-const WORK = await realpath(await mkdtemp(join(tmpdir(), 'lila-e2e-378-')));
-const DOWNLOADS = join(WORK, 'Descargas'); // synthetic "Downloads"-like folder — never a real one.
-await mkdir(DOWNLOADS, { recursive: true });
 
 const FILENAMES = {
   ascii: 'launch.lila',
@@ -292,7 +317,19 @@ for (const [label, name] of Object.entries(FILENAMES)) {
       // `dirty` clears (footer says "Saved") once main's `lila:writeProject` resolves.
       await waitSaved(page);
       const bytes = await readFile(src);
-      assertFixtureIntegrity(bytes, { taskName: edited });
+      await assertFixtureIntegrity(bytes, { taskName: edited });
+      // `writeLilaFile` writes `<file>.tmp-<uuid>` then `rename`s it ON TOP of `file` (atomic
+      // write, `apps/desktop/src/lilaFile.ts`) — for a Unicode name this is exactly where NFC vs
+      // NFD could go wrong: a `rename` that silently normalized the name (or a filesystem that
+      // did) would leave a DIFFERENT byte sequence on disk than the one this test opened, or a
+      // stray `.tmp-*` if the rename half-failed. `readdir` returns the raw bytes the filesystem
+      // actually holds, so this checks the literal entry, not just that some file is readable.
+      const entries = await readdir(DOWNLOADS);
+      const expectedName = `cold-${label}-${name}`;
+      assert.ok(entries.includes(expectedName),
+        `expected the exact original entry ${JSON.stringify(expectedName)} in Descargas after saving; got ${JSON.stringify(entries)}`);
+      const strays = entries.filter((e) => e.includes('.tmp-'));
+      assert.deepEqual(strays, [], `no .tmp-* leftover is expected after a successful save; found ${JSON.stringify(strays)}`);
     } finally {
       await app.close();
     }
@@ -309,13 +346,20 @@ await step('cold launch (ASCII): Save As to a new name writes a second file, ori
   try {
     await waitProjectLoaded(page);
     const beforeBytes = await readFile(src);
+    const edited = 'Take order (save-as e2e)';
+    await renameTomarPedido(page, edited);
     await stubSaveDialog(app, dest);
     await saveAsViaMenu(app);
-    await page.waitForFunction(() => document.querySelector('.archivo') !== null, undefined, { timeout: 15_000 });
+    // `waitSaved` waits for the REAL footer flip to "Saved" (the IPC round trip actually
+    // finishing), not just for `.archivo` to exist — that element is already there before the
+    // save even starts, so the old `waitForFunction` here passed instantly and asserted nothing.
+    await waitSaved(page);
     await stat(dest); // throws if "Save As" never wrote it.
     const afterBytes = await readFile(src);
     assert.ok(beforeBytes.equals(afterBytes), 'Save As must not touch the original file');
-    assertFixtureIntegrity(await readFile(dest));
+    // The edit was made before "Save As": proving `dest` carries it (via `taskName`) is what
+    // actually shows Save As wrote real content, not just an empty/unchanged copy.
+    await assertFixtureIntegrity(await readFile(dest), { taskName: edited });
   } finally {
     await app.close();
   }
@@ -363,7 +407,7 @@ for (const choice of ['save', 'discard', 'cancel']) {
       if (choice === 'save') {
         await app.close(); // main asks the renderer to save before quitting (LILA_E2E_CLOSE=save).
         const bytes = await readFile(src);
-        assertFixtureIntegrity(bytes, { taskName: edited });
+        await assertFixtureIntegrity(bytes, { taskName: edited });
       } else if (choice === 'discard') {
         await app.close();
         const bytes = await readFile(src);
@@ -416,7 +460,7 @@ await step('open-file into a running app opens the .lila and a save carries no m
     await renameTomarPedido(page, edited);
     await saveViaMenu(app);
     await waitSaved(page);
-    assertFixtureIntegrity(await readFile(src), { taskName: edited });
+    await assertFixtureIntegrity(await readFile(src), { taskName: edited });
   } finally {
     await app.close();
   }
@@ -449,7 +493,7 @@ await step('open-file BEFORE the renderer is ready (lazy startup queue) still op
     await renameTomarPedido(page, edited);
     await saveViaMenu(app);
     await waitSaved(page);
-    assertFixtureIntegrity(await readFile(src), { taskName: edited });
+    await assertFixtureIntegrity(await readFile(src), { taskName: edited });
   } finally {
     await app.close();
   }
@@ -475,7 +519,7 @@ await step('opening from Recents (welcome screen) does not forward `file`, and a
     await renameTomarPedido(page, edited);
     await saveViaMenu(app);
     await waitSaved(page);
-    assertFixtureIntegrity(await readFile(realSrc), { taskName: edited });
+    await assertFixtureIntegrity(await readFile(realSrc), { taskName: edited });
   } finally {
     await app.close();
   }
@@ -501,7 +545,7 @@ await step('opening via the native Open dialog does not forward `file`, and a sa
     await renameTomarPedido(page, edited);
     await saveViaMenu(app);
     await waitSaved(page);
-    assertFixtureIntegrity(await readFile(src), { taskName: edited });
+    await assertFixtureIntegrity(await readFile(src), { taskName: edited });
   } finally {
     await app.close();
   }
@@ -534,6 +578,17 @@ await step('a read-only .lila: Save fails, the file is untouched, close-with-sav
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const footer = await archivoText(page);
     assert.ok(!footer.includes('Saved'), `save on a read-only file should not report success: ${footer}`);
+    // It matters WHICH error this is: a directory permission failure (`EACCES`/`EPERM` from
+    // `mkdir`/`writeFile`/`rename` inside `writeLilaFile`), not #378's own `E-ARGUMENTO`. Without
+    // this the step could pass for entirely the wrong reason — e.g. if the fix regressed and the
+    // `.lila`'s own name leaked into `modelFile` again, THAT save would also fail, footer would
+    // also stay "Unsaved", and the test would wrongly call it proof of the read-only case.
+    const alertsAfterSave = await page.locator('[role="alert"]').allTextContents().catch(() => []);
+    const alertTextAfterSave = alertsAfterSave.join(' | ');
+    assert.ok(!alertTextAfterSave.includes('E-ARGUMENTO'),
+      `the read-only save failed with #378's own error, not a permission error: ${JSON.stringify(alertTextAfterSave)}`);
+    assert.ok(/EACCES|EPERM/.test(alertTextAfterSave),
+      `expected a permission error (EACCES/EPERM) in the alert banner, got: ${JSON.stringify(alertTextAfterSave)}`);
     const duringBytes = await readFile(src);
     assert.ok(beforeBytes.equals(duringBytes), 'a failed save must leave the file byte-identical');
     // Close-with-save: the save fails again, so the window must stay open with the edit intact.

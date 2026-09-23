@@ -712,7 +712,7 @@ it('una ruta .lila que llega con la app abierta también abre sin `file` (issue 
   expect(container.textContent).toContain('Segundo .lila');
 });
 
-it('una ruta .lila que llega con una E/S en curso avisa usando la ruta como nombre, sin "undefined" (issue #378)', async () => {
+it('una ruta .lila que llega con una E/S en curso avisa con solo el nombre del archivo, sin "undefined" (issue #378)', async () => {
   const guardado = deferred<ProjectDocument | null>();
   session.saveProject = vi.fn().mockReturnValue(guardado.promise);
   const abrirReciente = vi.fn().mockResolvedValue(proyecto('p16', 'Nunca'));
@@ -722,7 +722,9 @@ it('una ruta .lila que llega con una E/S en curso avisa usando la ruta como nomb
   await act(async () => { puente.menu('guardar'); }); // toma `ioLock` y no lo suelta.
   await act(async () => { puente.emitir({ dir: '/descargas/launch.lila' }); });
   expect(abrirReciente).not.toHaveBeenCalled();
-  expect(container.textContent).toContain(T.app.errorAbrirOcupado('/descargas/launch.lila'));
+  // Solo el nombre, como con un `.bpmn` (`ruta.file`) — no la ruta entera de `ruta.dir`.
+  expect(container.textContent).toContain(T.app.errorAbrirOcupado('launch.lila'));
+  expect(container.textContent).not.toContain('/descargas/launch.lila');
   expect(container.textContent).not.toContain('undefined');
   await act(async () => { guardado.resolve(null); });
 });
