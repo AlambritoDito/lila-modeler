@@ -608,7 +608,7 @@ describe('duplicar', () => {
   });
 
   it('duplicarEscenario no depende del DOM', () => {
-    expect(duplicarEscenario('to-be.scenario.json', { name: 'TO-BE' })).toEqual({
+    expect(duplicarEscenario('to-be.scenario.json', { name: 'TO-BE' }, [])).toEqual({
       archivo: 'to-be (copia).scenario.json',
       escenario: { version: 1, name: 'TO-BE (copia)', extends: 'to-be.scenario.json' },
     });

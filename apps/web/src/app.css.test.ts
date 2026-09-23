@@ -22,6 +22,15 @@ const escaparRegex = (texto: string): string => texto.replace(/[.*+?^${}()|[\]\\
 const bloque = (selector: string): string =>
   new RegExp(`${escaparRegex(selector)}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
 
+/**
+ * Como `bloque()`, pero solo cuenta como regla la que empieza su propia línea Y esa línea no es
+ * la cola de una lista de selectores: `bloque()` a secas encontraría `.boton.icono` dentro de
+ * `.iconos .boton.icono {`, y el `(?<!,)` de aquí hace falta además para no colar `.archivo`
+ * dentro de `.proyecto,\n.archivo {`, que sigue siendo un selector compuesto, no la regla suelta.
+ */
+const bloqueDeLinea = (selector: string): string =>
+  new RegExp(`(?<!,)\\n${escaparRegex(selector)}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
+
 it('la pila de zoom deja libre la esquina de la marca de agua', () => {
   // «Powered by bpmn.io» es obligatoria por la licencia de bpmn.io: es un enlace absoluto a
   // 15 px del borde inferior derecho del lienzo y mide unos 14 px de alto. La pila arranca
@@ -56,12 +65,26 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
   }
 });
 
-it('below 1500 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
-  // Measured over CDP: with its label, the toggle pushed Run and ⚙ off the bar below ~1150 px.
-  const media = /@media \(max-width: 1500px\) \{([\s\S]*?)\n\}/g;
-  const bloques = [...appCss.matchAll(media)].map((m) => m[1]!).join('\n');
-  expect(bloques).toMatch(/\.boton\.desacoplar span \{\s*display: none;/);
-  expect(bloques).toMatch(/\.boton\.desacoplar \{[^}]*width: 30px;/);
+it('the scenario toggle is icon-only at every width, like `.boton.icono` (#405)', () => {
+  // The label lives only in `aria-label`/`title` (no `<span>` in App.tsx), so the icon is the
+  // permanent 30x30 box, with no `@media` step that used to swap text for icon below 1500 px.
+  const icono = bloqueDeLinea('.boton.icono');
+  expect(icono).toContain('background: var(--bg-elevated)');
+  expect(icono).toContain('border: 1px solid var(--border)');
+  expect(icono).toContain('color: var(--fg-muted)');
+  expect(icono).toContain('height: 30px');
+  expect(icono).toContain('width: 30px');
+  expect(appCss).not.toContain('@media (max-width: 1500px)');
+
+  // `className="boton icono desacoplar"` (App.tsx, should-fix of #417) gets the box above for
+  // free; `.boton.desacoplar` only carries its own pressed state, no base rule that would
+  // duplicate `.boton.icono`'s.
+  expect(appCss).not.toMatch(/\.boton\.desacoplar\s*\{/);
+
+  const activo = bloque(".boton.desacoplar[aria-pressed='true']");
+  expect(activo).toContain('background: var(--bg-hover)');
+  expect(activo).toContain('color: var(--fg-primary)');
+  expect(activo).toContain('border-color: var(--border-strong)');
 });
 
 it('el select, la casilla y la fecha nativos pierden el aspecto del navegador (diseño 2d)', () => {
@@ -109,19 +132,67 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
 
 it('el nombre del proyecto y el del archivo se recortan con «…» en vez de desbordar la barra (QA de la ronda 2 de #392)', () => {
   // `.identidad { flex: none }` (ronda 1) evitaba el envuelto, pero le impedía encogerse y sacaba
-  // la página por el borde en angosto: `flex: 0 1 auto` dentro, `min-width: 0` en la identidad y
-  // en el `<div>` de proyecto/archivo (el mínimo de fábrica de un flex item es `auto`, y con eso
-  // ninguno de los dos encoge) es lo que deja que sea el texto el que se recorte.
+  // la página por el borde en angosto: `flex: 0 1 auto` es lo que deja que el bloque encoja.
   const identidad = bloque('.identidad');
   expect(identidad).toContain('flex: 0 1 auto');
-  expect(identidad).toContain('min-width: 0');
   expect(identidad).not.toContain('flex: none');
-  expect(bloque('.identidad > div')).toContain('min-width: 0');
+  expect(identidad).not.toContain('flex-shrink: 0');
 
   const recorte = bloque('.proyecto,\n.archivo');
   expect(recorte).toContain('overflow: hidden');
   expect(recorte).toContain('text-overflow: ellipsis');
   expect(recorte).toContain('white-space: nowrap');
+});
+
+it('the identity block stays shrinkable, but never narrower than the file line (#399, QA must-fix of #417)', () => {
+  // No more freezing `.identidad` solid above 1320 px (that stopped a long project name from
+  // ellipsizing and pushed Run/⚙ out of the window). Instead the text column is a grid, and
+  // `.archivo`'s own min-content — its full text, since it can't wrap — sets the column's floor;
+  // `.identidad`'s `min-width: min-content` (not 0) carries that floor up through logo and name.
+  const identidad = bloque('.identidad');
+  expect(identidad).toContain('min-width: min-content');
+  expect(identidad).not.toContain('flex-shrink: 0');
+  expect(identidad).not.toContain('flex: none');
+  expect(appCss).not.toContain('@media (min-width: 1321px)');
+
+  const div = bloque('.identidad > div');
+  expect(div).toContain('display: grid');
+  expect(div).toContain('min-width: min-content');
+
+  // `.proyecto` is the one that ellipsizes first…
+  expect(bloque('.proyecto')).toContain('min-width: 0');
+  // …because `.archivo` explicitly claims the column's min-content: `overflow: hidden` (shared
+  // with `.proyecto` above) turns a grid item's automatic minimum size to 0, so without this the
+  // file line would clip too instead of setting the floor.
+  expect(bloqueDeLinea('.archivo')).toContain('min-width: min-content');
+});
+
+it('below 1280 px the identity block gives up its file-line floor too, so the bar never overflows (#399, QA must-fix of #417)', () => {
+  // At 1024 px in Spanish the file-line floor above still overflowed the bar by 46 px once the
+  // search field and the product name were already gone: below 1280 px `.identidad` and
+  // `.archivo` both go back to `min-width: 0`, like before #399, and the file line clips too
+  // (the owner accepts that at 1024 px, just not the bar overflowing).
+  const desdeMedia = appCss.slice(appCss.indexOf('@media (max-width: 1280px)'));
+  const cierre = desdeMedia.indexOf('\n}');
+  expect(cierre).toBeGreaterThan(0);
+  const bloqueMedia = desdeMedia.slice(0, cierre);
+  expect(bloqueMedia).toMatch(/\.identidad\s*\{\s*\n\s*min-width: 0;/);
+  expect(bloqueMedia).toMatch(/\.archivo\s*\{\s*\n\s*min-width: 0;/);
+});
+
+it('the mode tabs give up some padding below 1365 px, not just 1280 (QA of #417)', () => {
+  // Measured worst case: default project name, dirty state («Sin guardar»), Spanish, Simulate —
+  // with `.identidad` shrinkable again (#399) and the scenario toggle (#405, 30 px, flex: none)
+  // in the bar, the bar overflowed by up to 21 px between 1281 and 1303 px, and by up to 13 px
+  // between 1321 and 1328 px (the search field reappearing at 1321 px eats the same room back),
+  // and by 12 px at 1346 fading to 1 px at 1357 once `.producto` stopped wrapping (round 2).
+  // Reverting this to 1280 alone (the QA's mutation test) reproduces the overflows, so the
+  // wider threshold is load-bearing and not just the file-line fix's leftover.
+  expect(appCss).toMatch(/@media \(max-width: 1365px\) \{\s*\n\s*\.modo \{/);
+});
+
+it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
+  expect(bloqueDeLinea('.producto')).toContain('white-space: nowrap');
 });
 
 it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de que le toque al proyecto (QA de la ronda 2 de #392)', () => {

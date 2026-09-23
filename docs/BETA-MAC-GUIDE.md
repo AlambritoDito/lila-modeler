@@ -87,9 +87,10 @@ or the example, dismisses it. Double-clicking a `.lila` or `.bpmn` skips it.
 
 The app always starts with the same example diagram bundled with it: the `pedido` process from
 `examples/pedido/model.bpmn` (imported directly in `apps/web/src/main.tsx`, not an external file).
-It shows with the **Eva-01** theme (dark background, light text, the bpmn-js palette on the left,
-the properties panel on the right) — the default theme `tokens.css` ships with, loaded on the fly
-from `eva-01.json`.
+Until you pick a theme it shows with **Lila Dark** when the system is in dark mode and **Lila
+Light** otherwise (the bpmn-js palette on the left, the properties panel on the right), loaded on
+the fly from `lila-dark.json` / `lila-light.json`; `tokens.css` still ships Eva-01 as the paint
+before any theme loads.
 
 ## Usage walkthrough
 
@@ -268,8 +269,8 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 ### Settings («Ajustes»)
 
 - `⌘,` (or the ⚙ button in the bar, or «Tema: …» — Theme: … — in the status bar) opens **Ajustes →
-  Apariencia** (Settings → Appearance): one of five themes (Eva-01 dark, Papel light, Tieso light,
-  Akira dark, Montana purple) and density (compacta/normal/cómoda —
+  Apariencia** (Settings → Appearance): one of seven themes (Lila Light, Lila Dark, Eva-01 dark, Papel light,
+  Tieso light, Akira dark, Montana purple) and density (compacta/normal/cómoda —
   compact/normal/comfortable). The theme change is immediate, it repaints
   the diagram too, and it is remembered across launches (the app's localStorage, under `lila://`).
   Switching themes remounts the canvas, so it clears the undo stack; the diagram and any unsaved

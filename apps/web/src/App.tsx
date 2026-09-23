@@ -82,6 +82,18 @@ function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | 
 type TemaId = keyof Strings['app']['temas'];
 /** Sus ids son los mismos en todos los idiomas —lo garantiza `Strings`—; su rótulo, no. */
 const temaIds = (): TemaId[] => Object.keys(strings().app.temas) as TemaId[];
+/**
+ * Theme used while no valid one is saved (#404): Lila Dark when the OS prefers dark, else Lila
+ * Light. It is never persisted, so until the user picks one in Settings the app follows the OS on
+ * every launch. Without `matchMedia` (jsdom, very old engines) it is Lila Light.
+ * ponytail: read once at startup, no `change` listener — switching the OS scheme applies on the
+ * next launch.
+ */
+function temaPorDefecto(): TemaId {
+  const oscuro = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return oscuro ? 'lila-dark' : 'lila-light';
+}
 
 /**
  * Preferencias de apariencia (LILA-113). Con puente van a `<userData>/estado.json`
@@ -351,7 +363,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
   const [decoratedTheme, setDecoratedTheme] = useState<string | undefined>();
-  const [temaId, setTemaId] = useState<string>('eva-01');
+  const [temaId, setTemaId] = useState<string>(temaPorDefecto);
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
@@ -680,6 +692,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
       const problemas = problemasEscenario(resuelto, ir, locale);
+      // ponytail (#409): an empty process («New») is not an error yet. Nothing to filter here:
+      // `E-SIN-START`/`E-SIN-END` come from the engine's full `validate()`, which the web app only
+      // runs at Run time (`simulationGate.ts`); `validateScenario` never emits them.
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
@@ -733,8 +748,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const mios = saneaTemas(guardadas.temas);
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
-      // (o a Eva-01), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
+      // (o al Lila del esquema del sistema, sin guardarlo), igual que con un id de tema borrado.
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
@@ -1129,13 +1144,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </button>
         </div>
         {(pestana === 'simulacion' || ventanaEscenario !== null) && (
-          <button ref={toggleEscenario} type="button" className="boton desacoplar" aria-pressed={ventanaEscenario !== null}
+          <button ref={toggleEscenario} type="button" className="boton icono desacoplar" aria-pressed={ventanaEscenario !== null}
             aria-label={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             title={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
-            {/* Below 1280 px only the icon is left (`app.css`), or Run and ⚙ leave the bar. */}
+            {/* Icon-only at every width (#405): the label lives in `aria-label`/`title`. */}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
-            <span>{ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}</span>
           </button>
         )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
@@ -1228,7 +1242,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           corridas={latest}
           validacion={validacion}
           onElegir={elegirEscenario}
-          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}); anadirEscenario(copia.archivo, copia.escenario); }}
+          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}, Object.keys(escenarios)); anadirEscenario(copia.archivo, copia.escenario); }}
           onProblema={(id) => modelador?.seleccionar?.(id)}
           enVentana={ventanaEscenario !== null ? escenarioId : null}
         />

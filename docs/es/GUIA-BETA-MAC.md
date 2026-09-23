@@ -76,9 +76,10 @@ perfil. Trata un `.lila` descargado como la copia durable.
 
 La app arranca siempre con el mismo diagrama de ejemplo incluido en el propio bundle: el proceso
 `pedido` de `examples/pedido/model.bpmn` (import directo en `apps/web/src/main.tsx`, no un archivo
-externo). Se ve con el tema **Eva-01** (fondo oscuro, texto claro, paleta de bpmn-js a la
-izquierda, panel de propiedades a la derecha) — es el tema por defecto que trae `tokens.css` y el
-que carga `eva-01.json` al vuelo.
+externo). Hasta que elijas un tema se ve con **Lila oscuro** si el sistema está en modo oscuro y
+con **Lila claro** en caso contrario (paleta de bpmn-js a la izquierda, panel de propiedades a la
+derecha), cargados al vuelo desde `lila-dark.json` / `lila-light.json`; `tokens.css` sigue trayendo
+Eva-01 como pintura previa a cualquier tema.
 
 ## Recorrido de uso
 
@@ -247,8 +248,8 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 ### Ajustes
 
 - `⌘,` (o el botón ⚙ de la barra, o «Tema: …» en la barra de estado) abre **Ajustes →
-  Apariencia**: uno de cinco temas (Eva-01 oscuro, Papel claro, Tieso claro, Akira oscuro, Montana
-  morado) y densidad (compacta, normal, cómoda). El cambio
+  Apariencia**: uno de siete temas (Lila claro, Lila oscuro, Eva-01 oscuro, Papel claro, Tieso claro,
+  Akira oscuro, Montana morado) y densidad (compacta, normal, cómoda). El cambio
   de tema es inmediato, repinta también el diagrama y se recuerda entre arranques (localStorage de
   la app, bajo `lila://`). Cambiar de tema vuelve a montar el lienzo, así que vacía la pila de
   deshacer; el diagrama y los cambios sin guardar se conservan.

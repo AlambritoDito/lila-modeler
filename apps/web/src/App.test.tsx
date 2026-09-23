@@ -9,7 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila/engine/bpmn';
-import { newModelXml } from './project';
+import { newModelXml, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';
 import { applyTheme } from './theme/applyTheme';
@@ -49,7 +49,9 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
-vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
+vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
+  // The rail «+» (#397) goes through the real naming, which is pure.
+  duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
   ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
@@ -117,8 +119,10 @@ beforeEach(async () => {
   // El reparseo diferido de `App.tsx` (150 ms tras montar) sustituye `ir` por el del XML
   // exportado. Para que ese XML nombre la misma tarea que el `ir` falso de `gate` —y el test no
   // dependa de terminar antes del temporizador— la tarea del modelo nuevo pasa a ser
-  // `Task_Preparar` («Preparar alimento»); ver `ir` arriba.
-  mocks.exportXml.mockResolvedValue(newModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar').replace(/(<bpmn:task id="Task_Preparar" name=")[^"]*/, '$1Preparar alimento'));
+  // `Task_Preparar` («Preparar alimento»); ver `ir` arriba. `newModelXml()` (#409) ya no tiene
+  // tareas —es un proceso vacío—, así que este fixture usa `seedModelXml()`, la plantilla
+  // inicio→tarea→fin de antes de #409 conservada solo para pruebas.
+  mocks.exportXml.mockResolvedValue(seedModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar').replace(/(<bpmn:task id="Task_Preparar" name=")[^"]*/, '$1Preparar alimento'));
   mocks.fabricar.mockImplementation((atributos: object) => ({ ...atributos, id: 'Figura_nueva' }));
   mocks.crearFigura.mockImplementation((figura: object) => figura);
   session = { openProject: vi.fn().mockResolvedValue(null), createProject: vi.fn(async (doc) => doc), saveProject: vi.fn(async (doc) => doc), setDirty: vi.fn(), putProcess: vi.fn(async () => {}) } as unknown as ProjectSessionStore;
@@ -254,6 +258,25 @@ it('nuevo proyecto reemplaza escenarios del ejemplo por ids propios', async () =
   expect(JSON.stringify(doc.scenarios)).not.toContain('cajero');
   expect(Object.keys(doc.scenarios)).toHaveLength(2);
   expect(container.textContent).toContain(T.app.proyectoNuevo);
+});
+it('nuevo proyecto (#409) crea un diagrama vacío sin marcar E-SIN-START/E-SIN-END', async () => {
+  await click(T.app.nuevo);
+  const doc = vi.mocked(session.createProject).mock.calls[0]![0];
+  expect(doc.model.xml).not.toContain('bpmn:startEvent');
+  expect(doc.model.xml).not.toContain('bpmn:task');
+  expect(doc.model.xml).not.toContain('bpmn:endEvent');
+  expect(Object.keys(doc.scenarios)).toHaveLength(2);
+  for (const escenario of Object.values(doc.scenarios) as Array<{ elements?: unknown }>) {
+    expect(escenario.elements ?? {}).toEqual({});
+  }
+  // Un proceso sin figuras no es un error hasta que se dibuje la primera (ver el `ponytail` en
+  // `App.tsx`, `validacion`): ni el chip flotante ni la cuenta del pie muestran errores o avisos.
+  expect(container.querySelector('.chips-validacion')).toBeNull();
+  expect(container.querySelector('.chip.error')).toBeNull();
+  expect(container.textContent).not.toContain('E-SIN-START');
+  expect(container.textContent).not.toContain('E-SIN-END');
+  expect(container.textContent).toContain(T.app.errores(0));
+  expect(container.textContent).toContain(T.app.avisos(0));
 });
 
 it('editar durante la exportación impide guardar un XML con revisión incorrecta', async () => {
@@ -456,7 +479,8 @@ it('un puente sin readSettings (preload viejo) arranca igual, con lienzo (QA #27
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  // jsdom has no `matchMedia`, so the system-based default is Lila Light (#404).
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
   expect(mocks.montajes).toBe(montajesAntes + 1);
 });
 it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch (LILA-113)', async () => {
@@ -464,8 +488,61 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
+});
+
+// ---------- default theme by prefers-color-scheme (#404) ----------
+
+/** Stubs `matchMedia` so only `(prefers-color-scheme: dark)` answers `oscuro`. */
+function esquemaDelSistema(oscuro: boolean): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: oscuro && query === '(prefers-color-scheme: dark)', media: query }));
+}
+/** Serves the real built-in theme JSONs, so `data-esquema` is computed from their `bg.base`. */
+function temasReales(): void {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    const archivo = resolve(dirname(fileURLToPath(import.meta.url)), 'theme/themes', String(url).replace('./', ''));
+    return { ok: true, json: async () => JSON.parse(readFileSync(archivo, 'utf8')) as unknown } as Response;
+  });
+}
+async function rearrancar(): Promise<void> {
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+}
+it.each([[true, 'lila-dark', 'oscuro'], [false, 'lila-light', 'claro']] as const)(
+  'with nothing saved and a dark OS = %s it starts in %s (%s) and does not save it (#404)',
+  async (oscuro, id, esquema) => {
+    esquemaDelSistema(oscuro); temasReales();
+    await rearrancar();
+    expect(fetch).toHaveBeenLastCalledWith(`./${id}.json`);
+    expect(container.querySelector('.app')?.getAttribute('data-esquema')).toBe(esquema);
+    expect(localStorage.getItem('lila.tema')).toBeNull();
+  },
+);
+it('a saved theme wins over the OS scheme (#404)', async () => {
+  esquemaDelSistema(true);
+  localStorage.setItem('lila.tema', 'papel');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+});
+it('an invalid saved theme falls back to the OS-based Lila theme (#404)', async () => {
+  esquemaDelSistema(true);
+  localStorage.setItem('lila.tema', 'nope');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+});
+it('desktop without a saved theme follows the OS and never writes the automatic choice (#404)', async () => {
+  esquemaDelSistema(true);
+  const escrito: Record<string, unknown>[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({}),
+    writeSettings: async (a: Record<string, unknown>) => { escrito.push(a); },
+  });
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(escrito.some((a) => 'tema' in a)).toBe(false);
 });
 
 // ---------- idioma (LILA-210) ----------
@@ -1147,6 +1224,16 @@ it('in Simulate the rail replaces the palette; a row picks the scenario and clea
   expect(container.querySelector('.rail-escenarios')).toBeNull();
 });
 
+it('the rail «+» twice on the same scenario numbers the copies instead of overwriting (#397)', async () => {
+  await act(async () => { filaRail('AS-IS').click(); });
+  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
+  await act(async () => { filaRail('AS-IS').click(); });
+  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
+  expect(filaRail('AS-IS (copy)')).toBeDefined();
+  expect(filaRail('AS-IS (copy 2)')).toBeDefined();
+  expect(filaRail('AS-IS (copy 2)').getAttribute('aria-current')).toBe('true');
+});
+
 it('the divider resizes the right panel between 300 and 520 px and remembers it', async () => {
   const app = container.querySelector<HTMLElement>('.app')!;
   const divisor = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
@@ -1443,7 +1530,7 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(bienvenida).not.toBeNull();
   expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
   expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
-  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.2'));
+  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.3'));
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();
@@ -1508,7 +1595,7 @@ it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2
   const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-escenario', expect.stringMatching(/popup/));
     expect(hijo.document.querySelector('[data-mock="escenario"]')).not.toBeNull();
     expect(container.querySelector('[data-mock="escenario"]')).toBeNull();
@@ -1538,7 +1625,7 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
   const sub = (nombre: string): string => filaRail(nombre).querySelector('.rail-sub')!.textContent!;
   try {
     expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Only the scenario that lives in the window says so.
     expect(sub('AS-IS')).toBe(T.rail.enVentana);
     expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
@@ -1566,7 +1653,7 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
 it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     expect(container.textContent).toContain(T.app.ventanaBloqueada);
     expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
     expect(container.textContent).not.toContain(T.app.enVentanaAparte);
@@ -1585,7 +1672,7 @@ it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni
     hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
   });
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Open would click the main page's file input with the popup's activation: the browser never
     // settles it and the app stays busy. Settings would open behind the window.
     await tecla('o');
@@ -1610,13 +1697,15 @@ it.each([
   ['#fff', true],
   ['#FFFFFF', true],
   ['#000', false],
-  // Los cinco temas integrados (`theme/themes/*.json`): Papel, Tieso y Montana son claros;
-  // Eva-01 y Akira, oscuros.
+  // Los siete temas integrados (`theme/themes/*.json`): Papel, Tieso, Montana y Lila Light son
+  // claros; Eva-01, Akira y Lila Dark, oscuros.
   ['#12101A', false], // eva-01
   ['#F3F2F2', true], // papel
   ['#EEF3F8', true], // tieso
   ['#0B0A14', false], // akira
   ['#EBC7FA', true], // montana
+  ['#FAF8EE', true], // lila-light
+  ['#1C0F2E', false], // lila-dark
 ] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
   expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
 });

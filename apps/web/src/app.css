@@ -186,20 +186,25 @@ body {
    fondo ni borde propios, una regla de 1 px separa el nombre del producto del proyecto.
    `flex: none` (QA de la ronda 1 de #392) evitaba que «Lila Modeler» y el nombre de archivo se
    envolvieran en dos líneas, pero eso mismo le impedía encogerse y sacaba la barra por el borde
-   de la ventana en angosto (QA de la ronda 2): `flex: 0 1 auto` dentro, `min-width: 0` fuera y
-   dentro (aquí y en el `<div>` de proyecto/archivo, o el `min-width` de fábrica de un flex item
-   —`auto`— gana y no deja encoger nada) para que sea el nombre del proyecto y el del archivo los
-   que se recorten con `…` (abajo), en vez de que la barra entera se desborde o se envuelva. */
+   de la ventana en angosto (QA de la ronda 2): `flex: 0 1 auto` dentro deja encoger el bloque
+   (el `min-width` de fábrica de un flex item —`auto`— si no, gana y no deja encoger nada); el
+   `min-width` exacto de fuera y dentro es el del #399 de abajo, no 0. */
 .identidad {
   align-items: center;
   display: flex;
   flex: 0 1 auto;
   gap: 10px;
-  min-width: 0;
+  min-width: min-content;
 }
 
+/* The text column as a grid, not a block: a block's automatic min width is 0, so `.proyecto`
+   ellipsizing couldn't stop `.archivo` — the file line — from being squeezed too. `.archivo`'s
+   own `min-width: min-content` (below) sets the column's floor at its full text, and `.identidad`
+   above (`min-width: min-content`, not 0) carries that floor up, while `.proyecto` (`min-width:
+   0`, below) is what ellipsizes first (#399). */
 .identidad > div {
-  min-width: 0;
+  display: grid;
+  min-width: min-content;
 }
 
 .logo {
@@ -212,6 +217,9 @@ body {
 .producto {
   flex: none;
   font: 800 13px var(--font-ui);
+  /* Without this the `min-content` floor of `.identidad` (#399) is computed as if «Lila Modeler»
+     wrapped to its longest word, ~25 px too low, and the file line spills under the first tab. */
+  white-space: nowrap;
 }
 
 .identidad .separador {
@@ -231,6 +239,7 @@ body {
 .proyecto {
   font-size: 12px;
   font-weight: 600;
+  min-width: 0;
 }
 
 .archivo {
@@ -238,6 +247,11 @@ body {
   font-family: var(--font-mono);
   font-size: 10px;
   margin-top: 2px;
+  /* `overflow: hidden` (above) turns off the grid item's automatic content-based minimum size —
+     without this it would resolve to 0, not to the text, and «model.bpmn · Sin guardar» would
+     clip like `.proyecto` instead of setting the column's floor (#399). `.archivo` can't wrap
+     (`white-space: nowrap` above), so its min-content is the same as its full width. */
+  min-width: min-content;
 }
 
 .hueco {
@@ -392,6 +406,22 @@ body {
   .producto,
   .identidad .separador {
     display: none;
+  }
+
+  /* The file line's floor (above) still overflows the bar by 46 px at 1024 px in Spanish once
+     the search field and the product name are already gone and there's nothing else to give: at
+     this width the project name clipping is not enough, so below 1280 px `.identidad` goes back
+     to shrinking past the file line, like before #399. Overriding `.identidad` alone isn't
+     enough: `.archivo`'s own `min-width: min-content` (above) is a flex-item constraint of the
+     grid `<div>`, and with `overflow: visible` on `.identidad` a `<div>` wider than its parent's
+     box spills out and overlaps `.modos` instead of shrinking it — so `.archivo` needs its own
+     floor lifted too, and `.archivo` clips like `.proyecto` from here down. */
+  .identidad {
+    min-width: 0;
+  }
+
+  .archivo {
+    min-width: 0;
   }
 }
 
@@ -2013,54 +2043,22 @@ body {
 
 /* ---------- escenario desacoplado (diseño 2c) ---------- */
 
-/* The toggle of the top bar, left of Run: outlined in the tertiary accent, the same 30 px box as
-   the icon buttons next to it. */
-.boton.desacoplar {
-  background: none;
-  border-color: var(--accent-tertiary);
-  color: var(--accent-tertiary);
-  flex: none;
-  font-size: 10px;
-  font-weight: 700;
-  height: 30px;
-  letter-spacing: 0.08em;
-  padding: 0 10px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
+/* Icon-only at every width (#405): the label lives in `aria-label`/`title` instead of a visible
+   `<span>`, so the button never has to make room for text. `className="boton icono desacoplar"`
+   (App.tsx) gets it the same 30 px box as the other icon buttons next to Undo/Redo/Run for free;
+   only the pressed state — not shared with plain `.boton.icono` — is declared here. */
 .boton.desacoplar[aria-pressed='true'] {
   background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg-primary);
 }
 
-.boton.desacoplar svg {
-  display: none;
-}
-
-/* Below 1500 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
-   the product name goes away (the search field already went at 1320), the mode tabs also lose
-   some air. Without this, Run and ⚙ left the bar below ~1150 px (QA of #391). 1500 and not 1400: with the brand lockup of #392, the labelled
-   toggle squeezed the project name out of the bar at 1440 px in Spanish. Measured with no
-   horizontal overflow and the project name whole from 1440 down to 1280 px, in English and
-   Spanish, on the Simulation tab. */
-@media (max-width: 1500px) {
-  .boton.desacoplar {
-    display: grid;
-    padding: 0;
-    place-items: center;
-    width: 30px;
-  }
-
-  .boton.desacoplar svg {
-    display: block;
-  }
-
-  .boton.desacoplar span {
-    display: none;
-  }
-}
-
-@media (max-width: 1280px) {
+/* 1365 and not 1280: with `.identidad` at its file-line floor (#399) and the scenario toggle
+   (#405, 30 px, flex: none) in the bar, Spanish on Simulate with «Sin guardar» ran up to 21 px
+   short between 1281 and 1303 px, 13 px short between 1321 and 1328 px (`.buscador` reappears)
+   and 12 px short at 1346 fading to 1 px at 1357 (QA of #417, rounds 1–2). The modes are the next
+   thing with air to spare; 1365 leaves a margin over the last measured overflow. */
+@media (max-width: 1365px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
   }

@@ -52,10 +52,13 @@ que cambiar un valor del JSON y recargar cambia la UI sin recompilar.
 
 ## Elegir tema (LILA-113, versión mínima)
 
-`App.tsx` conoce los temas integrados por id (`eva-01`, `papel`, `tieso`, `akira`, `montana`), pide `./<id>.json` y lo pasa a
+`App.tsx` conoce los temas integrados por id (`eva-01`, `papel`, `tieso`, `akira`, `montana`,
+`lila-light`, `lila-dark`), pide `./<id>.json` y lo pasa a
 `applyTheme`. La densidad (`compacta` / `normal` / `comoda`) se escribe encima del token `density`
 del tema y sale como `data-densidad` en `.app` para el CSS. No hay `ThemeProvider`: con dos temas y
-un `useState` sobra un contexto.
+un `useState` sobra un contexto. Mientras no haya tema guardado, la app elige `lila-dark` cuando el
+sistema operativo reporta `prefers-color-scheme: dark` y `lila-light` en caso contrario, en cada
+arranque y sin guardar esa elección; en cuanto el usuario elige un tema, el guardado gana siempre.
 
 **Dónde se guarda la elección.** En el navegador, en `localStorage['lila.tema']` y
 `localStorage['lila.densidad']`. En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el
@@ -156,7 +159,8 @@ español que se lee en el diálogo. Es la misma función para importar y para re
 **Dónde se guardan los temas del usuario.** En el mismo sitio que el resto de la apariencia
 (LILA-113) y con la misma forma en las dos modalidades: `ajustes.temas` de
 `<userData>/estado.json` en escritorio, `localStorage['lila.temas']` en la web. Cada entrada es
-`{ id, tema: { name, tokens }, origen }`: `id` es `u:<n>` (los integrados son `eva-01`, `papel`, `tieso`, `akira` y `montana`) y
+`{ id, tema: { name, tokens }, origen }`: `id` es `u:<n>` (los integrados son `eva-01`, `papel`, `tieso`,
+`akira`, `montana`, `lila-light` y `lila-dark`) y
 `origen` son los tokens de partida, que es lo único que necesita «Restablecer» —no hace falta
 volver a pedir el integrado ni confiar en que su JSON siga igual, y funciona igual para un tema
 importado, que no tiene integrado detrás—. `id` y `origen` son de la app: no salen en el archivo
