@@ -98,6 +98,9 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   const buscador = bloque('.buscador');
   // Shrinks before the brand lockup (flex-shrink 1): the project name stays whole above 1280 px.
   expect(buscador).toContain('flex: 0 99 210px');
+  // And goes away below 1320 px, where even at its minimum it left the Spanish project name short
+  // (QA of #393).
+  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.buscador \{\s*display: none;/);
   expect(buscador).toContain('min-width: 0');
   // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
   // solo el `flex`, no los dos.

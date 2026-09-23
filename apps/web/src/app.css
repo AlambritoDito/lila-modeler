@@ -342,7 +342,7 @@ body {
      `flex-shrink: 99` frente al 1 de `.identidad`: con encoger a 1 los dos (QA de la ronda 1 de
      #392) se repartían el déficit y el nombre del proyecto se recortaba o desaparecía entre 1281 y
      1440 px con el buscador aún a 114-201 px. Ahora el nombre solo cede cuando el buscador ya no
-     tiene nada que dar; por debajo de 1280 px el buscador se va (más abajo). */
+     tiene nada que dar; por debajo de 1320 px el buscador se va (más abajo). */
   flex: 0 99 210px;
   gap: 8px;
   height: 30px;
@@ -379,12 +379,16 @@ body {
    además es el único inerte; el resto —modos, deshacer/rehacer, ejecutar y ⚙— es alcanzable.
    El nombre del producto y la regla que lo separa del proyecto son lo segundo (QA de la ronda 2
    de #392): con el buscador ya fuera, ceder ese sitio es lo que evita que el nombre del proyecto
-   se recorte de más antes de que le toque a los modos. */
-@media (max-width: 1280px) {
+   se recorte de más antes de que le toque a los modos. El buscador se va ya a 1320 y no a 1280
+   (QA de #393): entre 1281 y ~1301 px, en español y con el conmutador de escenario de #391, el
+   buscador se quedaba en su mínimo de 22 px y aun así el nombre del proyecto no cabía entero. */
+@media (max-width: 1320px) {
   .buscador {
     display: none;
   }
+}
 
+@media (max-width: 1280px) {
   .producto,
   .identidad .separador {
     display: none;
@@ -2034,8 +2038,8 @@ body {
 }
 
 /* Below 1500 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
-   the search field goes away, the mode tabs also lose some air. Without this, Run and ⚙ left the
-   bar below ~1150 px (QA of #391). 1500 and not 1400: with the brand lockup of #392, the labelled
+   the product name goes away (the search field already went at 1320), the mode tabs also lose
+   some air. Without this, Run and ⚙ left the bar below ~1150 px (QA of #391). 1500 and not 1400: with the brand lockup of #392, the labelled
    toggle squeezed the project name out of the bar at 1440 px in Spanish. Measured with no
    horizontal overflow and the project name whole from 1440 down to 1280 px, in English and
    Spanish, on the Simulation tab. */
