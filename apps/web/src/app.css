@@ -443,9 +443,11 @@ body {
    de #392): con el buscador ya fuera, ceder ese sitio es lo que evita que el nombre del proyecto
    se recorte de más antes de que le toque a los modos. El buscador se va ya a 1320 y no a 1280
    (QA de #393): entre 1281 y ~1301 px, en español y con el conmutador de escenario de #391, el
-   buscador se quedaba en su mínimo de 22 px y aun así el nombre del proyecto no cabía entero. */
+   buscador se quedaba en su mínimo de 22 px y aun así el nombre del proyecto no cabía entero.
+   Only the field goes (#423): its zone stays as the bar's spring, or Undo/Redo, Run, ⚙ and the
+   panel toggles would stop being pushed against the right edge. */
 @media (max-width: 1320px) {
-  .zona-buscador {
+  .zona-buscador > .buscador {
     display: none;
   }
 }
@@ -554,8 +556,12 @@ body {
   width: 1em;
 }
 
-/* One or the other, never both: the group of four needs about 90 px more than the menu. */
-@media (max-width: 1599px) {
+/* One or the other, never both. The group of four is 75 px wider than the menu (4 × 28 px joined
+   by 1 px rules against one 30 px button); forced into the bar, it overflowed Spanish with «Sin
+   guardar» up to 1424 px in Model and up to 1464 px in Simulate (the scenario toggle), with the
+   mode tabs back at full padding above 1400 px (bar sweep of #412). The group shows from 1480 px,
+   a 15 px margin over the last overflow. */
+@media (max-width: 1479px) {
   .barra > .vista-grupo {
     display: none;
   }
@@ -577,13 +583,16 @@ body {
   border: none;
 }
 
-/* Progreso de la corrida, en el hueco de la acción primaria (artboard 03). */
+/* Progreso de la corrida, en el hueco de la acción primaria (artboard 03). 210 px when there is
+   room, but it gives way down to 96 px: with Cancel next to it the pair is ~130 px wider than Run,
+   and on a tight bar (Spanish, Simulate, the #412 toggles) that overflowed the window by up to
+   105 px for as long as the run lasted (bar sweep of #412). The counter ellipsizes first. */
 .progreso {
   display: flex;
-  flex: none;
+  flex: 0 1 210px;
   flex-direction: column;
   gap: 5px;
-  width: 210px;
+  min-width: 96px;
 }
 
 .progreso-cifras {
@@ -596,8 +605,17 @@ body {
   justify-content: space-between;
 }
 
+.progreso-cifras > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 .progreso-cifras .por-ciento {
   color: var(--accent-primary);
+  flex: none;
 }
 
 .progreso-pista {
@@ -2227,8 +2245,11 @@ body {
    (#405, 30 px, flex: none) in the bar, Spanish on Simulate with «Sin guardar» ran up to 21 px
    short between 1281 and 1303 px, 13 px short between 1321 and 1328 px (`.buscador` reappears)
    and 12 px short at 1346 fading to 1 px at 1357 (QA of #417, rounds 1–2). The modes are the next
-   thing with air to spare; 1365 leaves a margin over the last measured overflow. */
-@media (max-width: 1365px) {
+   thing with air to spare; 1365 leaves a margin over the last measured overflow.
+   1400 since the «View» menu of #412 (30 px + the 10 px gap): with it, Spanish on Simulate with
+   «Sin guardar» ran 16 px short at 1366 px fading to 0.4 px at 1382 px (bar sweep of #412, any
+   project name — the name ellipsizes, the file line is the floor). 1400 keeps an 18 px margin. */
+@media (max-width: 1400px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
   }
