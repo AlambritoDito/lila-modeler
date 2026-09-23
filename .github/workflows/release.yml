@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_npm:
-        description: 'Publish @lila/engine to npm (owner decision; requires NPM_TOKEN)'
+        description: 'Publish @lila/engine to npm (owner decision; requires NPM_TOKEN and a v* tag ref)'
         type: boolean
         default: false
 
@@ -27,7 +27,7 @@ jobs:
       contents: read
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-      PUBLISH_NPM: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm == true }}
+      PUBLISH_NPM: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm == true && github.ref_type == 'tag' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +40,7 @@ jobs:
           node --input-type=module - <<'JS'
           import { readFileSync } from 'node:fs';
           const ref = process.env.GITHUB_REF_NAME;
-          const expected = ref.startsWith('v') ? ref.slice(1) : undefined;
+          const expected = process.env.GITHUB_REF_TYPE === 'tag' && ref.startsWith('v') ? ref.slice(1) : undefined;
           const versions = {};
           for (const file of ['packages/engine/package.json', 'packages/mcp/package.json', 'apps/web/package.json', 'apps/desktop/package.json']) {
             versions[file] = JSON.parse(readFileSync(file, 'utf8')).version;
@@ -60,7 +60,9 @@ jobs:
       - name: Publish to npm (explicit owner action only)
         if: env.PUBLISH_NPM == 'true' && env.NPM_TOKEN != ''
         # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag so `latest` never
-        # points at a beta; a stable version goes to `latest`.
+        # points at a beta; a stable version goes to `latest`. Publication is only possible from
+        # a dispatch on a `v*` tag. Note: the registry sets `latest` on a package's very first
+        # publish regardless of --tag; check `npm view @lila/engine dist-tags` after a first publish.
         run: |
           version=$(node -p "require('./packages/engine/package.json').version")
           tag=latest

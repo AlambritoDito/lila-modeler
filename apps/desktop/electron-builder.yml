@@ -7,6 +7,7 @@ files:
   - package.json
   - resources/icons/**
 asar: true
+afterPack: scripts/adhoc-sign.cjs
 # Icono propio (LILA-207, #267): resources/icons/, generado desde docs/design/branding/sources/
 # (ver el script "icons" en package.json para la receta de regeneración).
 mac:
@@ -19,7 +20,7 @@ mac:
       arch:
         - arm64
   category: public.app-category.productivity
-  identity: null
+  identity: null  # no Developer ID; scripts/adhoc-sign.cjs seals the bundle ad hoc after packing
 fileAssociations:
   - ext: bpmn
     name: BPMN Diagram
@@ -32,7 +33,7 @@ fileAssociations:
     name: Lila Modeler Project
     role: Editor
     icon: resources/icons/icon.icns
-artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+artifactName: "Lila-Modeler-${version}-${os}-${arch}.${ext}"  # no spaces: GitHub renames them in release assets
 win:
   icon: resources/icons/icon.ico
   target: nsis

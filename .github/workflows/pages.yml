@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: pages
   cancel-in-progress: false
 
 jobs:
@@ -29,9 +29,12 @@ jobs:
           node-version: '22'
           cache: npm
       - name: Record the source being built
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
         run: |
-          echo "ref=${{ github.ref }} sha=${{ github.sha }} head=$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
-          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          echo "ref=$REF sha=$SHA head=$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$(git rev-parse HEAD)" = "$SHA"
       - run: npm ci
       - run: node tools/build-pages.mjs
       - uses: actions/upload-pages-artifact@v3
