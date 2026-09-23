@@ -58,9 +58,9 @@ changing a value in the JSON and reloading changes the UI without recompiling.
 `lila-dark`), requests `./<id>.json`, and passes it to
 `applyTheme`. Density (`compacta` / `normal` / `comoda`) is written on top of the theme's `density` token
 and comes out as `data-densidad` on `.app` for the CSS. There is no `ThemeProvider`: with two themes and
-a `useState`, a context would be overkill. On first launch, with no theme saved yet, the app picks
-`lila-dark` when the OS reports `prefers-color-scheme: dark` and `lila-light` otherwise; a saved theme
-always wins over that guess afterwards.
+a `useState`, a context would be overkill. While no theme is saved, the app picks `lila-dark` when the OS
+reports `prefers-color-scheme: dark` and `lila-light` otherwise, on every launch and without saving
+that choice; once the user picks a theme, the saved one always wins.
 
 **Where the choice is stored.** In the browser, in `localStorage['lila.tema']` and
 `localStorage['lila.densidad']`. On desktop, in `<userData>/estado.json`, under `ajustes`, through the
