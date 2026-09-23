@@ -292,6 +292,39 @@ fewer than two.
 Revisit only if a consumer explicitly needs per-replication results; in that case a separate field
 is added, without changing the top-level's meaning. *(test: LILA-029)*
 
+### Addendum (2026-09-22): replications without observations *(#356)*
+
+**Decided by:** the project owner.
+
+A replication in which a task never completed has `processing = {min: 0, max: 0, mean: 0,
+total: 0}`: 0 is the identity of the empty set, not a duration. Averaging it in as an observation
+made both the top level and `replications.kpis` report a time no instance ever took (a constant
+360 s task reached in 18 of 30 replications published 216 s, with a CI that excluded 360 s) and
+gave a spread that measured whether the task happened, not how long it took.
+
+The estimand is now **conditional**: for a KPI that only exists when something happened — the
+durations of a task or non-boundary timer, the cycle and wait times, cost per case and service
+level of the process and of each outcome — the mean is taken over the per-replication values of
+the replications that observed it, still one observation per replication, never a pool of the
+cases. `KpiSummary` carries `n`, the number of contributing replications; `sd` and `ci95` appear
+only with `n ≥ 2`, `n = 1` publishes `{mean, n}` and `n = 0` publishes `{mean: 0, n: 0}` so the key
+set stays stable. The same rule applies to a within-replication `sd` computed from a single
+observation, which is 0 by convention. Unconditional KPIs (counts, totals, costs, flows, resources,
+queue integrals) keep `n = count`. The top level uses the same selection through a single
+leaf-path walker, so R-ARR-9 holds by construction. A run where some replications observed a
+subject and others did not carries `W-REPLICACIONES-SIN-OBSERVACIONES`.
+
+Precedent: `meanBottlenecks` already averaged `bottlenecks[].utilization` only over the
+replications where the element appeared, for the same reason (RESULTS_FORMAT.md § 6); that rule
+and `saturationWarnings` are unchanged.
+
+Ruled out: weighting by the number of cases (the pooled estimand ADR-024 already rejects), and
+keeping zeros while only adding a warning (the published number would stay wrong). Consequence:
+this is a reviewed change of the public contract — the `KpiSummary` shape and a new warning code.
+Column names, BPMN ids, units and the `core/` boundary are unchanged; results stored before
+1.0.0-beta.1 carry no `n`, were computed with the previous definition and are still accepted.
+*(test: #356)*
+
 ---
 
 ## ADR-025 — Flat event log by allocation, grouped by activity instance

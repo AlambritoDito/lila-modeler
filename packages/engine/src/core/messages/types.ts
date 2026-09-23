@@ -97,6 +97,19 @@ export interface CoreCodeMessages {
   'W-RECURSO-SATURADO/utilizacion': (poolId: string, percent: string) => string;
   'W-UTILIZACION-MAYOR-UNO': (poolId: string) => string;
 
+  /* --- core/run.ts (warnings) --------------------------------------- */
+  /**
+   * #356: a task or timer that completed no instance in some replications, but not in all. Its
+   * time statistics average only the replications that observed it. The three counts arrive
+   * already formatted: replications without an observation, replications included, and
+   * replications that observed it.
+   */
+  'W-REPLICACIONES-SIN-OBSERVACIONES': (nodeId: string, missing: string, total: string, observed: string) => string;
+  /** The same for the whole process: no case completed in some replications. */
+  'W-REPLICACIONES-SIN-OBSERVACIONES/proceso': (missing: string, total: string, observed: string) => string;
+  /** The same for one outcome of `process.byEndEvent`: no case ended at that node. */
+  'W-REPLICACIONES-SIN-OBSERVACIONES/desenlace': (endId: string, missing: string, total: string, observed: string) => string;
+
   /* --- core/distributions.ts ---------------------------------------- */
   /** `percent` arrives already rounded; the caller prefixes the element path. */
   'W-NORMAL-NEGATIVA': (mean: number, sd: number, percent: string) => string;

@@ -433,7 +433,7 @@ describe('CompareView QA: significancia por columna', () => {
   const kpi = 'elements.A.resourceWait.mean';
   const summary = (low: number, high: number): ReplicationSummary => ({
     count: 30,
-    kpis: { [kpi]: { ci95: [low, high], mean: (low + high) / 2, sd: 1 } },
+    kpis: { [kpi]: { ci95: [low, high], mean: (low + high) / 2, n: 30, sd: 1 } },
   });
   const comparacion = compare([
     syntheticResult(10, {}, summary(9, 11)),

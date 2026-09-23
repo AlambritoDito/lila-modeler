@@ -30,7 +30,7 @@ const SEMANTICS = readFileSync(
 );
 
 /**
- * Los 60 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
+ * Los 61 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
  * sobre ninguno: un código nuevo sin su fila aquí no compila, y una fila de un código que ya no
  * existe tampoco.
  */
@@ -86,6 +86,7 @@ const COVERAGE: Record<ProblemCode, true> = {
   'W-PARSE': true,
   'W-PROB-IGNORADA': true,
   'W-RECURSO-SATURADO': true,
+  'W-REPLICACIONES-SIN-OBSERVACIONES': true,
   'W-SIN-SEED': true,
   'W-START-SIN-LLEGADAS': true,
   'W-TAREA-SIN-TIEMPO': true,
@@ -119,13 +120,13 @@ function callWithDummies(fn: (...args: unknown[]) => string): string {
 }
 
 describe('catálogo de mensajes (LILA-211)', () => {
-  test('el catálogo cubre exactamente los 60 códigos del motor', () => {
-    expect(CODES).toHaveLength(60);
+  test('el catálogo cubre exactamente los 61 códigos del motor', () => {
+    expect(CODES).toHaveLength(61);
     const fromCatalog = new Set(Object.keys(en.codes).map(codeOf));
     expect([...fromCatalog].sort()).toEqual(CODES);
   });
 
-  test('los 60 códigos son los que aparecen en `packages/engine/src`', () => {
+  test('los 61 códigos son los que aparecen en `packages/engine/src`', () => {
     const found = new Set<string>();
     for (const file of typeScriptFiles(ENGINE_SRC)) {
       for (const [code] of readFileSync(file, 'utf8').matchAll(/[EW]-[A-Z][A-Z0-9-]*/g)) {
@@ -186,7 +187,7 @@ describe('catálogo de mensajes (LILA-211)', () => {
     );
     const público = CODES.filter((code) => !INTERNAL_CODES.has(code));
 
-    expect(público).toHaveLength(49);
+    expect(público).toHaveLength(50);
     expect(INTERNAL_CODES.size).toBe(11);
     expect(público.filter((code) => !documented.has(code))).toEqual([]);
     expect([...documented].filter((code) => !CODES.includes(code as ProblemCode))).toEqual([]);
@@ -252,5 +253,19 @@ describe('#369 — blocked-token singular and plural messages', () => {
       .toBe(`Gateway: no branch event declares processingTime; ${english} left with their token waiting at the gateway.`);
     expect(es.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
       .toBe(`Gateway: ninguna rama declara processingTime; ${spanish} con su token esperando en la compuerta.`);
+  });
+});
+
+describe('#356 — replications without observations', () => {
+  test('the three variants in both locales match § 17 of SEMANTICS.md', () => {
+    const lines = [
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${en.codes['W-REPLICACIONES-SIN-OBSERVACIONES']('<nodeId>', '<m>', '<R>', '<n>')}`,
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${en.codes['W-REPLICACIONES-SIN-OBSERVACIONES/proceso']('<m>', '<R>', '<n>')}`,
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${en.codes['W-REPLICACIONES-SIN-OBSERVACIONES/desenlace']('<endId>', '<m>', '<R>', '<n>')}`,
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${es.codes['W-REPLICACIONES-SIN-OBSERVACIONES']('<nodeId>', '<m>', '<R>', '<n>')}`,
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${es.codes['W-REPLICACIONES-SIN-OBSERVACIONES/proceso']('<m>', '<R>', '<n>')}`,
+      `W-REPLICACIONES-SIN-OBSERVACIONES: ${es.codes['W-REPLICACIONES-SIN-OBSERVACIONES/desenlace']('<endId>', '<m>', '<R>', '<n>')}`,
+    ];
+    for (const line of lines) expect(section17()).toContain(line);
   });
 });

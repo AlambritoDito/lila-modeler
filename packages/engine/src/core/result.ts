@@ -103,12 +103,20 @@ export interface BottleneckEntry {
   utilization: number;
 }
 
-/** Resumen de un KPI numérico entre replicaciones (media, sd, intervalo de confianza 95 %). */
+/**
+ * Resumen de un KPI numérico entre replicaciones (media, sd, intervalo de confianza 95 %),
+ * sección 8. Una observación por replicación; un KPI condicional solo cuenta las replicaciones
+ * que lo observaron (#356).
+ */
 export interface KpiSummary {
+  /** Media de las `n` observaciones; 0 cuando `n = 0` (identidad, no una estimación). */
   mean: number;
-  sd: number;
-  /** [límite inferior, límite superior] del intervalo de confianza al 95 %. */
-  ci95: [number, number];
+  /** Replicaciones que aportaron una observación, `<= ReplicationSummary.count`. */
+  n: number;
+  /** Desviación estándar muestral; solo con `n >= 2`. */
+  sd?: number;
+  /** [límite inferior, límite superior] del intervalo de confianza al 95 %; solo con `n >= 2`. */
+  ci95?: [number, number];
 }
 
 /** Resumen entre replicaciones (`RunResult.replications`), sección 8. Solo si `scenario.run.replications > 1`. */

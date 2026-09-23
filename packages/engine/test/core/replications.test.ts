@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'vitest';
 
 import type { Flow, Node, ProcessIR } from '../../src/core/ir.js';
-import { numericKpis, runReplications, summarizeKpi, summarizeKpis } from '../../src/core/replications.js';
+import {
+  estimateKpi,
+  excludedPaths,
+  numericKpis,
+  runReplications,
+  summarizeKpi,
+  summarizeKpis,
+} from '../../src/core/replications.js';
 import type { ElementMetrics, RunResult } from '../../src/core/result.js';
 import { runReplication, type SimScenario } from '../../src/core/sim.js';
 
@@ -230,4 +237,123 @@ test('los paths KPI escapan puntos de ids BPMN sin alterar ids normales', () => 
   expect(kpis['elements.Task.processing.mean']).toBe(10);
   expect(kpis['elements.Task\\.processing.processing.mean']).toBe(20);
   expect(Object.keys(kpis)).toHaveLength(38 + 20);
+});
+
+describe('KPI condicionales (#356)', () => {
+  test('estimateKpi: sd e IC solo con dos o más observaciones', () => {
+    expect(estimateKpi([])).toEqual({ mean: 0, n: 0 });
+    expect(estimateKpi([7.5])).toEqual({ mean: 7.5, n: 1 });
+    const two = estimateKpi([1, 3]);
+    expect(Object.keys(two)).toEqual(['mean', 'n', 'sd', 'ci95']);
+    expect(two).toEqual(summarizeKpi([1, 3]));
+    expect(two).toMatchObject({ mean: 2, n: 2 });
+  });
+
+  test('summarizeKpi sigue exigiendo dos valores (oráculo del IC)', () => {
+    expect(() => summarizeKpi([1])).toThrow('E-REPLICACIONES-INSUFICIENTES');
+  });
+
+  test('summarizeKpis filtra por path pero valida todos los valores', () => {
+    const records = [
+      { a: 0, b: 1 },
+      { a: 4, b: 2 },
+      { a: 6, b: 3 },
+    ];
+    const excluded = [new Set(['a']), new Set<string>(), new Set<string>()];
+    const summary = summarizeKpis(records, 'en', excluded);
+
+    expect(summary.count).toBe(3);
+    expect(summary.kpis['a']).toMatchObject({ mean: 5, n: 2 });
+    expect(summary.kpis['b']).toMatchObject({ mean: 2, n: 3 });
+    expect(summarizeKpis(records, 'en', [new Set(['a']), new Set(['a']), new Set<string>()]).kpis['a']).toEqual({
+      mean: 6,
+      n: 1,
+    });
+    expect(summarizeKpis(records, 'en', records.map(() => new Set(['a']))).kpis['a']).toEqual({ mean: 0, n: 0 });
+    // Un valor excluido tampoco puede ser no finito ni faltar: el contrato de claves es el mismo.
+    expect(() => summarizeKpis([{ a: Number.NaN }, { a: 1 }], 'en', [new Set(['a'])])).toThrow('E-KPI-NO-FINITO');
+    expect(() => summarizeKpis([{ a: 1 }, { b: 1 }], 'en', [new Set(['a'])])).toThrow('E-KPI-INCONSISTENTE');
+  });
+
+  test('excludedPaths: tareas y timers no adjuntos, sd con menos de dos, proceso y desenlaces', () => {
+    const conditionalIr: ProcessIR = {
+      id: 'P',
+      name: '',
+      nodes: {
+        Start: { type: 'start', name: '', incoming: [], outgoing: ['s'] },
+        Gate: { type: 'xor', name: '', incoming: ['s'], outgoing: ['x', 'y'] },
+        'Task.A': { type: 'task', name: '', incoming: ['x'], outgoing: ['a'] },
+        Wait: { type: 'timer', name: '', incoming: ['y'], outgoing: ['w'] },
+        Border: { type: 'timer', name: '', incoming: [], outgoing: ['b'], attachedTo: 'Task.A' },
+        End: { type: 'end', name: '', incoming: ['a', 'w', 'b'], outgoing: [] },
+      },
+      flows: {
+        s: { from: 'Start', to: 'Gate', name: '', isDefault: false },
+        x: { from: 'Gate', to: 'Task.A', name: '', isDefault: false },
+        y: { from: 'Gate', to: 'Wait', name: '', isDefault: false },
+        a: { from: 'Task.A', to: 'End', name: '', isDefault: false },
+        w: { from: 'Wait', to: 'End', name: '', isDefault: false },
+        b: { from: 'Border', to: 'End', name: '', isDefault: false },
+      },
+      source: { exporter: 'test', exporterVersion: '0', originalIds: {} },
+    };
+    const withCompleted = (completed: number): ElementMetrics => ({ ...elementMetrics(0), completed });
+    const percentiles = { min: 0, max: 0, mean: 0, sd: 0, p50: 0, p90: 0, p95: 0 };
+    const result: RunResult = {
+      elements: {
+        Start: withCompleted(1),
+        Gate: withCompleted(0),
+        'Task.A': withCompleted(0),
+        Wait: withCompleted(1),
+        Border: withCompleted(0),
+        End: withCompleted(1),
+      },
+      flows: {},
+      resources: {},
+      process: {
+        started: 1,
+        completed: 1,
+        inFlight: 0,
+        cycleTime: percentiles,
+        waitTime: percentiles,
+        throughputPerHour: 1,
+        costPerCase: 0,
+        totalCost: 0,
+        byEndEvent: { End: { completed: 0, cycleTime: percentiles, waitTime: percentiles, withinServiceLevel: 0 } },
+        withinServiceLevel: 1,
+      },
+      bottlenecks: [],
+      warnings: [],
+    };
+
+    const excluded = [...excludedPaths(result, conditionalIr)].sort();
+    const kpis = new Set(Object.keys(numericKpis(result)));
+    // Todo path excluido es un KPI real: la escritura del path es la de `numericKpis`.
+    for (const path of excluded) expect(kpis.has(path), path).toBe(true);
+
+    const task = 'elements.Task\\.A';
+    expect(excluded).toEqual(
+      [
+        ...['processing', 'resourceWait', 'offHoursWait'].flatMap((stat) =>
+          ['min', 'max', 'mean'].map((key) => `${task}.${stat}.${key}`),
+        ),
+        `${task}.resourceWait.sd`,
+        `${task}.offHoursWait.sd`,
+        // Una sola instancia del timer: sus medias entran, sus sd no.
+        'elements.Wait.resourceWait.sd',
+        'elements.Wait.offHoursWait.sd',
+        // Un solo caso completado: solo las sd del proceso quedan fuera.
+        'process.cycleTime.sd',
+        'process.waitTime.sd',
+        ...['cycleTime', 'waitTime'].flatMap((stat) =>
+          ['min', 'max', 'mean', 'sd', 'p50', 'p90', 'p95'].map((key) => `process.byEndEvent.End.${stat}.${key}`),
+        ),
+        'process.byEndEvent.End.withinServiceLevel',
+      ].sort(),
+    );
+    // Gateway, start, end y el borde, aunque tengan `completed = 0`, son incondicionales.
+    for (const path of excluded) expect(path).not.toMatch(/^elements\.(Start|Gate|Border|End)\./);
+    expect(excluded).not.toContain('process.byEndEvent.End.completed');
+    expect(excluded).not.toContain('process.withinServiceLevel');
+  });
 });

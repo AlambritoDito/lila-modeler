@@ -44,9 +44,15 @@ interface RunResult {
 Todo elemento, flujo o recurso que exista en el IR aparece en el mapa correspondiente aunque su conteo sea cero (por ejemplo, una rama de XOR que nunca se tomó en una corrida corta). El `id` usado como clave es siempre el `id` BPMN — nunca el nombre visible (regla del repositorio, ver cabecera de `BACKLOG.md`).
 
 Con más de una replicación, todos los campos numéricos top-level son la **media aritmética del
-mismo campo calculado en cada replicación**. No representan la primera replicación ni un pool de
-todos los casos. `replications.kpis[path].mean` coincide con el campo top-level correspondiente en
-una corrida completa. Esta decisión se detalla en ADR-024. *(prueba: LILA-029)*
+mismo campo calculado en cada replicación que lo observó**. No representan la primera replicación
+ni un pool de todos los casos. La mayoría de los campos los observa toda replicación: conteos,
+totales, costos, flujos, recursos, integrales de cola. Las estadísticas de tiempo de una tarea o
+timer, del proceso y de cada desenlace no se observan en una replicación donde no se completó
+ninguna instancia: ahí el valor por replicación es solo la identidad del conjunto vacío
+(sección 2), así que queda fuera de la media, y si ninguna replicación lo observa el campo vale 0.
+La lista exacta de esos campos condicionales está en la sección 8.
+`replications.kpis[path].mean` coincide con el campo top-level correspondiente en una corrida
+completa. Esta decisión se detalla en ADR-024. *(prueba: LILA-029, #356)*
 
 ---
 
@@ -76,6 +82,15 @@ Definiciones operativas (todas se calculan sobre las instancias del elemento que
 - **`offHoursWait.{min,max,mean,sd,total}`** — estadísticas del tiempo cerrado dentro de todo el intervalo `[enabledAt, endedAt]`, incluido tanto el cierre antes de arrancar como las pausas durante el procesamiento (R-CAL-7). Se acumula por separado de `resourceWait`; si el elemento usa calendario 24×7 (default sin calendario asignado), siempre vale 0. *(prueba de agregación: LILA-028; semántica de calendario: LILA-041)*
 - **`queueLength.{mean,max}`** — longitud de la cola de instancias esperando el elemento. Cada instancia de actividad (no cada fila: una AND con dos pools aporta **una** sola vez) contribuye el intervalo **semiabierto** `[enabledAt, startedAt)`, o `[enabledAt, observedUntil)` si seguía en cola al cortar. `mean` es la integral de la longitud instantánea sobre la ventana estadística dividida entre su duración (`statisticsDuration`, es decir la corrida menos el `warmup`, ver sección 8); `max` es el máximo instantáneo. Consecuencias de que el intervalo sea semiabierto: una espera de duración cero nunca forma cola (sin recursos, `queueLength = {mean: 0, max: 0}` para todo elemento, R-DEG-1), y la instancia que sale de la cola en el mismo instante en que otra entra no se cuentan juntas. *(prueba: LILA-036)*
 - **`fixedCostTotal`** — `elements[id].fixedCost × completed` (costo fijo por token completado, definido en el escenario; ver `SCENARIO_FORMAT.md`). Se obtiene como `Σ row.elementCost`, nunca `Σ row.cost` (R-COST-4).
+
+**El conjunto vacío** *(#356)*. Un elemento que no completó ninguna instancia en una replicación
+conserva `processing`, `resourceWait` y `offHoursWait`, todos en 0, para que el conjunto de claves
+sea el mismo en toda replicación. Ese 0 es la identidad numérica del conjunto vacío, no una
+duración observada: `total = 0` es cierto (no se procesó nada), pero `min`, `max` y `mean` no
+describen ninguna instancia. Del mismo modo, la `sd` de una sola instancia vale 0 porque no hay
+dispersión que medir. Con varias replicaciones ninguno de los dos entra al agregado (sección 8).
+Gateways, start, end, terminate y timers de borde cuentan `started`/`completed` pero nunca
+producen duraciones: sus ceros son exactos y siempre entran.
 
 Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fuera de horario separada de espera por recurso — Bizagi ✗ / Lila ✓"); es una métrica extra de Lila.
 
@@ -176,6 +191,12 @@ interface Percentiles {
 - **`throughputPerHour`** — `completed / (duración efectiva de la corrida en horas)`, donde la duración efectiva excluye el `warmup` (ver sección 8).
 - **`costPerCase`** — media de `Σ row.cost` sobre los casos completados. Los costos de casos en vuelo sí forman parte de `totalCost`, pero no de esta media (R-COST-4). *(prueba: LILA-028)*
 - **`totalCost`** — suma de `fixedCostTotal` de todos los elementos más `totalCost` de todos los recursos (costo total del escenario en la replicación).
+
+Con varias replicaciones, una replicación sin ningún caso completado tiene los mismos ceros de
+conjunto vacío en `cycleTime`, `waitTime`, `costPerCase` y `withinServiceLevel`, y no entran a su
+media (sección 8, #356). Cada desenlace de `process.byEndEvent` se agrega igual que el resto de
+`process`: su `completed` sobre todas las replicaciones, y sus estadísticas de ciclo y espera y su
+`withinServiceLevel` solo sobre las replicaciones en que al menos un caso llegó a ese desenlace.
 
 `cycleTime.mean` "ponderado por las probabilidades de gateways" es justamente lo que produce agregar sobre el conjunto real de casos simulados (no hace falta ponderar aparte): cada camino aparece en la muestra en proporción a cuántas veces se tomó.
 
@@ -296,8 +317,9 @@ interface ReplicationSummary {
   count: number;                     // replicaciones completas resumidas; >= 2
   kpis: Record<string, {             // keyed por nombre de KPI, p. ej. "process.cycleTime.mean"
     mean: number;
-    sd: number;
-    ci95: [number, number];          // límite inferior y superior del intervalo de confianza al 95 %
+    n: number;                       // replicaciones que observaron el KPI; <= count
+    sd?: number;                     // solo con n >= 2
+    ci95?: [number, number];         // límites del intervalo de confianza al 95 %; solo con n >= 2
   }>;
 }
 ```
@@ -307,8 +329,44 @@ Los segmentos dinámicos de esos nombres (ids BPMN de elementos, flujos y recurs
 `Task.A` se llama `elements.Task\.A.processing.mean`, sin colisionar con otros ids válidos.
 Los ids sin punto conservan exactamente los nombres mostrados arriba. *(prueba: LILA-027)*
 
-- **`mean`/`sd`** — media y desviación estándar muestral del KPI a través de las `N` replicaciones (una observación por replicación, no por caso).
-- **`ci95`** — intervalo de confianza al 95 % para la media, `mean ± t(N-1, 0.975) × sd / √N` (t de Student con `N-1` grados de libertad; con `N` grande se aproxima a `1.96 × sd/√N`). Es la métrica que Bizagi solo ofrece desde What-If (sección 3: "Replicaciones — Bizagi ✓ solo en what-if / Lila ✓ siempre, con IC 95 %"); en Lila se calcula siempre que `replications > 1`.
+- **`n`** *(#356)* — número de replicaciones que **observaron** el KPI, una observación por
+  replicación. En un KPI incondicional vale siempre `count`; en uno condicional (lista de abajo)
+  puede ser menor. No es un número de casos: `elements[id].completed` cuenta instancias, `n` cuenta
+  replicaciones.
+- **`mean`/`sd`** — media y desviación estándar muestral del KPI a través de esas `n` replicaciones (una observación por replicación, no por caso). La media es la de los valores por replicación, nunca la de los casos agrupados (ADR-024).
+- **`ci95`** — intervalo de confianza al 95 % para la media, `mean ± t(n-1, 0.975) × sd / √n` (t de Student con `n-1` grados de libertad; con `n` grande se aproxima a `1.96 × sd/√n`). Es la métrica que Bizagi solo ofrece desde What-If (sección 3: "Replicaciones — Bizagi ✓ solo en what-if / Lila ✓ siempre, con IC 95 %"); en Lila se calcula siempre que `replications > 1` y el KPI tenga al menos dos observaciones.
+- **Elegibilidad** — con `n ≥ 2` la entrada es `{mean, n, sd, ci95}`; con `n = 1` es
+  `{mean, n}`, la única observación, sin dispersión ni intervalo; con `n = 0` es
+  `{mean: 0, n: 0}`, donde 0 es el valor identidad que conserva el conjunto de claves, no una
+  estimación. Las claves aparecen siempre en ese orden.
+
+**KPI condicionales.** Una replicación observa estos paths solo cuando se cumple la condición; si
+no, su valor es la identidad del conjunto vacío (secciones 2 y 5) y no entra al `n` del path:
+
+| Paths | Se observa cuando |
+|---|---|
+| `elements.X.processing.{min,max,mean}`, `elements.X.resourceWait.{min,max,mean}`, `elements.X.offHoursWait.{min,max,mean}` | `elements.X.completed > 0`, en un `task` o un `timer` que no es de borde |
+| `elements.X.resourceWait.sd`, `elements.X.offHoursWait.sd` | `elements.X.completed ≥ 2`, en un `task` o un `timer` que no es de borde |
+| `process.cycleTime.*` y `process.waitTime.*` salvo `sd`, `process.costPerCase`, `process.withinServiceLevel` | `process.completed > 0` |
+| `process.cycleTime.sd`, `process.waitTime.sd` | `process.completed ≥ 2` |
+| `process.byEndEvent.E.cycleTime.*` y `.waitTime.*` salvo `sd`, `process.byEndEvent.E.withinServiceLevel` | `process.byEndEvent.E.completed > 0` |
+| `process.byEndEvent.E.cycleTime.sd`, `.waitTime.sd` | `process.byEndEvent.E.completed ≥ 2` |
+
+Todo otro path es incondicional y tiene `n = count`: `started`, `completed`, todo `*.total`,
+`queueLength.*`, `fixedCostTotal`, `flows.*`, `resources.*`, `throughputPerHour`,
+`process.totalCost`, `inFlight`, `byEndEvent.E.completed`, y toda estadística de un gateway, un
+start, un end, un terminate o un timer de borde, cuyos ceros son exactos. La regla de la `sd` es el
+mismo defecto un nivel más abajo: dentro de una replicación, la desviación muestral de una sola
+observación vale 0 por convención, no por una ausencia de dispersión medida. `bottlenecks` conserva
+su propia regla (sección 6).
+
+Cuando un KPI condicional lo observan algunas replicaciones pero no todas, la corrida lleva
+`W-REPLICACIONES-SIN-OBSERVACIONES` (sección 9), para que la media no se lea como la de toda la
+corrida.
+
+> **Los resultados guardados antes de 1.0.0-beta.1** no traen `n` y se calcularon con la
+> definición anterior: las replicaciones sin observaciones contaban como cero. Su `sd` y su `ci95`
+> están siempre presentes. Los lectores los aceptan tal cual (`result.schema.ts`); no se recalculan.
 
 Si `opts.signal.aborted` detiene la corrida, el resultado lleva `cancelled: true` y
 `completedReplications`, que cuenta exclusivamente replicaciones terminadas; la ausencia de
@@ -352,6 +410,14 @@ Lista de strings, una por condición no fatal detectada durante `resolveScenario
   imprime al lado del aviso una nota que dice el criterio de arriba y qué es el número que se ve
   —esa razón, o la ocupación cuando el aviso sale por la segunda puerta— *(#357)*.
   *(LILA-191, #320)*
+- Una tarea o timer, el proceso o un desenlace que algunas replicaciones observaron y otras no
+  (`W-REPLICACIONES-SIN-OBSERVACIONES`, sección 8): por ejemplo
+  `W-REPLICACIONES-SIN-OBSERVACIONES: Task: ninguna instancia se completó en 12 de 30 replicaciones; sus estadísticas de tiempo promedian solo las otras 18.`
+  Sale una vez por sujeto y por corrida, solo cuando `0 < n < R` sobre las replicaciones que
+  incluye el top-level, en el orden de los nodos del IR, después el proceso y después los
+  desenlaces. No cambia ninguna métrica; dice que las estadísticas de tiempo publicadas describen
+  las replicaciones donde el sujeto ocurrió, no todas. Textos exactos en `SEMANTICS.md` § 17.
+  *(#356)*
 
 ---
 
@@ -505,7 +571,9 @@ interface CompareRow {
   resultado `i` (sección 8) **no se solapan**. Dos intervalos que solo se tocan en un extremo cuentan
   como solapados. Un resultado sin `replications` —una sola replicación, o una corrida cancelada con
   menos de dos completas— no tiene IC: `significant` vale `false`, y los deltas siguen siendo
-  válidos, solo que sin respaldo estadístico.
+  válidos, solo que sin respaldo estadístico. Lo mismo vale para un KPI suelto cuyo resumen no
+  trae `ci95` porque lo observaron menos de dos replicaciones (`n < 2`, sección 8): nunca es
+  significativo, esté del lado que esté. *(#356)*
 - Los deltas se leen limpios porque R-DET-3 garantiza números aleatorios comunes: cambiar la
   capacidad de un pool no altera el stream de los elementos que no se tocaron.
 

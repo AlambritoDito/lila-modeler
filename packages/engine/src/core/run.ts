@@ -8,7 +8,15 @@
 import type { ProcessIR } from './ir.js';
 import { coded, coreMessages, type Locale } from './messages/index.js';
 import { aggregateReplication, saturationWarning, type PoolLoad } from './metrics.js';
-import { summarizeRunResults } from './replications.js';
+import {
+  escapeId,
+  excludedPaths,
+  forEachKpiLeaf,
+  numericKpis,
+  observedValues,
+  summarizeKpis,
+  type KpiShape,
+} from './replications.js';
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
 import {
   assertSupportedCalendarScenario,
@@ -55,21 +63,41 @@ function mean(values: readonly number[]): number {
   return total / values.length;
 }
 
-/** Promedia recursivamente una estructura estable compuesta solo por objetos y números. */
-function meanShape<T>(values: readonly T[], locale: Locale = 'en'): T {
-  const first = values[0];
-  if (typeof first === 'number') return mean(values as readonly number[]) as T;
-  if (first === null || typeof first !== 'object' || Array.isArray(first)) {
+/** Copia una estructura estable compuesta solo por objetos y números. */
+function copyShape<T>(value: T, locale: Locale): T {
+  if (typeof value === 'number') return value;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError(
       coded('E-AGREGADO-NO-NUMERICO', coreMessages(locale).codes['E-AGREGADO-NO-NUMERICO']()),
     );
   }
-
   const output: Record<string, unknown> = {};
-  for (const key of Object.keys(first)) {
-    output[key] = meanShape(values.map((value) => (value as Record<string, unknown>)[key]), locale);
-  }
+  for (const [key, child] of Object.entries(value)) output[key] = copyShape(child, locale);
   return output as T;
+}
+
+/**
+ * Promedia la estructura de métricas de varias replicaciones (R-ARR-9). Cada hoja es la media de
+ * ese path sobre las replicaciones que lo observaron —las mismas `observedValues` que resume
+ * `replications.kpis`— y 0 si ninguna lo observó (#356). Las claves y su orden son los de la
+ * primera replicación.
+ */
+function meanShape(
+  results: readonly RunResult[],
+  records: readonly Readonly<Record<string, number>>[],
+  excluded: readonly ReadonlySet<string>[],
+  locale: Locale,
+): KpiShape {
+  const first = results[0]!;
+  const shape = copyShape<KpiShape>(
+    { elements: first.elements, flows: first.flows, resources: first.resources, process: first.process },
+    locale,
+  );
+  forEachKpiLeaf(shape, (path, holder, key) => {
+    const values = observedValues(records, excluded, path);
+    holder[key] = values.length === 0 ? 0 : mean(values);
+  });
+  return shape;
 }
 
 /** Ranking futuro de M2: promedio por elemento y orden normativo estable. */
@@ -109,7 +137,12 @@ function meanBottlenecks(results: readonly RunResult[]): BottleneckEntry[] {
 }
 
 /** Los campos top-level multi-réplica son medias de la misma ruta en cada replicación. */
-function meanRunResults(results: readonly RunResult[], locale: Locale = 'en'): RunResult {
+function meanRunResults(
+  results: readonly RunResult[],
+  records: readonly Readonly<Record<string, number>>[],
+  excluded: readonly ReadonlySet<string>[],
+  locale: Locale = 'en',
+): RunResult {
   if (results.length === 0) {
     throw new RangeError(
       coded('E-REPLICACIONES-VACIAS', coreMessages(locale).codes['E-REPLICACIONES-VACIAS']()),
@@ -119,13 +152,64 @@ function meanRunResults(results: readonly RunResult[], locale: Locale = 'en'): R
   for (const result of results) for (const warning of result.warnings) warnings.add(warning);
 
   return {
-    elements: meanShape(results.map((result) => result.elements), locale),
-    flows: meanShape(results.map((result) => result.flows), locale),
-    resources: meanShape(results.map((result) => result.resources), locale),
-    process: meanShape(results.map((result) => result.process), locale),
+    ...meanShape(results, records, excluded, locale),
     bottlenecks: meanBottlenecks(results),
     warnings: [...warnings],
   };
+}
+
+/**
+ * #356: una tarea, un timer, el proceso o un desenlace que solo algunas replicaciones observaron.
+ * Sus estadísticas de tiempo promedian solo esas replicaciones, y el aviso dice cuántas faltaron
+ * para que ese promedio no se lea como el de toda la corrida. Orden: nodos del IR, proceso,
+ * desenlaces.
+ */
+function observationWarnings(
+  included: readonly RunResult[],
+  excluded: readonly ReadonlySet<string>[],
+  ir: ProcessIR,
+  locale: Locale | undefined,
+): string[] {
+  const M = coreMessages(locale).codes;
+  const total = included.length;
+  const warnings: string[] = [];
+  const missingFor = (path: string): number => {
+    let missing = 0;
+    for (const paths of excluded) if (paths.has(path)) missing++;
+    return missing;
+  };
+  const counts = (missing: number): [string, string, string] => [
+    String(missing),
+    String(total),
+    String(total - missing),
+  ];
+  for (const nodeId of Object.keys(ir.nodes)) {
+    const missing = missingFor(`elements.${escapeId(nodeId)}.processing.mean`);
+    if (missing === 0 || missing === total) continue;
+    warnings.push(
+      coded('W-REPLICACIONES-SIN-OBSERVACIONES', M['W-REPLICACIONES-SIN-OBSERVACIONES'](nodeId, ...counts(missing))),
+    );
+  }
+  const processMissing = missingFor('process.cycleTime.mean');
+  if (processMissing > 0 && processMissing < total) {
+    warnings.push(
+      coded(
+        'W-REPLICACIONES-SIN-OBSERVACIONES',
+        M['W-REPLICACIONES-SIN-OBSERVACIONES/proceso'](...counts(processMissing)),
+      ),
+    );
+  }
+  for (const endId of Object.keys(included[0]?.process.byEndEvent ?? {})) {
+    const missing = missingFor(`process.byEndEvent.${escapeId(endId)}.cycleTime.mean`);
+    if (missing === 0 || missing === total) continue;
+    warnings.push(
+      coded(
+        'W-REPLICACIONES-SIN-OBSERVACIONES',
+        M['W-REPLICACIONES-SIN-OBSERVACIONES/desenlace'](endId, ...counts(missing)),
+      ),
+    );
+  }
+  return warnings;
 }
 
 /**
@@ -259,10 +343,21 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   // El top-level cancelado conserva todo el trabajo observable, incluida la réplica parcial.
   // El IC, en cambio, se calcula más abajo solo con `completed`.
   const included = partial === undefined ? completed : [...completed, partial];
-  const result = included.length === 1 ? included[0]! : meanRunResults(included, locale);
+  // #356: una sola selección de observaciones por path, compartida por el top-level y por
+  // `replications.kpis`. La réplica parcial, si existe, es la última: basta recortar.
+  const records = included.length === 1 ? [] : included.map((entry) => numericKpis(entry));
+  const excluded = included.length === 1 ? [] : included.map((entry) => excludedPaths(entry, ir));
+  const result = included.length === 1 ? included[0]! : meanRunResults(included, records, excluded, locale);
   for (const warning of saturationWarnings(loads, locale)) result.warnings.push(warning);
+  for (const warning of observationWarnings(included, excluded, ir, locale)) result.warnings.push(warning);
 
-  if (completed.length > 1) result.replications = summarizeRunResults(completed, locale);
+  if (completed.length > 1) {
+    result.replications = summarizeKpis(
+      records.slice(0, completed.length),
+      locale,
+      excluded.slice(0, completed.length),
+    );
+  }
   if (cancelled) {
     result.cancelled = true;
     result.completedReplications = completed.length;
