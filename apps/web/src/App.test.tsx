@@ -645,6 +645,41 @@ it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', 
   await act(async () => { menu!('acerca'); });
   expect(acerca.open).toBe(true);
 });
+it('mientras el karaoke del huevo de pascua suena, ni ⌘, ni "acerca" abren nada encima (QA de #387, Low)', async () => {
+  // El `<dialog>` de Acerca de ya está cerrado mientras el karaoke corre (para que su "top layer"
+  // no lo tape), así que ni el atajo de teclado ni el menú nativo pasan por él para saber que
+  // hay que esperar: sin la `ref` de `App.tsx` que enlaza con `onKaraoke`, `ejecutar('ajustes')`
+  // volvía a abrir Ajustes encima del overlay.
+  vi.useFakeTimers();
+  vi.stubGlobal('open', vi.fn());
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  await click(T.app.acercaDe);
+  expect(acerca.open).toBe(true);
+  const icono = container.querySelector<HTMLImageElement>('.acerca-icono')!;
+  for (let i = 0; i < 6; i += 1) {
+    await act(async () => { icono.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  }
+  const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
+  const receptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => { receptor.call(campo, 'brito'); campo.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('.acerca-clave button[type="submit"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  expect(acerca.open).toBe(false);
+  expect(document.querySelector('.karaoke')).not.toBeNull();
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(false);
+  expect(acerca.open).toBe(false);
+  // Se cancela para terminar sin temporizadores vivos ni el enlace abierto.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+  expect(document.querySelector('.karaoke')).toBeNull();
+  // Y con el karaoke ya fuera, ⌘, vuelve a funcionar normalmente.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(true);
+  vi.useRealTimers();
+});
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
   const doc = { version: 1, id: 'p2', name: 'Reciente', model: { id: 'Process_2', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };

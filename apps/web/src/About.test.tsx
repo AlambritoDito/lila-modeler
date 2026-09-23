@@ -150,6 +150,68 @@ it('«brito» cierra Acerca de, monta el karaoke con las tres líneas y solo al 
   expect(document.querySelector('.karaoke')).toBeNull();
 });
 
+it('el temporizador del karaoke sobrevive a que `About` se vuelva a renderizar (QA de #387, Medium)', async () => {
+  // Antes del arreglo, `onFin`/`onCancelar` eran dependencias del `useEffect` que arma el
+  // `setTimeout`: como son funciones nuevas en cada render de `About`, cualquier render ajeno al
+  // karaoke —el progreso de una simulación en curso, en la app de verdad— lo reiniciaba, y el
+  // enlace de «brito» no llegaba a abrirse nunca mientras la simulación seguía corriendo.
+  vi.useFakeTimers();
+  const dialogRef = await montar();
+  await clicarIcono(6);
+  await enviarClave('brito');
+  expect(document.querySelector('.karaoke')).not.toBeNull();
+  // Cinco renders «ajenos» (props nuevas cada vez, como haría `App.tsx` al re-renderizar), medio
+  // segundo después de montar el overlay: si el efecto dependiera de esas props, el reloj se
+  // reiniciaría aquí.
+  const PASO_MS = 100;
+  const RENDERS = 5;
+  for (let i = 0; i < RENDERS; i += 1) {
+    await act(async () => {
+      vi.advanceTimersByTime(PASO_MS);
+      root.render(<About dialogRef={dialogRef} onKaraoke={() => {}} />);
+    });
+  }
+  // Solo lo que falta desde el montaje ORIGINAL, más un margen: si el reloj se hubiera reiniciado
+  // en el último render (a los 500 ms), esto no alcanzaría para dispararlo, y `window.open`
+  // seguiría sin llamarse.
+  await act(async () => { vi.advanceTimersByTime(KARAOKE_DURACION_TOTAL_MS - RENDERS * PASO_MS + 50); });
+  expect(window.open).toHaveBeenCalledTimes(1);
+  expect(window.open).toHaveBeenCalledWith(
+    'https://www.youtube.com/watch?v=r7GBGZ004vQ&list=RDr7GBGZ004vQ&start_radio=1&t=203s',
+    '_blank',
+    'noopener,noreferrer',
+  );
+  expect(document.querySelector('.karaoke')).toBeNull();
+});
+
+it('el overlay es `role="presentation"`/`aria-live="polite"` y dejar `#root` inerte mientras suena (QA de #387, Low)', async () => {
+  const raiz = document.createElement('div');
+  raiz.id = 'root';
+  document.body.append(raiz);
+  vi.useFakeTimers();
+  try {
+    await montar();
+    await clicarIcono(6);
+    await enviarClave('brito');
+    const overlay = document.querySelector('.karaoke')!;
+    expect(overlay.getAttribute('role')).toBe('presentation');
+    expect(overlay.getAttribute('aria-live')).toBe('polite');
+    expect(raiz.hasAttribute('inert')).toBe(true);
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(raiz.hasAttribute('inert')).toBe(false);
+  } finally {
+    raiz.remove();
+  }
+});
+
+it('el campo de la clave no ofrece autocompletar ni corrector (QA de #387, Low)', async () => {
+  await montar();
+  await clicarIcono(6);
+  const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
+  expect(campo.getAttribute('autocomplete')).toBe('off');
+  expect(campo.getAttribute('spellcheck')).toBe('false');
+});
+
 it('Escape durante el karaoke lo quita sin abrir el enlace', async () => {
   vi.useFakeTimers();
   await montar();

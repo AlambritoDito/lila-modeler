@@ -14,7 +14,7 @@
  * cosa no revela nada. El contador de clics se reinicia cuando el diálogo se cierra (evento nativo
  * `close`, no un `onClick` propio: así también cubre el `Escape`).
  */
-import { useEffect, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { version } from '../package.json';
 import { useStrings } from './i18n';
@@ -80,20 +80,31 @@ export const KARAOKE_DURACION_TOTAL_MS = KARAOKE_RETRASO_EPICA_MS + KARAOKE_DURA
  * clic sobre el overlay no hace nada (a propósito, sin manejador). El temporizador es el único
  * reloj: `prefers-reduced-motion` solo quita la animación CSS (ver `app.css`), no el tiempo de
  * espera, así que `onFin` llega igual de tarde con o sin movimiento.
+ *
+ * `onFin`/`onCancelar` viven en `ref`s y el efecto corre con `[]` (QA de #387, Medium): son
+ * funciones nuevas en cada render de `About`, y `About` se vuelve a renderizar por cosas que no
+ * tienen nada que ver con el karaoke —el progreso de una simulación en curso, por ejemplo—. Con
+ * esas funciones como dependencias, cada uno de esos renders limpiaba el `setTimeout` y ponía
+ * otro desde cero, así que con una simulación corriendo el enlace no llegaba a abrirse nunca.
  */
 function Karaoke({ onFin, onCancelar }: {
   readonly onFin: () => void;
   readonly onCancelar: () => void;
 }) {
+  const fin = useRef(onFin);
+  fin.current = onFin;
+  const cancelar = useRef(onCancelar);
+  cancelar.current = onCancelar;
+
   useEffect(() => {
-    const reloj = setTimeout(onFin, KARAOKE_DURACION_TOTAL_MS);
-    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') onCancelar(); };
+    const reloj = setTimeout(() => fin.current(), KARAOKE_DURACION_TOTAL_MS);
+    const teclas = (e: KeyboardEvent): void => { if (e.key === 'Escape') cancelar.current(); };
     window.addEventListener('keydown', teclas);
     return () => { clearTimeout(reloj); window.removeEventListener('keydown', teclas); };
-  }, [onFin, onCancelar]);
+  }, []);
 
   return createPortal(
-    <div className="karaoke">
+    <div className="karaoke" role="presentation" aria-live="polite">
       <p className="karaoke-linea">
         {KARAOKE_PALABRAS_1.map((palabra, i) => (
           <span key={i} className="karaoke-palabra" style={{ animationDelay: `${i * KARAOKE_RETRASO_MS}ms` }}>{palabra}</span>
@@ -112,14 +123,27 @@ function Karaoke({ onFin, onCancelar }: {
   );
 }
 
-export function About({ dialogRef }: {
+export function About({ dialogRef, onKaraoke }: {
   readonly dialogRef: RefObject<HTMLDialogElement | null>;
+  /** Avisa a `App.tsx` mientras el karaoke está montado (QA de #387, Low): con el `<dialog>` de
+   * Acerca de ya cerrado, ni `⌘,`/`⌘.` ni el menú nativo pasan por su `<dialog>`, así que sin este
+   * aviso podían abrir Ajustes u otra vez Acerca de encima del overlay. */
+  readonly onKaraoke?: (activo: boolean) => void;
 }) {
   const S = useStrings();
   const [clics, setClics] = useState(0);
   const [clave, setClave] = useState('');
   const [tiembla, setTiembla] = useState(false);
   const [karaoke, setKaraoke] = useState(false);
+
+  // Mientras el overlay está montado, el resto de la app queda `inert` (QA de #387, Low): sin eso
+  // el `Tab` seguía entrando al `<dialog>` ya cerrado o al lienzo de detrás.
+  useEffect(() => {
+    if (!karaoke) return;
+    const raiz = document.getElementById('root');
+    raiz?.setAttribute('inert', '');
+    return () => raiz?.removeAttribute('inert');
+  }, [karaoke]);
 
   /** El único sitio que reinicia el huevo de pascua: se cuelga del evento `close` nativo del
    * `<dialog>`, así que cubre por igual el botón «×», el `Escape` y el `close()` que dispara la
@@ -137,6 +161,7 @@ export function About({ dialogRef }: {
     if (valor === 'brito') {
       dialogRef.current?.close();
       setKaraoke(true);
+      onKaraoke?.(true);
     } else if (valor === 'scuba') {
       abrirEnlace(URL_SCUBA);
     } else {
@@ -168,7 +193,7 @@ export function About({ dialogRef }: {
           <form className={`acerca-clave${tiembla ? ' tiembla' : ''}`} onSubmit={enviarClave} onAnimationEnd={() => setTiembla(false)}>
             <label>
               {CLAVE_ETIQUETA}
-              <input type="text" value={clave} onChange={(e) => setClave(e.target.value)} />
+              <input type="text" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="off" spellCheck={false} />
             </label>
             <button type="submit" className="boton primario">{CLAVE_BOTON}</button>
           </form>
@@ -176,8 +201,8 @@ export function About({ dialogRef }: {
       </dialog>
       {karaoke && (
         <Karaoke
-          onFin={() => { setKaraoke(false); abrirEnlace(URL_BRITO); }}
-          onCancelar={() => setKaraoke(false)}
+          onFin={() => { setKaraoke(false); onKaraoke?.(false); abrirEnlace(URL_BRITO); }}
+          onCancelar={() => { setKaraoke(false); onKaraoke?.(false); }}
         />
       )}
     </>

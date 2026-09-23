@@ -325,6 +325,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const ajustesDialog = useRef<HTMLDialogElement>(null);
   /** Diálogo «Acerca de» (LILA-381): se abre desde Ajustes y desde el menú nativo (`'acerca'`). */
   const acercaDialog = useRef<HTMLDialogElement>(null);
+  /** El overlay del karaoke del huevo de pascua (QA de #387, Low): con su `<dialog>` ya cerrado
+   * mientras suena, ni `⌘,` ni el menú nativo pasaban por él para saber que había que esperar, así
+   * que `Ajustes`/`Acerca de` podían abrirse encima. Una `ref`, no un estado: no hace falta un
+   * repintado por esto, y así tampoco reinicia el temporizador del propio karaoke (mismo QA). */
+  const karaokeActivo = useRef(false);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
@@ -718,8 +723,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * (`window.lila.onMenu`) llaman a lo mismo que los botones de la barra.
    */
   function ejecutar(accion: MenuAction): void {
-    if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
-    else if (accion === 'acerca') { if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }
+    if (accion === 'ajustes') { if (!karaokeActivo.current && !ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    else if (accion === 'acerca') { if (!karaokeActivo.current && !acercaDialog.current?.open) acercaDialog.current?.showModal(); }
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
@@ -1000,7 +1005,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </form>
       </dialog>
 
-      <About dialogRef={acercaDialog} />
+      <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
           pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
