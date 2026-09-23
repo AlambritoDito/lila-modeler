@@ -1449,3 +1449,31 @@ it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice
     abrir.mockRestore();
   }
 });
+
+it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni Ajustes (QA de #391)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const tecla = (key: string) => act(async () => {
+    hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
+  });
+  try {
+    await click(T.app.escenarioAcoplado);
+    // Open would click the main page's file input with the popup's activation: the browser never
+    // settles it and the app stays busy. Settings would open behind the window.
+    await tecla('o');
+    await tecla('n');
+    await tecla(',');
+    expect(session.openProject).not.toHaveBeenCalled();
+    expect(session.createProject).not.toHaveBeenCalled();
+    expect(container.querySelector('dialog.confirmar-reemplazo')).toBeNull();
+    expect(container.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(false);
+    await tecla('s');
+    expect(session.saveProject).toHaveBeenCalledOnce();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});

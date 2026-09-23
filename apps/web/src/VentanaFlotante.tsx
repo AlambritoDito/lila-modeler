@@ -23,6 +23,18 @@ export interface Geometria {
   readonly height: number;
 }
 
+/**
+ * A saved geometry worth reusing: finite numbers and a size between the desktop child's minimum
+ * (420 × 360) and 8192. Positions may be negative (a monitor left of the main one); an
+ * off-screen one is the browser's (or Electron's `fitsAnyDisplay`) to clamp.
+ */
+export function geometriaValida(valor: unknown): valor is Geometria {
+  if (typeof valor !== 'object' || valor === null) return false;
+  const { x, y, width, height } = valor as Record<string, unknown>;
+  const numero = (n: unknown, min: number): n is number => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= 8192;
+  return numero(x, -8192) && numero(y, -8192) && numero(width, 420) && numero(height, 360);
+}
+
 /** Where the window is now. `innerWidth/Height` because that is what `width/height` set on open. */
 export function geometriaDe(ventana: Window): Geometria {
   return { x: ventana.screenX, y: ventana.screenY, width: ventana.innerWidth, height: ventana.innerHeight };

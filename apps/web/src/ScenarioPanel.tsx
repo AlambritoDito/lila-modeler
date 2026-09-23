@@ -1843,22 +1843,22 @@ export function ScenarioPanel({
 
   const unidad = unidadBase(ctx);
 
-  const acciones = (
-    <>
-      <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
-        {S.escenario.guardar}
-      </button>
-      <button
-        type="button"
-        className="boton"
-        onClick={() => {
-          const copia = duplicarEscenario(archivo, delta);
-          onDuplicar(copia.archivo, copia.escenario);
-        }}
-      >
-        {S.escenario.duplicar}
-      </button>
-    </>
+  const guardarBoton = (
+    <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
+      {S.escenario.guardar}
+    </button>
+  );
+  const duplicarBoton = (
+    <button
+      type="button"
+      className="boton"
+      onClick={() => {
+        const copia = duplicarEscenario(archivo, delta);
+        onDuplicar(copia.archivo, copia.escenario);
+      }}
+    >
+      {S.escenario.duplicar}
+    </button>
   );
 
   return (
@@ -1868,7 +1868,8 @@ export function ScenarioPanel({
         <span className={errores > 0 ? 'error' : 'aviso'}>
           {S.escenario.conteo(errores, avisos)}
         </span>
-        {!enVentana && acciones}
+        {!enVentana && guardarBoton}
+        {!enVentana && duplicarBoton}
       </div>
 
       {heredaDe !== null && (
@@ -2026,7 +2027,9 @@ export function ScenarioPanel({
       {enVentana && (
         <footer className="escenario-pie">
           <span>{S.escenario.pieVentana}</span>
-          {acciones}
+          {/* Duplicate, then Save: the order they are painted in is the order Tab visits. */}
+          {duplicarBoton}
+          {guardarBoton}
         </footer>
       )}
     </div>

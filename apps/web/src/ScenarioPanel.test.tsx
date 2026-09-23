@@ -1070,7 +1070,8 @@ describe('ventana desacoplada (diseño 2c)', () => {
     const pie = document.querySelector('.escenario-pie')!;
     expect(pie.textContent).toContain(es.escenario.pieVentana);
     expect(pie.querySelector('.boton.primario')!.textContent).toBe(es.escenario.guardar);
-    expect(pie.textContent).toContain(es.escenario.duplicar);
+    // Duplicate, then Save: DOM order is the order Tab visits and the order on screen.
+    expect([...pie.querySelectorAll('button')].map((b) => b.textContent)).toEqual([es.escenario.duplicar, es.escenario.guardar]);
     expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
     pulsar(es.escenario.guardar);
     expect(guardados).toHaveLength(1);

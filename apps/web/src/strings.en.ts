@@ -119,8 +119,8 @@ export const en = {
     escenarioAcoplado: 'Scenario docked ↗',
     escenarioDesacoplado: 'In its own window',
     acoplar: 'Dock',
-    enVentanaAparte: 'The scenario is open in its own window.',
-    mostrarVentana: 'Show window',
+    enVentanaAparte: 'Scenario in its own window ↗',
+    mostrarVentana: 'Show',
     ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
     tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
 

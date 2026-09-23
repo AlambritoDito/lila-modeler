@@ -800,6 +800,25 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
           backgroundColor: '#12101a',
           autoHideMenuBar: true,
           icon,
+          // Pinned (QA of #391): Electron merges the renderer's features string under these, so
+          // anything left unset — `alwaysOnTop`, `closable=no`, `opacity`… — would be the
+          // renderer's to choose. Only position and size come from the features string.
+          alwaysOnTop: false,
+          closable: true,
+          movable: true,
+          resizable: true,
+          minimizable: true,
+          maximizable: true,
+          focusable: true,
+          frame: true,
+          transparent: false,
+          opacity: 1,
+          skipTaskbar: false,
+          fullscreen: false,
+          fullscreenable: false,
+          kiosk: false,
+          show: true,
+          modal: false,
           webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
         },
       };

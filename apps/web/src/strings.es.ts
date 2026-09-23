@@ -104,8 +104,8 @@ export const es: Strings = {
     escenarioAcoplado: 'Escenario acoplado ↗',
     escenarioDesacoplado: 'En ventana aparte',
     acoplar: 'Acoplar',
-    enVentanaAparte: 'El escenario está abierto en una ventana aparte.',
-    mostrarVentana: 'Mostrar ventana',
+    enVentanaAparte: 'Escenario en ventana aparte ↗',
+    mostrarVentana: 'Mostrar',
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
 

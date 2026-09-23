@@ -36,7 +36,7 @@ import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
 import { About } from './About';
-import { abrirVentanaFlotante, geometriaDe, VentanaFlotante, type Geometria } from './VentanaFlotante';
+import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
@@ -116,15 +116,14 @@ async function preferencias(): Promise<Ajustes> {
     let temas: unknown = null;
     try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
-    let ventana: Partial<Geometria> | null = null;
-    try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null') as Partial<Geometria> | null; } catch { /* se pierde solo ella */ }
-    const geometria = ventana !== null && [ventana.x, ventana.y, ventana.width, ventana.height].every((n) => typeof n === 'number');
+    let ventana: unknown = null;
+    try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
       ...(idioma === null ? {} : { idioma }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
-      ...(geometria ? { ventanaEscenario: ventana as Geometria } : {}),
+      ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
     };
   } catch { return {}; }
 }
@@ -763,6 +762,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     e.preventDefault();
     ejecutarRef.current(accion);
   };
+  /**
+   * From the detached window only Save and Save as are forwarded (QA of #391): Open would click the
+   * file input of the MAIN document with the popup's user activation, the browser refuses the
+   * chooser without ever settling it and the app stays busy until reload; Settings would open
+   * modal behind the window the user is looking at.
+   */
+  const teclasHija = (e: KeyboardEvent): void => { if (e.key.toLowerCase() === 's') teclas(e); };
   useEffect(() => {
     window.addEventListener('keydown', teclas);
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
@@ -770,9 +776,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Only a real size counts: a window already gone reports zeros. */
+  /** Only a sane size counts: a window already gone reports zeros. */
   function recordarGeometria(geometria: Geometria): void {
-    if (geometria.width <= 0 || geometria.height <= 0) return;
+    if (!geometriaValida(geometria)) return;
     geomEscenario.current = geometria;
     recordar({ ventanaEscenario: geometria });
   }
@@ -1031,8 +1037,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
         {(pestana === 'simulacion' || ventanaEscenario !== null) && (
           <button ref={toggleEscenario} type="button" className="boton desacoplar" aria-pressed={ventanaEscenario !== null}
+            aria-label={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
+            title={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
-            {ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
+            {/* Below 1280 px only the icon is left (`app.css`), or Run and ⚙ leave the bar. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
+            <span>{ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}</span>
           </button>
         )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
@@ -1108,7 +1118,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           inert={ioBusy}
           onAcoplar={acoplar}
           onGeometria={recordarGeometria}
-          onTecla={teclas}
+          onTecla={teclasHija}
         >
           {panelEscenario}
         </VentanaFlotante>

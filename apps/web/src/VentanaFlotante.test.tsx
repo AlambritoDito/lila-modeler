@@ -9,7 +9,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { abrirVentanaFlotante, VentanaFlotante } from './VentanaFlotante';
+import { abrirVentanaFlotante, geometriaValida, VentanaFlotante } from './VentanaFlotante';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -128,4 +128,13 @@ it('abrirVentanaFlotante dresses the child like the app, with the saved geometry
 it('abrirVentanaFlotante gives null when the popup is blocked', () => {
   vi.spyOn(window, 'open').mockReturnValue(null);
   expect(abrirVentanaFlotante('lila-escenario')).toBeNull();
+});
+
+it('geometriaValida keeps only finite, sane sizes (QA of #391)', () => {
+  expect(geometriaValida({ x: -1200, y: 20, width: 560, height: 720 })).toBe(true);
+  expect(geometriaValida({ x: 0, y: 0, width: 100, height: 720 })).toBe(false);
+  expect(geometriaValida({ x: 0, y: 0, width: 560, height: 99999 })).toBe(false);
+  expect(geometriaValida({ x: Number.NaN, y: 0, width: 560, height: 720 })).toBe(false);
+  expect(geometriaValida({ x: 0, y: 0, width: '560', height: 720 })).toBe(false);
+  expect(geometriaValida(null)).toBe(false);
 });

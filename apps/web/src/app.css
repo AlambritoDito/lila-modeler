@@ -191,9 +191,11 @@ body {
   color: var(--fg-muted);
   display: flex;
   gap: 8px;
+  /* 210 px, but the first thing to give way when the bar runs short (the scenario toggle, #391). */
+  flex: 0 1 210px;
   height: 30px;
+  min-width: 0;
   padding: 0 10px;
-  width: 210px;
 }
 
 .buscador input {
@@ -1612,9 +1614,40 @@ body {
   background: var(--bg-hover);
 }
 
+.boton.desacoplar svg {
+  display: none;
+}
+
+/* Below 1400 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
+   the search field goes away, the mode tabs also lose some air. Without this, Run and ⚙ left the
+   bar below ~1150 px (QA of #391). Measured with no horizontal overflow from 1440 down to 1024 px
+   in English and Spanish, on the Simulation tab. */
+@media (max-width: 1400px) {
+  .boton.desacoplar {
+    display: grid;
+    padding: 0;
+    place-items: center;
+    width: 30px;
+  }
+
+  .boton.desacoplar svg {
+    display: block;
+  }
+
+  .boton.desacoplar span {
+    display: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .modo {
+    padding: calc(2px * var(--espacio, 1)) 10px;
+  }
+}
+
 /* What stays in the docked panel while the scenario lives in its own window. */
 .panel-desacoplado {
-  align-items: flex-start;
+  align-items: center;
   border: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -1624,8 +1657,7 @@ body {
 
 .panel-desacoplado p {
   color: var(--fg-muted);
-  flex-basis: 100%;
-  margin: 0;
+  margin: 0 auto 0 0;
 }
 
 /* The child window: a column, not the grid of the main `.app` (same classes, so the density and
@@ -1755,8 +1787,4 @@ body {
 
 .escenario-pie .boton:not(.primario) {
   background: none;
-}
-
-.escenario-pie .boton.primario {
-  order: 1;
 }

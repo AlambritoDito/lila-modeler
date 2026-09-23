@@ -52,3 +52,11 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
     expect(reglas.filter((r) => /display:\s*none|visibility:\s*hidden/.test(r))).toEqual([]);
   }
 });
+
+it('below 1400 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
+  // Measured over CDP: with its label, the toggle pushed Run and ⚙ off the bar below ~1150 px.
+  const media = /@media \(max-width: 1400px\) \{([\s\S]*?)\n\}/g;
+  const bloques = [...appCss.matchAll(media)].map((m) => m[1]!).join('\n');
+  expect(bloques).toMatch(/\.boton\.desacoplar span \{\s*display: none;/);
+  expect(bloques).toMatch(/\.boton\.desacoplar \{[^}]*width: 30px;/);
+});

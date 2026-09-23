@@ -46,13 +46,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isWindowBounds(value: unknown): value is WindowBounds {
+/** A finite number in `[min, 8192]`: `NaN`, `Infinity` and absurd sizes are not bounds. */
+function isInRange(value: unknown, min: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= 8192;
+}
+
+/** Positions may be negative (a monitor left of the primary one); sizes have to be positive. */
+function isWindowBounds(value: unknown, minWidth = 1, minHeight = 1): value is WindowBounds {
   if (!isPlainObject(value)) return false;
   return (
-    typeof value.x === 'number' &&
-    typeof value.y === 'number' &&
-    typeof value.width === 'number' &&
-    typeof value.height === 'number'
+    isInRange(value.x, -8192) &&
+    isInRange(value.y, -8192) &&
+    isInRange(value.width, minWidth) &&
+    isInRange(value.height, minHeight)
   );
 }
 
@@ -76,8 +82,9 @@ export function parseAjustes(value: unknown): Ajustes {
   // valen lo decide el renderer, igual que con el tema y la densidad.
   if (typeof value.idioma === 'string') ajustes.idioma = value.idioma;
   if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
-  // Geometry of the detached scenario window (design 2c); `main.ts` recentres it if it no longer fits.
-  if (isWindowBounds(value.ventanaEscenario)) ajustes.ventanaEscenario = value.ventanaEscenario;
+  // Geometry of the detached scenario window (design 2c), no smaller than its `minWidth`/`minHeight`
+  // in `main.ts`, which also recentres it if it no longer fits any display.
+  if (isWindowBounds(value.ventanaEscenario, 420, 360)) ajustes.ventanaEscenario = value.ventanaEscenario;
   return ajustes;
 }
 
