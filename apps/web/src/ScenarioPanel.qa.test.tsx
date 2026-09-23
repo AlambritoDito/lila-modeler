@@ -183,16 +183,23 @@ function Anfitrion({
   guardados,
   irActual,
   seleccionInicial = null,
+  espejo,
 }: {
   inicial: Readonly<Record<string, Json>>;
   archivoInicial: string;
   guardados: Guardado[];
   irActual: ProcessIR | null;
   seleccionInicial?: string | null;
+  /** #397: exposes the scenario map and a way back to the original, like the rail does. */
+  espejo?: { escenarios: Readonly<Record<string, Json>>; volver: () => void };
 }): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
   const [archivo, setArchivo] = useState(archivoInicial);
   const [seleccion, setSeleccion] = useState<string | null>(seleccionInicial);
+  if (espejo !== undefined) {
+    espejo.escenarios = escenarios;
+    espejo.volver = () => setArchivo(archivoInicial);
+  }
   return (
     <ScenarioPanel
       archivo={archivo}
@@ -343,6 +350,33 @@ describe('duplicar', () => {
     pulsar('Guardar');
     expect(guardados[0]!.archivo).toBe('as-is (copia) (copia).scenario.json');
     expect(guardados[0]!.escenario['extends']).toBe('as-is (copia).scenario.json');
+  });
+
+  it('duplicar dos veces el mismo original numera la segunda copia en vez de machacar la primera (#397)', () => {
+    const espejo = { escenarios: {} as Readonly<Record<string, Json>>, volver: () => {} };
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={[]}
+        irActual={ir}
+        espejo={espejo}
+      />,
+    );
+    pulsar('Duplicar');
+    act(() => espejo.volver());
+    pulsar('Duplicar');
+
+    expect(espejo.escenarios['as-is (copia).scenario.json']).toEqual({
+      version: 1,
+      name: 'AS-IS (copia)',
+      extends: 'as-is.scenario.json',
+    });
+    expect(espejo.escenarios['as-is (copia 2).scenario.json']).toEqual({
+      version: 1,
+      name: 'AS-IS (copia 2)',
+      extends: 'as-is.scenario.json',
+    });
   });
 });
 

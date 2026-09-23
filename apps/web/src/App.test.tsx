@@ -49,7 +49,9 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
-vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => mocks.problemas,
+vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
+  // The rail «+» (#397) goes through the real naming, which is pure.
+  duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
   ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
     mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
@@ -1145,6 +1147,16 @@ it('in Simulate the rail replaces the palette; a row picks the scenario and clea
   await click(T.app.modos.modelar);
   expect(container.querySelector('.paleta')).not.toBeNull();
   expect(container.querySelector('.rail-escenarios')).toBeNull();
+});
+
+it('the rail «+» twice on the same scenario numbers the copies instead of overwriting (#397)', async () => {
+  await act(async () => { filaRail('AS-IS').click(); });
+  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
+  await act(async () => { filaRail('AS-IS').click(); });
+  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
+  expect(filaRail('AS-IS (copy)')).toBeDefined();
+  expect(filaRail('AS-IS (copy 2)')).toBeDefined();
+  expect(filaRail('AS-IS (copy 2)').getAttribute('aria-current')).toBe('true');
 });
 
 it('the divider resizes the right panel between 300 and 520 px and remembers it', async () => {
