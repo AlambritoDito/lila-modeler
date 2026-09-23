@@ -4,7 +4,7 @@ Discrete-event simulation for BPMN processes. Part of [Lila Modeler](https://git
 
 ## Preliminary release
 
-Version 1.0.0-alpha.1 is the first alpha, published for validation; it does not mark the project's 1.0 milestone complete. Requires Node.js 22 or later. Registry availability depends on the repository owner's first publication.
+Version 1.0.0-beta.1 is the first public beta, published for validation; it does not mark the project's 1.0 milestone complete. Requires Node.js 22 or later. Registry availability depends on the repository owner's first publication.
 
 ## CLI
 

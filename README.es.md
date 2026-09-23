@@ -74,7 +74,7 @@ Compartir es pasar un archivo `.lila` portable, no edición simultánea — no h
 sincronización en tiempo real. Usa **Archivo ▸ Guardar** (web, tooltip: Guardar proyecto) o
 **Guardar como…** (escritorio) para obtener un `.lila`, envíalo como enviarías cualquier archivo,
 y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la demo web, **Archivo ▸ Abrir proyecto…** en la app de
-escritorio, o con doble clic en el Finder (verificado para la Beta 1: `verificado en la Beta 1 en macOS 27.0 (arm64) por la ruta open-file de LaunchServices (`open -a`, el mismo evento que Finder envía al hacer doble clic) con la app cerrada y ya abierta, incluido un nombre `.lila` con acentos y raya; el doble clic físico en Finder no se ejerció en el Mac de prueba porque una build instalada anterior tenía allí la asociación`).
+escritorio, o con doble clic en el Finder (ver la guía de la beta: la ruta open-file se verificó en la Beta 1; el doble clic físico en Finder no).
 ¿Encontraste un problema reproducible en el camino?
 [Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
 — la plantilla de bug pide un archivo `.bpmn` mínimo o un escenario que lo muestre.
@@ -86,10 +86,10 @@ macOS en Apple Silicon, más un archivo `SHA256SUMS` para verificarlo —
 [Beta 1 en GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
 (no `/releases/latest`: GitHub excluye los prereleases de ese enlace). **No está firmada ni
 notarizada**, así que el primer arranque se bloquea. Tras el primer intento bloqueado (doble clic
-en la app), ve a **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todas formas**
+en la app), ve a **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todos modos**
 junto al mensaje que nombra la app, luego confirma **Abrir**. En macOS más antiguo, Control-clic
 sobre la app ▸ **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar
-esto. `verificado en la Beta 1 en macOS 27.0: la descarga en cuarentena se bloquea en el primer arranque y Ajustes del Sistema ▸ Privacidad y seguridad ofrece **Abrir de todos modos** (la app lleva un sello ad hoc, así que macOS no la reporta como dañada)`
+esto. La Beta 1 verificó en macOS 27.0 que la descarga en cuarentena se bloquea en el primer arranque y que Ajustes del Sistema ▸ Privacidad y seguridad ofrece Abrir de todos modos (la app lleva un sello ad hoc, así que macOS no la reporta como dañada).
 [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
 verificación del checksum.
 

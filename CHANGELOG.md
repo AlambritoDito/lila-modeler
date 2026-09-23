@@ -6,8 +6,7 @@ All notable changes to Lila Modeler are documented here. The format follows
 ## [1.0.0-beta.1] - 2026-09-22
 
 First public beta: the browser app at <https://alambritodito.github.io/lila-modeler/app/> and an
-unsigned macOS Apple Silicon (arm64) desktop build. Windows, Linux and Intel Macs are built by CI
-but not tested and not part of this beta.
+unsigned macOS Apple Silicon (arm64) desktop build. Windows and Linux are built by CI but not tested and not offered; there is no Intel Mac build.
 
 ### Changed — statistical behaviour (#356)
 
@@ -50,9 +49,10 @@ but not tested and not part of this beta.
 
 ### Known limitations
 
-- The macOS build is unsigned and not notarized: first launch needs right-click ▸ Open or
-  Privacy & Security ▸ Open Anyway. Do not disable Gatekeeper.
+- The macOS build is unsigned and not notarized: on macOS 15 and newer the first launch is blocked
+  and System Settings ▸ Privacy & Security ▸ Open Anyway is needed (Control-click ▸ Open only helps on
+  older macOS). Do not disable Gatekeeper.
 - Web app tested on macOS 27.0 (arm64) with Chrome 154 only; Safari and other browsers,
   operating systems and architectures are untested.
-- Mobile editing is untested; desktop browsers at 1280 px or wider are the supported editor
-  viewports.
+- Mobile editing is untested; Beta 1 acceptance ran on desktop browsers at 1440×900, narrower
+  editor viewports are untested.
