@@ -1046,3 +1046,33 @@ describe('resto de LILA-203', () => {
     ]);
   });
 });
+
+describe('ventana desacoplada (diseño 2c)', () => {
+  it('Duplicar y Guardar pasan de la cabecera al pie, con Guardar como acción primaria', () => {
+    const guardados: Guardado[] = [];
+    const panel = (enVentana: boolean): React.JSX.Element => (
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': asIsCorto() }}
+        onCambio={() => {}}
+        onGuardar={() => guardados.push({ archivo: 'as-is.scenario.json', escenario: {} })}
+        onDuplicar={() => {}}
+        ir={ir}
+        seleccion={null}
+        onSeleccionar={() => {}}
+        enVentana={enVentana}
+      />
+    );
+    montar(panel(false));
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.guardar);
+    expect(document.querySelector('.escenario-pie')).toBeNull();
+    act(() => raiz!.render(panel(true)));
+    const pie = document.querySelector('.escenario-pie')!;
+    expect(pie.textContent).toContain(es.escenario.pieVentana);
+    expect(pie.querySelector('.boton.primario')!.textContent).toBe(es.escenario.guardar);
+    expect(pie.textContent).toContain(es.escenario.duplicar);
+    expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
+    pulsar(es.escenario.guardar);
+    expect(guardados).toHaveLength(1);
+  });
+});

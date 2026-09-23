@@ -24,7 +24,7 @@ import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js'
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
-import { isTrustedSender } from './ipcGuards.js';
+import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
@@ -767,11 +767,12 @@ function attachCloseGuard(win: BrowserWindow): void {
 }
 
 function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow {
+  const icon = path.join(app.getAppPath(), 'resources', 'icons', 'icon.png');
   const win = new BrowserWindow({
     ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
     backgroundColor: '#12101a',
-    icon: path.join(app.getAppPath(), 'resources', 'icons', 'icon.png'),
+    icon,
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
       // "Cannot use import statement outside a module", verificado en el smoke de este
@@ -783,13 +784,40 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
     },
   });
 
-  // Bloquea siempre `window.open`/enlaces `target=_blank`; los http(s) se abren en el
-  // navegador del sistema en vez de crear una `BrowserWindow` sin las mismas protecciones.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  // Bloquea `window.open`/enlaces `target=_blank`; los http(s) se abren en el navegador del
+  // sistema en vez de crear una `BrowserWindow` sin las mismas protecciones. The one exception is
+  // the detached scenario window (design 2c): an empty `about:blank` of the app's own origin that
+  // the renderer fills with a React portal, so it needs no preload and gets none. Its size and
+  // position come from the features string of `window.open`.
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (permiteVentanaHija(url, frameName)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          useContentSize: true,
+          minWidth: 420,
+          minHeight: 360,
+          backgroundColor: '#12101a',
+          autoHideMenuBar: true,
+          icon,
+          webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+        },
+      };
+    }
     if (url.startsWith('http://') || url.startsWith('https://')) {
       void shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+  // The child opens nothing and navigates nowhere; a saved position on a monitor that is gone is
+  // recentred, like the main window's. It closes with the main window so `window-all-closed` quits.
+  const hijas = new Set<BrowserWindow>();
+  win.webContents.on('did-create-window', (hija) => {
+    hija.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    hija.webContents.on('will-navigate', (event) => event.preventDefault());
+    if (!fitsAnyDisplay(hija.getBounds(), screen.getAllDisplays().map((d) => d.bounds))) hija.center();
+    hijas.add(hija);
+    hija.on('closed', () => hijas.delete(hija));
   });
 
   // Cualquier navegación (barra de direcciones no existe, pero sí `<a href>`/redirects/JS) que no
@@ -812,6 +840,7 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
     if (mainWindow === win) windowLoaded = false;
   });
   win.on('closed', () => {
+    for (const hija of hijas) if (!hija.isDestroyed()) hija.close();
     if (mainWindow === win) {
       mainWindow = null;
       windowLoaded = false;
@@ -926,7 +955,8 @@ app.whenReady().then(async () => {
   await loadPromise;
 });
 
-// Esta beta tiene una sola ventana: cerrar termina la sesión también en macOS.
+// Esta beta tiene una sola ventana de proyecto (la del escenario desacoplado se cierra con ella):
+// cerrar termina la sesión también en macOS.
 // Las guardias de dirty ya se resolvieron antes de window-all-closed; al volver a
 // abrir desde Finder se crea una sesión nueva con sus handlers IPC propios.
 app.on('window-all-closed', () => {

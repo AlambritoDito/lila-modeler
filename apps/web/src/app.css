@@ -1589,3 +1589,174 @@ body {
 .bienvenida-tema .muestra { background: var(--accent-primary); flex: none; height: 9px; width: 9px; }
 .bienvenida .enlace { background: none; border: 0; color: var(--accent-tertiary); cursor: pointer; font: inherit; padding: 0; }
 @media (max-width: 900px) { .bienvenida { flex-direction: column; } .bienvenida-izq { border-right: 0; border-bottom: 2px solid var(--border); flex: none; } }
+
+/* ---------- escenario desacoplado (diseño 2c) ---------- */
+
+/* The toggle of the top bar, left of Run: outlined in the tertiary accent, the same 30 px box as
+   the icon buttons next to it. */
+.boton.desacoplar {
+  background: none;
+  border-color: var(--accent-tertiary);
+  color: var(--accent-tertiary);
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  height: 30px;
+  letter-spacing: 0.08em;
+  padding: 0 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.boton.desacoplar[aria-pressed='true'] {
+  background: var(--bg-hover);
+}
+
+/* What stays in the docked panel while the scenario lives in its own window. */
+.panel-desacoplado {
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: calc(12px * var(--espacio, 1)) 12px;
+}
+
+.panel-desacoplado p {
+  color: var(--fg-muted);
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* The child window: a column, not the grid of the main `.app` (same classes, so the density and
+   the decorated themes apply there too). */
+.app.ventana-flotante {
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.ventana-titulo {
+  align-items: center;
+  background: var(--bg-elevated);
+  border-bottom: 2px solid var(--border);
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.ventana-titulo > span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ventana-titulo .acoplar {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--accent-tertiary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0.1em;
+  padding: calc(4px * var(--espacio, 1)) 0;
+  text-transform: uppercase;
+}
+
+.panel.ventana-cuerpo {
+  border-left: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ventana-cuerpo .escenario {
+  flex: 1;
+}
+
+/* Labels flush left in small caps, square 30 px fields with mono values (artboard 2c). */
+.ventana-flotante .campo-schema label,
+.ventana-flotante .campo-schema .etiqueta {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ventana-flotante .campo-schema input:not([type='checkbox']),
+.ventana-flotante .campo-schema select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  border-radius: 0;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  height: 30px;
+}
+
+/* Two columns once the panel is wide enough: the detached window, or a wide docked panel. The
+   grid goes on each section's `::details-content` —the box that wraps what follows the summary;
+   on `<details>` itself its children are not grid items— and on each record entry (a pool, a
+   calendar). Browsers without the pseudo-element keep one column. A plain field shares a row
+   with the next plain field, or sits on the left of its own help line; lists, records, nested
+   groups and the weekly calendar grid span the row. `max()` caps it at two columns. */
+.ventana-flotante .escenario details[open]::details-content,
+.ventana-flotante .escenario .entrada,
+.panel.ancho .escenario details[open]::details-content,
+.panel.ancho .escenario .entrada {
+  align-items: start;
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(max(220px, calc(50% - 8px)), 1fr));
+}
+
+.ventana-flotante .escenario :is(details, .entrada) > *,
+.panel.ancho .escenario :is(details, .entrada) > * {
+  grid-column: 1 / -1;
+}
+
+.ventana-flotante .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)),
+.ventana-flotante .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)) + .ayuda,
+.panel.ancho .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)),
+.panel.ancho .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)) + .ayuda {
+  grid-column: auto;
+}
+
+.ventana-flotante .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)):has(+ .ayuda),
+.panel.ancho .escenario :is(details, .entrada) > .campo-schema:not(:has(fieldset, .anidado, .calendario)):has(+ .ayuda) {
+  grid-column: 1;
+}
+
+/* Footer of the window: the reminder on the left, Duplicate (outlined) and Save (filled) on the
+   right. Sticky, and pushed to the bottom when the form is short. */
+.escenario-pie {
+  align-items: center;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  margin: auto -12px -12px;
+  padding: calc(8px * var(--espacio, 1)) 12px;
+  position: sticky;
+}
+
+.escenario-pie > span {
+  color: var(--fg-muted);
+  font-size: 10px;
+  margin-right: auto;
+}
+
+.escenario-pie .boton:not(.primario) {
+  background: none;
+}
+
+.escenario-pie .boton.primario {
+  order: 1;
+}

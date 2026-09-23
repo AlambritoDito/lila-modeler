@@ -1668,6 +1668,8 @@ export interface ScenarioPanelProps {
   /** Id del elemento seleccionado en el lienzo, o `null`. */
   seleccion: string | null;
   onSeleccionar: (id: string | null) => void;
+  /** Drawn inside the detached window (design 2c): Duplicate and Save move to a footer. */
+  enVentana?: boolean;
 }
 
 export function ScenarioPanel({
@@ -1679,6 +1681,7 @@ export function ScenarioPanel({
   ir,
   seleccion,
   onSeleccionar,
+  enVentana = false,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -1840,6 +1843,24 @@ export function ScenarioPanel({
 
   const unidad = unidadBase(ctx);
 
+  const acciones = (
+    <>
+      <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
+        {S.escenario.guardar}
+      </button>
+      <button
+        type="button"
+        className="boton"
+        onClick={() => {
+          const copia = duplicarEscenario(archivo, delta);
+          onDuplicar(copia.archivo, copia.escenario);
+        }}
+      >
+        {S.escenario.duplicar}
+      </button>
+    </>
+  );
+
   return (
     <div className="escenario">
       <div className="escenario-cabecera">
@@ -1847,19 +1868,7 @@ export function ScenarioPanel({
         <span className={errores > 0 ? 'error' : 'aviso'}>
           {S.escenario.conteo(errores, avisos)}
         </span>
-        <button type="button" className="boton" onClick={onGuardar}>
-          {S.escenario.guardar}
-        </button>
-        <button
-          type="button"
-          className="boton"
-          onClick={() => {
-            const copia = duplicarEscenario(archivo, delta);
-            onDuplicar(copia.archivo, copia.escenario);
-          }}
-        >
-          {S.escenario.duplicar}
-        </button>
+        {!enVentana && acciones}
       </div>
 
       {heredaDe !== null && (
@@ -2012,6 +2021,13 @@ export function ScenarioPanel({
             ))}
           </ul>
         </details>
+      )}
+
+      {enVentana && (
+        <footer className="escenario-pie">
+          <span>{S.escenario.pieVentana}</span>
+          {acciones}
+        </footer>
       )}
     </div>
   );

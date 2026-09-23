@@ -158,6 +158,12 @@ export interface Ajustes {
   readonly idioma?: string;
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   readonly temas?: readonly TemaGuardado[];
+  /**
+   * Last position and size of the detached scenario window (design 2c). Written out instead of
+   * importing `WindowBounds`: this file is also type-checked by the web app, which must not pull
+   * `sessionState.ts` and its `node:` imports in.
+   */
+  readonly ventanaEscenario?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 }
 
 /**

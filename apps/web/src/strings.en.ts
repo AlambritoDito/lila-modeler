@@ -115,6 +115,15 @@ export const en = {
     replicacion: (actual: number, total: number): string => `Replication ${actual} of ${total}`,
     porCiento: (n: number): string => `${n} %`,
 
+    /** Detachable scenario window (design 2c): toggle in the top bar and the docked panel's stand-in. */
+    escenarioAcoplado: 'Scenario docked ↗',
+    escenarioDesacoplado: 'In its own window',
+    acoplar: 'Dock',
+    enVentanaAparte: 'The scenario is open in its own window.',
+    mostrarVentana: 'Show window',
+    ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
+    tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
+
     /** Canvas zoom controls. */
     acercar: 'Zoom in',
     alejar: 'Zoom out',
@@ -453,6 +462,8 @@ export const en = {
   escenario: {
     guardar: 'Save',
     duplicar: 'Duplicate',
+    /** Footer of the detached window, next to Duplicate and Save. */
+    pieVentana: 'changes show on the canvas instantly',
     /** Header: errors and warnings of the scenario being edited. */
     conteo: (errores: number, avisos: number): string =>
       `${errores} ${errores === 1 ? 'error' : 'errors'} · ${avisos} ${

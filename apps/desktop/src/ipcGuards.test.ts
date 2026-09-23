@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { isTrustedSender } from './ipcGuards.js';
+import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
+
+describe('permiteVentanaHija', () => {
+  it('allows only the blank scenario window', () => {
+    expect(permiteVentanaHija('about:blank', 'lila-escenario')).toBe(true);
+  });
+
+  it('rejects another frame name, an app URL or the web', () => {
+    expect(permiteVentanaHija('about:blank', 'otra')).toBe(false);
+    expect(permiteVentanaHija('about:blank', '')).toBe(false);
+    expect(permiteVentanaHija('lila://app/x', 'lila-escenario')).toBe(false);
+    expect(permiteVentanaHija('https://evil.example/', 'lila-escenario')).toBe(false);
+  });
+});
 
 describe('isTrustedSender', () => {
   it('acepta el protocolo empaquetado de la app', () => {

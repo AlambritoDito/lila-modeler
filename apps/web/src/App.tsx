@@ -36,6 +36,7 @@ import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
 import { About } from './About';
+import { abrirVentanaFlotante, geometriaDe, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
@@ -114,11 +115,16 @@ async function preferencias(): Promise<Ajustes> {
     // la densidad, que son texto y no pueden romperse.
     let temas: unknown = null;
     try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
+    let ventana: Partial<Geometria> | null = null;
+    try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null') as Partial<Geometria> | null; } catch { /* se pierde solo ella */ }
+    const geometria = ventana !== null && [ventana.x, ventana.y, ventana.width, ventana.height].every((n) => typeof n === 'number');
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
       ...(idioma === null ? {} : { idioma }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+      ...(geometria ? { ventanaEscenario: ventana as Geometria } : {}),
     };
   } catch { return {}; }
 }
@@ -137,6 +143,7 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
+    if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
@@ -331,6 +338,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * repintado por esto, y así tampoco reinicia el temporizador del propio karaoke (mismo QA). */
   const karaokeActivo = useRef(false);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
+  /**
+   * The scenario panel detached to its own window (design 2c), or `null` while docked. It is the
+   * `Window` itself: `VentanaFlotante` portals into it from this same tree, so there is no state
+   * to sync between the two.
+   */
+  const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
+  /** Last known geometry of that window; read with the preferences, written when it moves away. */
+  const geomEscenario = useRef<Geometria | undefined>(undefined);
+  const toggleEscenario = useRef<HTMLButtonElement>(null);
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
@@ -636,6 +652,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      geomEscenario.current = guardadas.ventanaEscenario;
       // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
       // mano— cae en `auto`, que es arrancar en el idioma del sistema.
       const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
@@ -735,20 +752,49 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   const ejecutarRef = useRef(ejecutar);
   ejecutarRef.current = ejecutar;
+  // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
+  // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux. It lives at
+  // component scope because the detached scenario window listens with it too (design 2c); it only
+  // reads the ref, so the copy the effect below captured on mount is as good as any later one.
+  const teclas = (e: KeyboardEvent): void => {
+    if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+    const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
+    if (accion === undefined) return;
+    e.preventDefault();
+    ejecutarRef.current(accion);
+  };
   useEffect(() => {
-    // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
-    // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux.
-    const teclas = (e: KeyboardEvent) => {
-      if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
-      if (accion === undefined) return;
-      e.preventDefault();
-      ejecutarRef.current(accion);
-    };
     window.addEventListener('keydown', teclas);
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
     return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Only a real size counts: a window already gone reports zeros. */
+  function recordarGeometria(geometria: Geometria): void {
+    if (geometria.width <= 0 || geometria.height <= 0) return;
+    geomEscenario.current = geometria;
+    recordar({ ventanaEscenario: geometria });
+  }
+  /** Detach the scenario panel (design 2c). A blocked popup leaves it docked and says why. */
+  function desacoplar(): void {
+    const ventana = abrirVentanaFlotante('lila-escenario', geomEscenario.current);
+    if (ventana === null) { setIoError(S.app.ventanaBloqueada); return; }
+    setVentanaEscenario(ventana);
+  }
+  /** Back to the panel. Idempotent: the child's own `pagehide` lands here too. */
+  function acoplar(): void {
+    const ventana = ventanaEscenario;
+    if (ventana === null) return;
+    if (!ventana.closed) { recordarGeometria(geometriaDe(ventana)); ventana.close(); }
+    setVentanaEscenario(null);
+    window.focus();
+    toggleEscenario.current?.focus();
+  }
+  const acoplarRef = useRef(acoplar);
+  acoplarRef.current = acoplar;
+  // Another project (or the app going away) docks the window: it was editing the previous one.
+  useEffect(() => () => acoplarRef.current(), [projectId]);
 
   /**
    * Abrir un `.bpmn` por asociación de archivo (LILA-072) y arranque en frío (LILA-074), o un
@@ -860,6 +906,40 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
+  /**
+   * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
+   * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
+   * on goes back to the first one; lift `paso` to the shell if anybody minds.
+   */
+  const panelEscenario = (
+    <ScenarioPanel
+      enVentana={ventanaEscenario !== null}
+      archivo={escenarioId}
+      escenarios={escenarios}
+      onCambio={(archivo, escenario) => {
+        setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+        // Cualquier padre extends editado invalida también sus descendientes.
+        setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+        // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
+        // que al cambiar de escenario en el selector (LILA-064).
+        cancelarCorrida();
+        setCorrida(null);
+      }}
+      onGuardar={() => { void guardar(); }}
+      onDuplicar={(archivo, escenario) => {
+        setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+        // Cualquier padre extends editado invalida también sus descendientes.
+        setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+        setEscenarioId(archivo);
+        cancelarCorrida();
+        setCorrida(null);
+      }}
+      ir={ir}
+      seleccion={seleccion}
+      onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
+    />
+  );
+
   return (
     <div className="app" data-densidad={densidad} data-theme={decoratedTheme}>
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
@@ -949,6 +1029,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 15.5-6.4L21 13" /></svg>
           </button>
         </div>
+        {(pestana === 'simulacion' || ventanaEscenario !== null) && (
+          <button ref={toggleEscenario} type="button" className="boton desacoplar" aria-pressed={ventanaEscenario !== null}
+            onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
+            {ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
+          </button>
+        )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
             el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo. */}
         {sim.tipo === 'simulando' ? (
@@ -1012,6 +1098,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </dialog>
 
       <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
+
+      {ventanaEscenario !== null && (
+        <VentanaFlotante
+          ventana={ventanaEscenario}
+          titulo={S.app.tituloVentanaEscenario(etiquetaEscenario(escenarioId, escenarios))}
+          tema={decoratedTheme}
+          densidad={densidad}
+          inert={ioBusy}
+          onAcoplar={acoplar}
+          onGeometria={recordarGeometria}
+          onTecla={teclas}
+        >
+          {panelEscenario}
+        </VentanaFlotante>
+      )}
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
           pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se
@@ -1171,31 +1272,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
                   S.app.cuellosSinEspera)}
             </p>
-            <ScenarioPanel
-              archivo={escenarioId}
-              escenarios={escenarios}
-              onCambio={(archivo, escenario) => {
-                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-                // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-                // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
-                // que al cambiar de escenario en el selector (LILA-064).
-                cancelarCorrida();
-                setCorrida(null);
-              }}
-              onGuardar={() => { void guardar(); }}
-              onDuplicar={(archivo, escenario) => {
-                setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-                // Cualquier padre extends editado invalida también sus descendientes.
-                setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-                setEscenarioId(archivo);
-                cancelarCorrida();
-                setCorrida(null);
-              }}
-              ir={ir}
-              seleccion={seleccion}
-              onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
-            />
+            {ventanaEscenario === null ? panelEscenario : (
+              <div className="panel-desacoplado">
+                <p>{S.app.enVentanaAparte}</p>
+                <button type="button" className="boton" onClick={() => ventanaEscenario.focus()}>{S.app.mostrarVentana}</button>
+                <button type="button" className="boton" onClick={acoplar}>{S.app.acoplar}</button>
+              </div>
+            )}
           </div>
         ) : (
           <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
