@@ -40,7 +40,7 @@ La app **no está firmada ni notarizada** (`identity: null` en `electron-builder
 ### Primer arranque sin firma (macOS 15 y más reciente)
 
 En macOS reciente (Sequoia 15, y la línea 26/27), el primer doble clic sobre la app descargada
-queda bloqueado directamente, sin una opción de «abrir de todas formas» en el diálogo de bloqueo:
+queda bloqueado directamente, sin una opción de «abrir de todos modos» en el diálogo de bloqueo:
 
 1. Ve a **Ajustes del Sistema ▸ Privacidad y seguridad**, busca el mensaje de seguridad que nombra
    «Lila Modeler» y pulsa **Abrir de todos modos**. Luego arranca la app de nuevo (doble clic, o
@@ -265,8 +265,7 @@ esta lista a ciegas en una fecha posterior)*
 - **Solo macOS arm64 se ofrece y está probado**: los instaladores de Windows (NSIS) y Linux
   (AppImage) los compila la matriz de CI (`.github/workflows/desktop.yml`) como artefactos sin
   probar; no están adjuntos al release de la Beta 1 y nadie del proyecto los ha probado.
-- **Doble clic de `.lila` y `.bpmn` en Finder: verificado por el lead en macOS 27 arm64 para la
-  Beta 1** — ver las notas de la versión. La Beta 1 verificó la ruta open-file de macOS para `.lila` en macOS 27.0 (arm64) con `open -a`, el mismo evento que Finder envía al hacer doble clic, con la app cerrada y ya abierta, incluido un nombre con acentos y raya. El doble clic físico en Finder, y abrir así un `.bpmn`, no se ejercieron.
+- **Doble clic en Finder**: La Beta 1 verificó la ruta open-file de macOS para `.lila` en macOS 27.0 (arm64) con `open -a`, el mismo evento que Finder envía al hacer doble clic, con la app cerrada y ya abierta, incluido un nombre con acentos y raya. El doble clic físico en Finder, y abrir así un `.bpmn`, no se ejercieron.
 - **Guardar un `.lila` abierto por doble clic o argumento de lanzamiento está arreglado en la
   Beta 1 (#378)**. verificado en la Beta 1 con la regresión en Electron real de `tools/e2e-desktop-open-path.mjs` (argumento de arranque, evento open-file, recientes, diálogo; ASCII, espacios, acentos en NFC y NFD)
 - **Mensajes de error crudos**: algunos errores llegan sin traducir a la interfaz — el JSON crudo
