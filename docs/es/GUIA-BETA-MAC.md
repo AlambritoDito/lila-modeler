@@ -267,7 +267,7 @@ esta lista a ciegas en una fecha posterior)*
   probar; no están adjuntos al release de la Beta 1 y nadie del proyecto los ha probado.
 - **Doble clic en Finder**: La Beta 1 verificó la ruta open-file de macOS para `.lila` en macOS 27.0 (arm64) con `open -a`, el mismo evento que Finder envía al hacer doble clic, con la app cerrada y ya abierta, incluido un nombre con acentos y raya. El doble clic físico en Finder, y abrir así un `.bpmn`, no se ejercieron.
 - **Guardar un `.lila` abierto por doble clic o argumento de lanzamiento está arreglado en la
-  Beta 1 (#378)**. verificado en la Beta 1 con la regresión en Electron real de `tools/e2e-desktop-open-path.mjs` (argumento de arranque, evento open-file, recientes, diálogo; ASCII, espacios, acentos en NFC y NFD)
+  Beta 1 (#378)**. Verificado en la Beta 1 con la regresión en Electron real de `tools/e2e-desktop-open-path.mjs` (argumento de arranque, evento open-file, recientes, diálogo; ASCII, espacios, acentos en NFC y NFD)
 - **Mensajes de error crudos**: algunos errores llegan sin traducir a la interfaz — el JSON crudo
   de validación de `zod` (por ejemplo, un escenario que referencia un id de tarea inexistente) y
   el texto genérico de Electron "Error invoking remote method…" (por ejemplo, al guardar en una
