@@ -783,8 +783,8 @@ export const en = {
      * and the count, this note explains what it means for the numbers on screen.
      */
     notaReplicacionesSinObservaciones:
-      'Some replications had no observation for this element; its time statistics use the ' +
-      'replications that did (see n in the results file).',
+      'Some replications did not observe the subject named in the warning; its statistics use ' +
+      'only the replications that did (see n in the results file).',
   },
 
   /* ------------------------------------------------------------------ *
@@ -803,6 +803,16 @@ export const en = {
     sinSignificancia:
       'No confidence intervals in this comparison: at least 2 replications per run are needed, ' +
       'so no significance marker is shown below.',
+    /**
+     * #356/#385 QA on PR #385: the generic `sinSignificancia` above says "at least 2
+     * replications are needed", which is false when the real reason is a legacy run (no `n`)
+     * mixed with a new one (with `n`) — both can well have 30 replications each. `CompareView`
+     * picks this text instead of `sinSignificancia` when `compareWarnings().mixedReplicationDefinitions`
+     * is the actual reason `significanceAvailable` is `false`.
+     */
+    sinSignificanciaMixtas:
+      'Significance is not shown: the compared runs use different replication statistics (one ' +
+      'was calculated before 1.0.0-beta.1).',
     leyenda:
       ' significant difference (CI95 without overlap). Highlighted cells are the ones that ' +
       'changed against the base.',

@@ -38,6 +38,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
+import { hasLegacyReplications } from './compareWarnings.js';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -615,19 +616,6 @@ function tabButtonStyle(active: boolean): CSSProperties {
  * argumentos. Exportada aparte para que el test la compare directo contra `elementsCsv`/
  * `flowsCsv`/`resourcesCsv`/`processCsv` sin tener que montar el componente.
  */
-/**
- * `true` when this result has a cross-replication summary and at least one of its KPIs was
- * computed before 1.0.0-beta.1 (no `n`, previous definition: replications without an observation
- * counted as zero — `docs/RESULTS_FORMAT.md` § 8, #356/#385). Every KPI of a given result shares
- * the same definition, so the first entry answers for all of them.
- */
-export function hasLegacyReplications(result: RunResult): boolean {
-  const kpis = result.replications?.kpis;
-  if (kpis === undefined) return false;
-  const first = Object.values(kpis)[0];
-  return first !== undefined && first.n === undefined;
-}
-
 export function buildResultCsvExports(
   ir: ProcessIR,
   scenario: ResolvedScenario,
@@ -648,6 +636,8 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
   const names = resourceNames(scenario);
   const csv = buildResultCsvExports(ir, scenario, result);
   const outcomes = outcomeRows(ir, result);
+  // #356/#385: `undefined` (no replications summary at all) is falsy here same as `false`.
+  const legacyReplications = hasLegacyReplications(result) === true;
   // Un solo libro para toda la vista: las cinco hojas ya llevan las cuatro tablas, así que el
   // botón exporta lo mismo esté abierta la pestaña que esté.
   const xlsxFilename = `${scenario.name}.xlsx`;
@@ -746,7 +736,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
 
-      {(result.warnings.length > 0 || hasLegacyReplications(result)) && (
+      {(result.warnings.length > 0 || legacyReplications) && (
         <section style={sectionStyle}>
           <h2 style={h2Style}>{S.resultados.avisos}</h2>
           {result.warnings.length > 0 && (
@@ -762,7 +752,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
           {result.warnings.some((warning) => warning.startsWith(REPLICATIONS_WITHOUT_OBSERVATIONS_CODE)) && (
             <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesSinObservaciones}</p>
           )}
-          {hasLegacyReplications(result) && (
+          {legacyReplications && (
             <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>
           )}
         </section>

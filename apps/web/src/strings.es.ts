@@ -751,8 +751,8 @@ export const es: Strings = {
       'en las medias.',
     /** Nota bajo los avisos cuando la corrida reporta `W-REPLICACIONES-SIN-OBSERVACIONES` (#356). */
     notaReplicacionesSinObservaciones:
-      'Algunas replicaciones no tuvieron observación para este elemento; sus estadísticas de ' +
-      'tiempo usan las replicaciones que sí la tuvieron (ver n en el archivo de resultados).',
+      'Algunas replicaciones no observaron el sujeto que nombra el aviso; sus estadísticas usan ' +
+      'solo las replicaciones que sí lo hicieron (ver n en el archivo de resultados).',
   },
 
   /* ------------------------------------------------------------------ *
@@ -771,6 +771,10 @@ export const es: Strings = {
     sinSignificancia:
       'Sin intervalos de confianza en esta comparación: hacen falta al menos 2 réplicas en cada ' +
       'corrida, así que ningún marcador de significancia se muestra abajo.',
+    /** #356/#385: razón real cuando `mixedReplicationDefinitions` y no la falta de réplicas. */
+    sinSignificanciaMixtas:
+      'No se muestra la significancia: las corridas comparadas usan estadísticas de replicación ' +
+      'distintas (una se calculó antes de 1.0.0-beta.1).',
     leyenda:
       ' diferencia significativa (IC95 sin solapamiento). Las celdas resaltadas son las que ' +
       'cambiaron contra la base.',

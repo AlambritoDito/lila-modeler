@@ -49,10 +49,22 @@ export interface CompareWarningsResult {
   warnings: string[];
   /** `false` si mezclar monedas invalida cualquier delta de costo entre corridas. */
   costsComparable: boolean;
-  /** `false` si alguna corrida no tiene al menos 2 réplicas: sin IC95, sin significancia. */
+  /**
+   * `false` si alguna corrida no tiene al menos 2 réplicas (sin IC95) o si las corridas mezclan
+   * definiciones de replicación (`mixedReplicationDefinitions`): en ninguno de los dos casos hay
+   * una comparación de IC95 en la que confiar.
+   */
   significanceAvailable: boolean;
   /** `true` si las corridas no comparten `baseTimeUnit`; cada una se formatea con el suyo. */
   unitsMixed: boolean;
+  /**
+   * `true` si conviven, entre las corridas comparadas, una calculada antes de 1.0.0-beta.1 (sin
+   * `n`) y una calculada después (con `n`), #356/#385. Distinto de "todas legado", que no es una
+   * mezcla — es la misma definición en las dos — y no bloquea la significancia. `CompareView` lo
+   * usa para elegir el texto exacto de la sección "Significancia" cuando no hay marcador: la razón
+   * no es siempre "faltan réplicas".
+   */
+  mixedReplicationDefinitions: boolean;
 }
 
 /**
@@ -121,21 +133,30 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
     warnings.push(S.comparar.avisoReplicas(replications));
   }
 
-  return { costsComparable, significanceAvailable, unitsMixed, warnings };
+  return { costsComparable, mixedReplicationDefinitions, significanceAvailable, unitsMixed, warnings };
 }
 
 /**
- * `true`/`false` si `result.replications.kpis` existe y tiene al menos una entrada, `undefined`
- * si no hay resumen de replicaciones que mirar (una sola replicación, o cancelada con menos de
- * dos completas). Todas las entradas de una misma corrida comparten definición (#356/#385), así
- * que basta mirar una para saber si trae `n`.
+ * `true` cuando `result.replications.kpis` existe y **alguna** de sus entradas no trae `n`: la
+ * corrida se guardó antes de 1.0.0-beta.1 y se calculó con la definición anterior (replicaciones
+ * sin observación contadas como cero, `docs/RESULTS_FORMAT.md` § 8, #356/#385). `false` cuando el
+ * resumen existe y todas sus entradas traen `n`. `undefined` cuando no hay resumen de
+ * replicaciones que mirar (una sola replicación, o cancelada con menos de dos completas) — ese
+ * caso no es "legado" ni "nuevo", es "no aplica", y así lo distingue `runMetaFrom` de un `false`
+ * real (una corrida legado de 30 réplicas comparada con una corrida nueva de 1 no es una mezcla de
+ * definiciones, #385 QA). Mira **todas** las entradas y no solo la primera: si el motor alguna vez
+ * emite un resumen con una mezcla, `.some` no se deja engañar por una entrada moderna que salga
+ * primero por el orden de inserción del objeto.
+ *
+ * Único punto de esta comprobación en la app — `ResultsView` la reutiliza para decidir si muestra
+ * el aviso de "calculado antes de 1.0.0-beta.1" (#356).
  */
-function isLegacyReplications(result: RunResult): boolean | undefined {
+export function hasLegacyReplications(result: RunResult): boolean | undefined {
   const kpis = result.replications?.kpis;
   if (kpis === undefined) return undefined;
-  const first = Object.values(kpis)[0];
-  if (first === undefined) return undefined;
-  return first.n === undefined;
+  const entries = Object.values(kpis);
+  if (entries.length === 0) return undefined;
+  return entries.some((kpi) => kpi.n === undefined);
 }
 
 /**
@@ -145,7 +166,7 @@ function isLegacyReplications(result: RunResult): boolean | undefined {
  * está declarada en este archivo; no hay más contrato que ese.
  */
 export function runMetaFrom(name: string, scenario: ResolvedScenario, result: RunResult): CompareRunMeta {
-  const legacyReplications = isLegacyReplications(result);
+  const legacyReplications = hasLegacyReplications(result);
   return {
     baseTimeUnit: scenario.run.baseTimeUnit as BaseTimeUnit,
     name,
