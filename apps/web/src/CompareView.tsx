@@ -34,6 +34,7 @@ import {
   exportButtonStyle,
   tabLabels,
   h2Style,
+  notaStyle,
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
@@ -411,7 +412,11 @@ export function CompareView({
   const costsComparable = globalWarnings.costsComparable;
   const significanceAvailable = globalWarnings.significanceAvailable;
   const perRunWarnings = (runs ?? []).some((run) => (run.warnings?.length ?? 0) > 0);
-  const showWarningsPanel = runs !== undefined && (globalWarnings.warnings.length > 0 || perRunWarnings);
+  // #356/#385: every compared run stored before 1.0.0-beta.1 (no `n` anywhere) is not a *mixed*
+  // comparison — `compareWarnings` only warns when legacy and new runs are mixed — but the reader
+  // still has to know the means below use the old definition. Shown once, not per column.
+  const allLegacy = (runs ?? []).length > 0 && (runs ?? []).every((run) => run.legacyReplications === true);
+  const showWarningsPanel = runs !== undefined && (globalWarnings.warnings.length > 0 || perRunWarnings || allLegacy);
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
@@ -476,6 +481,7 @@ export function CompareView({
               ))}
             </ul>
           )}
+          {allLegacy && <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>}
           {(runs ?? []).map((run, index) => {
             const warnings = run.warnings ?? [];
             if (warnings.length === 0) return null;

@@ -445,3 +445,74 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
     expect(tresHtml).not.toContain('no comparable');
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * #356/#385: mezclar una corrida legado (sin `n`, calculada antes de 1.0.0-beta.1) con una nueva
+ * (con `n`) puede marcar una diferencia "significativa" falsa — revisión de PR #384.
+ * ------------------------------------------------------------------ */
+
+describe('CompareView (#356/#385): definiciones de replicación mezcladas', () => {
+  test('corrida legado vs corrida nueva: sin marca de significancia y con el aviso propio', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, n: 30, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, n: 30, sd: 1 };
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const row = comparison.rows.find((r) => r.kpi === 'elements.A.resourceWait.mean')!;
+    expect(row.significant[1]).toBe(true); // compare() sí lo marca: no conoce la definición.
+
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: true, name: 'AS-IS', replications: 30 },
+      { legacyReplications: false, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).not.toContain('Diferencia significativa');
+    expect(html).toContain(
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes de 1.0.0-beta.1); no se muestran las marcas de significancia.',
+    );
+  });
+
+  test('las dos corridas legado: no es mezcla, la significancia sigue disponible', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, sd: 1 } as unknown as KpiSummary;
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, sd: 1 } as unknown as KpiSummary;
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: true, name: 'AS-IS', replications: 30 },
+      { legacyReplications: true, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain('Diferencia significativa');
+    expect(html).not.toContain('estadísticas de replicación distintas');
+    expect(html).toContain('Calculado antes de 1.0.0-beta.1');
+  });
+
+  test('las dos corridas nuevas: comportamiento sin cambios, sin aviso ni nota de legado', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, n: 30, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, n: 30, sd: 1 };
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: false, name: 'AS-IS', replications: 30 },
+      { legacyReplications: false, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain('Diferencia significativa');
+    expect(html).not.toContain('estadísticas de replicación distintas');
+    expect(html).not.toContain('Calculado antes de 1.0.0-beta.1');
+  });
+});

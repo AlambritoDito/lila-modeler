@@ -126,10 +126,20 @@ export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14
 const SATURATION_CODE = 'W-RECURSO-SATURADO';
 
 /**
+ * Prefix of the "some replications had no observation" warning (`docs/RESULTS_FORMAT.md` § 9,
+ * #356). Same pattern as `SATURATION_CODE`: the warning names the subject and the count, the
+ * footnote below explains what `n` means for the time statistics shown.
+ */
+const REPLICATIONS_WITHOUT_OBSERVATIONS_CODE = 'W-REPLICACIONES-SIN-OBSERVACIONES';
+
+/**
  * Footnote under a table or a list: what the number above means, in the same muted grey as the
  * header line (#357, #358). It explains, it never carries a value.
+ *
+ * Exported so `CompareView` (#356/#385) can print the legacy-replications notice with the exact
+ * same styling instead of redeclaring it.
  */
-const notaStyle: CSSProperties = {
+export const notaStyle: CSSProperties = {
   color: 'var(--fg-muted)',
   fontSize: 12,
   margin: '-8px 0 16px',
@@ -605,6 +615,19 @@ function tabButtonStyle(active: boolean): CSSProperties {
  * argumentos. Exportada aparte para que el test la compare directo contra `elementsCsv`/
  * `flowsCsv`/`resourcesCsv`/`processCsv` sin tener que montar el componente.
  */
+/**
+ * `true` when this result has a cross-replication summary and at least one of its KPIs was
+ * computed before 1.0.0-beta.1 (no `n`, previous definition: replications without an observation
+ * counted as zero — `docs/RESULTS_FORMAT.md` § 8, #356/#385). Every KPI of a given result shares
+ * the same definition, so the first entry answers for all of them.
+ */
+export function hasLegacyReplications(result: RunResult): boolean {
+  const kpis = result.replications?.kpis;
+  if (kpis === undefined) return false;
+  const first = Object.values(kpis)[0];
+  return first !== undefined && first.n === undefined;
+}
+
 export function buildResultCsvExports(
   ir: ProcessIR,
   scenario: ResolvedScenario,
@@ -723,16 +746,24 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
 
-      {result.warnings.length > 0 && (
+      {(result.warnings.length > 0 || hasLegacyReplications(result)) && (
         <section style={sectionStyle}>
           <h2 style={h2Style}>{S.resultados.avisos}</h2>
-          <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
-            {result.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
+          {result.warnings.length > 0 && (
+            <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
+              {result.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
           {result.warnings.some((warning) => warning.startsWith(SATURATION_CODE)) && (
             <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaSaturacion}</p>
+          )}
+          {result.warnings.some((warning) => warning.startsWith(REPLICATIONS_WITHOUT_OBSERVATIONS_CODE)) && (
+            <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesSinObservaciones}</p>
+          )}
+          {hasLegacyReplications(result) && (
+            <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>
           )}
         </section>
       )}

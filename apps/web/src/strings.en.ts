@@ -767,6 +767,24 @@ export const en = {
       'while the pool was full, so the number the warning shows — that ratio, or the utilization ' +
       'when it fires through that door — is observed over the simulated horizon, not the load of ' +
       'all external demand.',
+    /**
+     * #356/#385: results stored before 1.0.0-beta.1 carry no `n` and were computed with the
+     * previous definition of the cross-replication mean — replications without an observation
+     * counted as zero (`docs/RESULTS_FORMAT.md` § 8). They are never recomputed, so the reader is
+     * told once, next to the warnings, instead of silently reading a mean that means something
+     * different from a run made after that version. `CompareView` reuses the same sentence.
+     */
+    notaReplicacionesLegado:
+      'Calculated before 1.0.0-beta.1: replications without observations counted as zero in the ' +
+      'means.',
+    /**
+     * Footnote under the warnings when the run reports `W-REPLICACIONES-SIN-OBSERVACIONES`
+     * (#356), the same pattern as `notaSaturacion` above: the warning's own text names the subject
+     * and the count, this note explains what it means for the numbers on screen.
+     */
+    notaReplicacionesSinObservaciones:
+      'Some replications had no observation for this element; its time statistics use the ' +
+      'replications that did (see n in the results file).',
   },
 
   /* ------------------------------------------------------------------ *
@@ -810,6 +828,15 @@ export const en = {
       'the unit of its own run.',
     avisoSignificancia:
       'No confidence intervals: ≥ 2 replications are needed to talk about significance.',
+    /**
+     * #356/#385: a legacy run (stored before 1.0.0-beta.1, no `n`) compared against a new one
+     * (with `n`) can mark a false "significant" difference — `compare()` subtracts the raw
+     * numbers without knowing they come from two different definitions. Comparing two legacy
+     * runs against each other is not this case (same definition on both sides).
+     */
+    avisoReplicacionesMixtas:
+      'The compared runs use different replication statistics (one was calculated before ' +
+      '1.0.0-beta.1); significance marks are not shown.',
     avisoSemillas: (semillas: readonly number[]): string =>
       `Different seeds between runs (${semillas.join(' vs ')}): the runs do not share the same ` +
       'random sequence.',
