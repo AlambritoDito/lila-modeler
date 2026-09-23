@@ -1231,7 +1231,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           corridas={latest}
           validacion={validacion}
           onElegir={elegirEscenario}
-          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}); anadirEscenario(copia.archivo, copia.escenario); }}
+          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}, Object.keys(escenarios)); anadirEscenario(copia.archivo, copia.escenario); }}
           onProblema={(id) => modelador?.seleccionar?.(id)}
           enVentana={ventanaEscenario !== null ? escenarioId : null}
         />
