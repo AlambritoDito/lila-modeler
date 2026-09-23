@@ -19,6 +19,8 @@ interface Props {
   readonly onProblema: (id: string) => void;
   /** Scenario open in the detached window (design 2c), or `null` while it is docked. */
   readonly enVentana?: string | null;
+  /** Region id, for the `aria-controls` of the panel toggles (#412). */
+  readonly id?: string;
 }
 
 /** BASE = a scenario with no `extends` parent. The rail and the panel header both ask this. */
@@ -30,7 +32,7 @@ const nombre = (id: string, escenarios: Props['escenarios']): string => {
   return typeof n === 'string' ? n : id;
 };
 
-export function RailEscenarios({ escenarios, activo, corridas, validacion, onElegir, onNuevo, onProblema, enVentana = null }: Props): React.JSX.Element {
+export function RailEscenarios({ escenarios, activo, corridas, validacion, onElegir, onNuevo, onProblema, enVentana = null, id }: Props): React.JSX.Element {
   const S = useStrings();
   function subtitulo(id: string): string {
     if (id === enVentana) return S.rail.enVentana;
@@ -41,7 +43,7 @@ export function RailEscenarios({ escenarios, activo, corridas, validacion, onEle
   }
   const ir = (): void => { if (validacion.primero !== null) onProblema(validacion.primero); };
   return (
-    <nav className="rail-escenarios" aria-label={S.rail.titulo}>
+    <nav id={id} className="rail-escenarios" aria-label={S.rail.titulo}>
       <div className="rail-cabecera">
         <span>{S.rail.titulo}</span>
         <button type="button" className="rail-nuevo" aria-label={S.rail.nuevo} title={S.rail.nuevo} onClick={onNuevo}>+</button>
@@ -50,7 +52,7 @@ export function RailEscenarios({ escenarios, activo, corridas, validacion, onEle
         {Object.keys(escenarios).map((id) => (
           <button key={id} type="button" className="rail-fila" aria-current={id === activo ? 'true' : undefined} onClick={() => onElegir(id)}>
             <span className="rail-nombre">
-              {nombre(id, escenarios)}
+              <span className="rail-texto">{nombre(id, escenarios)}</span>
               {esEscenarioBase(escenarios[id]) && <span className="insignia-base">{S.rail.base}</span>}
             </span>
             <span className="rail-sub">{subtitulo(id)}</span>

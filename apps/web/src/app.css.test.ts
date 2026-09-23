@@ -118,13 +118,24 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   // inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece de 53 px a 60-67.
   expect(bloque('.modo')).toContain('white-space: nowrap');
 
-  const buscador = bloque('.buscador');
-  // Shrinks before the brand lockup (flex-shrink 1): the project name stays whole above 1280 px.
-  expect(buscador).toContain('flex: 0 99 210px');
+  const buscador = bloqueDeLinea('.buscador');
+  // Its zone is the bar's spring (#423): basis 0, so it gives way before the brand lockup, and the
+  // field inside keeps at least 120 px or wraps out of sight instead of an empty box.
+  const zona = bloque('.zona-buscador');
+  expect(zona).toContain('flex: 1 1 0');
+  expect(zona).toContain('flex-wrap: wrap');
+  expect(zona).toContain('justify-content: flex-end');
+  expect(zona).toContain('height: 30px');
+  expect(zona).toContain('min-width: 0');
+  expect(zona).toContain('overflow: hidden');
+  const muelle = bloque('.zona-buscador::before');
+  expect(muelle).toContain('flex: 1 0 0');
+  expect(muelle).toContain('height: 0');
+  expect(buscador).toContain('flex: 0 1 210px');
+  expect(buscador).toContain('min-width: 120px');
   // And goes away below 1320 px, where even at its minimum it left the Spanish project name short
   // (QA of #393).
-  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.buscador \{\s*display: none;/);
-  expect(buscador).toContain('min-width: 0');
+  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.zona-buscador \{\s*display: none;/);
   // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
   // solo el `flex`, no los dos.
   expect(buscador).not.toContain('width: 210px');

@@ -236,28 +236,23 @@ export function insertar(servicios: Servicios, figura: Figura): void {
 interface Props {
   /** `null` mientras el lienzo no está montado: la paleta se pinta igual, pero inerte. */
   servicios: Servicios | null;
+  /**
+   * Icons-only mode. It lives in `App.tsx` (#406) because the left column divider snaps to it;
+   * `App` also keeps it in `localStorage` under `lila.paleta`, as before.
+   */
+  compacta: boolean;
+  onCompacta: () => void;
+  /** Region id, for the `aria-controls` of the panel toggles (#412). */
+  id?: string;
 }
 
-/** Clave de `localStorage` del modo compacto; el resto de preferencias viven en `App.tsx`. */
-const CLAVE = 'lila.paleta';
-
-export function Paleta({ servicios }: Props): React.JSX.Element {
+export function Paleta({ servicios, compacta, onCompacta, id }: Props): React.JSX.Element {
   const S = useStrings();
   const [filtro, setFiltro] = useState('');
-  const [compacta, setCompacta] = useState(() => {
-    try { return localStorage.getItem(CLAVE) === 'compacta'; } catch { return false; }
-  });
   const grupos = filtrar(gruposDeFiguras(), filtro);
 
-  function cambiarCompacta(): void {
-    setCompacta((antes) => {
-      try { localStorage.setItem(CLAVE, antes ? 'normal' : 'compacta'); } catch { /* modo privado: no persiste, no rompe */ }
-      return !antes;
-    });
-  }
-
   return (
-    <div className={compacta ? 'paleta compacta' : 'paleta'}>
+    <div id={id} className={compacta ? 'paleta compacta' : 'paleta'}>
       <div className="paleta-filtro">
         {/* En compacto el campo no cabe: queda solo el botón, y filtrar es volver a la lista. */}
         {!compacta && (
@@ -266,7 +261,7 @@ export function Paleta({ servicios }: Props): React.JSX.Element {
             <input type="search" value={filtro} placeholder={S.paleta.filtrar} aria-label={S.paleta.filtrar} onChange={(e) => setFiltro(e.target.value)} />
           </label>
         )}
-        <button type="button" className="boton icono" aria-pressed={compacta} title={compacta ? S.paleta.salirCompacto : S.paleta.entrarCompacto} aria-label={S.paleta.modoCompacto} onClick={cambiarCompacta}>
+        <button type="button" className="boton icono" aria-pressed={compacta} title={compacta ? S.paleta.salirCompacto : S.paleta.entrarCompacto} aria-label={S.paleta.modoCompacto} onClick={onCompacta}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
         </button>
       </div>

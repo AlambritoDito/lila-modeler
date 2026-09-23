@@ -199,6 +199,25 @@ export const en = {
     nuevoDiagrama: 'New diagram',
     /** Divider between the canvas and the right panel (design 2a). */
     redimensionarPanel: 'Resize the right panel',
+    /** Divider between the left column and the canvas (#406). */
+    redimensionarIzquierda: 'Resize the left column',
+    /**
+     * Panel visibility toggles, top bar right (#412): the region names label the buttons and the
+     * items of the «View» menu that replaces them in narrow windows; the titles carry the key.
+     */
+    vista: 'View',
+    regiones: {
+      izquierda: 'Left column',
+      derecha: 'Right panel',
+      diagramas: 'Diagram tabs',
+      estado: 'Status bar',
+    },
+    tituloRegiones: {
+      izquierda: 'Show or hide the left column (Shift+Tab on the canvas)',
+      derecha: 'Show or hide the right panel (Tab on the canvas)',
+      diagramas: 'Show or hide the diagram tabs',
+      estado: 'Show or hide the status bar',
+    },
 
     /** Status bar. */
     semilla: (valor: string): string => `Seed ${valor}`,
