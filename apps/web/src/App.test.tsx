@@ -21,7 +21,9 @@ import { en as T } from './strings.en';
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
+  // #420: the scenario map the panel last received, to see what the seeding wrote.
+  escenarios: {} as Record<string, { elements?: Record<string, unknown>; extends?: string }>,
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
   // corrida se pinta o se limpia el lienzo.
   abrir: vi.fn(), cuellos: vi.fn(),
@@ -49,11 +51,14 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+// Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
+vi.mock('./replay/Replay', () => ({ Replay: () => null }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
-    mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
+  ScenarioPanel: ({ onCambio, escenarios }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios }) => {
+    mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
+    mocks.escenarios = escenarios;
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
   } }));
@@ -1708,4 +1713,95 @@ it.each([
   ['#1C0F2E', false], // lila-dark
 ] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
   expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
+});
+
+// ---------- first use of an empty process (#419, #420) ----------
+
+it('a failed Run outside the Simulation tab shows in the status bar, and only once with the tab open (#419)', async () => {
+  const mensaje = 'E-SIN-START: Process_1: the process has no start event.\nE-SIN-END: Process_1: the process has no end event and no terminate.';
+  mocks.gate.mockRejectedValue(new Error(mensaje));
+  await click(T.app.pestanas.propiedades);
+  await click(T.app.ejecutar);
+  const alerta = container.querySelector<HTMLElement>('footer.estado [role="alert"].error');
+  expect(alerta?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+  expect(alerta?.title).toBe(mensaje);
+  await click(T.app.pestanas.simulacion);
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
+  expect(container.textContent!.split('E-SIN-START')).toHaveLength(2);
+});
+
+/** A process with the given start events and tasks, no flows: enough for `parseBpmn` to list them. */
+function modelo(inicios: string[], tareas: string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_semilla" isExecutable="false">
+${inicios.map((id) => `<bpmn:startEvent id="${id}"/>`).join('')}${tareas.map((id) => `<bpmn:task id="${id}"/>`).join('')}<bpmn:endEvent id="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+}
+/** Hands the canvas a new XML and lets the deferred reparse (150 ms) turn it into the next `ir`. */
+async function reparsear(xml: string) {
+  mocks.exportXml.mockResolvedValue(xml);
+  // Two acts: React renders the new revision (and arms the timer) when the first one ends.
+  await act(async () => mocks.changed());
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+}
+const asIs = () => mocks.escenarios['as-is.scenario.json']!.elements ?? {};
+
+it('a start and a task drawn on an empty process get the defaults in the BASE scenario only (#420)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  expect(asIs()).toEqual({});
+
+  await reparsear(modelo(['Start_A'], ['Task_A']));
+  expect(asIs()).toEqual({ Start_A: { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } }, Task_A: { processingTime: { type: 'constant', value: 60 } } });
+  expect(mocks.escenarios['to-be.scenario.json']).toEqual(expect.not.objectContaining({ elements: expect.anything() }));
+
+  // Task_A edited and Task_B configured before it is drawn: neither is overwritten.
+  const editado = { processingTime: { type: 'constant', value: 7 } };
+  const previo = { processingTime: { type: 'constant', value: 5 } };
+  await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { ...asIs(), Task_A: editado, Task_B: previo } }));
+  await reparsear(modelo(['Start_A', 'Start_B'], ['Task_A', 'Task_B', 'Task_C']));
+  expect(asIs()['Task_A']).toEqual(editado);
+  expect(asIs()['Task_B']).toEqual(previo);
+  expect(asIs()['Task_C']).toEqual({ processingTime: { type: 'constant', value: 60 } });
+  // A second start does not get arrivals of its own.
+  expect(asIs()['Start_B']).toBeUndefined();
+
+  // Undo/delete: the untouched seed (Task_C) goes with its node; the edited entry stays.
+  await reparsear(modelo(['Start_A'], []));
+  expect(Object.keys(asIs()).sort()).toEqual(['Start_A', 'Task_A', 'Task_B']);
+});
+
+it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  const soloTimer = { interTriggerTimer: { type: 'exponential', mean: 30 } };
+  await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { Start_A: soloTimer } }));
+  await reparsear(modelo(['Start_A', 'Start_B'], []));
+  expect(asIs()).toEqual({ Start_A: soloTimer });
+});
+
+it('a failed Run in Animate shows in the status bar (#419)', async () => {
+  mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.modos.animar);
+  await click(T.app.ejecutar);
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+});
+
+it('opening a project with unconfigured tasks does not modify its scenarios (#420)', async () => {
+  // The demo diagram is parsed first, so the opened one would look like a batch of new nodes.
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const xml = modelo(['Start_A'], ['Task_A']);
+  const doc = { version: 1, id: 'abierto', name: 'Abierto', model: { id: 'Process_semilla', name: 'model.bpmn', xml, revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, model: 'model.bpmn', run: { duration: 60 }, elements: {} } }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(xml);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  expect(container.textContent).toContain('Abierto');
+  expect(asIs()).toEqual({});
 });

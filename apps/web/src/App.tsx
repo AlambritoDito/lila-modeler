@@ -14,7 +14,7 @@ import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
+import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
@@ -561,6 +561,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : doc.scenarios;
     setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
+    // #420: the first IR of an opened project is a baseline, not a list of new nodes to seed.
+    nodosVistos.current = null; sembrados.current.clear();
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar'); setBienvenida(false);
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
@@ -629,6 +631,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     cancelarCorrida();
     const run = latest.find((r) => r.scenarioName === id);
     setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
+  }
+
+  /** Every write to an existing scenario: the panel (docked or detached) and the #420 seeding. */
+  function cambiarEscenario(archivo: string, escenario: Record<string, unknown>): void {
+    setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
+    // Editing an `extends` parent also invalidates its descendants.
+    setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
+    // The scenario changed, so the result on screen belongs to the previous one: same treatment
+    // as picking another scenario in the selector (LILA-064).
+    cancelarCorrida();
+    setCorrida(null);
   }
 
   /** A new scenario (a duplicate, from the panel or the rail) becomes the active one. */
@@ -741,6 +754,50 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
   }, [modelador, procesoId, revision]);
+
+  /**
+   * #420: a start or task drawn on the canvas gets `defaultElement` in each BASE scenario (the
+   * ones without `extends`), so a process built from «New» runs with numbers. Only nodes new
+   * against the previous IR, only entries that do not exist, and only the first start with
+   * arrivals (`triggerCount` or `interTriggerTimer`). A seeded node that goes away (delete, ⌘Z) takes its untouched seed with it: an entry
+   * for an id that is not in the model is E-ELEMENTO-DESCONOCIDO and would block Run.
+   * ponytail: «untouched» is a JSON.stringify comparison with the seed and the seeds are tracked per
+   * id, not per scenario; an edit reverted by hand in another key order counts as edited. Move to a
+   * per-scenario record with a structural equal if that ever matters.
+   */
+  const nodosVistos = useRef<Set<string> | null>(null);
+  const sembrados = useRef(new Map<string, Record<string, unknown>>());
+  useEffect(() => {
+    if (ir === null) return;
+    const vistos = nodosVistos.current;
+    nodosVistos.current = new Set(Object.keys(ir.nodes));
+    // The first IR after opening a project is only a baseline: opening never modifies it.
+    if (vistos === null) return;
+    const nuevos = Object.keys(ir.nodes).filter((id) => !vistos.has(id));
+    const idos = [...sembrados.current.keys()].filter((id) => !(id in ir.nodes));
+    if (nuevos.length === 0 && idos.length === 0) return;
+    const igual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+    for (const [archivo, escenario] of Object.entries(escenarios)) {
+      if (escenario['extends'] !== undefined) continue;
+      const elements = { ...(escenario['elements'] as Record<string, Record<string, unknown>> | undefined) };
+      let cambio = false;
+      for (const id of idos) {
+        if (id in elements && igual(elements[id], sembrados.current.get(id))) { delete elements[id]; cambio = true; }
+      }
+      for (const id of nuevos) {
+        const type = ir.nodes[id]!.type;
+        if ((type !== 'start' && type !== 'task') || elements[id] !== undefined) continue;
+        if (type === 'start' && Object.entries(elements).some(([otro, e]) => ir.nodes[otro]?.type === 'start' && (e['triggerCount'] !== undefined || e['interTriggerTimer'] !== undefined))) continue;
+        elements[id] = defaultElement(type);
+        sembrados.current.set(id, elements[id]);
+        cambio = true;
+      }
+      if (cambio) cambiarEscenario(archivo, { ...escenario, elements });
+    }
+    for (const id of idos) sembrados.current.delete(id);
+    // Only a new IR is a new diagram; `escenarios` is read as it is when the diagram changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ir]);
 
   useEffect(() => {
     void preferencias().then(async (raw) => {
@@ -1015,6 +1072,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   /**
+   * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
+   * error goes to the status bar instead, so Run never fails silently and never shows it twice.
+   * Everything that hides the tab belongs in this one condition.
+   */
+  const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar') ? sim.mensaje : null;
+
+  /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
    * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
    * on goes back to the first one; lift `paso` to the shell if anybody minds.
@@ -1024,15 +1088,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       enVentana={ventanaEscenario !== null}
       archivo={escenarioId}
       escenarios={escenarios}
-      onCambio={(archivo, escenario) => {
-        setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
-        // Cualquier padre extends editado invalida también sus descendientes.
-        setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
-        // El escenario cambió: el resultado en pantalla es del anterior. Mismo trato
-        // que al cambiar de escenario en el selector (LILA-064).
-        cancelarCorrida();
-        setCorrida(null);
-      }}
+      onCambio={cambiarEscenario}
       onGuardar={() => { void guardar(); }}
       onDuplicar={anadirEscenario}
       ir={ir}
@@ -1429,6 +1485,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="aviso">{S.app.diagramaSuelto}</span>
         )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
+        {errorSimOculto !== null && (
+          <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
+        )}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">
             {S.app.perdidaAlExportar(perdidasAlExportar.length, perdidasAlExportar.join(' · '))}
