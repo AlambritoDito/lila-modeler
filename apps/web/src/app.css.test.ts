@@ -67,6 +67,36 @@ it('el select, la casilla y la fecha nativos pierden el aspecto del navegador (d
 
   const fecha = bloque(".app input[type='datetime-local']");
   expect(fecha).toContain('border-radius: 0');
+  // Sin esto el borde suma 2 px al alto de contenido y el campo sale de 32 px, no 30 como el
+  // resto (QA de la ronda 1 de #392).
+  expect(fecha).toContain('box-sizing: border-box');
+});
+
+it('el glifo del selector de fecha no se invierte por encima de `color-scheme: dark` (QA de la ronda 1 de #392)', () => {
+  // `color-scheme: dark` ya hace que el navegador pinte el glifo en claro sobre este control
+  // oscuro; invertirlo aquí encima lo devolvía a oscuro sobre oscuro (negro sobre negro en
+  // Eva-01/Akira). La regla sigue viva —solo la opacidad—, así que se busca por su selector
+  // exacto y se comprueba que no trae ningún `filter`.
+  const glifo = bloque("input[type='datetime-local']::-webkit-calendar-picker-indicator");
+  expect(glifo).not.toEqual('');
+  expect(glifo).not.toContain('filter');
+});
+
+it('la marca y los modos no se envuelven: son lo primero que tiene que caber en la barra (QA de la ronda 1 de #392)', () => {
+  // Sin esto, «Lila Modeler» y «Validate paths»/«Validar rutas» se parten en dos líneas antes de
+  // que el buscador inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece
+  // de 53 px a 60-67.
+  const identidad = bloque('.identidad');
+  expect(identidad).toContain('flex: none');
+  expect(identidad).toContain('white-space: nowrap');
+  expect(bloque('.modo')).toContain('white-space: nowrap');
+
+  const buscador = bloque('.buscador');
+  expect(buscador).toContain('flex: 0 1 210px');
+  expect(buscador).toContain('min-width: 0');
+  // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
+  // solo el `flex`, no los dos.
+  expect(buscador).not.toContain('width: 210px');
 });
 
 it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de validación', () => {

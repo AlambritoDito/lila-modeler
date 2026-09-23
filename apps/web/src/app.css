@@ -130,6 +130,9 @@ body {
 
 .app input[type='datetime-local'] {
   background: var(--bg-base);
+  /* Sin esto el borde de 1 px arriba y abajo suma 2 px al alto de contenido y el campo sale de
+     32 px en vez de los 30 de los demás controles (QA de la ronda 1 de #392). */
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 0;
   color: var(--fg-primary);
@@ -144,12 +147,11 @@ body {
   outline-offset: 0;
 }
 
-/* El glifo del selector de fecha lo pinta el navegador con el color de texto del sistema, que en
-   un tema oscuro sale negro sobre negro pese a `color-scheme: dark` de arriba (Chrome no lo sigue
-   todavía en este control concreto). ponytail: invertirlo a mano es el remiendo; el día que Chrome
-   respete `color-scheme` aquí, este filtro se puede quitar sin que nada más cambie. */
-.app[data-esquema='oscuro'] input[type='datetime-local']::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+/* `color-scheme: dark` (arriba) ya hace que el navegador pinte el glifo del selector de fecha en
+   claro sobre este control oscuro; invertirlo aquí encima (como hacía esta regla antes) lo
+   devolvía a oscuro sobre oscuro. Sin filtro, solo la opacidad para que no compita con el resto
+   de la fila (QA de la ronda 1 de #392). */
+.app input[type='datetime-local']::-webkit-calendar-picker-indicator {
   opacity: 0.6;
 }
 
@@ -180,11 +182,16 @@ body {
 }
 
 /* Marca sin caja (diseño 2d): el icono aprobado a 26 px sobre la superficie de la barra, sin
-   fondo ni borde propios, una regla de 1 px separa el nombre del producto del proyecto. */
+   fondo ni borde propios, una regla de 1 px separa el nombre del producto del proyecto.
+   `flex: none` + `white-space: nowrap` (QA de la ronda 1 de #392): sin ellos, «Lila Modeler» y el
+   nombre de archivo se envuelven en dos líneas antes de que el buscador inerte ceda su sitio, y
+   eso crece la barra de 53 px a 60-67 (probado a 1400/1280/1180). */
 .identidad {
   align-items: center;
   display: flex;
+  flex: none;
   gap: 10px;
+  white-space: nowrap;
 }
 
 .logo {
@@ -236,6 +243,9 @@ body {
   font: inherit;
   font-weight: 500;
   padding: calc(2px * var(--espacio, 1)) 20px;
+  /* «Validate paths»/«Validar rutas» es el modo más largo: sin esto es el primero en partirse en
+     dos líneas al estrechar la ventana, antes de que el buscador inerte le ceda su sitio. */
+  white-space: nowrap;
 }
 
 .modo.activo {
@@ -311,10 +321,14 @@ body {
   border: 1px solid var(--border);
   color: var(--fg-muted);
   display: flex;
+  /* `flex: 0 1 210px` en vez de un ancho fijo (QA de la ronda 1 de #392): 210 px es el ancho de
+     fábrica, pero el campo es el único inerte de la barra (LILA-066), así que es el primero que
+     cede sitio cuando algo no cabe, antes de que la identidad o los modos se envuelvan. */
+  flex: 0 1 210px;
   gap: 8px;
   height: 30px;
+  min-width: 0;
   padding: 0 10px;
-  width: 210px;
 }
 
 .buscador input {
@@ -726,7 +740,7 @@ body {
 .propiedades-vacio {
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
+  padding: calc(16px * var(--espacio, 1)) 12px;
 }
 
 .propiedades-vacio-titulo {
@@ -746,8 +760,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: calc(14px * var(--espacio, 1));
+  padding-top: calc(14px * var(--espacio, 1));
 }
 
 .propiedades-seccion h3 {
@@ -781,7 +795,7 @@ body {
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 10px;
-  padding: 12px;
+  padding: calc(12px * var(--espacio, 1)) 12px;
 }
 
 .propiedades-cabecera [class^='bpmn-icon-'] {

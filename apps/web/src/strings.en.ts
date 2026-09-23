@@ -367,7 +367,9 @@ export const en = {
     pistaSeleccion: 'Pick a shape to edit it, or start with the process.',
     proceso: 'Process',
     elementos: 'Elements',
-    carriles: 'Lanes',
+    // «Pools / lanes» (QA of round 1 of #392): a sample with pools but no internal lanes used to
+    // read «Lanes 0» with two pools plainly on screen; this row counts both (see `PanelVacio`).
+    carriles: 'Pools / lanes',
     avisos: 'Warnings',
     atajos: 'Shortcuts',
     renombrar: 'Rename',

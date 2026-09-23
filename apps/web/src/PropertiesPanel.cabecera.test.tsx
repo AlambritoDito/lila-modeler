@@ -75,29 +75,52 @@ describe('sin selección: resumen del proceso y atajos', () => {
   // Ni una raíz `bpmn:Process` en el árbol (`Elemento` no lleva `businessObject`, así que
   // `leerSeleccion` de `PanelPropiedades` no puede elegirla sola): la única forma de que la
   // selección se quede vacía y el panel entre por la cabecera nueva.
+  //
+  // Dos pools sin carriles propios, como en el ejemplo del pedido que encontró el QA (#392, ronda
+  // 1): «Restaurante» y «Cliente» no tienen `bpmn:Lane` ninguno, así que antes esto leía
+  // «Carriles 0» con dos pools bien a la vista. Una conexión (`SequenceFlow`) de propina, sin caja
+  // —sin `width`/`height`—, para probar que no cuenta como elemento tampoco.
+  const restaurante: Elemento = { type: 'bpmn:Participant', parent: {} };
+  const cliente: Elemento = { type: 'bpmn:Participant', parent: {} };
   const registro: Elemento[] = [
     { type: 'bpmn:Collaboration', parent: undefined }, // la raíz: sin padre, no cuenta.
-    { type: 'bpmn:Participant', parent: {} },
-    { type: 'bpmn:Lane', parent: {} },
-    { type: 'bpmn:Lane', parent: {} },
-    { type: 'bpmn:StartEvent', parent: {} },
-    { type: 'bpmn:Task', parent: {} },
+    restaurante,
+    cliente,
+    { type: 'bpmn:StartEvent', parent: restaurante, width: 36, height: 36 },
+    { type: 'bpmn:Task', parent: restaurante, width: 100, height: 80 },
     // La etiqueta externa de la tarea de arriba: cuelga del mismo padre pero no es «un elemento».
-    { type: 'bpmn:Task', parent: {}, labelTarget: {} },
-    { type: 'bpmn:EndEvent', parent: {} },
+    { type: 'bpmn:Task', parent: restaurante, width: 100, height: 80, labelTarget: {} },
+    { type: 'bpmn:EndEvent', parent: cliente, width: 36, height: 36 },
+    // Una conexión: sin caja, no es una figura del proceso.
+    { type: 'bpmn:SequenceFlow', parent: restaurante },
   ];
 
-  it('cuenta elementos y carriles del `elementRegistry`, y enseña los avisos que le pasan', () => {
+  it('cuenta figuras (no conexiones ni pools) y pools/carriles del `elementRegistry`, y enseña los avisos que le pasan', () => {
     const modelador = modeladorFalso({ registro });
     const panel = montar(modelador);
     expect(panel.textContent).toContain('Nada seleccionado');
     expect(panel.textContent).toContain('Elige una figura para editarla, o empieza por el proceso.');
     expect(panel.textContent).toContain('Proceso');
-    // Participant, StartEvent, Task y EndEvent: ni la raíz, ni los dos carriles, ni la etiqueta.
-    expect(filaValor(panel, 'Elementos')).toBe('4');
-    expect(filaValor(panel, 'Carriles')).toBe('2');
+    // StartEvent, Task y EndEvent: ni la raíz, ni los pools, ni la etiqueta, ni el flujo.
+    expect(filaValor(panel, 'Elementos')).toBe('3');
+    // Ningún `bpmn:Lane` de verdad: los dos pools sin carriles cuentan como dos filas, no cero.
+    expect(filaValor(panel, 'Pools / carriles')).toBe('2');
     // `avisos={6}` en `montar()`, no algo que el panel calcule por su cuenta.
     expect(filaValor(panel, 'Avisos')).toBe('6');
+  });
+
+  it('un pool con carriles no se cuenta dos veces: son sus carriles, no el pool más sus carriles', () => {
+    const restauranteConCarriles: Elemento = { type: 'bpmn:Participant', parent: {} };
+    const modelador = modeladorFalso({
+      registro: [
+        restauranteConCarriles,
+        { type: 'bpmn:Lane', parent: restauranteConCarriles },
+        { type: 'bpmn:Lane', parent: restauranteConCarriles },
+      ],
+    });
+    const panel = montar(modelador);
+    // 2 carriles, no 2 + 1 por el pool que los contiene.
+    expect(filaValor(panel, 'Pools / carriles')).toBe('2');
   });
 
   it('enseña solo los atajos que existen de verdad, F2 y ⇥ — no un ⌘K que todavía no busca nada', () => {
@@ -152,5 +175,53 @@ describe('con un elemento elegido: su icono, su nombre y su `$type · id`', () =
     expect(cabecera!.querySelector('.propiedades-cabecera-nombre')?.textContent).toBe('Compuerta exclusiva (XOR)');
     expect(cabecera!.querySelector('.propiedades-cabecera-tipo')?.textContent).toBe('bpmn:ExclusiveGateway · Gateway_1');
     expect(cabecera!.querySelector('.bpmn-icon-gateway-xor')).not.toBeNull();
+  });
+
+  it('un clic en la etiqueta flotante enseña la figura de verdad, no el `type` genérico `label` (QA de la ronda 1 de #392)', () => {
+    const figura: ElementoLienzo = {
+      id: 'Task_1',
+      type: 'bpmn:UserTask',
+      businessObject: { $type: 'bpmn:UserTask', id: 'Task_1', name: 'Revisar pedido' },
+    };
+    // Así la crea `BpmnImporter.addLabel`: `type: 'label'`, id con sufijo, mismo `businessObject`
+    // que la figura (ya trae el nombre, el `$type` y el id de verdad).
+    const etiqueta: ElementoLienzo = {
+      id: 'Task_1_label',
+      type: 'label',
+      businessObject: figura.businessObject,
+      labelTarget: figura,
+    };
+    const panel = montar(modeladorFalso({ seleccion: [etiqueta] }));
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    expect(cabecera!.querySelector('.propiedades-cabecera-nombre')?.textContent).toBe('Revisar pedido');
+    expect(cabecera!.querySelector('.propiedades-cabecera-tipo')?.textContent).toBe('bpmn:UserTask · Task_1');
+    expect(cabecera!.querySelector('.bpmn-icon-user-task')).not.toBeNull();
+  });
+
+  it('un evento intermedio de captura elige el icono por su `eventDefinition`, no siempre el de temporizador', () => {
+    const elemento: ElementoLienzo = {
+      id: 'Event_1',
+      type: 'bpmn:IntermediateCatchEvent',
+      businessObject: {
+        $type: 'bpmn:IntermediateCatchEvent',
+        id: 'Event_1',
+        eventDefinitions: [{ $type: 'bpmn:MessageEventDefinition' }],
+      },
+    };
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }));
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    expect(cabecera!.querySelector('.bpmn-icon-intermediate-event-catch-message')).not.toBeNull();
+    expect(cabecera!.querySelector('.bpmn-icon-intermediate-event-catch-timer')).toBeNull();
+  });
+
+  it.each([
+    ['bpmn:ManualTask', 'manual-task'],
+    ['bpmn:ScriptTask', 'script-task'],
+    ['bpmn:SendTask', 'send-task'],
+    ['bpmn:SequenceFlow', 'connection'],
+  ] as const)('%s ya no se queda sin icono: enseña `bpmn-icon-%s`', (tipo, icono) => {
+    const elemento: ElementoLienzo = { id: 'El_1', type: tipo, businessObject: { $type: tipo, id: 'El_1' } };
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }));
+    expect(panel.querySelector(`.propiedades-cabecera .bpmn-icon-${icono}`)).not.toBeNull();
   });
 });

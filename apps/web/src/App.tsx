@@ -155,8 +155,13 @@ function valido<T extends string>(valor: string | undefined, validas: readonly T
  * ponytail: umbral de luminancia relativa, no la fórmula de contraste completa — alcanza para
  * decidir claro/oscuro, no para medir accesibilidad.
  */
-function temaClaro(t: Theme | null | undefined): boolean {
-  const hex = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(t?.tokens?.['bg.base'] ?? '#12101A');
+export function temaClaro(t: Theme | null | undefined): boolean {
+  const crudo = (t?.tokens?.['bg.base'] ?? '#12101A').replace('#', '');
+  // `#RGB`, `#RRGGBB` o `#RRGGBBAA` son los tres formatos válidos (`theme/temas.ts`, `HEX`); un
+  // `#RGB` corto se expande antes de leerlo (QA de la ronda 1 de #392: sin esto, `#fff` no casaba
+  // con la expresión de 6 dígitos de abajo y `temaClaro` lo daba por oscuro).
+  const seis = crudo.length === 3 ? [...crudo].map((c) => c + c).join('') : crudo;
+  const hex = /^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(seis);
   if (hex === null) return false;
   const canal = (i: number): number => Number.parseInt(hex[i] ?? '00', 16) / 255;
   return 0.2126 * canal(1) + 0.7152 * canal(2) + 0.0722 * canal(3) > 0.5;

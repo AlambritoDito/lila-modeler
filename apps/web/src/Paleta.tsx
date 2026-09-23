@@ -93,16 +93,54 @@ export function gruposDeFiguras(): readonly Grupo[] {
 }
 
 /**
+ * Qué clase `bpmn-icon-intermediate-event-catch-*` le toca a un evento intermedio de captura o
+ * de límite según su `eventDefinition` (`docs.../events.md` no distingue: los dos comparten
+ * icono por definición en `bpmn-font`). Sin definición reconocida, el círculo genérico —el mismo
+ * «sin nada especial» que un `IntermediateCatchEvent` recién puesto (QA de la ronda 1 de #392).
+ */
+const ICONO_POR_DEFINICION: Readonly<Record<string, string>> = {
+  'bpmn:TimerEventDefinition': 'intermediate-event-catch-timer',
+  'bpmn:MessageEventDefinition': 'intermediate-event-catch-message',
+  'bpmn:SignalEventDefinition': 'intermediate-event-catch-signal',
+  'bpmn:ConditionalEventDefinition': 'intermediate-event-catch-condition',
+  'bpmn:ErrorEventDefinition': 'intermediate-event-catch-error',
+  'bpmn:EscalationEventDefinition': 'intermediate-event-catch-escalation',
+  'bpmn:CompensateEventDefinition': 'intermediate-event-catch-compensation',
+  'bpmn:LinkEventDefinition': 'intermediate-event-catch-link',
+  'bpmn:CancelEventDefinition': 'intermediate-event-catch-cancel',
+};
+
+/**
+ * Tipos que no están en ningún grupo de `gruposDeFiguras()` —el catálogo no ofrece crearlos
+ * directamente— pero sí tienen icono propio en `bpmn-font`: los subtipos de tarea que faltaban
+ * (manual, script, mensaje…) y el flujo de secuencia, que no es una figura y por eso no vive en
+ * el catálogo (QA de la ronda 1 de #392: antes se quedaban sin icono en la cabecera del panel).
+ */
+const ICONO_SIN_FIGURA: Readonly<Record<string, string>> = {
+  'bpmn:ManualTask': 'manual-task',
+  'bpmn:ScriptTask': 'script-task',
+  'bpmn:SendTask': 'send-task',
+  'bpmn:ReceiveTask': 'receive-task',
+  'bpmn:BusinessRuleTask': 'business-rule-task',
+  'bpmn:SequenceFlow': 'connection',
+};
+
+/**
  * Clase `bpmn-icon-*` de un `$type` BPMN, para quien necesita el mismo icono que la paleta sin
  * pintar la paleta entera (la cabecera de un elemento seleccionado en `PropertiesPanel.tsx`,
- * diseño 2d). Coge la primera figura de `gruposDeFiguras()` con ese `tipo` —el evento genérico,
- * no la variante mensaje/temporizador que también comparte el tipo—, que es la misma
- * simplificación que ya hace `nombreDeTipo`. `bpmn:Lane` no es una figura de la paleta —un carril
- * se añade desde el context pad de un pool— así que se resuelve a mano; lo que no está en
- * ninguna de las dos ramas se queda sin icono.
+ * diseño 2d). `bpmn:Lane` no es una figura de la paleta —un carril se añade desde el context pad
+ * de un pool—, así que se resuelve a mano, igual que el evento intermedio de captura y el de
+ * límite, cuyo icono depende de `eventDefinitionType` y no solo del `tipo` (el `find` de abajo
+ * solo mira el `tipo`, así que sin este corte antes cogía siempre la primera figura del grupo
+ * —temporizador— para cualquier definición). Lo que no está en ninguna rama se queda sin icono.
  */
-export function iconoDeTipo(tipo: string): string | undefined {
+export function iconoDeTipo(tipo: string, eventDefinitionType?: string): string | undefined {
   if (tipo === 'bpmn:Lane') return 'lane';
+  if (tipo === 'bpmn:IntermediateCatchEvent' || tipo === 'bpmn:BoundaryEvent') {
+    return (eventDefinitionType !== undefined ? ICONO_POR_DEFINICION[eventDefinitionType] : undefined) ?? 'intermediate-event-none';
+  }
+  const sinFigura = ICONO_SIN_FIGURA[tipo];
+  if (sinFigura !== undefined) return sinFigura;
   for (const grupo of gruposDeFiguras()) {
     const figura = grupo.figuras.find((f) => f.tipo === tipo);
     if (figura !== undefined) return figura.icono;

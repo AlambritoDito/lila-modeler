@@ -354,7 +354,9 @@ export const es: Strings = {
     pistaSeleccion: 'Elige una figura para editarla, o empieza por el proceso.',
     proceso: 'Proceso',
     elementos: 'Elementos',
-    carriles: 'Carriles',
+    // «Pools / carriles» (QA de la ronda 1 de #392): un ejemplo con pools pero sin carriles
+    // internos leía «Carriles 0» con dos pools a la vista; esta fila cuenta los dos (ver `PanelVacio`).
+    carriles: 'Pools / carriles',
     avisos: 'Avisos',
     atajos: 'Atajos',
     renombrar: 'Renombrar',

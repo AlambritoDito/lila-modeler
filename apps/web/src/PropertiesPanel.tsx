@@ -20,7 +20,7 @@
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066.
  */
 import { useEffect, useReducer, useState } from 'react';
-import type { Modelador, Servicios } from './Modeler';
+import type { Elemento, Modelador, Servicios } from './Modeler';
 import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
@@ -51,6 +51,9 @@ export interface ElementoModdle {
   documentation?: ElementoModdle[];
   extensionElements?: ElementoModdle;
   values?: ElementoModdle[];
+  /** De un evento intermedio de captura o de límite: qué lo dispara (temporizador, mensaje…),
+   * para elegir su icono (`CabeceraElemento`, QA de la ronda 1 de #392). */
+  eventDefinitions?: ElementoModdle[];
 }
 
 /** Una figura o conexión del lienzo. */
@@ -58,6 +61,13 @@ export interface ElementoLienzo {
   id: string;
   type: string;
   businessObject: ElementoModdle;
+  /**
+   * Presente cuando este elemento es la etiqueta flotante de otra figura o conexión: bpmn-js le
+   * da `type: 'label'` y un id con sufijo `_label` (`BpmnImporter.addLabel`), y aquí apunta a la
+   * figura de verdad. La cabecera del panel sin selección lo resuelve para no enseñar «label» ni
+   * el id de la etiqueta (QA de la ronda 1 de #392).
+   */
+  labelTarget?: ElementoLienzo;
 }
 
 /**
@@ -352,10 +362,23 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): Rea
  */
 function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry']; avisos: number }): React.JSX.Element {
   const S = useStrings();
-  // Misma regla que la barra de estado (`Modeler.tsx`): sin la raíz (no tiene padre) y sin las
-  // etiquetas externas. Los carriles llevan su propia fila, así que tampoco cuentan como elemento.
-  const elementos = registro.filter((el) => el.parent != null && el.labelTarget == null && el.type !== 'bpmn:Lane').length;
-  const carriles = registro.filter((el) => el.type === 'bpmn:Lane').length;
+  // Una figura, no una conexión: en diagram-js una conexión (`bpmn:SequenceFlow`,
+  // `bpmn:MessageFlow`, las asociaciones) no tiene caja —sin `width`/`height`—, así que esa es la
+  // frontera que ya usa `Paleta.tsx` para lo mismo. Sin la raíz (no tiene padre), sin las
+  // etiquetas externas y sin pools/carriles, que llevan su propia fila (QA de la ronda 1 de #392:
+  // «Elements» solo cuenta lo que de verdad se ve como un nodo del proceso).
+  const esFigura = (el: Elemento): boolean =>
+    el.parent != null && el.labelTarget == null && el.width !== undefined && el.height !== undefined;
+  const elementos = registro.filter(
+    (el) => esFigura(el) && el.type !== 'bpmn:Lane' && el.type !== 'bpmn:Participant',
+  ).length;
+  const carriles = registro.filter((el) => el.type === 'bpmn:Lane');
+  // Un pool sin carriles propios sigue siendo una fila de esta cuenta —es donde vive el proceso
+  // cuando no está subdividido—; uno que sí los tiene ya está representado por ellos, para no
+  // contarlo dos veces. El padre de un carril, en diagram-js, es el pool que lo dibuja.
+  const poolsConCarriles = new Set(carriles.map((el) => el.parent));
+  const poolsSinCarriles = registro.filter((el) => el.type === 'bpmn:Participant' && !poolsConCarriles.has(el));
+  const poolsYCarriles = carriles.length + poolsSinCarriles.length;
   return (
     <div className="propiedades-vacio">
       <p className="propiedades-vacio-titulo">{S.propiedades.nadaSeleccionado}</p>
@@ -363,7 +386,7 @@ function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry
       <section className="propiedades-seccion">
         <h3>{S.propiedades.proceso}</h3>
         <FilaResumen etiqueta={S.propiedades.elementos} valor={elementos} />
-        <FilaResumen etiqueta={S.propiedades.carriles} valor={carriles} />
+        <FilaResumen etiqueta={S.propiedades.carriles} valor={poolsYCarriles} />
         <FilaResumen etiqueta={S.propiedades.avisos} valor={avisos} />
       </section>
       <section className="propiedades-seccion">
@@ -395,14 +418,20 @@ function FilaResumen({ etiqueta, valor }: { etiqueta: string; valor: React.React
  * esto solo se pinta encima de las dos.
  */
 function CabeceraElemento({ elemento }: { elemento: ElementoLienzo }): React.JSX.Element {
-  const icono = iconoDeTipo(elemento.type);
-  const nombre = elemento.businessObject.name?.trim() || nombreDeTipo(elemento.type);
+  // Un clic en la etiqueta flotante selecciona la etiqueta, no la figura: sin esto el encabezado
+  // enseñaría el `type` genérico `'label'` y el id con el sufijo `_label` en vez de los de verdad.
+  const real = elemento.type === 'label' && elemento.labelTarget !== undefined ? elemento.labelTarget : elemento;
+  // Solo hace falta para el evento intermedio de captura y el de límite (`iconoDeTipo`); el
+  // resto de tipos lo ignora.
+  const eventDefinitionType = real.businessObject.eventDefinitions?.[0]?.$type;
+  const icono = iconoDeTipo(real.type, eventDefinitionType);
+  const nombre = real.businessObject.name?.trim() || nombreDeTipo(real.type);
   return (
     <div className="propiedades-cabecera">
       {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
       <div>
         <div className="propiedades-cabecera-nombre">{nombre}</div>
-        <div className="propiedades-cabecera-tipo mono">{`${elemento.type} · ${elemento.id}`}</div>
+        <div className="propiedades-cabecera-tipo mono">{`${real.type} · ${real.id}`}</div>
       </div>
     </div>
   );
