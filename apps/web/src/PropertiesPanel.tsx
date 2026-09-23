@@ -362,13 +362,16 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): Rea
  */
 function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry']; avisos: number }): React.JSX.Element {
   const S = useStrings();
-  // Una figura, no una conexión: en diagram-js una conexión (`bpmn:SequenceFlow`,
-  // `bpmn:MessageFlow`, las asociaciones) no tiene caja —sin `width`/`height`—, así que esa es la
-  // frontera que ya usa `Paleta.tsx` para lo mismo. Sin la raíz (no tiene padre), sin las
-  // etiquetas externas y sin pools/carriles, que llevan su propia fila (QA de la ronda 1 de #392:
+  // Una figura, no una conexión: `Paleta.tsx` distingue una conexión por que no tiene caja
+  // —sin `width`/`height`—, pero bpmn-js sí le pone un `width`/`height` de fábrica a una
+  // conexión (los de su caja envolvente), así que ese par por sí solo contaba de más (QA de la
+  // ronda 2 de #392: 29 en vez de 14). `waypoints` es lo que de verdad solo tiene una conexión
+  // (`bpmn:SequenceFlow`, `bpmn:MessageFlow`, las asociaciones). Sin la raíz (no tiene padre), sin
+  // las etiquetas externas y sin pools/carriles, que llevan su propia fila (QA de la ronda 1:
   // «Elements» solo cuenta lo que de verdad se ve como un nodo del proceso).
   const esFigura = (el: Elemento): boolean =>
-    el.parent != null && el.labelTarget == null && el.width !== undefined && el.height !== undefined;
+    el.parent != null && el.labelTarget == null && el.waypoints == null
+    && el.width !== undefined && el.height !== undefined;
   const elementos = registro.filter(
     (el) => esFigura(el) && el.type !== 'bpmn:Lane' && el.type !== 'bpmn:Participant',
   ).length;

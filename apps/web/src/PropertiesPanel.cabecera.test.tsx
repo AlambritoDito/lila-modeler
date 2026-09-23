@@ -78,8 +78,10 @@ describe('sin selección: resumen del proceso y atajos', () => {
   //
   // Dos pools sin carriles propios, como en el ejemplo del pedido que encontró el QA (#392, ronda
   // 1): «Restaurante» y «Cliente» no tienen `bpmn:Lane` ninguno, así que antes esto leía
-  // «Carriles 0» con dos pools bien a la vista. Una conexión (`SequenceFlow`) de propina, sin caja
-  // —sin `width`/`height`—, para probar que no cuenta como elemento tampoco.
+  // «Carriles 0» con dos pools bien a la vista. Dos conexiones (`SequenceFlow`) de propina, CON
+  // `width`/`height` —bpmn-js se los pone de fábrica, los de su caja envolvente (QA de la ronda 2:
+  // «Elements» contaba 29 en vez de 14 por fiarse solo de esos dos)— para probar que `waypoints`,
+  // no el tamaño, es lo que de verdad las saca de la cuenta.
   const restaurante: Elemento = { type: 'bpmn:Participant', parent: {} };
   const cliente: Elemento = { type: 'bpmn:Participant', parent: {} };
   const registro: Elemento[] = [
@@ -91,8 +93,9 @@ describe('sin selección: resumen del proceso y atajos', () => {
     // La etiqueta externa de la tarea de arriba: cuelga del mismo padre pero no es «un elemento».
     { type: 'bpmn:Task', parent: restaurante, width: 100, height: 80, labelTarget: {} },
     { type: 'bpmn:EndEvent', parent: cliente, width: 36, height: 36 },
-    // Una conexión: sin caja, no es una figura del proceso.
-    { type: 'bpmn:SequenceFlow', parent: restaurante },
+    // Dos conexiones con caja de fábrica y `waypoints`: ninguna es una figura del proceso.
+    { type: 'bpmn:SequenceFlow', parent: restaurante, width: 100, height: 40, waypoints: [] },
+    { type: 'bpmn:MessageFlow', parent: restaurante, width: 120, height: 60, waypoints: [] },
   ];
 
   it('cuenta figuras (no conexiones ni pools) y pools/carriles del `elementRegistry`, y enseña los avisos que le pasan', () => {
@@ -107,6 +110,19 @@ describe('sin selección: resumen del proceso y atajos', () => {
     expect(filaValor(panel, 'Pools / carriles')).toBe('2');
     // `avisos={6}` en `montar()`, no algo que el panel calcule por su cuenta.
     expect(filaValor(panel, 'Avisos')).toBe('6');
+  });
+
+  it('una conexión con la caja de fábrica de bpmn-js no cuenta como elemento (QA de la ronda 2 de #392)', () => {
+    // Aislado del resto del `describe`: si `esFigura` volviera a fiarse solo de `width`/`height`
+    // —la caja envolvente que bpmn-js le pone a una conexión de fábrica—, esto contaría 1 en vez
+    // de 0, con o sin las figuras de alrededor.
+    const modelador = modeladorFalso({
+      registro: [
+        { type: 'bpmn:SequenceFlow', parent: {}, width: 100, height: 40, waypoints: [{ x: 0, y: 0 }, { x: 100, y: 40 }] },
+      ],
+    });
+    const panel = montar(modelador);
+    expect(filaValor(panel, 'Elementos')).toBe('0');
   });
 
   it('un pool con carriles no se cuenta dos veces: son sus carriles, no el pool más sus carriles', () => {

@@ -90,13 +90,9 @@ it('el glifo del selector de fecha no se invierte por encima de `color-scheme: d
   expect(glifo).not.toContain('filter');
 });
 
-it('la marca y los modos no se envuelven: son lo primero que tiene que caber en la barra (QA de la ronda 1 de #392)', () => {
-  // Sin esto, «Lila Modeler» y «Validate paths»/«Validar rutas» se parten en dos líneas antes de
-  // que el buscador inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece
-  // de 53 px a 60-67.
-  const identidad = bloque('.identidad');
-  expect(identidad).toContain('flex: none');
-  expect(identidad).toContain('white-space: nowrap');
+it('los modos no se envuelven: son de lo primero que tiene que caber en la barra (QA de la ronda 1 de #392)', () => {
+  // Sin esto, «Validate paths»/«Validar rutas» se parte en dos líneas antes de que el buscador
+  // inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece de 53 px a 60-67.
   expect(bloque('.modo')).toContain('white-space: nowrap');
 
   const buscador = bloque('.buscador');
@@ -105,6 +101,35 @@ it('la marca y los modos no se envuelven: son lo primero que tiene que caber en 
   // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
   // solo el `flex`, no los dos.
   expect(buscador).not.toContain('width: 210px');
+});
+
+it('el nombre del proyecto y el del archivo se recortan con «…» en vez de desbordar la barra (QA de la ronda 2 de #392)', () => {
+  // `.identidad { flex: none }` (ronda 1) evitaba el envuelto, pero le impedía encogerse y sacaba
+  // la página por el borde en angosto: `flex: 0 1 auto` dentro, `min-width: 0` en la identidad y
+  // en el `<div>` de proyecto/archivo (el mínimo de fábrica de un flex item es `auto`, y con eso
+  // ninguno de los dos encoge) es lo que deja que sea el texto el que se recorte.
+  const identidad = bloque('.identidad');
+  expect(identidad).toContain('flex: 0 1 auto');
+  expect(identidad).toContain('min-width: 0');
+  expect(identidad).not.toContain('flex: none');
+  expect(bloque('.identidad > div')).toContain('min-width: 0');
+
+  const recorte = bloque('.proyecto,\n.archivo');
+  expect(recorte).toContain('overflow: hidden');
+  expect(recorte).toContain('text-overflow: ellipsis');
+  expect(recorte).toContain('white-space: nowrap');
+});
+
+it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de que le toque al proyecto (QA de la ronda 2 de #392)', () => {
+  // `bloque()` no sirve aquí: para en la primera `}` que encuentra, y dentro de un `@media` esa
+  // es la de la primera regla anidada (`.buscador`), no la del bloque entero. Se toma todo lo que
+  // hay entre el `@media (max-width: 1280px)` y su `}` de cierre —sin indentar, a diferencia del
+  // de sus reglas anidadas, que sí lo están— y se busca la regla de `.producto` ahí dentro.
+  const desdeMedia = appCss.slice(appCss.indexOf('@media (max-width: 1280px)'));
+  const cierre = desdeMedia.indexOf('\n}');
+  expect(cierre).toBeGreaterThan(0);
+  const bloqueMedia = desdeMedia.slice(0, cierre);
+  expect(bloqueMedia).toMatch(/\.producto,\s*\n\s*\.identidad \.separador\s*\{\s*\n\s*display: none;/);
 });
 
 it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de validación', () => {
