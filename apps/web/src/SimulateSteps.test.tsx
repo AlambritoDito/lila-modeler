@@ -238,6 +238,18 @@ describe('el paso elegido sobrevive', () => {
     expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(false);
   });
 
+  it('an actionable lint warning shows the validation list in every step (#360)', () => {
+    // The AS-IS without one task entry: the one R3 warning that still fires after #360.
+    const escenario = asIs();
+    const elementos = { ...(escenario['elements'] as Json) };
+    delete elementos['Task_PrepareService'];
+    montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
+    for (const paso of ['validation', 'times', 'resources', 'calendars'] as const) {
+      irAPaso(paso);
+      expect(texto()).toContain(en.escenario.seccionValidacion(0));
+    }
+  });
+
   it('el JSON avanzado está en los cuatro pasos', () => {
     montar(<Anfitrion inicial={asIs()} />);
     for (const paso of ['validation', 'times', 'resources', 'calendars'] as const) {

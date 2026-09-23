@@ -7,7 +7,7 @@
  *   —el lint del escenario resuelto (`problemasEscenario`, o sea `validateScenario` con los
  *   textos de la CLI), el diagnóstico del proyecto abierto y los avisos de bpmn-js al importar—
  *   y devuelve el mapa a pintar más los totales de los chips. No valida nada por su cuenta: si
- *   el chip dice «6 avisos», la cabecera del panel de escenario dice exactamente lo mismo,
+ *   el chip dice «1 aviso», la cabecera del panel de escenario dice exactamente lo mismo,
  *   porque los dos leen la misma lista.
  * - `sincronizarMarcadores` es el único punto que toca el modelador, por el servicio `overlays`
  *   (nada de SVG inyectado). Limpia por `type` antes de repintar, así que es idempotente: el
