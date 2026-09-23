@@ -50,14 +50,13 @@ blocked outright, with no direct "Open anyway" option in the block dialog:
 
 Either way, this authorization is a one-time step per copy of the app — it is how macOS is
 designed to treat software from outside the App Store that isn't notarized. Do not disable
-Gatekeeper to work around it. `<VERIFY-GATEKEEPER>`
+Gatekeeper to work around it. Beta 1 verified on macOS 27.0 that the quarantined download is blocked on first launch and that System Settings ▸ Privacy & Security offers Open Anyway (the app is ad-hoc sealed, so macOS does not report it as damaged).
 
 The app uses the Lila icon in the Dock and in Finder.
 
 ## Project files: `.lila` vs `.bpmn`
 
-Two file types register with Finder and double-click to open in this app (Beta 1 verification: see
-`<VERIFY-FINDER>` under Limitations):
+Two file types register with Finder and double-click to open in this app (Beta 1 verification: see Limitations):
 
 - **`.lila`** is the whole project container: the model, its scenarios, revisions and saved runs,
   zipped into one file (see [`PROJECT_FORMAT.md`](PROJECT_FORMAT.md)). This is the form to hand to
@@ -103,8 +102,7 @@ follow that same setting. This walkthrough uses the English labels.
 ### Model («Modelar»)
 
 - On desktop you work with **New project** and **Open project**
-  by folder. You can also open a loose `.bpmn` by double click (see `<VERIFY-FINDER>` under
-  Limitations). Use **Save as** to retain
+  by folder. You can also open a loose `.bpmn` by double click (see Limitations). Use **Save as** to retain
   its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
   like any bpmn.io editor.
@@ -280,7 +278,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.1, SHA `<RC-SHA>`; check whether any of these has already been resolved before
+*(as of 1.0.0-beta.1, tag `v1.0.0-beta.1`; check whether any of these has already been resolved before
 trusting this list blindly at a later date)*
 
 - **No signing or notarization**: a received copy requires macOS's opening authorization (see
@@ -288,10 +286,9 @@ trusting this list blindly at a later date)*
 - **Only macOS arm64 is offered and exercised**: the Windows (NSIS) and Linux (AppImage) installers
   are built by the CI matrix (`.github/workflows/desktop.yml`) as untested artifacts; they are not
   attached to the Beta 1 release and nobody on the project has tested them.
-- **`.lila` and `.bpmn` Finder double-click: verified by the lead on macOS 27 arm64 for Beta 1** —
-  see release notes. `<VERIFY-FINDER>`
+- **Finder double-click**: Beta 1 verified the macOS open-file route for `.lila` on macOS 27.0 (arm64) with `open -a`, the same event Finder sends on double-click, with the app closed and already running, including a name with accents and an em dash. A physical double-click in Finder, and opening a `.bpmn` that way, were not exercised.
 - **Saving a `.lila` opened by double-click or launch argument is fixed in Beta 1 (#378)**.
-  `<VERIFY-378>`
+  Verified in Beta 1 by the real-Electron regression in `tools/e2e-desktop-open-path.mjs` (launch argument, open-file event, recents, dialog; ASCII, spaces, accents in NFC and NFD)
 - **Raw error messages**: some errors reach the interface untranslated — `zod`'s raw validation
   JSON (for example, a scenario that references a nonexistent task id) and Electron's generic
   "Error invoking remote method…" text (for example, when saving into a folder with no

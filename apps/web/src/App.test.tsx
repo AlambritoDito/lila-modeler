@@ -1351,7 +1351,7 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y Â
   expect(bienvenida).not.toBeNull();
   expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
   expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
-  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-alpha.1'));
+  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.1'));
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();

@@ -46,6 +46,7 @@ jobs:
             versions[file] = JSON.parse(readFileSync(file, 'utf8')).version;
           }
           versions['packages/engine/src/version.ts'] = /version = '([^']+)'/.exec(readFileSync('packages/engine/src/version.ts', 'utf8'))[1];
+          versions['packages/mcp/src/server.ts'] = /const VERSION = '([^']+)'/.exec(readFileSync('packages/mcp/src/server.ts', 'utf8'))[1];
           const distinct = new Set(Object.values(versions));
           console.log(versions);
           if (distinct.size !== 1) throw new Error(`Release manifests disagree: ${JSON.stringify(versions)}`);

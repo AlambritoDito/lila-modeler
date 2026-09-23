@@ -40,24 +40,23 @@ La app **no está firmada ni notarizada** (`identity: null` en `electron-builder
 ### Primer arranque sin firma (macOS 15 y más reciente)
 
 En macOS reciente (Sequoia 15, y la línea 26/27), el primer doble clic sobre la app descargada
-queda bloqueado directamente, sin una opción de «abrir de todas formas» en el diálogo de bloqueo:
+queda bloqueado directamente, sin una opción de «abrir de todos modos» en el diálogo de bloqueo:
 
 1. Ve a **Ajustes del Sistema ▸ Privacidad y seguridad**, busca el mensaje de seguridad que nombra
-   «Lila Modeler» y pulsa **Abrir de todas formas**. Luego arranca la app de nuevo (doble clic, o
+   «Lila Modeler» y pulsa **Abrir de todos modos**. Luego arranca la app de nuevo (doble clic, o
    Control-clic ▸ **Abrir**) y confirma **Abrir** en el diálogo que sigue.
 2. En macOS más antiguo, Control-clic (clic derecho) sobre la app en Finder ▸ **Abrir** ▸ **Abrir**
    funciona directamente, sin pasar por Ajustes del Sistema.
 
 En cualquiera de los dos casos, esta autorización es un paso único por copia de la app — es la
 forma en que macOS trata el software fuera de la App Store que no está notarizado. No desactives
-Gatekeeper para evitar esto. `<VERIFY-GATEKEEPER>`
+Gatekeeper para evitar esto. La Beta 1 verificó en macOS 27.0 que la descarga en cuarentena se bloquea en el primer arranque y que Ajustes del Sistema ▸ Privacidad y seguridad ofrece Abrir de todos modos (la app lleva un sello ad hoc, así que macOS no la reporta como dañada).
 
 La app utiliza el icono ilustrado detallado de Lila en el Dock y en el Finder.
 
 ## Archivos de proyecto: `.lila` frente a `.bpmn`
 
-Dos tipos de archivo se registran en Finder y abren esta app con doble clic (verificación de la
-Beta 1: ver `<VERIFY-FINDER>` en Limitaciones):
+Dos tipos de archivo se registran en Finder y abren esta app con doble clic (verificación de la Beta 1: ver Limitaciones):
 
 - **`.lila`** es el contenedor completo del proyecto: el modelo, sus escenarios, revisiones y
   corridas guardadas, comprimidos en un solo archivo (ver [`PROJECT_FORMAT.md`](../PROJECT_FORMAT.md)).
@@ -90,7 +89,7 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 ### Modelar
 
 - En escritorio se trabaja con **Nuevo proyecto** y **Abrir proyecto** por carpeta. También puedes
-  abrir un `.bpmn` suelto con doble clic (ver `<VERIFY-FINDER>` en Limitaciones). Usa **Guardar
+  abrir un `.bpmn` suelto con doble clic (ver Limitaciones). Usa **Guardar
   como** para conservar sus escenarios y
   corridas en una carpeta de proyecto, como se describe más abajo.
 - El lienzo central es el editor de bpmn-js: se edita arrastrando figuras de la paleta, igual que
@@ -257,7 +256,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.1, SHA `<RC-SHA>`; revisar si alguna de estas ya se resolvió antes de creer
+*(a fecha 1.0.0-beta.1, tag `v1.0.0-beta.1`; revisar si alguna de estas ya se resolvió antes de creer
 esta lista a ciegas en una fecha posterior)*
 
 - **Sin firma ni notarización**: una copia recibida requiere la autorización de apertura de macOS
@@ -266,10 +265,9 @@ esta lista a ciegas en una fecha posterior)*
 - **Solo macOS arm64 se ofrece y está probado**: los instaladores de Windows (NSIS) y Linux
   (AppImage) los compila la matriz de CI (`.github/workflows/desktop.yml`) como artefactos sin
   probar; no están adjuntos al release de la Beta 1 y nadie del proyecto los ha probado.
-- **Doble clic de `.lila` y `.bpmn` en Finder: verificado por el lead en macOS 27 arm64 para la
-  Beta 1** — ver las notas de la versión. `<VERIFY-FINDER>`
+- **Doble clic en Finder**: La Beta 1 verificó la ruta open-file de macOS para `.lila` en macOS 27.0 (arm64) con `open -a`, el mismo evento que Finder envía al hacer doble clic, con la app cerrada y ya abierta, incluido un nombre con acentos y raya. El doble clic físico en Finder, y abrir así un `.bpmn`, no se ejercieron.
 - **Guardar un `.lila` abierto por doble clic o argumento de lanzamiento está arreglado en la
-  Beta 1 (#378)**. `<VERIFY-378>`
+  Beta 1 (#378)**. Verificado en la Beta 1 con la regresión en Electron real de `tools/e2e-desktop-open-path.mjs` (argumento de arranque, evento open-file, recientes, diálogo; ASCII, espacios, acentos en NFC y NFD)
 - **Mensajes de error crudos**: algunos errores llegan sin traducir a la interfaz — el JSON crudo
   de validación de `zod` (por ejemplo, un escenario que referencia un id de tarea inexistente) y
   el texto genérico de Electron "Error invoking remote method…" (por ejemplo, al guardar en una
