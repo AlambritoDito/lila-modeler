@@ -76,7 +76,8 @@ D7 tracks the utilization denominator (Bizagi's declared 43200 min versus Lila's
 - `bizagi-parity.test.ts`: runs the committed scenarios and records which published values
   fall inside or outside ±5%; a change of classification fails the test.
 - `bizagi-levels.qa.test.ts`: supported BPMN, NCName IDs, published JSON Schema validation,
-  no lint except `W-ELEMENTO-SIN-PARAMETROS`, XOR probabilities summing to 1 and complete provenance.
+  no lint except `W-SIN-SEED` (no level declares `run.seed`) and, in level 1 only,
+  `W-ELEMENTO-SIN-PARAMETROS` for its untimed tasks; XOR probabilities summing to 1 and complete provenance.
 
 Documented differences are D2 (level-1 Yellow count, −5.4%), D5/D6 (level-3 maximum with three
 nurses and saturated mean with two), and D7 (level-4 denominator and BA waits). The

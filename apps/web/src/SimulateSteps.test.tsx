@@ -161,7 +161,8 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(hay('campo-run.duration')).toBe(true);
     expect(hay('campo-run.replications')).toBe(true);
     expect(hay('campo-run.start')).toBe(true);
-    expect(texto()).toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
+    // #360: this fully configured fixture has no actionable lint warnings.
+    expect(texto()).not.toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
 
     // Y nada de los pasos 3 y 4: no plegado, fuera del DOM.
     expect(texto()).not.toContain(en.escenario.seccionCalendarios);
@@ -235,6 +236,18 @@ describe('el paso elegido sobrevive', () => {
     // El campo que se ve sigue siendo el del paso 2, no el del elemento entero.
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
     expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(false);
+  });
+
+  it('an actionable lint warning shows the validation list in every step (#360)', () => {
+    // The AS-IS without one task entry: the one R3 warning that still fires after #360.
+    const escenario = asIs();
+    const elementos = { ...(escenario['elements'] as Json) };
+    delete elementos['Task_PrepareService'];
+    montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
+    for (const paso of ['validation', 'times', 'resources', 'calendars'] as const) {
+      irAPaso(paso);
+      expect(texto()).toContain(en.escenario.seccionValidacion(0));
+    }
   });
 
   it('el JSON avanzado está en los cuatro pasos', () => {
