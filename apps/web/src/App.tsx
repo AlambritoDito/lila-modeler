@@ -1133,9 +1133,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             aria-label={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             title={ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}
             onClick={() => { if (ventanaEscenario === null) desacoplar(); else acoplar(); }}>
-            {/* Below 1280 px only the icon is left (`app.css`), or Run and ⚙ leave the bar. */}
+            {/* Icon-only at every width (#405): the label lives in `aria-label`/`title`. */}
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
-            <span>{ventanaEscenario === null ? S.app.escenarioAcoplado : S.app.escenarioDesacoplado}</span>
           </button>
         )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y

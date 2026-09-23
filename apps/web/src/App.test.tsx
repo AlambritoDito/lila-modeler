@@ -1508,7 +1508,7 @@ it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2
   const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-escenario', expect.stringMatching(/popup/));
     expect(hijo.document.querySelector('[data-mock="escenario"]')).not.toBeNull();
     expect(container.querySelector('[data-mock="escenario"]')).toBeNull();
@@ -1538,7 +1538,7 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
   const sub = (nombre: string): string => filaRail(nombre).querySelector('.rail-sub')!.textContent!;
   try {
     expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Only the scenario that lives in the window says so.
     expect(sub('AS-IS')).toBe(T.rail.enVentana);
     expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
@@ -1566,7 +1566,7 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
 it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     expect(container.textContent).toContain(T.app.ventanaBloqueada);
     expect(container.querySelector('[data-mock="escenario"]')).not.toBeNull();
     expect(container.textContent).not.toContain(T.app.enVentanaAparte);
@@ -1585,7 +1585,7 @@ it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni
     hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
   });
   try {
-    await click(T.app.escenarioAcoplado);
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Open would click the main page's file input with the popup's activation: the browser never
     // settles it and the app stays busy. Settings would open behind the window.
     await tecla('o');

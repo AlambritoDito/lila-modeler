@@ -56,12 +56,21 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
   }
 });
 
-it('below 1500 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
-  // Measured over CDP: with its label, the toggle pushed Run and ⚙ off the bar below ~1150 px.
-  const media = /@media \(max-width: 1500px\) \{([\s\S]*?)\n\}/g;
-  const bloques = [...appCss.matchAll(media)].map((m) => m[1]!).join('\n');
-  expect(bloques).toMatch(/\.boton\.desacoplar span \{\s*display: none;/);
-  expect(bloques).toMatch(/\.boton\.desacoplar \{[^}]*width: 30px;/);
+it('the scenario toggle is icon-only at every width, like `.boton.icono` (#405)', () => {
+  // The label lives only in `aria-label`/`title` (no `<span>` in App.tsx), so the icon is the
+  // permanent 30x30 box, with no `@media` step that used to swap text for icon below 1500 px.
+  const toggle = bloque('.boton.desacoplar');
+  expect(toggle).toContain('background: var(--bg-elevated)');
+  expect(toggle).toContain('border: 1px solid var(--border)');
+  expect(toggle).toContain('color: var(--fg-muted)');
+  expect(toggle).toContain('height: 30px');
+  expect(toggle).toContain('width: 30px');
+  expect(appCss).not.toContain('@media (max-width: 1500px)');
+
+  const activo = bloque(".boton.desacoplar[aria-pressed='true']");
+  expect(activo).toContain('background: var(--bg-hover)');
+  expect(activo).toContain('color: var(--fg-primary)');
+  expect(activo).toContain('border-color: var(--border-strong)');
 });
 
 it('el select, la casilla y la fecha nativos pierden el aspecto del navegador (diseño 2d)', () => {
@@ -122,6 +131,19 @@ it('el nombre del proyecto y el del archivo se recortan con «…» en vez de de
   expect(recorte).toContain('overflow: hidden');
   expect(recorte).toContain('text-overflow: ellipsis');
   expect(recorte).toContain('white-space: nowrap');
+});
+
+it('the file line stays whole while the search field is visible, only the project name may still ellipsize below that (#399)', () => {
+  // Above 1320 px `.buscador` (flex-shrink: 99) is still on screen and gives way first:
+  // `.identidad` no longer nibbles its own ~1 % off «model.bpmn · Guardado» in Spanish. At
+  // 1320 px and below the search field is already gone (above), so `.identidad` keeps its base
+  // `flex: 0 1 auto` (still not `flex: none`) and the project name is what shrinks instead.
+  const desdeMedia = appCss.slice(appCss.indexOf('@media (min-width: 1321px)'));
+  const cierre = desdeMedia.indexOf('\n}');
+  expect(cierre).toBeGreaterThan(0);
+  const bloqueMedia = desdeMedia.slice(0, cierre);
+  expect(bloqueMedia).toMatch(/\.identidad\s*\{\s*\n\s*flex-shrink: 0;/);
+  expect(bloqueMedia).toMatch(/\.archivo\s*\{\s*\n\s*min-width: max-content;/);
 });
 
 it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de que le toque al proyecto (QA de la ronda 2 de #392)', () => {

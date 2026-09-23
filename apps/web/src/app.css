@@ -388,6 +388,23 @@ body {
   }
 }
 
+/* While the search field is still visible (above), it's the one with `flex-shrink: 99` that
+   should give first: `.identidad`'s own default shrink (1) still nibbled ~1 % off it, and that
+   was enough for `.archivo`'s `text-overflow: ellipsis` (above) to clip «model.bpmn · Guardado»
+   in Spanish between 1281 and 1440 px (#399). Freezing `.identidad` here — and `.archivo` at its
+   content width, so it can't be squeezed by anything else in its own column — keeps the file
+   line whole. Below 1320 px the search field is gone and `.identidad` goes back to shrinking
+   (default above) so the project name, not the bar, is what gives. */
+@media (min-width: 1321px) {
+  .identidad {
+    flex-shrink: 0;
+  }
+
+  .archivo {
+    min-width: max-content;
+  }
+}
+
 @media (max-width: 1280px) {
   .producto,
   .identidad .separador {
@@ -2013,54 +2030,38 @@ body {
 
 /* ---------- escenario desacoplado (diseño 2c) ---------- */
 
-/* The toggle of the top bar, left of Run: outlined in the tertiary accent, the same 30 px box as
-   the icon buttons next to it. */
+/* Icon-only at every width (#405): the label lives in `aria-label`/`title` instead of a visible
+   `<span>`, so the button never has to make room for text. Same 30 px box as `.boton.icono`, next
+   to Undo/Redo/Run. */
 .boton.desacoplar {
-  background: none;
-  border-color: var(--accent-tertiary);
-  color: var(--accent-tertiary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  display: grid;
   flex: none;
-  font-size: 10px;
-  font-weight: 700;
   height: 30px;
-  letter-spacing: 0.08em;
-  padding: 0 10px;
-  text-transform: uppercase;
-  white-space: nowrap;
+  padding: 0;
+  place-items: center;
+  width: 30px;
+}
+
+.boton.desacoplar:hover:enabled {
+  color: var(--fg-primary);
 }
 
 .boton.desacoplar[aria-pressed='true'] {
   background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg-primary);
 }
 
-.boton.desacoplar svg {
-  display: none;
-}
-
-/* Below 1500 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
-   the product name goes away (the search field already went at 1320), the mode tabs also lose
-   some air. Without this, Run and ⚙ left the bar below ~1150 px (QA of #391). 1500 and not 1400: with the brand lockup of #392, the labelled
-   toggle squeezed the project name out of the bar at 1440 px in Spanish. Measured with no
-   horizontal overflow and the project name whole from 1440 down to 1280 px, in English and
-   Spanish, on the Simulation tab. */
-@media (max-width: 1500px) {
-  .boton.desacoplar {
-    display: grid;
-    padding: 0;
-    place-items: center;
-    width: 30px;
-  }
-
-  .boton.desacoplar svg {
-    display: block;
-  }
-
-  .boton.desacoplar span {
-    display: none;
-  }
-}
-
-@media (max-width: 1280px) {
+/* 1345 and not 1280: with `.identidad` frozen above 1320 px (#399) and the scenario toggle
+   (#405, 30 px, flex: none) in the bar on the Simulate tab, Spanish ran 19 px short of fitting
+   between 1321 and 1339 px — `.buscador` was already at its own floor (22 px) with nothing left
+   to give, and the bar overflowed the window. The modes are the next thing with air to spare, so
+   they give it a little earlier here too; below 1321 px `.identidad` is free to shrink again and
+   this isn't needed, but the threshold covers the whole band regardless of tab or language. */
+@media (max-width: 1345px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
   }
