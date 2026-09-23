@@ -92,6 +92,24 @@ export function gruposDeFiguras(): readonly Grupo[] {
   ];
 }
 
+/**
+ * Clase `bpmn-icon-*` de un `$type` BPMN, para quien necesita el mismo icono que la paleta sin
+ * pintar la paleta entera (la cabecera de un elemento seleccionado en `PropertiesPanel.tsx`,
+ * diseño 2d). Coge la primera figura de `gruposDeFiguras()` con ese `tipo` —el evento genérico,
+ * no la variante mensaje/temporizador que también comparte el tipo—, que es la misma
+ * simplificación que ya hace `nombreDeTipo`. `bpmn:Lane` no es una figura de la paleta —un carril
+ * se añade desde el context pad de un pool— así que se resuelve a mano; lo que no está en
+ * ninguna de las dos ramas se queda sin icono.
+ */
+export function iconoDeTipo(tipo: string): string | undefined {
+  if (tipo === 'bpmn:Lane') return 'lane';
+  for (const grupo of gruposDeFiguras()) {
+    const figura = grupo.figuras.find((f) => f.tipo === tipo);
+    if (figura !== undefined) return figura.icono;
+  }
+  return undefined;
+}
+
 /** Compara sin acentos ni mayúsculas: «anotacion» encuentra «Anotación». */
 function normalizar(texto: string): string {
   return texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();

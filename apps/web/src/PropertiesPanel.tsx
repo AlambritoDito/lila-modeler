@@ -20,7 +20,8 @@
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066.
  */
 import { useEffect, useReducer, useState } from 'react';
-import type { Modelador } from './Modeler';
+import type { Modelador, Servicios } from './Modeler';
+import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
 import type { Strings } from './strings.types';
@@ -272,9 +273,15 @@ interface Props {
   /** `null` mientras el lienzo no ha terminado de montarse. */
   modelador: Modelador | null;
   pestana: Exclude<PestanaId, 'simulacion'>;
+  /**
+   * Avisos de ahora mismo, para la sección «Proceso» de la cabecera sin selección (diseño 2d).
+   * Es `validacion.avisos` de `App.tsx`: este panel no tiene otra vía para llegar a ese número
+   * —no conoce el escenario activo ni el lint—, así que se lo pasan de fuera.
+   */
+  avisos?: number;
 }
 
-export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Element {
+export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): React.JSX.Element {
   const S = useStrings();
   const [seleccion, setSeleccion] = useState<ElementoLienzo[]>([]);
   // El moddle no es estado de React: se lee en cada render. Este contador es lo que fuerza a
@@ -308,20 +315,96 @@ export function PanelPropiedades({ modelador, pestana }: Props): React.JSX.Eleme
 
   const elemento = seleccion.length === 1 ? seleccion[0] : undefined;
 
-  if (modelador === null || elemento === undefined) {
+  // Sin lienzo, o varios elementos a la vez: el mensaje suelto de siempre. Lo de varios sigue
+  // sin acción propia (LILA-060); la cabecera rica de abajo es solo para «nada» o «uno».
+  if (modelador === null || seleccion.length > 1) {
     return (
       <p className="vacio">
-        {seleccion.length > 1
-          ? S.propiedades.variosSeleccionados(seleccion.length)
-          : S.propiedades.sinSeleccion}
+        {seleccion.length > 1 ? S.propiedades.variosSeleccionados(seleccion.length) : S.propiedades.sinSeleccion}
       </p>
     );
   }
 
-  return pestana === 'propiedades' ? (
-    <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
-  ) : (
-    <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+  if (elemento === undefined) {
+    return <PanelVacio registro={modelador.servicios.elementRegistry} avisos={avisos} />;
+  }
+
+  return (
+    <>
+      <CabeceraElemento elemento={elemento} />
+      {pestana === 'propiedades' ? (
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+      ) : (
+        <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+      )}
+    </>
+  );
+}
+
+/**
+ * Cabecera sin selección (diseño «Turno 2», bloque 2d): un resumen del proceso —tamaño y
+ * avisos— y los atajos que ya funcionan en la app. Solo entra por aquí cuando la raíz visible
+ * no es un `bpmn:Process` (si lo es, `leerSeleccion` de arriba la elige sola): en un diagrama
+ * con pools es donde de verdad se puede tener el lienzo abierto sin nada elegido.
+ *
+ * La vista rápida de simulación del artefacto queda fuera: este panel no recibe datos del
+ * escenario activo, y traérselos es un cambio de otro alcance.
+ */
+function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry']; avisos: number }): React.JSX.Element {
+  const S = useStrings();
+  // Misma regla que la barra de estado (`Modeler.tsx`): sin la raíz (no tiene padre) y sin las
+  // etiquetas externas. Los carriles llevan su propia fila, así que tampoco cuentan como elemento.
+  const elementos = registro.filter((el) => el.parent != null && el.labelTarget == null && el.type !== 'bpmn:Lane').length;
+  const carriles = registro.filter((el) => el.type === 'bpmn:Lane').length;
+  return (
+    <div className="propiedades-vacio">
+      <p className="propiedades-vacio-titulo">{S.propiedades.nadaSeleccionado}</p>
+      <p className="propiedades-vacio-pista">{S.propiedades.pistaSeleccion}</p>
+      <section className="propiedades-seccion">
+        <h3>{S.propiedades.proceso}</h3>
+        <FilaResumen etiqueta={S.propiedades.elementos} valor={elementos} />
+        <FilaResumen etiqueta={S.propiedades.carriles} valor={carriles} />
+        <FilaResumen etiqueta={S.propiedades.avisos} valor={avisos} />
+      </section>
+      <section className="propiedades-seccion">
+        <h3>{S.propiedades.atajos}</h3>
+        {/* Los dos únicos atajos reales de hoy (`ValidationMarkers.ts` los enseña igual, en el
+            lienzo): F2 renombra y ⇥ va a Propiedades, los dos de bpmn-js/diagram-js de serie.
+            «Buscar actividad ⌘K» del artefacto se queda fuera —el buscador de la barra es un
+            campo inerte (`App.tsx`, LILA-066/#66): la paleta de comandos todavía no existe. */}
+        <FilaResumen etiqueta={S.propiedades.renombrar} valor={<kbd>F2</kbd>} />
+        <FilaResumen etiqueta={S.app.pestanas.propiedades} valor={<kbd>⇥</kbd>} />
+      </section>
+    </div>
+  );
+}
+
+/** Una fila «etiqueta a la izquierda, valor mono a la derecha» de la cabecera sin selección. */
+function FilaResumen({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="propiedades-fila">
+      <span>{etiqueta}</span>
+      <output className="mono">{valor}</output>
+    </div>
+  );
+}
+
+/**
+ * Cabecera con un elemento elegido (diseño 2d): su icono de la paleta, el nombre (o el tipo
+ * legible si no tiene) y la línea técnica `$type · id`. `Propiedades`/`Documentacion` no cambian:
+ * esto solo se pinta encima de las dos.
+ */
+function CabeceraElemento({ elemento }: { elemento: ElementoLienzo }): React.JSX.Element {
+  const icono = iconoDeTipo(elemento.type);
+  const nombre = elemento.businessObject.name?.trim() || nombreDeTipo(elemento.type);
+  return (
+    <div className="propiedades-cabecera">
+      {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
+      <div>
+        <div className="propiedades-cabecera-nombre">{nombre}</div>
+        <div className="propiedades-cabecera-tipo mono">{`${elemento.type} · ${elemento.id}`}</div>
+      </div>
+    </div>
   );
 }
 

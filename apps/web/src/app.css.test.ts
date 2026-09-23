@@ -15,9 +15,12 @@ import { expect, it } from 'vitest';
 const ruta = './app.css';
 const appCss = readFileSync(new URL(ruta, import.meta.url), 'utf8');
 
+/** Escapa lo que un selector CSS puede traer y un `RegExp` no puede leer literal (`[`, `]`, `'`…). */
+const escaparRegex = (texto: string): string => texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Cuerpo de la primera regla con ese selector exacto. */
 const bloque = (selector: string): string =>
-  new RegExp(`${selector.replaceAll('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
+  new RegExp(`${escaparRegex(selector)}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ?? '';
 
 it('la pila de zoom deja libre la esquina de la marca de agua', () => {
   // «Powered by bpmn.io» es obligatoria por la licencia de bpmn.io: es un enlace absoluto a
@@ -51,4 +54,24 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
     const reglas = appCss.match(new RegExp(`[^}]*\\.${mando}[^{]*\\{[^}]*\\}`, 'g')) ?? [];
     expect(reglas.filter((r) => /display:\s*none|visibility:\s*hidden/.test(r))).toEqual([]);
   }
+});
+
+it('el select, la casilla y la fecha nativos pierden el aspecto del navegador (diseño 2d)', () => {
+  const select = bloque('.app select');
+  expect(select).toContain('appearance: none');
+  expect(select).toContain('border-radius: 0');
+
+  const casilla = bloque(".app input[type='checkbox']");
+  expect(casilla).toContain('appearance: none');
+  expect(casilla).toContain('border-radius: 0');
+
+  const fecha = bloque(".app input[type='datetime-local']");
+  expect(fecha).toContain('border-radius: 0');
+});
+
+it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de validación', () => {
+  const radios = [...appCss.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => (m[1] ?? '').trim());
+  // Si esto falla con algo que no sea «50%» es que una regla nueva volvió a redondear una
+  // esquina sin decir por qué (el comentario que acompaña al 50% es el sitio para esa excepción).
+  expect(radios.filter((r) => r !== '0')).toEqual(['50%']);
 });

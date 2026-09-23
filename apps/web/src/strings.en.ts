@@ -50,6 +50,9 @@ export const en = {
    * App shell (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
+    /** Product name in the top-bar lockup (`.identidad`, design 2d); hidden in Electron, where
+     * the OS title bar already carries it. */
+    marca: 'Lila Modeler',
     /** Label of each mode of the top bar; the id comes from `ids.ts` (`MODO_IDS`). */
     modos: {
       modelar: 'Model',
@@ -358,6 +361,16 @@ export const en = {
     variosSeleccionados: (n: number): string =>
       `${n} elements selected: acting on several at once is not there yet. ` +
       'Select a single one to edit it.',
+
+    /* Right-panel header with nothing selected (design "Turno 2", block 2d). */
+    nadaSeleccionado: 'Nothing selected',
+    pistaSeleccion: 'Pick a shape to edit it, or start with the process.',
+    proceso: 'Process',
+    elementos: 'Elements',
+    carriles: 'Lanes',
+    avisos: 'Warnings',
+    atajos: 'Shortcuts',
+    renombrar: 'Rename',
 
     textoAnotacion: 'Annotation text',
     nombre: 'Name',

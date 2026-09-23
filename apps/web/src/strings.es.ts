@@ -36,6 +36,9 @@ export const es: Strings = {
    * Shell de la app (`App.tsx`)
    * ------------------------------------------------------------------ */
   app: {
+    /** Nombre del producto en la marca de la barra superior (`.identidad`, diseño 2d); no se
+     * pinta en Electron, donde ya lo lleva la barra de título del sistema. */
+    marca: 'Lila Modeler',
     /** Rótulo de cada modo de la barra superior; el id lo fija `ids.ts` (`MODO_IDS`). */
     modos: {
       modelar: 'Modelar',
@@ -345,6 +348,16 @@ export const es: Strings = {
     variosSeleccionados: (n: number): string =>
       `${n} elementos seleccionados: las acciones sobre varios a la vez todavía no están. ` +
       'Selecciona uno solo para editarlo.',
+
+    /* Cabecera del panel derecho sin nada seleccionado (diseño "Turno 2", bloque 2d). */
+    nadaSeleccionado: 'Nada seleccionado',
+    pistaSeleccion: 'Elige una figura para editarla, o empieza por el proceso.',
+    proceso: 'Proceso',
+    elementos: 'Elementos',
+    carriles: 'Carriles',
+    avisos: 'Avisos',
+    atajos: 'Atajos',
+    renombrar: 'Renombrar',
 
     textoAnotacion: 'Texto de la anotación',
     nombre: 'Nombre',
