@@ -32,6 +32,7 @@
           <a href="#cli">Command line</a>
           <a href="#screenshots">Screenshots</a>
           <a href="#desktop">Desktop</a>
+          <a href="#colleagues">Getting started</a>
           <a href="#docs">Docs</a>
           <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
         </nav>
@@ -54,7 +55,7 @@
           </p>
           <div class="actions">
             <a class="btn btn-primary" href="app/">Try the demo</a>
-            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases">Download the beta</a>
+            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">Download Beta 1 for macOS (Apple Silicon, unsigned)</a>
             <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/COMING-FROM-BIZAGI.md">Coming from Bizagi?</a>
             <a class="btn" href="https://github.com/AlambritoDito/lila-modeler">Source on GitHub</a>
           </div>
@@ -62,7 +63,8 @@
             The demo is the whole web app running in your browser: it starts with the
             <code>examples/pedido</code> restaurant process loaded, keeps a copy of your work in the
             browser's local storage, and opens and saves <code>.bpmn</code> files and
-            <code>.lila</code> projects as ordinary downloads. Nothing is uploaded anywhere.
+            <code>.lila</code> projects as ordinary downloads. Nothing is uploaded anywhere. See
+            <a href="#colleagues">Getting started for colleagues</a> below for the full flow.
           </p>
         </div>
       </div>
@@ -141,8 +143,11 @@
             <li>
               <h3>Themes and languages</h3>
               <p>
-                Eva-01 (dark) and Papel (light) ship with the app; a theme is a JSON file you can
-                edit or add. The interface is available in English and Spanish.
+                Five themes ship with the app: Eva-01 (dark, the default), Papel (light), Tieso
+                (light, ITESO blues), Akira (dark, Neo-Tokyo) and Montana (purple, bubblegum pink
+                and gold, inspired by Hannah Montana Linux). Your choice persists across sessions.
+                A theme is a JSON file you can edit or add. The interface is available in English
+                and Spanish.
               </p>
             </li>
             <li>
@@ -200,8 +205,10 @@
         <div class="wrap">
           <h2>Screenshots</h2>
           <p class="section-lede">
-            The web app in the Eva-01 theme, its default. A light theme (Papel) ships with it and
-            themes are plain JSON files you can edit.
+            The web app in Eva-01, its default theme. Four more ship with it — Papel (light),
+            Tieso (light, ITESO blues), Akira (dark, Neo-Tokyo) and Montana (purple, bubblegum pink
+            and gold, Hannah Montana Linux–inspired) — and your choice persists. Themes are plain
+            JSON files you can edit.
           </p>
           <div class="shots">
             <figure>
@@ -282,9 +289,10 @@
           <p class="section-lede">
             The same app packaged with Electron: projects live as folders on your disk,
             <code>.lila</code> and <code>.bpmn</code> files open with a double-click, and a welcome
-            screen lists your recent projects. The beta is built for macOS on Apple Silicon and
-            is <b>not signed or notarized</b>: on first launch, right-click the app and choose
-            Open. <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BETA-MAC-GUIDE.md">The beta guide</a>
+            screen lists your recent projects. Beta 1 (<code>v1.0.0-beta.1</code>) is built only for
+            macOS on Apple Silicon (arm64) and is <b>not signed or notarized</b>: on first launch,
+            right-click the app and choose Open, twice. Windows and Linux builds are not tested.
+            <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BETA-MAC-GUIDE.md">The beta guide</a>
             walks through installing it and reading the results.
           </p>
           <div class="shots">
@@ -305,6 +313,113 @@
         </div>
       </section>
 
+      <section id="colleagues">
+        <div class="wrap">
+          <h2>Getting started for colleagues</h2>
+          <p class="section-lede">
+            You got a link to this page. Here is the whole flow, and what to expect.
+          </p>
+
+          <div class="step">
+            <h3><span class="num">1</span>Try it</h3>
+            <p>
+              Open <a href="app/">the demo</a> — it starts with the neutral
+              <code>examples/pedido</code> restaurant process already loaded. Draw or edit a model,
+              open <b>Simulate</b> and run the AS-IS and TO-BE scenarios (already written for the
+              example), then open <b>Compare</b> to see the deltas, and <b>Animate</b> to replay
+              the run over the diagram.
+            </p>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">2</span>Know where your work lives</h3>
+            <p>
+              While you work, the browser keeps a copy in <b>that browser's local storage only</b>
+              — clearing site data, or opening the demo in another browser or profile, loses it.
+              That local copy is not a backup. To keep your work anywhere else, use
+              <b>Save project</b>: it downloads the whole project — model, scenarios, revisions and
+              saved runs — as one portable <code>.lila</code> file.
+            </p>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">3</span>Send a project to a colleague</h3>
+            <p>
+              Send them the <code>.lila</code> file (email, chat, a shared drive — anything that
+              moves a file). They open it with <b>Open project</b> in the web demo, or by
+              double-clicking it in the macOS app. This is sharing as portable project files, not
+              simultaneous editing: there is no account, no backend and no real-time collaboration
+              — one person edits a copy at a time, and the last <code>.lila</code> sent around is
+              the one everyone should work from next.
+            </p>
+          </div>
+
+          <p class="section-lede subhead">Known limits</p>
+          <ul class="links">
+            <li><b>Single-user files</b>Sharing means passing a <code>.lila</code> around, not co-editing one.</li>
+            <li><b>No accounts, backend or real-time sync</b>Everything runs locally, in your browser or the desktop app.</li>
+            <li><b>Mobile editing is untested</b>The tested editor viewports are desktop browsers at 1280px width or wider.</li>
+            <li><b>The macOS beta is unsigned</b>See the desktop section above for the first-launch steps.</li>
+          </ul>
+          <p class="note">
+            Beta 1 was tested on macOS with Chrome and Safari. Found a reproducible problem?
+            <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Open an issue</a>
+            — the bug template asks for a minimal <code>.bpmn</code> file or scenario that shows it.
+          </p>
+
+          <h3 id="es" class="lang-heading">En español</h3>
+          <p class="section-lede">Llegaste a esta página por un enlace. Así es el flujo completo, y qué esperar.</p>
+
+          <div class="step">
+            <h3><span class="num">1</span>Pruébalo</h3>
+            <p>
+              Abre <a href="app/">la demo</a> — arranca con el proceso neutral del restaurante,
+              <code>examples/pedido</code>, ya cargado. Dibuja o edita un modelo, abre
+              <b>Simular</b> y corre los escenarios AS-IS y TO-BE (ya escritos para el ejemplo),
+              luego abre <b>Comparar</b> para ver las diferencias, y <b>Animar</b> para reproducir
+              la corrida sobre el diagrama.
+            </p>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">2</span>Dónde vive tu trabajo</h3>
+            <p>
+              Mientras trabajas, el navegador guarda una copia solo en el
+              <b>almacenamiento local de ese navegador</b> — borrar los datos del sitio, o abrir la
+              demo en otro navegador o perfil, la pierde. Esa copia local no es un respaldo. Para
+              guardar tu trabajo en cualquier otro lugar, usa <b>Guardar proyecto</b>: descarga el
+              proyecto completo — modelo, escenarios, revisiones y corridas guardadas — como un
+              único archivo <code>.lila</code> portable.
+            </p>
+          </div>
+
+          <div class="step">
+            <h3><span class="num">3</span>Enviar un proyecto a un colega</h3>
+            <p>
+              Envíale el archivo <code>.lila</code> (correo, chat, un drive compartido — cualquier
+              cosa que mueva un archivo). Lo abre con <b>Abrir proyecto</b> en la demo web, o con
+              doble clic en la app de macOS. Esto es compartir archivos de proyecto portables, no
+              edición simultánea: no hay cuenta, ni backend, ni colaboración en tiempo real — una
+              persona edita una copia a la vez, y el último <code>.lila</code> que circuló es el que
+              todos deberían usar después.
+            </p>
+          </div>
+
+          <p class="section-lede subhead">Límites conocidos</p>
+          <ul class="links">
+            <li><b>Archivos de un solo usuario</b>Compartir es pasar un <code>.lila</code>, no coeditar uno.</li>
+            <li><b>Sin cuentas, backend ni sincronización en tiempo real</b>Todo corre localmente, en tu navegador o en la app de escritorio.</li>
+            <li><b>La edición en móvil no está probada</b>Los viewports probados del editor son navegadores de escritorio de 1280px de ancho o más.</li>
+            <li><b>La beta de macOS no está firmada</b>Ver la sección de escritorio arriba para los pasos del primer arranque.</li>
+          </ul>
+          <p class="note">
+            La Beta 1 se probó en macOS con Chrome y Safari. ¿Encontraste un problema reproducible?
+            <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Abre un issue</a>
+            — la plantilla de bug pide un archivo <code>.bpmn</code> mínimo o un escenario que lo muestre.
+          </p>
+        </div>
+      </section>
+
       <section id="docs">
         <div class="wrap">
           <h2>Documentation and downloads</h2>
@@ -314,8 +429,9 @@
               Source, issues and the full README.
             </li>
             <li>
-              <b><a href="https://github.com/AlambritoDito/lila-modeler/releases">Releases</a></b>
-              Desktop builds (macOS arm64 is the tested one; unsigned).
+              <b><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">Beta 1 (v1.0.0-beta.1)</a></b>
+              Desktop build for macOS Apple Silicon, unsigned. Not on <code>/releases/latest</code>
+              — GitHub excludes prereleases from that link.
             </li>
             <li>
               <b>
@@ -355,7 +471,7 @@
                   >docs/BETA-MAC-GUIDE.md</a
                 >
               </b>
-              Installing and using the unsigned macOS beta.
+              Installing and using the unsigned macOS Beta 1.
             </li>
             <li>
               <b>

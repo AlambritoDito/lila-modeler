@@ -367,3 +367,15 @@ footer .fine {
 
 .hero-brand { max-width: 580px; margin-bottom: 1.5rem; }
 .hero-brand img { display: block; width: 100%; height: auto; background: #fff; border-radius: 16px; }
+
+/* --- Getting started for colleagues -------------------------------------- */
+
+.subhead {
+  margin-top: 1.75rem;
+}
+
+.lang-heading {
+  margin-top: 2.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--border);
+}

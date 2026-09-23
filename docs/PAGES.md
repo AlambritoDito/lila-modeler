@@ -38,3 +38,23 @@ as a portable backup. Clearing browser data removes the local copy.
 PRs and pushes build the artifact without publishing by default. Deployment uses the
 `github-pages` environment with `pages: write` and `id-token: write`; build jobs only need
 read access to repository contents. No npm token or backend server is required.
+
+## Publishing from a release tag (owner action)
+
+For a tagged release such as `v1.0.0-beta.1`, publish the landing and demo that match that exact
+tag, rather than whatever is currently on `main`, by dispatching the workflow against the tag ref:
+
+```bash
+gh workflow run pages.yml --ref v1.0.0-beta.1 -f publish=true
+```
+
+Before dispatching, note the tag's commit SHA (`git rev-parse v1.0.0-beta.1`). After the run
+finishes, compare it against the deployed commit shown in the run's summary (or
+`gh run view <run-id> --json headSha`) to confirm the site was built from that same SHA, not a
+later commit on `main`. Automatic publication on push stays disabled regardless.
+
+**Requires the workflow accepting tag refs**: as of this writing, `pages.yml`'s `deploy` job
+gates on `github.ref == 'refs/heads/main'`, which a tag ref does not satisfy — the workflow needs
+to accept `refs/tags/v*` (or an equivalent input) before this procedure can run end to end. That
+change belongs to whoever owns `.github/workflows/pages.yml`; this section describes the intended
+procedure for when it lands.

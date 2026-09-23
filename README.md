@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases"><img src="https://img.shields.io/badge/Download-desktop_beta-0969da" alt="Download beta"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1"><img src="https://img.shields.io/badge/Download-Beta_1_(macOS)-0969da" alt="Download Beta 1"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -65,10 +65,20 @@ Open [alambritodito.github.io/lila-modeler/app/](https://alambritodito.github.io
 It starts with the restaurant example (`examples/pedido`) loaded. **Save project** downloads a
 `.lila` file and keeps a browser copy to restore on reload; nothing is uploaded anywhere.
 
+### Share a project with a colleague
+
+Sharing means passing around a portable `.lila` file, not simultaneous editing — there is no
+account, backend or real-time sync. Use **Save project** (web) or **Save as…** (desktop) to get a
+`.lila`, send it however you'd send any file, and your colleague opens it with **Open project** in
+the web demo or by double-clicking it in the macOS app. Found a reproducible problem along the way?
+[Open an issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose) — the bug template
+asks for a minimal `.bpmn` file or scenario that shows it.
+
 ### Desktop beta
 
 Installers are built by CI for macOS (arm64 `.dmg`), Windows (`.exe`) and Linux (`.AppImage`) and
-attached to the [GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases). They are
+attached to [Beta 1 on GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
+(not `/releases/latest` — GitHub excludes prereleases from that link). They are
 **neither signed nor notarized**, so the first launch is blocked:
 
 - **macOS**: right-click the app → **Open**, then confirm **Open**.

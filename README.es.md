@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases"><img src="https://img.shields.io/badge/Descargar-beta_de_escritorio-0969da" alt="Descargar beta"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1"><img src="https://img.shields.io/badge/Descargar-Beta_1_(macOS)-0969da" alt="Descargar Beta 1"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -68,11 +68,21 @@ Arranca con el ejemplo del restaurante (`examples/pedido`) cargado. **Guardar pr
 un `.lila` y conserva una copia en el navegador para restaurarla al recargar; no se sube nada a
 ningún sitio.
 
+### Compartir un proyecto con un colega
+
+Compartir es pasar un archivo `.lila` portable, no edición simultánea — no hay cuenta, backend ni
+sincronización en tiempo real. Usa **Guardar proyecto** (web) o **Guardar como…** (escritorio) para
+obtener un `.lila`, envíalo como enviarías cualquier archivo, y tu colega lo abre con **Abrir
+proyecto** en la demo web o con doble clic en la app de macOS. ¿Encontraste un problema
+reproducible en el camino? [Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
+— la plantilla de bug pide un archivo `.bpmn` mínimo o un escenario que lo muestre.
+
 ### Beta de escritorio
 
 CI construye instaladores para macOS (`.dmg` arm64), Windows (`.exe`) y Linux (`.AppImage`) y los
-adjunta a los [Releases de GitHub](https://github.com/AlambritoDito/lila-modeler/releases). **No
-están firmados ni notarizados**, así que el primer arranque se bloquea:
+adjunta a la [Beta 1 en GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
+(no `/releases/latest`: GitHub excluye los prereleases de ese enlace). **No están firmados ni
+notarizados**, así que el primer arranque se bloquea:
 
 - **macOS**: clic derecho sobre la app → **Abrir** y confirma **Abrir**.
   [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo.
