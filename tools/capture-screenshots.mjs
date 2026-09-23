@@ -30,7 +30,7 @@ const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_P
 const screenshots = [];
 try {
   await mkdir(output, { recursive: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'light' });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -55,7 +55,7 @@ try {
   }
   await page.goto(url); await ready();
   // Set the actual settings through the UI, without overriding application rendering or state.
-  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'eva-01'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
+  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
   await selectTask(); await page.getByLabel('Name', { exact: true }).fill('Take order — checked'); await page.getByLabel('Name', { exact: true }).press('Tab');
   await button('Simulate').click();
   await page.getByLabel('Seed', { exact: true }).fill('43'); await page.getByLabel('Seed', { exact: true }).press('Tab');
@@ -81,11 +81,11 @@ try {
   console.log('PASS: edit BPMN, numeric scenario edit, both 30-replication seed-42 simulations, compare, download, reload, discard unsaved edit, reopen downloaded project.');
   // Clear this disposable context's saved project to capture the unchanged maintained example.
   await page.evaluate(() => localStorage.clear()); await page.reload(); await ready();
-  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'eva-01'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
+  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
   const cdp = await context.newCDPSession(page);
   async function capture(name, canvas = true) {
     assert.doesNotMatch(await page.locator('body').innerText(), /\b(Modelar|Simular|Resultados|Comparar|Ajustes)\b/);
-    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim().toUpperCase()), '#12101A');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim().toUpperCase()), '#FAF8EE');
     for (const [width, height] of [[1440, 900], [1920, 1080]]) {
       await page.setViewportSize({ width, height });
       await page.waitForTimeout(150); // Allow ResizeObserver and the diagram viewport to settle.
@@ -127,7 +127,7 @@ try {
   assert.deepEqual(errors, []);
   await writeFile(path.join(output, 'capture-manifest.json'), JSON.stringify({
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    browser: await browser.version(), locale: 'en-US', timezone: 'America/Mexico_City', theme: 'Eva-01', seed: 42, replications: 30,
+    browser: await browser.version(), locale: 'en-US', timezone: 'America/Mexico_City', theme: 'Lila Light', seed: 42, replications: 30,
     path: '/lila-modeler/app/', acceptance: 'edit, simulate both scenarios, compare, explicit save, reload, discard unsaved edits, reopen download: PASS',
     screenshots,
   }, null, 2) + '\n');

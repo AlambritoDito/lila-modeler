@@ -82,6 +82,18 @@ function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | 
 type TemaId = keyof Strings['app']['temas'];
 /** Sus ids son los mismos en todos los idiomas —lo garantiza `Strings`—; su rótulo, no. */
 const temaIds = (): TemaId[] => Object.keys(strings().app.temas) as TemaId[];
+/**
+ * Theme used while no valid one is saved (#404): Lila Dark when the OS prefers dark, else Lila
+ * Light. It is never persisted, so until the user picks one in Settings the app follows the OS on
+ * every launch. Without `matchMedia` (jsdom, very old engines) it is Lila Light.
+ * ponytail: read once at startup, no `change` listener — switching the OS scheme applies on the
+ * next launch.
+ */
+function temaPorDefecto(): TemaId {
+  const oscuro = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return oscuro ? 'lila-dark' : 'lila-light';
+}
 
 /**
  * Preferencias de apariencia (LILA-113). Con puente van a `<userData>/estado.json`
@@ -351,7 +363,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
   const [decoratedTheme, setDecoratedTheme] = useState<string | undefined>();
-  const [temaId, setTemaId] = useState<string>('eva-01');
+  const [temaId, setTemaId] = useState<string>(temaPorDefecto);
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
@@ -736,8 +748,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const mios = saneaTemas(guardadas.temas);
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
-      // (o a Eva-01), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), 'eva-01');
+      // (o al Lila del esquema del sistema, sin guardarlo), igual que con un id de tema borrado.
+      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
