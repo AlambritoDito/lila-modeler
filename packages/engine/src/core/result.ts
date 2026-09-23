@@ -111,7 +111,11 @@ export interface BottleneckEntry {
 export interface KpiSummary {
   /** Media de las `n` observaciones; 0 cuando `n = 0` (identidad, no una estimación). */
   mean: number;
-  /** Replicaciones que aportaron una observación, `<= ReplicationSummary.count`. */
+  /**
+   * Replicaciones que aportaron una observación, `<= ReplicationSummary.count`. Los resultados
+   * guardados antes de 1.0.0-beta.1 no lo traen: el esquema los acepta y en ese caso vale
+   * `undefined` en tiempo de ejecución aunque el tipo diga `number`.
+   */
   n: number;
   /** Desviación estándar muestral; solo con `n >= 2`. */
   sd?: number;
