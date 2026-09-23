@@ -71,7 +71,7 @@ uploaded anywhere.
 Sharing means passing around a portable `.lila` file, not simultaneous editing — there is no
 account, backend or real-time sync. Use **File ▸ Save** (web, tooltip: Save project) or **Save
 as…** (desktop) to get a `.lila`, send it however you'd send any file, and your colleague opens it
-with **File ▸ Open** (tooltip: Open project) in the web demo or the desktop app, or by
+with **File ▸ Open** (tooltip: Open project) in the web demo, **File ▸ Open project…** in the desktop app, or by
 double-clicking it in Finder (verified for Beta 1: `<VERIFY-FINDER>`). Found a reproducible
 problem along the way?
 [Open an issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose) — the bug template

@@ -56,7 +56,8 @@ La app utiliza el icono ilustrado detallado de Lila en el Dock y en el Finder.
 
 ## Archivos de proyecto: `.lila` frente a `.bpmn`
 
-Dos tipos de archivo se registran en Finder y abren esta app con doble clic:
+Dos tipos de archivo se registran en Finder y abren esta app con doble clic (verificación de la
+Beta 1: ver `<VERIFY-FINDER>` en Limitaciones):
 
 - **`.lila`** es el contenedor completo del proyecto: el modelo, sus escenarios, revisiones y
   corridas guardadas, comprimidos en un solo archivo (ver [`PROJECT_FORMAT.md`](../PROJECT_FORMAT.md)).
@@ -89,7 +90,8 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 ### Modelar
 
 - En escritorio se trabaja con **Nuevo proyecto** y **Abrir proyecto** por carpeta. También puedes
-  abrir un `.bpmn` suelto con doble clic. Usa **Guardar como** para conservar sus escenarios y
+  abrir un `.bpmn` suelto con doble clic (ver `<VERIFY-FINDER>` en Limitaciones). Usa **Guardar
+  como** para conservar sus escenarios y
   corridas en una carpeta de proyecto, como se describe más abajo.
 - El lienzo central es el editor de bpmn-js: se edita arrastrando figuras de la paleta, igual que
   cualquier editor de bpmn.io.

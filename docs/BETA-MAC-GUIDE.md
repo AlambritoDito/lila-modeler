@@ -56,7 +56,8 @@ The app uses the Lila icon in the Dock and in Finder.
 
 ## Project files: `.lila` vs `.bpmn`
 
-Two file types register with Finder and double-click to open in this app:
+Two file types register with Finder and double-click to open in this app (Beta 1 verification: see
+`<VERIFY-FINDER>` under Limitations):
 
 - **`.lila`** is the whole project container: the model, its scenarios, revisions and saved runs,
   zipped into one file (see [`PROJECT_FORMAT.md`](PROJECT_FORMAT.md)). This is the form to hand to
@@ -102,7 +103,8 @@ follow that same setting. This walkthrough uses the English labels.
 ### Model («Modelar»)
 
 - On desktop you work with **New project** and **Open project**
-  by folder. You can also open a loose `.bpmn` by double click. Use **Save as** to retain
+  by folder. You can also open a loose `.bpmn` by double click (see `<VERIFY-FINDER>` under
+  Limitations). Use **Save as** to retain
   its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
   like any bpmn.io editor.

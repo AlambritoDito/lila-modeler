@@ -73,7 +73,7 @@ recargar; no se sube nada a ningún sitio.
 Compartir es pasar un archivo `.lila` portable, no edición simultánea — no hay cuenta, backend ni
 sincronización en tiempo real. Usa **Archivo ▸ Guardar** (web, tooltip: Guardar proyecto) o
 **Guardar como…** (escritorio) para obtener un `.lila`, envíalo como enviarías cualquier archivo,
-y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la demo web o la app de
+y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la demo web, **Archivo ▸ Abrir proyecto…** en la app de
 escritorio, o con doble clic en el Finder (verificado para la Beta 1: `<VERIFY-FINDER>`).
 ¿Encontraste un problema reproducible en el camino?
 [Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
