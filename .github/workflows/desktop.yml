@@ -1,7 +1,11 @@
 name: Desktop
 
-# Build unsigned installers on PRs and manual runs. Tags create a draft release.
-# The owner approves publication and creates v0.1.0 only after validation.
+# Build unsigned installers on PRs and manual runs. A `v*` tag additionally attaches the
+# macOS arm64 DMG and its checksum to a DRAFT release (prerelease when the version has a
+# suffix); the owner reviews the assets and publishes the release manually. Windows and
+# Linux builds stay CI artifacts only: they are built but not validated, so they are not
+# advertised as release assets. Build jobs run with read-only credentials; only the
+# separate `release` job can write to the repository.
 on:
   workflow_dispatch:
   pull_request:
@@ -10,7 +14,11 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -19,14 +27,16 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            flag: --mac
+            flags: --mac --arm64
           - os: windows-latest
-            flag: --win
+            flags: --win
           - os: ubuntu-latest
-            flag: --linux
+            flags: --linux
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -35,16 +45,71 @@ jobs:
       - run: npm run build -w @lila/engine
       - run: npm run build -w @lila/web
       - run: npm run build -w @lila/desktop
-      - run: npx electron-builder ${{ matrix.flag }} --publish never
+      - run: npx electron-builder ${{ matrix.flags }} --publish never
         working-directory: apps/desktop
+      - name: Verify macOS artifact is arm64, ad-hoc signed and carries the tagged version
+        if: runner.os == 'macOS'
+        working-directory: apps/desktop
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if [ "$REF_TYPE" = tag ]; then test "v$version" = "$REF_NAME" || { echo "package version $version does not match tag $REF_NAME"; exit 1; }; fi
+          dmg=$(ls release/*-mac-arm64.dmg)
+          echo "DMG: $dmg"
+          case "$dmg" in *"-${version}-mac-arm64.dmg") ;; *) echo "DMG name does not carry version $version"; exit 1;; esac
+          case "$(basename "$dmg")" in *" "*) echo "DMG name must not contain spaces (GitHub renames them)"; exit 1;; esac
+          app="release/mac-arm64/Lila Modeler.app"
+          lipo -archs "$app/Contents/MacOS/Lila Modeler" | tee /dev/stderr | grep -qw arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$version"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          (cd release && shasum -a 256 *-mac-arm64.dmg > SHA256SUMS && cat SHA256SUMS)
+          cat release/ORIGEN.txt 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: lila-desktop-${{ matrix.os }}-${{ github.sha }}
           path: apps/desktop/release/**
           if-no-files-found: error
-      - uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
+
+  release:
+    # Only the validated platform reaches the release, only from a tag, only as a draft.
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: apps/desktop/release/*.{dmg,exe,AppImage}
+          name: lila-desktop-macos-latest-${{ github.sha }}
+          path: release
+      - name: Refuse to touch a release that is already published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # "not found" means the action will create the draft; any other failure is a real error.
+          if out=$(gh release view "$REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>&1); then
+            case "$out" in
+              true) echo "Release $REF_NAME is a draft; assets may be added." ;;
+              *) echo "::error::Release $REF_NAME is already published; assets are not replaced by CI."; exit 1 ;;
+            esac
+          else
+            case "$out" in
+              *"release not found"*|*"Not Found"*|*"HTTP 404"*) echo "No release $REF_NAME yet; the action creates a draft." ;;
+              *) echo "::error::Could not inspect release $REF_NAME: $out"; exit 1 ;;
+            esac
+          fi
+          ls -la release
+      - uses: softprops/action-gh-release@v2 # the repository allowlist only admits this pattern, not a SHA pin
+        with:
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: false
+          files: |
+            release/*-mac-arm64.dmg
+            release/SHA256SUMS
           fail_on_unmatched_files: true

@@ -1,23 +1,33 @@
 name: Release
 
-# The owner creates the release tag and configures NPM_TOKEN after approving publication.
+# A `v*` tag only proves the package builds, type-checks, tests and packs. Nothing is
+# published from a tag: pushing `v1.0.0-beta.1` must not touch the npm registry nor advance
+# its `latest` dist-tag. npm publication is a separate, explicit owner action: run this
+# workflow manually with `publish_npm: true` (it also requires the NPM_TOKEN secret).
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: 'Publish @lila/engine to npm (owner decision; requires NPM_TOKEN and a v* tag ref)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  checks:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
-    # Publication is opt-in: the owner has not created NPM_TOKEN nor settled the npm org, so
-    # the alpha tag proves the package builds and packs without pushing anything to a registry.
-    # Secrets are unavailable to `if:` directly, so the job exposes the token as an env var and
-    # the publish step tests that instead.
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PUBLISH_NPM: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm == true && github.ref_type == 'tag' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,11 +39,17 @@ jobs:
         run: |
           node --input-type=module - <<'JS'
           import { readFileSync } from 'node:fs';
-          const tag = process.env.GITHUB_REF_NAME.slice(1);
-          for (const file of ['packages/engine/package.json', 'apps/desktop/package.json']) {
-            const { version } = JSON.parse(readFileSync(file, 'utf8'));
-            if (version !== tag) throw new Error(`${file}: ${version} differs from tag ${tag}`);
+          const ref = process.env.GITHUB_REF_NAME;
+          const expected = process.env.GITHUB_REF_TYPE === 'tag' && ref.startsWith('v') ? ref.slice(1) : undefined;
+          const versions = {};
+          for (const file of ['packages/engine/package.json', 'packages/mcp/package.json', 'apps/web/package.json', 'apps/desktop/package.json']) {
+            versions[file] = JSON.parse(readFileSync(file, 'utf8')).version;
           }
+          versions['packages/engine/src/version.ts'] = /version = '([^']+)'/.exec(readFileSync('packages/engine/src/version.ts', 'utf8'))[1];
+          const distinct = new Set(Object.values(versions));
+          console.log(versions);
+          if (distinct.size !== 1) throw new Error(`Release manifests disagree: ${JSON.stringify(versions)}`);
+          if (expected !== undefined && !distinct.has(expected)) throw new Error(`Manifests say ${[...distinct][0]} but the tag is ${ref}`);
           JS
       - run: npm ci
       - run: npm run build
@@ -41,12 +57,21 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:package
       - run: npm pack --workspace @lila/engine --dry-run
-      - name: Publish to npm
-        if: env.NPM_TOKEN != ''
-        run: npm publish --workspace @lila/engine --provenance --access public
+      - name: Publish to npm (explicit owner action only)
+        if: env.PUBLISH_NPM == 'true' && env.NPM_TOKEN != ''
+        # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag so `latest` never
+        # points at a beta; a stable version goes to `latest`. Publication is only possible from
+        # a dispatch on a `v*` tag. Note: the registry sets `latest` on a package's very first
+        # publish regardless of --tag; check `npm view @lila/engine dist-tags` after a first publish.
+        run: |
+          version=$(node -p "require('./packages/engine/package.json').version")
+          tag=latest
+          case "$version" in *-*) tag=$(echo "$version" | sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/');; esac
+          echo "Publishing @lila/engine@$version with dist-tag $tag"
+          npm publish --workspace @lila/engine --provenance --access public --tag "$tag"
         env:
           NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
       - name: Report that publication was skipped
-        if: env.NPM_TOKEN == ''
+        if: env.PUBLISH_NPM != 'true' || env.NPM_TOKEN == ''
         run: |
-          echo "::notice title=npm publish skipped::NPM_TOKEN is not configured, so @lila/engine was not published. The tag still proved that the package builds, type-checks, tests and packs. Add the NPM_TOKEN secret and re-run this workflow to publish."
+          echo "::notice title=npm publish skipped::@lila/engine was not published. Publication only happens from a manual run with publish_npm=true and the NPM_TOKEN secret; a tag push only proves the package builds, type-checks, tests and packs."
