@@ -291,7 +291,7 @@ trusting this list blindly at a later date)*
 - **`.lila` and `.bpmn` Finder double-click: verified by the lead on macOS 27 arm64 for Beta 1** —
   see release notes. `<VERIFY-FINDER>`
 - **Saving a `.lila` opened by double-click or launch argument is fixed in Beta 1 (#378)**.
-  `<VERIFY-378>`
+  `verified in Beta 1 by the real-Electron regression `tools/e2e-desktop-open-path.mjs` (launch argument, `open-file`, recents, dialog; ASCII, spaces, accents in NFC and NFD)`
 - **Raw error messages**: some errors reach the interface untranslated — `zod`'s raw validation
   JSON (for example, a scenario that references a nonexistent task id) and Electron's generic
   "Error invoking remote method…" text (for example, when saving into a folder with no

@@ -269,7 +269,7 @@ esta lista a ciegas en una fecha posterior)*
 - **Doble clic de `.lila` y `.bpmn` en Finder: verificado por el lead en macOS 27 arm64 para la
   Beta 1** — ver las notas de la versión. `<VERIFY-FINDER>`
 - **Guardar un `.lila` abierto por doble clic o argumento de lanzamiento está arreglado en la
-  Beta 1 (#378)**. `<VERIFY-378>`
+  Beta 1 (#378)**. `verificado en la Beta 1 con la regresión en Electron real `tools/e2e-desktop-open-path.mjs` (argumento de arranque, `open-file`, recientes, diálogo; ASCII, espacios, acentos en NFC y NFD)`
 - **Mensajes de error crudos**: algunos errores llegan sin traducir a la interfaz — el JSON crudo
   de validación de `zod` (por ejemplo, un escenario que referencia un id de tarea inexistente) y
   el texto genérico de Electron "Error invoking remote method…" (por ejemplo, al guardar en una
