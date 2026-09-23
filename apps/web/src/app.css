@@ -217,6 +217,9 @@ body {
 .producto {
   flex: none;
   font: 800 13px var(--font-ui);
+  /* Without this the `min-content` floor of `.identidad` (#399) is computed as if «Lila Modeler»
+     wrapped to its longest word, ~25 px too low, and the file line spills under the first tab. */
+  white-space: nowrap;
 }
 
 .identidad .separador {
@@ -2050,12 +2053,12 @@ body {
   color: var(--fg-primary);
 }
 
-/* 1345 and not 1280: even with `.identidad` shrinkable again (#399) and its floor at the file
-   line, the scenario toggle (#405, 30 px, flex: none) still leaves the bar up to 21 px short of
-   fitting between 1281 and 1303 px, and up to 13 px short between 1321 and 1328 px (where
-   `.buscador` reappears and eats the same room back) — measured with the default project name,
-   dirty state, Spanish, Simulate. The modes are the next thing with air to spare. */
-@media (max-width: 1345px) {
+/* 1365 and not 1280: with `.identidad` at its file-line floor (#399) and the scenario toggle
+   (#405, 30 px, flex: none) in the bar, Spanish on Simulate with «Sin guardar» ran up to 21 px
+   short between 1281 and 1303 px, 13 px short between 1321 and 1328 px (`.buscador` reappears)
+   and 12 px short at 1346 fading to 1 px at 1357 (QA of #417, rounds 1–2). The modes are the next
+   thing with air to spare; 1365 leaves a margin over the last measured overflow. */
+@media (max-width: 1365px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
   }
