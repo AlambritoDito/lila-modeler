@@ -1,9 +1,9 @@
 {
-  "sourceCommit": "27f850741c49ff660db9808dae0c3e7f73a0d096",
+  "sourceCommit": "1b7c3f8719fee8a88724b50c4531f23098e73106",
   "browser": "153.0.8010.12",
   "locale": "en-US",
   "timezone": "America/Mexico_City",
-  "theme": "Eva-01",
+  "theme": "Lila Light",
   "seed": 42,
   "replications": 30,
   "path": "/lila-modeler/app/",
@@ -116,6 +116,16 @@
     },
     {
       "file": "appearance-1920.png",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "theme-lila-dark.png",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "theme-lila-dark-1920.png",
       "width": 1920,
       "height": 1080
     }

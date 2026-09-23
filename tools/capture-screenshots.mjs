@@ -125,6 +125,23 @@ try {
   await button('Validate paths').click(); await button('Properties').click(); await capture('routes');
   await button('Model').click(); await button('Fit to screen').click(); await button('Settings').click(); await capture('appearance', false); await button('Close').click();
   assert.deepEqual(errors, []);
+  // Lila Dark is what a dark-mode system gets on first launch (#404): one Model capture per size,
+  // from a fresh context (no saved theme) with the dark scheme emulated, so nothing else changes.
+  const dark = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'dark' });
+  const darkPage = await dark.newPage(); darkPage.on('pageerror', error => errors.push(error.message));
+  await darkPage.goto(url); await darkPage.getByRole('button', { name: 'Run simulation', exact: true }).waitFor(); await darkPage.evaluate(() => document.fonts.ready);
+  assert.equal(await darkPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim().toUpperCase()), '#1C0F2E');
+  const darkCdp = await dark.newCDPSession(darkPage);
+  for (const [width, height] of [[1440, 900], [1920, 1080]]) {
+    await darkPage.setViewportSize({ width, height }); await darkPage.waitForTimeout(150);
+    await darkPage.getByRole('button', { name: 'Fit to screen', exact: true }).click(); await darkPage.mouse.move(width - 4, height - 4); await darkPage.waitForTimeout(250);
+    const bytes = Buffer.from((await darkCdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })).data, 'base64');
+    assert.equal(bytes.readUInt32BE(16), width); assert.equal(bytes.readUInt32BE(20), height);
+    const file = `theme-lila-dark${width === 1440 ? '' : '-1920'}.png`;
+    await writeFile(path.join(output, file), bytes); screenshots.push({ file, width, height });
+  }
+  console.log('Captured theme-lila-dark'); await dark.close();
+  assert.deepEqual(errors, []);
   await writeFile(path.join(output, 'capture-manifest.json'), JSON.stringify({
     sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     browser: await browser.version(), locale: 'en-US', timezone: 'America/Mexico_City', theme: 'Lila Light', seed: 42, replications: 30,
