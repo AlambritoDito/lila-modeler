@@ -3,6 +3,38 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.3] - 2026-09-24
+
+Lote A: identity and first launch. No installer is attached to this version; the browser app and
+locally built desktop bundles report it so builds can be told apart.
+
+### Added
+
+- **Lila Light and Lila Dark themes** (#404): two built-in themes drawn from the approved Lila
+  illustration palette (purple, cream, pink, plum, lavender). Both pass the contrast checks and drive
+  the light/dark scheme of native controls and of the detached scenario window.
+- **Default theme by system scheme** (#404): while no theme is saved, the app follows
+  `prefers-color-scheme` (Lila Dark or Lila Light) on every launch without saving that choice; once a
+  theme is picked in Settings it always wins. A saved id that no longer exists falls back the same way.
+
+### Changed
+
+- **New process starts empty** (#409): «New» (⌘N, File menu, toolbar, welcome screen) creates a
+  process with no shapes and two scenarios with no element entries, as the welcome hint promised;
+  the old start → task → end template only survives as a test fixture.
+- **Detach toggle is an icon** (#405): the «Scenario docked ↗» control in the top bar is a 30 px icon
+  button at every width, with the full text as its accessible label and tooltip.
+
+### Fixed
+
+- **File line no longer clipped in Spanish** (#399): «model.bpmn · Guardado» stays whole while the
+  search field is visible; the project name is what ellipsizes when the bar is short of room.
+- **Duplicating a scenario twice** (#397) no longer overwrites the first copy: copies are numbered
+  (« (copy)», « (copy 2)», …) and each one still extends the original.
+- **Desktop Recent list scoped to the active profile** (#389): the one-off migration that copied the
+  pre-productName `estado.json` from the shared app-data folder into any fresh profile is gone, so an
+  isolated `--user-data-dir` no longer shows another profile's projects.
+
 ## [1.0.0-beta.2] - 2026-09-23
 
 Interim beta: the Simulate view follows the "Turno 2" design review. No installer is attached to this
