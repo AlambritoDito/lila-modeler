@@ -158,6 +158,8 @@ export interface Ajustes {
   readonly idioma?: string;
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   readonly temas?: readonly TemaGuardado[];
+  /** Width of the right panel in px (design 2a); the renderer clamps it to 300–520. */
+  readonly panelAncho?: number;
 }
 
 /**

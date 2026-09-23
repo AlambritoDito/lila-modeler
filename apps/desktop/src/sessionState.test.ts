@@ -199,6 +199,14 @@ describe('ajustes de apariencia (LILA-113)', () => {
     });
   });
 
+  it('panelAncho (design 2a) is kept only as a number inside 300–520', () => {
+    expect(parseAjustes({ panelAncho: 440 })).toEqual({ panelAncho: 440 });
+    expect(parseAjustes({ panelAncho: 299 })).toEqual({});
+    expect(parseAjustes({ panelAncho: 521 })).toEqual({});
+    expect(parseAjustes({ panelAncho: '440' })).toEqual({});
+    expect(parseAjustes({ panelAncho: Number.NaN })).toEqual({});
+  });
+
   it('withAjustes fusiona el idioma como cualquier otra preferencia (LILA-210)', () => {
     const conIdioma = withAjustes(defaultSessionState(), { idioma: 'es' });
     expect(withAjustes(conIdioma, { tema: 'papel' }).ajustes).toEqual({ idioma: 'es', tema: 'papel' });

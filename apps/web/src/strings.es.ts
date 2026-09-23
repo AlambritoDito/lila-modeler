@@ -170,6 +170,8 @@ export const es: Strings = {
     cerrarDiagrama: 'Cerrar diagrama',
     cerrarArchivo: (archivo: string): string => `Cerrar ${archivo}`,
     nuevoDiagrama: 'Nuevo diagrama',
+    /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
+    redimensionarPanel: 'Redimensionar el panel derecho',
 
     /** Barra de estado. */
     semilla: (valor: string): string => `Semilla ${valor}`,
@@ -435,6 +437,20 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Raíl de escenarios de Simular (`RailEscenarios.tsx`, diseño 2a)
+   * ------------------------------------------------------------------ */
+  rail: {
+    titulo: 'Escenarios',
+    nuevo: 'Duplicar el escenario activo',
+    base: 'BASE',
+    sinCorrer: 'sin correr',
+    corrida: (semilla: string, repl: string): string => `semilla ${semilla} · ${repl} repl.`,
+    hereda: (padre: string): string => `hereda ${padre}`,
+    enVentana: 'en ventana aparte ↗',
+    validacion: 'Validación',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Panel de escenario (`ScenarioPanel.tsx`)
    * ------------------------------------------------------------------ */
   escenario: {
@@ -445,8 +461,10 @@ export const es: Strings = {
       `${errores} ${errores === 1 ? 'error' : 'errores'} · ${avisos} ${
         avisos === 1 ? 'aviso' : 'avisos'
       }`,
-    hereda: (padre: string): string =>
-      `Hereda de ${padre}: se muestran los valores resueltos y se edita solo el delta.`,
+    titulo: (nombre: string): string => `Escenario ${nombre}`,
+    /** Línea mono bajo la cabecera: el archivo y su padre `extends`, «—» si es base. */
+    archivoHereda: (archivo: string, padre: string | null): string =>
+      `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
      * #333 — los cuatro pasos del panel de simulación, que son los cuatro niveles de Bizagi en

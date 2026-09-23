@@ -948,7 +948,8 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
     ];
     mocks.scenarioChange();
   });
-  const chips = [...container.querySelectorAll('.chips-validacion .chip')].map((c) => c.textContent);
+  // The canvas chips; the rail of Simulate repeats them in its footer (design 2a).
+  const chips = [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
   expect(chips).toEqual([T.app.errores(1), T.app.avisos(1)]);
   // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
   const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
@@ -959,7 +960,8 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
 });
 
 it('sin problemas no hay chips', () => {
-  expect(container.querySelector('.chips-validacion')).toBeNull();
+  // Over the canvas only: the rail footer always shows its two counts (design 2a).
+  expect(container.querySelector('.zona-modelo .chips-validacion')).toBeNull();
 });
 
 // --- «Validar rutas» (LILA-065) ---
@@ -1066,8 +1068,8 @@ it('el pie lleva errores, avisos, escenario y semilla heredada del escenario act
   expect(pie.textContent).toContain(T.app.escenario);
   expect(pie.textContent).toContain('AS-IS');
   expect(pie.textContent).toContain(T.app.semilla('42'));
-  const select = container.querySelector<HTMLSelectElement>('.simulacion select')!;
-  await act(async () => { select.value = 'to-be-3-cajeros.scenario.json'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  // The scenario is picked in the rail of Simulate now (design 2a), not in a `<select>`.
+  await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
   expect(pie.textContent).toContain('TO-BE 3 cashiers');
   expect(pie.textContent).toContain(T.app.semilla('42'));
 });
@@ -1081,9 +1083,15 @@ function teclear(campo: HTMLInputElement, texto: string): void {
   });
 }
 
+/** A row of the scenario rail (design 2a), by the scenario's name. */
+const filaRail = (nombre: string): HTMLButtonElement =>
+  [...container.querySelectorAll<HTMLButtonElement>('.rail-fila')].find((b) => b.querySelector('.rail-nombre')!.firstChild!.textContent === nombre)!;
+
 const figuras = (): HTMLButtonElement[] => [...container.querySelectorAll<HTMLButtonElement>('.paleta .figura')];
 
 it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se compacta', async () => {
+  // The palette is Model's only since design 2a: in Simulate its column is the scenario rail.
+  await click(T.app.modos.modelar);
   const tarea = figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario);
   expect(tarea).toBeDefined();
   // `Enter` sobre un ítem es la activación por defecto del `<button>`; jsdom no la ejecuta
@@ -1112,6 +1120,64 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
   expect(figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario)).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+// --- Design 2a: scenario rail and resizable right panel ---
+
+it('in Simulate the rail replaces the palette; a row picks the scenario and clears the result', async () => {
+  expect(container.querySelector('.rail-escenarios')).not.toBeNull();
+  expect(container.querySelector('.paleta')).toBeNull();
+  expect(container.querySelector('.simulacion select')).toBeNull();
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click(T.app.ejecutar);
+  await click(T.app.modos.simular);
+  expect(ultimoOverlay()[0]).not.toBeNull();
+  await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
+  expect(filaRail('TO-BE 3 cashiers').getAttribute('aria-current')).toBe('true');
+  expect(filaRail('AS-IS').hasAttribute('aria-current')).toBe(false);
+  expect(ultimoOverlay()[0]).toBeNull();
+  expect(container.textContent).toContain(T.app.cuellosSinCorrida);
+  // Back in Model the palette returns.
+  await click(T.app.modos.modelar);
+  expect(container.querySelector('.paleta')).not.toBeNull();
+  expect(container.querySelector('.rail-escenarios')).toBeNull();
+});
+
+it('the divider resizes the right panel between 300 and 520 px and remembers it', async () => {
+  const app = container.querySelector<HTMLElement>('.app')!;
+  const divisor = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
+  const ancho = () => app.style.getPropertyValue('--panel-ancho');
+  const puntero = (tipo: string, clientX: number) => act(async () => {
+    divisor.dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX }));
+  });
+  expect(ancho()).toBe('320px');
+  // Dragging left widens the panel: it grows from the right edge.
+  await puntero('pointerdown', 1000); await puntero('pointermove', 900);
+  expect(ancho()).toBe('420px');
+  await puntero('pointermove', 100);
+  expect(ancho()).toBe('520px');
+  await puntero('pointermove', 1500);
+  expect(ancho()).toBe('300px');
+  await puntero('pointermove', 880); await puntero('pointerup', 880);
+  expect(ancho()).toBe('440px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('440');
+  expect(container.querySelector('.panel.ancho')).not.toBeNull();
+  // Moving without a pointerdown does nothing.
+  await puntero('pointermove', 0);
+  expect(ancho()).toBe('440px');
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+  expect(ancho()).toBe('456px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('456');
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+  expect(ancho()).toBe('440px');
+});
+
+it('the panel width saved in the browser is restored, clamped', async () => {
+  await act(async () => root.unmount());
+  localStorage.setItem('lila.panelAncho', '9999');
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('520px');
 });
 
 // --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---

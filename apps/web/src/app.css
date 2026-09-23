@@ -36,8 +36,9 @@ body {
     'paleta    diagramas panel'
     'estado    estado    estado';
   /* La paleta (LILA-207) fija su propio ancho —236 px, o 48 en compacto— y la columna se
-     encoge a 0 cuando no se pinta (modos Resultados y Comparar). */
-  grid-template-columns: auto 1fr 320px;
+     encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
+     scenario rail (212 px). The right panel is `--panel-ancho`, set inline by the divider. */
+  grid-template-columns: auto 1fr var(--panel-ancho, 320px);
   grid-template-rows: auto 1fr auto auto;
   height: 100vh;
 }
@@ -334,6 +335,47 @@ body {
   flex-direction: column;
   grid-area: panel;
   overflow: auto;
+}
+
+/* Divider of the right panel (design 2a, `docs/design/COMPARACION-2026-09-07.md`): a 6 px
+   strip sharing the panel's grid area, straddling its left border. Grid items honour `z-index`
+   without `position`, so it sits over the panel's edge. */
+.divisor {
+  cursor: col-resize;
+  grid-area: panel;
+  justify-self: start;
+  margin-left: -3px;
+  touch-action: none;
+  width: 6px;
+  z-index: 2;
+}
+
+.divisor:hover,
+.divisor:focus-visible {
+  background: var(--accent-primary);
+  outline: none;
+}
+
+/* Wide panel (≥ 440 px): the scenario form (sections and record entries) goes two columns.
+   The selector is shared with the detached window of W1. Each `.propiedad` (a field and its help, from `Propiedades`) is a cell;
+   everything else (titles, lists, records with nested entries, the calendar grid) takes the row.
+   ponytail: a CSS grid over the generated markup, no layout component. */
+/* The grid goes on `::details-content`: a `<details>` lays its children out inside that slot, so
+   `display: grid` on the element itself only sees two boxes (summary and content). */
+.ventana-flotante .escenario details[open]::details-content,
+.panel.ancho .escenario details[open]::details-content,
+.ventana-flotante .escenario .entrada,
+.panel.ancho .escenario .entrada {
+  display: grid;
+  gap: 8px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ventana-flotante .escenario :is(details[open], .entrada) > :not(.propiedad),
+.panel.ancho .escenario :is(details[open], .entrada) > :not(.propiedad),
+.ventana-flotante .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario),
+.panel.ancho .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario) {
+  grid-column: 1 / -1;
 }
 
 .pestanas,
@@ -774,6 +816,7 @@ body {
   color: var(--fg-primary);
   font: inherit;
   padding: calc(3px * var(--espacio, 1)) 6px;
+  box-sizing: border-box;
   width: 100%;
 }
 
@@ -1335,6 +1378,122 @@ body {
 
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
+
+/* ---------- scenario rail of Simulate (design 2a) ---------- */
+
+/* Replaces the shape palette in Simulate, in the same grid column. Measures from design 2a:
+   212 px rail, 10 px uppercase header, 20 px `+`, 12 px names, 10 px mono subtitles. */
+.rail-escenarios {
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  grid-area: paleta;
+  min-height: 0;
+  width: 212px;
+}
+
+.rail-cabecera,
+.rail-rotulo {
+  color: var(--fg-muted);
+  font: 600 10px/1 var(--font-ui);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rail-cabecera {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: calc(10px * var(--espacio, 1)) 12px;
+}
+
+.rail-nuevo {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: 400 14px/1 var(--font-ui);
+  height: 20px;
+  padding: 0;
+  width: 20px;
+}
+
+.rail-nuevo:hover { background: var(--bg-hover); }
+
+.rail-lista {
+  flex: 1;
+  overflow: auto;
+}
+
+.rail-fila {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: calc(9px * var(--espacio, 1)) 12px calc(9px * var(--espacio, 1)) 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.rail-fila:hover { background: var(--bg-hover); }
+
+.rail-fila[aria-current='true'] {
+  background: var(--bg-elevated);
+  border-left-color: var(--accent-primary);
+}
+
+.rail-nombre {
+  align-items: center;
+  display: flex;
+  font: 500 12px/1.2 var(--font-ui);
+  gap: 6px;
+}
+
+.rail-fila[aria-current='true'] .rail-nombre { font-weight: 600; }
+
+.rail-sub {
+  color: var(--fg-muted);
+  font: 400 10px/1.3 var(--font-mono);
+}
+
+.insignia-base {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  padding: 2px 4px;
+}
+
+.rail-pie {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: calc(10px * var(--espacio, 1)) 12px;
+}
+
+/* The canvas chips, in the flow of the rail instead of floating over the canvas. */
+.chips-validacion.en-rail {
+  align-self: flex-start;
+  position: static;
+}
+
+.chips-validacion .chip:disabled { cursor: default; }
+
+/* Scenario header of the panel: «Escenario AS-IS · BASE» and the file · parent line. */
+.escenario-archivo {
+  color: var(--fg-muted);
+  font: 400 10px/1.3 var(--font-mono);
+  margin: 0;
+}
 
 /* ---------- validar rutas (LILA-065) ---------- */
 

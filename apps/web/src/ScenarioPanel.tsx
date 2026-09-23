@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { ProcessIR } from '@lila/engine';
 import {
@@ -946,7 +946,8 @@ function Propiedades({
               leer(ctx.resuelto, [...ruta, clave]) !== undefined),
         )
         .map(([clave, sub]) => (
-          <Fragment key={clave}>
+          // One box per field and its help, so the wide panel (design 2a) can lay them out in a grid.
+          <div key={clave} className="propiedad">
             <Campo
               esquema={sub}
               ruta={[...ruta, clave]}
@@ -957,7 +958,7 @@ function Propiedades({
             {ayudaDe(S, ruta, clave) !== undefined && (
               <p className="ayuda">{ayudaDe(S, ruta, clave)}</p>
             )}
-          </Fragment>
+          </div>
         ))}
     </>
   );
@@ -1843,7 +1844,8 @@ export function ScenarioPanel({
   return (
     <div className="escenario">
       <div className="escenario-cabecera">
-        <strong>{typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo}</strong>
+        <strong>{S.escenario.titulo(typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo)}</strong>
+        {heredaDe === null && <span className="insignia-base">{S.rail.base}</span>}
         <span className={errores > 0 ? 'error' : 'aviso'}>
           {S.escenario.conteo(errores, avisos)}
         </span>
@@ -1862,11 +1864,7 @@ export function ScenarioPanel({
         </button>
       </div>
 
-      {heredaDe !== null && (
-        <p className="vacio">
-          {S.escenario.hereda(heredaDe)}
-        </p>
-      )}
+      <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
       <Problemas ruta={['extends']} ctx={ctx} />
 
       <BarraPasos paso={paso} onPaso={setPaso} />

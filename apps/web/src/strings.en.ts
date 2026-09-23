@@ -185,6 +185,8 @@ export const en = {
     cerrarDiagrama: 'Close diagram',
     cerrarArchivo: (archivo: string): string => `Close ${archivo}`,
     nuevoDiagrama: 'New diagram',
+    /** Divider between the canvas and the right panel (design 2a). */
+    redimensionarPanel: 'Resize the right panel',
 
     /** Status bar. */
     semilla: (valor: string): string => `Seed ${valor}`,
@@ -448,6 +450,20 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Scenario rail of Simulate (`RailEscenarios.tsx`, design 2a)
+   * ------------------------------------------------------------------ */
+  rail: {
+    titulo: 'Scenarios',
+    nuevo: 'Duplicate the active scenario',
+    base: 'BASE',
+    sinCorrer: 'not run',
+    corrida: (semilla: string, repl: string): string => `seed ${semilla} · ${repl} reps`,
+    hereda: (padre: string): string => `inherits ${padre}`,
+    enVentana: 'in its own window ↗',
+    validacion: 'Validation',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Scenario panel (`ScenarioPanel.tsx`)
    * ------------------------------------------------------------------ */
   escenario: {
@@ -458,8 +474,10 @@ export const en = {
       `${errores} ${errores === 1 ? 'error' : 'errors'} · ${avisos} ${
         avisos === 1 ? 'warning' : 'warnings'
       }`,
-    hereda: (padre: string): string =>
-      `Inherits from ${padre}: resolved values are shown and only the delta is edited.`,
+    titulo: (nombre: string): string => `Scenario ${nombre}`,
+    /** Mono line under the header: the file and its `extends` parent, «—» for a base scenario. */
+    archivoHereda: (archivo: string, padre: string | null): string =>
+      `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
      * #333 — the four steps of the Simulate panel, which are Bizagi's four levels of simulation
