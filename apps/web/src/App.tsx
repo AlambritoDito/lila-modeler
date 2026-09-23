@@ -155,6 +155,30 @@ function valido<T extends string>(valor: string | undefined, validas: readonly T
   return validas.includes(valor as T) ? (valor as T) : porDefecto;
 }
 /**
+ * Si el tema se lee claro (letra oscura sobre fondo claro) — Papel, Tieso y Montana lo son hoy,
+ * Eva-01 y Akira no. Decide qué `color-scheme` llevan los controles nativos (diseño 2d): sin
+ * eso el `<select>` pinta sus `<option>` y el selector de fecha con los colores que trae por
+ * fábrica el navegador, que son los de un tema oscuro, y salen ilegibles sobre uno claro.
+ *
+ * Ningún tema trae una marca «soy claro» (`docs/THEMES.md`) — ninguno la necesitaba antes de
+ * esto—, así que se calcula del mismo `bg.base` que ya trae cada uno, con la misma caída a
+ * Eva-01 que usa `aplicarTema` para el token que falte.
+ * ponytail: umbral de luminancia relativa, no la fórmula de contraste completa — alcanza para
+ * decidir claro/oscuro, no para medir accesibilidad.
+ */
+export function temaClaro(t: Theme | null | undefined): boolean {
+  const crudo = (t?.tokens?.['bg.base'] ?? '#12101A').replace('#', '');
+  // `#RGB`, `#RRGGBB` o `#RRGGBBAA` son los tres formatos válidos (`theme/temas.ts`, `HEX`); un
+  // `#RGB` corto se expande antes de leerlo (QA de la ronda 1 de #392: sin esto, `#fff` no casaba
+  // con la expresión de 6 dígitos de abajo y `temaClaro` lo daba por oscuro).
+  const seis = crudo.length === 3 ? [...crudo].map((c) => c + c).join('') : crudo;
+  const hex = /^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(seis);
+  if (hex === null) return false;
+  const canal = (i: number): number => Number.parseInt(hex[i] ?? '00', 16) / 255;
+  return 0.2126 * canal(1) + 0.7152 * canal(2) + 0.0722 * canal(3) > 0.5;
+}
+
+/**
  * Aplica el tema y borra las variables en línea que el anterior dejó puestas y este no trae. Sin
  * eso, `docs/THEMES.md` mentía: un tema parcial (legal, y lo que sale de «Importar») heredaba en
  * silencio los tokens del que estuviera puesto, así que el mismo archivo se veía distinto según lo
@@ -1003,7 +1027,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   );
 
   return (
-    <div className="app" data-densidad={densidad} data-theme={decoratedTheme} style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}>
+    <div
+      className="app"
+      data-densidad={densidad}
+      data-theme={decoratedTheme}
+      data-esquema={temaClaro(tema) ? 'claro' : 'oscuro'}
+      style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}
+    >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
         <p>{S.app.reemplazoTexto(projectName)}</p>
@@ -1035,7 +1065,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       />}
       <header className="barra">
         <div className="identidad">
-          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="32" height="32" />
+          <img className="logo" src={`${import.meta.env.BASE_URL}branding/app-icon.png`} alt="" aria-hidden="true" width="26" height="26" />
+          {/* En Electron el nombre del producto ya va en la barra de título del sistema
+              (diseño 2d): repetirlo aquí encima del icono sería ruido. */}
+          {!DESKTOP && <span className="producto">{S.app.marca}</span>}
+          <span className="separador" aria-hidden="true" />
           <div>
             <div className="proyecto">{projectName}</div>
             <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>
@@ -1337,7 +1371,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             )}
           </div>
         ) : (
-          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} />
+          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} avisos={validacion.avisos} />
         )}
         </>}
       </aside>

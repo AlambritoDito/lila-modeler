@@ -43,6 +43,119 @@ body {
   height: 100vh;
 }
 
+/* ---------- controles nativos: sin chrome del navegador (diseño 2d) ---------- */
+
+/*
+ * `<select>`, `<input type="checkbox">` y `<input type="datetime-local">` traían el aspecto de
+ * fábrica del navegador —azulado, con esquinas redondas— dentro de un tema a radio 0. Una regla
+ * por control, aquí y en ningún otro sitio: los selectores que antes repetían color/borde por
+ * componente (`.campo select`, `.campos select`, `.campo-schema select`, `.ajustes .campo
+ * select`, `.ajustes .token select`, `.campo-schema input[type='checkbox']`) se recortan a lo
+ * que de verdad es suyo —ancho, `flex`—, no color.
+ *
+ * `color-scheme` es lo que decide con qué paleta pinta el navegador lo que sigue siendo suyo
+ * pese a `appearance: none` —las `<option>` del desplegable, el glifo del selector de fecha—:
+ * sin ella salen con los colores de un tema oscuro encima de uno claro (Papel, Tieso, Montana).
+ * Los temas (`theme/themes/*.json`) no traen una marca «soy claro» (`docs/THEMES.md`), así que
+ * `App.tsx` la calcula de `bg.base` (`temaClaro()`) y la escribe en `data-esquema`.
+ */
+.app[data-esquema='claro'] {
+  color-scheme: light;
+}
+
+.app[data-esquema='oscuro'] {
+  color-scheme: dark;
+}
+
+.app select {
+  appearance: none;
+  background-color: var(--bg-base);
+  /* Dos gradientes de 5x5 en diagonales opuestas dibujan la flecha en `currentColor`: sigue el
+     texto del tema sin un SVG ni un `::after` que un `<select>` no puede tener. */
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 12px center, right 8px center;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--fg-primary);
+  font: inherit;
+  height: 30px;
+  padding: 0 28px 0 9px;
+}
+
+.app select:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 0;
+}
+
+.app select:disabled {
+  opacity: 0.45;
+}
+
+.app input[type='checkbox'] {
+  appearance: none;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  display: inline-grid;
+  height: 14px;
+  margin: 0;
+  place-items: center;
+  vertical-align: -2px;
+  width: 14px;
+}
+
+.app input[type='checkbox']:checked {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.app input[type='checkbox']:checked::after {
+  border: solid var(--fg-onAccent);
+  border-width: 0 0 2px 2px;
+  content: '';
+  height: 5px;
+  transform: translateY(-1px) rotate(-45deg);
+  width: 8px;
+}
+
+.app input[type='checkbox']:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.app input[type='checkbox']:disabled {
+  opacity: 0.45;
+}
+
+.app input[type='datetime-local'] {
+  background: var(--bg-base);
+  /* Sin esto el borde de 1 px arriba y abajo suma 2 px al alto de contenido y el campo sale de
+     32 px en vez de los 30 de los demás controles (QA de la ronda 1 de #392). */
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--fg-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  height: 30px;
+  padding: 0 9px;
+}
+
+.app input[type='datetime-local']:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 0;
+}
+
+/* `color-scheme: dark` (arriba) ya hace que el navegador pinte el glifo del selector de fecha en
+   claro sobre este control oscuro; invertirlo aquí encima (como hacía esta regla antes) lo
+   devolvía a oscuro sobre oscuro. Sin filtro, solo la opacidad para que no compita con el resto
+   de la fila (QA de la ronda 1 de #392). */
+.app input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+}
+
 /* ---------- barra superior ---------- */
 
 /* Alturas, anchos y tamaños de letra salen del artboard 01 (`docs/design/Lila Modeler.dc.html`):
@@ -60,34 +173,49 @@ body {
 }
 
 /* La identidad y los modos ocupan la barra de arriba abajo —el subrayado del modo activo va
-   pegado al borde inferior, como en el artefacto—, así que se comen el padding vertical de la
-   barra en vez de heredarlo. */
-.identidad,
+   pegado al borde inferior, como en el artefacto—, así que se come el padding vertical de la
+   barra en vez de heredarlo. La identidad ya no necesita el mismo truco (diseño «Turno 2»,
+   bloque 2d): sin la caja ni el `border-right` de antes, centrarla con el `align-items` de
+   `.barra` basta. */
 .modos {
   align-self: stretch;
   margin: calc(-10px * var(--espacio, 1)) 0;
 }
 
+/* Marca sin caja (diseño 2d): el icono aprobado a 26 px sobre la superficie de la barra, sin
+   fondo ni borde propios, una regla de 1 px separa el nombre del producto del proyecto.
+   `flex: none` + `white-space: nowrap` (QA de la ronda 1 de #392): sin ellos, «Lila Modeler» y el
+   nombre de archivo se envuelven en dos líneas antes de que el buscador inerte ceda su sitio, y
+   eso crece la barra de 53 px a 60-67 (probado a 1400/1280/1180). */
 .identidad {
   align-items: center;
-  border-right: 1px solid var(--border);
   display: flex;
-  gap: 12px;
-  padding-right: 16px;
+  flex: none;
+  gap: 10px;
+  white-space: nowrap;
 }
 
 .logo {
   flex: none;
-  height: 32px;
-  width: 32px;
-  border-radius: 7px;
+  height: 26px;
   object-fit: contain;
+  width: 26px;
+}
+
+.producto {
+  font: 800 13px var(--font-ui);
+}
+
+.identidad .separador {
+  background: var(--border);
+  flex: none;
+  height: 22px;
+  width: 1px;
 }
 
 .proyecto {
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .archivo {
@@ -116,6 +244,9 @@ body {
   font: inherit;
   font-weight: 500;
   padding: calc(2px * var(--espacio, 1)) 20px;
+  /* «Validate paths»/«Validar rutas» es el modo más largo: sin esto es el primero en partirse en
+     dos líneas al estrechar la ventana, antes de que el buscador inerte le ceda su sitio. */
+  white-space: nowrap;
 }
 
 .modo.activo {
@@ -191,6 +322,10 @@ body {
   border: 1px solid var(--border);
   color: var(--fg-muted);
   display: flex;
+  /* `flex: 0 1 210px` en vez de un ancho fijo (QA de la ronda 1 de #392): 210 px es el ancho de
+     fábrica, pero el campo es el único inerte de la barra (LILA-066), así que es el primero que
+     cede sitio cuando algo no cabe, antes de que la identidad o los modos se envuelvan. */
+  flex: 0 1 210px;
   gap: 8px;
   /* 210 px, but the first thing to give way when the bar runs short (the scenario toggle, #391). */
   flex: 0 1 210px;
@@ -476,14 +611,6 @@ body {
   justify-content: space-between;
 }
 
-.campo select {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  color: var(--fg-primary);
-  font: inherit;
-  padding: calc(4px * var(--espacio, 1)) 8px;
-}
-
 .interruptor {
   cursor: pointer;
   justify-content: flex-start;
@@ -655,6 +782,87 @@ body {
 
 /* ---------- panel de propiedades (LILA-060) ---------- */
 
+/* Cabecera sin selección (diseño «Turno 2», bloque 2d): el título y la pista ocupan el mismo
+   `padding` que `.vacio`, y las dos secciones —Proceso, Atajos— se separan con la misma regla
+   de 1 px que el resto del panel derecho (`.grupo`). */
+.propiedades-vacio {
+  display: flex;
+  flex-direction: column;
+  padding: calc(16px * var(--espacio, 1)) 12px;
+}
+
+.propiedades-vacio-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.propiedades-vacio-pista {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.propiedades-seccion {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: calc(14px * var(--espacio, 1));
+  padding-top: calc(14px * var(--espacio, 1));
+}
+
+.propiedades-seccion h3 {
+  color: var(--fg-muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.propiedades-fila {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.propiedades-fila kbd {
+  border: 1px solid var(--border);
+  color: var(--fg-disabled);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 4px;
+}
+
+/* Cabecera con un elemento elegido (diseño 2d): el icono de la paleta a la izquierda (`Paleta.tsx`
+   ya carga `bpmn-font`), el nombre y la línea técnica `$type · id` a la derecha. Comparte la
+   regla de abajo con `.campos`, así que no lleva la suya. */
+.propiedades-cabecera {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  padding: calc(12px * var(--espacio, 1)) 12px;
+}
+
+.propiedades-cabecera [class^='bpmn-icon-'] {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 20px;
+}
+
+.propiedades-cabecera-nombre {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.propiedades-cabecera-tipo {
+  color: var(--fg-muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
 .campos {
   display: flex;
   flex-direction: column;
@@ -683,7 +891,6 @@ body {
 }
 
 .campos input,
-.campos select,
 .campos textarea {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -694,12 +901,17 @@ body {
   width: 100%;
 }
 
+/* El color y el borde son los del `select` compartido (arriba); aquí solo el ancho, para que
+   llene el campo igual que `input`/`textarea`. */
+.campos select {
+  width: 100%;
+}
+
 .campos textarea {
   resize: vertical;
 }
 
 .campos input:focus,
-.campos select:focus,
 .campos textarea:focus {
   border-color: var(--accent-primary);
   outline: 1px solid var(--accent-primary);
@@ -815,8 +1027,7 @@ body {
   color: var(--fg-muted);
 }
 
-.campo-schema input[type='text'],
-.campo-schema select {
+.campo-schema input[type='text'] {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   color: var(--fg-primary);
@@ -826,8 +1037,8 @@ body {
   width: 100%;
 }
 
-.campo-schema input[type='checkbox'] {
-  width: auto;
+.campo-schema select {
+  width: 100%;
 }
 
 /* «Assign lane to pool» (LILA-334): separated from the pools it edits above it. */
@@ -1566,7 +1777,6 @@ body {
 .ajustes-encabezado h2 { margin: 0; }
 .ajustes h3 { color: var(--fg-muted); font-size: inherit; font-weight: 600; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
 .ajustes .campo { margin-bottom: 10px; }
-.ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
 .ajustes .acciones { justify-content: flex-end; margin-top: 16px; }
 
 /* Editor de temas (LILA-114). El diálogo puede crecer mucho —40 tokens en siete grupos—, así que
@@ -1587,7 +1797,9 @@ body {
 .ajustes .grupo > summary { color: var(--fg-muted); cursor: pointer; font-weight: 600; padding: 4px 0; }
 .ajustes .token { align-items: center; display: grid; gap: 8px; grid-template-columns: 1fr auto minmax(6rem, 10rem); margin: 4px 0; }
 .ajustes .token code { color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
-.ajustes .token input, .ajustes .token select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
+.ajustes .token input { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
+/* Color y borde del `select` compartido (arriba); aquí solo lo que encoge en la retícula. */
+.ajustes .token select { min-width: 0; }
 .ajustes .token input[type='color'] { background: var(--bg-surface); block-size: 24px; border: 1px solid var(--border-strong); cursor: pointer; inline-size: 34px; padding: 1px; }
 .ajustes .token input[type='text'] { font-family: var(--font-mono); }
 /* Lo tecleado a medias (`#12`, el nombre vacío) no se aplica ni se guarda (QA de #277): el campo

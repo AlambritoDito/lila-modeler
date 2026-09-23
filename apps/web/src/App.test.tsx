@@ -11,7 +11,7 @@ import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { newModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
-import { App } from './App';
+import { App, temaClaro } from './App';
 import { applyTheme } from './theme/applyTheme';
 // The app boots in English (jsdom's `navigator.language` is `en-US`), so the texts this suite
 // clicks and reads come from the base catalog instead of being written by hand: a literal here
@@ -1567,4 +1567,22 @@ it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni
     abrir.mockRestore();
     marco.remove();
   }
+});
+
+// QA de la ronda 1 de #392: `#fff` no casaba con la expresión de 6 dígitos que lee
+// `temaClaro` y el tema se daba por oscuro sin serlo. Un `it.each` corto en vez de una función
+// por caso: mismo assert, solo cambia el hex y lo que se espera.
+it.each([
+  ['#fff', true],
+  ['#FFFFFF', true],
+  ['#000', false],
+  // Los cinco temas integrados (`theme/themes/*.json`): Papel, Tieso y Montana son claros;
+  // Eva-01 y Akira, oscuros.
+  ['#12101A', false], // eva-01
+  ['#F3F2F2', true], // papel
+  ['#EEF3F8', true], // tieso
+  ['#0B0A14', false], // akira
+  ['#EBC7FA', true], // montana
+] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
+  expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
 });
