@@ -990,7 +990,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               elegir el propio a quien no entiende el que está puesto. */}
           <h3>{S.app.idioma}</h3>
           <label className="campo idioma">
-            <select aria-label={S.app.idioma} value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
+            <select aria-label={S.app.idioma} autoFocus value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
               <option value="auto">{S.app.idiomaAuto}</option>
               {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
             </select>
