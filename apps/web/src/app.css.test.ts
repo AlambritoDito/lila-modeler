@@ -208,7 +208,10 @@ it('el nombre del producto y su regla se callan por debajo de 1280 px, antes de 
 });
 
 it('en toda la hoja el radio es 0, salvo el círculo marcado del disco de validación', () => {
-  const radios = [...appCss.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => (m[1] ?? '').trim());
+  // #408: the rounded About image is the one owner-approved exception, and it stays in its rule.
+  const sinAcerca = appCss.replace(/^\.acerca-icono \{[^}]*\}/m, '');
+  expect(sinAcerca).not.toBe(appCss);
+  const radios = [...sinAcerca.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => (m[1] ?? '').trim());
   // Si esto falla con algo que no sea «50%» es que una regla nueva volvió a redondear una
   // esquina sin decir por qué (el comentario que acompaña al 50% es el sitio para esa excepción).
   expect(radios.filter((r) => r !== '0')).toEqual(['50%']);

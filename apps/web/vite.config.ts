@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { novedades } from './novedades';
 
 // Stage local assets without moving theme sources or changing their public URLs.
 const here = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
@@ -14,6 +15,8 @@ cpSync(here('./src/theme/themes'), here('./public'), { recursive: true });
 cpSync(here('../../docs/design/branding/web'), here('./public/branding'), { recursive: true });
 
 export default defineConfig({
+  // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
+  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(readFileSync(here('../../CHANGELOG.md'), 'utf8'), webVersion)) },
   plugins: [react(), {
     name: 'lila-branding',
     transformIndexHtml: (html) => html.replaceAll('%LILA_APP_VERSION%', webVersion),

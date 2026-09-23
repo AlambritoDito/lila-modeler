@@ -113,6 +113,7 @@ export const es: Strings = {
     enVentanaAparte: 'Escenario en ventana aparte ↗',
     mostrarVentana: 'Mostrar',
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
+    acercaBloqueada: 'Se bloqueó la ventana Acerca de; permite ventanas emergentes para este sitio.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
 
     /** Controles de zoom del lienzo. */
@@ -241,9 +242,8 @@ export const es: Strings = {
     recientes: 'Recientes',
     sinRecientes: 'Todavía no hay proyectos recientes. Abre uno o empieza por el ejemplo.',
     novedades: (version: string): string => `Novedades de ${version}`,
-    novedadesTexto: 'Archivos de proyecto .lila con corridas guardadas, Simular en cuatro pasos, repetición del log de eventos sobre el diagrama, rutas según el resultado previo del caso y resultados con los mismos nombres de columna que Bizagi Modeler.',
     notasVersion: 'Notas de la versión',
-    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad} ·`,
+    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad}`,
     cambiarApariencia: 'cambiar en Ajustes → Apariencia',
   },
 

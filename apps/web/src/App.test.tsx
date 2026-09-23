@@ -20,6 +20,7 @@ import { en as T } from './strings.en';
 // The Spanish catalog is only read by the language tests (LILA-210): what they assert is
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
+import { version } from '../package.json';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
   // #420: the scenario map the panel last received, to see what the seeding wrote.
@@ -706,18 +707,43 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
-it('en Ajustes, «Acerca de Lila Modeler» cierra Ajustes y abre el diálogo Acerca de (LILA-381)', async () => {
-  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(true);
-  expect(acerca.open).toBe(false);
-  await click(T.app.acercaDe);
-  expect(ajustes.open).toBe(false);
-  expect(acerca.open).toBe(true);
-  expect(container.textContent).toContain(T.bienvenida.nombre);
-});
-it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', async () => {
+// ---------- About window (#408, LILA-381) ----------
+
+/**
+ * A fake popup for the About window: an `about:blank` iframe's window (same origin, its own
+ * document, like the real popup), handed out by a stubbed `window.open`. jsdom's `close()` would
+ * empty the body under React's feet, so it is only watched — as in the scenario-window tests.
+ */
+function ventanaAcercaFalsa() {
+  const marco = document.createElement('iframe');
+  marco.src = 'about:blank';
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const acerca = (): Element | null => hijo.document.querySelector('.acerca');
+  const clic = async (nodo: Element): Promise<void> => {
+    await act(async () => { nodo.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true, cancelable: true })); });
+  };
+  const clicarImagen = async (veces: number): Promise<void> => {
+    for (let i = 0; i < veces; i += 1) await clic(hijo.document.querySelector('.acerca-icono')!);
+  };
+  const enviarClave = async (texto: string): Promise<void> => {
+    const campo = hijo.document.querySelector<HTMLInputElement>('.acerca-clave input')!;
+    const receptor = Object.getOwnPropertyDescriptor((hijo as unknown as typeof globalThis).HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { receptor.call(campo, texto); campo.dispatchEvent(new (hijo as unknown as typeof globalThis).Event('input', { bubbles: true })); });
+    await clic(hijo.document.querySelector('.acerca-clave button[type="submit"]')!);
+  };
+  const tecla = async (key: string): Promise<void> => {
+    await act(async () => { hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key })); });
+  };
+  return { hijo, cerrar, abrir, acerca, clicarImagen, enviarClave, tecla, quitar: () => { abrir.mockRestore(); marco.remove(); } };
+}
+/** «About» from the web File menu (a `<details>`, clicked directly: it needs no opening). */
+function ejecutarArchivo(etiqueta: string): void {
+  [...container.querySelectorAll<HTMLButtonElement>('.menu-archivo button')].find((b) => b.textContent === etiqueta)!.click();
+}
+async function remontarConMenu(): Promise<(a: unknown) => void> {
   let menu: ((a: unknown) => void) | null = null;
   vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
     pendingOpenPath: async () => null, onOpenPath: () => () => {},
@@ -726,45 +752,102 @@ it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', 
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(menu).not.toBeNull();
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  expect(acerca.open).toBe(false);
-  await act(async () => { menu!('acerca'); });
-  expect(acerca.open).toBe(true);
+  return menu!;
+}
+
+it('in Settings, «About Lila Modeler» closes Settings and opens the About window (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+    expect(ajustes.open).toBe(true);
+    await click(T.app.acercaDe);
+    expect(ajustes.open).toBe(false);
+    expect(v.abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.stringMatching(/popup,width=440,height=600/));
+    expect(v.acerca()!.textContent).toContain(T.bienvenida.nombre);
+    expect(container.querySelector('.acerca')).toBeNull();
+    expect(document.querySelector('dialog.acerca')).toBeNull();
+    expect(v.hijo.document.title).toBe(T.app.acercaDe);
+    // A window that docks nothing has no «Dock» header.
+    expect(v.hijo.document.querySelector('.ventana-titulo')).toBeNull();
+  } finally { v.quitar(); }
 });
-it('mientras el karaoke del huevo de pascua suena, ni ⌘, ni "acerca" abren nada encima (QA de #387, Low)', async () => {
-  // El `<dialog>` de Acerca de ya está cerrado mientras el karaoke corre (para que su "top layer"
-  // no lo tape), así que ni el atajo de teclado ni el menú nativo pasan por él para saber que
-  // hay que esperar: sin la `ref` de `App.tsx` que enlaza con `onKaraoke`, `ejecutar('ajustes')`
-  // volvía a abrir Ajustes encima del overlay.
+it('the native menu dispatches "acerca" and opens the About window (#408, LILA-381)', async () => {
+  const menu = await remontarConMenu();
+  const v = ventanaAcercaFalsa();
+  try {
+    expect(v.acerca()).toBeNull();
+    await act(async () => { menu('acerca'); });
+    expect(v.abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.any(String));
+    expect(v.acerca()).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('six clicks reveal the key form; Esc closes the window and reopening starts the count over (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(5);
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(1);
+    expect(v.hijo.document.querySelector('.acerca-clave')).not.toBeNull();
+    await v.tecla('Escape');
+    expect(v.cerrar).toHaveBeenCalled();
+    expect(v.acerca()).toBeNull();
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(5);
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(1);
+    expect(v.hijo.document.querySelector('.acerca-clave')).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('a blocked About popup says so with its own message (QA of #427, S1)', async () => {
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    expect(abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.any(String));
+    expect(container.textContent).toContain(T.app.acercaBloqueada);
+    expect(container.textContent).not.toContain(T.app.ventanaBloqueada);
+  } finally { abrir.mockRestore(); }
+});
+it('«scuba» in the About window opens its YouTube link through the main window (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(6);
+    await v.enviarClave('scuba');
+    expect(v.abrir).toHaveBeenLastCalledWith('https://www.youtube.com/watch?v=1jvqMJ379rc', '_blank', 'noopener,noreferrer');
+    expect(v.acerca()).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('«brito» closes the About window and plays the karaoke in the main window; meanwhile neither ⌘, nor "acerca" open anything (QA of #387)', async () => {
+  const menu = await remontarConMenu();
+  const v = ventanaAcercaFalsa();
   vi.useFakeTimers();
-  vi.stubGlobal('open', vi.fn());
-  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  await click(T.app.acercaDe);
-  expect(acerca.open).toBe(true);
-  const icono = container.querySelector<HTMLImageElement>('.acerca-icono')!;
-  for (let i = 0; i < 6; i += 1) {
-    await act(async () => { icono.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  }
-  const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
-  const receptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-  await act(async () => { receptor.call(campo, 'brito'); campo.dispatchEvent(new Event('input', { bubbles: true })); });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('.acerca-clave button[type="submit"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-  });
-  expect(acerca.open).toBe(false);
-  expect(document.querySelector('.karaoke')).not.toBeNull();
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(false);
-  expect(acerca.open).toBe(false);
-  // Se cancela para terminar sin temporizadores vivos ni el enlace abierto.
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
-  expect(document.querySelector('.karaoke')).toBeNull();
-  // Y con el karaoke ya fuera, ⌘, vuelve a funcionar normalmente.
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(true);
-  vi.useRealTimers();
+  try {
+    await act(async () => { menu('acerca'); });
+    await v.clicarImagen(6);
+    await v.enviarClave('brito');
+    expect(v.cerrar).toHaveBeenCalled();
+    expect(v.acerca()).toBeNull();
+    expect(document.querySelector('.karaoke')!.parentElement).toBe(document.body);
+    expect(v.hijo.document.querySelector('.karaoke')).toBeNull();
+    const aperturas = v.abrir.mock.calls.length;
+    const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+    await act(async () => { menu('ajustes'); });
+    await act(async () => { menu('acerca'); });
+    expect(ajustes.open).toBe(false);
+    expect(v.abrir.mock.calls.length).toBe(aperturas);
+    expect(v.acerca()).toBeNull();
+    // Cancelled so the test ends without live timers or the link opened.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('.karaoke')).toBeNull();
+    expect(v.abrir.mock.calls.length).toBe(aperturas);
+    // With the karaoke gone, the menu opens About again.
+    await act(async () => { menu('acerca'); });
+    expect(v.acerca()).not.toBeNull();
+  } finally { vi.useRealTimers(); v.quitar(); }
 });
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
@@ -1535,7 +1618,21 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(bienvenida).not.toBeNull();
   expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
   expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
-  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.4'));
+  // #425: the heading follows the manifest and the paragraph is this version's CHANGELOG intro
+  // (`__LILA_NOVEDADES__`), not a fixed text; the theme line never ends with a stray «·».
+  expect(bienvenida.querySelector('.bienvenida-novedades h3')!.textContent).toBe(T.bienvenida.novedades(version));
+  expect(__LILA_NOVEDADES__).not.toBe('');
+  expect(bienvenida.querySelector('.bienvenida-novedades p')!.textContent).toBe(__LILA_NOVEDADES__);
+  // One flex item after the swatch: text and link wrap inline together, and the «·» travels with
+  // the link inside a `nowrap` span, so no line can end with it (QA of #427, M1).
+  const lineaTema = bienvenida.querySelector('.bienvenida-tema')!;
+  expect([...lineaTema.children].map((hijo) => hijo.tagName)).toEqual(['SPAN', 'SPAN']);
+  const texto = lineaTema.children[1]!;
+  expect(texto.firstChild!.textContent!.trim()).not.toMatch(/·$/);
+  const enlace = texto.querySelector('.enlace-tema')!;
+  expect(enlace.parentElement).toBe(texto);
+  expect(enlace.textContent).toBe(`· ${T.bienvenida.cambiarApariencia}`);
+  expect(enlace.querySelector('button.enlace')!.textContent).toBe(T.bienvenida.cambiarApariencia);
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();

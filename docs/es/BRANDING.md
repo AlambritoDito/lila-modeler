@@ -35,6 +35,16 @@ nuevos tamaños usa `tools/generate-branding.mjs`, sin regenerar el personaje.
 El favicon y los iconos de plataforma mantienen el fondo morado; el logo
 horizontal continúa sobre blanco en la presentación principal y el arranque.
 
+## Excepción de la ventana Acerca de — 23 de septiembre de 2026 (#408)
+
+Por decisión del usuario, y solo en la ventana «Acerca de», se muestra
+`web/app-icon.png` (la ilustración sobre su morado de marca fijo, nunca un color
+del tema) con esquinas redondeadas de 24 px, y un clic reproduce un pulso breve
+que crece y vuelve (`transform: scale`, unos 300 ms, desactivado con
+`prefers-reduced-motion`). La variante transparente sigue sin contenedores
+redondeados, y en ningún otro lugar del producto se redondea ni se anima al
+personaje.
+
 ## Instalación registrada
 
 El 14 de septiembre de 2026 se instaló en `/Applications/Lila Modeler.app` la versión

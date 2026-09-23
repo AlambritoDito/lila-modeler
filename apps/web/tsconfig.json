@@ -17,6 +17,7 @@
   "include": [
     "src",
     "vite.config.ts",
+    "novedades.ts",
     "../../packages/engine/src/bpmn/bpmn-moddle.d.ts"
   ]
 }

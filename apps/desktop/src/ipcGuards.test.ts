@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
 
 describe('permiteVentanaHija', () => {
-  it('allows only the blank scenario window', () => {
+  it('allows only the blank scenario and About windows', () => {
     expect(permiteVentanaHija('about:blank', 'lila-escenario')).toBe(true);
+    expect(permiteVentanaHija('about:blank', 'lila-acerca')).toBe(true);
   });
 
   it('rejects another frame name, an app URL or the web', () => {
@@ -11,6 +12,7 @@ describe('permiteVentanaHija', () => {
     expect(permiteVentanaHija('about:blank', '')).toBe(false);
     expect(permiteVentanaHija('lila://app/x', 'lila-escenario')).toBe(false);
     expect(permiteVentanaHija('https://evil.example/', 'lila-escenario')).toBe(false);
+    expect(permiteVentanaHija('https://evil.example/', 'lila-acerca')).toBe(false);
   });
 });
 

@@ -84,12 +84,14 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
         )}
         <div className="bienvenida-novedades">
           <h3>{S.novedades(version)}</h3>
-          <p>{S.novedadesTexto}</p>
+          {__LILA_NOVEDADES__ !== '' && <p>{__LILA_NOVEDADES__}</p>}
           <a href={`${REPO_URL}/releases`} target="_blank" rel="noreferrer">{S.notasVersion}</a>
         </div>
         <p className="bienvenida-tema">
           <span className="muestra" aria-hidden="true" />
-          {S.tema(temaNombre, densidadTexto)} <button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button>
+          {/* One flex item (#425) so the text and the link wrap inline together, and the «·» is
+              glued to the link (`nowrap`): a narrow column breaks before it, never after it. */}
+          <span>{S.tema(temaNombre, densidadTexto)}{' '}<span className="enlace-tema">{'· '}<button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button></span></span>
         </p>
       </div>
     </section>
