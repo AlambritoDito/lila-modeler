@@ -929,9 +929,14 @@ export function validateScenario(
     });
   }
 
-  // R3 — un elemento del modelo sin parámetros es warning, no error.
-  for (const id of Object.keys(ir.nodes)) {
-    if (elements[id] === undefined) {
+  // R3 / #360: warn only when an absent entry leaves an actionable default.
+  for (const [id, node] of Object.entries(ir.nodes)) {
+    const takesParameters = node.type === 'task' || node.type === 'timer' || node.type === 'start';
+    const unconfiguredSplit = (node.type === 'xor' || node.type === 'or')
+      && node.outgoing.length > 1
+      && !node.outgoing.some((flowId) =>
+        elements[flowId]?.probability !== undefined || (elements[flowId]?.conditions?.length ?? 0) > 0);
+    if (elements[id] === undefined && (takesParameters || unconfiguredSplit)) {
       problems.push({
         code: 'W-ELEMENTO-SIN-PARAMETROS',
         path: `elements.${id}`,
