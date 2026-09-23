@@ -257,7 +257,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.1, SHA `<RC-SHA>`; revisar si alguna de estas ya se resolvió antes de creer
+*(a fecha 1.0.0-beta.1, SHA `tag `v1.0.0-beta.1``; revisar si alguna de estas ya se resolvió antes de creer
 esta lista a ciegas en una fecha posterior)*
 
 - **Sin firma ni notarización**: una copia recibida requiere la autorización de apertura de macOS

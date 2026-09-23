@@ -280,7 +280,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.1, SHA `<RC-SHA>`; check whether any of these has already been resolved before
+*(as of 1.0.0-beta.1, SHA `tag `v1.0.0-beta.1``; check whether any of these has already been resolved before
 trusting this list blindly at a later date)*
 
 - **No signing or notarization**: a received copy requires macOS's opening authorization (see
