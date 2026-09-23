@@ -42,19 +42,24 @@ read access to repository contents. No npm token or backend server is required.
 ## Publishing from a release tag (owner action)
 
 For a tagged release such as `v1.0.0-beta.1`, publish the landing and demo that match that exact
-tag, rather than whatever is currently on `main`, by dispatching the workflow against the tag ref:
+tag, rather than whatever is currently on `main`. This requires `pages.yml`'s `deploy` job to
+accept `main` or a `v*` tag ref (workflow #382) and the `github-pages` environment to carry a tag
+deployment policy of `v*` — both added by the owner/lead. The procedure:
 
-```bash
-gh workflow run pages.yml --ref v1.0.0-beta.1 -f publish=true
-```
+1. **Publish the GitHub release first.** The landing's download button links straight to
+   `releases/tag/v1.0.0-beta.1`; publish that (pre)release before publishing the site, so the
+   button resolves the moment the page goes live instead of 404ing.
+2. **Dispatch the workflow against the tag ref**, once the environment accepts tag deployments
+   (requires the environment policy above):
 
-Before dispatching, note the tag's commit SHA (`git rev-parse v1.0.0-beta.1`). After the run
-finishes, compare it against the deployed commit shown in the run's summary (or
-`gh run view <run-id> --json headSha`) to confirm the site was built from that same SHA, not a
-later commit on `main`. Automatic publication on push stays disabled regardless.
+   ```bash
+   gh workflow run pages.yml --ref v1.0.0-beta.1 -f publish=true
+   ```
 
-**Requires the workflow accepting tag refs**: as of this writing, `pages.yml`'s `deploy` job
-gates on `github.ref == 'refs/heads/main'`, which a tag ref does not satisfy — the workflow needs
-to accept `refs/tags/v*` (or an equivalent input) before this procedure can run end to end. That
-change belongs to whoever owns `.github/workflows/pages.yml`; this section describes the intended
-procedure for when it lands.
+3. **Verify the SHA before and after.** Note the tag's commit SHA (`git rev-parse v1.0.0-beta.1`)
+   before dispatching. After the run finishes, compare it against the SHA recorded in the run's job
+   summary (or `gh run view <run-id> --json headSha`) to confirm the site was built from that exact
+   tag commit, not a later commit on `main`.
+4. **Automatic publication on push to `main` stays gated** by the repository variable
+   `PAGES_PUBLISH_ENABLED` (currently unset) — this tag-based procedure does not change that; both
+   remain manual until the owner opts in.

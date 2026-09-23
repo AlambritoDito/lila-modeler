@@ -62,31 +62,37 @@ stable.
 ### Web
 
 Open [alambritodito.github.io/lila-modeler/app/](https://alambritodito.github.io/lila-modeler/app/).
-It starts with the restaurant example (`examples/pedido`) loaded. **Save project** downloads a
-`.lila` file and keeps a browser copy to restore on reload; nothing is uploaded anywhere.
+It starts with the restaurant example (`examples/pedido`) loaded. **File ▸ Save** (tooltip: Save
+project) downloads a `.lila` file and keeps a browser copy to restore on reload; nothing is
+uploaded anywhere.
 
 ### Share a project with a colleague
 
 Sharing means passing around a portable `.lila` file, not simultaneous editing — there is no
-account, backend or real-time sync. Use **Save project** (web) or **Save as…** (desktop) to get a
-`.lila`, send it however you'd send any file, and your colleague opens it with **Open project** in
-the web demo or by double-clicking it in the macOS app. Found a reproducible problem along the way?
+account, backend or real-time sync. Use **File ▸ Save** (web, tooltip: Save project) or **Save
+as…** (desktop) to get a `.lila`, send it however you'd send any file, and your colleague opens it
+with **File ▸ Open** (tooltip: Open project) in the web demo or the desktop app, or by
+double-clicking it in Finder (verified for Beta 1: `<VERIFY-FINDER>`). Found a reproducible
+problem along the way?
 [Open an issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose) — the bug template
 asks for a minimal `.bpmn` file or scenario that shows it.
 
 ### Desktop beta
 
-Installers are built by CI for macOS (arm64 `.dmg`), Windows (`.exe`) and Linux (`.AppImage`) and
-attached to [Beta 1 on GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
-(not `/releases/latest` — GitHub excludes prereleases from that link). They are
-**neither signed nor notarized**, so the first launch is blocked:
+Beta 1 attaches a single installer to the release: `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` for
+macOS on Apple Silicon, plus a `SHA256SUMS` file to check it —
+[Beta 1 on GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
+(not `/releases/latest` — GitHub excludes prereleases from that link). It is **neither signed nor
+notarized**, so the first launch is blocked. After the first blocked attempt (double-clicking the
+app), go to **System Settings ▸ Privacy & Security** and click **Open Anyway** next to the message
+naming the app, then confirm **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open**
+works directly. Do not disable Gatekeeper to work around this. `<VERIFY-GATEKEEPER>`
+[`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks through the whole flow, including
+checksum verification.
 
-- **macOS**: right-click the app → **Open**, then confirm **Open**.
-  [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks through the whole flow.
-- **Windows**: SmartScreen shows "Windows protected your PC" → **More info** → **Run anyway**.
-
-Only the macOS arm64 build has been exercised by the project; Windows and Linux are built but not
-tested. The desktop app registers itself as the editor for `.bpmn` and `.lila` files.
+CI also builds Windows (`.exe`) and Linux (`.AppImage`) installers, but they are untested CI
+artifacts, not offered as part of the Beta 1 release. The desktop app registers itself as the
+editor for `.bpmn` and `.lila` files.
 
 ### CLI
 

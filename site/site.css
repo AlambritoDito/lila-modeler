@@ -75,7 +75,8 @@ a:hover {
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   line-height: 1.2;
   letter-spacing: -0.015em;
   margin: 0 0 0.6em;
@@ -85,7 +86,8 @@ h2 {
   font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem);
 }
 
-h3 {
+h3,
+h4 {
   font-size: 1.1rem;
 }
 
@@ -254,12 +256,14 @@ section {
   margin-top: 1.75rem;
 }
 
-.step h3 {
+.step h3,
+.step h4 {
   color: var(--fg-primary);
   margin-bottom: 0.5em;
 }
 
-.step h3 .num {
+.step h3 .num,
+.step h4 .num {
   color: var(--accent-secondary);
   font-family: var(--font-mono);
   margin-right: 0.5rem;
@@ -370,8 +374,14 @@ footer .fine {
 
 /* --- Getting started for colleagues -------------------------------------- */
 
-.subhead {
-  margin-top: 1.75rem;
+/* Real heading elements (for a11y) styled to read like the surrounding body copy, not like a
+   bigger/bolder h3 or h4 — same look the plain paragraph they replaced had. */
+.limits-heading {
+  margin: 1.75rem 0 1rem;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.65;
 }
 
 .lang-heading {

@@ -20,33 +20,37 @@ explícitamente en «Limitaciones de esta beta».
 ## Dónde está el instalador y cómo abrirlo sin firma
 
 El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila/desktop`),
-llamado `Lila Modeler-1.0.0-beta.1-mac-arm64.dmg` para esta versión. Descárgalo desde
+llamado `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` para esta versión (guiones, sin espacios,
+igual que la entrada del archivo `SHA256SUMS`). Descarga ambos desde
 [la versión `v1.0.0-beta.1`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
-— no `/releases/latest`, porque GitHub excluye los prereleases de ese enlace. No se distribuye
-dentro del repositorio (la carpeta `apps/desktop/release/` está en `.gitignore`): también puedes
-compilarlo tú mismo (ver más abajo).
+— no `/releases/latest`, porque GitHub excluye los prereleases de ese enlace. Solo el `.dmg` de
+macOS arm64 y `SHA256SUMS` están adjuntos a la Beta 1; no hay instalador de Windows ni Linux en
+este release (CI los sigue compilando, pero como artefactos sin probar — ver «Limitaciones» más
+abajo). El `.dmg` no se distribuye dentro del repositorio (la carpeta `apps/desktop/release/` está
+en `.gitignore`): también puedes compilarlo tú mismo (ver más abajo).
 
-La app **no está firmada ni notarizada** (`identity: null` en `electron-builder.yml`). Esto es
-esperado en una beta sin firmar, no una señal de descarga corrupta — no desactives Gatekeeper para
-evitarlo; usa los pasos de apertura de abajo.
+**Verifica la descarga** antes de abrirla, con ambos archivos en la misma carpeta:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+La app **no está firmada ni notarizada** (`identity: null` en `electron-builder.yml`).
 
 ### Primer arranque sin firma (macOS 15 y más reciente)
 
-En macOS reciente (Sequoia 15, y la línea 26/27), Gatekeeper bloquea una app sin firmar con más
-insistencia que en versiones anteriores, así que el primer arranque sigue uno de estos dos caminos:
+En macOS reciente (Sequoia 15, y la línea 26/27), el primer doble clic sobre la app descargada
+queda bloqueado directamente, sin una opción de «abrir de todas formas» en el diálogo de bloqueo:
 
-1. **Clic derecho (Control-clic) sobre la app en Finder ▸ Abrir ▸ Abrir** de nuevo en el diálogo
-   que aparece. Si ese diálogo ofrece un botón **Abrir**, con esto basta y la app arranca con
-   normalidad desde entonces (el doble clic también funciona, una vez hecha esta primera
-   autorización).
-2. Si el paso 1 solo muestra un botón **Listo** sin forma de abrir la app, ve a **Ajustes del
-   Sistema ▸ Privacidad y seguridad**, busca el mensaje de seguridad que nombra «Lila Modeler» y
-   pulsa **Abrir de todas formas**. Luego arranca la app de nuevo (doble clic o clic derecho ▸
-   Abrir) y confirma **Abrir** en el diálogo que sigue.
+1. Ve a **Ajustes del Sistema ▸ Privacidad y seguridad**, busca el mensaje de seguridad que nombra
+   «Lila Modeler» y pulsa **Abrir de todas formas**. Luego arranca la app de nuevo (doble clic, o
+   Control-clic ▸ **Abrir**) y confirma **Abrir** en el diálogo que sigue.
+2. En macOS más antiguo, Control-clic (clic derecho) sobre la app en Finder ▸ **Abrir** ▸ **Abrir**
+   funciona directamente, sin pasar por Ajustes del Sistema.
 
 En cualquiera de los dos casos, esta autorización es un paso único por copia de la app — es la
-forma en que macOS trata el software fuera de la App Store que no está notarizado, y no significa
-que algo esté mal con la build.
+forma en que macOS trata el software fuera de la App Store que no está notarizado. No desactives
+Gatekeeper para evitar esto. `<VERIFY-GATEKEEPER>`
 
 La app utiliza el icono ilustrado detallado de Lila en el Dock y en el Finder.
 
@@ -78,8 +82,8 @@ que carga `eva-01.json` al vuelo.
 
 ## Recorrido de uso
 
-La barra superior tiene cinco modos: **Modelar**, **Simular**, **Resultados**, **Comparar** y
-**Validar rutas**. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
+La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **Comparar**,
+**Animar** y **Validar rutas**. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
 `apps/web/src/strings.es.ts`), no paráfrasis.
 
 ### Modelar
@@ -242,7 +246,8 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 ### Ajustes
 
 - `⌘,` (o el botón ⚙ de la barra, o «Tema: …» en la barra de estado) abre **Ajustes →
-  Apariencia**: tema (Eva-01 oscuro, Papel claro) y densidad (compacta, normal, cómoda). El cambio
+  Apariencia**: uno de cinco temas (Eva-01 oscuro, Papel claro, Tieso claro, Akira oscuro, Montana
+  morado) y densidad (compacta, normal, cómoda). El cambio
   de tema es inmediato, repinta también el diagrama y se recuerda entre arranques (localStorage de
   la app, bajo `lila://`). Cambiar de tema vuelve a montar el lienzo, así que vacía la pila de
   deshacer; el diagrama y los cambios sin guardar se conservan.
@@ -256,9 +261,9 @@ esta lista a ciegas en una fecha posterior)*
 - **Sin firma ni notarización**: una copia recibida requiere la autorización de apertura de macOS
   (ver «Primer arranque sin firma» arriba). Esto es esperado; no desactives Gatekeeper para
   evitarlo.
-- **Solo macOS arm64 está probado**: los instaladores de Windows (NSIS) y Linux (AppImage) los
-  compila la matriz de CI (`.github/workflows/desktop.yml`) y quedan adjuntos al Release, pero nadie
-  del proyecto los ha probado.
+- **Solo macOS arm64 se ofrece y está probado**: los instaladores de Windows (NSIS) y Linux
+  (AppImage) los compila la matriz de CI (`.github/workflows/desktop.yml`) como artefactos sin
+  probar; no están adjuntos al release de la Beta 1 y nadie del proyecto los ha probado.
 - **Doble clic de `.lila` y `.bpmn` en Finder: verificado por el lead en macOS 27 arm64 para la
   Beta 1** — ver las notas de la versión. `<VERIFY-FINDER>`
 - **Guardar un `.lila` abierto por doble clic o argumento de lanzamiento está arreglado en la
@@ -291,10 +296,10 @@ npm run dist:mac -w @lila/desktop   # tsc + copia dist/web + electron-builder --
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (versión actual en `apps/desktop/package.json`: `1.0.0-beta.1`):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.1` para la Beta 1):
 
-- `apps/desktop/release/Lila Modeler-1.0.0-beta.1-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila Modeler-1.0.0-beta.1-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,
