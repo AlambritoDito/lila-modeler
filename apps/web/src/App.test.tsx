@@ -456,7 +456,8 @@ it('un puente sin readSettings (preload viejo) arranca igual, con lienzo (QA #27
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  // jsdom has no `matchMedia`, so the system-based default is Lila Light (#404).
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
   expect(mocks.montajes).toBe(montajesAntes + 1);
 });
 it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch (LILA-113)', async () => {
@@ -464,8 +465,61 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(fetch).toHaveBeenLastCalledWith('./eva-01.json');
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('normal');
+});
+
+// ---------- default theme by prefers-color-scheme (#404) ----------
+
+/** Stubs `matchMedia` so only `(prefers-color-scheme: dark)` answers `oscuro`. */
+function esquemaDelSistema(oscuro: boolean): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: oscuro && query === '(prefers-color-scheme: dark)', media: query }));
+}
+/** Serves the real built-in theme JSONs, so `data-esquema` is computed from their `bg.base`. */
+function temasReales(): void {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    const archivo = resolve(dirname(fileURLToPath(import.meta.url)), 'theme/themes', String(url).replace('./', ''));
+    return { ok: true, json: async () => JSON.parse(readFileSync(archivo, 'utf8')) as unknown } as Response;
+  });
+}
+async function rearrancar(): Promise<void> {
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+}
+it.each([[true, 'lila-dark', 'oscuro'], [false, 'lila-light', 'claro']] as const)(
+  'with nothing saved and a dark OS = %s it starts in %s (%s) and does not save it (#404)',
+  async (oscuro, id, esquema) => {
+    esquemaDelSistema(oscuro); temasReales();
+    await rearrancar();
+    expect(fetch).toHaveBeenLastCalledWith(`./${id}.json`);
+    expect(container.querySelector('.app')?.getAttribute('data-esquema')).toBe(esquema);
+    expect(localStorage.getItem('lila.tema')).toBeNull();
+  },
+);
+it('a saved theme wins over the OS scheme (#404)', async () => {
+  esquemaDelSistema(true);
+  localStorage.setItem('lila.tema', 'papel');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+});
+it('an invalid saved theme falls back to the OS-based Lila theme (#404)', async () => {
+  esquemaDelSistema(true);
+  localStorage.setItem('lila.tema', 'nope');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+});
+it('desktop without a saved theme follows the OS and never writes the automatic choice (#404)', async () => {
+  esquemaDelSistema(true);
+  const escrito: Record<string, unknown>[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({}),
+    writeSettings: async (a: Record<string, unknown>) => { escrito.push(a); },
+  });
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(escrito.some((a) => 'tema' in a)).toBe(false);
 });
 
 // ---------- idioma (LILA-210) ----------
