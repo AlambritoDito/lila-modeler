@@ -5,6 +5,11 @@ The [current English application gallery](en/README.md) contains real browser sc
 checks opening, editing, simulation, comparison, explicit saving and reload under the Pages base.
 The product landing page uses only this gallery. No public deployment is implied by local capture.
 
+The Turno 2 design — the scenario rail, the resizable panel, the detachable scenario window (2c),
+and the brand lockup with themed controls (2d) — is implemented as of #393 and #370. The
+screenshots below reflect it. Follow-ups tracked separately: #394 (dock), #395 (Results window)
+and #396 (step names).
+
 ## Historical inventory (#287)
 
 All 28 historical PNG files are accounted for below. The 13 design artboards and references
