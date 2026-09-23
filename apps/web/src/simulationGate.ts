@@ -37,7 +37,9 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
   const problems = validateScenario(scenario, model.ir, { locale });
   const errors = [
-    ...model.errors.map((p) => `${p.code}: ${p.id}: ${p.message}`),
+    // #419: several engine messages (E-SIN-START, E-SIN-END, E-INALCANZABLE…) already open with
+    // the id; prefixing it again printed the process id twice.
+    ...model.errors.map((p) => (p.message.startsWith(p.id) ? `${p.code}: ${p.message}` : `${p.code}: ${p.id}: ${p.message}`)),
     ...problems.filter((p) => p.severity === 'error').map((p) => `${p.code}: ${p.path}: ${p.message}`),
   ];
   if (errors.length) throw new Error(errors.join('\n'));

@@ -723,6 +723,17 @@ body {
   color: var(--accent-primary);
 }
 
+/* #419: a failed Run in the bar is one line cut with an ellipsis (the whole list is in its
+   `title`). Zero basis: it only takes the free space (nearly all of it, ahead of `.hueco`), so
+   the counts beside it never shrink or wrap. */
+.estado .corrida-fallida {
+  flex: 1000 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .enlace {
   background: none;
   border: none;
