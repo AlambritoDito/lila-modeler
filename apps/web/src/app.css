@@ -1388,7 +1388,11 @@ body {
 /* ---------- ajustes ---------- */
 
 .ajustes { min-width: 22rem; }
-.ajustes h2 { margin: 0 0 12px; }
+/* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22): con
+   los grupos de Apariencia colapsados de fábrica el diálogo ya no hace scroll por defecto, pero
+   el botón se queda visible sin tocar nada aunque alguien deje un grupo abierto. */
+.ajustes-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ajustes-encabezado h2 { margin: 0; }
 .ajustes h3 { color: var(--fg-muted); font-size: inherit; font-weight: 600; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
 .ajustes .campo { margin-bottom: 10px; }
 .ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
@@ -1433,6 +1437,111 @@ body {
    entiende. */
 .app[data-densidad='compacta'] { --espacio: 0.85; }
 .app[data-densidad='comoda'] { --espacio: 1.2; }
+
+/* ---------- acerca de (LILA-381) ---------- */
+
+/* Todos los productos del dueño llevan un «Acerca de»: icono, nombre, versión y su línea de
+   marca, centrados y pequeño. `position: relative` es solo para anclar el botón de cerrar.
+   `display` va en `.acerca[open]`, no aquí: un `<dialog>` cerrado es `display: none` por la hoja
+   de estilos del navegador, y una regla de autor sin `[open]` la pisa aunque `open` sea `false`
+   (el origen del autor gana a la del navegador, con independencia de la especificidad) — el
+   diálogo se quedaba pintado en la esquina en vez de escondido (QA de LILA-381). */
+.acerca {
+  position: relative;
+  max-width: 340px;
+  padding: 32px 24px 24px;
+  text-align: center;
+  color: var(--fg-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px var(--shadow);
+}
+.acerca[open] { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.acerca::backdrop { background: rgb(0 0 0 / 50%); }
+/* El redondeo sale de `.logo` (la misma marca de la barra, LILA-206): aquí solo se agranda. */
+.acerca-icono { width: 104px; height: 104px; }
+.acerca strong { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.acerca-version { margin: 0; color: var(--fg-muted); font-family: var(--font-mono); font-size: 12px; }
+.acerca-marca { margin: 4px 0 0; color: var(--fg-muted); font-size: 12px; line-height: 1.5; }
+.acerca-cerrar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.acerca-cerrar:hover { color: var(--fg-primary); }
+
+/* Huevo de pascua (pedido del dueño, 2026-09-22): seis clics en el icono destapan esto. Sin
+   ninguna pista de texto —el label es «Clave secreta» y ya—, y sin decir nunca qué clave vale. */
+.acerca-clave { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; width: 100%; }
+.acerca-clave label { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: 11px; color: var(--fg-muted); text-align: left; }
+.acerca-clave input[type='text'] { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: 5px 8px; width: 100%; }
+/* Un temblor breve para «esa clave no es», sin decir por qué (LILA-381). */
+.acerca-clave.tiembla { animation: acerca-tiembla 320ms; }
+@keyframes acerca-tiembla {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acerca-clave.tiembla { animation: none; }
+}
+
+/* ---------- karaoke (LILA-381) ---------- */
+
+/* Overlay a pantalla completa por encima de todo lo demás (el diálogo de Acerca de ya se cerró
+   antes de montar esto): fondo casi negro con `--bg-base`, texto centrado que cae palabra por
+   palabra como un karaoke. Ni un radio nuevo (Modernist, LILA-206): el overlay es todo esquinas
+   rectas. */
+.karaoke {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 24px;
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  text-align: center;
+  overflow: hidden;
+}
+.karaoke-linea { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em; margin: 0; max-width: 60rem; font-size: clamp(1.1rem, 3vw, 1.7rem); font-weight: 500; }
+.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida 250ms ease-out both; }
+/* «La Mente Maestra» cae la última, mucho más grande y con brillo del acento (pedido del dueño). */
+.karaoke-epica {
+  margin: 0;
+  font-size: clamp(2.5rem, 8vw, 6rem);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--accent-primary);
+  text-shadow: 0 0 24px var(--accent-primary), 0 0 48px var(--accent-primary);
+  opacity: 0;
+  animation-name: karaoke-caida;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+@keyframes karaoke-caida {
+  0% { opacity: 0; transform: translateY(-40px) scale(1.15); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* El texto entero se ve de una vez, sin caída: la demora antes de abrir el enlace la sigue
+   marcando el temporizador de `About.tsx`, no el CSS. */
+@media (prefers-reduced-motion: reduce) {
+  .karaoke-palabra, .karaoke-epica { animation: none; opacity: 1; transform: none; }
+}
 
 /* ---------- bienvenida (artboard 08) ---------- */
 

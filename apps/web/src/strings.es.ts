@@ -134,6 +134,8 @@ export const es: Strings = {
     tema: 'Tema',
     densidad: 'Densidad',
     cerrar: 'Cerrar',
+    /** Ajustes → Acerca de Lila Modeler (LILA-381): cierra Ajustes y abre el diálogo Acerca de. */
+    acercaDe: 'Acerca de Lila Modeler',
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',

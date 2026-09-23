@@ -35,6 +35,7 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
+import { About } from './About';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
@@ -322,6 +323,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [idioma, setIdioma] = useState<Preferencia>('auto');
   const locale = useLocale();
   const ajustesDialog = useRef<HTMLDialogElement>(null);
+  /** Diálogo «Acerca de» (LILA-381): se abre desde Ajustes y desde el menú nativo (`'acerca'`). */
+  const acercaDialog = useRef<HTMLDialogElement>(null);
+  /** El overlay del karaoke del huevo de pascua (QA de #387, Low): con su `<dialog>` ya cerrado
+   * mientras suena, ni `⌘,` ni el menú nativo pasaban por él para saber que había que esperar, así
+   * que `Ajustes`/`Acerca de` podían abrirse encima. Una `ref`, no un estado: no hace falta un
+   * repintado por esto, y así tampoco reinicia el temporizador del propio karaoke (mismo QA). */
+  const karaokeActivo = useRef(false);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
@@ -715,7 +723,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * (`window.lila.onMenu`) llaman a lo mismo que los botones de la barra.
    */
   function ejecutar(accion: MenuAction): void {
-    if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    if (accion === 'ajustes') { if (!karaokeActivo.current && !ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    else if (accion === 'acerca') { if (!karaokeActivo.current && !acercaDialog.current?.open) acercaDialog.current?.showModal(); }
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
@@ -921,6 +930,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
               <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
             </>}
+            <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
           </div>
         </details>}
         <span className="hueco" />
@@ -966,14 +976,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
             con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
         <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
-          <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+          {/* «Acerca de Lila Modeler» vive en el encabezado, no al final (pedido del dueño,
+              2026-09-22): con los grupos de Apariencia colapsados de fábrica el diálogo ya no
+              hace scroll de por sí, pero el botón tiene que verse sin tocar nada igualmente —
+              alguien pudo haber dejado un grupo abierto antes de volver a entrar aquí. */}
+          <div className="ajustes-encabezado">
+            <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }}>{S.app.acercaDe}</button>
+          </div>
           {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
               toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
               se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
               elegir el propio a quien no entiende el que está puesto. */}
           <h3>{S.app.idioma}</h3>
           <label className="campo idioma">
-            <select aria-label={S.app.idioma} value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
+            <select aria-label={S.app.idioma} autoFocus value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
               <option value="auto">{S.app.idiomaAuto}</option>
               {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
             </select>
@@ -988,9 +1005,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             onTemas={guardarTemas}
             onSeleccionar={(id) => void seleccionarTema(id)}
           />
-          <div className="acciones"><button className="boton primario">{S.app.cerrar}</button></div>
+          <div className="acciones">
+            <button className="boton primario">{S.app.cerrar}</button>
+          </div>
         </form>
       </dialog>
+
+      <About dialogRef={acercaDialog} onKaraoke={(activo) => { karaokeActivo.current = activo; }} />
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
           pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se

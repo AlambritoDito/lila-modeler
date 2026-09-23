@@ -103,6 +103,9 @@ beforeEach(async () => {
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  // LILA-381: «Acerca de» cierra Ajustes con `close()` antes de abrir su propio diálogo; jsdom no
+  // implementa ese método tampoco (mismo motivo que `showModal` arriba).
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.abrir.mockResolvedValue(true);
@@ -616,6 +619,66 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   expect(dialog.open).toBe(true);
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
+});
+it('en Ajustes, «Acerca de Lila Modeler» cierra Ajustes y abre el diálogo Acerca de (LILA-381)', async () => {
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(true);
+  expect(acerca.open).toBe(false);
+  await click(T.app.acercaDe);
+  expect(ajustes.open).toBe(false);
+  expect(acerca.open).toBe(true);
+  expect(container.textContent).toContain(T.bienvenida.nombre);
+});
+it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', async () => {
+  let menu: ((a: unknown) => void) | null = null;
+  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    pendingOpenPath: async () => null, onOpenPath: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {} });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(menu).not.toBeNull();
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  expect(acerca.open).toBe(false);
+  await act(async () => { menu!('acerca'); });
+  expect(acerca.open).toBe(true);
+});
+it('mientras el karaoke del huevo de pascua suena, ni ⌘, ni "acerca" abren nada encima (QA de #387, Low)', async () => {
+  // El `<dialog>` de Acerca de ya está cerrado mientras el karaoke corre (para que su "top layer"
+  // no lo tape), así que ni el atajo de teclado ni el menú nativo pasan por él para saber que
+  // hay que esperar: sin la `ref` de `App.tsx` que enlaza con `onKaraoke`, `ejecutar('ajustes')`
+  // volvía a abrir Ajustes encima del overlay.
+  vi.useFakeTimers();
+  vi.stubGlobal('open', vi.fn());
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  await click(T.app.acercaDe);
+  expect(acerca.open).toBe(true);
+  const icono = container.querySelector<HTMLImageElement>('.acerca-icono')!;
+  for (let i = 0; i < 6; i += 1) {
+    await act(async () => { icono.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  }
+  const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
+  const receptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => { receptor.call(campo, 'brito'); campo.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('.acerca-clave button[type="submit"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  expect(acerca.open).toBe(false);
+  expect(document.querySelector('.karaoke')).not.toBeNull();
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(false);
+  expect(acerca.open).toBe(false);
+  // Se cancela para terminar sin temporizadores vivos ni el enlace abierto.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+  expect(document.querySelector('.karaoke')).toBeNull();
+  // Y con el karaoke ya fuera, ⌘, vuelve a funcionar normalmente.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(true);
+  vi.useRealTimers();
 });
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;

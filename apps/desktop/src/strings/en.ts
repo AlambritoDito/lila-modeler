@@ -22,6 +22,9 @@ export const en = {
   /** Native menu (`menu.ts`). The role submenus are localised by the OS and not listed here. */
   menu: {
     preferencias: 'Preferences…',
+    /** Every product this owner ships has an About dialog (LILA-381). On macOS it replaces the
+     * app menu's `{ role: 'about' }`; on Windows/Linux it sits at the end of File, before Quit. */
+    acercaDe: 'About Lila Modeler',
     /** The «Open Recent» submenu when there is no recent project yet; shown disabled. */
     ninguno: 'None',
     archivo: 'File',

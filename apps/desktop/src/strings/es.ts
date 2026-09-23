@@ -14,6 +14,7 @@ import type { Strings } from './types.js';
 export const es: Strings = {
   menu: {
     preferencias: 'Preferencias…',
+    acercaDe: 'Acerca de Lila Modeler',
     ninguno: 'Ninguno',
     archivo: 'Archivo',
     nuevoProyecto: 'Nuevo proyecto',
