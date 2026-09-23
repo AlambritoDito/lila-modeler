@@ -72,8 +72,28 @@ export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument
     'to-be.scenario.json': { version: 1, name: S.proyecto.escenarioToBe, extends: 'as-is.scenario.json' },
   };
 }
-/** Documento inicio → tarea → fin con DI; ids distintos en cada proyecto. */
+/**
+ * Documento «New process» (#409): un `bpmn:process` sin figuras, con DI vacío pero enlazado al
+ * proceso; ids distintos en cada proyecto. Antes de #409 esta función sembraba inicio → tarea →
+ * fin (ver `seedModelXml`); ahora arranca de verdad en blanco, como dice la pista de la bienvenida
+ * («⌘N · creates an empty .bpmn»).
+ */
 export function newModelXml(): string {
+  const S = strings();
+  const suffix = crypto.randomUUID().replaceAll('-', '');
+  const p = `Process_${suffix}`;
+  return marcarExportador(`<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${suffix}" targetNamespace="https://lila-modeler.org/bpmn">
+<bpmn:process id="${p}" name="${S.proyecto.procesoNuevo}" isExecutable="false"/>
+<bpmndi:BPMNDiagram id="Diagram_${suffix}"><bpmndi:BPMNPlane id="Plane_${suffix}" bpmnElement="${p}"/></bpmndi:BPMNDiagram></bpmn:definitions>`);
+}
+
+/**
+ * Documento inicio → tarea → fin con DI; ids distintos en cada proyecto. Es el `newModelXml` de
+ * antes de #409, conservado solo como fixture de pruebas (`App.test.tsx` reescribe su tarea a
+ * `Task_Preparar`): la app ya no lo usa para «Nuevo».
+ */
+export function seedModelXml(): string {
   const S = strings();
   const suffix = crypto.randomUUID().replaceAll('-', '');
   const p = `Process_${suffix}`, a = `Start_${suffix}`, b = `Task_${suffix}`, c = `End_${suffix}`, f = `Flow_A_${suffix}`, g = `Flow_B_${suffix}`;

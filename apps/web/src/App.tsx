@@ -680,6 +680,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
       const problemas = problemasEscenario(resuelto, ir, locale);
+      // ponytail (#409): an empty process («New») is not an error yet. Nothing to filter here:
+      // `E-SIN-START`/`E-SIN-END` belong to the engine's `validate()` (CLI/MCP only), and
+      // `validateScenario` never emits them.
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
