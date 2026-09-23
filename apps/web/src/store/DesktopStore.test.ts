@@ -483,6 +483,36 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     expect(bridge.writes.at(-1)?.options).toEqual({ saveAs: false, overwrite: false, modelFile: 'ventas.bpmn' });
   });
 
+  it('openRecent de un .lila (sin `file`): un guardado normal posterior NO manda `modelFile` (issue #378)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [] });
+
+    // `main.ts` manda `{ dir }` sin `file` para un `.lila` (`acceptOpenPath`/`openPathRequest`);
+    // aquí se simula esa misma forma: `openRecent(dir)`, sin segundo argumento.
+    await store.openRecent('/descargas/launch.lila');
+    await store.saveProject(documentoBase({ name: 'v2' }));
+
+    // Antes del fix, `activeModelFile` quedaba en `undefined` de todos modos aquí porque no se
+    // pasó `file` — el caso que SÍ reproducía #378 es que `file` llegue con el nombre del propio
+    // `.lila` (ver el siguiente test): la defensa de abajo cubre ambos.
+    expect(bridge.writes.at(-1)?.options).toEqual({ saveAs: false, overwrite: false });
+  });
+
+  it('openRecent con `file` de un .lila (llamador que no filtró): se ignora como modelFile (issue #378, defensa en profundidad)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [] });
+
+    // Si algún llamador reenviara `file` con el propio nombre del `.lila` (lo que `App.tsx`
+    // `abrirRuta` ya no hace tras el fix), `DesktopStore` no debe guardarlo como `activeModelFile`:
+    // `lila:writeProject`/`requireBpmnName` rechaza cualquier `modelFile` que no sea `.bpmn`.
+    await store.openRecent('/descargas/launch.lila', 'launch.lila');
+    await store.saveProject(documentoBase({ name: 'v2' }));
+
+    expect(bridge.writes.at(-1)?.options).toEqual({ saveAs: false, overwrite: false });
+  });
+
   it('guardado normal de un diagrama suelto: solo el .bpmn (diagramOnly)', async () => {
     const bridge = new FakeBridge();
     const store = new DesktopStore(bridge);
