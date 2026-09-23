@@ -360,9 +360,11 @@ mismo defecto un nivel más abajo: dentro de una replicación, la desviación mu
 observación vale 0 por convención, no por una ausencia de dispersión medida. `bottlenecks` conserva
 su propia regla (sección 6).
 
-Cuando un KPI condicional lo observan algunas replicaciones pero no todas, la corrida lleva
-`W-REPLICACIONES-SIN-OBSERVACIONES` (sección 9), para que la media no se lea como la de toda la
-corrida.
+Cuando una tarea o temporizador, el proceso o un desenlace lo observan algunas replicaciones
+pero no todas, la corrida lleva un `W-REPLICACIONES-SIN-OBSERVACIONES` por cada sujeto (sección
+9), para que la media no se lea como la de toda la corrida. El aviso se decide sobre el path
+`mean` del sujeto; un path `sd` puede tener un `n` menor (necesita dos observaciones) sin aviso
+propio: léase `n` junto al valor.
 
 > **Los resultados guardados antes de 1.0.0-beta.1** no traen `n` y se calcularon con la
 > definición anterior: las replicaciones sin observaciones contaban como cero. Su `sd` y su `ci95`

@@ -366,9 +366,11 @@ start, end or terminate event or boundary timer, whose zeros are exact. The `sd`
 defect one level down: within a replication, the sample deviation of a single observation is 0 by
 convention, not a measured absence of spread. `bottlenecks` keeps its own rule (section 6).
 
-When a conditional KPI is observed by some replications but not all, the run carries
-`W-REPLICACIONES-SIN-OBSERVACIONES` (section 9), so the mean is not read as a mean over the whole
-run.
+When a task or timer, the process, or an outcome is observed by some replications but not all,
+the run carries one `W-REPLICACIONES-SIN-OBSERVACIONES` per such subject (section 9), so the
+mean is not read as a mean over the whole run. The warning keys off the subject's `mean` path;
+an `sd` path can have a smaller `n` (it needs two observations) without a warning of its own —
+read `n` next to the value.
 
 > **Results stored before 1.0.0-beta.1** carry no `n` and were computed with the previous
 > definition: replications without observations counted as zero. Their `sd` and `ci95` are always
