@@ -241,9 +241,8 @@ export const es: Strings = {
     recientes: 'Recientes',
     sinRecientes: 'Todavía no hay proyectos recientes. Abre uno o empieza por el ejemplo.',
     novedades: (version: string): string => `Novedades de ${version}`,
-    novedadesTexto: 'Archivos de proyecto .lila con corridas guardadas, Simular en cuatro pasos, repetición del log de eventos sobre el diagrama, rutas según el resultado previo del caso y resultados con los mismos nombres de columna que Bizagi Modeler.',
     notasVersion: 'Notas de la versión',
-    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad} ·`,
+    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad}`,
     cambiarApariencia: 'cambiar en Ajustes → Apariencia',
   },
 

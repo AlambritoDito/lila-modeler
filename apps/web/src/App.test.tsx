@@ -20,6 +20,7 @@ import { en as T } from './strings.en';
 // The Spanish catalog is only read by the language tests (LILA-210): what they assert is
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
+import { version } from '../package.json';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
@@ -1530,7 +1531,14 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(bienvenida).not.toBeNull();
   expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
   expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
-  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.3'));
+  // #425: the heading follows the manifest and the paragraph is this version's CHANGELOG intro
+  // (`__LILA_NOVEDADES__`), not a fixed text; the theme line never ends with a stray «·».
+  expect(bienvenida.querySelector('.bienvenida-novedades h3')!.textContent).toBe(T.bienvenida.novedades(version));
+  expect(__LILA_NOVEDADES__).not.toBe('');
+  expect(bienvenida.querySelector('.bienvenida-novedades p')!.textContent).toBe(__LILA_NOVEDADES__);
+  const lineaTema = bienvenida.querySelector('.bienvenida-tema')!;
+  expect(lineaTema.firstChild!.nextSibling!.textContent!.trim()).not.toMatch(/·$/);
+  expect(lineaTema.textContent).toMatch(/ · [^·]+$/);
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();

@@ -84,12 +84,12 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
         )}
         <div className="bienvenida-novedades">
           <h3>{S.novedades(version)}</h3>
-          <p>{S.novedadesTexto}</p>
+          {__LILA_NOVEDADES__ !== '' && <p>{__LILA_NOVEDADES__}</p>}
           <a href={`${REPO_URL}/releases`} target="_blank" rel="noreferrer">{S.notasVersion}</a>
         </div>
         <p className="bienvenida-tema">
           <span className="muestra" aria-hidden="true" />
-          {S.tema(temaNombre, densidadTexto)} <button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button>
+          {S.tema(temaNombre, densidadTexto)}{' · '}<button type="button" className="enlace" onClick={onAjustes}>{S.cambiarApariencia}</button>
         </p>
       </div>
     </section>

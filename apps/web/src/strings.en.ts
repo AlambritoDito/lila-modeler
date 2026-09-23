@@ -250,9 +250,8 @@ export const en = {
     recientes: 'Recent',
     sinRecientes: 'No recent projects yet. Open one or start from the example.',
     novedades: (version: string): string => `What's new in ${version}`,
-    novedadesTexto: '.lila project files with saved runs, Simulate as four steps, replay of the event log on the diagram, routing on the case\'s previous outcome, and results with the same column names as Bizagi Modeler.',
     notasVersion: 'Release notes',
-    tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad} ·`,
+    tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad}`,
     cambiarApariencia: 'change in Settings → Appearance',
   },
 
