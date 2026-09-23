@@ -288,8 +288,11 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         <span className="acento">{S.apariencia.muestraBoton}</span>
       </div>
 
-      {grupos().map((grupo, i) => (
-        <details key={grupo.titulo} className="grupo" open={i === 0}>
+      {/* Los siete grupos empiezan todos cerrados (pedido del dueño, 2026-09-22): con el primero
+          («Base») abierto de fábrica el diálogo entero arrancaba con scroll, y el botón «Acerca
+          de Lila Modeler» del encabezado quedaba fuera de la vista sin bajar. */}
+      {grupos().map((grupo) => (
+        <details key={grupo.titulo} className="grupo">
           <summary>{grupo.titulo}</summary>
           {grupo.tokens.map((token) => {
             const campo = { token, valor: tokens[token] ?? '', editar };

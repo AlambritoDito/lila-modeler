@@ -1388,7 +1388,11 @@ body {
 /* ---------- ajustes ---------- */
 
 .ajustes { min-width: 22rem; }
-.ajustes h2 { margin: 0 0 12px; }
+/* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22): con
+   los grupos de Apariencia colapsados de fábrica el diálogo ya no hace scroll por defecto, pero
+   el botón se queda visible sin tocar nada aunque alguien deje un grupo abierto. */
+.ajustes-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ajustes-encabezado h2 { margin: 0; }
 .ajustes h3 { color: var(--fg-muted); font-size: inherit; font-weight: 600; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
 .ajustes .campo { margin-bottom: 10px; }
 .ajustes .campo select { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }

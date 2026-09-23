@@ -976,7 +976,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
             con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
         <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
-          <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+          {/* «Acerca de Lila Modeler» vive en el encabezado, no al final (pedido del dueño,
+              2026-09-22): con los grupos de Apariencia colapsados de fábrica el diálogo ya no
+              hace scroll de por sí, pero el botón tiene que verse sin tocar nada igualmente —
+              alguien pudo haber dejado un grupo abierto antes de volver a entrar aquí. */}
+          <div className="ajustes-encabezado">
+            <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
+            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }}>{S.app.acercaDe}</button>
+          </div>
           {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
               toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
               se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
@@ -999,7 +1006,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             onSeleccionar={(id) => void seleccionarTema(id)}
           />
           <div className="acciones">
-            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }}>{S.app.acercaDe}</button>
             <button className="boton primario">{S.app.cerrar}</button>
           </div>
         </form>
