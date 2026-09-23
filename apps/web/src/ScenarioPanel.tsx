@@ -375,7 +375,7 @@ function porRuta(problemas: readonly Problema[]): Map<string, Problema[]> {
 export function duplicarEscenario(
   archivo: string,
   escenario: Record<string, unknown>,
-  existentes: readonly string[] = [],
+  existentes: readonly string[],
 ): { archivo: string; escenario: Record<string, unknown> } {
   const S = strings();
   const base = archivo.replace(/\.scenario\.json$/, '');
@@ -386,10 +386,12 @@ export function duplicarEscenario(
   const vecino = archivo.slice(archivo.lastIndexOf('/') + 1);
   // #397: a second copy of the same scenario must not overwrite the first one, so the suffix
   // is numbered — « (copy)», « (copy 2)», « (copy 3)»… — until the file name is free.
-  let sufijo = S.escenario.sufijoCopia;
-  for (let n = 2; existentes.includes(`${base}${sufijo}.scenario.json`); n++) {
-    sufijo = S.escenario.sufijoCopia.replace(/\)$/, ` ${n})`);
-  }
+  const copia = S.escenario.sufijoCopia;
+  // The number goes inside the closing parenthesis when the catalog has one, after it otherwise,
+  // so a catalog without «)» cannot make this loop spin forever.
+  const numerado = (n: number): string => (copia.endsWith(')') ? `${copia.slice(0, -1)} ${n})` : `${copia} ${n}`);
+  let sufijo = copia;
+  for (let n = 2; existentes.includes(`${base}${sufijo}.scenario.json`); n++) sufijo = numerado(n);
   return {
     archivo: `${base}${sufijo}.scenario.json`,
     escenario: { version: 1, name: `${nombre}${sufijo}`, extends: vecino },

@@ -326,7 +326,7 @@ describe('extends roto', () => {
 
 describe('duplicar', () => {
   it('el extends de la copia es relativo al directorio del original', () => {
-    const copia = duplicarEscenario('escenarios/as-is.scenario.json', { name: 'AS-IS' });
+    const copia = duplicarEscenario('escenarios/as-is.scenario.json', { name: 'AS-IS' }, []);
     expect(copia.archivo).toBe('escenarios/as-is (copia).scenario.json');
     // § 6: `extends` se resuelve **relativo al archivo del hijo**. Una ruta con el directorio
     // dentro lo duplica y el padre deja de encontrarse.
