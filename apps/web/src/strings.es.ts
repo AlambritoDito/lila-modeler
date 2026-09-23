@@ -739,6 +739,20 @@ export const es: Strings = {
       'con el pool lleno, así que el número que muestra el aviso —esa razón, o la ocupación ' +
       'cuando salta por esa puerta— es observado sobre el horizonte simulado, no la carga de ' +
       'toda la demanda externa.',
+    /**
+     * #356/#385: los resultados guardados antes de 1.0.0-beta.1 no traen `n` y se calcularon con
+     * la definición anterior de la media entre replicaciones — las replicaciones sin observación
+     * contaban como cero (docs/RESULTS_FORMAT.md § 8). Nunca se recalculan, así que se avisa una
+     * vez, junto a los avisos, en vez de dejar leer en silencio una media que significa algo
+     * distinto de una corrida hecha después de esa versión. `CompareView` reutiliza la misma frase.
+     */
+    notaReplicacionesLegado:
+      'Calculado antes de 1.0.0-beta.1: las replicaciones sin observaciones contaban como cero ' +
+      'en las medias.',
+    /** Nota bajo los avisos cuando la corrida reporta `W-REPLICACIONES-SIN-OBSERVACIONES` (#356). */
+    notaReplicacionesSinObservaciones:
+      'Algunas replicaciones no observaron el sujeto que nombra el aviso; sus estadísticas usan ' +
+      'solo las replicaciones que sí lo hicieron (ver n en el archivo de resultados).',
   },
 
   /* ------------------------------------------------------------------ *
@@ -757,6 +771,10 @@ export const es: Strings = {
     sinSignificancia:
       'Sin intervalos de confianza en esta comparación: hacen falta al menos 2 réplicas en cada ' +
       'corrida, así que ningún marcador de significancia se muestra abajo.',
+    /** #356/#385: razón real cuando `mixedReplicationDefinitions` y no la falta de réplicas. */
+    sinSignificanciaMixtas:
+      'No se muestra la significancia: las corridas comparadas usan estadísticas de replicación ' +
+      'distintas (una se calculó antes de 1.0.0-beta.1).',
     leyenda:
       ' diferencia significativa (IC95 sin solapamiento). Las celdas resaltadas son las que ' +
       'cambiaron contra la base.',
@@ -782,6 +800,10 @@ export const es: Strings = {
       'muestra con la unidad de su propia corrida.',
     avisoSignificancia:
       'Sin intervalos de confianza: hacen falta ≥ 2 réplicas para hablar de significancia.',
+    /** #356/#385: una corrida de antes de 1.0.0-beta.1 (sin `n`) frente a una nueva (con `n`). */
+    avisoReplicacionesMixtas:
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes ' +
+      'de 1.0.0-beta.1); no se muestran las marcas de significancia.',
     avisoSemillas: (semillas: readonly number[]): string =>
       `Semillas distintas entre corridas (${semillas.join(' vs ')}): las corridas no comparten ` +
       'la misma secuencia aleatoria.',

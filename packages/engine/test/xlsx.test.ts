@@ -520,4 +520,39 @@ describe('workbook of a comparison', () => {
       comparison.rows[cycleTime]!.deltaRel[1],
     );
   });
+
+  // #356/#385: a kpi observed by a single replication (n = 1) carries `{mean, n}` with no `sd`/
+  // `ci95` (docs/RESULTS_FORMAT.md § 8, "Eligibility"). The workbook must export blank CI cells
+  // for it instead of throwing or writing a stale interval — `ci95Of` already reads `?.ci95`
+  // optionally, this pins that it does not regress.
+  test('a kpi summary with n = 1 (no ci95) exports blank CI cells without throwing', async () => {
+    const ir = await pedidoIr();
+    const entries = ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json'].map((file) => {
+      const scenario = pedidoScenario(file, 3);
+      return { result: simulate(ir, scenario, { log: false }), scenario };
+    });
+    const kpi = 'process.cycleTime.mean';
+    for (const entry of entries) {
+      const summary = entry.result.replications!.kpis[kpi]!;
+      entry.result.replications!.kpis[kpi] = { mean: summary.mean, n: 1 };
+    }
+    const comparison = compare(entries.map((entry) => entry.result));
+
+    expect(() => compareWorkbook(ir, entries, comparison)).not.toThrow();
+
+    const files = parts(compareWorkbook(ir, entries, comparison));
+    const sheet = files['xl/worksheets/sheet3.xml']!;
+    const rows = sheetRows(sheet);
+    const headers = rows[0]!;
+    const rowIndex = rows.findIndex((row) => row[0] === kpi);
+    expect(rowIndex).toBeGreaterThan(0);
+
+    const column = headers.indexOf(entries[0]!.scenario.name);
+    // CI95 low/high (column + 1, column + 2) are absent cells, never zero.
+    for (const offset of [1, 2]) {
+      expect(sheet).not.toContain(`<c r="${columnName(column + offset)}${rowIndex + 1}"`);
+    }
+    // The mean itself is still exported.
+    expect(Number(rows[rowIndex]?.[column])).toBe(comparison.rows[rowIndex - 1]!.values[0]);
+  });
 });

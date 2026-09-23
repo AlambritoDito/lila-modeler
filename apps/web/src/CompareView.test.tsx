@@ -32,6 +32,8 @@ import {
 
 import { CompareView, compareMetricLabel, visibleCompareRows, type CompareRunMeta } from './CompareView.js';
 import { setLocale } from './i18n';
+import { en } from './strings.en';
+import { es } from './strings.es';
 
 // This suite pins the Spanish translation. English is the app's base language since
 // LILA-210, so the locale is set here instead of depending on the machine's.
@@ -443,5 +445,104 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
   test('sin `runs` la vista es idéntica a antes de OP-05: sin panel de avisos ni metadatos extra', () => {
     expect(tresHtml).not.toContain('Avisos');
     expect(tresHtml).not.toContain('no comparable');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #356/#385: mezclar una corrida legado (sin `n`, calculada antes de 1.0.0-beta.1) con una nueva
+ * (con `n`) puede marcar una diferencia "significativa" falsa — revisión de PR #384.
+ * ------------------------------------------------------------------ */
+
+describe('CompareView (#356/#385): definiciones de replicación mezcladas', () => {
+  test('corrida legado vs corrida nueva: sin marca de significancia y con el aviso propio', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, n: 30, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, n: 30, sd: 1 };
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const row = comparison.rows.find((r) => r.kpi === 'elements.A.resourceWait.mean')!;
+    expect(row.significant[1]).toBe(true); // compare() sí lo marca: no conoce la definición.
+
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: true, name: 'AS-IS', replications: 30 },
+      { legacyReplications: false, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).not.toContain('Diferencia significativa');
+    expect(html).toContain(es.comparar.avisoReplicacionesMixtas);
+    // La sección "Significancia" tiene que dar la razón real (definiciones mezcladas) y no el
+    // texto genérico de "faltan réplicas", que sería falso: las dos corridas sí tienen 30 (#385 QA).
+    expect(html).toContain(es.comparar.sinSignificanciaMixtas);
+    expect(html).not.toContain(es.comparar.sinSignificancia);
+    expect(es.comparar.sinSignificanciaMixtas).toContain('antes de 1.0.0-beta.1');
+    expect(en.comparar.sinSignificanciaMixtas).toContain('before 1.0.0-beta.1');
+    expect(en.comparar.sinSignificanciaMixtas).not.toBe(en.comparar.sinSignificancia);
+  });
+
+  test('las dos corridas legado: no es mezcla, la significancia sigue disponible', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, sd: 1 } as unknown as KpiSummary;
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, sd: 1 } as unknown as KpiSummary;
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: true, name: 'AS-IS', replications: 30 },
+      { legacyReplications: true, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain('Diferencia significativa');
+    expect(html).not.toContain('estadísticas de replicación distintas');
+    expect(html).toContain('Calculado antes de 1.0.0-beta.1');
+  });
+
+  test('las dos corridas nuevas: comportamiento sin cambios, sin aviso ni nota de legado', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, n: 30, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, n: 30, sd: 1 };
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),
+    ]);
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: false, name: 'AS-IS', replications: 30 },
+      { legacyReplications: false, name: 'TO-BE', replications: 30 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain('Diferencia significativa');
+    expect(html).not.toContain('estadísticas de replicación distintas');
+    expect(html).not.toContain('Calculado antes de 1.0.0-beta.1');
+  });
+
+  // #385 QA (4): una corrida legado no siempre tiene enfrente una corrida nueva con `n` — puede
+  // no tener resumen de replicaciones en absoluto (una sola réplica). Eso no es una mezcla de
+  // definiciones (no hay una definición "nueva" con la que chocar), pero el lector igual tiene que
+  // saber que la corrida legado usa la definición anterior: la nota se muestra igual.
+  test('corrida legado (30 réplicas) contra una sin resumen de replicaciones: nota de legado sin aviso de mezcla', () => {
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, sd: 1 } as unknown as KpiSummary;
+    const comparison = compare([
+      syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
+      syntheticResult(30),
+    ]);
+    const runs: CompareRunMeta[] = [
+      { legacyReplications: true, name: 'AS-IS', replications: 30 },
+      { name: 'TO-BE', replications: 1 },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} runs={runs} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+
+    expect(html).toContain(es.resultados.notaReplicacionesLegado);
+    expect(html).not.toContain(es.comparar.avisoReplicacionesMixtas);
+    expect(html).not.toContain(es.comparar.sinSignificanciaMixtas);
   });
 });

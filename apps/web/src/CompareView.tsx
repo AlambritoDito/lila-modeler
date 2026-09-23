@@ -34,6 +34,7 @@ import {
   exportButtonStyle,
   tabLabels,
   h2Style,
+  notaStyle,
   sectionStyle,
   type ColumnDef,
 } from './ResultsView.js';
@@ -410,8 +411,16 @@ export function CompareView({
   const globalWarnings = compareWarnings(runs ?? []);
   const costsComparable = globalWarnings.costsComparable;
   const significanceAvailable = globalWarnings.significanceAvailable;
+  const mixedReplicationDefinitions = globalWarnings.mixedReplicationDefinitions;
   const perRunWarnings = (runs ?? []).some((run) => (run.warnings?.length ?? 0) > 0);
-  const showWarningsPanel = runs !== undefined && (globalWarnings.warnings.length > 0 || perRunWarnings);
+  // #356/#385 (QA on PR #385): at least one compared run stored before 1.0.0-beta.1 (no `n`) and
+  // not mixed with a new one — a legacy run compared against another legacy run, or against a run
+  // with no replication summary at all (single replication) — is not the *mixed* case
+  // `compareWarnings` warns about, but the reader still has to know that run's means use the old
+  // definition. Shown once, not per column; `mixedReplicationDefinitions` already has its own,
+  // more specific warning below, so this note is skipped when that one applies.
+  const anyLegacy = !mixedReplicationDefinitions && (runs ?? []).some((run) => run.legacyReplications === true);
+  const showWarningsPanel = runs !== undefined && (globalWarnings.warnings.length > 0 || perRunWarnings || anyLegacy);
 
   return (
     <div style={{ color: 'var(--fg-primary)', font: 'var(--font-size-base) var(--font-ui)' }}>
@@ -476,6 +485,7 @@ export function CompareView({
               ))}
             </ul>
           )}
+          {anyLegacy && <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>}
           {(runs ?? []).map((run, index) => {
             const warnings = run.warnings ?? [];
             if (warnings.length === 0) return null;
@@ -523,7 +533,7 @@ export function CompareView({
         <h2 style={h2Style}>{S.comparar.significancia}</h2>
         {!significanceAvailable && (
           <p style={{ color: 'var(--status-warning)', margin: '8px 0 0' }}>
-            {S.comparar.sinSignificancia}
+            {mixedReplicationDefinitions ? S.comparar.sinSignificanciaMixtas : S.comparar.sinSignificancia}
           </p>
         )}
         <p style={{ color: 'var(--fg-muted)', margin: '8px 0 0' }}>

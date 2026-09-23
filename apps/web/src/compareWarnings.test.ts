@@ -16,7 +16,13 @@ function run(overrides: Partial<CompareRunMeta> = {}): CompareRunMeta {
 describe('compareWarnings', () => {
   test('sin metadatos distintos: todo comparable y sin avisos', () => {
     const result = compareWarnings([run({ currency: 'USD', replications: 30, seed: 42 }), run({ currency: 'USD', name: 'TO-BE', replications: 30, seed: 42 })]);
-    expect(result).toEqual({ costsComparable: true, significanceAvailable: true, unitsMixed: false, warnings: [] });
+    expect(result).toEqual({
+      costsComparable: true,
+      mixedReplicationDefinitions: false,
+      significanceAvailable: true,
+      unitsMixed: false,
+      warnings: [],
+    });
   });
 
   test('monedas distintas: costsComparable false y aviso con los dos códigos', () => {
@@ -86,7 +92,69 @@ describe('compareWarnings', () => {
     const result = compareWarnings([run({ currency: 'USD', replications: 30, seed: 7 })]);
     // Una sola corrida no tiene con qué comparar (ni moneda ni unidad distintas posibles), y
     // replications=30 sí basta para su propio IC.
-    expect(result).toEqual({ costsComparable: true, significanceAvailable: true, unitsMixed: false, warnings: [] });
+    expect(result).toEqual({
+      costsComparable: true,
+      mixedReplicationDefinitions: false,
+      significanceAvailable: true,
+      unitsMixed: false,
+      warnings: [],
+    });
+  });
+
+  // #356/#385: revisión de PR #384 — comparar una corrida de antes de 1.0.0-beta.1 (sin `n`)
+  // contra una nueva (con `n`) puede marcar una diferencia "significativa" falsa.
+  test('una corrida legado (sin n) y otra nueva (con n): significancia bloqueada y aviso propio', () => {
+    const result = compareWarnings([
+      run({ legacyReplications: true, replications: 30 }),
+      run({ legacyReplications: false, name: 'TO-BE', replications: 30 }),
+    ]);
+    expect(result.significanceAvailable).toBe(false);
+    expect(result.mixedReplicationDefinitions).toBe(true);
+    expect(result.warnings).toContain(
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes de 1.0.0-beta.1); no se muestran las marcas de significancia.',
+    );
+    // Y no dispara además el aviso genérico de "hacen falta ≥ 2 réplicas": las dos corridas sí
+    // tienen réplicas suficientes, lo que falta es que compartan definición.
+    expect(result.warnings).not.toContain('Sin intervalos de confianza: hacen falta ≥ 2 réplicas para hablar de significancia.');
+  });
+
+  test('todas las corridas legado (sin n): no es una mezcla, significancia sigue las réplicas como siempre', () => {
+    const result = compareWarnings([
+      run({ legacyReplications: true, replications: 30 }),
+      run({ legacyReplications: true, name: 'TO-BE', replications: 30 }),
+    ]);
+    expect(result.significanceAvailable).toBe(true);
+    expect(result.mixedReplicationDefinitions).toBe(false);
+    expect(result.warnings).not.toContain(
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes de 1.0.0-beta.1); no se muestran las marcas de significancia.',
+    );
+  });
+
+  test('todas las corridas nuevas (con n): sin aviso de definiciones mezcladas', () => {
+    const result = compareWarnings([
+      run({ legacyReplications: false, replications: 30 }),
+      run({ legacyReplications: false, name: 'TO-BE', replications: 30 }),
+    ]);
+    expect(result.significanceAvailable).toBe(true);
+    expect(result.mixedReplicationDefinitions).toBe(false);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('una corrida legado de 30 réplicas contra una sin resumen de replicaciones: no es mezcla (QA #385)', () => {
+    // La corrida sin `legacyReplications` (ni resumen de replicaciones, p. ej. una sola réplica)
+    // no es "nueva": es "no aplica", y compararla con una legado no mezcla las dos definiciones.
+    const result = compareWarnings([run({ legacyReplications: true, replications: 30 }), run({ name: 'TO-BE', replications: 1 })]);
+    expect(result.mixedReplicationDefinitions).toBe(false);
+    expect(result.warnings).not.toContain(
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes de 1.0.0-beta.1); no se muestran las marcas de significancia.',
+    );
+  });
+
+  test('legacyReplications ausente en ambas (sin resumen de replicaciones que mirar): sin aviso de mezcla', () => {
+    const result = compareWarnings([run({ replications: 30 }), run({ name: 'TO-BE', replications: 30 })]);
+    expect(result.warnings).not.toContain(
+      'Las corridas comparadas usan estadísticas de replicación distintas (una se calculó antes de 1.0.0-beta.1); no se muestran las marcas de significancia.',
+    );
   });
 });
 
@@ -105,5 +173,50 @@ describe('runMetaFrom', () => {
       seed: 42,
       warnings: ['aviso de prueba'],
     });
+  });
+
+  // #356/#385
+  test('legacyReplications: true cuando las entradas de replications.kpis no traen n', () => {
+    const scenario = { run: {} } as unknown as ResolvedScenario;
+    const result = {
+      replications: { count: 30, kpis: { 'process.cycleTime.mean': { ci95: [1, 2], mean: 1.5, sd: 0.3 } } },
+      warnings: [],
+    } as unknown as RunResult;
+
+    expect(runMetaFrom('AS-IS', scenario, result).legacyReplications).toBe(true);
+  });
+
+  test('legacyReplications: false cuando las entradas de replications.kpis traen n', () => {
+    const scenario = { run: {} } as unknown as ResolvedScenario;
+    const result = {
+      replications: { count: 30, kpis: { 'process.cycleTime.mean': { mean: 1.5, n: 30 } } },
+      warnings: [],
+    } as unknown as RunResult;
+
+    expect(runMetaFrom('AS-IS', scenario, result).legacyReplications).toBe(false);
+  });
+
+  // #385 QA: mira todas las entradas de `kpis`, no solo la primera.
+  test('legacyReplications: true si CUALQUIER entrada de kpis no trae n, aunque la primera sí', () => {
+    const scenario = { run: {} } as unknown as ResolvedScenario;
+    const result = {
+      replications: {
+        count: 30,
+        kpis: {
+          'elements.A.processing.mean': { mean: 1.5, n: 30 },
+          'process.cycleTime.mean': { ci95: [1, 2], mean: 1.5, sd: 0.3 },
+        },
+      },
+      warnings: [],
+    } as unknown as RunResult;
+
+    expect(runMetaFrom('AS-IS', scenario, result).legacyReplications).toBe(true);
+  });
+
+  test('legacyReplications: ausente del objeto cuando la corrida no tiene resumen de replicaciones', () => {
+    const scenario = { run: {} } as unknown as ResolvedScenario;
+    const result = { warnings: [] } as unknown as RunResult;
+
+    expect(runMetaFrom('AS-IS', scenario, result)).not.toHaveProperty('legacyReplications');
   });
 });

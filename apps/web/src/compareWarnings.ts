@@ -31,17 +31,40 @@ export interface CompareRunMeta {
   baseTimeUnit?: BaseTimeUnit;
   /** `RunResult.warnings` de esa corrida; se listan bajo su columna sin perderse. */
   warnings?: readonly string[];
+  /**
+   * `true` cuando `RunResult.replications.kpis` de esa corrida trae entradas sin `n`: se guardó
+   * antes de 1.0.0-beta.1 y se calculó con la definición anterior (replicaciones sin observación
+   * contaban como cero, `docs/RESULTS_FORMAT.md` § 8, #356/#385). `false` cuando sí trae `n`.
+   * `undefined` cuando la corrida no tiene resumen de replicaciones que mirar. Nunca mixto dentro
+   * de una misma corrida: el motor calcula sus KPIs todos con la misma definición.
+   */
+  legacyReplications?: boolean;
 }
 
 export interface CompareWarningsResult {
-  /** Avisos en el orden en que se detectaron: moneda, unidades, significancia, semilla, réplicas. */
+  /**
+   * Avisos en el orden en que se detectaron: moneda, unidades, significancia, definiciones de
+   * replicación mezcladas, semilla, réplicas.
+   */
   warnings: string[];
   /** `false` si mezclar monedas invalida cualquier delta de costo entre corridas. */
   costsComparable: boolean;
-  /** `false` si alguna corrida no tiene al menos 2 réplicas: sin IC95, sin significancia. */
+  /**
+   * `false` si alguna corrida no tiene al menos 2 réplicas (sin IC95) o si las corridas mezclan
+   * definiciones de replicación (`mixedReplicationDefinitions`): en ninguno de los dos casos hay
+   * una comparación de IC95 en la que confiar.
+   */
   significanceAvailable: boolean;
   /** `true` si las corridas no comparten `baseTimeUnit`; cada una se formatea con el suyo. */
   unitsMixed: boolean;
+  /**
+   * `true` si conviven, entre las corridas comparadas, una calculada antes de 1.0.0-beta.1 (sin
+   * `n`) y una calculada después (con `n`), #356/#385. Distinto de "todas legado", que no es una
+   * mezcla — es la misma definición en las dos — y no bloquea la significancia. `CompareView` lo
+   * usa para elegir el texto exacto de la sección "Significancia" cuando no hay marcador: la razón
+   * no es siempre "faltan réplicas".
+   */
+  mixedReplicationDefinitions: boolean;
 }
 
 /**
@@ -79,10 +102,26 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
     warnings.push(S.comparar.avisoUnidades(units));
   }
 
-  const significanceAvailable = runs.every((run) => effectiveReplications(run) >= 2);
-  if (!significanceAvailable) {
+  const sufficientReplications = runs.every((run) => effectiveReplications(run) >= 2);
+  if (!sufficientReplications) {
     warnings.push(S.comparar.avisoSignificancia);
   }
+
+  // Mezclar una corrida guardada antes de 1.0.0-beta.1 (sin `n`, replicaciones sin observación
+  // contadas como cero) con una corrida nueva (con `n`) produce un IC95 que no compara lo mismo
+  // en las dos columnas: `compare()` los resta igual (no conoce la definición), así que una
+  // diferencia puede marcarse "significativa" sin serlo (revisión de PR #384). Cuando **todas**
+  // las corridas son legado no hay mezcla — es la misma definición en las dos — así que ahí no se
+  // bloquea nada; sólo se avisa cuando conviven las dos definiciones.
+  const legacyFlags = runs
+    .map((run) => run.legacyReplications)
+    .filter((flag): flag is boolean => flag !== undefined);
+  const mixedReplicationDefinitions = legacyFlags.includes(true) && legacyFlags.includes(false);
+  if (mixedReplicationDefinitions) {
+    warnings.push(S.comparar.avisoReplicacionesMixtas);
+  }
+
+  const significanceAvailable = sufficientReplications && !mixedReplicationDefinitions;
 
   const seeds = distinct(runs.map(effectiveSeed));
   if (seeds.length > 1) {
@@ -94,7 +133,30 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
     warnings.push(S.comparar.avisoReplicas(replications));
   }
 
-  return { costsComparable, significanceAvailable, unitsMixed, warnings };
+  return { costsComparable, mixedReplicationDefinitions, significanceAvailable, unitsMixed, warnings };
+}
+
+/**
+ * `true` cuando `result.replications.kpis` existe y **alguna** de sus entradas no trae `n`: la
+ * corrida se guardó antes de 1.0.0-beta.1 y se calculó con la definición anterior (replicaciones
+ * sin observación contadas como cero, `docs/RESULTS_FORMAT.md` § 8, #356/#385). `false` cuando el
+ * resumen existe y todas sus entradas traen `n`. `undefined` cuando no hay resumen de
+ * replicaciones que mirar (una sola replicación, o cancelada con menos de dos completas) — ese
+ * caso no es "legado" ni "nuevo", es "no aplica", y así lo distingue `runMetaFrom` de un `false`
+ * real (una corrida legado de 30 réplicas comparada con una corrida nueva de 1 no es una mezcla de
+ * definiciones, #385 QA). Mira **todas** las entradas y no solo la primera: si el motor alguna vez
+ * emite un resumen con una mezcla, `.some` no se deja engañar por una entrada moderna que salga
+ * primero por el orden de inserción del objeto.
+ *
+ * Único punto de esta comprobación en la app — `ResultsView` la reutiliza para decidir si muestra
+ * el aviso de "calculado antes de 1.0.0-beta.1" (#356).
+ */
+export function hasLegacyReplications(result: RunResult): boolean | undefined {
+  const kpis = result.replications?.kpis;
+  if (kpis === undefined) return undefined;
+  const entries = Object.values(kpis);
+  if (entries.length === 0) return undefined;
+  return entries.some((kpi) => kpi.n === undefined);
 }
 
 /**
@@ -104,6 +166,7 @@ export function compareWarnings(runs: readonly CompareRunMeta[]): CompareWarning
  * está declarada en este archivo; no hay más contrato que ese.
  */
 export function runMetaFrom(name: string, scenario: ResolvedScenario, result: RunResult): CompareRunMeta {
+  const legacyReplications = hasLegacyReplications(result);
   return {
     baseTimeUnit: scenario.run.baseTimeUnit as BaseTimeUnit,
     name,
@@ -117,5 +180,6 @@ export function runMetaFrom(name: string, scenario: ResolvedScenario, result: Ru
     // baseTimeUnit): con `exactOptionalPropertyTypes` un campo opcional no admite `undefined`
     // explícito, así que se omite del todo en vez de escribir `currency: undefined`.
     ...(scenario.run.currency === undefined ? {} : { currency: scenario.run.currency }),
+    ...(legacyReplications === undefined ? {} : { legacyReplications }),
   };
 }

@@ -146,6 +146,76 @@ describe('footnotes of the results view (#357, #358)', () => {
     expect(text()).not.toContain(note);
   });
 
+  // #356/#385: results stored before 1.0.0-beta.1 have no `n` in their replications.kpis and were
+  // computed with the previous definition (replications without an observation counted as zero).
+  it('warns when the result was calculated before 1.0.0-beta.1 (no n in replications.kpis)', () => {
+    setLocale('en');
+    // Legacy results carry no `n` at runtime even though the type declares it required
+    // (`packages/engine/src/core/result.ts`); the cast mirrors that documented mismatch.
+    const legacy = {
+      ...golden,
+      replications: {
+        ...golden.replications!,
+        kpis: Object.fromEntries(
+          Object.entries(golden.replications!.kpis).map(([kpi, summary]) => [
+            kpi,
+            { ci95: summary.ci95, mean: summary.mean, sd: summary.sd },
+          ]),
+        ),
+      },
+    } as unknown as RunResult;
+    mount(legacy);
+    expect(text()).toContain(en.resultados.notaReplicacionesLegado);
+    expect(en.resultados.notaReplicacionesLegado).toContain('before 1.0.0-beta.1');
+  });
+
+  it('does not warn about legacy replications when every kpi carries n', () => {
+    setLocale('en');
+    mount(golden);
+    expect(text()).not.toContain(en.resultados.notaReplicacionesLegado);
+  });
+
+  it('explains W-REPLICACIONES-SIN-OBSERVACIONES the same way it explains W-RECURSO-SATURADO', () => {
+    setLocale('en');
+    const partial: RunResult = {
+      ...golden,
+      warnings: [
+        'W-REPLICACIONES-SIN-OBSERVACIONES: Task: no instance completed in 12 of 30 replications; ' +
+          'its time statistics average only the other 18.',
+      ],
+    };
+    mount(partial);
+    expect(text()).toContain(en.resultados.notaReplicacionesSinObservaciones);
+    // And it does not explain a warning nobody is looking at.
+    act(() => root!.render(<ResultsView ir={ir} scenario={scenario} result={{ ...golden, warnings: ['W-SIN-SEED: run.seed'] }} />));
+    expect(text()).not.toContain(en.resultados.notaReplicacionesSinObservaciones);
+  });
+
+  it('the legacy and W-REPLICACIONES-SIN-OBSERVACIONES notes follow the catalog in Spanish', () => {
+    setLocale('es');
+    const legacy = {
+      ...golden,
+      replications: {
+        ...golden.replications!,
+        kpis: Object.fromEntries(
+          Object.entries(golden.replications!.kpis).map(([kpi, summary]) => [
+            kpi,
+            { ci95: summary.ci95, mean: summary.mean, sd: summary.sd },
+          ]),
+        ),
+      },
+      warnings: [
+        'W-REPLICACIONES-SIN-OBSERVACIONES: Tarea: ninguna instancia terminó en 12 de 30 replicaciones; ' +
+          'sus estadísticas de tiempo promedian solo las otras 18.',
+      ],
+    } as unknown as RunResult;
+    mount(legacy);
+    expect(text()).toContain(es.resultados.notaReplicacionesLegado);
+    expect(text()).toContain(es.resultados.notaReplicacionesSinObservaciones);
+    expect(text()).not.toContain(en.resultados.notaReplicacionesLegado);
+    expect(text()).not.toContain(en.resultados.notaReplicacionesSinObservaciones);
+  });
+
   it('the saturation note says the same criterion in Spanish', () => {
     setLocale('es');
     const saturated: RunResult = {

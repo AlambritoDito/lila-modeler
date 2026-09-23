@@ -38,6 +38,7 @@ import type {
   ResourceMetrics,
   RunResult,
 } from '@lila/engine';
+import { hasLegacyReplications } from './compareWarnings.js';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -126,10 +127,20 @@ export const h2Style: CSSProperties = { color: 'var(--fg-primary)', fontSize: 14
 const SATURATION_CODE = 'W-RECURSO-SATURADO';
 
 /**
+ * Prefix of the "some replications had no observation" warning (`docs/RESULTS_FORMAT.md` § 9,
+ * #356). Same pattern as `SATURATION_CODE`: the warning names the subject and the count, the
+ * footnote below explains what `n` means for the time statistics shown.
+ */
+const REPLICATIONS_WITHOUT_OBSERVATIONS_CODE = 'W-REPLICACIONES-SIN-OBSERVACIONES';
+
+/**
  * Footnote under a table or a list: what the number above means, in the same muted grey as the
  * header line (#357, #358). It explains, it never carries a value.
+ *
+ * Exported so `CompareView` (#356/#385) can print the legacy-replications notice with the exact
+ * same styling instead of redeclaring it.
  */
-const notaStyle: CSSProperties = {
+export const notaStyle: CSSProperties = {
   color: 'var(--fg-muted)',
   fontSize: 12,
   margin: '-8px 0 16px',
@@ -625,6 +636,8 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
   const names = resourceNames(scenario);
   const csv = buildResultCsvExports(ir, scenario, result);
   const outcomes = outcomeRows(ir, result);
+  // #356/#385: `undefined` (no replications summary at all) is falsy here same as `false`.
+  const legacyReplications = hasLegacyReplications(result) === true;
   // Un solo libro para toda la vista: las cinco hojas ya llevan las cuatro tablas, así que el
   // botón exporta lo mismo esté abierta la pestaña que esté.
   const xlsxFilename = `${scenario.name}.xlsx`;
@@ -723,16 +736,24 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
 
-      {result.warnings.length > 0 && (
+      {(result.warnings.length > 0 || legacyReplications) && (
         <section style={sectionStyle}>
           <h2 style={h2Style}>{S.resultados.avisos}</h2>
-          <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
-            {result.warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
+          {result.warnings.length > 0 && (
+            <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
+              {result.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          )}
           {result.warnings.some((warning) => warning.startsWith(SATURATION_CODE)) && (
             <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaSaturacion}</p>
+          )}
+          {result.warnings.some((warning) => warning.startsWith(REPLICATIONS_WITHOUT_OBSERVATIONS_CODE)) && (
+            <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesSinObservaciones}</p>
+          )}
+          {legacyReplications && (
+            <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>
           )}
         </section>
       )}
