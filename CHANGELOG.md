@@ -3,7 +3,7 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
-## [1.0.0-beta.3] - 2026-09-24
+## [1.0.0-beta.3] - 2026-09-23
 
 Lote A: identity and first launch. No installer is attached to this version; the browser app and
 locally built desktop bundles report it so builds can be told apart.
