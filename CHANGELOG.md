@@ -3,6 +3,37 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.2] - 2026-09-23
+
+Interim beta: the Simulate view follows the "Turno 2" design review. No installer is attached to this
+version yet; the browser app and locally built desktop bundles report it so builds can be told apart.
+
+### Added
+
+- **Detachable scenario window** (#391, #393): the scenario editor can leave the right panel for its own
+  non-modal OS window ("Scenario docked ↗" in the top bar, "Dock" in the window). It shares the live
+  model, selection, dirty state and ⌘S with the main window; theme, density, language and light/dark
+  scheme follow it live; its size and position are remembered. In the desktop app only that window may
+  be opened, with hardened window options.
+- **Scenario rail** in Simulate (#390, #393): the shape palette gives way to the list of scenarios
+  (BASE badge, last run or "not run", validation chips); the scenario `<select>` is gone.
+- **Resizable right panel** (#390): 300–520 px with a keyboard-accessible divider; from 440 px the
+  scenario form lays out in two columns.
+- **Properties panel** (#392): an empty state with process counts and shortcuts, and a header with the
+  element icon, name and `bpmn:Type · id` when one element is selected.
+
+### Changed
+
+- **Brand lockup** without a box (#392, #370): the approved Lila illustration with a transparent
+  background at 26 px, product name, a 1 px rule and the project/file line.
+- **Native controls** (#392): selects, checkboxes and date-time fields are drawn with the theme tokens
+  (radius 0, themed chevron and tick, `color-scheme` per theme).
+- **Default-parameter warnings** (#377, closes #360): `W-ELEMENTO-SIN-PARAMETROS` is emitted only for
+  actionable elements (tasks, timers, starts and diverging XOR/OR gateways without probabilities or
+  conditions); end events, AND/event gateways and merge gateways no longer warn. The sample order now
+  shows one warning instead of six. Its code and text are unchanged.
+- English design screenshots refreshed from this UI (#401).
+
 ## [1.0.0-beta.1] - 2026-09-22
 
 First public beta: the browser app at <https://alambritodito.github.io/lila-modeler/app/> and an
