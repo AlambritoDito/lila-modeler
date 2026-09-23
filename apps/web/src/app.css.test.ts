@@ -56,9 +56,9 @@ it('«Validar rutas» solo esconde el interruptor propio del módulo, no sus man
   }
 });
 
-it('below 1400 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
+it('below 1500 px the scenario toggle is icon-only, so Run and ⚙ stay in the bar (QA of #391)', () => {
   // Measured over CDP: with its label, the toggle pushed Run and ⚙ off the bar below ~1150 px.
-  const media = /@media \(max-width: 1400px\) \{([\s\S]*?)\n\}/g;
+  const media = /@media \(max-width: 1500px\) \{([\s\S]*?)\n\}/g;
   const bloques = [...appCss.matchAll(media)].map((m) => m[1]!).join('\n');
   expect(bloques).toMatch(/\.boton\.desacoplar span \{\s*display: none;/);
   expect(bloques).toMatch(/\.boton\.desacoplar \{[^}]*width: 30px;/);
@@ -96,7 +96,8 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   expect(bloque('.modo')).toContain('white-space: nowrap');
 
   const buscador = bloque('.buscador');
-  expect(buscador).toContain('flex: 0 1 210px');
+  // Shrinks before the brand lockup (flex-shrink 1): the project name stays whole above 1280 px.
+  expect(buscador).toContain('flex: 0 99 210px');
   expect(buscador).toContain('min-width: 0');
   // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
   // solo el `flex`, no los dos.
@@ -147,4 +148,12 @@ it('no select rule uses the `background` shorthand, which would wipe the themed 
     .filter((m) => /\bselect\b/.test(m[1]!) && /(^|[;\s])background:/.test(m[2]!))
     .map((m) => m[1]!.trim());
   expect(reglas).toEqual([]);
+});
+
+it('text fields of the scenario and properties forms are 30 px like the themed select (QA of #393)', () => {
+  // At 22 px a text field sat lower than the select or date beside it in the two-column form.
+  expect(bloque(".campo-schema input[type='text']")).toContain('height: 30px');
+  const propiedades = bloque(".campos input:not([type='checkbox'])");
+  expect(propiedades).toContain('height: 30px');
+  expect(propiedades).toContain('box-sizing: border-box');
 });

@@ -337,11 +337,13 @@ body {
   border: 1px solid var(--border);
   color: var(--fg-muted);
   display: flex;
-  /* `flex: 0 1 210px` en vez de un ancho fijo (QA de la ronda 1 de #392): 210 px es el ancho de
-     fábrica, pero el campo es el único inerte de la barra (LILA-066), así que es el primero que
-     cede sitio cuando algo no cabe —el conmutador de escenario de #391 incluido—, antes de que la
-     identidad o los modos se envuelvan. */
-  flex: 0 1 210px;
+  /* 210 px de fábrica, pero el campo es el único inerte de la barra (LILA-066): tiene que ceder
+     sitio antes que nadie cuando algo no cabe —el conmutador de escenario de #391 incluido—.
+     `flex-shrink: 99` frente al 1 de `.identidad`: con encoger a 1 los dos (QA de la ronda 1 de
+     #392) se repartían el déficit y el nombre del proyecto se recortaba o desaparecía entre 1281 y
+     1440 px con el buscador aún a 114-201 px. Ahora el nombre solo cede cuando el buscador ya no
+     tiene nada que dar; por debajo de 1280 px el buscador se va (más abajo). */
+  flex: 0 99 210px;
   gap: 8px;
   height: 30px;
   min-width: 0;
@@ -929,6 +931,12 @@ body {
   width: 100%;
 }
 
+/* Same 30 px box as the shared `select` beside it (QA of #393). */
+.campos input:not([type='checkbox']) {
+  box-sizing: border-box;
+  height: 30px;
+}
+
 .campos textarea {
   resize: vertical;
 }
@@ -1049,11 +1057,15 @@ body {
   color: var(--fg-muted);
 }
 
+/* 30 px like the themed `select` and `datetime-local` (design 2d, fixed at every density): with
+   only the padding it came out at 22 px, and in the two-column form (design 2a) a text field sat
+   lower than the select or date beside it (QA of #393). */
 .campo-schema input[type='text'] {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   color: var(--fg-primary);
   font: inherit;
+  height: 30px;
   padding: calc(3px * var(--espacio, 1)) 6px;
   box-sizing: border-box;
   width: 100%;
@@ -2021,11 +2033,13 @@ body {
   display: none;
 }
 
-/* Below 1400 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
+/* Below 1500 px only the icon is left, with the label as `aria-label`/`title`; below 1280 px, where
    the search field goes away, the mode tabs also lose some air. Without this, Run and ⚙ left the
-   bar below ~1150 px (QA of #391). Measured with no horizontal overflow from 1440 down to 1024 px
-   in English and Spanish, on the Simulation tab. */
-@media (max-width: 1400px) {
+   bar below ~1150 px (QA of #391). 1500 and not 1400: with the brand lockup of #392, the labelled
+   toggle squeezed the project name out of the bar at 1440 px in Spanish. Measured with no
+   horizontal overflow and the project name whole from 1440 down to 1280 px, in English and
+   Spanish, on the Simulation tab. */
+@media (max-width: 1500px) {
   .boton.desacoplar {
     display: grid;
     padding: 0;
