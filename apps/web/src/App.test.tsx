@@ -76,7 +76,9 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       rules: { allowed: () => true },
     },
   } as unknown as Modelador); if (!mocks.retrasarLienzo) mocks.listo(); }, [onListo]);
-  return <div>Modelo montado</div>;
+  // The canvas container of bpmn-js, as far as the panel keys (#412) care: its focusable `<svg>`
+  // and the contenteditable label editor that lives next to it.
+  return <div>Modelo montado<div className="djs-container"><svg tabIndex={0} /><div className="djs-direct-editing-parent" contentEditable /></div></div>;
 } }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
@@ -1291,6 +1293,287 @@ it('the panel width saved in the browser is restored, clamped', async () => {
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('320px');
+});
+
+// --- Hideable panels (#412) and the resizable left column (#406) ---
+
+type RegionT = keyof typeof T.app.regiones;
+const appEl = () => container.querySelector<HTMLElement>('.app')!;
+const conClase = (clase: string) => appEl().classList.contains(clase);
+const toggleDe = (r: RegionT) => container.querySelector<HTMLButtonElement>(`.vista-grupo [data-region="${r}"]`)!;
+const itemVista = (r: RegionT) => [...container.querySelectorAll<HTMLButtonElement>('.menu-vista [role="menuitemcheckbox"]')].find((b) => b.textContent!.includes(T.app.regiones[r]))!;
+/** A keydown on `destino`; returns whether the app took it (`preventDefault`). */
+async function pulsar(destino: EventTarget, init: KeyboardEventInit): Promise<boolean> {
+  const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+  await act(async () => { destino.dispatchEvent(e); });
+  return e.defaultPrevented;
+}
+const svgLienzo = () => container.querySelector<SVGElement>('.djs-container > svg')!;
+
+it('each panel toggle hides its region with a class, keeps it mounted and flips aria-pressed (#412)', async () => {
+  const casos: [RegionT, string, string][] = [
+    ['izquierda', 'sin-izquierda', '.rail-escenarios'],
+    ['derecha', 'sin-panel', 'aside.panel'],
+    ['diagramas', 'sin-diagramas', 'nav.diagramas'],
+    ['estado', 'sin-estado', 'footer.estado'],
+  ];
+  for (const [r, clase, selector] of casos) {
+    const boton = toggleDe(r);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+    expect(boton.getAttribute('aria-controls')).toBe(container.querySelector(selector)!.id);
+    expect(itemVista(r).getAttribute('aria-checked')).toBe('true');
+    await act(async () => boton.click());
+    expect(conClase(clase)).toBe(true);
+    expect(boton.getAttribute('aria-pressed')).toBe('false');
+    expect(itemVista(r).getAttribute('aria-checked')).toBe('false');
+    // Still mounted: its state survives, only the CSS hides it.
+    expect(container.querySelector(selector)).not.toBeNull();
+    // The «View» menu item is the same switch.
+    await act(async () => itemVista(r).click());
+    expect(conClase(clase)).toBe(false);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+  }
+});
+
+it('hiding the region that holds the focus hands it to the toggle (#412)', async () => {
+  const fila = filaRail('AS-IS');
+  await act(async () => { fila.focus(); });
+  await act(async () => toggleDe('izquierda').click());
+  // jsdom has no layout, so the group counts as off screen and the «View» menu gets it.
+  expect(document.activeElement).toBe(container.querySelector('.menu-vista > summary'));
+});
+
+it('panel visibility is remembered per mode in lila.paneles and restored, invalid JSON shows all (#412)', async () => {
+  await act(async () => toggleDe('derecha').click());
+  expect(conClase('sin-panel')).toBe(true);
+  await click(T.app.modos.modelar);
+  expect(conClase('sin-panel')).toBe(false);
+  await act(async () => toggleDe('estado').click());
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  expect(conClase('sin-estado')).toBe(false);
+  const guardado = JSON.parse(localStorage.getItem('lila.paneles')!) as Record<string, Record<string, boolean>>;
+  // The whole map, every mode.
+  expect(Object.keys(guardado)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(guardado['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: true });
+  expect(guardado['modelar']).toEqual({ izquierda: true, derecha: true, diagramas: true, estado: false });
+
+  await remontar();
+  expect(conClase('sin-estado')).toBe(true);
+  expect(conClase('sin-panel')).toBe(false);
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  // Mounting does not write over what was saved.
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!)).toEqual(guardado);
+
+  localStorage.setItem('lila.paneles', '{not json');
+  await remontar();
+  await click(T.app.modos.simular);
+  expect([...appEl().classList].filter((c) => c.startsWith('sin-'))).toEqual([]);
+});
+
+it('with the desktop bridge the panel map and the left widths go through Ajustes, not localStorage (#406, #412)', async () => {
+  const escrito: Record<string, unknown>[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ paneles: { simular: { derecha: false }, raro: { estado: false } }, paletaAncho: 300, railAncho: 9999 }),
+    writeSettings: async (a: Record<string, unknown>) => { escrito.push(a); },
+  });
+  await remontar();
+  expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('300px');
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('320px');
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  await act(async () => toggleDe('estado').click());
+  const paneles = escrito.filter((a) => 'paneles' in a).at(-1)!['paneles'] as Record<string, Record<string, boolean>>;
+  // Always the full map (the bridge merges shallowly), sanitised to the known modes.
+  expect(Object.keys(paneles)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(paneles['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: false });
+  expect(localStorage.getItem('lila.paneles')).toBeNull();
+});
+
+it('Tab and Shift+Tab toggle the right panel and the left column only from the canvas (#412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(true);
+  expect(conClase('sin-panel')).toBe(true);
+  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
+  expect(conClase('sin-izquierda')).toBe(true);
+  await pulsar(svgLienzo(), { key: 'Tab' });
+  await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true });
+  expect(conClase('sin-panel') || conClase('sin-izquierda')).toBe(false);
+
+  const nada = async (destino: EventTarget, init: KeyboardEventInit = {}) => {
+    expect(await pulsar(destino, { key: 'Tab', ...init })).toBe(false);
+    expect(conClase('sin-panel')).toBe(false);
+  };
+  await nada(document.body);
+  await nada(selectIdioma());
+  await nada(porEtiqueta(T.app.deshacer));
+  await nada(container.querySelector('.djs-direct-editing-parent')!);
+  await nada(svgLienzo(), { repeat: true });
+  await nada(svgLienzo(), { metaKey: true });
+  await nada(svgLienzo(), { ctrlKey: true });
+  await click(T.app.modos.modelar);
+  await nada(container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!);
+  // Not while a dialog is open.
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  expect(container.querySelector('dialog.ajustes[open]')).not.toBeNull();
+  await nada(svgLienzo());
+});
+
+it('F6 goes to the modes and Shift+F6 to the right panel or its toggle, the way out of the canvas (#412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'F6' })).toBe(true);
+  expect(document.activeElement).toBe(container.querySelector('.modos .modo'));
+  await pulsar(svgLienzo(), { key: 'Tab' });
+  await pulsar(svgLienzo(), { key: 'F6', shiftKey: true });
+  expect(document.activeElement).toBe(container.querySelector('.menu-vista > summary'));
+});
+
+it('double-click and Enter on a divider hide and show its side without saving a width (#406, #412)', async () => {
+  const derecho = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  expect(conClase('sin-panel')).toBe(true);
+  // Hidden: arrows and drags do nothing.
+  await pulsar(derecho, { key: 'ArrowLeft' });
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 1000, button: 0 })); });
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 900 })); });
+  expect(appEl().style.getPropertyValue('--panel-ancho')).toBe('320px');
+  await pulsar(derecho, { key: 'Enter' });
+  expect(conClase('sin-panel')).toBe(false);
+  expect(localStorage.getItem('lila.panelAncho')).toBeNull();
+
+  const izquierdo = container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
+  expect(izquierdo.getAttribute('aria-label')).toBe(T.app.redimensionarIzquierda);
+  await act(async () => { izquierdo.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  expect(conClase('sin-izquierda')).toBe(true);
+  // The divider stays, so it can bring the column back.
+  expect(container.querySelector('.divisor-izquierdo')).not.toBeNull();
+  await pulsar(izquierdo, { key: 'ArrowRight' });
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
+  await pulsar(izquierdo, { key: 'Enter' });
+  expect(conClase('sin-izquierda')).toBe(false);
+  expect(localStorage.getItem('lila.railAncho')).toBeNull();
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['izquierda']).toBe(true);
+});
+
+it('the detached scenario window hides the right panel; its toggle peeks without saving, docking restores (#412)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(conClase('sin-panel')).toBe(true);
+    expect(toggleDe('derecha').getAttribute('aria-pressed')).toBe('false');
+    await act(async () => toggleDe('derecha').click());
+    expect(conClase('sin-panel')).toBe(false);
+    expect(container.querySelector('aside')!.textContent).toContain(T.app.enVentanaAparte);
+    expect(localStorage.getItem('lila.paneles')).toBeNull();
+    await act(async () => toggleDe('derecha').click());
+    expect(conClase('sin-panel')).toBe(true);
+    // Model on the Properties tab: the window is not what the panel shows, so it is not hidden.
+    await click(T.app.modos.modelar);
+    expect(conClase('sin-panel')).toBe(true);
+    await click(T.app.pestanas.propiedades);
+    expect(conClase('sin-panel')).toBe(false);
+    await click(T.app.pestanas.simulacion);
+    expect(conClase('sin-panel')).toBe(true);
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar)!;
+    await act(async () => {
+      acoplar.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(conClase('sin-panel')).toBe(false);
+    expect(localStorage.getItem('lila.paneles')).toBeNull();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('a hidden status bar comes back to show an alert, like a blocked popup (#412)', async () => {
+  await act(async () => toggleDe('estado').click());
+  expect(conClase('sin-estado')).toBe(true);
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(conClase('sin-estado')).toBe(false);
+    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('footer.estado [role="alert"]')!.textContent).toBe(T.app.ventanaBloqueada);
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
+it('the left divider sizes the rail in Simulate (160–320) and the palette in Model (180–360), each its own (#406)', async () => {
+  const izquierdo = () => container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
+  const puntero = (tipo: string, clientX: number) => act(async () => {
+    izquierdo().dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX, button: 0 }));
+  });
+  const ancho = (v: string) => appEl().style.getPropertyValue(v);
+  // Simulate: the rail. Dragging right widens it.
+  expect(izquierdo().getAttribute('aria-valuenow')).toBe('212');
+  await puntero('pointerdown', 200); await puntero('pointermove', 600);
+  expect(ancho('--rail-ancho')).toBe('320px');
+  await puntero('pointermove', 0);
+  expect(ancho('--rail-ancho')).toBe('160px');
+  await puntero('pointerup', 250);
+  expect(ancho('--rail-ancho')).toBe('262px');
+  expect(localStorage.getItem('lila.railAncho')).toBe('262');
+  await pulsar(izquierdo(), { key: 'ArrowRight' });
+  expect(ancho('--rail-ancho')).toBe('278px');
+  expect(localStorage.getItem('lila.railAncho')).toBe('278');
+  expect(localStorage.getItem('lila.paletaAncho')).toBeNull();
+
+  // Model: the palette.
+  await click(T.app.modos.modelar);
+  expect(ancho('--paleta-ancho')).toBe('236px');
+  await puntero('pointerdown', 200); await puntero('pointermove', 500);
+  expect(ancho('--paleta-ancho')).toBe('360px');
+  await puntero('pointerup', 300);
+  expect(ancho('--paleta-ancho')).toBe('336px');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('336');
+  expect(localStorage.getItem('lila.railAncho')).toBe('278');
+  // Below 114 px it snaps to the compact palette; the width is kept for later.
+  await puntero('pointerdown', 300); await puntero('pointermove', 0); await puntero('pointerup', 0);
+  expect(container.querySelector('.paleta.compacta')).not.toBeNull();
+  expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('336');
+  expect(izquierdo().getAttribute('aria-valuenow')).toBe('48');
+  // ArrowRight from compact lands on 180, not compact; ArrowLeft at 180 goes back to compact.
+  await pulsar(izquierdo(), { key: 'ArrowRight' });
+  expect(container.querySelector('.paleta.compacta')).toBeNull();
+  expect(ancho('--paleta-ancho')).toBe('180px');
+  expect(localStorage.getItem('lila.paleta')).toBe('normal');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('180');
+  await pulsar(izquierdo(), { key: 'ArrowLeft' });
+  expect(container.querySelector('.paleta.compacta')).not.toBeNull();
+  // Dragging out of compact leaves at max(180, x).
+  await puntero('pointerdown', 100); await puntero('pointermove', 200);
+  expect(container.querySelector('.paleta.compacta')).toBeNull();
+  expect(ancho('--paleta-ancho')).toBe('180px');
+  await puntero('pointermove', 350); await puntero('pointerup', 350);
+  expect(ancho('--paleta-ancho')).toBe('298px');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('298');
+  // The palette's own button still toggles it, under the same key.
+  await act(async () => { porEtiqueta(T.paleta.modoCompacto).click(); });
+  expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+it('saved left widths are clamped, blank means never saved; no left divider without a left column (#406)', async () => {
+  localStorage.setItem('lila.paletaAncho', '9999');
+  localStorage.setItem('lila.railAncho', '  ');
+  await remontar();
+  expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('360px');
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
+  for (const modo of [T.app.modos.resultados, T.app.modos.comparar]) {
+    await click(modo);
+    expect(container.querySelector('.divisor-izquierdo')).toBeNull();
+    expect(toggleDe('izquierda').disabled).toBe(true);
+    expect(toggleDe('izquierda').getAttribute('aria-pressed')).toBe('false');
+    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
+    expect(conClase('sin-izquierda')).toBe(false);
+  }
 });
 
 // --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---

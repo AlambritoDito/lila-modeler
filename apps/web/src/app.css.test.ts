@@ -130,7 +130,8 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   expect(zona).toContain('overflow: hidden');
   const muelle = bloque('.zona-buscador::before');
   expect(muelle).toContain('flex: 1 0 0');
-  expect(muelle).toContain('height: 0');
+  // 30 px, not 0: a 0 px first line would leave the wrapped field at the top, in sight.
+  expect(muelle).toContain('height: 30px');
   expect(buscador).toContain('flex: 0 1 210px');
   expect(buscador).toContain('min-width: 120px');
   // And goes away below 1320 px, where even at its minimum it left the Spanish project name short

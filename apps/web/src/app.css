@@ -374,7 +374,8 @@ body {
 /* The bar's spring (#423): it takes the free room, pushes the field to its right edge with an
    invisible first item, and wraps the field to a second line — clipped by `overflow: hidden` and
    the 30 px height — when fewer than its 120 px minimum are left, instead of letting it shrink to
-   an empty box. */
+   an empty box. The invisible item is 30 px tall, not 0: a 0 px first line would put the wrapped
+   field back at the top of the zone, in sight. */
 .zona-buscador {
   display: flex;
   flex: 1 1 0;
@@ -388,7 +389,7 @@ body {
 .zona-buscador::before {
   content: '';
   flex: 1 0 0;
-  height: 0;
+  height: 30px;
 }
 
 /* Campo de búsqueda inerte: el artefacto le da sitio y ancho fijos; buscar de verdad es la
@@ -488,8 +489,7 @@ body {
   color: var(--fg-primary);
 }
 
-.vista-grupo .boton.icono[aria-pressed='true'] .region,
-.menu-vista .region {
+.vista-grupo .boton.icono[aria-pressed='true'] .region {
   fill: currentColor;
 }
 
@@ -556,7 +556,7 @@ body {
 
 /* One or the other, never both: the group of four needs about 90 px more than the menu. */
 @media (max-width: 1599px) {
-  .vista-grupo {
+  .barra > .vista-grupo {
     display: none;
   }
 
