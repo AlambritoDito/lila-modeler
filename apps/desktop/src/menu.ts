@@ -29,6 +29,13 @@ export function menuTemplate(
     accelerator: 'CmdOrCtrl+,',
     click: () => send('ajustes'),
   };
+  // Todos los productos del dueño llevan un «Acerca de» (LILA-381): en macOS sustituye al role
+  // `about` de Electron (genérico, sin la marca del dueño); fuera de macOS no hay app menu, así
+  // que va al final de Archivo, antes de Salir.
+  const acercaDe: MenuItemConstructorOptions = {
+    label: S.acercaDe,
+    click: () => send('acerca'),
+  };
   const recientes: MenuItemConstructorOptions[] = recents.length
     ? recents.map((r) => ({ label: r.name, sublabel: r.dir, toolTip: r.dir, click: () => send({ openRecent: r.dir }) }))
     : [{ label: S.ninguno, enabled: false }];
@@ -38,7 +45,7 @@ export function menuTemplate(
       ? [{
           role: 'appMenu' as const,
           submenu: [
-            { role: 'about' as const },
+            acercaDe,
             { type: 'separator' as const },
             preferencias,
             { type: 'separator' as const },
@@ -68,7 +75,13 @@ export function menuTemplate(
         // desplegable dentro del diálogo: el diálogo nativo de guardar no admite elegir «carpeta o
         // archivo», así que la elección tiene que estar antes de abrirlo.
         { label: S.guardarComoCarpeta, click: () => send('guardarComoCarpeta') },
-        ...(mac ? [] : [{ type: 'separator' as const }, preferencias, { type: 'separator' as const }, { role: 'quit' as const }]),
+        ...(mac
+          ? []
+          : [
+              { type: 'separator' as const }, preferencias,
+              { type: 'separator' as const }, acercaDe,
+              { type: 'separator' as const }, { role: 'quit' as const },
+            ]),
       ],
     },
     { role: 'editMenu' },

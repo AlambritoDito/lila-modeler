@@ -149,6 +149,8 @@ export const en = {
     tema: 'Theme',
     densidad: 'Density',
     cerrar: 'Close',
+    /** Settings → About Lila Modeler (LILA-381): closes Settings and opens the About dialog. */
+    acercaDe: 'About Lila Modeler',
 
     /** Validation chips over the canvas and counters of the status bar. */
     irAlPrimerProblema: 'Go to the first element with problems',

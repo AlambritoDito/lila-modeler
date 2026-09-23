@@ -29,6 +29,28 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
     expect(send).toHaveBeenCalledWith('ajustes');
   });
 
+  it('en macOS «Acerca de» sustituye al role genérico `about` y manda "acerca" (LILA-381)', () => {
+    const send = vi.fn();
+    const items = menuTemplate([], 'darwin', send, desktopStrings(locale));
+    const appMenu = items[0]!.submenu as MenuItemConstructorOptions[];
+    expect(appMenu.some((i) => i.role === 'about')).toBe(false);
+    const acerca = appMenu.find((i) => i.label === S.acercaDe);
+    expect(acerca).toBeDefined();
+    (acerca!.click as () => void)();
+    expect(send).toHaveBeenCalledWith('acerca');
+  });
+
+  it('fuera de macOS «Acerca de» va al final de Archivo, antes de Salir (LILA-381)', () => {
+    const send = vi.fn();
+    const archivo = menuTemplate([], 'win32', send, desktopStrings(locale))[0]!.submenu as MenuItemConstructorOptions[];
+    const labels = archivo.map((i) => i.label ?? i.role);
+    expect(labels.indexOf(S.acercaDe)).toBeGreaterThan(-1);
+    expect(labels.indexOf(S.acercaDe)).toBeLessThan(labels.indexOf('quit'));
+    const acerca = archivo.find((i) => i.label === S.acercaDe);
+    (acerca!.click as () => void)();
+    expect(send).toHaveBeenCalledWith('acerca');
+  });
+
   it('fuera de macOS Preferencias… y Salir van en Archivo', () => {
     const items = menuTemplate([], 'win32', vi.fn(), desktopStrings(locale));
     expect(items[0]?.label).toBe(S.archivo);

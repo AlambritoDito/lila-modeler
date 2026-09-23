@@ -179,6 +179,7 @@ export interface TemaGuardado {
 /** Lo que el menú nativo puede pedirle al shell. `openRecent` lleva la carpeta de `listRecents()`. */
 export type MenuAction =
   | 'ajustes'
+  | 'acerca'
   | 'nuevo'
   | 'abrir'
   | 'abrirArchivo'

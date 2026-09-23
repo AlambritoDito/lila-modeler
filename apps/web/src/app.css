@@ -1434,6 +1434,48 @@ body {
 .app[data-densidad='compacta'] { --espacio: 0.85; }
 .app[data-densidad='comoda'] { --espacio: 1.2; }
 
+/* ---------- acerca de (LILA-381) ---------- */
+
+/* Todos los productos del dueño llevan un «Acerca de»: icono, nombre, versión y su línea de
+   marca, centrados y pequeño. `position: relative` es solo para anclar el botón de cerrar.
+   `display` va en `.acerca[open]`, no aquí: un `<dialog>` cerrado es `display: none` por la hoja
+   de estilos del navegador, y una regla de autor sin `[open]` la pisa aunque `open` sea `false`
+   (el origen del autor gana a la del navegador, con independencia de la especificidad) — el
+   diálogo se quedaba pintado en la esquina en vez de escondido (QA de LILA-381). */
+.acerca {
+  position: relative;
+  max-width: 340px;
+  padding: 32px 24px 24px;
+  text-align: center;
+  color: var(--fg-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px var(--shadow);
+}
+.acerca[open] { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.acerca::backdrop { background: rgb(0 0 0 / 50%); }
+/* El redondeo sale de `.logo` (la misma marca de la barra, LILA-206): aquí solo se agranda. */
+.acerca-icono { width: 104px; height: 104px; }
+.acerca strong { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.acerca-version { margin: 0; color: var(--fg-muted); font-family: var(--font-mono); font-size: 12px; }
+.acerca-marca { margin: 4px 0 0; color: var(--fg-muted); font-size: 12px; line-height: 1.5; }
+.acerca-cerrar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.acerca-cerrar:hover { color: var(--fg-primary); }
+
 /* ---------- bienvenida (artboard 08) ---------- */
 
 /* Overlay sobre el shell entero mientras no hay proyecto abierto; por debajo de la pantalla de

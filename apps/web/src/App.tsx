@@ -35,6 +35,7 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { Apariencia } from './settings/Apariencia';
+import { About } from './About';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
@@ -322,6 +323,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [idioma, setIdioma] = useState<Preferencia>('auto');
   const locale = useLocale();
   const ajustesDialog = useRef<HTMLDialogElement>(null);
+  /** Diálogo «Acerca de» (LILA-381): se abre desde Ajustes y desde el menú nativo (`'acerca'`). */
+  const acercaDialog = useRef<HTMLDialogElement>(null);
   const [escenarioId, setEscenarioId] = useState('as-is.scenario.json');
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
@@ -716,6 +719,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   function ejecutar(accion: MenuAction): void {
     if (accion === 'ajustes') { if (!ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
+    else if (accion === 'acerca') { if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
@@ -921,6 +925,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
               <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
             </>}
+            <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
           </div>
         </details>}
         <span className="hueco" />
@@ -988,9 +993,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             onTemas={guardarTemas}
             onSeleccionar={(id) => void seleccionarTema(id)}
           />
-          <div className="acciones"><button className="boton primario">{S.app.cerrar}</button></div>
+          <div className="acciones">
+            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); if (!acercaDialog.current?.open) acercaDialog.current?.showModal(); }}>{S.app.acercaDe}</button>
+            <button className="boton primario">{S.app.cerrar}</button>
+          </div>
         </form>
       </dialog>
+
+      <About dialogRef={acercaDialog} />
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
           pinta dentro del contenedor (escondidos en `app.css`). En Resultados y Comparar no se

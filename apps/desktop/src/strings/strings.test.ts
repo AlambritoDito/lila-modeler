@@ -72,6 +72,8 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
     // The acceptance criterion of LILA-213: a Spanish user must not notice this ticket happened.
     expect(es.menu).toEqual({
       preferencias: 'Preferencias…',
+      // LILA-381: el «Acerca de» es nuevo, así que tampoco existía antes de este ticket.
+      acercaDe: 'Acerca de Lila Modeler',
       ninguno: 'Ninguno',
       archivo: 'Archivo',
       nuevoProyecto: 'Nuevo proyecto',

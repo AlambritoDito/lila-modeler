@@ -103,6 +103,9 @@ beforeEach(async () => {
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  // LILA-381: «Acerca de» cierra Ajustes con `close()` antes de abrir su propio diálogo; jsdom no
+  // implementa ese método tampoco (mismo motivo que `showModal` arriba).
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
   mocks.gate.mockResolvedValue({ ir, scenario, warnings: ['W-FRONTERA'] });
   mocks.abrir.mockResolvedValue(true);
@@ -616,6 +619,31 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   expect(dialog.open).toBe(true);
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
+});
+it('en Ajustes, «Acerca de Lila Modeler» cierra Ajustes y abre el diálogo Acerca de (LILA-381)', async () => {
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  expect(ajustes.open).toBe(true);
+  expect(acerca.open).toBe(false);
+  await click(T.app.acercaDe);
+  expect(ajustes.open).toBe(false);
+  expect(acerca.open).toBe(true);
+  expect(container.textContent).toContain(T.bienvenida.nombre);
+});
+it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', async () => {
+  let menu: ((a: unknown) => void) | null = null;
+  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    pendingOpenPath: async () => null, onOpenPath: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {} });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(menu).not.toBeNull();
+  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
+  expect(acerca.open).toBe(false);
+  await act(async () => { menu!('acerca'); });
+  expect(acerca.open).toBe(true);
 });
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
