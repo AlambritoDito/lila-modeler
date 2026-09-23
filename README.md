@@ -72,7 +72,7 @@ Sharing means passing around a portable `.lila` file, not simultaneous editing �
 account, backend or real-time sync. Use **File ▸ Save** (web, tooltip: Save project) or **Save
 as…** (desktop) to get a `.lila`, send it however you'd send any file, and your colleague opens it
 with **File ▸ Open** (tooltip: Open project) in the web demo, **File ▸ Open project…** in the desktop app, or by
-double-clicking it in Finder (verified for Beta 1: `<VERIFY-FINDER>`). Found a reproducible
+double-clicking it in Finder (verified for Beta 1: `verified for Beta 1 on macOS 27.0 (arm64) through the LaunchServices open-file route (`open -a`, the same event Finder sends on double-click) with the app closed and already running, including a `.lila` name with accents and an em dash; a physical double-click in Finder was not exercised on the test Mac because an older installed build owned the association there`). Found a reproducible
 problem along the way?
 [Open an issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose) — the bug template
 asks for a minimal `.bpmn` file or scenario that shows it.
@@ -86,7 +86,7 @@ macOS on Apple Silicon, plus a `SHA256SUMS` file to check it —
 notarized**, so the first launch is blocked. After the first blocked attempt (double-clicking the
 app), go to **System Settings ▸ Privacy & Security** and click **Open Anyway** next to the message
 naming the app, then confirm **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open**
-works directly. Do not disable Gatekeeper to work around this. `<VERIFY-GATEKEEPER>`
+works directly. Do not disable Gatekeeper to work around this. `verified for Beta 1 on macOS 27.0: the quarantined download is blocked on first launch and System Settings ▸ Privacy & Security offers **Open Anyway** (the app is ad-hoc sealed, so macOS does not report it as damaged)`
 [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks through the whole flow, including
 checksum verification.
 

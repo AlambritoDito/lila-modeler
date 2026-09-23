@@ -74,7 +74,7 @@ Compartir es pasar un archivo `.lila` portable, no edición simultánea — no h
 sincronización en tiempo real. Usa **Archivo ▸ Guardar** (web, tooltip: Guardar proyecto) o
 **Guardar como…** (escritorio) para obtener un `.lila`, envíalo como enviarías cualquier archivo,
 y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la demo web, **Archivo ▸ Abrir proyecto…** en la app de
-escritorio, o con doble clic en el Finder (verificado para la Beta 1: `<VERIFY-FINDER>`).
+escritorio, o con doble clic en el Finder (verificado para la Beta 1: `verificado en la Beta 1 en macOS 27.0 (arm64) por la ruta open-file de LaunchServices (`open -a`, el mismo evento que Finder envía al hacer doble clic) con la app cerrada y ya abierta, incluido un nombre `.lila` con acentos y raya; el doble clic físico en Finder no se ejerció en el Mac de prueba porque una build instalada anterior tenía allí la asociación`).
 ¿Encontraste un problema reproducible en el camino?
 [Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
 — la plantilla de bug pide un archivo `.bpmn` mínimo o un escenario que lo muestre.
@@ -89,7 +89,7 @@ notarizada**, así que el primer arranque se bloquea. Tras el primer intento blo
 en la app), ve a **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todas formas**
 junto al mensaje que nombra la app, luego confirma **Abrir**. En macOS más antiguo, Control-clic
 sobre la app ▸ **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar
-esto. `<VERIFY-GATEKEEPER>`
+esto. `verificado en la Beta 1 en macOS 27.0: la descarga en cuarentena se bloquea en el primer arranque y Ajustes del Sistema ▸ Privacidad y seguridad ofrece **Abrir de todos modos** (la app lleva un sello ad hoc, así que macOS no la reporta como dañada)`
 [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
 verificación del checksum.
 

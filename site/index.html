@@ -100,7 +100,7 @@
                 A project is a folder — <code>model.bpmn</code>, scenarios, results — and a
                 <code>.lila</code> file is that folder zipped. The browser downloads it, the desktop
                 app opens it with <b>Open</b> (File menu) or a Finder double-click
-                (<code>&lt;VERIFY-FINDER&gt;</code>), and the CLI reads the same files.
+                (verified for Beta 1 through the macOS open-file route; see the beta guide), and the CLI reads the same files.
               </p>
             </li>
             <li>
@@ -290,14 +290,14 @@
           <p class="section-lede">
             The same app packaged with Electron: projects live as folders on your disk,
             <code>.lila</code> and <code>.bpmn</code> files open with a double-click
-            (<code>&lt;VERIFY-FINDER&gt;</code>), and a welcome screen lists your recent projects.
+            (verified for Beta 1 through the macOS open-file route; see the beta guide), and a welcome screen lists your recent projects.
             Beta 1 (<code>v1.0.0-beta.1</code>) attaches a single installer, for macOS on Apple
             Silicon (arm64); Windows and Linux builds exist only as untested CI artifacts and are
             not offered for Beta 1. The app is <b>not signed or notarized</b>: on first launch, go
             to System Settings ▸ Privacy &amp; Security ▸ <b>Open Anyway</b> after the first
             blocked attempt, then confirm Open (on older macOS, Control-click the app ▸ Open ▸
             Open works directly). Do not disable Gatekeeper to work around this.
-            (First-launch flow verified for Beta 1: <code>&lt;VERIFY-GATEKEEPER&gt;</code>.)
+            (First-launch flow verified for Beta 1: the blocked first launch and the Open Anyway step were verified on macOS 27.)
             <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BETA-MAC-GUIDE.md">The beta guide</a>
             walks through installing it, checksum verification and reading the results.
           </p>
@@ -354,7 +354,7 @@
               Send them the <code>.lila</code> file (email, chat, a shared drive — anything that
               moves a file). They open it with <b>File ▸ Open</b> (tooltip: Open project) in the web
               demo, <b>File ▸ Open project…</b> in the desktop app, or by double-clicking it in Finder
-              (<code>&lt;VERIFY-FINDER&gt;</code>). This is sharing as portable project files, not
+              (verified for Beta 1 through the macOS open-file route; see the beta guide). This is sharing as portable project files, not
               simultaneous editing: there is no account, no backend and no real-time collaboration
               — one person edits a copy at a time, and the last <code>.lila</code> sent around is
               the one everyone should work from next.
@@ -369,7 +369,7 @@
             <li><b>The macOS beta is unsigned</b>See the desktop section above for the first-launch steps.</li>
           </ul>
           <p class="note">
-            Beta 1 was tested on <code>&lt;BROWSERS-TESTED&gt;</code>. Found a reproducible problem?
+            Beta 1 was tested on <code>Beta 1 was tested on macOS 27 with Chrome 154; Safari and other browsers are untested</code>. Found a reproducible problem?
             <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Open an issue</a>
             — the bug template asks for a minimal <code>.bpmn</code> file or scenario that shows it.
           </p>
@@ -408,7 +408,7 @@
                 cosa que mueva un archivo). Lo abre con <b>Archivo ▸ Abrir</b> (tooltip: Abrir
                 proyecto) en la demo web, <b>Archivo ▸ Abrir proyecto…</b> en la app de escritorio, o con doble
                 clic en el Finder
-                (<code>&lt;VERIFY-FINDER&gt;</code>). Esto es compartir archivos de proyecto portables, no
+                (verificado en la Beta 1 por la ruta open-file de macOS; ver la guía de la beta). Esto es compartir archivos de proyecto portables, no
                 edición simultánea: no hay cuenta, ni backend, ni colaboración en tiempo real — una
                 persona edita una copia a la vez, y el último <code>.lila</code> que circuló es el que
                 todos deberían usar después.
@@ -423,7 +423,7 @@
               <li><b>La beta de macOS no está firmada</b>Ver la sección de escritorio arriba para los pasos del primer arranque.</li>
             </ul>
             <p class="note">
-              La Beta 1 se probó en <code>&lt;BROWSERS-TESTED&gt;</code>. ¿Encontraste un problema reproducible?
+              La Beta 1 se probó en <code>La Beta 1 se probó en macOS 27 con Chrome 154; Safari y otros navegadores no están probados</code>. ¿Encontraste un problema reproducible?
               <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Abre un issue</a>
               — la plantilla de bug pide un archivo <code>.bpmn</code> mínimo o un escenario que lo muestre.
             </p>

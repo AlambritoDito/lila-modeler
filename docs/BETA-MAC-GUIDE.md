@@ -50,14 +50,14 @@ blocked outright, with no direct "Open anyway" option in the block dialog:
 
 Either way, this authorization is a one-time step per copy of the app — it is how macOS is
 designed to treat software from outside the App Store that isn't notarized. Do not disable
-Gatekeeper to work around it. `<VERIFY-GATEKEEPER>`
+Gatekeeper to work around it. `verified for Beta 1 on macOS 27.0: the quarantined download is blocked on first launch and System Settings ▸ Privacy & Security offers **Open Anyway** (the app is ad-hoc sealed, so macOS does not report it as damaged)`
 
 The app uses the Lila icon in the Dock and in Finder.
 
 ## Project files: `.lila` vs `.bpmn`
 
 Two file types register with Finder and double-click to open in this app (Beta 1 verification: see
-`<VERIFY-FINDER>` under Limitations):
+`verified for Beta 1 on macOS 27.0 (arm64) through the LaunchServices open-file route (`open -a`, the same event Finder sends on double-click) with the app closed and already running, including a `.lila` name with accents and an em dash; a physical double-click in Finder was not exercised on the test Mac because an older installed build owned the association there` under Limitations):
 
 - **`.lila`** is the whole project container: the model, its scenarios, revisions and saved runs,
   zipped into one file (see [`PROJECT_FORMAT.md`](PROJECT_FORMAT.md)). This is the form to hand to
@@ -103,7 +103,7 @@ follow that same setting. This walkthrough uses the English labels.
 ### Model («Modelar»)
 
 - On desktop you work with **New project** and **Open project**
-  by folder. You can also open a loose `.bpmn` by double click (see `<VERIFY-FINDER>` under
+  by folder. You can also open a loose `.bpmn` by double click (see `verified for Beta 1 on macOS 27.0 (arm64) through the LaunchServices open-file route (`open -a`, the same event Finder sends on double-click) with the app closed and already running, including a `.lila` name with accents and an em dash; a physical double-click in Finder was not exercised on the test Mac because an older installed build owned the association there` under
   Limitations). Use **Save as** to retain
   its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
@@ -289,7 +289,7 @@ trusting this list blindly at a later date)*
   are built by the CI matrix (`.github/workflows/desktop.yml`) as untested artifacts; they are not
   attached to the Beta 1 release and nobody on the project has tested them.
 - **`.lila` and `.bpmn` Finder double-click: verified by the lead on macOS 27 arm64 for Beta 1** —
-  see release notes. `<VERIFY-FINDER>`
+  see release notes. `verified for Beta 1 on macOS 27.0 (arm64) through the LaunchServices open-file route (`open -a`, the same event Finder sends on double-click) with the app closed and already running, including a `.lila` name with accents and an em dash; a physical double-click in Finder was not exercised on the test Mac because an older installed build owned the association there`
 - **Saving a `.lila` opened by double-click or launch argument is fixed in Beta 1 (#378)**.
   `verified in Beta 1 by the real-Electron regression `tools/e2e-desktop-open-path.mjs` (launch argument, `open-file`, recents, dialog; ASCII, spaces, accents in NFC and NFD)`
 - **Raw error messages**: some errors reach the interface untranslated — `zod`'s raw validation
