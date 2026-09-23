@@ -91,8 +91,17 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if gh release view "$REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null | grep -qx false; then
-            echo "::error::Release $REF_NAME is already published; assets are not replaced by CI."; exit 1
+          # "not found" means the action will create the draft; any other failure is a real error.
+          if out=$(gh release view "$REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>&1); then
+            case "$out" in
+              true) echo "Release $REF_NAME is a draft; assets may be added." ;;
+              *) echo "::error::Release $REF_NAME is already published; assets are not replaced by CI."; exit 1 ;;
+            esac
+          else
+            case "$out" in
+              *"release not found"*|*"Not Found"*|*"HTTP 404"*) echo "No release $REF_NAME yet; the action creates a draft." ;;
+              *) echo "::error::Could not inspect release $REF_NAME: $out"; exit 1 ;;
+            esac
           fi
           ls -la release
       - uses: softprops/action-gh-release@v2 # the repository allowlist only admits this pattern, not a SHA pin
