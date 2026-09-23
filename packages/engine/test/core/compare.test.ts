@@ -144,7 +144,7 @@ function runResult(
 }
 
 const WAIT = 'elements.A.resourceWait.mean';
-const summary = (mean: number, low: number, high: number): KpiSummary => ({ mean, sd: 0, ci95: [low, high] });
+const summary = (mean: number, low: number, high: number): KpiSummary => ({ mean, n: 30, sd: 0, ci95: [low, high] });
 
 describe('compare()', () => {
   test('rechaza una lista vacía', () => {
@@ -172,6 +172,20 @@ describe('compare()', () => {
     const withoutCi = runResult({ A: 1 });
     expect(compare([withCi, withoutCi]).rows.find((r) => r.kpi === WAIT)!.significant).toEqual([false, false]);
     expect(compare([withoutCi, withCi]).rows.find((r) => r.kpi === WAIT)!.significant).toEqual([false, false]);
+  });
+
+  test('un KPI observado por una sola réplica (n = 1, sin ci95) nunca marca significancia (#356)', () => {
+    const withCi = runResult({ A: 10 }, { [WAIT]: summary(10, 9, 11) });
+    const single = runResult({ A: 100 }, { [WAIT]: { mean: 100, n: 1 } });
+    const empty = runResult({ A: 0 }, { [WAIT]: { mean: 0, n: 0 } });
+    expect(compare([withCi, single, empty]).rows.find((r) => r.kpi === WAIT)!.significant).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(compare([single, withCi]).rows.find((r) => r.kpi === WAIT)!.significant).toEqual([false, false]);
+    // Los deltas siguen valiendo, solo que sin respaldo estadístico.
+    expect(compare([withCi, single]).rows.find((r) => r.kpi === WAIT)!.deltaAbs).toEqual([0, 90]);
   });
 
   test('los IC que solo se tocan en un extremo se consideran solapados', () => {

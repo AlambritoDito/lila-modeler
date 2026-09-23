@@ -291,6 +291,41 @@ para no ocultarlo; el IC usa solo replicaciones completas y se omite con menos d
 Revisar solo si un consumidor necesita explícitamente resultados por réplica; en ese caso se añade
 un campo separado, sin cambiar el significado del top-level. *(prueba: LILA-029)*
 
+### Adenda (2026-09-22): replicaciones sin observaciones *(#356)*
+
+**Decidido por:** el dueño del proyecto.
+
+Una replicación en la que una tarea nunca se completó tiene `processing = {min: 0, max: 0,
+mean: 0, total: 0}`: el 0 es la identidad del conjunto vacío, no una duración. Promediarlo como
+observación hacía que el top-level y `replications.kpis` publicaran un tiempo que ninguna
+instancia tardó (una tarea constante de 360 s alcanzada en 18 de 30 replicaciones publicaba
+216 s, con un IC que excluía 360 s) y daba una dispersión que medía si la tarea ocurrió, no
+cuánto tardó.
+
+El estimando pasa a ser **condicional**: para un KPI que solo existe cuando algo ocurrió —las
+duraciones de una tarea o de un timer que no es de borde, el tiempo de ciclo y de espera, el costo
+por caso y el nivel de servicio del proceso y de cada desenlace— la media se toma sobre los valores
+por replicación de las replicaciones que lo observaron, siempre una observación por replicación,
+nunca un pool de los casos. `KpiSummary` lleva `n`, el número de replicaciones que aportan;
+`sd` y `ci95` solo aparecen con `n ≥ 2`, `n = 1` publica `{mean, n}` y `n = 0` publica
+`{mean: 0, n: 0}` para que el conjunto de claves siga estable. La misma regla vale para una `sd`
+dentro de la replicación calculada con una sola observación, que vale 0 por convención. Los KPI
+incondicionales (conteos, totales, costos, flujos, recursos, integrales de cola) conservan
+`n = count`. El top-level usa la misma selección mediante un único recorrido de paths, así que
+R-ARR-9 se cumple por construcción. Una corrida en la que algunas replicaciones observaron un
+sujeto y otras no lleva `W-REPLICACIONES-SIN-OBSERVACIONES`.
+
+Precedente: `meanBottlenecks` ya promediaba `bottlenecks[].utilization` solo sobre las
+replicaciones donde el elemento aparecía, por la misma razón (RESULTS_FORMAT.md § 6); esa regla y
+`saturationWarnings` no cambian.
+
+Se descarta ponderar por el número de casos (el estimando agrupado que ADR-024 ya rechaza) y
+mantener los ceros añadiendo solo un aviso (el número publicado seguiría mal). Consecuencia: es un
+cambio revisado del contrato público —la forma de `KpiSummary` y un código de aviso nuevo—. Los
+nombres de columna, los ids BPMN, las unidades y la frontera de `core/` no cambian; los resultados
+guardados antes de 1.0.0-beta.1 no traen `n`, se calcularon con la definición anterior y se siguen
+aceptando. *(prueba: #356)*
+
 ---
 
 ## ADR-025 — Event log plano por asignación, agrupado por instancia de actividad

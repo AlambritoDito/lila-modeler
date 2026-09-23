@@ -681,13 +681,20 @@ hace simulable la construcción sin mensajes, señales ni bus de eventos.
   pre-warmup sí puede retrasar indirectamente a esa cohorte. *(prueba: LILA-027, LILA-033)*
 - **R-ARR-8 — Replicaciones.** `run.replications = R` corre R veces la misma configuración; la
   replicación `r` (0-indexada) usa streams derivados de `(seed, r, elementId)`. Por KPI se reportan
-  `mean`, `sd` (muestral, `n − 1`) y `ci95 = mean ± t(0,975; R−1) · sd / √R`. Con `R = 1` no hay
-  `ci95`. Los casos **no** se comparten entre replicaciones: cada una parte del estado vacío.
-  *(prueba: LILA-027)*
+  `n` (las replicaciones que lo observaron, una observación cada una), `mean` y —solo con
+  `n ≥ 2`— `sd` (muestral, `n − 1`) y `ci95 = mean ± t(0,975; n−1) · sd / √n`. En un KPI
+  incondicional `n = R`; uno condicional (las duraciones de una tarea, el tiempo de ciclo y de
+  espera del proceso o de un desenlace, listados en `RESULTS_FORMAT.md` § 8) solo lo observan las
+  replicaciones donde ocurrió, y el cero de conjunto vacío de las demás no es una observación. Con
+  `R = 1` no hay `ci95`. Los casos **no** se comparten entre replicaciones: cada una parte del
+  estado vacío. *(prueba: LILA-027, #356)*
 - **R-ARR-9 — Agregado público multi-réplica.** En `simulate()`, cada campo numérico top-level es
-  la media del mismo campo agregado por replicación; no es la primera replicación ni una muestra
-  agrupada de todos los casos. En una corrida completa coincide con el `mean` del mismo path en
-  `replications.kpis`. *(prueba: LILA-029; decisión: ADR-024)*
+  la media del mismo campo agregado por replicación, sobre las replicaciones que lo observaron
+  (R-ARR-8), y 0 si ninguna lo observó; no es la primera replicación ni una muestra agrupada de
+  todos los casos. En una corrida completa coincide con el `mean` del mismo path en
+  `replications.kpis`: los dos salen de la misma selección de observaciones. Cuando algunas
+  replicaciones observaron una tarea, un timer, el proceso o un desenlace y otras no, la corrida
+  avisa `W-REPLICACIONES-SIN-OBSERVACIONES`. *(prueba: LILA-029, #356; decisión: ADR-024)*
 - **R-ARR-10 — Cancelación cooperativa.** `opts.signal` se comprueba entre eventos y entre
   replicaciones. El resultado parcial lleva `cancelled: true` y `completedReplications`; el
   top-level conserva la réplica parcial, pero `replications.kpis` solo usa replicaciones completas
@@ -1044,7 +1051,7 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 60 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 61 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
 Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecución se lanzan; la CLI sale con 1):
@@ -1132,7 +1139,7 @@ dispara sobre su host, interrumpa o no, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMA
 preceder a su gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
 `isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
-`W-RECURSO-SATURADO`.
+`W-RECURSO-SATURADO`, `W-REPLICACIONES-SIN-OBSERVACIONES` (R-ARR-9).
 
 `W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
 del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool
@@ -1207,6 +1214,28 @@ esa media, con un decimal; `Y` es la ocupación media en porcentaje entero.
 Es un aviso, no un error: no cambia ninguna métrica. Lo que señala es que `resourceWait` y
 `bottlenecks` de ese pool son números que crecen con la duración de la corrida y no son comparables
 con los de un pool estable. *(prueba: LILA-191)*
+
+`W-REPLICACIONES-SIN-OBSERVACIONES` avisa de que las estadísticas de tiempo de un sujeto se
+observaron solo en algunas replicaciones (R-ARR-8/R-ARR-9, #356): un `task` o un `timer` que no es
+de borde y no completó ninguna instancia, el proceso sin ningún caso completado, o un desenlace de
+`process.byEndEvent` al que no llegó ningún caso. Sus estadísticas promedian entonces solo las
+replicaciones donde ocurrió. Sale una vez por sujeto y por corrida, solo cuando `0 < n < R`, donde
+`R` cuenta las replicaciones que incluye el top-level (también la parcial de una corrida cancelada)
+y `n` las que observaron al sujeto; orden: nodos del IR, después el proceso, después los
+desenlaces. `m = R − n`. Los tres conteos son enteros y se formatean antes de interpolarse, así que
+los dos idiomas imprimen los mismos números. Textos exactos, `en` y `es`:
+
+```
+W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: no instance completed in <m> of <R> replications; its time statistics average only the other <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: process: no case completed in <m> of <R> replications; its cycle time, wait time, cost per case and service level average only the other <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: no case ended here in <m> of <R> replications; its time statistics average only the other <n>.
+```
+
+```
+W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: ninguna instancia se completó en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: process: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
+```
 
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
@@ -1290,8 +1319,8 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |
-| R-ARR-8 | replicaciones e IC 95 % | LILA-027 |
-| R-ARR-9, R-ARR-10 | agregado público y cancelación | LILA-029 |
+| R-ARR-8 | replicaciones e IC 95 %; `n` y KPI condicionales | LILA-027, #356 |
+| R-ARR-9, R-ARR-10 | agregado público y cancelación | LILA-029, #356 |
 | R-REC-1 … R-REC-3 | pools, defaults y FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
 | R-REC-4, R-REC-5 | AND atómico sin retención parcial; sin deadlock | LILA-034 |
 | R-REC-6 | selección OR | LILA-035 |

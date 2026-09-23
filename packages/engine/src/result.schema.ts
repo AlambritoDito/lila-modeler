@@ -81,16 +81,50 @@ const bottleneckEntrySchema = z.object({
   utilization: z.number(),
 });
 
-const kpiSummarySchema = z.object({
-  mean: z.number(),
-  sd: z.number(),
-  ci95: z.tuple([z.number(), z.number()]),
-});
+// #356: `n` es el número de replicaciones que observaron el KPI. Un resultado guardado antes
+// de 1.0.0-beta.1 no lo trae y siempre publicó `sd` y `ci95`; desde entonces esos dos solo
+// existen con `n >= 2`.
+const kpiSummarySchema = z
+  .object({
+    mean: z.number(),
+    n: z.number().int().min(0).optional(),
+    sd: z.number().optional(),
+    ci95: z.tuple([z.number(), z.number()]).optional(),
+  })
+  .superRefine((kpi, context) => {
+    const spread = kpi.sd !== undefined || kpi.ci95 !== undefined;
+    if ((kpi.n === undefined || kpi.n >= 2) && (kpi.sd === undefined || kpi.ci95 === undefined)) {
+      context.addIssue({
+        code: 'custom',
+        path: [kpi.sd === undefined ? 'sd' : 'ci95'],
+        message: 'sd y ci95 son obligatorios sin n o con n >= 2.',
+      });
+    }
+    if (kpi.n !== undefined && kpi.n < 2 && spread) {
+      context.addIssue({
+        code: 'custom',
+        path: [kpi.sd === undefined ? 'ci95' : 'sd'],
+        message: 'sd y ci95 se omiten con n < 2.',
+      });
+    }
+  });
 
-const replicationSummarySchema = z.object({
-  count: z.number().int().min(2),
-  kpis: z.record(z.string(), kpiSummarySchema),
-});
+const replicationSummarySchema = z
+  .object({
+    count: z.number().int().min(2),
+    kpis: z.record(z.string(), kpiSummarySchema),
+  })
+  .superRefine((summary, context) => {
+    for (const [kpi, entry] of Object.entries(summary.kpis)) {
+      if (entry.n !== undefined && entry.n > summary.count) {
+        context.addIssue({
+          code: 'custom',
+          path: ['kpis', kpi, 'n'],
+          message: 'n no puede superar replications.count.',
+        });
+      }
+    }
+  });
 
 export const eventLogRowSchema = z.object({
   replication: z.number(),

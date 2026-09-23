@@ -687,14 +687,21 @@ what makes the construct simulable without messages, signals or an event bus.
   `[warmup, t_stop]`; pre-warmup occupancy can still indirectly delay that cohort.
   *(test: LILA-027, LILA-033)*
 - **R-ARR-8 — Replications.** `run.replications = R` runs the same configuration R times; the
-  replication `r` (0-indexed) uses streams derived from `(seed, r, elementId)`. Per KPI, `mean`,
-  `sd` (sample, `n − 1`) and `ci95 = mean ± t(0.975; R−1) · sd / √R` are reported. With `R = 1`
+  replication `r` (0-indexed) uses streams derived from `(seed, r, elementId)`. Per KPI, `n` (the
+  replications that observed it, one observation each), `mean`, and — only with `n ≥ 2` — `sd`
+  (sample, `n − 1`) and `ci95 = mean ± t(0.975; n−1) · sd / √n` are reported. For an
+  unconditional KPI `n = R`; a conditional one (a task's durations, the process's or an outcome's
+  cycle and wait times, listed in `RESULTS_FORMAT.md` § 8) is observed only by the replications
+  where it happened, and the empty-set zero of the others is not an observation. With `R = 1`
   there is no `ci95`. Cases are **not** shared between replications: each one starts from empty
-  state. *(test: LILA-027)*
+  state. *(test: LILA-027, #356)*
 - **R-ARR-9 — Public multi-replication aggregate.** In `simulate()`, each top-level numeric field
-  is the mean of that same field aggregated per replication; it is not the first replication nor
-  a pooled sample of every case. In a full run it matches the `mean` of the same path in
-  `replications.kpis`. *(test: LILA-029; decision: ADR-024)*
+  is the mean of that same field aggregated per replication, over the replications that observed
+  it (R-ARR-8), and 0 when none did; it is not the first replication nor a pooled sample of every
+  case. In a full run it matches the `mean` of the same path in `replications.kpis`: both come
+  from the same selection of observations. When some replications observed a task, timer, the
+  process or an outcome and others did not, the run warns `W-REPLICACIONES-SIN-OBSERVACIONES`.
+  *(test: LILA-029, #356; decision: ADR-024)*
 - **R-ARR-10 — Cooperative cancellation.** `opts.signal` is checked between events and between
   replications. The partial result carries `cancelled: true` and `completedReplications`; the
   top-level result keeps the partial replication, but `replications.kpis` uses only complete
@@ -1055,7 +1062,7 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 60 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 61 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
 Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
@@ -1145,7 +1152,8 @@ fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMA
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
-ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`.
+ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`,
+`W-REPLICACIONES-SIN-OBSERVACIONES` (R-ARR-9).
 
 `W-RECURSO-SATURADO` warns that a pool never reaches a steady state: more work arrives than it
 can dispatch, and its queue grows with the run's duration. Exact text, once per pool and per run:
@@ -1220,6 +1228,27 @@ for all thirty. `X` is the ρ of that mean, with one decimal; `Y` is the mean ut
 It is a warning, not an error: it changes no metric. What it flags is that `resourceWait` and
 `bottlenecks` for that pool are numbers that grow with the run's duration and are not comparable
 to those of a stable pool. *(test: LILA-191)*
+
+`W-REPLICACIONES-SIN-OBSERVACIONES` warns that a subject's time statistics were observed in only
+some of the replications (R-ARR-8/R-ARR-9, #356): a `task` or non-boundary `timer` that completed
+no instance, the process with no completed case, or an outcome of `process.byEndEvent` that no case
+reached. Its statistics then average only the replications where it happened. It fires once per
+subject and per run, only when `0 < n < R`, where `R` counts the replications the top level
+includes (the partial one of a cancelled run too) and `n` those that observed the subject; order:
+IR nodes, then the process, then the outcomes. `m = R − n`. The three counts are integers and are
+formatted before interpolation, so both locales print the same numbers. Exact texts, `en` and `es`:
+
+```
+W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: no instance completed in <m> of <R> replications; its time statistics average only the other <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: process: no case completed in <m> of <R> replications; its cycle time, wait time, cost per case and service level average only the other <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: no case ended here in <m> of <R> replications; its time statistics average only the other <n>.
+```
+
+```
+W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: ninguna instancia se completó en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: process: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
+```
 
 `W-START-SIN-LLEGADAS` fires only when the `start` declares **neither** `interTriggerTimer`
 **nor** `triggerCount`: with `triggerCount` alone there are arrivals (all at `t = 0`, R-ARR-1) and
@@ -1304,8 +1333,8 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |
-| R-ARR-8 | replications and 95% CI | LILA-027 |
-| R-ARR-9, R-ARR-10 | public aggregate and cancellation | LILA-029 |
+| R-ARR-8 | replications and 95% CI; `n` and conditional KPIs | LILA-027, #356 |
+| R-ARR-9, R-ARR-10 | public aggregate and cancellation | LILA-029, #356 |
 | R-REC-1 … R-REC-3 | pools, defaults and FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
 | R-REC-4, R-REC-5 | atomic AND with no partial holding; no deadlock | LILA-034 |
 | R-REC-6 | OR selection | LILA-035 |

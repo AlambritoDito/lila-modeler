@@ -97,6 +97,13 @@ export const coreEs: CoreCatalog = {
     'W-UTILIZACION-MAYOR-UNO': (poolId) =>
       `${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
 
+    'W-REPLICACIONES-SIN-OBSERVACIONES': (nodeId, missing, total, observed) =>
+      `${nodeId}: ninguna instancia se completó en ${missing} de ${total} replicaciones; sus estadísticas de tiempo promedian solo las otras ${observed}.`,
+    'W-REPLICACIONES-SIN-OBSERVACIONES/proceso': (missing, total, observed) =>
+      `process: ningún caso se completó en ${missing} de ${total} replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras ${observed}.`,
+    'W-REPLICACIONES-SIN-OBSERVACIONES/desenlace': (endId, missing, total, observed) =>
+      `${endId}: ningún caso terminó aquí en ${missing} de ${total} replicaciones; sus estadísticas de tiempo promedian solo las otras ${observed}.`,
+
     'W-NORMAL-NEGATIVA': (mean, sd, percent) =>
       `normal(mean=${mean}, sd=${sd}): P(x < 0) = ${percent} % > 1 %; las muestras negativas se truncan a 0.`,
     'W-USER-NORMALIZADA': (total) =>

@@ -364,8 +364,8 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
   });
 
   test('(b) réplicas = 1 en una corrida: sin marcador de significancia aunque `significant` sea true', () => {
-    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, sd: 1 };
-    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, sd: 1 };
+    const disjointBase: KpiSummary = { ci95: [9, 11], mean: 10, n: 30, sd: 1 };
+    const disjointOther: KpiSummary = { ci95: [29, 31], mean: 30, n: 30, sd: 1 };
     const comparison = compare([
       syntheticResult(10, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointBase } } }),
       syntheticResult(30, {}, { replications: { count: 30, kpis: { 'elements.A.resourceWait.mean': disjointOther } } }),

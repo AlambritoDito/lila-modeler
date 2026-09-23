@@ -44,9 +44,14 @@ interface RunResult {
 Every element, flow, or resource that exists in the IR appears in the corresponding map even if its count is zero (for example, an XOR branch that was never taken in a short run). The `id` used as the key is always the BPMN `id` — never the visible name (a repository-wide rule, see the header of `BACKLOG.md`).
 
 With more than one replication, every top-level numeric field is the **arithmetic mean of that
-same field computed in each replication**. They do not represent the first replication, nor a
-pool of every case. `replications.kpis[path].mean` matches the corresponding top-level field in a
-complete run. This decision is detailed in ADR-024. *(test: LILA-029)*
+same field computed in each replication that observed it**. They do not represent the first
+replication, nor a pool of every case. Most fields are observed by every replication — counts,
+totals, costs, flows, resources, queue integrals. The time statistics of a task or timer, of the
+process and of each outcome are not observed in a replication where no instance of it completed:
+there the per-replication value is only the identity of the empty set (section 2), so it is left
+out of the mean, and with no replication observing it the field is 0. The exact list of those
+conditional fields is in section 8. `replications.kpis[path].mean` matches the corresponding
+top-level field in a complete run. This decision is detailed in ADR-024. *(test: LILA-029, #356)*
 
 ---
 
@@ -76,6 +81,15 @@ Operative definitions (all computed over the element's instances that **complete
 - **`offHoursWait.{min,max,mean,sd,total}`** — statistics of closed time within the whole `[enabledAt, endedAt]` interval, including both the closure before starting and pauses during processing (R-CAL-7). It accumulates separately from `resourceWait`; if the element uses a 24×7 calendar (the default with no calendar assigned), it is always 0. *(aggregation test: LILA-028; calendar semantics: LILA-041)*
 - **`queueLength.{mean,max}`** — length of the queue of instances waiting for the element. Each activity instance (not each row: an AND with two pools contributes **only once**) contributes the **half-open** interval `[enabledAt, startedAt)`, or `[enabledAt, observedUntil)` if it was still queued when the run was cut off. `mean` is the integral of the instantaneous length over the statistics window divided by its duration (`statisticsDuration`, i.e. the run minus `warmup`, see section 8); `max` is the instantaneous maximum. Consequences of the interval being half-open: a wait of zero duration never forms a queue (with no resources, `queueLength = {mean: 0, max: 0}` for every element, R-DEG-1), and the instance that leaves the queue at the same instant another enters are not counted together. *(test: LILA-036)*
 - **`fixedCostTotal`** — `elements[id].fixedCost × completed` (fixed cost per completed token, defined in the scenario; see `SCENARIO_FORMAT.md`). It is obtained as `Σ row.elementCost`, never `Σ row.cost` (R-COST-4).
+
+**The empty set** *(#356)*. An element that completed no instance in a replication still carries
+`processing`, `resourceWait` and `offHoursWait`, all at 0, so the key set is the same in every
+replication. That 0 is the numeric identity of the empty set, not an observed duration: `total = 0`
+is a true statement (nothing was processed), but `min`, `max` and `mean` describe no instance. In
+the same way, `sd` over a single instance is 0 because there is no spread to measure. With several
+replications neither enters the aggregate (section 8). Gateways, start, end and terminate events and
+boundary timers count `started`/`completed` but never produce durations: their zeros are exact and
+always enter.
 
 Bizagi Modeler does not distinguish `resourceWait` from `offHoursWait` (see section 3: "Off-hours wait kept separate from resource wait — Bizagi Modeler ✗ / Lila ✓"); it is an extra Lila metric.
 
@@ -186,7 +200,7 @@ interface Percentiles {
 - **`costPerCase`** — average of `Σ row.cost` over completed cases. In-flight cases' costs are part of `totalCost`, but not of this average (R-COST-4). *(test: LILA-028)*
 - **`totalCost`** — sum of `fixedCostTotal` across every element plus `totalCost` across every resource (the scenario's total cost in the replication).
 
-- **`byEndEvent`** *(#316)* — the same cycle and wait statistics, split by the **outcome** each case reached: the key is the BPMN id of the `end` (or `terminate`) event that closed it. `process.cycleTime` mixes every outcome; a process whose rejections are fast and whose approvals are slow needs both numbers apart. Every `end`/`terminate` node of the model has an entry, even one no case reached (`completed: 0` and zeroed statistics), so the key set is identical across replications and across scenarios. In-flight cases are not counted in any entry, so `Σ byEndEvent[*].completed === completed`. Over several replications, each entry is the mean of that entry across replications, exactly like the rest of `process`.
+- **`byEndEvent`** *(#316)* — the same cycle and wait statistics, split by the **outcome** each case reached: the key is the BPMN id of the `end` (or `terminate`) event that closed it. `process.cycleTime` mixes every outcome; a process whose rejections are fast and whose approvals are slow needs both numbers apart. Every `end`/`terminate` node of the model has an entry, even one no case reached (`completed: 0` and zeroed statistics), so the key set is identical across replications and across scenarios. In-flight cases are not counted in any entry, so `Σ byEndEvent[*].completed === completed`. Over several replications, each entry is aggregated exactly like the rest of `process`: its `completed` across every replication, and its cycle and wait statistics and `withinServiceLevel` only across the replications in which at least one case reached that outcome (section 8, #356). A replication with no completed case at all has the same empty-set zeros in `process.cycleTime`, `process.waitTime`, `costPerCase` and `withinServiceLevel`, and they are handled the same way.
 - **`withinServiceLevel`** *(#316)* — only present when the scenario declares `run.serviceLevel` (seconds, docs/SCENARIO_FORMAT.md § 2.2): fraction in `0..1` of **completed** cases whose `cycleTime` is at most that target. It is reported both for the whole process and inside each `byEndEvent` entry. Without a declared target the field is absent, rather than a `0` that would read as "0 % met".
 
 `cycleTime.mean` "weighted by gateway probabilities" is exactly what aggregating over the real set of simulated cases already produces (no separate weighting is needed): each path appears in the sample in proportion to how many times it was taken.
@@ -310,8 +324,9 @@ interface ReplicationSummary {
   count: number;                     // complete replications summarized; >= 2
   kpis: Record<string, {             // keyed by KPI name, e.g. "process.cycleTime.mean"
     mean: number;
-    sd: number;
-    ci95: [number, number];          // lower and upper bound of the 95% confidence interval
+    n: number;                       // replications that observed the KPI; <= count
+    sd?: number;                     // only with n >= 2
+    ci95?: [number, number];         // lower and upper bound of the 95% CI; only with n >= 2
   }>;
 }
 ```
@@ -321,8 +336,45 @@ The dynamic segments of those names (BPMN ids of elements, flows, and resources)
 named `elements.Task\.A.processing.mean`, without colliding with other valid ids. Ids with no dot
 keep exactly the names shown above. *(test: LILA-027)*
 
-- **`mean`/`sd`** — sample mean and standard deviation of the KPI across the `N` replications (one observation per replication, not per case).
-- **`ci95`** — 95% confidence interval for the mean, `mean ± t(N-1, 0.975) × sd / √N` (Student's t with `N-1` degrees of freedom; for large `N` it approximates `1.96 × sd/√N`). This is a metric Bizagi Modeler only offers from What-If onward (section 3: "Replications — Bizagi Modeler ✓ what-if only / Lila ✓ always, with a 95% CI"); in Lila it is computed whenever `replications > 1`.
+- **`n`** *(#356)* — number of replications that **observed** the KPI, one observation per
+  replication. For an unconditional KPI it is always `count`; for a conditional one (list below) it
+  can be smaller. It is not the number of cases: `elements[id].completed` counts instances, `n`
+  counts replications.
+- **`mean`/`sd`** — sample mean and standard deviation of the KPI across those `n` replications (one observation per replication, not per case). The mean is of the per-replication values, never a mean of the pooled cases (ADR-024).
+- **`ci95`** — 95% confidence interval for the mean, `mean ± t(n-1, 0.975) × sd / √n` (Student's t with `n-1` degrees of freedom; for large `n` it approximates `1.96 × sd/√n`). This is a metric Bizagi Modeler only offers from What-If onward (section 3: "Replications — Bizagi Modeler ✓ what-if only / Lila ✓ always, with a 95% CI"); in Lila it is computed whenever `replications > 1` and the KPI has at least two observations.
+- **Eligibility** — with `n ≥ 2` the entry is `{mean, n, sd, ci95}`; with `n = 1` it is
+  `{mean, n}`, the only observation with no spread or interval; with `n = 0` it is
+  `{mean: 0, n: 0}`, where 0 is the identity value that keeps the key set stable, not an estimate.
+  The keys always appear in that order.
+
+**Conditional KPIs.** A replication observes these paths only when the condition holds; otherwise
+its value is the empty-set identity (sections 2 and 5) and does not enter the path's `n`:
+
+| Paths | Observed when |
+|---|---|
+| `elements.X.processing.{min,max,mean}`, `elements.X.resourceWait.{min,max,mean}`, `elements.X.offHoursWait.{min,max,mean}` | `elements.X.completed > 0`, for a `task` or a non-boundary `timer` |
+| `elements.X.resourceWait.sd`, `elements.X.offHoursWait.sd` | `elements.X.completed ≥ 2`, for a `task` or a non-boundary `timer` |
+| `process.cycleTime.*` and `process.waitTime.*` except `sd`, `process.costPerCase`, `process.withinServiceLevel` | `process.completed > 0` |
+| `process.cycleTime.sd`, `process.waitTime.sd` | `process.completed ≥ 2` |
+| `process.byEndEvent.E.cycleTime.*` and `.waitTime.*` except `sd`, `process.byEndEvent.E.withinServiceLevel` | `process.byEndEvent.E.completed > 0` |
+| `process.byEndEvent.E.cycleTime.sd`, `.waitTime.sd` | `process.byEndEvent.E.completed ≥ 2` |
+
+Every other path is unconditional and has `n = count`: `started`, `completed`, every `*.total`,
+`queueLength.*`, `fixedCostTotal`, `flows.*`, `resources.*`, `throughputPerHour`,
+`process.totalCost`, `inFlight`, `byEndEvent.E.completed`, and every statistic of a gateway,
+start, end or terminate event or boundary timer, whose zeros are exact. The `sd` rule is the same
+defect one level down: within a replication, the sample deviation of a single observation is 0 by
+convention, not a measured absence of spread. `bottlenecks` keeps its own rule (section 6).
+
+When a task or timer, the process, or an outcome is observed by some replications but not all,
+the run carries one `W-REPLICACIONES-SIN-OBSERVACIONES` per such subject (section 9), so the
+mean is not read as a mean over the whole run. The warning keys off the subject's `mean` path;
+an `sd` path can have a smaller `n` (it needs two observations) without a warning of its own —
+read `n` next to the value.
+
+> **Results stored before 1.0.0-beta.1** carry no `n` and were computed with the previous
+> definition: replications without observations counted as zero. Their `sd` and `ci95` are always
+> present. Readers accept them as they are (`result.schema.ts`); they are not recomputed.
 
 If `opts.signal.aborted` stops the run, the result carries `cancelled: true` and
 `completedReplications`, which counts exclusively finished replications; the absence of
@@ -365,6 +417,13 @@ A list of strings, one per non-fatal condition detected during `resolveScenario`
   next to the warning stating the criterion above and what the number shown is — that ratio, or
   the utilization when the warning comes through the second door *(#357)*.
   *(LILA-191, #320)*
+- A task or timer, the process, or an outcome that some replications observed and others did not
+  (`W-REPLICACIONES-SIN-OBSERVACIONES`, section 8): for example
+  `W-REPLICACIONES-SIN-OBSERVACIONES: Task: no instance completed in 12 of 30 replications; its time statistics average only the other 18.`
+  It fires once per subject and per run, only when `0 < n < R` over the replications the top level
+  includes, in IR node order, then the process, then the outcomes. It changes no metric; it says
+  that the published time statistics describe the replications where the subject happened, not
+  every replication. Exact texts in `SEMANTICS.md` § 17. *(#356)*
 
 ---
 
@@ -538,7 +597,9 @@ interface CompareRow {
   (section 8) **do not overlap**. Two intervals that only touch at one endpoint count as
   overlapping. A result with no `replications` — a single replication, or a cancelled run with
   fewer than two complete ones — has no CI: `significant` is `false`, and the deltas remain valid,
-  just without statistical backing.
+  just without statistical backing. The same holds for a single KPI whose summary carries no
+  `ci95` because fewer than two replications observed it (`n < 2`, section 8): it is never
+  significant on either side. *(#356)*
 - The deltas read clean because R-DET-3 guarantees common random numbers: changing a pool's
   capacity does not alter the stream of elements that were not touched.
 

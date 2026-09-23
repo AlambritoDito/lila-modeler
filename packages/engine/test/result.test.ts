@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { runResultSchema, eventLogRowSchema } from '../src/result.schema.js';
 import type { RunResult } from '../src/core/result.js';
 
@@ -217,4 +217,44 @@ test('una fila de event log con un campo faltante falla', () => {
     cost: 25,
   });
   expect(result.success).toBe(false);
+});
+
+describe('KpiSummary con `n` (#356)', () => {
+  const withKpi = (kpi: Record<string, unknown>, count = 30): unknown => ({
+    ...exampleRunResult(),
+    replications: { count, kpis: { 'elements.Task_7f3k2q1.processing.mean': kpi } },
+  });
+
+  test('un resultado guardado antes de 1.0.0-beta.1, sin `n`, sigue siendo válido', () => {
+    // `exampleRunResult` es exactamente esa forma: `{mean, sd, ci95}` sin `n`.
+    expect(runResultSchema.safeParse(exampleRunResult()).success).toBe(true);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1 })).success).toBe(false);
+  });
+
+  test('`n >= 2` exige sd y ci95; `n < 2` los prohíbe', () => {
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 18, sd: 0, ci95: [1, 1] })).success).toBe(true);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 18 })).success).toBe(false);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 18, sd: 0 })).success).toBe(false);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 1 })).success).toBe(true);
+    expect(runResultSchema.safeParse(withKpi({ mean: 0, n: 0 })).success).toBe(true);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 1, ci95: [1, 1] })).success).toBe(false);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 1, sd: 0 })).success).toBe(false);
+  });
+
+  test('`n` es un entero no negativo que no supera `count`', () => {
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 30, sd: 0, ci95: [1, 1] })).success).toBe(true);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 31, sd: 0, ci95: [1, 1] })).success).toBe(false);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: -1 })).success).toBe(false);
+    expect(runResultSchema.safeParse(withKpi({ mean: 1, n: 2.5, sd: 0, ci95: [1, 1] })).success).toBe(false);
+  });
+
+  test('el esquema conserva `n` al parsear (no lo descarta como clave desconocida)', () => {
+    const parsed = runResultSchema.parse(withKpi({ mean: 360, n: 18, sd: 0, ci95: [360, 360] }));
+    expect(parsed.replications?.kpis['elements.Task_7f3k2q1.processing.mean']).toEqual({
+      mean: 360,
+      n: 18,
+      sd: 0,
+      ci95: [360, 360],
+    });
+  });
 });
