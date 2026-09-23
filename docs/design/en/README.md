@@ -1,8 +1,8 @@
 # English application screenshots
 
-Real Chromium browser captures, generated on 2026-09-17 from the built application at
+Real Chromium browser captures, generated on 2026-09-23 from the built application at
 `/lila-modeler/app/` by `tools/capture-screenshots.mjs`. English is selected explicitly, with the
-default Eva-01 theme, normal density, America/Mexico_City timezone and device scale factor 1.
+default Lila Light theme (#404), normal density, America/Mexico_City timezone and device scale factor 1.
 Each web state has a 1440×900 PNG and a 1920×1080 PNG. The [manifest](capture-manifest.json)
 records the exact application source commit, browser version and dimensions. These are local
 validation artifacts, not evidence that Pages has been published.
@@ -26,6 +26,7 @@ throw-away `estado.json` whose recents are neutral names, never a private projec
 | AS-IS versus TO-BE, saved and reloaded | [compare](compare.png) | [compare](compare-1920.png) |
 | Path validation mode (token animation, not simulation) | [routes](routes.png) | [routes](routes-1920.png) |
 | Settings and appearance | [appearance](appearance.png) | [appearance](appearance-1920.png) |
+| Model in Lila Dark, the first-launch theme on a dark system (fresh context, `prefers-color-scheme: dark`) | [theme-lila-dark](theme-lila-dark.png) | [theme-lila-dark](theme-lila-dark-1920.png) |
 | Desktop welcome overlay with recents (Electron only, 2880×1736) | [welcome](welcome.png) | — |
 
 The current application uses horizontally scrolling result tables. At 1440 pixels the comparison
@@ -77,8 +78,8 @@ Before capture, the script verifies the browser round-trip through visible contr
 6. Clear only the disposable browser context's storage and capture the original maintained
    example. Run both scenarios again; explicitly save/reload before capturing Compare.
 
-Validation on 2026-09-17: all round-trip assertions passed, with no browser page errors.
-The 22 web PNGs were checked for format/dimensions and visually reviewed for English interface,
-Eva-01, the expected calendar, genuine overlay, numerical results and comparison data; the
+Validation on 2026-09-23: all round-trip assertions passed, with no browser page errors.
+The 24 web PNGs were checked for format/dimensions and visually reviewed for English interface,
+Lila Light (Lila Dark for the two theme captures), the expected calendar, genuine overlay, numerical results and comparison data; the
 desktop welcome was reviewed for neutral recents only.
 See [the historical inventory](../README.md) for all 28 retired or retained image dispositions.

@@ -1,7 +1,7 @@
 # Interface design and screenshot inventory
 
 The [current English application gallery](en/README.md) contains real browser screenshots at
-1440×900 and 1920×1080, using the default Eva-01 theme. Its reproducible capture script also
+1440×900 and 1920×1080, using the default Lila Light theme (Lila Dark for two extra Model captures). Its reproducible capture script also
 checks opening, editing, simulation, comparison, explicit saving and reload under the Pages base.
 The product landing page uses only this gallery. No public deployment is implied by local capture.
 
