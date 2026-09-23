@@ -16,9 +16,13 @@ npm run build:pages
 ```
 
 The script builds the existing Vite app with `LILA_WEB_BASE=/lila-modeler/app/` and assembles
-`_site/`: landing page, app, local fonts/themes and English screenshots. The normal desktop/web
+`_site/`: landing page, app, local fonts/themes, English screenshots and the rendered docs. The normal desktop/web
 build retains its root base. To preview the real subpath, serve a directory containing a
 `lila-modeler` link or copy of `_site`, then open `/lila-modeler/` on that server.
+
+`tools/build-docs.mjs` renders every `.md` in `docs/`, `docs/es/` and `docs/releases/` to
+`_site/docs/`, with an index at `docs/`. A new document is published by adding the file; to keep one
+internal, add its name to `INTERNAL` in that script. `docs/design/**` is never published.
 
 **Save project** downloads the complete project as a `.lila` file — the project folder zipped,
 the same one the desktop app opens (see [project format](PROJECT_FORMAT.md)) — and stores a local
