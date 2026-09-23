@@ -21,6 +21,10 @@ interface Props {
   readonly enVentana?: string | null;
 }
 
+/** BASE = a scenario with no `extends` parent. The rail and the panel header both ask this. */
+export const esEscenarioBase = (escenario: Record<string, unknown> | undefined): boolean =>
+  typeof escenario?.['extends'] !== 'string';
+
 const nombre = (id: string, escenarios: Props['escenarios']): string => {
   const n = escenarios[id]?.['name'];
   return typeof n === 'string' ? n : id;
@@ -47,7 +51,7 @@ export function RailEscenarios({ escenarios, activo, corridas, validacion, onEle
           <button key={id} type="button" className="rail-fila" aria-current={id === activo ? 'true' : undefined} onClick={() => onElegir(id)}>
             <span className="rail-nombre">
               {nombre(id, escenarios)}
-              {escenarios[id]?.['extends'] === undefined && <span className="insignia-base">{S.rail.base}</span>}
+              {esEscenarioBase(escenarios[id]) && <span className="insignia-base">{S.rail.base}</span>}
             </span>
             <span className="rail-sub">{subtitulo(id)}</span>
           </button>
@@ -56,10 +60,10 @@ export function RailEscenarios({ escenarios, activo, corridas, validacion, onEle
       <div className="rail-pie">
         <span className="rail-rotulo">{S.rail.validacion}</span>
         <div className="chips-validacion en-rail">
-          <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+          <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.errores === 0 || validacion.primero === null} onClick={ir}>
             {validacion.errores > 0 && <span className="punto" />}{S.app.errores(validacion.errores)}
           </button>
-          <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+          <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.avisos === 0 || validacion.primero === null} onClick={ir}>
             {validacion.avisos > 0 && <span className="punto" />}{S.app.avisos(validacion.avisos)}
           </button>
         </div>

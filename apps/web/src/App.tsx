@@ -106,7 +106,8 @@ async function preferencias(): Promise<Ajustes> {
     const tema = localStorage.getItem('lila.tema');
     const densidad = localStorage.getItem('lila.densidad');
     const idioma = localStorage.getItem('lila.idioma');
-    const panelAncho = Number(localStorage.getItem('lila.panelAncho') ?? NaN);
+    // Empty or blank is "never saved" (320 by default), not 0 clamped up to 300 (QA of #390).
+    const panelAncho = Number(localStorage.getItem('lila.panelAncho')?.trim() || NaN);
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -589,16 +590,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setCorrida(null);
   }
 
-  /** Divider of the right panel: pointer drag and arrow keys, persisted when the gesture ends. */
+  /**
+   * Divider of the right panel: primary-button drag and arrow keys, persisted when the gesture
+   * ends. Arrows follow the ARIA splitter convention: they move the divider, so ArrowLeft widens
+   * the panel on its right.
+   */
   function divisorPanel(): React.HTMLAttributes<HTMLDivElement> {
     const mover = (x: number): number => anchoPanel(arrastre.current!.ancho + arrastre.current!.x - x);
     const fijar = (px: number): void => { setPanelAncho(px); recordar({ panelAncho: px }); };
+    // A cancelled or lost capture ends the drag where the last move left it.
+    const soltar = (): void => { if (arrastre.current !== null) { arrastre.current = null; fijar(panelAncho); } };
     return {
-      onPointerDown: (e) => { e.currentTarget.setPointerCapture?.(e.pointerId); arrastre.current = { x: e.clientX, ancho: panelAncho }; },
+      onPointerDown: (e) => {
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        arrastre.current = { x: e.clientX, ancho: panelAncho };
+      },
       onPointerMove: (e) => { if (arrastre.current !== null) setPanelAncho(mover(e.clientX)); },
       onPointerUp: (e) => { if (arrastre.current !== null) { fijar(mover(e.clientX)); arrastre.current = null; } },
+      onPointerCancel: soltar,
+      onLostPointerCapture: soltar,
       onKeyDown: (e) => {
-        const paso = e.key === 'ArrowRight' ? 16 : e.key === 'ArrowLeft' ? -16 : 0;
+        const paso = e.key === 'ArrowLeft' ? 16 : e.key === 'ArrowRight' ? -16 : 0;
         if (paso !== 0) { e.preventDefault(); fijar(anchoPanel(panelAncho + paso)); }
       },
     };

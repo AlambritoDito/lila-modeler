@@ -62,7 +62,7 @@ try {
   assert.equal(await page.getByLabel('Seed', { exact: true }).inputValue(), '43');
   await page.getByLabel('Seed', { exact: true }).fill('42'); await page.getByLabel('Seed', { exact: true }).press('Tab');
   await run();
-  await button('Simulate').click(); await page.locator('.simulacion > label > select').selectOption({ label: 'TO-BE 3 cashiers' }); await run();
+  await button('Simulate').click(); await page.locator('.rail-fila', { hasText: 'TO-BE' }).click(); await run();
   await button('Compare').click();
   assert.match(await page.locator('body').innerText(), /TO-BE 3 cashiers/);
   const saved = await save(); assert.equal(saved.document.runs.length, 2);
@@ -119,7 +119,7 @@ try {
   await page.locator('.replay').getByRole('button', { name: 'Pause', exact: true }).click();
   await capture('animate', false);
   await button('Simulate').click(); await capture('overlay');
-  await page.locator('.simulacion > label > select').selectOption({ label: 'TO-BE 3 cashiers' }); await run();
+  await page.locator('.rail-fila', { hasText: 'TO-BE' }).click(); await run();
   await button('Compare').click(); await save(); await page.reload(); await ready(); await button('Compare').click();
   await capture('compare', false);
   await button('Validate paths').click(); await button('Properties').click(); await capture('routes');

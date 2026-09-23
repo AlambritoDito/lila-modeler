@@ -83,6 +83,8 @@ it('the validation footer counts and jumps to the first problem', () => {
   const { onProblema } = montar();
   const chips = [...contenedor!.querySelectorAll<HTMLButtonElement>('.rail-pie .chip')];
   expect(chips.map((c) => c.textContent)).toEqual([T.app.errores(0), T.app.avisos(6)]);
+  // Nothing to jump to from «0 errors», like the canvas chips that are not drawn at all.
+  expect(chips.map((c) => c.disabled)).toEqual([true, false]);
   act(() => chips[1]!.click());
   expect(onProblema).toHaveBeenCalledWith('Task_1');
 });

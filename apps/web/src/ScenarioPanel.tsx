@@ -52,6 +52,7 @@ import {
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { LaneAssign } from './LaneAssign.js';
+import { esEscenarioBase } from './RailEscenarios.js';
 import {
   DESFASES,
   aSegundos,
@@ -1845,7 +1846,7 @@ export function ScenarioPanel({
     <div className="escenario">
       <div className="escenario-cabecera">
         <strong>{S.escenario.titulo(typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo)}</strong>
-        {heredaDe === null && <span className="insignia-base">{S.rail.base}</span>}
+        {esEscenarioBase(delta) && <span className="insignia-base">{S.rail.base}</span>}
         <span className={errores > 0 ? 'error' : 'aviso'}>
           {S.escenario.conteo(errores, avisos)}
         </span>

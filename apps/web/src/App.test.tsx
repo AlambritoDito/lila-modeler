@@ -1,5 +1,8 @@
 import type { SaveOutcome } from '../../desktop/src/bridge.js';
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, StrictMode, useEffect } from 'react';
 import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
@@ -1147,9 +1150,12 @@ it('the divider resizes the right panel between 300 and 520 px and remembers it'
   const app = container.querySelector<HTMLElement>('.app')!;
   const divisor = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
   const ancho = () => app.style.getPropertyValue('--panel-ancho');
-  const puntero = (tipo: string, clientX: number) => act(async () => {
-    divisor.dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX }));
+  const puntero = (tipo: string, clientX: number, button = 0) => act(async () => {
+    divisor.dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX, button }));
   });
+  expect(ancho()).toBe('320px');
+  // Only the primary button drags.
+  await puntero('pointerdown', 1000, 2); await puntero('pointermove', 900);
   expect(ancho()).toBe('320px');
   // Dragging left widens the panel: it grows from the right edge.
   await puntero('pointerdown', 1000); await puntero('pointermove', 900);
@@ -1165,11 +1171,24 @@ it('the divider resizes the right panel between 300 and 520 px and remembers it'
   // Moving without a pointerdown does nothing.
   await puntero('pointermove', 0);
   expect(ancho()).toBe('440px');
-  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
+  // ARIA splitter convention: the arrow moves the divider, so ArrowLeft widens the panel.
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
   expect(ancho()).toBe('456px');
   expect(localStorage.getItem('lila.panelAncho')).toBe('456');
-  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+  await act(async () => { divisor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); });
   expect(ancho()).toBe('440px');
+  // A cancelled pointer ends the drag where the last move left it, and saves that.
+  await puntero('pointerdown', 1000); await puntero('pointermove', 1040); await puntero('pointercancel', 0);
+  expect(ancho()).toBe('400px');
+  expect(localStorage.getItem('lila.panelAncho')).toBe('400');
+  await puntero('pointermove', 0);
+  expect(ancho()).toBe('400px');
+});
+
+it('the divider stays below the File menu (QA of #390)', () => {
+  const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'app.css'), 'utf8');
+  const zIndex = (selector: string) => Number(new RegExp(`^${selector.replace(/[.>]/g, '\\$&')} \\{[^}]*z-index: (\\d+)`, 'm').exec(css)![1]);
+  expect(zIndex('.divisor')).toBeLessThan(zIndex('.menu-archivo > div'));
 });
 
 it('the panel width saved in the browser is restored, clamped', async () => {
@@ -1178,6 +1197,12 @@ it('the panel width saved in the browser is restored, clamped', async () => {
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('520px');
+  // Blank means never saved: the 320 default, not 0 clamped to 300.
+  await act(async () => root.unmount());
+  localStorage.setItem('lila.panelAncho', '  ');
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('320px');
 });
 
 // --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---

@@ -339,7 +339,8 @@ body {
 
 /* Divider of the right panel (design 2a, `docs/design/COMPARACION-2026-09-07.md`): a 6 px
    strip sharing the panel's grid area, straddling its left border. Grid items honour `z-index`
-   without `position`, so it sits over the panel's edge. */
+   without `position`, so it sits over the panel's edge — at 1, below the File menu (2), which
+   drops over it at narrow widths (QA of #390). */
 .divisor {
   cursor: col-resize;
   grid-area: panel;
@@ -347,7 +348,7 @@ body {
   margin-left: -3px;
   touch-action: none;
   width: 6px;
-  z-index: 2;
+  z-index: 1;
 }
 
 .divisor:hover,
@@ -1374,7 +1375,7 @@ body {
   text-transform: uppercase;
 }
 
-.chips-validacion .chip:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.chips-validacion .chip:hover:enabled { background: var(--bg-hover); color: var(--fg-primary); }
 
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
@@ -1422,6 +1423,12 @@ body {
 }
 
 .rail-nuevo:hover { background: var(--bg-hover); }
+
+.rail-nuevo:focus-visible,
+.rail-fila:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
 
 .rail-lista {
   flex: 1;
