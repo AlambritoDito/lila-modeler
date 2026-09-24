@@ -3,6 +3,37 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.6] - 2026-09-24
+
+Lote C: keyboard, search and Settings. One shortcut map now drives the keys, the tooltips, the
+native menu and a new Shortcuts section, the search box in the top bar is a real command palette
+on Cmd+K, and Settings is laid out like the design: sections on the left, content on the right. No
+installer is attached to this version.
+
+### Added
+
+- **Command palette** (#410): ⌘K / Ctrl+K or the search box open a palette that finds the
+  diagram's elements by name, id or type (Enter selects and centres the element on the canvas),
+  switches scenarios and modes, and runs the app's actions with their keys shown; ↑/↓, Enter and
+  Esc, with the focus returned where it was. It also opens from the detached scenario window.
+- **One shortcut map** (#413): `apps/web/src/atajos.ts` feeds the keyboard, the tooltips, the
+  Electron menu and the docs. New keys: ⌘↩ run, Esc cancel, ⌘+ / ⌘− / ⌘0 zoom and fit, F2 rename,
+  ⌘⇧L / ⌘⇧P / ⌘⇧D / ⌘⇧B show or hide the left column, the right panel, the diagram tabs and the
+  status bar, ⌘1…⌘6 modes (desktop app). Keys without ⌘ never fire inside a field. The desktop
+  app gets its own View and Simulation menus. Documented in `docs/SHORTCUTS.md`.
+- **Settings → Shortcuts** (#407, #413): a read-only table of the whole map with this platform's
+  keys.
+
+### Changed
+
+- **Settings** (#407): General (language, density), Appearance and Shortcuts as sections on the
+  left with the content on the right, labels on the left of the controls, only the content scrolls
+  and Close is always visible; radius 0 and 1 px rules throughout.
+- **Tab on the canvas moves the focus again** (#413): the Tab / Shift+Tab panel toggles of #412
+  are replaced by ⌘⇧P / ⌘⇧L; F6 and ⇧F6 still leave the canvas.
+- The Electron View menu no longer reloads the page or zooms the whole window: those keys belong
+  to the canvas now.
+
 ## [1.0.0-beta.5] - 2026-09-23
 
 Lote B: first use and the frame of the UI. Running an empty or incomplete process now says what is
