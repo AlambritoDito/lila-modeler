@@ -1676,6 +1676,10 @@ it('the View menu closes on a click outside and the File and View menus close ea
   await abrir(vista);
   expect(vista.open).toBe(true);
   expect(archivo.open).toBe(false);
+  // The late «closed» toggle of the other dropdown must not disarm this one (QA of #433, S1b).
+  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(false);
+  await abrir(vista);
   // A click inside the open dropdown is not «outside».
   await act(async () => { itemVista('diagramas').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
   expect(vista.open).toBe(true);

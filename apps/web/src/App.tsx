@@ -387,7 +387,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * screen), so opening one and reopening the menu shows the up-to-date list regardless of when
    * the welcome screen last ran. */
   const [recientesMenu, setRecientesMenu] = useState<readonly Recent[]>([]);
-  const cerrarMenuFuera = useRef<((e: PointerEvent) => void) | null>(null);
+  const cerrarMenuFuera = useRef<{ menu: HTMLDetailsElement; cerrar: (e: PointerEvent) => void } | null>(null);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
   const rutaPendiente = useRef<OpenPathRequest | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
@@ -1032,8 +1032,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   function alternarMenu(e: React.SyntheticEvent<HTMLDetailsElement>): void {
     const el = e.currentTarget;
-    if (cerrarMenuFuera.current) {
-      document.removeEventListener('pointerdown', cerrarMenuFuera.current);
+    // `toggle` fires late: when one dropdown opens and closes the other, the other's «closed»
+    // event arrives after this one armed its listener. A closing dropdown may only remove the
+    // listener it armed itself (seams QA of #433, S1b).
+    const armado = cerrarMenuFuera.current;
+    if (armado !== null && (el.open || armado.menu === el)) {
+      document.removeEventListener('pointerdown', armado.cerrar);
       cerrarMenuFuera.current = null;
     }
     if (!el.open) return;
@@ -1045,9 +1049,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (el.contains(ev.target as Node)) return;
       el.open = false;
       document.removeEventListener('pointerdown', cerrar);
-      cerrarMenuFuera.current = null;
+      if (cerrarMenuFuera.current?.cerrar === cerrar) cerrarMenuFuera.current = null;
     };
-    cerrarMenuFuera.current = cerrar;
+    cerrarMenuFuera.current = { menu: el, cerrar };
     document.addEventListener('pointerdown', cerrar);
   }
   // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
