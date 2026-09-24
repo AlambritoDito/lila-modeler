@@ -102,6 +102,23 @@ export const en = {
     tituloGuardar: 'Save project',
     tituloGuardarComo: 'Save as',
 
+    /**
+     * Desktop «File» menu (#411): same `<details className="menu-archivo">` as the browser, but
+     * these entries mirror the native menu bar word for word (`apps/desktop/src/strings/en.ts`),
+     * because the owner reads both and they must agree. The native menu (and its accelerators)
+     * stays; this is only about the owner finding the same actions inside the window too.
+     */
+    menuEscritorio: {
+      nuevoProyecto: 'New project',
+      abrirProyecto: 'Open project…',
+      abrirProyectoArchivo: 'Open project file (.lila)…',
+      abrirReciente: 'Open recent',
+      ninguno: 'No recent projects',
+      guardarProyecto: 'Save project',
+      guardarComo: 'Save as…',
+      guardarComoCarpeta: 'Save as folder…',
+    },
+
     /** Inert search box of the bar (the command palette is another ticket). */
     buscar: 'Search activity',
     buscarPista: 'Search activity…',
