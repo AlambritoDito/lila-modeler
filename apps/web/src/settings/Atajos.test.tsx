@@ -29,13 +29,13 @@ afterEach(async () => {
   container.remove();
 });
 
-it('pinta un encabezado y una tabla por grupo, en el mismo orden', () => {
+it('paints one heading and one table per group, in the same order', () => {
   const encabezados = [...container.querySelectorAll('h3')].map((h) => h.textContent);
   expect(encabezados).toEqual(['Archivo', 'Lienzo']);
   expect(container.querySelectorAll('table')).toHaveLength(2);
 });
 
-it('cada fila trae la etiqueta y la tecla en un `<kbd>` mono', () => {
+it('each row carries the label and the key in a mono `<kbd>`', () => {
   const filas = [...container.querySelectorAll('table')[0]!.querySelectorAll('tbody tr')];
   expect(filas.map((f) => f.querySelector('td')?.textContent)).toEqual(['Guardar', 'Guardar como']);
   const teclas = filas.map((f) => f.querySelector('kbd'));
@@ -43,7 +43,7 @@ it('cada fila trae la etiqueta y la tecla en un `<kbd>` mono', () => {
   expect(teclas.map((k) => k!.textContent)).toEqual(['⌘S', '⇧⌘S']);
 });
 
-it('un grupo sin filas pinta su tabla vacía sin reventar', async () => {
+it('a group with no rows paints its empty table without blowing up', async () => {
   await act(async () => root.render(<Atajos grupos={[{ titulo: 'Vacío', filas: [] }]} />));
   expect(container.querySelector('h3')?.textContent).toBe('Vacío');
   expect(container.querySelectorAll('tbody tr')).toHaveLength(0);

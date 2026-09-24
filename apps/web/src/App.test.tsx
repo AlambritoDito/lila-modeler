@@ -2478,14 +2478,17 @@ it('the three tabs of Settings swap the visible panel, General first (#407)', as
   expect(selectTema()).not.toBeNull();
 });
 
-it('language and density keep working from the General section (#407)', async () => {
+it('language and density keep working from the General section, and density stays there (#407, QA nit N4)', async () => {
   await act(async () => porEtiqueta(T.app.ajustes).click());
   const idioma = selectIdioma();
   await act(async () => { idioma.value = 'es'; idioma.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(container.querySelector('dialog.ajustes')!.textContent).toContain(ES.app.ajustes);
 
-  // The label reads in Spanish now that the language above switched.
-  const densidad = container.querySelector<HTMLSelectElement>(`dialog.ajustes select[aria-label="${ES.app.densidad}"]`)!;
+  // Scoped to `#ajustes-panel-general`, not just `dialog.ajustes`: a query against the whole
+  // dialog would still find the control even if density moved to another panel, and would not
+  // catch that regression (QA of #407, N4). The label reads in Spanish now that the language
+  // above switched.
+  const densidad = panelAjustes('general').querySelector<HTMLSelectElement>(`select[aria-label="${ES.app.densidad}"]`)!;
   expect(densidad).not.toBeNull();
   await act(async () => { densidad.value = 'compacta'; densidad.dispatchEvent(new Event('change', { bubbles: true })); });
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
@@ -2629,4 +2632,23 @@ it('the palette\'s actions are the map\'s entries, labelled with their keys, and
   expect(fila.querySelector('kbd')!.textContent).toBe('Ctrl+Shift+P');
   await teclaPaleta('Enter');
   expect(container.querySelector('.app')!.classList.contains('sin-panel')).toBe(true);
+});
+
+it('Settings resets to General when the dialog closes, whichever way it closes (#407, QA must-fix S4)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(panelAjustes('atajos').hidden).toBe(false);
+
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  // jsdom's `close()` stub (above, LILA-381) only flips `.open`; a real `<dialog>` also dispatches
+  // a `close` event on every closing path — Esc, the form's own `method="dialog"` submit, and
+  // `cerrarDialogo()` alike — which is what `Ajustes.tsx`'s listener reacts to. Dispatching it here
+  // exercises that listener the way any of those three paths would in a real browser.
+  await act(async () => { dialog.close(); dialog.dispatchEvent(new Event('close')); });
+  expect(dialog.open).toBe(false);
+
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('general').hidden).toBe(false);
+  expect(panelAjustes('atajos').hidden).toBe(true);
 });
