@@ -8,6 +8,7 @@
  * (LILA-066), que es también lo que vigila `strings.test.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
@@ -18,7 +19,8 @@ import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenari
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
-import { PanelPropiedades } from './PropertiesPanel';
+import { PaletaComandos, type Comando } from './PaletaComandos';
+import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
@@ -36,12 +38,15 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
-import { Apariencia } from './settings/Apariencia';
+// Aliased: `Ajustes` above is already the bridge's settings-payload type (`readSettings`/
+// `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
+import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
+import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -210,20 +215,20 @@ async function cargarTema(id: TemaId): Promise<Theme> {
 }
 
 /**
- * Texto de atajo para los tooltips: `⌘S` en Mac, `Ctrl+S` en el resto. En el navegador solo se
- * anuncian los que la página llega a ver: Chrome y Safari se quedan `⌘N` (ventana nueva) y `⌘,`
- * (preferencias) antes de entregarlos, así que ahí solo valen dentro de Electron, donde son
- * aceleradores del menú nativo.
+ * Shortcut text for a tooltip, from the one map (#413): ` (⌘S)` on Mac, ` (Ctrl+S)` elsewhere.
+ * `soloDesktop` entries are announced only inside Electron: the browser keeps ⌘N, ⌘, and ⌘1…⌘6.
  */
-const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
-function atajo(tecla: string, soloDesktop = false): string {
-  const S = strings();
-  if (soloDesktop && !DESKTOP) return '';
-  const shift = tecla.startsWith('⇧');
-  const letra = shift ? tecla.slice(1) : tecla;
-  return S.app.atajo(letra, shift, MAC);
+function atajo(id: AtajoId): string {
+  const a = atajoPorId(id);
+  return a.soloDesktop && !DESKTOP ? '' : tooltip(a, MAC);
 }
+/** Where a key without ⌘/Ctrl is somebody's typing, not a shortcut. */
+const CAMPO = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+/** A modal dialog or the welcome screen is up: no shortcut reaches what is behind it. */
+const bloqueado = (): boolean => document.querySelector('dialog[open], .bienvenida, .karaoke') !== null;
+/** An open dropdown of the bar takes Esc for itself: it closes on it (QA of #436, M2). */
+const menuAbierto = (): boolean => document.querySelector('.menu-archivo[open], .menu-vista[open]') !== null;
 
 /**
  * Los servicios del lienzo para la paleta (LILA-207). El getter de `Modelador` lanza mientras no
@@ -381,6 +386,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * hay `window.lila`, así que nunca sale; lo que ve Pages no cambia.
    */
   const [bienvenida, setBienvenida] = useState(false);
+  const [paletaAbierta, setPaletaAbierta] = useState(false);
   const [recientes, setRecientes] = useState<readonly Recent[]>([]);
   /** Recents for the desktop File dropdown (#411): fetched again every time it opens
    * (`alternarMenuArchivo`) instead of reusing `recientes` (that one is only for the welcome
@@ -1017,6 +1023,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
     else if (accion === 'guardarComoCarpeta') void guardar(true, true);
+    // A shortcut the native menu owns (#413): same handlers as the keyboard; unknown ids are ignored.
+    else if ('atajo' in accion) { if (Object.hasOwn(atajosRef.current, accion.atajo) && !bloqueado()) atajosRef.current[accion.atajo as AtajoPropio](); }
     else void projectAction({ recent: accion.openRecent });
   }
   const ejecutarRef = useRef(ejecutar);
@@ -1054,60 +1062,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     cerrarMenuFuera.current = { menu: el, cerrar };
     document.addEventListener('pointerdown', cerrar);
   }
-  // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
-  // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux. It lives at
-  // component scope because the detached scenario window listens with it too (design 2c); it only
-  // reads the ref, so the copy the effect below captured on mount is as good as any later one.
-  const teclas = (e: KeyboardEvent): void => {
-    if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
-    const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
-    if (accion === undefined) return;
-    e.preventDefault();
-    ejecutarRef.current(accion);
-  };
-  /**
-   * From the detached window only Save and Save as are forwarded (QA of #391): Open would click the
-   * file input of the MAIN document with the popup's user activation, the browser refuses the
-   * chooser without ever settling it and the app stays busy until reload; Settings would open
-   * modal behind the window the user is looking at.
-   */
-  const teclasHija = (e: KeyboardEvent): void => { if (e.key.toLowerCase() === 's') teclas(e); };
-  useEffect(() => {
-    window.addEventListener('keydown', teclas);
-    const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
-    return () => { window.removeEventListener('keydown', teclas); quitar?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /**
-   * Panel keys (#412), Ableton style: Tab toggles the right panel and Shift+Tab the left column,
-   * but ONLY while the canvas `<svg>` has the focus — anywhere else Tab keeps moving the focus,
-   * and a field, a select, a button or the label editor (a contenteditable inside the canvas
-   * container) never sees it taken. Not gated by DESKTOP: no native menu item owns these keys.
-   * Since the canvas now keeps Tab, F6 (to the modes) and Shift+F6 (to the right panel, or its
-   * toggle when hidden) are the way out of it with the keyboard (WCAG 2.1.2).
-   * ponytail: #413 owns the final shortcut map; these keys may move there.
-   */
-  useEffect(() => {
-    const teclasPaneles = (e: KeyboardEvent): void => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing) return;
-      if (document.querySelector('dialog[open], .bienvenida') !== null) return;
-      if (e.key === 'F6') {
-        e.preventDefault();
-        if (!e.shiftKey) { document.querySelector<HTMLElement>('.modos .modo')?.focus(); return; }
-        const panel = document.getElementById(ID_REGION.derecha);
-        const destino = panel?.offsetParent === null ? null
-          : panel?.querySelector<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea, [tabindex]:not([tabindex="-1"])');
-        if (destino) destino.focus(); else enfocarToggle('derecha');
-        return;
-      }
-      if (e.key !== 'Tab' || !(e.target as Element | null)?.matches?.('.djs-container > svg')) return;
-      // Taken only when it toggles something: with no left column Shift+Tab keeps moving the focus.
-      if (alternarRef.current(e.shiftKey ? 'izquierda' : 'derecha')) e.preventDefault();
-    };
-    window.addEventListener('keydown', teclasPaneles);
-    return () => window.removeEventListener('keydown', teclasPaneles);
-  }, []);
+  useEffect(() => window.lila?.onMenu((a) => ejecutarRef.current(a)), []);
 
   /** Only a sane size counts: a window already gone reports zeros. */
   function recordarGeometria(geometria: Geometria): void {
@@ -1131,6 +1086,74 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     window.focus();
     toggleEscenario.current?.focus();
   }
+  /**
+   * Command palette (#410). Not while a file operation holds the app (`ioBusy`: the canvas and the
+   * rail are inert), nor over another modal, the welcome screen or the karaoke: those own the
+   * keyboard until they close.
+   */
+  function abrirPaleta(desdeHija = false): void {
+    if (ioBusy || karaoke || document.querySelector('dialog[open], .bienvenida') !== null) return;
+    // ponytail: from the detached scenario window the palette opens in the main one. A browser
+    // ignores `focus()` on another window (QA of #438, headed Chrome), so there it would open
+    // unseen while the typing kept going to the child: in the browser ⌘K from the child does
+    // nothing. Electron honours `focus()`. Ceiling: render the palette inside the child window.
+    if (desdeHija) {
+      if (!DESKTOP) return;
+      window.focus();
+    }
+    setPaletaAbierta(true);
+  }
+  const abrirPaletaRef = useRef(abrirPaleta);
+  abrirPaletaRef.current = abrirPaleta;
+  /** Set while `teclasHija` dispatches, so the `paleta` handler knows to raise the main window. */
+  const desdeHija = useRef(false);
+  /** The palette's rows, built when it opens: the canvas elements are read at that moment. */
+  function comandosPaleta(): Comando[] {
+    const irAModo = (m: ModoId): void => { setModo(m); if (m === 'simular') setPestana('simulacion'); };
+    const elementos: Comando[] = serviciosDe(modelador)?.elementRegistry.filter((el) =>
+      // Roots have no parent: the process, the collaboration and each collapsed sub-process's plane.
+      el.id !== undefined && el.labelTarget === undefined && el.parent !== undefined
+      && !(el.waypoints !== undefined && !el.businessObject?.name))
+      .map((el): Comando => ({
+        grupo: 'elementos', nombre: el.businessObject?.name || el.businessObject?.text || el.id!, id: el.id!, tipo: nombreDeTipo(el.type ?? ''),
+        elegir: () => {
+          // The canvas is hidden in Results and Compare; it has to be on screen before the focus.
+          if (modo === 'resultados' || modo === 'comparar') flushSync(() => setModo('modelar'));
+          modelador?.seleccionar?.(el.id!, { centrar: true });
+          modelador?.enfocar?.();
+        },
+      })) ?? [];
+    const libre = !ioBusy && modelador !== null;
+    // Zoom, fit and rename act on the canvas, hidden in Results and Compare (the keys skip it too).
+    const conLienzo = modelador !== null && modo !== 'resultados' && modo !== 'comparar';
+    const corriendo = sim.tipo === 'simulando';
+    // The actions are the app's own entries of the shortcut map (#413), with the same labels the
+    // Settings → Shortcuts table prints and the same handlers the keys run; modes are their own
+    // group above, and the focus-moving keys make no sense from a palette.
+    const teclaDe = (id: AtajoId): string | undefined => {
+      const a = atajoPorId(id);
+      return a.soloDesktop && !DESKTOP ? undefined : etiqueta(a, MAC);
+    };
+    const accion = (id: AtajoPropio, cuando = true): Comando | false =>
+      cuando && { grupo: 'acciones', nombre: S.atajos[id], tecla: teclaDe(id), elegir: () => atajosRef.current[id]() };
+    const acciones: (Comando | false)[] = [
+      accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
+      accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
+      accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
+      accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
+      accion('ajustes'),
+      { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
+    ];
+    return [
+      ...elementos,
+      ...Object.keys(escenarios).map((id): Comando => ({
+        grupo: 'escenarios', nombre: etiquetaEscenario(id, escenarios), elegir: () => { elegirEscenario(id); irAModo('simular'); },
+      })),
+      ...MODO_IDS.map((m): Comando => ({ grupo: 'modos', nombre: S.app.modos[m], tecla: teclaDe(`modo:${m}`), elegir: () => irAModo(m) })),
+      ...acciones.filter((a): a is Comando => a !== false),
+    ];
+  }
+
   /**
    * Opens the About window (#408), centred over the app, or focuses it if it is already open.
    * Like `desacoplar`, only from a click or a menu action: popup blockers need the gesture.
@@ -1320,8 +1343,98 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     recordar({ paneles: siguiente });
     return true;
   }
-  const alternarRef = useRef(alternarRegion);
-  alternarRef.current = alternarRegion;
+
+  // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
+  function elegirModo(m: ModoId): void {
+    setModo(m);
+    if (m === 'simular') setPestana('simulacion');
+  }
+  /** F2: rename the one selected element in place (bpmn-js has no key for it). */
+  function renombrar(): void {
+    const s = serviciosDe(modelador);
+    const [unico, ...otros] = s?.selection.get() ?? [];
+    if (unico !== undefined && otros.length === 0) s!.directEditing.activate(unico);
+  }
+  /** Shift+F6: to the right panel's first control, or to its toggle while it is hidden (#412). */
+  function irPanel(): void {
+    const panel = document.getElementById(ID_REGION.derecha);
+    const destino = panel?.offsetParent === null ? null
+      : panel?.querySelector<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea, [tabindex]:not([tabindex="-1"])');
+    if (destino) destino.focus(); else enfocarToggle('derecha');
+  }
+  // Exhaustive on purpose: a new entry in `ATAJOS` does not compile until it has a handler here.
+  const atajos: Record<AtajoPropio, () => void> = {
+    nuevo: () => ejecutar('nuevo'),
+    abrir: () => ejecutar('abrir'),
+    guardar: () => ejecutar('guardar'),
+    guardarComo: () => ejecutar('guardarComo'),
+    ajustes: () => ejecutar('ajustes'),
+    paleta: () => abrirPaletaRef.current(desdeHija.current),
+    ...Object.fromEntries(MODO_IDS.map((m) => [`modo:${m}`, () => elegirModo(m)])) as Record<`modo:${ModoId}`, () => void>,
+    // The Run button is replaced by Cancel while a run is in flight; the key follows the button.
+    ejecutar: () => { if (enVuelo.current === null && modelador !== null) void simular(); },
+    cancelar: cancelarCorrida,
+    zoomMas: () => modelador?.zoom(1.2),
+    zoomMenos: () => modelador?.zoom(1 / 1.2),
+    ajustarVista: () => modelador?.ajustar(),
+    renombrar,
+    izquierda: () => alternarRegion('izquierda'),
+    derecha: () => alternarRegion('derecha'),
+    diagramas: () => alternarRegion('diagramas'),
+    estado: () => alternarRegion('estado'),
+    irModos: () => document.querySelector<HTMLElement>('.modos .modo')?.focus(),
+    irPanel,
+  };
+  const atajosRef = useRef(atajos);
+  atajosRef.current = atajos;
+
+  /**
+   * The one keyboard dispatcher (#413), on `window` in the CAPTURE phase: it runs before bpmn-js's
+   * canvas listener, so ⌘0 fits the diagram instead of bpmn-js's 100 % and ⌘+/⌘− zoom once, not
+   * twice. Rules, in order: the first own entry that matches wins; in Electron the entries of the
+   * native menu are left to it (they come back through `onMenu`, and would fire twice on
+   * Windows/Linux otherwise); a key without ⌘/Ctrl is typing inside a field; nothing fires while a
+   * dialog or the welcome screen is up (they handle their own keys); Esc only cancels a run.
+   * Tab is Tab again: #412's Tab-on-the-canvas panel toggle is gone (WCAG 2.1.2).
+   */
+  const despachar = (e: KeyboardEvent, soloHija = false): void => {
+    if (e.isComposing) return;
+    const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
+    if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
+    // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
+    // and ⌘K's there, the keys belong to the desktop app only.
+    if (!DESKTOP && a.grupo === 'modos') return;
+    const conMod = a.tecla.startsWith('Mod+');
+    if (!conMod && (e.target as Element | null)?.closest?.(CAMPO)) return;
+    if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
+    // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
+    if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
+    e.preventDefault();
+    // Only the ⌘ keys are hidden from the target (bpmn-js zooms on them too); Esc, F2 and F6 still
+    // reach whatever else listens.
+    if (conMod) e.stopPropagation();
+    // A held key is swallowed, not repeated (QA of #436, M1): one save / run / toggle per press,
+    // and the browser never gets the repeats (⌘S «Save page as», ⇧⌘B bookmarks bar). Zoom repeats.
+    if (e.repeat && a.id !== 'zoomMas' && a.id !== 'zoomMenos') return;
+    atajosRef.current[a.id as AtajoPropio]();
+  };
+  /**
+   * The detached scenario window (design 2c) forwards only the `hija` entries (QA of #391): Open
+   * would click the file input of the MAIN document with the popup's user activation, the browser
+   * refuses the chooser without ever settling it and the app stays busy until reload; Settings
+   * would open modal behind the window the user is looking at.
+   */
+  const teclasHija = (e: KeyboardEvent): void => {
+    desdeHija.current = true;
+    try { despachar(e, true); } finally { desdeHija.current = false; }
+  };
+  const despacharRef = useRef(despachar);
+  despacharRef.current = despachar;
+  useEffect(() => {
+    const oyente = (e: KeyboardEvent): void => despacharRef.current(e);
+    window.addEventListener('keydown', oyente, true);
+    return () => window.removeEventListener('keydown', oyente, true);
+  }, []);
 
   /** The compact palette keeps its own `localStorage` key, as before #406 (web and desktop). */
   function guardarCompacta(activa: boolean): void {
@@ -1410,8 +1523,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               key={m}
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
-
-              onClick={() => { setModo(m); if (m === 'simular') setPestana('simulacion'); }}
+              onClick={() => elegirModo(m)}
             >
               {S.app.modos[m]}
             </button>
@@ -1442,8 +1554,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             (e.currentTarget.parentElement as HTMLDetailsElement).open = false;
           }}>
             {DESKTOP ? <>
-              <button type="button" title={`${S.app.menuEscritorio.nuevoProyecto}${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.menuEscritorio.nuevoProyecto}</button>
-              <button type="button" title={`${S.app.menuEscritorio.abrirProyecto}${atajo('O', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.menuEscritorio.abrirProyecto}</button>
+              <button type="button" title={`${S.app.menuEscritorio.nuevoProyecto}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.menuEscritorio.nuevoProyecto}</button>
+              <button type="button" title={`${S.app.menuEscritorio.abrirProyecto}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.menuEscritorio.abrirProyecto}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('openFile')}>{S.app.menuEscritorio.abrirProyectoArchivo}</button>
               <details className="menu-archivo-reciente">
                 <summary>{S.app.menuEscritorio.abrirReciente}</summary>
@@ -1458,16 +1570,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 </div>
               </details>
               <hr />
-              <button type="button" title={`${S.app.menuEscritorio.guardarProyecto}${atajo('S', true)}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.menuEscritorio.guardarProyecto}</button>
-              <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('⇧S', true)}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
+              <button type="button" title={`${S.app.menuEscritorio.guardarProyecto}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.menuEscritorio.guardarProyecto}</button>
+              <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </> : <>
-              <button type="button" title={`${S.app.tituloNuevo}${atajo('N', true)}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
-              <button type="button" title={`${S.app.tituloAbrir}${atajo('O')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
-              <button type="button" title={`${S.app.tituloGuardar}${atajo('S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
-              <button type="button" title={`${S.app.tituloGuardarComo}${atajo('⇧S')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
+              <button type="button" title={`${S.app.tituloNuevo}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
+              <button type="button" title={`${S.app.tituloAbrir}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
+              <button type="button" title={`${S.app.tituloGuardar}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
+              <button type="button" title={`${S.app.tituloGuardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
               {bpmnFilesEnabled && <>
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
@@ -1476,16 +1588,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </>}
           </div>
         </details>
-        {/* Campo inerte: buscar de verdad es la paleta de comandos (LILA-066, #66). Está aquí
-            porque el artefacto fija su sitio y su ancho, no para que funcione todavía. Its zone
-            is the bar's spring: when fewer than 120 px are left the field wraps to a second,
-            clipped line instead of shrinking to an empty box (#423). Out of the Tab order: it
-            does nothing yet. */}
+        {/* The search box is a button that opens the command palette (#410); the artboard fixes
+            its place and width. Its zone is the bar's spring: when fewer than 120 px are left the
+            box wraps to a second, clipped line instead of shrinking to an empty box (#423). */}
         <div className="zona-buscador">
           <div className="buscador">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
-            <input type="search" readOnly tabIndex={-1} aria-label={S.app.buscar} placeholder={S.app.buscarPista} title={S.app.buscarPendiente} />
-            <kbd>⌘K</kbd>
+            <button type="button" className="buscador-boton" aria-haspopup="dialog" aria-keyshortcuts={MAC ? 'Meta+K' : 'Control+K'}
+              aria-label={S.app.buscar} title={`${S.app.buscar}${atajo('paleta')}`} onClick={() => abrirPaleta()}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
+              <span className="pista">{S.app.buscarPista}</span>
+              <kbd>{etiqueta(atajoPorId('paleta'), MAC)}</kbd>
+            </button>
           </div>
         </div>
         <div className="iconos">
@@ -1516,22 +1629,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               </div>
               <div className="progreso-pista"><div style={{ width: `${Math.round((sim.progreso?.fraction ?? 0) * 100)}%` }} /></div>
             </div>
-            <button type="button" className="boton cancelar" onClick={cancelarCorrida}>{S.app.cancelar}</button>
+            <button type="button" className="boton cancelar" title={`${S.app.cancelar}${atajo('cancelar')}`} onClick={cancelarCorrida}>{S.app.cancelar}</button>
           </>
         ) : (
-          <button type="button" className="boton primario ejecutar" disabled={modelador === null} onClick={() => void simular()}>
+          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={() => void simular()}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
             {S.app.ejecutar}
           </button>
         )}
-        <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo(',', true)}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
+        <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo('ajustes')}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
         {/* Panel toggles (#412): four icon buttons in wide windows, one «View» menu in narrow
             ones (`app.css` swaps them). Pressed = the region is on screen (see `pulsado`). */}
         <div className="iconos vista-grupo" role="group" aria-label={S.app.vista}>
           {REGIONES.map((r) => (
             <button key={r} type="button" className="boton icono" data-region={r} aria-pressed={pulsado[r]}
               aria-controls={r === 'izquierda' && !hayIzquierda ? undefined : ID_REGION[r]}
-              aria-label={S.app.regiones[r]} title={tituloRegion(r)}
+              aria-label={S.app.regiones[r]} title={`${tituloRegion(r)}${atajo(r)}`}
               disabled={r === 'izquierda' && !hayIzquierda} onClick={() => alternarRegion(r)}>
               <IconoRegion region={r} />
             </button>
@@ -1548,7 +1661,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
           <div>
             {REGIONES.map((r) => (
-              <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={tituloRegion(r)}
+              <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={`${tituloRegion(r)}${atajo(r)}`}
                 disabled={r === 'izquierda' && !hayIzquierda}
                 onClick={(e) => {
                   const menu = e.currentTarget.closest('details')!;
@@ -1564,44 +1677,23 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
-        {/* Enter dentro de un campo de texto enviaba el formulario, o sea cerraba el diálogo en
-            mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
-            con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
-        <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
-          {/* «Acerca de Lila Modeler» vive en el encabezado, no al final (pedido del dueño,
-              2026-09-22): con los grupos de Apariencia colapsados de fábrica el diálogo ya no
-              hace scroll de por sí, pero el botón tiene que verse sin tocar nada igualmente —
-              alguien pudo haber dejado un grupo abierto antes de volver a entrar aquí. */}
-          <div className="ajustes-encabezado">
-            <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
-            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); abrirAcerca(); }}>{S.app.acercaDe}</button>
-          </div>
-          {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
-              toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
-              se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
-              elegir el propio a quien no entiende el que está puesto. */}
-          <h3>{S.app.idioma}</h3>
-          <label className="campo idioma">
-            <select aria-label={S.app.idioma} autoFocus value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
-              <option value="auto">{S.app.idiomaAuto}</option>
-              {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
-            </select>
-          </label>
-          <h3>{S.app.apariencia}</h3>
-          <Apariencia
-            temaId={temaId}
-            tema={tema ?? null}
-            temas={temas}
-            densidad={densidad}
-            onDensidad={(d) => setDensidad(d as Densidad)}
-            onTemas={guardarTemas}
-            onSeleccionar={(id) => void seleccionarTema(id)}
-          />
-          <div className="acciones">
-            <button className="boton primario">{S.app.cerrar}</button>
-          </div>
-        </form>
+        <AjustesDialogo
+          idioma={idioma}
+          cambiarIdioma={cambiarIdioma}
+          LOCALES={LOCALES}
+          temaId={temaId}
+          tema={tema ?? null}
+          temas={temas}
+          densidad={densidad}
+          onDensidad={(d) => setDensidad(d as Densidad)}
+          onTemas={guardarTemas}
+          onSeleccionar={(id) => void seleccionarTema(id)}
+          abrirAcerca={abrirAcerca}
+          cerrarDialogo={() => ajustesDialog.current?.close()}
+        />
       </dialog>
+
+      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} onCerrar={() => setPaletaAbierta(false)} />}
 
       {ventanaAcerca !== null && (
         <VentanaFlotante

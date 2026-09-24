@@ -21,6 +21,7 @@
  */
 import { useEffect, useReducer, useState } from 'react';
 import type { Elemento, Modelador, Servicios } from './Modeler';
+import { atajoPorId, etiqueta, MAC } from './atajos';
 import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
@@ -394,12 +395,10 @@ function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry
       </section>
       <section className="propiedades-seccion">
         <h3>{S.propiedades.atajos}</h3>
-        {/* The two real shortcuts today (`ValidationMarkers.ts` shows the same on the canvas):
-            F2 renames (bpmn-js) and Shift+F6 moves the focus from the canvas to this panel
-            (#412 — Tab on the canvas now hides and shows the panel instead). The artboard's
-            «Search activity ⌘K» stays out: the bar's search field is inert (LILA-066/#66). */}
-        <FilaResumen etiqueta={S.propiedades.renombrar} valor={<kbd>F2</kbd>} />
-        <FilaResumen etiqueta={S.app.pestanas.propiedades} valor={<kbd>⇧F6</kbd>} />
+        {/* Two entries of the one shortcut map (#413); the full list lives in Settings and in
+            docs/SHORTCUTS.md. `ValidationMarkers.ts` shows the same pair on the canvas. */}
+        <FilaResumen etiqueta={S.propiedades.renombrar} valor={<kbd>{etiqueta(atajoPorId('renombrar'), MAC)}</kbd>} />
+        <FilaResumen etiqueta={S.app.pestanas.propiedades} valor={<kbd>{etiqueta(atajoPorId('irPanel'), MAC)}</kbd>} />
       </section>
     </div>
   );

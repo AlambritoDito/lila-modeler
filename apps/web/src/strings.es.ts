@@ -62,10 +62,6 @@ export const es: Strings = {
     /** El mismo nombre en minúscula, para la barra de estado («Densidad cómoda»). */
     densidadNombre: (id: string): string => (id === 'comoda' ? 'cómoda' : id),
 
-    /** Atajo entre paréntesis detrás del tooltip: `⌘S` en Mac, `Ctrl+S` en el resto. */
-    atajo: (letra: string, shift: boolean, mac: boolean): string =>
-      mac ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`,
-
     /** Nombre por defecto de un proyecto nuevo y del que la app trae de serie. */
     proyectoNuevo: 'Mi proyecto',
     proyectoDemo: 'Pedido de ejemplo',
@@ -102,13 +98,12 @@ export const es: Strings = {
       guardarComoCarpeta: 'Guardar como carpeta…',
     },
 
-    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
+    /** Botón buscador de la barra: abre la paleta de comandos (#410). El texto de dentro
      * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
      * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»
      * (QA de la ronda 2 de #392). */
     buscar: 'Buscar actividad',
     buscarPista: 'Buscar…',
-    buscarPendiente: 'La búsqueda y la paleta de comandos llegan en LILA-066',
 
     deshacer: 'Deshacer',
     rehacer: 'Rehacer',
@@ -214,8 +209,8 @@ export const es: Strings = {
       estado: 'Barra de estado',
     },
     tituloRegiones: {
-      izquierda: 'Mostrar u ocultar la columna izquierda (Mayús+Tab en el lienzo)',
-      derecha: 'Mostrar u ocultar el panel derecho (Tab en el lienzo)',
+      izquierda: 'Mostrar u ocultar la columna izquierda',
+      derecha: 'Mostrar u ocultar el panel derecho',
       diagramas: 'Mostrar u ocultar las pestañas de diagramas',
       estado: 'Mostrar u ocultar la barra de estado',
     },
@@ -344,6 +339,21 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Cascarón del diálogo de Ajustes (`settings/Ajustes.tsx`, artboard 09, #407)
+   * ------------------------------------------------------------------ */
+  ajustes: {
+    /** Rótulos de la navegación, columna izquierda (`role="tablist"`). */
+    secciones: {
+      general: 'General',
+      apariencia: 'Apariencia',
+      atajos: 'Atajos',
+    },
+    /** Cabeceras de columna de la tabla de Atajos. */
+    accion: 'Acción',
+    tecla: 'Tecla',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Paleta de figuras (`Paleta.tsx`)
    * ------------------------------------------------------------------ */
   paleta: {
@@ -356,6 +366,12 @@ export const es: Strings = {
     pieTecla: 'Enter',
     pieSufijo: ' para insertar',
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
+    comandos: {
+      titulo: 'Paleta de comandos',
+      pista: 'Busca elementos, escenarios, modos y acciones',
+      sinResultados: (consulta: string): string => `Nada coincide con «${consulta}».`,
+      grupos: { elementos: 'Elementos', escenarios: 'Escenarios', modos: 'Modos', acciones: 'Acciones' },
+    },
     grupos: {
       eventos: 'Eventos',
       actividades: 'Actividades',
@@ -912,7 +928,7 @@ export const es: Strings = {
 
     /** Marcador de validación: el disco y su tooltip nativo. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 renombrar · ⇧F6 propiedades',
+    marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} renombrar · ${panel} propiedades`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },
@@ -1066,6 +1082,55 @@ export const es: Strings = {
     sinLog: 'Esta corrida no tiene event log en memoria (viene de un archivo guardado): vuelve a simular para animarla.',
     fin: 'Fin de la replicación.',
     progreso: (porcentaje: number): string => `${porcentaje}% de la replicación`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Mapa de atajos (`atajos.ts`, #413): un rótulo por id de entrada y un título por grupo.
+   * ------------------------------------------------------------------ */
+  atajos: {
+    grupos: {
+      archivo: 'Archivo',
+      buscar: 'Buscar',
+      modos: 'Modos',
+      simulacion: 'Simulación',
+      lienzo: 'Lienzo',
+      paneles: 'Paneles',
+    },
+    nuevo: 'Nuevo proyecto',
+    abrir: 'Abrir proyecto',
+    guardar: 'Guardar proyecto',
+    guardarComo: 'Guardar como',
+    ajustes: 'Ajustes',
+    paleta: 'Paleta de comandos',
+    'modo:modelar': 'Modelar',
+    'modo:simular': 'Simular',
+    'modo:resultados': 'Resultados',
+    'modo:comparar': 'Comparar',
+    'modo:animar': 'Animar',
+    'modo:rutas': 'Validar rutas',
+    ejecutar: 'Ejecutar la simulación',
+    cancelar: 'Cancelar la corrida',
+    zoomMas: 'Acercar',
+    zoomMenos: 'Alejar',
+    ajustarVista: 'Ajustar el diagrama',
+    renombrar: 'Renombrar el elemento seleccionado',
+    deshacer: 'Deshacer',
+    rehacer: 'Rehacer',
+    borrar: 'Borrar la selección',
+    seleccionarTodo: 'Seleccionar todo',
+    copiar: 'Copiar',
+    pegar: 'Pegar',
+    lazo: 'Herramienta lazo',
+    mano: 'Herramienta mano',
+    conectar: 'Herramienta conectar',
+    editarEtiqueta: 'Editar la etiqueta',
+    reemplazar: 'Reemplazar el elemento',
+    izquierda: 'Mostrar u ocultar la columna izquierda',
+    derecha: 'Mostrar u ocultar el panel derecho',
+    diagramas: 'Mostrar u ocultar las pestañas de diagramas',
+    estado: 'Mostrar u ocultar la barra de estado',
+    irModos: 'Llevar el foco a los modos',
+    irPanel: 'Llevar el foco al panel derecho',
   },
 
   /* ------------------------------------------------------------------ *

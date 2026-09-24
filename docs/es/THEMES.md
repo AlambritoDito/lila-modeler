@@ -96,14 +96,23 @@ quedaba con el relleno del tema anterior y la etiqueta con el color del nuevo.
 propio tamaño. A propósito no está en `html`: las medidas en `rem` del CSS se resolverían contra el
 token y los diálogos encogerían al bajar la letra.
 
-## Ajustes → Apariencia (LILA-114)
+## Ajustes → General / Apariencia / Atajos (#407)
 
-`apps/web/src/settings/Apariencia.tsx` es el contenido del diálogo de Ajustes; el `<dialog>` y su
-apertura (⚙, ⌘, y el menú nativo) se quedan en `App.tsx`, que sigue siendo **el único** que llama a
-`applyTheme` y a `Modelador.repintar()`. El componente no aplica ni persiste nada: construye la
-lista nueva de temas del usuario y dice cuál queda activo (`onTemas(lista, seleccion)`), y de ahí
-sale la vista previa —cada cambio válido repinta la app entera, diálogo incluido—. El recuadro de
-muestras (texto, texto apagado, acento) es solo el atajo para no tener que mirar detrás del diálogo.
+`apps/web/src/settings/Ajustes.tsx` es el contenido del diálogo de Ajustes (artboard 09); el
+`<dialog>` y su apertura (⚙, ⌘, y el menú nativo) se quedan en `App.tsx`. Se divide en tres
+secciones detrás de una navegación `role="tablist"` a la izquierda — **General** (idioma,
+densidad), **Apariencia** (el editor de temas, abajo) y **Atajos** (una tabla de solo lectura con
+el mapa de teclado actual) — las tres montadas a la vez y alternadas con `hidden`, no
+desmontadas, así la vista previa en caliente de `Apariencia` sobrevive a cambiar de pestaña y un
+test llega a cualquier control sin tener que pasar antes por la navegación. General es la sección
+con la que arranca el diálogo cada vez que se abre.
+
+`apps/web/src/settings/Apariencia.tsx` es la sección Apariencia; `App.tsx` sigue siendo **el
+único** que llama a `applyTheme` y a `Modelador.repintar()`. El componente no aplica ni persiste
+nada: construye la lista nueva de temas del usuario y dice cuál queda activo
+(`onTemas(lista, seleccion)`), y de ahí sale la vista previa —cada cambio válido repinta la app
+entera, diálogo incluido—. El recuadro de muestras (texto, texto apagado, acento) es solo el
+atajo para no tener que mirar detrás del diálogo.
 
 Los controles:
 
@@ -120,9 +129,9 @@ Los controles:
 - **Editar un tema integrado no lo modifica**: la primera edición sobre Eva-01 crea «Eva-01 (copia)»
   y sigue sobre ella. Se prefirió a un aviso «duplica primero» porque el cambio que el usuario pidió
   ocurre igual y el nombre del tema, que cambia delante de sus ojos, ya cuenta lo que ha pasado.
-- **La densidad sigue siendo una preferencia, no una edición del tema** (LILA-113): se aplica encima
-  de cualquier tema, así que el control de arriba no toca el token `density` del tema que se edita;
-  el token viaja en el JSON exportado tal y como venga del tema de origen.
+- **La densidad vive en la sección General** (LILA-113), no aquí: es una preferencia que se aplica
+  encima de cualquier tema, así que no toca el token `density` del tema que se edita en Apariencia;
+  ese token sigue viajando en el JSON exportado tal y como venga del tema de origen.
 - **Restablecer**: devuelve el tema del usuario a los tokens con los que nació y el integrado a su
   JSON (se vuelve a pedir).
 - **Exportar**: descarga `{ name, tokens }` —exactamente el formato de arriba, sin `id` ni nada de

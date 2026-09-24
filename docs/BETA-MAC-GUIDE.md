@@ -264,7 +264,9 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   them with no dialog; if the folder no longer exists, it drops off the list and the app says so in
   the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Save project**
   (`⌘S`), **Save as…** (`⇧⌘S`), and **Preferences…** (`⌘,`) in the app
-  menu.
+  menu; **View** carries the command palette (`⌘K`) and the six modes (`⌘1`…`⌘6`), and
+  **Simulation** runs the simulation (`⌘↩`). Every shortcut is listed in
+  [Keyboard shortcuts](SHORTCUTS.md).
 
 ### Settings («Ajustes»)
 

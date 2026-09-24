@@ -201,7 +201,11 @@ export interface TemaGuardado {
   readonly origen: { readonly [token: string]: string };
 }
 
-/** Lo que el menú nativo puede pedirle al shell. `openRecent` lleva la carpeta de `listRecents()`. */
+/**
+ * What the native menu can ask of the shell. `openRecent` carries the folder from `listRecents()`;
+ * `atajo` is an id of the shortcut map (`apps/web/src/atajos.ts`, #413), dispatched by the same
+ * handler as the keyboard — unknown ids are ignored.
+ */
 export type MenuAction =
   | 'ajustes'
   | 'acerca'
@@ -211,7 +215,8 @@ export type MenuAction =
   | 'guardar'
   | 'guardarComo'
   | 'guardarComoCarpeta'
-  | { readonly openRecent: string };
+  | { readonly openRecent: string }
+  | { readonly atajo: string };
 
 export interface WriteProjectOptions {
   readonly saveAs?: boolean;

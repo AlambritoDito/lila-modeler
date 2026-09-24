@@ -21,6 +21,7 @@ import { en as T } from './strings.en';
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
 import { version } from '../package.json';
+import { atajoPorId, etiqueta, type AtajoId } from './atajos';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
   // #420: the scenario map the panel last received, to see what the seeding wrote.
@@ -42,16 +43,37 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   retrasarLienzo: false, listo: (() => {}) as () => void,
   // LILA-207: los servicios que la paleta usa para insertar una figura.
   fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
+  // #413: what the canvas has selected, for F2.
+  seleccionados: [] as unknown[],
   // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
   // callback para poder empujar un estado de lienzo concreto desde los tests.
-  publicarEstado: (_estado: unknown) => {} }));
+  publicarEstado: (_estado: unknown) => {},
+  // #410: the command palette focuses the canvas after picking an element.
+  enfocar: vi.fn() }));
+/**
+ * The canvas elements the command palette lists (#410), with no box, so the shape palette's
+ * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
+ * a lane, a named and an unnamed flow, an annotation, and two roots (no parent) that must stay
+ * out: the process and a collapsed sub-process's plane (QA of #438).
+ */
+const ELEMENTOS = [
+  { id: 'Task_1', type: 'bpmn:UserTask', parent: 'raiz', businessObject: { name: 'Revisar' } },
+  { id: 'Task_2', type: 'bpmn:Task', parent: 'raiz', businessObject: { name: 'Enviar' } },
+  { id: 'Gateway_1', type: 'bpmn:ExclusiveGateway', parent: 'raiz', businessObject: { name: 'Aprobado' } },
+  { id: 'Lane_1', type: 'bpmn:Lane', parent: 'raiz', businessObject: { name: 'Ventas' } },
+  { id: 'Flow_1', type: 'bpmn:SequenceFlow', parent: 'raiz', waypoints: [], businessObject: { name: 'Sí' } },
+  { id: 'Flow_2', type: 'bpmn:SequenceFlow', parent: 'raiz', waypoints: [], businessObject: {} },
+  { id: 'Ann_1', type: 'bpmn:TextAnnotation', parent: 'raiz', businessObject: { text: 'Llamar al cliente' } },
+  { id: 'Process_1', type: 'bpmn:Process', businessObject: { name: 'Raíz' } },
+  { id: 'Sub_1_plane', type: 'bpmn:SubProcess', businessObject: { name: 'Plano' } },
+];
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 // Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
-vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
 // Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
 vi.mock('./replay/Replay', () => ({ Replay: () => null }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
@@ -67,7 +89,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar,
-    validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens,
+    validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
     servicios: {
@@ -76,9 +98,10 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre },
+      selection: { get: () => mocks.seleccionados },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
-      elementRegistry: { filter: () => [] },
+      elementRegistry: { filter: (prueba: (el: object) => boolean) => ELEMENTOS.filter(prueba) },
       rules: { allowed: () => true },
     },
   } as unknown as Modelador); if (!mocks.retrasarLienzo) mocks.listo(); }, [onListo]);
@@ -116,6 +139,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
+  mocks.seleccionados = [];
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   // LILA-381: «Acerca de» cierra Ajustes con `close()` antes de abrir su propio diálogo; jsdom no
   // implementa ese método tampoco (mismo motivo que `showModal` arriba).
@@ -740,6 +764,10 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   expect(session.saveProject).not.toHaveBeenCalled();
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
   expect(dialog.open).toBe(true);
+  // #413: no shortcut reaches what is behind an open dialog.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
+  expect(session.saveProject).not.toHaveBeenCalled();
+  await act(async () => dialog.close());
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
@@ -883,6 +911,23 @@ it('«brito» closes the About window and plays the karaoke in the main window; 
     // With the karaoke gone, the menu opens About again.
     await act(async () => { menu('acerca'); });
     expect(v.acerca()).not.toBeNull();
+  } finally { vi.useRealTimers(); v.quitar(); }
+});
+it('no shortcut reaches the inert app behind the karaoke (QA of #436, N1)', async () => {
+  const v = ventanaAcercaFalsa();
+  vi.useFakeTimers();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(6);
+    await v.enviarClave('brito');
+    expect(document.querySelector('.karaoke')).not.toBeNull();
+    await pulsar(document.body, { key: 'P', metaKey: true, shiftKey: true });
+    expect(conClase('sin-panel')).toBe(false);
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('.karaoke')).toBeNull();
+    // Control: with the karaoke gone the same key works.
+    await pulsar(document.body, { key: 'P', metaKey: true, shiftKey: true });
+    expect(conClase('sin-panel')).toBe(true);
   } finally { vi.useRealTimers(); v.quitar(); }
 });
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
@@ -1515,32 +1560,135 @@ it('with the desktop bridge the panel map and the left widths go through Ajustes
   expect(localStorage.getItem('lila.paneles')).toBeNull();
 });
 
-it('Tab and Shift+Tab toggle the right panel and the left column only from the canvas (#412)', async () => {
-  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(true);
-  expect(conClase('sin-panel')).toBe(true);
-  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
-  expect(conClase('sin-izquierda')).toBe(true);
-  await pulsar(svgLienzo(), { key: 'Tab' });
-  await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true });
-  expect(conClase('sin-panel') || conClase('sin-izquierda')).toBe(false);
+/** A ⌘/Ctrl key (jsdom is not a Mac: the labels read `Ctrl+…`, and both modifiers match). */
+const mod = (key: string, extra: KeyboardEventInit = {}): KeyboardEventInit => ({ key, metaKey: true, ...extra });
 
-  const nada = async (destino: EventTarget, init: KeyboardEventInit = {}) => {
-    expect(await pulsar(destino, { key: 'Tab', ...init })).toBe(false);
-    expect(conClase('sin-panel')).toBe(false);
-  };
-  await nada(document.body);
-  await nada(selectIdioma());
-  await nada(porEtiqueta(T.app.deshacer));
-  await nada(container.querySelector('.djs-direct-editing-parent')!);
-  await nada(svgLienzo(), { repeat: true });
-  await nada(svgLienzo(), { metaKey: true });
-  await nada(svgLienzo(), { ctrlKey: true });
+it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#413)', async () => {
+  const casos: [string, string][] = [['L', 'sin-izquierda'], ['P', 'sin-panel'], ['D', 'sin-diagramas'], ['B', 'sin-estado']];
+  for (const [key, clase] of casos) {
+    expect(await pulsar(document.body, mod(key, { shiftKey: true })), key).toBe(true);
+    expect(conClase(clase), key).toBe(true);
+    expect(await pulsar(svgLienzo(), { key, ctrlKey: true, shiftKey: true }), key).toBe(true);
+    expect(conClase(clase), key).toBe(false);
+  }
+  // Without Shift, ⌘P / ⌘D / ⌘B are not ours.
+  expect(await pulsar(document.body, mod('p'))).toBe(false);
+});
+
+it('on the web ⌘1…⌘6 / Ctrl+1…6 stay the browser\'s: no mode change, nothing prevented (#413)', async () => {
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(await pulsar(document.body, { key: '1', code: 'Digit1', ctrlKey: true })).toBe(false);
+  expect(await pulsar(svgLienzo(), mod('3', { code: 'Digit3' }))).toBe(false);
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+});
+
+it('Tab on the canvas no longer toggles anything: it moves the focus again (#413, was #412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(false);
+  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
+  expect([...appEl().classList].filter((c) => c.startsWith('sin-'))).toEqual([]);
+});
+
+it('F2 renames the one selected element, not from a field and not with several selected (#413)', async () => {
+  mocks.seleccionados = [{ id: 'Task_1' }];
+  expect(await pulsar(svgLienzo(), { key: 'F2' })).toBe(true);
+  expect(mocks.editarNombre).toHaveBeenCalledExactlyOnceWith({ id: 'Task_1' });
+  await pulsar(selectIdioma(), { key: 'F2' });
+  await pulsar(container.querySelector('.djs-direct-editing-parent')!, { key: 'F2' });
+  mocks.seleccionados = [{ id: 'Task_1' }, { id: 'Task_2' }];
+  await pulsar(svgLienzo(), { key: 'F2' });
+  expect(mocks.editarNombre).toHaveBeenCalledOnce();
+});
+
+it('⌘↩ runs the simulation, not while Settings is open; Esc cancels only a run in flight (#413)', async () => {
+  expect(await pulsar(document.body, { key: 'Escape' })).toBe(false);
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => dialog.showModal());
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.gate).not.toHaveBeenCalled();
+  await act(async () => dialog.close());
+
+  mocks.worker.mockReturnValueOnce(new Promise(() => {}));
+  expect(await pulsar(svgLienzo(), mod('Enter'))).toBe(true);
+  await act(async () => {});
+  expect(mocks.worker).toHaveBeenCalledOnce();
+  const { signal } = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
+  // A second ⌘↩ while it runs does not restart it: the Run button is not there either.
+  await pulsar(document.body, mod('Enter'));
+  expect(signal.aborted).toBe(false);
+  // Esc typed in a field is typing, not a cancel.
+  await pulsar(selectIdioma(), { key: 'Escape' });
+  expect(signal.aborted).toBe(false);
+  expect(await pulsar(document.body, { key: 'Escape' })).toBe(true);
+  expect(signal.aborted).toBe(true);
+  expect(container.querySelector('.boton.cancelar')).toBeNull();
+});
+
+it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {
+  const lienzoVe = vi.fn();
+  svgLienzo().addEventListener('keydown', lienzoVe);
+  expect(await pulsar(svgLienzo(), mod('0'))).toBe(true);
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
+  await pulsar(svgLienzo(), mod('+', { shiftKey: true }));
+  await pulsar(svgLienzo(), mod('-'));
+  expect(mocks.zoom.mock.calls).toEqual([[1.2], [1 / 1.2]]);
+  expect(lienzoVe).not.toHaveBeenCalled();
+  // bpmn-js's own keys (⌘Z, ⌘A…) are left alone.
+  expect(await pulsar(svgLienzo(), mod('z'))).toBe(false);
+  expect(lienzoVe).toHaveBeenCalledOnce();
+});
+
+it('a held shortcut runs once and every repeat stays swallowed; zoom repeats (QA of #436, M1)', async () => {
+  expect(await pulsar(document.body, mod('s'))).toBe(true);
+  for (let i = 0; i < 3; i += 1) expect(await pulsar(document.body, mod('s', { repeat: true })), `repeat ${i}`).toBe(true);
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(await pulsar(document.body, mod('B', { shiftKey: true }))).toBe(true);
+  expect(await pulsar(document.body, mod('B', { shiftKey: true, repeat: true }))).toBe(true);
+  expect(conClase('sin-estado')).toBe(true);
+  await pulsar(svgLienzo(), mod('+'));
+  expect(await pulsar(svgLienzo(), mod('+', { repeat: true }))).toBe(true);
+  expect(mocks.zoom).toHaveBeenCalledTimes(2);
+});
+
+it('Esc that closes an open bar dropdown does not cancel the run (QA of #436, M2)', async () => {
+  mocks.worker.mockReturnValueOnce(new Promise(() => {}));
+  await pulsar(document.body, mod('Enter'));
+  await act(async () => {});
+  const { signal } = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
+  const menu = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  menu.open = true;
+  await pulsar(menu.querySelector('summary')!, { key: 'Escape' });
+  expect(menu.open).toBe(false);
+  expect(signal.aborted).toBe(false);
+  // With the dropdown closed, Esc cancels again.
+  await pulsar(document.body, { key: 'Escape' });
+  expect(signal.aborted).toBe(true);
+});
+
+it('in Results and Compare the hidden canvas keys go back to the browser (QA of #436, S1)', async () => {
+  for (const m of [T.app.modos.resultados, T.app.modos.comparar]) {
+    await click(m);
+    expect(await pulsar(document.body, mod('0')), m).toBe(false);
+    expect(await pulsar(document.body, mod('+')), m).toBe(false);
+  }
+  expect(mocks.ajustar).not.toHaveBeenCalled();
+  expect(mocks.zoom).not.toHaveBeenCalled();
   await click(T.app.modos.modelar);
-  await nada(container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!);
-  // Not while a dialog is open.
-  await act(async () => porEtiqueta(T.app.ajustes).click());
-  expect(container.querySelector('dialog.ajustes[open]')).not.toBeNull();
-  await nada(svgLienzo());
+  expect(await pulsar(document.body, mod('0'))).toBe(true);
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
+});
+
+it('tooltips carry the key from the map; the browser-kept ones stay quiet on the web (#413)', async () => {
+  const titulo = (texto: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === texto)!.title;
+  const tecla = (id: AtajoId) => `(${etiqueta(atajoPorId(id), false)})`;
+  expect(titulo(T.app.guardar)).toContain(tecla('guardar'));
+  expect(titulo(T.app.guardarComo)).toContain(tecla('guardarComo'));
+  expect(container.querySelector<HTMLButtonElement>('.boton.ejecutar')!.title).toContain(tecla('ejecutar'));
+  for (const r of ['izquierda', 'derecha', 'diagramas', 'estado'] as const) {
+    expect(toggleDe(r).title, r).toContain(tecla(r));
+    expect(itemVista(r).title, r).toContain(tecla(r));
+  }
+  expect(titulo(T.app.nuevo)).toBe(T.app.tituloNuevo);
+  expect(porEtiqueta(T.app.ajustes).title).toBe(T.app.ajustes);
 });
 
 it('F6 goes to the modes and Shift+F6 to the right panel or its toggle, the way out of the canvas (#412)', async () => {
@@ -1624,7 +1772,7 @@ it('a hidden status bar comes back for an error, while its toggle keeps the save
     expect(container.querySelector('footer.estado [role="alert"]')!.textContent).toBe(T.app.ventanaBloqueada);
     // The toggle shows the preference (hidden), and says why the bar is there anyway.
     expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('false');
-    expect(toggleDe('estado').title).toBe(T.app.tituloEstadoForzado);
+    expect(toggleDe('estado').title).toBe(`${T.app.tituloEstadoForzado} (${etiqueta(atajoPorId('estado'), false)})`);
     // Pressing it is not dead: it records «shown»…
     await act(async () => toggleDe('estado').click());
     expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
@@ -1643,7 +1791,7 @@ it('import warnings do not pin the status bar: they are not errors (QA of #429)'
   await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 3, avisos: 2, perdidas: [], refsRotas: [], error: null }); });
   expect(container.querySelector('footer.estado')!.textContent).toContain(T.app.avisosAlImportar(2));
   expect(conClase('sin-estado')).toBe(true);
-  expect(toggleDe('estado').title).toBe(T.app.tituloRegiones.estado);
+  expect(toggleDe('estado').title).toBe(`${T.app.tituloRegiones.estado} (${etiqueta(atajoPorId('estado'), false)})`);
 });
 
 it('Escape in the View menu closes it and gives the focus back to its button (QA of #429)', async () => {
@@ -1754,8 +1902,8 @@ it('saved left widths are clamped, blank means never saved; no left divider with
     expect(container.querySelector('.divisor-izquierdo')).toBeNull();
     expect(toggleDe('izquierda').disabled).toBe(true);
     expect(toggleDe('izquierda').getAttribute('aria-pressed')).toBe('false');
-    // Nothing to toggle: Shift+Tab falls through and keeps moving the focus backwards.
-    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
+    // Nothing to toggle: ⌘⇧L does nothing.
+    await pulsar(svgLienzo(), mod('L', { shiftKey: true }));
     expect(conClase('sin-izquierda')).toBe(false);
   }
 });
@@ -2143,15 +2291,17 @@ it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice
   }
 });
 
-it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni Ajustes (QA de #391)', async () => {
+it('desde la ventana desacoplada solo llegan Guardar, Guardar como y ⌘K, no Abrir ni Ajustes (QA de #391, #413)', async () => {
   const marco = document.createElement('iframe');
   document.body.append(marco);
   const hijo = marco.contentWindow!;
   vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
-  const tecla = (key: string) => act(async () => {
-    hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
-  });
+  const tecla = async (key: string): Promise<boolean> => {
+    const e = new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true });
+    await act(async () => { hijo.dispatchEvent(e); });
+    return e.defaultPrevented;
+  };
   try {
     await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Open would click the main page's file input with the popup's activation: the browser never
@@ -2165,6 +2315,9 @@ it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni
     expect(container.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(false);
     await tecla('s');
     expect(session.saveProject).toHaveBeenCalledOnce();
+    // #413: the command palette is forwarded (taken from the popup), Open is not.
+    expect(await tecla('k')).toBe(true);
+    expect(await tecla('o')).toBe(false);
   } finally {
     abrir.mockRestore();
     marco.remove();
@@ -2297,4 +2450,265 @@ it('opening a project with unconfigured tasks does not modify its scenarios (#42
   await click(T.app.modos.simular);
   expect(container.textContent).toContain('Abierto');
   expect(asIs()).toEqual({});
+});
+
+// ---------- Settings dialog: General / Appearance / Shortcuts sections (#407) ----------
+
+/** A `role="tab"` button of the Settings nav, by its visible label. */
+function pestanaAjustes(etiqueta: string): HTMLButtonElement {
+  const b = [...container.querySelectorAll<HTMLButtonElement>('dialog.ajustes [role="tab"]')].find((x) => x.textContent === etiqueta);
+  expect(b, etiqueta).toBeDefined();
+  return b!;
+}
+function panelAjustes(id: 'general' | 'apariencia' | 'atajos'): HTMLElement {
+  return container.querySelector<HTMLElement>(`#ajustes-panel-${id}`)!;
+}
+
+it('the three tabs of Settings swap the visible panel, General first (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  // General is the section Settings always opens on.
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('general').hidden).toBe(false);
+  expect(panelAjustes('apariencia').hidden).toBe(true);
+  expect(panelAjustes('atajos').hidden).toBe(true);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
+  expect(pestanaAjustes(T.ajustes.secciones.apariencia).getAttribute('aria-selected')).toBe('true');
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('false');
+  expect(panelAjustes('general').hidden).toBe(true);
+  expect(panelAjustes('apariencia').hidden).toBe(false);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(pestanaAjustes(T.ajustes.secciones.atajos).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('apariencia').hidden).toBe(true);
+  expect(panelAjustes('atajos').hidden).toBe(false);
+  // Hidden, not unmounted: the theme selector is still in the DOM under the panel that just hid.
+  expect(selectTema()).not.toBeNull();
+});
+
+it('language and density keep working from the General section, and density stays there (#407, QA nit N4)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  const idioma = selectIdioma();
+  await act(async () => { idioma.value = 'es'; idioma.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(container.querySelector('dialog.ajustes')!.textContent).toContain(ES.app.ajustes);
+
+  // Scoped to `#ajustes-panel-general`, not just `dialog.ajustes`: a query against the whole
+  // dialog would still find the control even if density moved to another panel, and would not
+  // catch that regression (QA of #407, N4). The label reads in Spanish now that the language
+  // above switched.
+  const densidad = panelAjustes('general').querySelector<HTMLSelectElement>(`select[aria-label="${ES.app.densidad}"]`)!;
+  expect(densidad).not.toBeNull();
+  await act(async () => { densidad.value = 'compacta'; densidad.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
+});
+
+it('Appearance still shows the theme selector with its optgroup (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
+  expect(selectTema()).not.toBeNull();
+  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+});
+
+it('Close is still the last button of the dialog and About sits in the header, from every tab (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  const ultimo = () => [...container.querySelectorAll('dialog.ajustes button')].at(-1)!;
+  expect(ultimo().textContent).toBe(T.app.cerrar);
+  expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(ultimo().textContent).toBe(T.app.cerrar);
+  expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
+});
+
+// ---------- Command palette, ⌘K (#410) ----------
+
+const paleta = () => container.querySelector<HTMLDialogElement>('dialog.paleta-comandos');
+const campoPaleta = () => paleta()!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+const opciones = () => [...paleta()!.querySelectorAll('[role="option"]')].map((o) => o.querySelector('.nombre')!.textContent);
+const modoActivo = () => container.querySelector('.modo.activo')!.textContent;
+async function abrirConTeclado(init: KeyboardEventInit = { metaKey: true }): Promise<void> {
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', cancelable: true, ...init })); });
+}
+async function escribir(texto: string): Promise<void> {
+  const campo = campoPaleta();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(campo, texto);
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+async function teclaPaleta(key: string): Promise<void> {
+  await act(async () => { campoPaleta().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+}
+
+it('⌘K finds an element by name; ↓ Enter selects and centres it, focuses the canvas and leaves Results for Model (#410)', async () => {
+  await click(T.app.modos.resultados);
+  await abrirConTeclado();
+  expect(paleta()?.open).toBe(true);
+  expect(document.activeElement).toBe(campoPaleta());
+  await escribir('rev');
+  expect(opciones()).toEqual(['Revisar']);
+  const fila = paleta()!.querySelector('[role="option"]')!;
+  expect(campoPaleta().getAttribute('aria-activedescendant')).toBe(fila.id);
+  // One row: ↓ wraps around to it.
+  await teclaPaleta('ArrowDown');
+  await teclaPaleta('Enter');
+  expect(paleta()).toBeNull();
+  expect(mocks.seleccionar).toHaveBeenCalledWith('Task_1', { centrar: true });
+  expect(mocks.enfocar).toHaveBeenCalled();
+  expect(modoActivo()).toBe(T.app.modos.modelar);
+});
+
+it('the palette lists no elements with an empty query, and picks a scenario, a mode or an action (#410)', async () => {
+  await abrirConTeclado({ ctrlKey: true });
+  expect(opciones()).not.toContain('Revisar');
+  expect(opciones()).toEqual(expect.arrayContaining(['AS-IS', 'TO-BE 3 cashiers', T.app.modos.comparar, T.atajos.guardar]));
+  await escribir('to-be');
+  await teclaPaleta('Enter');
+  expect(container.querySelector('footer.estado')!.textContent).toContain('TO-BE 3 cashiers');
+  expect(modoActivo()).toBe(T.app.modos.simular);
+
+  await abrirConTeclado();
+  await escribir(T.app.modos.comparar);
+  await teclaPaleta('Enter');
+  expect(modoActivo()).toBe(T.app.modos.comparar);
+
+  await abrirConTeclado();
+  await escribir(T.atajos.guardar);
+  expect(opciones()[0]).toBe(T.atajos.guardar);
+  await teclaPaleta('Enter');
+  expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+it('Esc closes the palette and gives the focus back; the bar button opens it; not over Settings (#410)', async () => {
+  const engranaje = porEtiqueta(T.app.ajustes);
+  engranaje.focus();
+  await abrirConTeclado();
+  await teclaPaleta('ArrowUp');
+  await teclaPaleta('Escape');
+  expect(paleta()).toBeNull();
+  expect(document.activeElement).toBe(engranaje);
+
+  await act(async () => container.querySelector<HTMLButtonElement>('.buscador-boton')!.click());
+  expect(paleta()?.open).toBe(true);
+  await teclaPaleta('Escape');
+
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  await abrirConTeclado();
+  expect(paleta()).toBeNull();
+});
+
+it('in the browser ⌘K from the detached window opens nothing: the main window cannot take the focus (#410, QA of #438)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const enfocarPrincipal = vi.spyOn(window, 'focus').mockImplementation(() => {});
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    await act(async () => {
+      hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }));
+    });
+    expect(paleta()).toBeNull();
+    expect(enfocarPrincipal).not.toHaveBeenCalled();
+  } finally {
+    abrir.mockRestore();
+    enfocarPrincipal.mockRestore();
+    marco.remove();
+  }
+});
+
+// ---------- Seams of Lote C: the map feeds Settings → Shortcuts and the palette ----------
+
+it('Settings → Shortcuts lists every entry of the map the web app announces, with this platform\'s keys', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  const texto = panelAjustes('atajos').textContent!;
+  // jsdom reports no platform, so the keys print as Ctrl+…; ⌘N and the modes stay desktop-only.
+  expect(texto).toContain(T.atajos.derecha);
+  expect(texto).toContain('Ctrl+Shift+P');
+  expect(texto).toContain(T.atajos.deshacer);
+  expect(texto).not.toContain(T.atajos['modo:simular']);
+  expect(texto).not.toContain(T.atajos.nuevo);
+});
+
+it('the palette\'s actions are the map\'s entries, labelled with their keys, and run the same handlers', async () => {
+  await abrirConTeclado();
+  await escribir(T.atajos.derecha);
+  const fila = paleta()!.querySelector('[role="option"]')!;
+  expect(fila.querySelector('.nombre')!.textContent).toBe(T.atajos.derecha);
+  expect(fila.querySelector('kbd')!.textContent).toBe('Ctrl+Shift+P');
+  await teclaPaleta('Enter');
+  expect(container.querySelector('.app')!.classList.contains('sin-panel')).toBe(true);
+});
+
+it('Settings resets to General when the dialog closes, whichever way it closes (#407, QA must-fix S4)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(panelAjustes('atajos').hidden).toBe(false);
+
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  // jsdom's `close()` stub (above, LILA-381) only flips `.open`; a real `<dialog>` also dispatches
+  // a `close` event on every closing path — Esc, the form's own `method="dialog"` submit, and
+  // `cerrarDialogo()` alike — which is what `Ajustes.tsx`'s listener reacts to. Dispatching it here
+  // exercises that listener the way any of those three paths would in a real browser.
+  await act(async () => { dialog.close(); dialog.dispatchEvent(new Event('close')); });
+  expect(dialog.open).toBe(false);
+
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('general').hidden).toBe(false);
+  expect(panelAjustes('atajos').hidden).toBe(true);
+});
+
+it('roots, labels and unnamed flows stay out; lanes, flows and annotations are found by type or text in Spanish (#410, QA of #438)', async () => {
+  localStorage.setItem('lila.idioma', 'es');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await abrirConTeclado();
+  await escribir('carril');
+  expect(opciones()).toEqual(['Ventas']);
+  await escribir('flujo');
+  expect(opciones()).toEqual(['Sí']);
+  await escribir('llamar');
+  expect(opciones()).toEqual(['Llamar al cliente']);
+  for (const fuera of ['raíz', 'plano', 'flow_2']) {
+    await escribir(fuera);
+    expect(opciones(), fuera).toEqual([]);
+  }
+});
+
+it('↑ from the first row wraps to the last and ↓ back to the first; a click picks a row (#410)', async () => {
+  await abrirConTeclado();
+  const filas = () => [...paleta()!.querySelectorAll('[role="option"]')];
+  const activa = () => campoPaleta().getAttribute('aria-activedescendant');
+  expect(activa()).toBe(filas()[0]!.id);
+  await teclaPaleta('ArrowUp');
+  expect(activa()).toBe(filas().at(-1)!.id);
+  expect(filas().at(-1)!.getAttribute('aria-selected')).toBe('true');
+  await teclaPaleta('ArrowDown');
+  expect(activa()).toBe(filas()[0]!.id);
+  const comparar = filas().find((f) => f.querySelector('.nombre')!.textContent === T.app.modos.comparar)!;
+  await act(async () => { (comparar as HTMLElement).click(); });
+  expect(paleta()).toBeNull();
+  expect(modoActivo()).toBe(T.app.modos.comparar);
+});
+
+it('Enter that confirms an IME composition does not pick a row (#410)', async () => {
+  await abrirConTeclado();
+  await act(async () => { campoPaleta().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true })); });
+  expect(paleta()?.open).toBe(true);
+});
+
+it('the palette does not open while a file operation holds the app (#410, QA of #438)', async () => {
+  const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
+  await click(T.app.abrir);
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(true);
+  await abrirConTeclado();
+  await act(async () => container.querySelector<HTMLButtonElement>('.buscador-boton')!.click());
+  expect(paleta()).toBeNull();
+  await act(async () => pending.resolve(null));
+  await abrirConTeclado();
+  expect(paleta()?.open).toBe(true);
 });

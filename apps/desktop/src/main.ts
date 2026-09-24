@@ -335,7 +335,11 @@ function refreshMenu(): void {
     sessionState.recents,
     process.platform,
     (action) => {
-      if (win !== null && !win.isDestroyed()) win.webContents.send('lila:menu', action);
+      if (win === null || win.isDestroyed()) return;
+      // The palette (#410) lives in the main window: an accelerator pressed in the detached
+      // scenario window would open it behind that window (seams QA of #439).
+      if (typeof action === 'object' && 'atajo' in action && action.atajo === 'paleta') win.focus();
+      win.webContents.send('lila:menu', action);
     },
     strings(),
   );

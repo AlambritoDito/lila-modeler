@@ -87,6 +87,17 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       // LILA-317: tampoco existía antes — «Guardar como…» pasó a crear un `.lila` y la carpeta
       // necesitaba su propia entrada.
       guardarComoCarpeta: 'Guardar como carpeta…',
+      // #413: the View and Simulation menus are new, the app's own instead of Electron's role.
+      vista: 'Vista',
+      paleta: 'Paleta de comandos',
+      modoModelar: 'Modelar',
+      modoSimular: 'Simular',
+      modoResultados: 'Resultados',
+      modoComparar: 'Comparar',
+      modoAnimar: 'Animar',
+      modoRutas: 'Validar rutas',
+      simulacion: 'Simulación',
+      ejecutar: 'Ejecutar la simulación',
     });
     expect(es.cierre).toEqual({
       guardar: 'Guardar',

@@ -64,7 +64,6 @@ function Banco(): React.JSX.Element {
   const [temaId, setTemaId] = useState('eva-01');
   const [tema, setTema] = useState<Theme>(EVA);
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
-  const [densidad, setDensidad] = useState('normal');
   function seleccionar(id: string, lista: readonly TemaGuardado[]): void {
     // '' ("no theme saved", #422 QA S1) resolves to the system rule for applying/displaying, same
     // as `App.tsx`'s `seleccionarTema`; what gets tracked as "saved" (`temaGuardado`, below) stays
@@ -82,8 +81,6 @@ function Banco(): React.JSX.Element {
       temaId={temaId}
       tema={tema}
       temas={temas}
-      densidad={densidad}
-      onDensidad={setDensidad}
       onTemas={(lista, seleccion = temaId) => { guardado = lista; setTemas(lista); seleccionar(seleccion, lista); }}
       onSeleccionar={(id) => seleccionar(id, temas)}
     />

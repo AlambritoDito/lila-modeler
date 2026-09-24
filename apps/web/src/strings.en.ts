@@ -77,10 +77,6 @@ export const en = {
     densidadNombre: (id: string): string =>
       ({ compacta: 'Compact', normal: 'Normal', comoda: 'Comfortable' })[id] ?? id,
 
-    /** Shortcut in parentheses after the tooltip: `⌘S` on Mac, `Ctrl+S` everywhere else. */
-    atajo: (letra: string, shift: boolean, mac: boolean): string =>
-      mac ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`,
-
     /** Default name of a new project and of the one the app ships with. */
     proyectoNuevo: 'My project',
     proyectoDemo: 'Sample order',
@@ -121,10 +117,9 @@ export const en = {
       guardarComoCarpeta: 'Save as folder…',
     },
 
-    /** Inert search box of the bar (the command palette is another ticket). */
+    /** The bar's search button: it opens the command palette (#410). */
     buscar: 'Search activity',
     buscarPista: 'Search activity…',
-    buscarPendiente: 'Search and the command palette arrive in LILA-066',
 
     deshacer: 'Undo',
     rehacer: 'Redo',
@@ -233,8 +228,8 @@ export const en = {
       estado: 'Status bar',
     },
     tituloRegiones: {
-      izquierda: 'Show or hide the left column (Shift+Tab on the canvas)',
-      derecha: 'Show or hide the right panel (Tab on the canvas)',
+      izquierda: 'Show or hide the left column',
+      derecha: 'Show or hide the right panel',
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
     },
@@ -361,6 +356,21 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Settings dialog shell (`settings/Ajustes.tsx`, artboard 09, #407)
+   * ------------------------------------------------------------------ */
+  ajustes: {
+    /** Nav tab labels, left column (`role="tablist"`). */
+    secciones: {
+      general: 'General',
+      apariencia: 'Appearance',
+      atajos: 'Shortcuts',
+    },
+    /** Column headers of the Shortcuts table. */
+    accion: 'Action',
+    tecla: 'Key',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Shape palette (`Paleta.tsx`)
    * ------------------------------------------------------------------ */
   paleta: {
@@ -373,6 +383,13 @@ export const en = {
     pieTecla: 'Enter',
     pieSufijo: ' to insert',
     sinCoincidencias: (filtro: string): string => `No shape matches «${filtro}».`,
+    /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */
+    comandos: {
+      titulo: 'Command palette',
+      pista: 'Search elements, scenarios, modes and actions',
+      sinResultados: (consulta: string): string => `Nothing matches «${consulta}».`,
+      grupos: { elementos: 'Elements', escenarios: 'Scenarios', modos: 'Modes', acciones: 'Actions' },
+    },
     grupos: {
       eventos: 'Events',
       actividades: 'Activities',
@@ -964,7 +981,8 @@ export const en = {
 
     /** Validation marker: the disc and its native tooltip. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 rename · ⇧F6 properties',
+    /** The two keys come from the shortcut map (`atajos.ts`), formatted for the platform. */
+    marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} rename · ${panel} properties`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },
@@ -1082,6 +1100,56 @@ export const en = {
     sinLog: 'This run has no event log in memory (it came from a saved file): run the simulation again to animate it.',
     fin: 'End of the replication.',
     progreso: (porcentaje: number): string => `${porcentaje}% of the replication`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Shortcut map (`atajos.ts`, #413): one label per entry id, and one title per group. The keys
+   * themselves are not text: `etiqueta()` formats them per platform.
+   * ------------------------------------------------------------------ */
+  atajos: {
+    grupos: {
+      archivo: 'File',
+      buscar: 'Search',
+      modos: 'Modes',
+      simulacion: 'Simulation',
+      lienzo: 'Canvas',
+      paneles: 'Panels',
+    },
+    nuevo: 'New project',
+    abrir: 'Open project',
+    guardar: 'Save project',
+    guardarComo: 'Save as',
+    ajustes: 'Settings',
+    paleta: 'Command palette',
+    'modo:modelar': 'Model',
+    'modo:simular': 'Simulate',
+    'modo:resultados': 'Results',
+    'modo:comparar': 'Compare',
+    'modo:animar': 'Animate',
+    'modo:rutas': 'Validate paths',
+    ejecutar: 'Run simulation',
+    cancelar: 'Cancel the run',
+    zoomMas: 'Zoom in',
+    zoomMenos: 'Zoom out',
+    ajustarVista: 'Fit the diagram',
+    renombrar: 'Rename the selected element',
+    deshacer: 'Undo',
+    rehacer: 'Redo',
+    borrar: 'Delete the selection',
+    seleccionarTodo: 'Select all',
+    copiar: 'Copy',
+    pegar: 'Paste',
+    lazo: 'Lasso tool',
+    mano: 'Hand tool',
+    conectar: 'Connect tool',
+    editarEtiqueta: 'Edit the label',
+    reemplazar: 'Replace the element',
+    izquierda: 'Show or hide the left column',
+    derecha: 'Show or hide the right panel',
+    diagramas: 'Show or hide the diagram tabs',
+    estado: 'Show or hide the status bar',
+    irModos: 'Move the focus to the modes',
+    irPanel: 'Move the focus to the right panel',
   },
 
   /* ------------------------------------------------------------------ *

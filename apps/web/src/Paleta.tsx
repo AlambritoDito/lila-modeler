@@ -149,7 +149,7 @@ export function iconoDeTipo(tipo: string, eventDefinitionType?: string): string 
 }
 
 /** Compara sin acentos ni mayúsculas: «anotacion» encuentra «Anotación». */
-function normalizar(texto: string): string {
+export function normalizar(texto: string): string {
   return texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
