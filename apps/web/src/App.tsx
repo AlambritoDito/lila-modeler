@@ -36,7 +36,9 @@ import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
 import { temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
-import { Apariencia } from './settings/Apariencia';
+// Aliased: `Ajustes` above is already the bridge's settings-payload type (`readSettings`/
+// `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
+import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
@@ -1564,43 +1566,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
-        {/* Enter dentro de un campo de texto enviaba el formulario, o sea cerraba el diálogo en
-            mitad de teclear un hex o un nombre (QA de #277). El botón «Cerrar» sigue funcionando
-            con Enter porque ahí el objetivo es el botón, no un `<input>`. */}
-        <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
-          {/* «Acerca de Lila Modeler» vive en el encabezado, no al final (pedido del dueño,
-              2026-09-22): con los grupos de Apariencia colapsados de fábrica el diálogo ya no
-              hace scroll de por sí, pero el botón tiene que verse sin tocar nada igualmente —
-              alguien pudo haber dejado un grupo abierto antes de volver a entrar aquí. */}
-          <div className="ajustes-encabezado">
-            <h2 id="ajustes-titulo">{S.app.ajustes}</h2>
-            <button type="button" className="boton" onClick={() => { ajustesDialog.current?.close(); abrirAcerca(); }}>{S.app.acercaDe}</button>
-          </div>
-          {/* El idioma va antes que la apariencia porque cambia el resto del diálogo: quien lo
-              toca ve al momento en qué idioma queda todo lo demás. «Predeterminado del sistema»
-              se traduce; los dos idiomas se nombran en el suyo (endónimos), que es lo que deja
-              elegir el propio a quien no entiende el que está puesto. */}
-          <h3>{S.app.idioma}</h3>
-          <label className="campo idioma">
-            <select aria-label={S.app.idioma} autoFocus value={idioma} onChange={(e) => cambiarIdioma(e.target.value as Preferencia)}>
-              <option value="auto">{S.app.idiomaAuto}</option>
-              {LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
-            </select>
-          </label>
-          <h3>{S.app.apariencia}</h3>
-          <Apariencia
-            temaId={temaId}
-            tema={tema ?? null}
-            temas={temas}
-            densidad={densidad}
-            onDensidad={(d) => setDensidad(d as Densidad)}
-            onTemas={guardarTemas}
-            onSeleccionar={(id) => void seleccionarTema(id)}
-          />
-          <div className="acciones">
-            <button className="boton primario">{S.app.cerrar}</button>
-          </div>
-        </form>
+        <AjustesDialogo
+          idioma={idioma}
+          cambiarIdioma={cambiarIdioma}
+          LOCALES={LOCALES}
+          temaId={temaId}
+          tema={tema ?? null}
+          temas={temas}
+          densidad={densidad}
+          onDensidad={(d) => setDensidad(d as Densidad)}
+          onTemas={guardarTemas}
+          onSeleccionar={(id) => void seleccionarTema(id)}
+          abrirAcerca={abrirAcerca}
+          cerrarDialogo={() => ajustesDialog.current?.close()}
+        />
       </dialog>
 
       {ventanaAcerca !== null && (

@@ -361,6 +361,21 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Settings dialog shell (`settings/Ajustes.tsx`, artboard 09, #407)
+   * ------------------------------------------------------------------ */
+  ajustes: {
+    /** Nav tab labels, left column (`role="tablist"`). */
+    secciones: {
+      general: 'General',
+      apariencia: 'Appearance',
+      atajos: 'Shortcuts',
+    },
+    /** Column headers of the Shortcuts table. */
+    accion: 'Action',
+    tecla: 'Key',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Shape palette (`Paleta.tsx`)
    * ------------------------------------------------------------------ */
   paleta: {

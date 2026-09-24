@@ -2088,23 +2088,41 @@ body {
 .confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 .confirmar-perdida ul { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 
-/* ---------- ajustes ---------- */
+/* ---------- ajustes (artboard 09, #407) ---------- */
 
-.ajustes { min-width: 22rem; }
-/* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22): con
-   los grupos de Apariencia colapsados de fábrica el diálogo ya no hace scroll por defecto, pero
-   el botón se queda visible sin tocar nada aunque alguien deje un grupo abierto. */
-.ajustes-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.ajustes-encabezado h2 { margin: 0; }
-.ajustes h3 { color: var(--fg-muted); font-size: inherit; font-weight: 600; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
-.ajustes .campo { margin-bottom: 10px; }
-.ajustes .acciones { justify-content: flex-end; margin-top: 16px; }
+/* Two columns behind a `role="tablist"` nav (General / Appearance / Shortcuts), replacing the old
+   single scrolling stack of `<h3>` headings. The dialog is a fixed box — `height`, not
+   `max-height` alone — so the nav rail and the content pane both get a stable frame to scroll
+   inside; `max-height` only keeps that box from overflowing a short viewport. The outer border
+   stays `--border-strong` (shared rule above); every divider inside this dialog is the plain
+   `--border`. Padding lives on the header/nav/panel/footer, not on the dialog itself, so the nav's
+   right-hand rule and the footer's top rule can run edge to edge. */
+.ajustes { border-radius: 0; display: flex; flex-direction: column; height: 70vh; max-height: 82vh; max-width: min(760px, 90vw); min-width: 22rem; overflow: hidden; padding: 0; width: 90vw; }
+/* `.ajustes`'s only DOM child is the `<form method="dialog">` (`settings/Ajustes.tsx`): the flex
+   column above lays out that ONE child, not its grandchildren. Without this, the form sizes to
+   its content (`height: auto`) and — with 40 tokens across seven groups possibly open — grows
+   taller than the dialog's fixed height, clipping the footer's «Close» button under
+   `.ajustes`'s own `overflow: hidden` (QA must-fix of #407: `Close` was unreachable, not merely
+   scrolled to). Stretching the form to the dialog's own box turns the header/body/footer below
+   into the real flex column, so only `.ajustes-panel` (its own `overflow: auto`) scrolls. */
+.ajustes > form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+/* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22). */
+.ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
+.ajustes-encabezado h2 { font-size: 1em; margin: 0; }
+.ajustes-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
+.ajustes-nav { border-right: 1px solid var(--border); display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
+.ajustes-nav [role='tab'] { background: none; border: none; border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; padding: calc(8px * var(--espacio, 1)) 10px; text-align: left; }
+.ajustes-nav [role='tab']:hover { color: var(--fg-primary); }
+.ajustes-nav [role='tab'].activo { background: var(--bg-hover); color: var(--fg-primary); font-weight: 600; }
+.ajustes-panel { flex: 1 1 auto; min-width: 0; overflow: auto; padding: calc(20px * var(--espacio, 1)) 24px; }
+.ajustes .fila { align-items: center; display: grid; gap: 8px; grid-template-columns: 9rem 1fr; margin-bottom: calc(10px * var(--espacio, 1)); }
+.ajustes .fila > span { color: var(--fg-muted); }
+.ajustes .campo { margin-bottom: calc(10px * var(--espacio, 1)); }
+.ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
 
-/* Editor de temas (LILA-114). El diálogo puede crecer mucho —40 tokens en siete grupos—, así que
-   se acota a la altura de la ventana y desplaza dentro; los grupos son `<details>` y solo el
-   primero viene abierto. Ni un color literal aquí: todo sale de los tokens, incluidos los del
-   propio editor, que por eso se repinta a la vez que la app cuando se cambia uno. */
-.ajustes { max-height: 82vh; overflow: auto; }
+/* Editor de temas (LILA-114): los grupos son `<details>` y solo el primero viene abierto por
+   defecto. Ni un color literal aquí: todo sale de los tokens, incluidos los del propio editor,
+   que por eso se repinta a la vez que la app cuando se cambia uno. */
 .ajustes .campo input[type='text'] { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; width: 100%; }
 .ajustes .acciones.temas { justify-content: flex-start; margin: 12px 0; }
 /* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
@@ -2115,17 +2133,29 @@ body {
 .ajustes .muestras .apagado { color: var(--fg-muted); }
 .ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }
 .ajustes .grupo { border-top: 1px solid var(--border); padding: 6px 0; }
-.ajustes .grupo > summary { color: var(--fg-muted); cursor: pointer; font-weight: 600; padding: 4px 0; }
-.ajustes .token { align-items: center; display: grid; gap: 8px; grid-template-columns: 1fr auto minmax(6rem, 10rem); margin: 4px 0; }
+/* Rótulos en mayúsculas espaciadas, como el artboard (mismo tratamiento que
+   `.propiedades-seccion h3`). */
+.ajustes .grupo > summary { color: var(--fg-muted); cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; padding: 4px 0; text-transform: uppercase; }
+/* Tarjeta de 1 px por token (artboard), no solo una fila suelta. */
+.ajustes .token { align-items: center; border: 1px solid var(--border); border-radius: 0; display: grid; gap: 8px; grid-template-columns: 1fr auto minmax(6rem, 10rem); margin: 4px 0; padding: calc(6px * var(--espacio, 1)) 8px; }
 .ajustes .token code { color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
-.ajustes .token input { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
+.ajustes .token input { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
 /* Color y borde del `select` compartido (arriba); aquí solo lo que encoge en la retícula. */
 .ajustes .token select { min-width: 0; }
-.ajustes .token input[type='color'] { background: var(--bg-surface); block-size: 24px; border: 1px solid var(--border-strong); cursor: pointer; inline-size: 34px; padding: 1px; }
+.ajustes .token input[type='color'] { background: var(--bg-surface); block-size: 24px; border: 1px solid var(--border-strong); border-radius: 0; cursor: pointer; inline-size: 34px; padding: 1px; }
 .ajustes .token input[type='text'] { font-family: var(--font-mono); }
 /* Lo tecleado a medias (`#12`, el nombre vacío) no se aplica ni se guarda (QA de #277): el campo
    lo dice con el token de error y el tema sigue con el valor bueno. */
 .ajustes input.invalido { border: 1px solid var(--status-error); }
+
+/* Ajustes → Atajos (#407): tabla de solo lectura por grupo, `settings/Atajos.tsx`. */
+.ajustes-atajos-grupo { margin-bottom: calc(20px * var(--espacio, 1)); }
+.ajustes-atajos-grupo h3 { color: var(--fg-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; margin: 0 0 8px; text-transform: uppercase; }
+.ajustes-atajos-grupo table { border-collapse: collapse; width: 100%; }
+.ajustes-atajos-grupo th { color: var(--fg-muted); font-size: 0.85em; font-weight: 600; padding: 4px 0; text-align: left; }
+.ajustes-atajos-grupo th:last-child, .ajustes-atajos-grupo td:last-child { text-align: right; }
+.ajustes-atajos-grupo td { border-top: 1px solid var(--border); padding: calc(6px * var(--espacio, 1)) 0; }
+.ajustes-atajos-grupo kbd { border: 1px solid var(--border); border-radius: 0; color: var(--fg-muted); font-family: var(--font-mono); font-size: 0.85em; padding: 2px 6px; }
 .boton.icono { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-muted); display: grid; flex: none; height: 30px; line-height: 1; padding: 0; place-items: center; width: 30px; }
 .boton.icono:hover:enabled { color: var(--fg-primary); }
 .boton.icono:disabled { color: var(--fg-disabled); }

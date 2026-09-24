@@ -98,14 +98,22 @@ to keep the previous theme's fill with the new one's label color.
 inherits it from there. It is deliberately not on `html`: the CSS's `rem` measurements would resolve
 against the token, and dialogs would shrink when the font size is lowered.
 
-## Settings → Appearance (LILA-114)
+## Settings → General / Appearance / Shortcuts (#407)
 
-`apps/web/src/settings/Apariencia.tsx` is the content of the Settings dialog; the `<dialog>` and how
-it opens (⚙, ⌘, and the native menu) stay in `App.tsx`, which remains **the only one** that calls
-`applyTheme` and `Modelador.repintar()`. The component neither applies nor persists anything: it
-builds the user's new theme list and says which one stays active (`onTemas(lista, seleccion)`), and
-the live preview follows from that — every valid change repaints the whole app, dialog included. The
-sample box (text, dimmed text, accent) is just a shortcut so you don't have to look behind the dialog.
+`apps/web/src/settings/Ajustes.tsx` is the content of the Settings dialog (artboard 09); the
+`<dialog>` and how it opens (⚙, ⌘, and the native menu) stay in `App.tsx`. It splits into three
+sections behind a left `role="tablist"` nav — **General** (language, density), **Appearance**
+(theme editor, below) and **Shortcuts** (a read-only table of the current keyboard map) — all
+three mounted at once and toggled with `hidden`, not remounted, so `Apariencia`'s live-preview
+wiring survives switching tabs and a test can reach any control without first clicking through the
+nav. General starts active every time the dialog opens.
+
+`apps/web/src/settings/Apariencia.tsx` is the Appearance section; `App.tsx` remains **the only
+one** that calls `applyTheme` and `Modelador.repintar()`. The component neither applies nor
+persists anything: it builds the user's new theme list and says which one stays active
+(`onTemas(lista, seleccion)`), and the live preview follows from that — every valid change repaints
+the whole app, dialog included. The sample box (text, dimmed text, accent) is just a shortcut so
+you don't have to look behind the dialog.
 
 The controls:
 
@@ -124,9 +132,10 @@ The controls:
   (copia)» (Eva-01 (copy)) and continues on that copy. This was preferred over a "duplicate
   first" warning because the change the user asked for happens anyway, and the theme's name,
   changing right in front of them, already tells the story of what happened.
-- **Density remains a preference, not a theme edit** (LILA-113): it is applied on top of any
-  theme, so the control above does not touch the `density` token of the theme being edited; the
-  token travels in the exported JSON exactly as it came from the source theme.
+- **Density lives in the General section** (LILA-113), not here: it is a preference applied on
+  top of any theme, so it does not touch the `density` token of the theme being edited in
+  Appearance; that token still travels in the exported JSON exactly as it came from the source
+  theme.
 - **Reset**: returns a user theme to the tokens it was born with, and a built-in one to its JSON
   (which is re-fetched).
 - **Export**: downloads `{ name, tokens }` — exactly the format shown above, with no `id` or

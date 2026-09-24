@@ -2298,3 +2298,68 @@ it('opening a project with unconfigured tasks does not modify its scenarios (#42
   expect(container.textContent).toContain('Abierto');
   expect(asIs()).toEqual({});
 });
+
+// ---------- Settings dialog: General / Appearance / Shortcuts sections (#407) ----------
+
+/** A `role="tab"` button of the Settings nav, by its visible label. */
+function pestanaAjustes(etiqueta: string): HTMLButtonElement {
+  const b = [...container.querySelectorAll<HTMLButtonElement>('dialog.ajustes [role="tab"]')].find((x) => x.textContent === etiqueta);
+  expect(b, etiqueta).toBeDefined();
+  return b!;
+}
+function panelAjustes(id: 'general' | 'apariencia' | 'atajos'): HTMLElement {
+  return container.querySelector<HTMLElement>(`#ajustes-panel-${id}`)!;
+}
+
+it('the three tabs of Settings swap the visible panel, General first (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  // General is the section Settings always opens on.
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('general').hidden).toBe(false);
+  expect(panelAjustes('apariencia').hidden).toBe(true);
+  expect(panelAjustes('atajos').hidden).toBe(true);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
+  expect(pestanaAjustes(T.ajustes.secciones.apariencia).getAttribute('aria-selected')).toBe('true');
+  expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('false');
+  expect(panelAjustes('general').hidden).toBe(true);
+  expect(panelAjustes('apariencia').hidden).toBe(false);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(pestanaAjustes(T.ajustes.secciones.atajos).getAttribute('aria-selected')).toBe('true');
+  expect(panelAjustes('apariencia').hidden).toBe(true);
+  expect(panelAjustes('atajos').hidden).toBe(false);
+  // Hidden, not unmounted: the theme selector is still in the DOM under the panel that just hid.
+  expect(selectTema()).not.toBeNull();
+});
+
+it('language and density keep working from the General section (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  const idioma = selectIdioma();
+  await act(async () => { idioma.value = 'es'; idioma.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(container.querySelector('dialog.ajustes')!.textContent).toContain(ES.app.ajustes);
+
+  // The label reads in Spanish now that the language above switched.
+  const densidad = container.querySelector<HTMLSelectElement>(`dialog.ajustes select[aria-label="${ES.app.densidad}"]`)!;
+  expect(densidad).not.toBeNull();
+  await act(async () => { densidad.value = 'compacta'; densidad.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
+});
+
+it('Appearance still shows the theme selector with its optgroup (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
+  expect(selectTema()).not.toBeNull();
+  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+});
+
+it('Close is still the last button of the dialog and About sits in the header, from every tab (#407)', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  const ultimo = () => [...container.querySelectorAll('dialog.ajustes button')].at(-1)!;
+  expect(ultimo().textContent).toBe(T.app.cerrar);
+  expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
+
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  expect(ultimo().textContent).toBe(T.app.cerrar);
+  expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
+});

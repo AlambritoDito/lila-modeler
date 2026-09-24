@@ -344,6 +344,21 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Cascarón del diálogo de Ajustes (`settings/Ajustes.tsx`, artboard 09, #407)
+   * ------------------------------------------------------------------ */
+  ajustes: {
+    /** Rótulos de la navegación, columna izquierda (`role="tablist"`). */
+    secciones: {
+      general: 'General',
+      apariencia: 'Apariencia',
+      atajos: 'Atajos',
+    },
+    /** Cabeceras de columna de la tabla de Atajos. */
+    accion: 'Acción',
+    tecla: 'Tecla',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Paleta de figuras (`Paleta.tsx`)
    * ------------------------------------------------------------------ */
   paleta: {
