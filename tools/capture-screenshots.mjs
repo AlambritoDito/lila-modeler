@@ -55,7 +55,7 @@ try {
   }
   await page.goto(url); await ready();
   // Set the actual settings through the UI, without overriding application rendering or state.
-  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
+  await button('Settings').click(); assert.equal(await page.locator('dialog[open] .campo:not(.idioma) select').first().inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
   await selectTask(); await page.getByLabel('Name', { exact: true }).fill('Take order — checked'); await page.getByLabel('Name', { exact: true }).press('Tab');
   await button('Simulate').click();
   await page.getByLabel('Seed', { exact: true }).fill('43'); await page.getByLabel('Seed', { exact: true }).press('Tab');
@@ -81,7 +81,7 @@ try {
   console.log('PASS: edit BPMN, numeric scenario edit, both 30-replication seed-42 simulations, compare, download, reload, discard unsaved edit, reopen downloaded project.');
   // Clear this disposable context's saved project to capture the unchanged maintained example.
   await page.evaluate(() => localStorage.clear()); await page.reload(); await ready();
-  await button('Settings').click(); assert.equal(await page.locator('dialog[open] select').nth(1).inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
+  await button('Settings').click(); assert.equal(await page.locator('dialog[open] .campo:not(.idioma) select').first().inputValue(), 'lila-light'); await page.getByLabel('Language', { exact: true }).selectOption('en'); await button('Close').click();
   const cdp = await context.newCDPSession(page);
   async function capture(name, canvas = true) {
     assert.doesNotMatch(await page.locator('body').innerText(), /\b(Modelar|Simular|Resultados|Comparar|Ajustes)\b/);
@@ -123,7 +123,7 @@ try {
   await button('Compare').click(); await save(); await page.reload(); await ready(); await button('Compare').click();
   await capture('compare', false);
   await button('Validate paths').click(); await button('Properties').click(); await capture('routes');
-  await button('Model').click(); await button('Fit to screen').click(); await button('Settings').click(); await capture('appearance', false); await button('Close').click();
+  await button('Model').click(); await button('Fit to screen').click(); await button('Settings').click(); await page.getByRole('tab', { name: 'Appearance' }).click(); await capture('appearance', false); await button('Close').click();
   assert.deepEqual(errors, []);
   // Lila Dark is what a dark-mode system gets on first launch (#404): one Model capture per size,
   // from a fresh context (no saved theme) with the dark scheme emulated, so nothing else changes.
