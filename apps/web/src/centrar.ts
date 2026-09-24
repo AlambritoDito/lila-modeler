@@ -21,6 +21,15 @@ export interface CanvasCentrable {
 export function centrar(canvas: CanvasCentrable, elemento: Elemento): void {
   canvas.scrollToElement(elemento);
   const vista = canvas.viewbox();
-  const { x = 0, y = 0, width = 0, height = 0 } = elemento;
+  const { x, y, width, height } = caja(elemento);
   canvas.viewbox({ x: x + width / 2 - vista.width / 2, y: y + height / 2 - vista.height / 2, width: vista.width, height: vista.height });
+}
+
+/** A shape has `x/y/width/height`; a connection only has `waypoints`, so its box is theirs. */
+function caja(elemento: Elemento): Caja {
+  const puntos = Array.isArray(elemento.waypoints) ? (elemento.waypoints as { x: number; y: number }[]) : [];
+  if (puntos.length === 0) return { x: elemento.x ?? 0, y: elemento.y ?? 0, width: elemento.width ?? 0, height: elemento.height ?? 0 };
+  const xs = puntos.map((p) => p.x); const ys = puntos.map((p) => p.y);
+  const x = Math.min(...xs); const y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
