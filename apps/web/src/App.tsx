@@ -1263,11 +1263,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * Anything the status bar has to say right now. A hidden status bar comes back for it: an
    * error nobody can see is worse than a bar the user asked to hide.
    */
+  const derechaVisible = visibles.derecha && !(ocultoPorVentana && !verConVentana);
+  /**
+   * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
+   * error goes to the status bar instead, so Run never fails silently and never shows it twice.
+   * Everything that hides the tab belongs in this one condition, the hidden right panel (#412)
+   * included.
+   */
+  const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
   const hayAlerta = suelto || ioError !== null || perdidasAlExportar.length > 0
-    || estado.avisos - estado.perdidas.length > 0 || estado.error !== null || avisoTema !== null;
+    || estado.avisos - estado.perdidas.length > 0 || estado.error !== null || avisoTema !== null
+    || errorSimOculto !== null;
   const visible: Record<Region, boolean> = {
     izquierda: hayIzquierda && visibles.izquierda,
-    derecha: visibles.derecha && !(ocultoPorVentana && !verConVentana),
+    derecha: derechaVisible,
     diagramas: visibles.diagramas,
     estado: visibles.estado || hayAlerta,
   };
@@ -1301,12 +1310,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setCompacta(!compacta);
   }
 
-  /**
-   * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
-   * error goes to the status bar instead, so Run never fails silently and never shows it twice.
-   * Everything that hides the tab belongs in this one condition.
-   */
-  const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar') ? sim.mensaje : null;
 
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window

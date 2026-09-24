@@ -2110,6 +2110,23 @@ it('a failed Run outside the Simulation tab shows in the status bar, and only on
   expect(container.textContent!.split('E-SIN-START')).toHaveLength(2);
 });
 
+it('a failed Run with the right panel hidden goes to the status bar and brings a hidden bar back (#419 + #412)', async () => {
+  mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.pestanas.simulacion);
+  await act(async () => toggleDe('derecha').click());
+  await act(async () => toggleDe('estado').click());
+  expect(conClase('sin-panel')).toBe(true);
+  expect(conClase('sin-estado')).toBe(true);
+  await click(T.app.ejecutar);
+  expect(conClase('sin-estado')).toBe(false);
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+  // The panel back on screen shows the error in the tab, so the bar no longer needs it.
+  await act(async () => toggleDe('derecha').click());
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
+  expect(conClase('sin-estado')).toBe(true);
+  expect(container.textContent!.split('E-SIN-START')).toHaveLength(2);
+});
+
 /** A process with the given start events and tasks, no flows: enough for `parseBpmn` to list them. */
 function modelo(inicios: string[], tareas: string[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
