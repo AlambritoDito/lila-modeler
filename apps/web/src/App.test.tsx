@@ -692,6 +692,40 @@ it('editar un token guarda la lista donde toca en cada modalidad (LILA-114)', as
   expect(escrito).toContainEqual({ temas: [{ ...temaMio, tema: { ...temaMio.tema, tokens: { 'accent.primary': '#0000FF' } } }] });
 });
 
+/**
+ * QA of #432 (S1 follow-up): `seleccionarTema`'s '' branch had no test through the real code path
+ * — `Apariencia.test.tsx` only exercises a copy of the resolution logic written inside that test's
+ * own bench, not `App.tsx`'s `seleccionarTema`. Reverting `recordar({ tema: id })` back to
+ * `recordar({ tema: idAplicado })` left every existing test green. This one mounts the real `App`
+ * in desktop mode (a `window.lila` stub, same as "editar un token guarda la lista…" above), makes
+ * a user theme active via `readSettings`, deletes it from Appearance, and asserts on what actually
+ * gets sent to `writeSettings`.
+ */
+it('eliminar el tema activo en escritorio persiste un `tema` vacío, no el id de Lila resuelto (QA de #432)', async () => {
+  const escrito: { tema?: string }[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ tema: 'u:1', temas: [temaMio] }),
+    writeSettings: async (a: { tema?: string }) => { escrito.push(a); },
+  });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  // The active theme is the user's ('u:1'), matching what `readSettings` seeded.
+  expect(selectTema().value).toBe('u:1');
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const botonEliminar = [...ajustes.querySelectorAll('button')].find((b) => b.textContent === T.apariencia.eliminar);
+  expect(botonEliminar, T.apariencia.eliminar).toBeDefined();
+  await act(async () => { botonEliminar!.click(); });
+  // The selector now shows a resolved, concrete Lila id (jsdom has no `matchMedia`, so
+  // `temaPorDefecto()` reads "not dark" and falls to Lila Light) …
+  expect(selectTema().value).toBe('lila-light');
+  // … but what got PERSISTED is an empty `tema`, not that resolved id: saving the resolved id
+  // would freeze the app on today's OS scheme instead of following it on every future launch.
+  expect(escrito).toContainEqual(expect.objectContaining({ tema: '' }));
+  expect(escrito.some((a) => a.tema === 'lila-light')).toBe(false);
+});
+
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); });
