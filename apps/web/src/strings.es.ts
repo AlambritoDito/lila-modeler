@@ -87,6 +87,21 @@ export const es: Strings = {
     tituloGuardar: 'Guardar proyecto',
     tituloGuardarComo: 'Guardar como',
 
+    /** Menú «Archivo» de escritorio (#411): mismas palabras que el menú nativo
+     * (`apps/desktop/src/strings/es.ts`), letra por letra. */
+    menuEscritorio: {
+      nuevoProyecto: 'Nuevo proyecto',
+      abrirProyecto: 'Abrir proyecto…',
+      abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+      abrirReciente: 'Abrir reciente',
+      // QA de #432 (N1): igual, letra por letra, al vacío del menú nativo
+      // (`menu.ninguno` en `apps/desktop/src/strings/es.ts`), no una paráfrasis más larga.
+      ninguno: 'Ninguno',
+      guardarProyecto: 'Guardar proyecto',
+      guardarComo: 'Guardar como…',
+      guardarComoCarpeta: 'Guardar como carpeta…',
+    },
+
     /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
      * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
      * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»
@@ -113,6 +128,7 @@ export const es: Strings = {
     enVentanaAparte: 'Escenario en ventana aparte ↗',
     mostrarVentana: 'Mostrar',
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
+    acercaBloqueada: 'Se bloqueó la ventana Acerca de; permite ventanas emergentes para este sitio.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
 
     /** Controles de zoom del lienzo. */
@@ -187,6 +203,24 @@ export const es: Strings = {
     nuevoDiagrama: 'Nuevo diagrama',
     /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
     redimensionarPanel: 'Redimensionar el panel derecho',
+    /** Divisor entre la columna izquierda y el lienzo (#406). */
+    redimensionarIzquierda: 'Redimensionar la columna izquierda',
+    /** Botones para mostrar u ocultar paneles, a la derecha de la barra (#412). */
+    vista: 'Vista',
+    regiones: {
+      izquierda: 'Columna izquierda',
+      derecha: 'Panel derecho',
+      diagramas: 'Pestañas de diagramas',
+      estado: 'Barra de estado',
+    },
+    tituloRegiones: {
+      izquierda: 'Mostrar u ocultar la columna izquierda (Mayús+Tab en el lienzo)',
+      derecha: 'Mostrar u ocultar el panel derecho (Tab en el lienzo)',
+      diagramas: 'Mostrar u ocultar las pestañas de diagramas',
+      estado: 'Mostrar u ocultar la barra de estado',
+    },
+    /** El botón de la barra de estado mientras un error la mantiene en pantalla (#412). */
+    tituloEstadoForzado: 'Mostrar u ocultar la barra de estado — sigue mientras muestre un error',
 
     /** Barra de estado. */
     semilla: (valor: string): string => `Semilla ${valor}`,
@@ -241,9 +275,8 @@ export const es: Strings = {
     recientes: 'Recientes',
     sinRecientes: 'Todavía no hay proyectos recientes. Abre uno o empieza por el ejemplo.',
     novedades: (version: string): string => `Novedades de ${version}`,
-    novedadesTexto: 'Archivos de proyecto .lila con corridas guardadas, Simular en cuatro pasos, repetición del log de eventos sobre el diagrama, rutas según el resultado previo del caso y resultados con los mismos nombres de columna que Bizagi Modeler.',
     notasVersion: 'Notas de la versión',
-    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad} ·`,
+    tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad}`,
     cambiarApariencia: 'cambiar en Ajustes → Apariencia',
   },
 
@@ -879,7 +912,7 @@ export const es: Strings = {
 
     /** Marcador de validación: el disco y su tooltip nativo. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 renombrar · ⇥ propiedades',
+    marcadorAcciones: 'F2 renombrar · ⇧F6 propiedades',
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

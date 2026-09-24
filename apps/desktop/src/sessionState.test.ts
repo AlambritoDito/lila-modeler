@@ -207,6 +207,46 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ panelAncho: Number.NaN })).toEqual({});
   });
 
+  it('left column widths (#406) are kept only as numbers inside 180–360 and 160–320', () => {
+    expect(parseAjustes({ paletaAncho: 180, railAncho: 320 })).toEqual({ paletaAncho: 180, railAncho: 320 });
+    expect(parseAjustes({ paletaAncho: 360, railAncho: 160 })).toEqual({ paletaAncho: 360, railAncho: 160 });
+    expect(parseAjustes({ paletaAncho: 179, railAncho: 321 })).toEqual({});
+    expect(parseAjustes({ paletaAncho: 361, railAncho: 159 })).toEqual({});
+    expect(parseAjustes({ paletaAncho: '200', railAncho: Number.NaN })).toEqual({});
+  });
+
+  it('paneles (#412) keeps only plain per-mode objects with the four boolean fields', () => {
+    expect(parseAjustes({ paneles: {
+      modelar: { izquierda: false, derecha: true, diagramas: 'no', estado: false, extra: false },
+      simular: { derecha: false },
+      rutas: 'oculto',
+      comparar: [true],
+    } })).toEqual({ paneles: {
+      modelar: { izquierda: false, derecha: true, estado: false },
+      simular: { derecha: false },
+    } });
+    expect(parseAjustes({ paneles: 'todo' })).toEqual({});
+    expect(parseAjustes({ paneles: [{ derecha: false }] })).toEqual({});
+    expect(parseAjustes({ paneles: null })).toEqual({});
+    const muchos = Object.fromEntries(Array.from({ length: 17 }, (_, i) => [`m${i}`, { derecha: false }]));
+    expect(parseAjustes({ paneles: muchos })).toEqual({});
+    const dieciseis = Object.fromEntries(Array.from({ length: 16 }, (_, i) => [`m${i}`, { derecha: false }]));
+    expect(parseAjustes({ paneles: dieciseis })).toEqual({ paneles: dieciseis });
+  });
+
+  it('paneles and the left widths survive a disk round trip, and withAjustes replaces paneles whole', async () => {
+    const paneles = { modelar: { derecha: false }, simular: { izquierda: false, estado: false } };
+    const state = withAjustes(defaultSessionState(), { paneles, paletaAncho: 300, railAncho: 200 });
+    await writeSessionState(statePath, state);
+    await expect(readSessionState(statePath)).resolves.toEqual(state);
+    // The renderer always sends the full map: a shallow merge replaces it instead of mixing modes.
+    expect(withAjustes(state, { paneles: { modelar: { derecha: true } } }).ajustes).toEqual({
+      paneles: { modelar: { derecha: true } },
+      paletaAncho: 300,
+      railAncho: 200,
+    });
+  });
+
   it('withAjustes fusiona el idioma como cualquier otra preferencia (LILA-210)', () => {
     const conIdioma = withAjustes(defaultSessionState(), { idioma: 'es' });
     expect(withAjustes(conIdioma, { tema: 'papel' }).ajustes).toEqual({ idioma: 'es', tema: 'papel' });

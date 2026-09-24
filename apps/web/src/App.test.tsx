@@ -20,8 +20,11 @@ import { en as T } from './strings.en';
 // The Spanish catalog is only read by the language tests (LILA-210): what they assert is
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
+import { version } from '../package.json';
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: () => {},
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
+  // #420: the scenario map the panel last received, to see what the seeding wrote.
+  escenarios: {} as Record<string, { elements?: Record<string, unknown>; extends?: string }>,
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
   // corrida se pinta o se limpia el lienzo.
   abrir: vi.fn(), cuellos: vi.fn(),
@@ -49,11 +52,14 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
 vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+// Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
+vi.mock('./replay/Replay', () => ({ Replay: () => null }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio }: { onCambio: (file: string, raw: object) => void }) => {
-    mocks.scenarioChange = () => onCambio('as-is.scenario.json', {});
+  ScenarioPanel: ({ onCambio, escenarios }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios }) => {
+    mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
+    mocks.escenarios = escenarios;
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
   } }));
@@ -76,7 +82,9 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       rules: { allowed: () => true },
     },
   } as unknown as Modelador); if (!mocks.retrasarLienzo) mocks.listo(); }, [onListo]);
-  return <div>Modelo montado</div>;
+  // The canvas container of bpmn-js, as far as the panel keys (#412) care: its focusable `<svg>`
+  // and the contenteditable label editor that lives next to it.
+  return <div>Modelo montado<div className="djs-container"><svg tabIndex={0} /><div className="djs-direct-editing-parent" contentEditable /></div></div>;
 } }));
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
@@ -692,6 +700,40 @@ it('editar un token guarda la lista donde toca en cada modalidad (LILA-114)', as
   expect(escrito).toContainEqual({ temas: [{ ...temaMio, tema: { ...temaMio.tema, tokens: { 'accent.primary': '#0000FF' } } }] });
 });
 
+/**
+ * QA of #432 (S1 follow-up): `seleccionarTema`'s '' branch had no test through the real code path
+ * — `Apariencia.test.tsx` only exercises a copy of the resolution logic written inside that test's
+ * own bench, not `App.tsx`'s `seleccionarTema`. Reverting `recordar({ tema: id })` back to
+ * `recordar({ tema: idAplicado })` left every existing test green. This one mounts the real `App`
+ * in desktop mode (a `window.lila` stub, same as "editar un token guarda la lista…" above), makes
+ * a user theme active via `readSettings`, deletes it from Appearance, and asserts on what actually
+ * gets sent to `writeSettings`.
+ */
+it('eliminar el tema activo en escritorio persiste un `tema` vacío, no el id de Lila resuelto (QA de #432)', async () => {
+  const escrito: { tema?: string }[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ tema: 'u:1', temas: [temaMio] }),
+    writeSettings: async (a: { tema?: string }) => { escrito.push(a); },
+  });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  // The active theme is the user's ('u:1'), matching what `readSettings` seeded.
+  expect(selectTema().value).toBe('u:1');
+  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  const botonEliminar = [...ajustes.querySelectorAll('button')].find((b) => b.textContent === T.apariencia.eliminar);
+  expect(botonEliminar, T.apariencia.eliminar).toBeDefined();
+  await act(async () => { botonEliminar!.click(); });
+  // The selector now shows a resolved, concrete Lila id (jsdom has no `matchMedia`, so
+  // `temaPorDefecto()` reads "not dark" and falls to Lila Light) …
+  expect(selectTema().value).toBe('lila-light');
+  // … but what got PERSISTED is an empty `tema`, not that resolved id: saving the resolved id
+  // would freeze the app on today's OS scheme instead of following it on every future launch.
+  expect(escrito).toContainEqual(expect.objectContaining({ tema: '' }));
+  expect(escrito.some((a) => a.tema === 'lila-light')).toBe(false);
+});
+
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's' })); });
@@ -701,18 +743,43 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
-it('en Ajustes, «Acerca de Lila Modeler» cierra Ajustes y abre el diálogo Acerca de (LILA-381)', async () => {
-  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(true);
-  expect(acerca.open).toBe(false);
-  await click(T.app.acercaDe);
-  expect(ajustes.open).toBe(false);
-  expect(acerca.open).toBe(true);
-  expect(container.textContent).toContain(T.bienvenida.nombre);
-});
-it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', async () => {
+// ---------- About window (#408, LILA-381) ----------
+
+/**
+ * A fake popup for the About window: an `about:blank` iframe's window (same origin, its own
+ * document, like the real popup), handed out by a stubbed `window.open`. jsdom's `close()` would
+ * empty the body under React's feet, so it is only watched — as in the scenario-window tests.
+ */
+function ventanaAcercaFalsa() {
+  const marco = document.createElement('iframe');
+  marco.src = 'about:blank';
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const acerca = (): Element | null => hijo.document.querySelector('.acerca');
+  const clic = async (nodo: Element): Promise<void> => {
+    await act(async () => { nodo.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true, cancelable: true })); });
+  };
+  const clicarImagen = async (veces: number): Promise<void> => {
+    for (let i = 0; i < veces; i += 1) await clic(hijo.document.querySelector('.acerca-icono')!);
+  };
+  const enviarClave = async (texto: string): Promise<void> => {
+    const campo = hijo.document.querySelector<HTMLInputElement>('.acerca-clave input')!;
+    const receptor = Object.getOwnPropertyDescriptor((hijo as unknown as typeof globalThis).HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { receptor.call(campo, texto); campo.dispatchEvent(new (hijo as unknown as typeof globalThis).Event('input', { bubbles: true })); });
+    await clic(hijo.document.querySelector('.acerca-clave button[type="submit"]')!);
+  };
+  const tecla = async (key: string): Promise<void> => {
+    await act(async () => { hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key })); });
+  };
+  return { hijo, cerrar, abrir, acerca, clicarImagen, enviarClave, tecla, quitar: () => { abrir.mockRestore(); marco.remove(); } };
+}
+/** «About» from the web File menu (a `<details>`, clicked directly: it needs no opening). */
+function ejecutarArchivo(etiqueta: string): void {
+  [...container.querySelectorAll<HTMLButtonElement>('.menu-archivo button')].find((b) => b.textContent === etiqueta)!.click();
+}
+async function remontarConMenu(): Promise<(a: unknown) => void> {
   let menu: ((a: unknown) => void) | null = null;
   vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
     pendingOpenPath: async () => null, onOpenPath: () => () => {},
@@ -721,45 +788,102 @@ it('el menú nativo despacha "acerca" y abre el diálogo Acerca de (LILA-381)', 
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(menu).not.toBeNull();
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  expect(acerca.open).toBe(false);
-  await act(async () => { menu!('acerca'); });
-  expect(acerca.open).toBe(true);
+  return menu!;
+}
+
+it('in Settings, «About Lila Modeler» closes Settings and opens the About window (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+    expect(ajustes.open).toBe(true);
+    await click(T.app.acercaDe);
+    expect(ajustes.open).toBe(false);
+    expect(v.abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.stringMatching(/popup,width=440,height=600/));
+    expect(v.acerca()!.textContent).toContain(T.bienvenida.nombre);
+    expect(container.querySelector('.acerca')).toBeNull();
+    expect(document.querySelector('dialog.acerca')).toBeNull();
+    expect(v.hijo.document.title).toBe(T.app.acercaDe);
+    // A window that docks nothing has no «Dock» header.
+    expect(v.hijo.document.querySelector('.ventana-titulo')).toBeNull();
+  } finally { v.quitar(); }
 });
-it('mientras el karaoke del huevo de pascua suena, ni ⌘, ni "acerca" abren nada encima (QA de #387, Low)', async () => {
-  // El `<dialog>` de Acerca de ya está cerrado mientras el karaoke corre (para que su "top layer"
-  // no lo tape), así que ni el atajo de teclado ni el menú nativo pasan por él para saber que
-  // hay que esperar: sin la `ref` de `App.tsx` que enlaza con `onKaraoke`, `ejecutar('ajustes')`
-  // volvía a abrir Ajustes encima del overlay.
+it('the native menu dispatches "acerca" and opens the About window (#408, LILA-381)', async () => {
+  const menu = await remontarConMenu();
+  const v = ventanaAcercaFalsa();
+  try {
+    expect(v.acerca()).toBeNull();
+    await act(async () => { menu('acerca'); });
+    expect(v.abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.any(String));
+    expect(v.acerca()).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('six clicks reveal the key form; Esc closes the window and reopening starts the count over (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(5);
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(1);
+    expect(v.hijo.document.querySelector('.acerca-clave')).not.toBeNull();
+    await v.tecla('Escape');
+    expect(v.cerrar).toHaveBeenCalled();
+    expect(v.acerca()).toBeNull();
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(5);
+    expect(v.hijo.document.querySelector('.acerca-clave')).toBeNull();
+    await v.clicarImagen(1);
+    expect(v.hijo.document.querySelector('.acerca-clave')).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('a blocked About popup says so with its own message (QA of #427, S1)', async () => {
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    expect(abrir).toHaveBeenCalledWith('', 'lila-acerca', expect.any(String));
+    expect(container.textContent).toContain(T.app.acercaBloqueada);
+    expect(container.textContent).not.toContain(T.app.ventanaBloqueada);
+  } finally { abrir.mockRestore(); }
+});
+it('«scuba» in the About window opens its YouTube link through the main window (#408)', async () => {
+  const v = ventanaAcercaFalsa();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(6);
+    await v.enviarClave('scuba');
+    expect(v.abrir).toHaveBeenLastCalledWith('https://www.youtube.com/watch?v=1jvqMJ379rc', '_blank', 'noopener,noreferrer');
+    expect(v.acerca()).not.toBeNull();
+  } finally { v.quitar(); }
+});
+it('«brito» closes the About window and plays the karaoke in the main window; meanwhile neither ⌘, nor "acerca" open anything (QA of #387)', async () => {
+  const menu = await remontarConMenu();
+  const v = ventanaAcercaFalsa();
   vi.useFakeTimers();
-  vi.stubGlobal('open', vi.fn());
-  const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
-  const acerca = container.querySelector<HTMLDialogElement>('dialog.acerca')!;
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  await click(T.app.acercaDe);
-  expect(acerca.open).toBe(true);
-  const icono = container.querySelector<HTMLImageElement>('.acerca-icono')!;
-  for (let i = 0; i < 6; i += 1) {
-    await act(async () => { icono.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  }
-  const campo = container.querySelector<HTMLInputElement>('.acerca-clave input')!;
-  const receptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-  await act(async () => { receptor.call(campo, 'brito'); campo.dispatchEvent(new Event('input', { bubbles: true })); });
-  await act(async () => {
-    container.querySelector<HTMLButtonElement>('.acerca-clave button[type="submit"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-  });
-  expect(acerca.open).toBe(false);
-  expect(document.querySelector('.karaoke')).not.toBeNull();
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(false);
-  expect(acerca.open).toBe(false);
-  // Se cancela para terminar sin temporizadores vivos ni el enlace abierto.
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
-  expect(document.querySelector('.karaoke')).toBeNull();
-  // Y con el karaoke ya fuera, ⌘, vuelve a funcionar normalmente.
-  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
-  expect(ajustes.open).toBe(true);
-  vi.useRealTimers();
+  try {
+    await act(async () => { menu('acerca'); });
+    await v.clicarImagen(6);
+    await v.enviarClave('brito');
+    expect(v.cerrar).toHaveBeenCalled();
+    expect(v.acerca()).toBeNull();
+    expect(document.querySelector('.karaoke')!.parentElement).toBe(document.body);
+    expect(v.hijo.document.querySelector('.karaoke')).toBeNull();
+    const aperturas = v.abrir.mock.calls.length;
+    const ajustes = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+    await act(async () => { menu('ajustes'); });
+    await act(async () => { menu('acerca'); });
+    expect(ajustes.open).toBe(false);
+    expect(v.abrir.mock.calls.length).toBe(aperturas);
+    expect(v.acerca()).toBeNull();
+    // Cancelled so the test ends without live timers or the link opened.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('.karaoke')).toBeNull();
+    expect(v.abrir.mock.calls.length).toBe(aperturas);
+    // With the karaoke gone, the menu opens About again.
+    await act(async () => { menu('acerca'); });
+    expect(v.acerca()).not.toBeNull();
+  } finally { vi.useRealTimers(); v.quitar(); }
 });
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
@@ -1293,6 +1417,349 @@ it('the panel width saved in the browser is restored, clamped', async () => {
   expect(container.querySelector<HTMLElement>('.app')!.style.getPropertyValue('--panel-ancho')).toBe('320px');
 });
 
+// --- Hideable panels (#412) and the resizable left column (#406) ---
+
+type RegionT = keyof typeof T.app.regiones;
+const appEl = () => container.querySelector<HTMLElement>('.app')!;
+const conClase = (clase: string) => appEl().classList.contains(clase);
+const toggleDe = (r: RegionT) => container.querySelector<HTMLButtonElement>(`.vista-grupo [data-region="${r}"]`)!;
+const itemVista = (r: RegionT) => container.querySelector<HTMLButtonElement>(`.menu-vista > div > [data-region="${r}"]`)!;
+/** A keydown on `destino`; returns whether the app took it (`preventDefault`). */
+async function pulsar(destino: EventTarget, init: KeyboardEventInit): Promise<boolean> {
+  const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+  await act(async () => { destino.dispatchEvent(e); });
+  return e.defaultPrevented;
+}
+const svgLienzo = () => container.querySelector<SVGElement>('.djs-container > svg')!;
+
+it('each panel toggle hides its region with a class, keeps it mounted and flips aria-pressed (#412)', async () => {
+  const casos: [RegionT, string, string][] = [
+    ['izquierda', 'sin-izquierda', '.rail-escenarios'],
+    ['derecha', 'sin-panel', 'aside.panel'],
+    ['diagramas', 'sin-diagramas', 'nav.diagramas'],
+    ['estado', 'sin-estado', 'footer.estado'],
+  ];
+  for (const [r, clase, selector] of casos) {
+    const boton = toggleDe(r);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+    expect(boton.getAttribute('aria-controls')).toBe(container.querySelector(selector)!.id);
+    expect(itemVista(r).getAttribute('aria-pressed')).toBe('true');
+    expect(itemVista(r).textContent).toContain(T.app.regiones[r]);
+    await act(async () => boton.click());
+    expect(conClase(clase)).toBe(true);
+    expect(boton.getAttribute('aria-pressed')).toBe('false');
+    expect(itemVista(r).getAttribute('aria-pressed')).toBe('false');
+    // Still mounted: its state survives, only the CSS hides it.
+    expect(container.querySelector(selector)).not.toBeNull();
+    // The «View» menu item is the same switch.
+    await act(async () => itemVista(r).click());
+    expect(conClase(clase)).toBe(false);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+  }
+});
+
+it('hiding the region that holds the focus hands it to the toggle (#412)', async () => {
+  const fila = filaRail('AS-IS');
+  await act(async () => { fila.focus(); });
+  await act(async () => toggleDe('izquierda').click());
+  // jsdom has no layout, so the group counts as off screen and the «View» menu gets it.
+  expect(document.activeElement).toBe(container.querySelector('.menu-vista > summary'));
+});
+
+it('panel visibility is remembered per mode in lila.paneles and restored, invalid JSON shows all (#412)', async () => {
+  await act(async () => toggleDe('derecha').click());
+  expect(conClase('sin-panel')).toBe(true);
+  await click(T.app.modos.modelar);
+  expect(conClase('sin-panel')).toBe(false);
+  await act(async () => toggleDe('estado').click());
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  expect(conClase('sin-estado')).toBe(false);
+  const guardado = JSON.parse(localStorage.getItem('lila.paneles')!) as Record<string, Record<string, boolean>>;
+  // The whole map, every mode.
+  expect(Object.keys(guardado)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(guardado['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: true });
+  expect(guardado['modelar']).toEqual({ izquierda: true, derecha: true, diagramas: true, estado: false });
+
+  await remontar();
+  expect(conClase('sin-estado')).toBe(true);
+  expect(conClase('sin-panel')).toBe(false);
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  // Mounting does not write over what was saved.
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!)).toEqual(guardado);
+
+  localStorage.setItem('lila.paneles', '{not json');
+  await remontar();
+  await click(T.app.modos.simular);
+  expect([...appEl().classList].filter((c) => c.startsWith('sin-'))).toEqual([]);
+});
+
+it('with the desktop bridge the panel map and the left widths go through Ajustes, not localStorage (#406, #412)', async () => {
+  const escrito: Record<string, unknown>[] = [];
+  vi.stubGlobal('lila', {
+    pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
+    readSettings: async () => ({ paneles: { simular: { derecha: false }, raro: { estado: false } }, paletaAncho: 300, railAncho: 9999 }),
+    writeSettings: async (a: Record<string, unknown>) => { escrito.push(a); },
+  });
+  await remontar();
+  expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('300px');
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('320px');
+  await click(T.app.modos.simular);
+  expect(conClase('sin-panel')).toBe(true);
+  await act(async () => toggleDe('estado').click());
+  const paneles = escrito.filter((a) => 'paneles' in a).at(-1)!['paneles'] as Record<string, Record<string, boolean>>;
+  // Always the full map (the bridge merges shallowly), sanitised to the known modes.
+  expect(Object.keys(paneles)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(paneles['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: false });
+  expect(localStorage.getItem('lila.paneles')).toBeNull();
+});
+
+it('Tab and Shift+Tab toggle the right panel and the left column only from the canvas (#412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(true);
+  expect(conClase('sin-panel')).toBe(true);
+  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
+  expect(conClase('sin-izquierda')).toBe(true);
+  await pulsar(svgLienzo(), { key: 'Tab' });
+  await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true });
+  expect(conClase('sin-panel') || conClase('sin-izquierda')).toBe(false);
+
+  const nada = async (destino: EventTarget, init: KeyboardEventInit = {}) => {
+    expect(await pulsar(destino, { key: 'Tab', ...init })).toBe(false);
+    expect(conClase('sin-panel')).toBe(false);
+  };
+  await nada(document.body);
+  await nada(selectIdioma());
+  await nada(porEtiqueta(T.app.deshacer));
+  await nada(container.querySelector('.djs-direct-editing-parent')!);
+  await nada(svgLienzo(), { repeat: true });
+  await nada(svgLienzo(), { metaKey: true });
+  await nada(svgLienzo(), { ctrlKey: true });
+  await click(T.app.modos.modelar);
+  await nada(container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!);
+  // Not while a dialog is open.
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  expect(container.querySelector('dialog.ajustes[open]')).not.toBeNull();
+  await nada(svgLienzo());
+});
+
+it('F6 goes to the modes and Shift+F6 to the right panel or its toggle, the way out of the canvas (#412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'F6' })).toBe(true);
+  expect(document.activeElement).toBe(container.querySelector('.modos .modo'));
+  await pulsar(svgLienzo(), { key: 'Tab' });
+  await pulsar(svgLienzo(), { key: 'F6', shiftKey: true });
+  expect(document.activeElement).toBe(container.querySelector('.menu-vista > summary'));
+});
+
+it('double-click and Enter on a divider hide and show its side without saving a width (#406, #412)', async () => {
+  const derecho = container.querySelector<HTMLElement>('.divisor[role="separator"]')!;
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  expect(conClase('sin-panel')).toBe(true);
+  // Hidden: arrows and drags do nothing.
+  await pulsar(derecho, { key: 'ArrowLeft' });
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 1000, button: 0 })); });
+  await act(async () => { derecho.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 900 })); });
+  expect(appEl().style.getPropertyValue('--panel-ancho')).toBe('320px');
+  await pulsar(derecho, { key: 'Enter' });
+  expect(conClase('sin-panel')).toBe(false);
+  expect(localStorage.getItem('lila.panelAncho')).toBeNull();
+
+  const izquierdo = container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
+  expect(izquierdo.getAttribute('aria-label')).toBe(T.app.redimensionarIzquierda);
+  await act(async () => { izquierdo.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  expect(conClase('sin-izquierda')).toBe(true);
+  // The divider stays, so it can bring the column back.
+  expect(container.querySelector('.divisor-izquierdo')).not.toBeNull();
+  await pulsar(izquierdo, { key: 'ArrowRight' });
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
+  await pulsar(izquierdo, { key: 'Enter' });
+  expect(conClase('sin-izquierda')).toBe(false);
+  expect(localStorage.getItem('lila.railAncho')).toBeNull();
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['izquierda']).toBe(true);
+});
+
+it('the detached scenario window hides the right panel; its toggle peeks without saving, docking restores (#412)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(conClase('sin-panel')).toBe(true);
+    expect(toggleDe('derecha').getAttribute('aria-pressed')).toBe('false');
+    await act(async () => toggleDe('derecha').click());
+    expect(conClase('sin-panel')).toBe(false);
+    expect(container.querySelector('aside')!.textContent).toContain(T.app.enVentanaAparte);
+    expect(localStorage.getItem('lila.paneles')).toBeNull();
+    await act(async () => toggleDe('derecha').click());
+    expect(conClase('sin-panel')).toBe(true);
+    // Model on the Properties tab: the window is not what the panel shows, so it is not hidden.
+    await click(T.app.modos.modelar);
+    expect(conClase('sin-panel')).toBe(true);
+    await click(T.app.pestanas.propiedades);
+    expect(conClase('sin-panel')).toBe(false);
+    await click(T.app.pestanas.simulacion);
+    expect(conClase('sin-panel')).toBe(true);
+
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar)!;
+    await act(async () => {
+      acoplar.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+    expect(conClase('sin-panel')).toBe(false);
+    expect(localStorage.getItem('lila.paneles')).toBeNull();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('a hidden status bar comes back for an error, while its toggle keeps the saved choice (#412, QA of #429)', async () => {
+  await act(async () => toggleDe('estado').click());
+  expect(conClase('sin-estado')).toBe(true);
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(conClase('sin-estado')).toBe(false);
+    expect(container.querySelector('footer.estado [role="alert"]')!.textContent).toBe(T.app.ventanaBloqueada);
+    // The toggle shows the preference (hidden), and says why the bar is there anyway.
+    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('false');
+    expect(toggleDe('estado').title).toBe(T.app.tituloEstadoForzado);
+    // Pressing it is not dead: it records «shown»…
+    await act(async () => toggleDe('estado').click());
+    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['estado']).toBe(true);
+    // …and «hidden» again, which applies as soon as the error goes.
+    await act(async () => toggleDe('estado').click());
+    expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['estado']).toBe(false);
+    expect(conClase('sin-estado')).toBe(false);
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
+it('import warnings do not pin the status bar: they are not errors (QA of #429)', async () => {
+  await act(async () => toggleDe('estado').click());
+  await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 3, avisos: 2, perdidas: [], refsRotas: [], error: null }); });
+  expect(container.querySelector('footer.estado')!.textContent).toContain(T.app.avisosAlImportar(2));
+  expect(conClase('sin-estado')).toBe(true);
+  expect(toggleDe('estado').title).toBe(T.app.tituloRegiones.estado);
+});
+
+it('Escape in the View menu closes it and gives the focus back to its button (QA of #429)', async () => {
+  const menu = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  expect(menu.querySelector('[role="menu"], [role="menuitemcheckbox"]')).toBeNull();
+  menu.open = true;
+  await act(async () => { itemVista('diagramas').focus(); });
+  await pulsar(itemVista('diagramas'), { key: 'Escape' });
+  expect(menu.open).toBe(false);
+  expect(document.activeElement).toBe(menu.querySelector('summary'));
+});
+
+it('the View menu closes on a click outside and the File and View menus close each other (QA of #433)', async () => {
+  const vista = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  const archivo = container.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+  const abrir = async (menu: HTMLDetailsElement) => {
+    await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  };
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(false);
+
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  await abrir(archivo);
+  expect(archivo.open).toBe(true);
+  expect(vista.open).toBe(false);
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  expect(archivo.open).toBe(false);
+  // The late «closed» toggle of the other dropdown must not disarm this one (QA of #433, S1b):
+  // let every queued `toggle` task run before clicking outside.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(false);
+  await abrir(vista);
+  // A click inside the open dropdown is not «outside».
+  await act(async () => { itemVista('diagramas').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(true);
+});
+
+it('the left divider sizes the rail in Simulate (160–320) and the palette in Model (180–360), each its own (#406)', async () => {
+  const izquierdo = () => container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
+  const puntero = (tipo: string, clientX: number) => act(async () => {
+    izquierdo().dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX, button: 0 }));
+  });
+  const ancho = (v: string) => appEl().style.getPropertyValue(v);
+  // Simulate: the rail. Dragging right widens it.
+  expect(izquierdo().getAttribute('aria-valuenow')).toBe('212');
+  await puntero('pointerdown', 200); await puntero('pointermove', 600);
+  expect(ancho('--rail-ancho')).toBe('320px');
+  await puntero('pointermove', 0);
+  expect(ancho('--rail-ancho')).toBe('160px');
+  await puntero('pointerup', 250);
+  expect(ancho('--rail-ancho')).toBe('262px');
+  expect(localStorage.getItem('lila.railAncho')).toBe('262');
+  await pulsar(izquierdo(), { key: 'ArrowRight' });
+  expect(ancho('--rail-ancho')).toBe('278px');
+  expect(localStorage.getItem('lila.railAncho')).toBe('278');
+  expect(localStorage.getItem('lila.paletaAncho')).toBeNull();
+
+  // Model: the palette.
+  await click(T.app.modos.modelar);
+  expect(ancho('--paleta-ancho')).toBe('236px');
+  await puntero('pointerdown', 200); await puntero('pointermove', 500);
+  expect(ancho('--paleta-ancho')).toBe('360px');
+  await puntero('pointerup', 300);
+  expect(ancho('--paleta-ancho')).toBe('336px');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('336');
+  expect(localStorage.getItem('lila.railAncho')).toBe('278');
+  // Below 114 px it snaps to the compact palette; the width is kept for later.
+  await puntero('pointerdown', 300); await puntero('pointermove', 0); await puntero('pointerup', 0);
+  expect(container.querySelector('.paleta.compacta')).not.toBeNull();
+  expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('336');
+  expect(izquierdo().getAttribute('aria-valuenow')).toBe('48');
+  // ArrowRight from compact lands on 180, not compact; ArrowLeft at 180 goes back to compact.
+  await pulsar(izquierdo(), { key: 'ArrowRight' });
+  expect(container.querySelector('.paleta.compacta')).toBeNull();
+  expect(ancho('--paleta-ancho')).toBe('180px');
+  expect(localStorage.getItem('lila.paleta')).toBe('normal');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('180');
+  await pulsar(izquierdo(), { key: 'ArrowLeft' });
+  expect(container.querySelector('.paleta.compacta')).not.toBeNull();
+  // Dragging out of compact leaves at max(180, x).
+  await puntero('pointerdown', 100); await puntero('pointermove', 200);
+  expect(container.querySelector('.paleta.compacta')).toBeNull();
+  expect(ancho('--paleta-ancho')).toBe('180px');
+  await puntero('pointermove', 350); await puntero('pointerup', 350);
+  expect(ancho('--paleta-ancho')).toBe('298px');
+  expect(localStorage.getItem('lila.paletaAncho')).toBe('298');
+  // The palette's own button still toggles it, under the same key.
+  await act(async () => { porEtiqueta(T.paleta.modoCompacto).click(); });
+  expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+it('saved left widths are clamped, blank means never saved; no left divider without a left column (#406)', async () => {
+  localStorage.setItem('lila.paletaAncho', '9999');
+  localStorage.setItem('lila.railAncho', '  ');
+  await remontar();
+  expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('360px');
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
+  for (const modo of [T.app.modos.resultados, T.app.modos.comparar]) {
+    await click(modo);
+    expect(container.querySelector('.divisor-izquierdo')).toBeNull();
+    expect(toggleDe('izquierda').disabled).toBe(true);
+    expect(toggleDe('izquierda').getAttribute('aria-pressed')).toBe('false');
+    // Nothing to toggle: Shift+Tab falls through and keeps moving the focus backwards.
+    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
+    expect(conClase('sin-izquierda')).toBe(false);
+  }
+});
+
 // --- Pérdida al importar y al exportar (LILA-192 #214, LILA-193 #216) ---
 
 const ESTADO_CON_PERDIDA = {
@@ -1530,7 +1997,21 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(bienvenida).not.toBeNull();
   expect(bienvenida.textContent).toContain('/p/clickandgo.lila');
   expect(bienvenida.querySelector('time')!.textContent).toBe('2 hours ago');
-  expect(bienvenida.textContent).toContain(T.bienvenida.novedades('1.0.0-beta.4'));
+  // #425: the heading follows the manifest and the paragraph is this version's CHANGELOG intro
+  // (`__LILA_NOVEDADES__`), not a fixed text; the theme line never ends with a stray «·».
+  expect(bienvenida.querySelector('.bienvenida-novedades h3')!.textContent).toBe(T.bienvenida.novedades(version));
+  expect(__LILA_NOVEDADES__).not.toBe('');
+  expect(bienvenida.querySelector('.bienvenida-novedades p')!.textContent).toBe(__LILA_NOVEDADES__);
+  // One flex item after the swatch: text and link wrap inline together, and the «·» travels with
+  // the link inside a `nowrap` span, so no line can end with it (QA of #427, M1).
+  const lineaTema = bienvenida.querySelector('.bienvenida-tema')!;
+  expect([...lineaTema.children].map((hijo) => hijo.tagName)).toEqual(['SPAN', 'SPAN']);
+  const texto = lineaTema.children[1]!;
+  expect(texto.firstChild!.textContent!.trim()).not.toMatch(/·$/);
+  const enlace = texto.querySelector('.enlace-tema')!;
+  expect(enlace.parentElement).toBe(texto);
+  expect(enlace.textContent).toBe(`· ${T.bienvenida.cambiarApariencia}`);
+  expect(enlace.querySelector('button.enlace')!.textContent).toBe(T.bienvenida.cambiarApariencia);
   await act(async () => { bienvenida.querySelector<HTMLButtonElement>('.bienvenida-recientes button')!.click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/clickandgo.lila', undefined);
   expect(container.querySelector('.bienvenida')).toBeNull();
@@ -1708,4 +2189,112 @@ it.each([
   ['#1C0F2E', false], // lila-dark
 ] as const)('temaClaro(%s) es %s', (bgBase, claro) => {
   expect(temaClaro({ name: 't', tokens: { 'bg.base': bgBase } })).toBe(claro);
+});
+
+// ---------- first use of an empty process (#419, #420) ----------
+
+it('a failed Run outside the Simulation tab shows in the status bar, and only once with the tab open (#419)', async () => {
+  const mensaje = 'E-SIN-START: Process_1: the process has no start event.\nE-SIN-END: Process_1: the process has no end event and no terminate.';
+  mocks.gate.mockRejectedValue(new Error(mensaje));
+  await click(T.app.pestanas.propiedades);
+  await click(T.app.ejecutar);
+  const alerta = container.querySelector<HTMLElement>('footer.estado [role="alert"].error');
+  expect(alerta?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+  expect(alerta?.title).toBe(mensaje);
+  await click(T.app.pestanas.simulacion);
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
+  expect(container.textContent!.split('E-SIN-START')).toHaveLength(2);
+});
+
+it('a failed Run with the right panel hidden goes to the status bar and brings a hidden bar back (#419 + #412)', async () => {
+  mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.pestanas.simulacion);
+  await act(async () => toggleDe('derecha').click());
+  await act(async () => toggleDe('estado').click());
+  expect(conClase('sin-panel')).toBe(true);
+  expect(conClase('sin-estado')).toBe(true);
+  await click(T.app.ejecutar);
+  expect(conClase('sin-estado')).toBe(false);
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+  // The panel back on screen shows the error in the tab, so the bar no longer needs it.
+  await act(async () => toggleDe('derecha').click());
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
+  expect(conClase('sin-estado')).toBe(true);
+  expect(container.textContent!.split('E-SIN-START')).toHaveLength(2);
+});
+
+/** A process with the given start events and tasks, no flows: enough for `parseBpmn` to list them. */
+function modelo(inicios: string[], tareas: string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_semilla" isExecutable="false">
+${inicios.map((id) => `<bpmn:startEvent id="${id}"/>`).join('')}${tareas.map((id) => `<bpmn:task id="${id}"/>`).join('')}<bpmn:endEvent id="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+}
+/** Hands the canvas a new XML and lets the deferred reparse (150 ms) turn it into the next `ir`. */
+async function reparsear(xml: string) {
+  mocks.exportXml.mockResolvedValue(xml);
+  // Two acts: React renders the new revision (and arms the timer) when the first one ends.
+  await act(async () => mocks.changed());
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+}
+const asIs = () => mocks.escenarios['as-is.scenario.json']!.elements ?? {};
+
+it('a start and a task drawn on an empty process get the defaults in the BASE scenario only (#420)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  expect(asIs()).toEqual({});
+
+  await reparsear(modelo(['Start_A'], ['Task_A']));
+  expect(asIs()).toEqual({ Start_A: { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } }, Task_A: { processingTime: { type: 'constant', value: 60 } } });
+  expect(mocks.escenarios['to-be.scenario.json']).toEqual(expect.not.objectContaining({ elements: expect.anything() }));
+
+  // Task_A edited and Task_B configured before it is drawn: neither is overwritten.
+  const editado = { processingTime: { type: 'constant', value: 7 } };
+  const previo = { processingTime: { type: 'constant', value: 5 } };
+  await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { ...asIs(), Task_A: editado, Task_B: previo } }));
+  await reparsear(modelo(['Start_A', 'Start_B'], ['Task_A', 'Task_B', 'Task_C']));
+  expect(asIs()['Task_A']).toEqual(editado);
+  expect(asIs()['Task_B']).toEqual(previo);
+  expect(asIs()['Task_C']).toEqual({ processingTime: { type: 'constant', value: 60 } });
+  // A second start does not get arrivals of its own.
+  expect(asIs()['Start_B']).toBeUndefined();
+
+  // Undo/delete: the untouched seed (Task_C) goes with its node; the edited entry stays.
+  await reparsear(modelo(['Start_A'], []));
+  expect(Object.keys(asIs()).sort()).toEqual(['Start_A', 'Task_A', 'Task_B']);
+});
+
+it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  const soloTimer = { interTriggerTimer: { type: 'exponential', mean: 30 } };
+  await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { Start_A: soloTimer } }));
+  await reparsear(modelo(['Start_A', 'Start_B'], []));
+  expect(asIs()).toEqual({ Start_A: soloTimer });
+});
+
+it('a failed Run in Animate shows in the status bar (#419)', async () => {
+  mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.modos.animar);
+  await click(T.app.ejecutar);
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+});
+
+it('opening a project with unconfigured tasks does not modify its scenarios (#420)', async () => {
+  // The demo diagram is parsed first, so the opened one would look like a batch of new nodes.
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const xml = modelo(['Start_A'], ['Task_A']);
+  const doc = { version: 1, id: 'abierto', name: 'Abierto', model: { id: 'Process_semilla', name: 'model.bpmn', xml, revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, model: 'model.bpmn', run: { duration: 60 }, elements: {} } }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(xml);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  expect(container.textContent).toContain('Abierto');
+  expect(asIs()).toEqual({});
 });

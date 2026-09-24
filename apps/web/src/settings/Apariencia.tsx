@@ -266,8 +266,13 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
             onChange={(e) => { const f = e.target.files?.[0]; if (f !== undefined) void importar(f).finally(() => { if (archivo.current !== null) archivo.current.value = ''; }); }}
           />
         </label>
+        {/* #422: deleting the active theme falls back to "no theme saved" (an empty `seleccion`),
+            the same rule the first launch uses (`temaPorDefecto`, #404) — no longer the fixed
+            `'eva-01'` of before. `''`, not the resolved id: `App.tsx`'s `seleccionarTema` shows and
+            applies the resolved Lila id but persists `''`, so a later OS scheme change is picked
+            up again at the next launch instead of freezing on today's (QA of #432, S1). */}
         {activo !== undefined && (
-          <button type="button" className="boton" onClick={() => props.onTemas(temas.filter((t) => t.id !== activo.id), 'eva-01')}>{S.apariencia.eliminar}</button>
+          <button type="button" className="boton" onClick={() => props.onTemas(temas.filter((t) => t.id !== activo.id), '')}>{S.apariencia.eliminar}</button>
         )}
       </div>
 

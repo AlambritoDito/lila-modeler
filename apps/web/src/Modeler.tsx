@@ -502,8 +502,16 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       if (vivo && abierto) onListo(api);
     });
 
+    // diagram-js caches the container size for its viewbox and only rereads it on window
+    // `resize`: hiding or resizing a panel (#406, #412) changes the canvas box without one, and
+    // zoom, fit and scrolling would work on the old size until then.
+    const observador = typeof ResizeObserver === 'undefined' ? null
+      : new ResizeObserver(() => { if (conTamano()) activo?.get<Canvas>('canvas').resized(); });
+    observador?.observe(container);
+
     return () => {
       vivo = false;
+      observador?.disconnect();
       activo?.destroy();
     };
   }, [xmlInicial, onListo, onEstado, onSeleccion]);

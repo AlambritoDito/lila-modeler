@@ -11,11 +11,12 @@
  */
 
 /**
- * The only child window the renderer may open (design 2c): the detached scenario panel, an empty
- * `about:blank` the app itself fills through a React portal. Anything else keeps being denied.
+ * The only child windows the renderer may open: the detached scenario panel (design 2c) and the
+ * About window (#408), both an empty `about:blank` the app itself fills through a React portal.
+ * Anything else keeps being denied.
  */
 export function permiteVentanaHija(url: string, frameName: string): boolean {
-  return url === 'about:blank' && frameName === 'lila-escenario';
+  return url === 'about:blank' && (frameName === 'lila-escenario' || frameName === 'lila-acerca');
 }
 
 /** Origen esperado del protocolo empaquetado: `lila://app/...`. */

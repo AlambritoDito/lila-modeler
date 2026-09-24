@@ -2,7 +2,7 @@
   "name": "@lila/desktop",
   "productName": "Lila Modeler",
   "private": true,
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.5",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "icons": "node ../../tools/generate-branding.mjs"
   },
   "dependencies": {
-    "@lila/engine": "1.0.0-beta.4"
+    "@lila/engine": "1.0.0-beta.5"
   },
   "devDependencies": {
     "electron": "44.2.0",

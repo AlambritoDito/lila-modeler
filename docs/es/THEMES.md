@@ -132,7 +132,13 @@ Los controles:
 - **Importar**: un `<input type="file" accept=".json">`. El JSON se valida entero antes de tocar
   nada (`validarTema`, `apps/web/src/theme/temas.ts`); si algo falla, el mensaje sale dentro del
   diálogo y no se aplica ni se guarda nada. Si vale, entra como tema del usuario y se aplica.
-- **Eliminar** quita el tema del usuario activo y vuelve a Eva-01.
+- **Eliminar** quita el tema del usuario activo y cae a la misma regla del sistema que el primer
+  arranque (sin tema guardado): el selector de `App.tsx` enseña y aplica Lila Oscuro o Lila Claro
+  por `temaPorDefecto()` (`apps/web/src/theme/temaPorDefecto.ts`), pero guarda un `tema` vacío en
+  vez de ese id resuelto, ya no el Eva-01 fijo de antes (#422). Un `tema` vacío se vuelve a resolver
+  con la misma regla en cada arranque siguiente, así que un cambio posterior del esquema del SO se
+  recoge de nuevo en vez de quedarse fijo en el esquema del momento del borrado (QA de #432,
+  should-fix S1).
 - **Cerrar el diálogo no deshace nada.** El botón «Cerrar» y la tecla Escape hacen lo mismo: lo
   editado ya está aplicado y ya está guardado desde la pulsación que lo cambió, porque el editor no
   tiene «Aceptar». Para volver atrás está «Restablecer». Enter dentro de un campo de texto **no**

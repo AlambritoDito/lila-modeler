@@ -137,7 +137,12 @@ The controls:
   anything (`validarTema`, `apps/web/src/theme/temas.ts`); if something fails, the message
   appears inside the dialog and nothing is applied or saved. If it is valid, it comes in as a user
   theme and is applied.
-- **Delete** removes the active user theme and falls back to Eva-01.
+- **Delete** removes the active user theme and falls back to the system rule as on first launch
+  (no theme saved): `App.tsx`'s selector shows and applies Lila Dark or Lila Light by
+  `temaPorDefecto()` (`apps/web/src/theme/temaPorDefecto.ts`), but persists an empty `tema` instead
+  of that resolved id, not the fixed Eva-01 of before (#422). An empty `tema` is re-resolved by the
+  same rule on every future launch, so a later OS scheme change is picked up again instead of
+  freezing on the scheme at the moment of deletion (QA of #432, should-fix S1).
 - **Closing the dialog undoes nothing.** The «Cerrar» (Close) button and the Escape key do the
   same thing: whatever was edited is already applied and already saved from the keystroke that
   changed it, because the editor has no «Aceptar» (Accept). To go back there is «Restablecer»

@@ -60,12 +60,22 @@ export function readLila(bytes: Uint8Array): ProjectDocument {
   }
 }
 
+/**
+ * Parameters a start event or a task gets when nobody has configured it yet (times in seconds):
+ * 20 arrivals one minute apart, one minute of work. Used by the default scenarios and, since #420, for each start or task
+ * drawn on the canvas, so a process built from «New» runs with numbers and not with zeros.
+ */
+export function defaultElement(type: 'start' | 'task'): Record<string, unknown> {
+  return type === 'start'
+    ? { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } }
+    : { processingTime: { type: 'constant', value: 60 } };
+}
+
 export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument> {
   const S = strings();
   const elements: Record<string, unknown> = {};
   for (const [id, node] of Object.entries(ir.nodes)) {
-    if (node.type === 'start') elements[id] = { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } };
-    if (node.type === 'task') elements[id] = { processingTime: { type: 'constant', value: 60 } };
+    if (node.type === 'start' || node.type === 'task') elements[id] = defaultElement(node.type);
   }
   return {
     'as-is.scenario.json': { version: 1, name: S.proyecto.escenarioAsIs, model: 'model.bpmn', run: { start: '2026-09-07T08:00:00Z', duration: 3600, warmup: 0, replications: 3, seed: 42, baseTimeUnit: 'min', currency: 'MXN' }, elements },

@@ -56,3 +56,25 @@ it('bloquea elementos BPMN fuera del perfil antes de simular', async () => {
 it('un escenario que apunta a otro modelo no simula el modelo activo por accidente', async () => {
   await expect(prepareSimulation(xml, 'base', { base: { ...raw, model: 'otro.bpmn' } })).rejects.toThrow('modelo activo');
 });
+
+// #419: the engine message for E-SIN-START already opens with the process id; the gate must not
+// prefix it a second time.
+it('an empty process reports E-SIN-START with its id exactly once (#419)', async () => {
+  const empty = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_vacio" isExecutable="false"/></bpmn:definitions>`;
+  const error = await prepareSimulation(empty, 'base', { base: raw }).catch((e: unknown) => e as Error);
+  expect(error).toBeInstanceOf(Error);
+  const message = (error as Error).message;
+  const line = message.split('\n').find((l) => l.startsWith('E-SIN-START:')) ?? '';
+  expect(line).toMatch(/^E-SIN-START: Process_vacio: /);
+  expect(line.split('Process_vacio')).toHaveLength(2);
+});
+
+// Same guard for scenario problems: E-ELEMENTO-DESCONOCIDO already opens with its path.
+it('a scenario entry for an unknown id cites its path exactly once (#419)', async () => {
+  const elements = { ...(raw['elements'] as Record<string, unknown>), Tarea_fantasma: { processingTime: { type: 'constant', value: 1 } } };
+  const error = await prepareSimulation(xml, 'base', { base: { ...raw, elements } }).catch((e: unknown) => e as Error);
+  const line = (error as Error).message.split('\n').find((l) => l.startsWith('E-ELEMENTO-DESCONOCIDO:')) ?? '';
+  expect(line).toMatch(/^E-ELEMENTO-DESCONOCIDO: elements\.Tarea_fantasma: /);
+  expect(line.split('elements.Tarea_fantasma')).toHaveLength(2);
+});

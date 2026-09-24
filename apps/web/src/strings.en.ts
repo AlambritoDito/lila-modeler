@@ -102,6 +102,25 @@ export const en = {
     tituloGuardar: 'Save project',
     tituloGuardarComo: 'Save as',
 
+    /**
+     * Desktop «File» menu (#411): same `<details className="menu-archivo">` as the browser, but
+     * these entries mirror the native menu bar word for word (`apps/desktop/src/strings/en.ts`),
+     * because the owner reads both and they must agree. The native menu (and its accelerators)
+     * stays; this is only about the owner finding the same actions inside the window too.
+     */
+    menuEscritorio: {
+      nuevoProyecto: 'New project',
+      abrirProyecto: 'Open project…',
+      abrirProyectoArchivo: 'Open project file (.lila)…',
+      abrirReciente: 'Open recent',
+      // QA of #432 (N1): word for word with the native menu's own empty state
+      // (`apps/desktop/src/strings/en.ts`'s `menu.ninguno`), not a longer paraphrase.
+      ninguno: 'None',
+      guardarProyecto: 'Save project',
+      guardarComo: 'Save as…',
+      guardarComoCarpeta: 'Save as folder…',
+    },
+
     /** Inert search box of the bar (the command palette is another ticket). */
     buscar: 'Search activity',
     buscarPista: 'Search activity…',
@@ -125,6 +144,7 @@ export const en = {
     enVentanaAparte: 'Scenario in its own window ↗',
     mostrarVentana: 'Show',
     ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
+    acercaBloqueada: 'The About window was blocked; allow pop-ups for this site.',
     tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
 
     /** Canvas zoom controls. */
@@ -199,6 +219,27 @@ export const en = {
     nuevoDiagrama: 'New diagram',
     /** Divider between the canvas and the right panel (design 2a). */
     redimensionarPanel: 'Resize the right panel',
+    /** Divider between the left column and the canvas (#406). */
+    redimensionarIzquierda: 'Resize the left column',
+    /**
+     * Panel visibility toggles, top bar right (#412): the region names label the buttons and the
+     * items of the «View» menu that replaces them in narrow windows; the titles carry the key.
+     */
+    vista: 'View',
+    regiones: {
+      izquierda: 'Left column',
+      derecha: 'Right panel',
+      diagramas: 'Diagram tabs',
+      estado: 'Status bar',
+    },
+    tituloRegiones: {
+      izquierda: 'Show or hide the left column (Shift+Tab on the canvas)',
+      derecha: 'Show or hide the right panel (Tab on the canvas)',
+      diagramas: 'Show or hide the diagram tabs',
+      estado: 'Show or hide the status bar',
+    },
+    /** The status bar toggle while an error keeps the bar on screen (#412). */
+    tituloEstadoForzado: 'Show or hide the status bar — it stays while it shows an error',
 
     /** Status bar. */
     semilla: (valor: string): string => `Seed ${valor}`,
@@ -250,9 +291,8 @@ export const en = {
     recientes: 'Recent',
     sinRecientes: 'No recent projects yet. Open one or start from the example.',
     novedades: (version: string): string => `What's new in ${version}`,
-    novedadesTexto: '.lila project files with saved runs, Simulate as four steps, replay of the event log on the diagram, routing on the case\'s previous outcome, and results with the same column names as Bizagi Modeler.',
     notasVersion: 'Release notes',
-    tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad} ·`,
+    tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad}`,
     cambiarApariencia: 'change in Settings → Appearance',
   },
 
@@ -924,7 +964,7 @@ export const en = {
 
     /** Validation marker: the disc and its native tooltip. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 rename · ⇥ properties',
+    marcadorAcciones: 'F2 rename · ⇧F6 properties',
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

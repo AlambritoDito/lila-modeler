@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+import { novedades } from './apps/web/novedades';
+
+const leer = (ruta: string): string => readFileSync(new URL(ruta, import.meta.url), 'utf8');
+const webVersion = (JSON.parse(leer('./apps/web/package.json')) as { version: string }).version;
 
 const { CI } = process.env;
 const onCi = CI !== undefined && CI !== '' && CI !== 'false';
@@ -9,6 +14,9 @@ const onCi = CI !== undefined && CI !== '' && CI !== 'false';
  * intacto el resto (pool `forks`, `isolate: true`, `include` por defecto).
  */
 export default defineConfig({
+  // Tests run with this config, not `apps/web/vite.config.ts`, so the welcome's build-time
+  // constant (#425) is defined here too, from the same CHANGELOG section.
+  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(leer('./CHANGELOG.md'), webVersion)) },
   test: {
     // Cada fork corre simulaciones de 30 réplicas de examples/pedido. Con `maxForks` por
     // defecto (un proceso por core) el runner del CI queda saturado, y de ahí salen los

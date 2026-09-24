@@ -16,7 +16,7 @@
  *   verifica que el mensaje venga del frame principal de la propia app (`isTrustedSender`,
  *   `ipcGuards.ts`) — un frame anidado o una URL de navegación ajena no puede invocar el puente.
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -766,12 +766,26 @@ function attachCloseGuard(win: BrowserWindow): void {
   });
 }
 
+/**
+ * Window background before anything paints (#421): Lila Dark or Lila Light by
+ * `nativeTheme.shouldUseDarkColors`, instead of the fixed Eva-01 grey it always was — so there is
+ * no dark→light flash on a light system. Same hex values as `startup.css` (`theme/themes/
+ * lila-{dark,light}.json` → `bg.base`), which is the screen showing while this sits behind it.
+ * ponytail: reads the SYSTEM scheme, not the theme the user SAVED in Settings — if they saved a
+ * dark theme on a light system (or vice versa), this window still flashes from the OS scheme to
+ * theirs; ceiling: read `Ajustes.tema` from `estado.json` (`sessionState.ts`) before creating the
+ * window, which this file does not do today for any appearance setting.
+ */
+function fondoVentana(): string {
+  return nativeTheme.shouldUseDarkColors ? '#1C0F2E' : '#FAF8EE';
+}
+
 function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow {
   const icon = path.join(app.getAppPath(), 'resources', 'icons', 'icon.png');
   const win = new BrowserWindow({
     ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
-    backgroundColor: '#12101a',
+    backgroundColor: fondoVentana(),
     icon,
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
@@ -788,16 +802,19 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   // sistema en vez de crear una `BrowserWindow` sin las mismas protecciones. The one exception is
   // the detached scenario window (design 2c): an empty `about:blank` of the app's own origin that
   // the renderer fills with a React portal, so it needs no preload and gets none. Its size and
-  // position come from the features string of `window.open`.
+  // position come from the features string of `window.open`. The About window (#408) takes the
+  // same path but is a fixed card: its size is pinned here and it cannot be resized, minimised or
+  // maximised.
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     if (permiteVentanaHija(url, frameName)) {
+      const acerca = frameName === 'lila-acerca';
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
           useContentSize: true,
           minWidth: 420,
           minHeight: 360,
-          backgroundColor: '#12101a',
+          backgroundColor: fondoVentana(),
           autoHideMenuBar: true,
           icon,
           // Pinned (QA of #391): Electron merges the renderer's features string under these, so
@@ -806,9 +823,10 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
           alwaysOnTop: false,
           closable: true,
           movable: true,
-          resizable: true,
-          minimizable: true,
-          maximizable: true,
+          ...(acerca ? { width: 440, height: 600 } : {}),
+          resizable: !acerca,
+          minimizable: !acerca,
+          maximizable: !acerca,
           focusable: true,
           frame: true,
           transparent: false,

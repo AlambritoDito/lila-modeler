@@ -9,7 +9,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 // Solo el tipo (se borra al compilar): `Ajustes` es parte del contrato del puente, así que se
 // define una vez en `bridge.ts` y aquí se reusa en vez de duplicar la forma.
-import type { Ajustes, TemaGuardado } from './bridge.js';
+import type { Ajustes, TemaGuardado, VisibilidadPaneles } from './bridge.js';
 
 export interface WindowBounds {
   readonly x: number;
@@ -81,6 +81,9 @@ export function parseAjustes(value: unknown): Ajustes {
     idioma?: string;
     temas?: readonly TemaGuardado[];
     panelAncho?: number;
+    paletaAncho?: number;
+    railAncho?: number;
+    paneles?: Record<string, VisibilidadPaneles>;
     ventanaEscenario?: WindowBounds;
   } = {};
   if (typeof value.tema === 'string') ajustes.tema = value.tema;
@@ -91,10 +94,35 @@ export function parseAjustes(value: unknown): Ajustes {
   if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
   // The right panel width (design 2a): the same 300–520 px the renderer's divider allows.
   if (typeof value.panelAncho === 'number' && value.panelAncho >= 300 && value.panelAncho <= 520) ajustes.panelAncho = value.panelAncho;
+  // Left column widths (#406): the palette's 180–360 px and the rail's 160–320 px.
+  if (typeof value.paletaAncho === 'number' && value.paletaAncho >= 180 && value.paletaAncho <= 360) ajustes.paletaAncho = value.paletaAncho;
+  if (typeof value.railAncho === 'number' && value.railAncho >= 160 && value.railAncho <= 320) ajustes.railAncho = value.railAncho;
+  const paneles = parsePaneles(value.paneles);
+  if (paneles !== undefined) ajustes.paneles = paneles;
   // Geometry of the detached scenario window (design 2c), no smaller than its `minWidth`/`minHeight`
   // in `main.ts`, which also recentres it if it no longer fits any display.
   if (isWindowBounds(value.ventanaEscenario, 420, 360)) ajustes.ventanaEscenario = value.ventanaEscenario;
   return ajustes;
+}
+
+/** Region names of `VisibilidadPaneles` (#412); anything else in a mode's entry is dropped. */
+const REGIONES = ['izquierda', 'derecha', 'diagramas', 'estado'] as const;
+
+/**
+ * Per-mode panel visibility (#412). Main does not know the mode ids (the renderer does and ignores
+ * the unknown ones), so it only checks the shape: a plain object of at most 16 modes, each a plain
+ * object from which only the four boolean fields are copied.
+ */
+function parsePaneles(value: unknown): Record<string, VisibilidadPaneles> | undefined {
+  if (!isPlainObject(value) || Object.keys(value).length > 16) return undefined;
+  const paneles: Record<string, VisibilidadPaneles> = {};
+  for (const [modo, entrada] of Object.entries(value)) {
+    if (!isPlainObject(entrada)) continue;
+    const limpia: { -readonly [K in keyof VisibilidadPaneles]: boolean } = {};
+    for (const region of REGIONES) if (typeof entrada[region] === 'boolean') limpia[region] = entrada[region];
+    paneles[modo] = limpia;
+  }
+  return paneles;
 }
 
 /** Tope de temas de usuario en disco (LILA-114): esto es la configuración de la app, no una galería. */

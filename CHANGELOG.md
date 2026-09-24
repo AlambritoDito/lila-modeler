@@ -3,6 +3,52 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.5] - 2026-09-23
+
+Lote B: first use and the frame of the UI. Running an empty or incomplete process now says what is
+missing wherever you are, shapes drawn on a new process get usable defaults, the palette, rail,
+panel, tab strip and status bar can be hidden and resized per mode, About lives in its own window,
+and the desktop app shows the File menu in the top bar. No installer is attached to this version.
+
+### Added
+
+- **Hideable panels, Ableton-style** (#412): toggles at the right end of the top bar (a «View» menu
+  below 1480 px) hide the left column, the right panel, the diagram tab strip and the status bar,
+  remembered per mode; Tab / Shift+Tab toggle the right panel / left column while the canvas has
+  focus, F6 / Shift+F6 leave the canvas, and a double-click (or Enter) on a divider collapses that
+  side. The status bar reappears while an error is showing; the detached scenario window counts as
+  «right panel hidden».
+- **Resizable left column** (#406): the palette (180–360 px, snapping to its 48 px compact mode)
+  and the scenario rail (160–320 px) have a divider with drag and arrow keys; widths are saved
+  separately.
+- **Defaults for drawn shapes** (#420): the first start event drawn on a process gets 20 arrivals
+  one minute apart and every new task one minute of work, only in the base scenario and never over
+  an existing entry; an untouched seed leaves with its shape (undo, delete).
+- **File menu on desktop** (#411): the same New / Open / Open recent / Save / Save as entries as
+  the native menu, in the top bar, closing on Esc and on a click outside.
+
+### Changed
+
+- **About in its own window** (#408): the approved Lila tile with rounded corners (the one
+  exception to the radius-0 system) and a grow/shrink pulse on click; the six-click Easter egg,
+  the version and the fixed Spanish lines are unchanged.
+- **Welcome «What's new»** (#425): the paragraph is this version's introduction from the changelog,
+  read at build time (English in both languages); the theme/density line no longer ends with a
+  stray «·».
+- **Startup and window background follow the system scheme** (#421): cream on a light system, plum
+  on a dark one, instead of always dark.
+- **Deleting the active user theme** (#422) falls back to the system-based Lila default, not to
+  Eva-01.
+
+### Fixed
+
+- **Run errors were silent outside the Simulation tab** (#419): the validation errors of Run
+  (`E-SIN-START`, `E-SIN-END`…) show in the status bar whenever the Simulation tab is not visible,
+  and the process id or element path is no longer printed twice.
+- **The inert search field collapsed to an empty box** (#423): it is now at least 120 px wide or
+  hidden, whatever the language and project name; the mode tabs give up their padding below
+  1400 px instead of 1365.
+
 ## [1.0.0-beta.4] - 2026-09-23
 
 ### Added
