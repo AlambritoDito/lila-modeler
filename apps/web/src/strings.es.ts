@@ -94,7 +94,9 @@ export const es: Strings = {
       abrirProyecto: 'Abrir proyecto…',
       abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
       abrirReciente: 'Abrir reciente',
-      ninguno: 'Sin proyectos recientes',
+      // QA de #432 (N1): igual, letra por letra, al vacío del menú nativo
+      // (`menu.ninguno` en `apps/desktop/src/strings/es.ts`), no una paráfrasis más larga.
+      ninguno: 'Ninguno',
       guardarProyecto: 'Guardar proyecto',
       guardarComo: 'Guardar como…',
       guardarComoCarpeta: 'Guardar como carpeta…',

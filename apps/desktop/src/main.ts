@@ -767,14 +767,14 @@ function attachCloseGuard(win: BrowserWindow): void {
 }
 
 /**
- * Fondo de la ventana antes de que pinte nada (#421): Lila Dark o Lila Light por
- * `nativeTheme.shouldUseDarkColors`, en vez del gris de Eva-01 fijo de siempre — así no hay un
- * parpadeo oscuro→claro en un sistema claro. Mismos hex que `startup.css` (`theme/themes/
- * lila-{dark,light}.json` → `bg.base`), que es la pantalla que se ve mientras esto está detrás.
- * ponytail: lee el esquema del SISTEMA, no el tema GUARDADO por el usuario en Ajustes —si guardó
- * un tema oscuro en un sistema claro (o viceversa), esta ventana sigue parpadeando del esquema del
- * SO al suyo; techo: leer `Ajustes.tema` de `estado.json` (`sessionState.ts`) antes de crear la
- * ventana, cosa que este archivo no hace hoy con nada de la apariencia.
+ * Window background before anything paints (#421): Lila Dark or Lila Light by
+ * `nativeTheme.shouldUseDarkColors`, instead of the fixed Eva-01 grey it always was — so there is
+ * no dark→light flash on a light system. Same hex values as `startup.css` (`theme/themes/
+ * lila-{dark,light}.json` → `bg.base`), which is the screen showing while this sits behind it.
+ * ponytail: reads the SYSTEM scheme, not the theme the user SAVED in Settings — if they saved a
+ * dark theme on a light system (or vice versa), this window still flashes from the OS scheme to
+ * theirs; ceiling: read `Ajustes.tema` from `estado.json` (`sessionState.ts`) before creating the
+ * window, which this file does not do today for any appearance setting.
  */
 function fondoVentana(): string {
   return nativeTheme.shouldUseDarkColors ? '#1C0F2E' : '#FAF8EE';

@@ -377,10 +377,9 @@ body {
   margin: calc(4px * var(--espacio, 1)) 0;
 }
 
-/* «Abrir reciente» (#411, solo escritorio): mismo `<details>` anidado que el desplegable que lo
-   envuelve, sin flyout lateral. ponytail: una lista que se despliega hacia abajo, dentro del
-   propio menú, es más simple que calcular la posición de un flyout; techo: si molesta, `left:
-   100%; top: 0` aquí y basta. */
+/* "Open recent" (#411, desktop only): same nested `<details>` as the dropdown wrapping it, no
+   side flyout. ponytail: a list that drops down inside the menu itself is simpler than computing
+   a flyout's position; ceiling: if that bothers someone, `left: 100%; top: 0` here is enough. */
 .menu-archivo-reciente {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -404,7 +403,9 @@ body {
 .menu-archivo-reciente > div {
   display: flex;
   flex-direction: column;
-  max-height: 220px;
+  /* QA of #432 (S2): tall enough for 5+ recents at one line each (~44px) before the list scrolls
+     — it used to fit only 1–2 because the path below wrapped across several lines. */
+  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -412,6 +413,13 @@ body {
   color: var(--fg-disabled);
   display: block;
   font-size: 11px;
+  /* QA of #432 (S2): the native menu's sublabel stays on one line; this one wrapped across up to
+     8 lines for a real path, pushing later recents out of view (and out of `max-height`) and
+     under the fold. The full path stays available in the button's `title`. */
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The bar's spring (#423): it takes the free room, pushes the field to its right edge with an

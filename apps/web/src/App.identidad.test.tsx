@@ -32,9 +32,9 @@ vi.mock('./Modeler', () => ({
   Lienzo: ({ onListo }: { onListo: (modelo: Modelador) => void }) => {
     useEffect(() => {
       onListo({
-        // #411: «Guardar proyecto»/«Guardar como» del nuevo menú de escritorio pasan por aquí
-        // (`App.tsx`'s `snapshot()` → `modelador.exportar` → `parseBpmn`), así que hace falta un
-        // XML de verdad y no el `undefined` de un `vi.fn()` sin implementación.
+        // #411: the new desktop menu's "Save project"/"Save as" go through here
+        // (`App.tsx`'s `snapshot()` → `modelador.exportar` → `parseBpmn`), so a real XML is
+        // needed instead of the `undefined` an unimplemented `vi.fn()` returns.
         exportar: vi.fn().mockResolvedValue(newModelXml()), abrir: vi.fn(), cuellos: vi.fn(), ajustar: vi.fn(), zoom: vi.fn(),
         repintar: vi.fn(), validacion: vi.fn(), seleccionar: vi.fn(), simulacionTokens: vi.fn(),
         suscribir: () => () => {},
@@ -69,9 +69,9 @@ afterEach(async () => {
 });
 
 /**
- * `sessionOverrides` (#411) es lo único que añade el desplegable Archivo de escritorio a este
- * montaje: `openRecent`, para las pruebas que abren un reciente desde el menú. El resto de campos
- * son los que ya bastaban para `App.identidad.test.tsx`.
+ * `sessionOverrides` (#411) is the only thing the desktop File dropdown adds to this mount:
+ * `openRecent`, for the tests that open a recent from the menu. The rest of the fields are the
+ * ones `App.identidad.test.tsx` already needed.
  */
 async function montarApp(sessionOverrides: Record<string, unknown> = {}): Promise<{ contenedor: HTMLDivElement; session: ProjectSessionStore }> {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
@@ -94,16 +94,16 @@ async function montarApp(sessionOverrides: Record<string, unknown> = {}): Promis
 }
 
 /**
- * El `toggle` de `<details>` es real HTML, no un evento de React: el propio estándar lo pone en
- * cola (`queue a task`, `setTimeout(0)` en jsdom) en vez de dispararlo en el mismo turno del clic
- * — así que un test que dependa de `onToggle` (recientes, clic-fuera) tiene que ceder un tick.
+ * `<details>`'s `toggle` is real HTML, not a React event: the standard itself queues it (`queue a
+ * task`, `setTimeout(0)` in jsdom) instead of firing it in the same turn as the click — so a test
+ * that depends on `onToggle` (recents, click-outside) has to yield a tick.
  */
 async function tick(): Promise<void> {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 
-/** Puente mínimo de escritorio: lo que `App.tsx` invoca al arrancar, más `listRecents` (su mock,
- * devuelto para que las pruebas de recientes lo aserten sin `window.lila` de por medio). */
+/** Minimal desktop bridge: what `App.tsx` calls at startup, plus `listRecents` (its mock,
+ * returned so the recents tests can assert on it without going through `window.lila`). */
 function puenteEscritorio(recientes: readonly { dir: string; name: string; openedAt: string }[] = []) {
   const listRecents = vi.fn().mockResolvedValue(recientes);
   (window as unknown as { lila: unknown }).lila = {
@@ -134,7 +134,7 @@ it('en Electron (`window.lila` presente) la marca se calla: ya la lleva la barra
   expect(contenedor.querySelector('.identidad .logo')).not.toBeNull();
 });
 
-// ---------- menú Archivo de escritorio (#411) ----------
+// ---------- desktop File menu (#411) ----------
 
 it('en Electron, el desplegable Archivo se pinta en la barra con el mismo texto que el menú nativo', async () => {
   puenteEscritorio();
@@ -148,18 +148,17 @@ it('en Electron, el desplegable Archivo se pinta en la barra con el mismo texto 
     T.app.menuEscritorio.guardarProyecto, T.app.menuEscritorio.guardarComo, T.app.menuEscritorio.guardarComoCarpeta,
     T.app.acercaDe,
   ]));
-  // Las entradas de solo-web (abrir/exportar .bpmn) no aplican aquí: `bpmnFilesEnabled` es falso.
+  // Web-only entries (open/export .bpmn) don't apply here: `bpmnFilesEnabled` is false.
   expect(acciones).not.toContain(T.app.abrirBpmn);
   expect(acciones).not.toContain(T.app.exportarBpmn);
 });
 
 /**
- * Una entrada por prueba, cada una con su propio montaje (#411): encadenarlas en una sola —Nuevo,
- * luego Abrir, luego Guardar— dispara las mismas guardias de `projectAction`/`guardar` que ya
- * cubren `App.test.tsx` (documento sucio, `ioLock`…) y esas no son lo que este archivo prueba.
- * Aquí solo importa que cada botón del desplegable de escritorio llegue a la misma función que su
- * equivalente del menú nativo (`ejecutar`/`projectAction`/`guardar`, ya probados a fondo en
- * `App.test.tsx`).
+ * One entry per test, each with its own mount (#411): chaining them in a single one — New, then
+ * Open, then Save — trips the same `projectAction`/`guardar` guards `App.test.tsx` already covers
+ * (a dirty document, `ioLock`…), and those aren't what this file tests. All that matters here is
+ * that each desktop dropdown button reaches the same function as its native-menu equivalent
+ * (`ejecutar`/`projectAction`/`guardar`, already thoroughly tested in `App.test.tsx`).
  */
 it('«Nuevo proyecto» crea el proyecto, como el menú nativo', async () => {
   puenteEscritorio();
@@ -201,14 +200,14 @@ it('«Abrir reciente» pide los recientes al puente al abrirse y abre uno al pul
   const submenu = menu.querySelector<HTMLDetailsElement>('.menu-archivo-reciente')!;
   await act(async () => { submenu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   await tick();
-  // Abrir «Abrir reciente» solo abre ESE submenú: el clic en su `<summary>` no debe cerrar el
-  // desplegable Archivo entero (found via a real-Chrome CDP check, not caught by jsdom alone).
+  // Opening "Open recent" only opens THAT submenu: a click on its `<summary>` must not close the
+  // whole File dropdown (found via a real-Chrome CDP check, not caught by jsdom alone).
   expect(menu.open).toBe(true);
   const items = [...submenu.querySelectorAll('div button')];
   expect(items.map((b) => b.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Uno'), expect.stringContaining('Dos'), expect.stringContaining('/p/uno')]));
   await act(async () => { (items.find((b) => b.textContent?.includes('Uno')) as HTMLButtonElement).click(); });
   expect(openRecent).toHaveBeenCalledWith('/p/uno', undefined);
-  // El clic en la entrada cierra el desplegable entero, no solo el submenú (el wrapper `onClick`).
+  // Clicking an entry closes the whole dropdown, not just the submenu (the wrapper's `onClick`).
   expect(menu.open).toBe(false);
 });
 
@@ -245,7 +244,7 @@ it('el menú Archivo de escritorio se cierra con Esc y con un clic fuera', async
   await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
   expect(menu.open).toBe(false);
 
-  // Un clic DENTRO del desplegable (aquí, el summary de "Abrir reciente") no cuenta como fuera.
+  // A click INSIDE the dropdown (here, "Open recent"'s summary) doesn't count as outside.
   await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   await tick();
   expect(menu.open).toBe(true);

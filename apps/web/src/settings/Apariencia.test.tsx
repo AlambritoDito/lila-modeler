@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { applyTheme, type Theme } from '../theme/applyTheme';
 import { esDelUsuario, temaDe, type TemaGuardado } from '../theme/temas';
+import { temaPorDefecto } from '../theme/temaPorDefecto';
 import { Apariencia } from './Apariencia';
 import { setLocale } from '../i18n';
 
@@ -50,6 +51,13 @@ let root: Root;
 let container: HTMLDivElement;
 /** Lo último que el componente mandó guardar: lo que en la app va a `estado.json`/`localStorage`. */
 let guardado: readonly TemaGuardado[] = [];
+/**
+ * The raw `seleccion` `onTemas` last received, mirroring what `App.tsx`'s `seleccionarTema` would
+ * persist via `recordar({ tema })` (QA of #432, S1) — as opposed to the RESOLVED id it applies and
+ * shows in the selector. Delete passes `''` ("no theme saved"); everything else passes a concrete
+ * id, which is what this bench used to conflate with what gets displayed.
+ */
+let temaGuardado: string | undefined;
 
 /** El cableado de `App.tsx`, en pequeño: aplica lo seleccionado y guarda la lista. */
 function Banco(): React.JSX.Element {
@@ -58,11 +66,16 @@ function Banco(): React.JSX.Element {
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState('normal');
   function seleccionar(id: string, lista: readonly TemaGuardado[]): void {
-    const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : INTEGRADOS[id];
+    // '' ("no theme saved", #422 QA S1) resolves to the system rule for applying/displaying, same
+    // as `App.tsx`'s `seleccionarTema`; what gets tracked as "saved" (`temaGuardado`, below) stays
+    // the original, unresolved `id`.
+    const idAplicado = id === '' ? temaPorDefecto() : id;
+    const t = esDelUsuario(idAplicado) ? temaDe(idAplicado, lista)?.tema : INTEGRADOS[idAplicado];
     if (t === undefined) return;
     applyTheme(t as Theme);
     setTema(t as Theme);
-    setTemaId(id);
+    setTemaId(idAplicado);
+    temaGuardado = id;
   }
   return (
     <Apariencia
@@ -107,6 +120,7 @@ async function importar(contenido: string): Promise<void> {
 
 beforeEach(async () => {
   guardado = [];
+  temaGuardado = undefined;
   document.documentElement.removeAttribute('style');
   container = document.createElement('div');
   document.body.append(container);
@@ -274,6 +288,10 @@ it('eliminar el tema del usuario cae al Lila del sistema (#422), no al fijo eva-
   // jsdom no trae `matchMedia`: `temaPorDefecto()` lo lee como "no oscuro" y cae en Lila Light.
   expect(selectTema().value).toBe('lila-light');
   expect(variable('--accent-primary')).toBe('#7028F0');
+  // QA of #432, S1: what gets PERSISTED is '' ("no theme saved"), not the resolved 'lila-light' —
+  // saving the resolved id would freeze the app on today's OS scheme, since a later launch would
+  // read that concrete id back as an explicit choice instead of re-resolving the system rule.
+  expect(temaGuardado).toBe('');
 });
 
 /**
