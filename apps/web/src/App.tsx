@@ -8,6 +8,7 @@
  * (LILA-066), que es también lo que vigila `strings.test.ts`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
 import { parseBpmn } from '@lila/engine/bpmn';
 import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
@@ -17,7 +18,8 @@ import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
-import { Paleta } from './Paleta';
+import { etiquetaDeTipo, Paleta } from './Paleta';
+import { PaletaComandos, type Comando } from './PaletaComandos';
 import { PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
@@ -381,6 +383,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * hay `window.lila`, así que nunca sale; lo que ve Pages no cambia.
    */
   const [bienvenida, setBienvenida] = useState(false);
+  const [paletaAbierta, setPaletaAbierta] = useState(false);
   const [recientes, setRecientes] = useState<readonly Recent[]>([]);
   /** Recents for the desktop File dropdown (#411): fetched again every time it opens
    * (`alternarMenuArchivo`) instead of reusing `recientes` (that one is only for the welcome
@@ -1058,20 +1061,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // por `onMenu`; registrarlos también aquí los dispararía dos veces en Windows/Linux. It lives at
   // component scope because the detached scenario window listens with it too (design 2c); it only
   // reads the ref, so the copy the effect below captured on mount is as good as any later one.
-  const teclas = (e: KeyboardEvent): void => {
+  const teclas = (e: KeyboardEvent, desdeHija = false): void => {
     if (DESKTOP || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+    // ponytail: provisional until the shortcut map (C1) lands
+    if (e.key.toLowerCase() === 'k' && !e.shiftKey) { e.preventDefault(); abrirPaletaRef.current(desdeHija); return; }
     const accion = ({ ',': 'ajustes', n: 'nuevo', o: 'abrir', s: e.shiftKey ? 'guardarComo' : 'guardar' } as const)[e.key.toLowerCase()];
     if (accion === undefined) return;
     e.preventDefault();
     ejecutarRef.current(accion);
   };
   /**
-   * From the detached window only Save and Save as are forwarded (QA of #391): Open would click the
-   * file input of the MAIN document with the popup's user activation, the browser refuses the
-   * chooser without ever settling it and the app stays busy until reload; Settings would open
-   * modal behind the window the user is looking at.
+   * From the detached window only Save, Save as and the command palette (#410) are forwarded (QA
+   * of #391): Open would click the file input of the MAIN document with the popup's user
+   * activation, the browser refuses the chooser without ever settling it and the app stays busy
+   * until reload; Settings would open modal behind the window the user is looking at.
    */
-  const teclasHija = (e: KeyboardEvent): void => { if (e.key.toLowerCase() === 's') teclas(e); };
+  const teclasHija = (e: KeyboardEvent): void => { if (['s', 'k'].includes(e.key.toLowerCase())) teclas(e, true); };
   useEffect(() => {
     window.addEventListener('keydown', teclas);
     const quitar = window.lila?.onMenu((a) => ejecutarRef.current(a));
@@ -1131,6 +1136,57 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     window.focus();
     toggleEscenario.current?.focus();
   }
+  /**
+   * Command palette (#410). Not over another modal, the welcome screen or the karaoke: those own
+   * the keyboard until they close.
+   */
+  function abrirPaleta(desdeHija = false): void {
+    if (karaoke || document.querySelector('dialog[open], .bienvenida') !== null) return;
+    // ponytail: from the detached scenario window the palette opens in the main one, so that one
+    // is raised first; a browser may ignore `focus()` on another window, and then the palette
+    // waits there unseen. Ceiling: open it inside the child window if that turns out to happen.
+    if (desdeHija) window.focus();
+    setPaletaAbierta(true);
+  }
+  const abrirPaletaRef = useRef(abrirPaleta);
+  abrirPaletaRef.current = abrirPaleta;
+  /** The palette's rows, built when it opens: the canvas elements are read at that moment. */
+  function comandosPaleta(): Comando[] {
+    const irAModo = (m: ModoId): void => { setModo(m); if (m === 'simular') setPestana('simulacion'); };
+    const tecla = (t: string, soloDesktop = false): string | undefined => atajo(t, soloDesktop).trim().slice(1, -1) || undefined;
+    const elementos: Comando[] = serviciosDe(modelador)?.elementRegistry.filter((el) =>
+      el.id !== undefined && el.labelTarget === undefined && el.type !== 'bpmn:Process' && el.type !== 'bpmn:Collaboration'
+      && !(el.waypoints !== undefined && !el.businessObject?.name))
+      .map((el): Comando => ({
+        grupo: 'elementos', nombre: el.businessObject?.name || el.id!, id: el.id!, tipo: etiquetaDeTipo(el.type ?? ''),
+        elegir: () => {
+          // The canvas is hidden in Results and Compare; it has to be on screen before the focus.
+          if (modo === 'resultados' || modo === 'comparar') flushSync(() => setModo('modelar'));
+          modelador?.seleccionar?.(el.id!, { centrar: true });
+          modelador?.enfocar?.();
+        },
+      })) ?? [];
+    const libre = !ioBusy && modelador !== null;
+    // ponytail: C1's shortcut map replaces this list at integration
+    const acciones: (Comando | false)[] = [
+      libre && { grupo: 'acciones', nombre: S.app.nuevo, tecla: tecla('N', true), elegir: () => { void projectAction('new'); } },
+      libre && { grupo: 'acciones', nombre: S.app.abrir, tecla: tecla('O'), elegir: () => { void projectAction('open'); } },
+      libre && { grupo: 'acciones', nombre: S.app.guardar, tecla: tecla('S'), elegir: () => { void guardar(); } },
+      libre && { grupo: 'acciones', nombre: S.app.guardarComo, tecla: tecla('⇧S'), elegir: () => { void guardar(true); } },
+      libre && sim.tipo !== 'simulando' && { grupo: 'acciones', nombre: S.app.ejecutar, elegir: () => { void simular(); } },
+      { grupo: 'acciones', nombre: S.app.ajustes, tecla: tecla(',', true), elegir: () => ejecutar('ajustes') },
+      { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
+    ];
+    return [
+      ...elementos,
+      ...Object.keys(escenarios).map((id): Comando => ({
+        grupo: 'escenarios', nombre: etiquetaEscenario(id, escenarios), elegir: () => { elegirEscenario(id); irAModo('simular'); },
+      })),
+      ...MODO_IDS.map((m): Comando => ({ grupo: 'modos', nombre: S.app.modos[m], elegir: () => irAModo(m) })),
+      ...acciones.filter((a): a is Comando => a !== false),
+    ];
+  }
+
   /**
    * Opens the About window (#408), centred over the app, or focuses it if it is already open.
    * Like `desacoplar`, only from a click or a menu action: popup blockers need the gesture.
@@ -1476,16 +1532,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </>}
           </div>
         </details>
-        {/* Campo inerte: buscar de verdad es la paleta de comandos (LILA-066, #66). Está aquí
-            porque el artefacto fija su sitio y su ancho, no para que funcione todavía. Its zone
-            is the bar's spring: when fewer than 120 px are left the field wraps to a second,
-            clipped line instead of shrinking to an empty box (#423). Out of the Tab order: it
-            does nothing yet. */}
+        {/* The search box is a button that opens the command palette (#410); the artboard fixes
+            its place and width. Its zone is the bar's spring: when fewer than 120 px are left the
+            box wraps to a second, clipped line instead of shrinking to an empty box (#423). */}
         <div className="zona-buscador">
           <div className="buscador">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
-            <input type="search" readOnly tabIndex={-1} aria-label={S.app.buscar} placeholder={S.app.buscarPista} title={S.app.buscarPendiente} />
-            <kbd>⌘K</kbd>
+            <button type="button" className="buscador-boton" aria-haspopup="dialog" aria-keyshortcuts={MAC ? 'Meta+K' : 'Control+K'}
+              aria-label={S.app.buscar} title={S.app.buscar} onClick={() => abrirPaleta()}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
+              <span className="pista">{S.app.buscarPista}</span>
+              <kbd>{MAC ? '⌘K' : 'Ctrl+K'}</kbd>
+            </button>
           </div>
         </div>
         <div className="iconos">
@@ -1602,6 +1659,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </div>
         </form>
       </dialog>
+
+      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} onCerrar={() => setPaletaAbierta(false)} />}
 
       {ventanaAcerca !== null && (
         <VentanaFlotante

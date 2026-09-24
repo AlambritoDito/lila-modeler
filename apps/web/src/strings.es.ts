@@ -102,13 +102,12 @@ export const es: Strings = {
       guardarComoCarpeta: 'Guardar como carpeta…',
     },
 
-    /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
+    /** Botón buscador de la barra: abre la paleta de comandos (#410). El texto de dentro
      * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
      * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»
      * (QA de la ronda 2 de #392). */
     buscar: 'Buscar actividad',
     buscarPista: 'Buscar…',
-    buscarPendiente: 'La búsqueda y la paleta de comandos llegan en LILA-066',
 
     deshacer: 'Deshacer',
     rehacer: 'Rehacer',
@@ -356,6 +355,12 @@ export const es: Strings = {
     pieTecla: 'Enter',
     pieSufijo: ' para insertar',
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
+    comandos: {
+      titulo: 'Paleta de comandos',
+      pista: 'Busca elementos, escenarios, modos y acciones',
+      sinResultados: (consulta: string): string => `Nada coincide con «${consulta}».`,
+      grupos: { elementos: 'Elementos', escenarios: 'Escenarios', modos: 'Modos', acciones: 'Acciones' },
+    },
     grupos: {
       eventos: 'Eventos',
       actividades: 'Actividades',

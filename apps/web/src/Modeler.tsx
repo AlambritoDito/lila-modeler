@@ -129,7 +129,12 @@ interface Rectangulo extends Punto { width: number; height: number }
  * `width`/`height` de fábrica (el de su caja envolvente), así que ese par por sí solo no basta
  * (QA de la ronda 2 de #392).
  */
-export interface Elemento { x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown; type?: string; parent?: unknown; waypoints?: unknown }
+export interface Elemento {
+  x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown; type?: string; parent?: unknown; waypoints?: unknown;
+  /** Id and name, for the command palette's element search (#410). */
+  id?: string;
+  businessObject?: { name?: string };
+}
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
@@ -180,8 +185,13 @@ export interface Modelador {
   /** Superficie opcional para que el shell añada controles básicos sin importar diagram-js. */
   deshacer?(): void;
   rehacer?(): void;
-  /** Selecciona por id interno o por el id original anterior al saneamiento. */
-  seleccionar?(id: string): void;
+  /**
+   * Selecciona por id interno o por el id original anterior al saneamiento. `centrar` also scrolls
+   * the element into view (the command palette, #410).
+   */
+  seleccionar?(id: string, opciones?: { centrar?: true }): void;
+  /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
+  enfocar?(): void;
 }
 
 interface Props {
@@ -486,15 +496,20 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         const commands = activo?.get<CommandStack>('commandStack');
         if (commands?.canRedo()) commands.redo();
       },
-      seleccionar: (id) => {
+      seleccionar: (id, opciones) => {
         if (activo === null) return;
         const registro = activo.get<ElementRegistry>('elementRegistry');
         const interno = registro.get(id)
           ? id
           : [...originalIds].find(([, original]) => original === id)?.[0];
         const elemento = interno === undefined ? undefined : registro.get(interno);
-        if (elemento !== undefined) activo.get<Selection>('selection').select(elemento);
+        if (elemento === undefined) return;
+        // Scroll first: `scrollToElement` also switches to the element's plane (a collapsed
+        // sub-process), and the selection belongs on the plane that ends up on screen.
+        if (opciones?.centrar && conTamano()) activo.get<Canvas>('canvas').scrollToElement(elemento);
+        activo.get<Selection>('selection').select(elemento);
       },
+      enfocar: () => { activo?.get<Canvas>('canvas').focus(); },
     };
     // `onListo` se publica después del import inicial: su primera exportación ya contiene el
     // modelo recibido y nunca el lienzo vacío de una instancia recién creada.
