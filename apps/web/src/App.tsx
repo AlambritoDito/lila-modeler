@@ -787,18 +787,24 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * estado de React.
    */
   async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
+    // '' means "no explicit choice, follow the system" (Appearance's delete button, #422 QA S1):
+    // resolve it to a concrete Lila id to actually apply and show in the selector, but persist the
+    // ORIGINAL `id` — so '' — instead of the resolved one. Persisting the resolved id would freeze
+    // the app on today's OS scheme, since `preferencias()` would read that concrete id back as an
+    // explicit choice on every future launch, even after the OS scheme changes.
+    const idAplicado = id === '' ? temaPorDefecto() : id;
     try {
-      const t = esDelUsuario(id) ? temaDe(id, lista)?.tema : await cargarTema(id as TemaId);
+      const t = esDelUsuario(idAplicado) ? temaDe(idAplicado, lista)?.tema : await cargarTema(idAplicado as TemaId);
       if (t === undefined) return;
       aplicarTema(t);
-      setDecoratedTheme(id === 'montana' ? id : undefined);
+      setDecoratedTheme(idAplicado === 'montana' ? idAplicado : undefined);
       // El lienzo NO se remonta (LILA-113): `repintar` relee los tokens en el renderer vivo de
       // bpmn-js y redibuja las figuras, así que la pila de deshacer y la selección siguen ahí.
       modelador?.repintar();
       setTema(t);
       setAvisoTema(null);
-      if (id !== temaId) {
-        setTemaId(id);
+      if (idAplicado !== temaId) {
+        setTemaId(idAplicado);
         recordar({ tema: id });
       }
     } catch (e: unknown) {
