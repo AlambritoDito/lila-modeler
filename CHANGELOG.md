@@ -16,7 +16,7 @@ and the desktop app shows the File menu in the top bar. No installer is attached
   below 1480 px) hide the left column, the right panel, the diagram tab strip and the status bar,
   remembered per mode; Tab / Shift+Tab toggle the right panel / left column while the canvas has
   focus, F6 / Shift+F6 leave the canvas, and a double-click (or Enter) on a divider collapses that
-  side. The status bar reappears while an alert is showing; the detached scenario window counts as
+  side. The status bar reappears while an error is showing; the detached scenario window counts as
   «right panel hidden».
 - **Resizable left column** (#406): the palette (180–360 px, snapping to its 48 px compact mode)
   and the scenario rail (160–320 px) have a divider with drag and arrow keys; widths are saved

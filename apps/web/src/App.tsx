@@ -387,7 +387,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * screen), so opening one and reopening the menu shows the up-to-date list regardless of when
    * the welcome screen last ran. */
   const [recientesMenu, setRecientesMenu] = useState<readonly Recent[]>([]);
-  const cerrarMenuArchivoFuera = useRef<((e: PointerEvent) => void) | null>(null);
+  const cerrarMenuFuera = useRef<((e: PointerEvent) => void) | null>(null);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
   const rutaPendiente = useRef<OpenPathRequest | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
@@ -1023,28 +1023,31 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   ejecutarRef.current = ejecutar;
 
   /**
-   * `onToggle` of the File dropdown (#411, in both modes): on opening, in desktop mode it asks the
+   * `onToggle` of the bar's dropdowns — File (#411, in both modes) and View (#412): on opening it
+   * closes the other one, arms the click-outside listener and, for File in desktop mode, asks the
    * bridge for the recents (so the dropdown shows the up-to-date list, not whatever was there when
-   * the app started) and arms the click-outside listener; on closing — or on reopening, in case the
-   * previous close never fired `toggle` — it removes that listener. `<details>` has no built-in
-   * click-outside close (that's a `<dialog>`/popover feature); `Esc` is still handled by the usual
-   * `onKeyDown`.
+   * the app started); on closing — or on reopening, in case the previous close never fired
+   * `toggle` — it removes that listener. `<details>` has no built-in click-outside close (that's a
+   * `<dialog>`/popover feature); `Esc` is still handled by each dropdown's `onKeyDown`.
    */
-  function alternarMenuArchivo(e: React.SyntheticEvent<HTMLDetailsElement>): void {
+  function alternarMenu(e: React.SyntheticEvent<HTMLDetailsElement>): void {
     const el = e.currentTarget;
-    if (cerrarMenuArchivoFuera.current) {
-      document.removeEventListener('pointerdown', cerrarMenuArchivoFuera.current);
-      cerrarMenuArchivoFuera.current = null;
+    if (cerrarMenuFuera.current) {
+      document.removeEventListener('pointerdown', cerrarMenuFuera.current);
+      cerrarMenuFuera.current = null;
     }
     if (!el.open) return;
-    if (DESKTOP) void window.lila?.listRecents().then(setRecientesMenu).catch(() => setRecientesMenu([]));
+    for (const otro of document.querySelectorAll<HTMLDetailsElement>('.barra > details[open]')) {
+      if (otro !== el) otro.open = false;
+    }
+    if (DESKTOP && el.classList.contains('menu-archivo')) void window.lila?.listRecents().then(setRecientesMenu).catch(() => setRecientesMenu([]));
     const cerrar = (ev: PointerEvent): void => {
       if (el.contains(ev.target as Node)) return;
       el.open = false;
       document.removeEventListener('pointerdown', cerrar);
-      cerrarMenuArchivoFuera.current = null;
+      cerrarMenuFuera.current = null;
     };
-    cerrarMenuArchivoFuera.current = cerrar;
+    cerrarMenuFuera.current = cerrar;
     document.addEventListener('pointerdown', cerrar);
   }
   // En Electron los atajos son aceleradores del menú nativo (`apps/desktop/src/menu.ts`) y llegan
@@ -1266,12 +1269,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const hayIzquierda = conIzquierda(modo);
   /** The detached scenario window counts as «right panel hidden» while it shows the scenario. */
   const ocultoPorVentana = ventanaEscenario !== null && pestana === 'simulacion' && modo !== 'animar';
-  /**
-   * An error the status bar is showing right now. A hidden status bar comes back for it: an
-   * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
-   * `.bpmn` notice and the import warnings last as long as the model, and would pin the bar for
-   * the whole session (QA of #429).
-   */
   const derechaVisible = visibles.derecha && !(ocultoPorVentana && !verConVentana);
   /**
    * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
@@ -1280,6 +1277,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * included.
    */
   const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
+  /**
+   * An error the status bar is showing right now. A hidden status bar comes back for it: an
+   * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
+   * `.bpmn` notice and the import warnings last as long as the model, and would pin the bar for
+   * the whole session (QA of #429).
+   */
   const hayAlerta = ioError !== null || perdidasAlExportar.length > 0 || estado.error !== null || avisoTema !== null
     || errorSimOculto !== null;
   const visible: Record<Region, boolean> = {
@@ -1318,13 +1321,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** The compact palette keeps its own `localStorage` key, as before #406 (web and desktop). */
   function guardarCompacta(activa: boolean): void {
-    try { localStorage.setItem('lila.paleta', activa ? 'compacta' : 'normal'); } catch { /* modo privado: no persiste, no rompe */ }
+    try { localStorage.setItem('lila.paleta', activa ? 'compacta' : 'normal'); } catch { /* private mode: nothing persists, nothing breaks */ }
   }
   function cambiarCompacta(): void {
     guardarCompacta(!compacta);
     setCompacta(!compacta);
   }
-
 
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
@@ -1418,9 +1420,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             closes it by hand —`<details>` doesn't ship that, it's a `<dialog>`/popover feature—
             with the usual `onKeyDown`, which also returns focus to the summary (QA of #432, N2):
             otherwise it lands on an item hidden inside the now-closed `<details>`. A click outside
-            closes it via `alternarMenuArchivo`'s `pointerdown` on `document` (there was none
+            closes it via `alternarMenu`'s `pointerdown` on `document` (there was none
             before). */}
-        <details className="menu-archivo" onToggle={alternarMenuArchivo} onKeyDown={(e) => {
+        <details className="menu-archivo" onToggle={alternarMenu} onKeyDown={(e) => {
           if (e.key !== 'Escape') return;
           const d = e.currentTarget;
           d.open = false;
@@ -1533,7 +1535,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
         {/* Plain toggle buttons like the File menu (QA of #429): no `role="menu"`, which would
             promise arrow-key navigation. Escape closes it and gives the focus back to its button. */}
-        <details className="menu-vista" onKeyDown={(e) => {
+        <details className="menu-vista" onToggle={alternarMenu} onKeyDown={(e) => {
           if (e.key !== 'Escape') return;
           const menu = e.currentTarget as HTMLDetailsElement;
           menu.open = false;

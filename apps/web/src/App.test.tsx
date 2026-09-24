@@ -1656,6 +1656,31 @@ it('Escape in the View menu closes it and gives the focus back to its button (QA
   expect(document.activeElement).toBe(menu.querySelector('summary'));
 });
 
+it('the View menu closes on a click outside and the File and View menus close each other (QA of #433)', async () => {
+  const vista = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  const archivo = container.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+  const abrir = async (menu: HTMLDetailsElement) => {
+    await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  };
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(false);
+
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  await abrir(archivo);
+  expect(archivo.open).toBe(true);
+  expect(vista.open).toBe(false);
+  await abrir(vista);
+  expect(vista.open).toBe(true);
+  expect(archivo.open).toBe(false);
+  // A click inside the open dropdown is not «outside».
+  await act(async () => { itemVista('diagramas').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(vista.open).toBe(true);
+});
+
 it('the left divider sizes the rail in Simulate (160–320) and the palette in Model (180–360), each its own (#406)', async () => {
   const izquierdo = () => container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
   const puntero = (tipo: string, clientX: number) => act(async () => {
