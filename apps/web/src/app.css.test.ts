@@ -297,6 +297,32 @@ it('Settings (artboard 09, #407) is an explicit radius-0 box, capped at 760 px/9
   // Padding lives on the header/nav/panel/footer (below), not on the dialog itself, so their own
   // borders can run edge to edge.
   expect(ajustes).toContain('padding: 0');
+  expect(ajustes).toContain('display: flex');
+  expect(ajustes).toContain('flex-direction: column');
+});
+
+it('the Settings dialog\'s only DOM child (its `<form>`) is stretched into the real flex column, so «Close» never gets clipped (QA must-fix of #407)', () => {
+  // `.ajustes { display: flex; flex-direction: column }` alone only lays out that one child — the
+  // `<form method="dialog">` — not the header/body/footer inside it. Without this rule the form
+  // sizes to its content and, with enough token groups open, grows past the dialog's fixed
+  // height, clipping the footer's «Close» button under `.ajustes`'s own `overflow: hidden`.
+  const form = bloqueDeLinea('.ajustes > form');
+  expect(form).toContain('display: flex');
+  expect(form).toContain('flex-direction: column');
+  expect(form).toContain('min-height: 0');
+
+  // The body (nav + active tabpanel) is what shrinks to make room, not the header or the footer.
+  const cuerpo = bloqueDeLinea('.ajustes-cuerpo');
+  expect(cuerpo).toContain('flex: 1 1 auto');
+  expect(cuerpo).toContain('min-height: 0');
+  expect(bloqueDeLinea('.ajustes-encabezado')).toContain('flex: none');
+  expect(bloqueDeLinea('.ajustes .acciones')).toContain('flex: none');
+
+  // The active tabpanel is what actually scrolls — not the nav, and not the dialog itself.
+  const panel = bloqueDeLinea('.ajustes-panel');
+  expect(panel).toContain('overflow: auto');
+  expect(panel).toContain('flex: 1 1 auto');
+  expect(bloqueDeLinea('.ajustes-nav')).toContain('flex: none');
 });
 
 it('the Settings nav is a fixed 200 px rail with a right-hand `--border` divider, not `--border-strong`', () => {

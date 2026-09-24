@@ -215,38 +215,46 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
 
   return (
     <>
-      <label className="campo">
-        {S.app.tema}
-        <select value={temaId} onChange={(e) => { setError(null); props.onSeleccionar(e.target.value); }}>
-          <optgroup label={S.apariencia.integrado}>
-            {Object.entries(S.app.temas).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
-          </optgroup>
-          {temas.length > 0 && (
-            <optgroup label={S.apariencia.delUsuario}>
-              {temas.map((t) => <option key={t.id} value={t.id}>{t.tema.name}</option>)}
+      {/* Label to the left of the control, same `.fila` row as General's (QA must-fix of #407):
+          the visible text moves to a sibling `<span>` so `label.campo` keeps wrapping only the
+          `<select>`, which is what `dialog.ajustes .campo:not(.idioma) select` (App.test.tsx)
+          reaches into. */}
+      <div className="fila">
+        <span>{S.app.tema}</span>
+        <label className="campo">
+          <select value={temaId} onChange={(e) => { setError(null); props.onSeleccionar(e.target.value); }}>
+            <optgroup label={S.apariencia.integrado}>
+              {Object.entries(S.app.temas).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
             </optgroup>
-          )}
-        </select>
-      </label>
+            {temas.length > 0 && (
+              <optgroup label={S.apariencia.delUsuario}>
+                {temas.map((t) => <option key={t.id} value={t.id}>{t.tema.name}</option>)}
+              </optgroup>
+            )}
+          </select>
+        </label>
+      </div>
 
       {activo !== undefined && (
-        <label className="campo">
-          {S.apariencia.nombre}
-          <input
-            type="text"
-            value={borradorNombre ?? activo.tema.name}
-            aria-invalid={borradorNombre !== null}
-            className={borradorNombre === null ? undefined : 'invalido'}
-            onChange={(e) => {
-              const nuevo = e.target.value;
-              // Un tema sin rótulo no se puede elegir en la lista: mientras el campo esté vacío se
-              // conserva el nombre anterior y no se guarda nada.
-              if (nuevo.trim() === '') setBorradorNombre(nuevo);
-              else { setBorradorNombre(null); renombrar(nuevo); }
-            }}
-            onBlur={() => setBorradorNombre(null)}
-          />
-        </label>
+        <div className="fila">
+          <span>{S.apariencia.nombre}</span>
+          <label className="campo">
+            <input
+              type="text"
+              value={borradorNombre ?? activo.tema.name}
+              aria-invalid={borradorNombre !== null}
+              className={borradorNombre === null ? undefined : 'invalido'}
+              onChange={(e) => {
+                const nuevo = e.target.value;
+                // Un tema sin rótulo no se puede elegir en la lista: mientras el campo esté vacío se
+                // conserva el nombre anterior y no se guarda nada.
+                if (nuevo.trim() === '') setBorradorNombre(nuevo);
+                else { setBorradorNombre(null); renombrar(nuevo); }
+              }}
+              onBlur={() => setBorradorNombre(null)}
+            />
+          </label>
+        </div>
       )}
 
       <div className="acciones temas">

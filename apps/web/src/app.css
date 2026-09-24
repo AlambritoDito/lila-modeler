@@ -2098,6 +2098,14 @@ body {
    `--border`. Padding lives on the header/nav/panel/footer, not on the dialog itself, so the nav's
    right-hand rule and the footer's top rule can run edge to edge. */
 .ajustes { border-radius: 0; display: flex; flex-direction: column; height: 70vh; max-height: 82vh; max-width: min(760px, 90vw); min-width: 22rem; overflow: hidden; padding: 0; width: 90vw; }
+/* `.ajustes`'s only DOM child is the `<form method="dialog">` (`settings/Ajustes.tsx`): the flex
+   column above lays out that ONE child, not its grandchildren. Without this, the form sizes to
+   its content (`height: auto`) and — with 40 tokens across seven groups possibly open — grows
+   taller than the dialog's fixed height, clipping the footer's «Close» button under
+   `.ajustes`'s own `overflow: hidden` (QA must-fix of #407: `Close` was unreachable, not merely
+   scrolled to). Stretching the form to the dialog's own box turns the header/body/footer below
+   into the real flex column, so only `.ajustes-panel` (its own `overflow: auto`) scrolls. */
+.ajustes > form { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 /* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22). */
 .ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
 .ajustes-encabezado h2 { font-size: 1em; margin: 0; }
