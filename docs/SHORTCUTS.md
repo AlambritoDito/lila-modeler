@@ -34,7 +34,9 @@ and no shortcut reaches the app while a dialog (Settings, a confirmation) is ope
 | Animate ¹ | `⌘5` | `Ctrl+5` |
 | Validate paths ¹ | `⌘6` | `Ctrl+6` |
 
-The number keys are read by position, so they work on any keyboard layout.
+The number keys are read by position, so they work on any keyboard layout. Switching modes
+from the keyboard is a desktop-app feature: in a browser these keys switch the browser's tabs, so
+the web app leaves them alone — click a mode tab or use the command palette (`⌘K`) instead.
 
 ## Simulation
 
@@ -83,9 +85,10 @@ left filters as you type and inserts the highlighted shape with `Enter`.
 
 ## Keys the browser keeps
 
-¹ Only in the desktop app. In a browser, `⌘N`/`Ctrl+N` (new window), `⌘,` (browser settings) and
-`⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` (switch tabs) are taken by the browser before the page sees them: use
-the bar's buttons and mode tabs instead. In the desktop app the File, View and Simulation menus
+¹ Only in the desktop app. In a browser, `⌘N`/`Ctrl+N` (new window) and `⌘,` (browser settings)
+are taken by the browser before the page sees them, and the web app does not listen to
+`⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` so they keep switching the browser's tabs: use the bar's buttons, the
+mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
 list these shortcuts next to each item.
 
 The detached scenario window forwards `⌘S`, `⇧⌘S` and `⌘K` to the main window.

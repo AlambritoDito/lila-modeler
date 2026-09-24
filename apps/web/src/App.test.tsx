@@ -1539,6 +1539,13 @@ it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#4
   expect(await pulsar(document.body, mod('p'))).toBe(false);
 });
 
+it('on the web ⌘1…⌘6 / Ctrl+1…6 stay the browser\'s: no mode change, nothing prevented (#413)', async () => {
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(await pulsar(document.body, { key: '1', code: 'Digit1', ctrlKey: true })).toBe(false);
+  expect(await pulsar(svgLienzo(), mod('3', { code: 'Digit3' }))).toBe(false);
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+});
+
 it('Tab on the canvas no longer toggles anything: it moves the focus again (#413, was #412)', async () => {
   expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(false);
   expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);

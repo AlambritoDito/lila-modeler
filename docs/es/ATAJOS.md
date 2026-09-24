@@ -37,6 +37,9 @@ confirmación).
 | Validar rutas ¹ | `⌘6` | `Ctrl+6` |
 
 Las teclas numéricas se leen por posición, así que funcionan con cualquier distribución de teclado.
+Cambiar de modo con el teclado es cosa de la app de escritorio: en un navegador estas teclas cambian
+de pestaña del navegador, así que la app web no las toca; haz clic en la pestaña del modo o usa la
+paleta de comandos (`⌘K`).
 
 ## Simulación
 
@@ -85,9 +88,10 @@ La paleta de figuras de la izquierda filtra al teclear e inserta la figura resal
 
 ## Teclas que se queda el navegador
 
-¹ Solo en la app de escritorio. En un navegador, `⌘N`/`Ctrl+N` (ventana nueva), `⌘,` (ajustes del
-navegador) y `⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` (cambiar de pestaña) se los queda el navegador antes de
-que la página los vea: usa los botones de la barra y las pestañas de modo. En la app de escritorio,
+¹ Solo en la app de escritorio. En un navegador, `⌘N`/`Ctrl+N` (ventana nueva) y `⌘,` (ajustes del
+navegador) se los queda el navegador antes de que la página los vea, y la app web no escucha
+`⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` para que sigan cambiando de pestaña del navegador: usa los botones de
+la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
 los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
 
 La ventana desacoplada del escenario reenvía `⌘S`, `⇧⌘S` y `⌘K` a la ventana principal.

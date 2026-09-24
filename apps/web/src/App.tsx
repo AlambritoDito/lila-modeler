@@ -1327,6 +1327,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (e.isComposing) return;
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
     if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
+    // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
+    // and ⌘K's there, the keys belong to the desktop app only.
+    if (!DESKTOP && a.grupo === 'modos') return;
     const conMod = a.tecla.startsWith('Mod+');
     if (!conMod && (e.target as Element | null)?.closest?.(CAMPO)) return;
     if ('ambito' in a && enVuelo.current === null) return;

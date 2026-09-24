@@ -11,7 +11,8 @@
  * - `menu`: an item of the native Electron menu owns it; in the desktop app the keyboard handler
  *   leaves it alone and it arrives through `onMenu`.
  * - `soloDesktop`: the browser keeps that key for itself (⌘N, ⌘, and ⌘1…⌘6 open windows and
- *   settings or switch tabs), so the web app does not announce it in its tooltips.
+ *   settings or switch tabs), so the web app does not announce it in its tooltips; the `modos`
+ *   group is not even dispatched there, so Ctrl+1…6 keep switching the browser's tabs.
  * - `lienzo`: bpmn-js handles it on the focused canvas; it is listed here only to be documented.
  * - `hija`: the detached scenario window forwards it to the main one.
  * - `ambito: 'corrida'`: only while a simulation is running.
