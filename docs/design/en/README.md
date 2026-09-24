@@ -1,6 +1,6 @@
 # English application screenshots
 
-Real Chromium browser captures, generated on 2026-09-23 from the built application at
+Real Chromium browser captures, generated on 2026-09-24 from the built application at
 `/lila-modeler/app/` by `tools/capture-screenshots.mjs`. English is selected explicitly, with the
 default Lila Light theme (#404), normal density, America/Mexico_City timezone and device scale factor 1.
 Each web state has a 1440×900 PNG and a 1920×1080 PNG. The [manifest](capture-manifest.json)
@@ -78,7 +78,7 @@ Before capture, the script verifies the browser round-trip through visible contr
 6. Clear only the disposable browser context's storage and capture the original maintained
    example. Run both scenarios again; explicitly save/reload before capturing Compare.
 
-Validation on 2026-09-23: all round-trip assertions passed, with no browser page errors.
+Validation on 2026-09-24: all round-trip assertions passed, with no browser page errors.
 The 24 web PNGs were checked for format/dimensions and visually reviewed for English interface,
 Lila Light (Lila Dark for the two theme captures), the expected calendar, genuine overlay, numerical results and comparison data; the
 desktop welcome was reviewed for neutral recents only.
