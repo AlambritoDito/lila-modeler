@@ -25,6 +25,7 @@ import type Modeler from 'bpmn-js/lib/Modeler';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { Problema } from './ScenarioPanel';
+import { atajoPorId, etiqueta, MAC } from './atajos';
 import { strings } from './i18n';
 
 const TIPO = 'lila-validacion';
@@ -113,7 +114,7 @@ function disco(marcador: MarcadorValidacion): HTMLElement {
   div.className = `lila-validacion lila-validacion-${marcador.nivel}`;
   div.textContent = S.lienzo.marcadorSimbolo;
   // Las acciones que recuerda el tooltip, como en el artboard `docs/design/01-modelar-1440.png`.
-  div.title = S.lienzo.marcadorTitulo(marcador.mensajes, S.lienzo.marcadorAcciones);
+  div.title = S.lienzo.marcadorTitulo(marcador.mensajes, S.lienzo.marcadorAcciones(etiqueta(atajoPorId('renombrar'), MAC), etiqueta(atajoPorId('irPanel'), MAC)));
   return div;
 }
 

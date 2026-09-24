@@ -908,7 +908,7 @@ export const es: Strings = {
 
     /** Marcador de validación: el disco y su tooltip nativo. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 renombrar · ⇧F6 propiedades',
+    marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} renombrar · ${panel} propiedades`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

@@ -1,10 +1,10 @@
 /**
- * Plantilla del menú nativo. Pura (solo tipos de Electron) para probarla sin Electron detrás:
- * `main.ts` la construye con `Menu.buildFromTemplate` y la vuelve a construir cuando cambian los
- * recientes. Los aceleradores (`CmdOrCtrl+,`, `CmdOrCtrl+S`, …) viven aquí y no en el renderer:
- * en macOS el sistema consume la tecla al despachar el menú, y en Windows/Linux llegaría también
- * al renderer, así que el shell web no despacha desde el teclado las entradas `menu: true` del
- * mapa de atajos (#413) cuando `window.lila` existe.
+ * The native menu template. Pure (Electron types only) so it can be tested without Electron:
+ * `main.ts` builds it with `Menu.buildFromTemplate` and rebuilds it whenever the recents change.
+ * The accelerators (`CmdOrCtrl+,`, `CmdOrCtrl+S`, …) live here and not in the renderer: on macOS
+ * the system consumes the key when it dispatches the menu, and on Windows/Linux it would reach the
+ * renderer too, so the web shell does not dispatch the `menu: true` entries of the shortcut map
+ * (#413) from the keyboard when `window.lila` exists.
  */
 import type { MenuItemConstructorOptions } from 'electron';
 import type { MenuAction } from './bridge.js';

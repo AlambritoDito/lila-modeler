@@ -89,11 +89,11 @@ function partes(atajo: Atajo, mac: boolean): { mod: boolean; shift: boolean; tec
 /**
  * Whether `e` is `atajo`. ⌘ or Ctrl both count as `Mod` on every platform, like bpmn-js's
  * `isCmd` (and like the handler this replaces); Alt never matches (AltGr types characters).
- * Held keys (`repeat`) never match: one save, one run, one toggle per press.
+ * Held keys (`repeat`) match too: `App.tsx` swallows them without running the handler again.
  */
 export function coincide(atajo: Atajo, e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'repeat'>, mac: boolean): boolean {
   const { mod, shift, tecla } = partes(atajo, mac);
-  if (e.repeat || e.altKey || mod !== (e.metaKey || e.ctrlKey)) return false;
+  if (e.altKey || mod !== (e.metaKey || e.ctrlKey)) return false;
   // `+` needs Shift on many layouts, so zoom ignores it (bpmn-js does the same).
   if (tecla === 'Plus') return ['+', '=', 'Add'].includes(e.key);
   if (tecla === 'Minus') return ['-', 'Subtract'].includes(e.key);

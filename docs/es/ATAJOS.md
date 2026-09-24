@@ -6,8 +6,8 @@ inglés de esta página ([SHORTCUTS.md](../SHORTCUTS.md)) no trae alguna de sus 
 Linux, `Ctrl` ocupa el lugar de `⌘`.
 
 Los atajos sin `⌘`/`Ctrl` (F2, F6, Esc) no hacen nada mientras escribes en un campo o editas una
-etiqueta, y ningún atajo llega a la app mientras hay un diálogo abierto (Ajustes, una
-confirmación).
+etiqueta, y, salvo el menú Archivo de la app de escritorio, ningún atajo llega a la app mientras
+hay un diálogo abierto (Ajustes, una confirmación).
 
 ## Archivo
 

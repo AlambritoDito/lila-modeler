@@ -960,7 +960,8 @@ export const en = {
 
     /** Validation marker: the disc and its native tooltip. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 rename · ⇧F6 properties',
+    /** The two keys come from the shortcut map (`atajos.ts`), formatted for the platform. */
+    marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} rename · ${panel} properties`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

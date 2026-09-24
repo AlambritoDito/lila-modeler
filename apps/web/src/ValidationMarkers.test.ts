@@ -26,6 +26,8 @@ import type ModelerType from 'bpmn-js/lib/Modeler';
 import { problemasEscenario, type Problema } from './ScenarioPanel';
 import { problemasPorElemento, sincronizarMarcadores, type Validacion } from './ValidationMarkers';
 import { setLocale } from './i18n';
+import { atajoPorId, etiqueta, MAC } from './atajos';
+import { es } from './strings.es';
 
 // This suite pins the Spanish translation. English is the app's base language since
 // LILA-210, so the locale is set here instead of depending on the machine's.
@@ -190,7 +192,9 @@ describe('sincronizarMarcadores sobre el lienzo (LILA-209)', () => {
     expect(falso.discos[0]?.html.className).toBe('lila-validacion lila-validacion-error');
     expect(falso.discos[1]?.html.className).toBe('lila-validacion lila-validacion-aviso');
     expect(falso.discos[0]?.html.textContent).toBe('!');
-    expect(falso.discos[0]?.html.title).toBe('Task_1: algo\nF2 renombrar · ⇧F6 propiedades');
+    // The keys come from the shortcut map, per platform (QA of #436, N3): Shift+F6 off a Mac.
+    expect(falso.discos[0]?.html.title).toBe(`Task_1: algo\nF2 renombrar · ${etiqueta(atajoPorId('irPanel'), MAC)} propiedades`);
+    expect(es.lienzo.marcadorAcciones('F2', 'Shift+F6')).toBe('F2 renombrar · Shift+F6 propiedades');
   });
 
   it('ignora los ids que el lienzo no conoce, sin fallar', () => {
