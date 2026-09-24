@@ -1389,7 +1389,7 @@ type RegionT = keyof typeof T.app.regiones;
 const appEl = () => container.querySelector<HTMLElement>('.app')!;
 const conClase = (clase: string) => appEl().classList.contains(clase);
 const toggleDe = (r: RegionT) => container.querySelector<HTMLButtonElement>(`.vista-grupo [data-region="${r}"]`)!;
-const itemVista = (r: RegionT) => [...container.querySelectorAll<HTMLButtonElement>('.menu-vista [role="menuitemcheckbox"]')].find((b) => b.textContent!.includes(T.app.regiones[r]))!;
+const itemVista = (r: RegionT) => container.querySelector<HTMLButtonElement>(`.menu-vista > div > [data-region="${r}"]`)!;
 /** A keydown on `destino`; returns whether the app took it (`preventDefault`). */
 async function pulsar(destino: EventTarget, init: KeyboardEventInit): Promise<boolean> {
   const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
@@ -1409,11 +1409,12 @@ it('each panel toggle hides its region with a class, keeps it mounted and flips 
     const boton = toggleDe(r);
     expect(boton.getAttribute('aria-pressed')).toBe('true');
     expect(boton.getAttribute('aria-controls')).toBe(container.querySelector(selector)!.id);
-    expect(itemVista(r).getAttribute('aria-checked')).toBe('true');
+    expect(itemVista(r).getAttribute('aria-pressed')).toBe('true');
+    expect(itemVista(r).textContent).toContain(T.app.regiones[r]);
     await act(async () => boton.click());
     expect(conClase(clase)).toBe(true);
     expect(boton.getAttribute('aria-pressed')).toBe('false');
-    expect(itemVista(r).getAttribute('aria-checked')).toBe('false');
+    expect(itemVista(r).getAttribute('aria-pressed')).toBe('false');
     // Still mounted: its state survives, only the CSS hides it.
     expect(container.querySelector(selector)).not.toBeNull();
     // The «View» menu item is the same switch.
@@ -1579,18 +1580,46 @@ it('the detached scenario window hides the right panel; its toggle peeks without
   }
 });
 
-it('a hidden status bar comes back to show an alert, like a blocked popup (#412)', async () => {
+it('a hidden status bar comes back for an error, while its toggle keeps the saved choice (#412, QA of #429)', async () => {
   await act(async () => toggleDe('estado').click());
   expect(conClase('sin-estado')).toBe(true);
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
     await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     expect(conClase('sin-estado')).toBe(false);
-    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
     expect(container.querySelector('footer.estado [role="alert"]')!.textContent).toBe(T.app.ventanaBloqueada);
+    // The toggle shows the preference (hidden), and says why the bar is there anyway.
+    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('false');
+    expect(toggleDe('estado').title).toBe(T.app.tituloEstadoForzado);
+    // Pressing it is not dead: it records «shown»…
+    await act(async () => toggleDe('estado').click());
+    expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
+    expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['estado']).toBe(true);
+    // …and «hidden» again, which applies as soon as the error goes.
+    await act(async () => toggleDe('estado').click());
+    expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['estado']).toBe(false);
+    expect(conClase('sin-estado')).toBe(false);
   } finally {
     abrir.mockRestore();
   }
+});
+
+it('import warnings do not pin the status bar: they are not errors (QA of #429)', async () => {
+  await act(async () => toggleDe('estado').click());
+  await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 3, avisos: 2, perdidas: [], refsRotas: [], error: null }); });
+  expect(container.querySelector('footer.estado')!.textContent).toContain(T.app.avisosAlImportar(2));
+  expect(conClase('sin-estado')).toBe(true);
+  expect(toggleDe('estado').title).toBe(T.app.tituloRegiones.estado);
+});
+
+it('Escape in the View menu closes it and gives the focus back to its button (QA of #429)', async () => {
+  const menu = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  expect(menu.querySelector('[role="menu"], [role="menuitemcheckbox"]')).toBeNull();
+  menu.open = true;
+  await act(async () => { itemVista('diagramas').focus(); });
+  await pulsar(itemVista('diagramas'), { key: 'Escape' });
+  expect(menu.open).toBe(false);
+  expect(document.activeElement).toBe(menu.querySelector('summary'));
 });
 
 it('the left divider sizes the rail in Simulate (160–320) and the palette in Model (180–360), each its own (#406)', async () => {
@@ -1659,7 +1688,8 @@ it('saved left widths are clamped, blank means never saved; no left divider with
     expect(container.querySelector('.divisor-izquierdo')).toBeNull();
     expect(toggleDe('izquierda').disabled).toBe(true);
     expect(toggleDe('izquierda').getAttribute('aria-pressed')).toBe('false');
-    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
+    // Nothing to toggle: Shift+Tab falls through and keeps moving the focus backwards.
+    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
     expect(conClase('sin-izquierda')).toBe(false);
   }
 });

@@ -238,6 +238,8 @@ export const en = {
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
     },
+    /** The status bar toggle while an error keeps the bar on screen (#412). */
+    tituloEstadoForzado: 'Show or hide the status bar — it stays while it shows an error',
 
     /** Status bar. */
     semilla: (valor: string): string => `Seed ${valor}`,
@@ -962,7 +964,7 @@ export const en = {
 
     /** Validation marker: the disc and its native tooltip. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 rename · ⇥ properties',
+    marcadorAcciones: 'F2 rename · ⇧F6 properties',
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

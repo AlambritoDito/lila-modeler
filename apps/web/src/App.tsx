@@ -1095,8 +1095,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         return;
       }
       if (e.key !== 'Tab' || !(e.target as Element | null)?.matches?.('.djs-container > svg')) return;
-      e.preventDefault();
-      alternarRef.current(e.shiftKey ? 'izquierda' : 'derecha');
+      // Taken only when it toggles something: with no left column Shift+Tab keeps moving the focus.
+      if (alternarRef.current(e.shiftKey ? 'izquierda' : 'derecha')) e.preventDefault();
     };
     window.addEventListener('keydown', teclasPaneles);
     return () => window.removeEventListener('keydown', teclasPaneles);
@@ -1267,8 +1267,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** The detached scenario window counts as «right panel hidden» while it shows the scenario. */
   const ocultoPorVentana = ventanaEscenario !== null && pestana === 'simulacion' && modo !== 'animar';
   /**
-   * Anything the status bar has to say right now. A hidden status bar comes back for it: an
-   * error nobody can see is worse than a bar the user asked to hide.
+   * An error the status bar is showing right now. A hidden status bar comes back for it: an
+   * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
+   * `.bpmn` notice and the import warnings last as long as the model, and would pin the bar for
+   * the whole session (QA of #429).
    */
   const derechaVisible = visibles.derecha && !(ocultoPorVentana && !verConVentana);
   /**
@@ -1278,8 +1280,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * included.
    */
   const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
-  const hayAlerta = suelto || ioError !== null || perdidasAlExportar.length > 0
-    || estado.avisos - estado.perdidas.length > 0 || estado.error !== null || avisoTema !== null
+  const hayAlerta = ioError !== null || perdidasAlExportar.length > 0 || estado.error !== null || avisoTema !== null
     || errorSimOculto !== null;
   const visible: Record<Region, boolean> = {
     izquierda: hayIzquierda && visibles.izquierda,
@@ -1287,23 +1288,30 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     diagramas: visibles.diagramas,
     estado: visibles.estado || hayAlerta,
   };
+  /**
+   * What the toggles show as pressed and flip: what is on screen, except for the status bar, whose
+   * toggle keeps showing (and recording) the user's choice while an error forces the bar in.
+   */
+  const pulsado: Record<Region, boolean> = { ...visible, estado: visibles.estado };
+  const tituloRegion = (r: Region): string => (r === 'estado' && hayAlerta ? S.app.tituloEstadoForzado : S.app.tituloRegiones[r]);
 
-  /** Show or hide `region` in the current mode, and save the whole map. */
-  function alternarRegion(region: Region): void {
-    if (region === 'izquierda' && !hayIzquierda) return;
-    const mostrar = !visible[region];
+  /** Show or hide `region` in the current mode, and save the whole map. `false` = nothing to do. */
+  function alternarRegion(region: Region): boolean {
+    if (region === 'izquierda' && !hayIzquierda) return false;
+    const mostrar = !pulsado[region];
     // Hiding the region that holds the focus would drop it on `<body>`: it goes to the toggle.
-    if (!mostrar && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
+    if (!mostrar && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
     // While detached the right toggle only peeks at the docked panel: the saved choice stays.
     if (region === 'derecha' && ocultoPorVentana) {
       setVerConVentana(mostrar);
-      if (!mostrar || visibles.derecha) return;
+      if (!mostrar || visibles.derecha) return true;
     }
     const actual = panelesRef.current;
     const siguiente = { ...actual, [modo]: { ...actual[modo], [region]: mostrar } };
     panelesRef.current = siguiente;
     setPaneles(siguiente);
     recordar({ paneles: siguiente });
+    return true;
   }
   const alternarRef = useRef(alternarRegion);
   alternarRef.current = alternarRegion;
@@ -1512,22 +1520,29 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}
         <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo(',', true)}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
         {/* Panel toggles (#412): four icon buttons in wide windows, one «View» menu in narrow
-            ones (`app.css` swaps them). Pressed = the region is on screen right now. */}
+            ones (`app.css` swaps them). Pressed = the region is on screen (see `pulsado`). */}
         <div className="iconos vista-grupo" role="group" aria-label={S.app.vista}>
           {REGIONES.map((r) => (
-            <button key={r} type="button" className="boton icono" data-region={r} aria-pressed={visible[r]}
+            <button key={r} type="button" className="boton icono" data-region={r} aria-pressed={pulsado[r]}
               aria-controls={r === 'izquierda' && !hayIzquierda ? undefined : ID_REGION[r]}
-              aria-label={S.app.regiones[r]} title={S.app.tituloRegiones[r]}
+              aria-label={S.app.regiones[r]} title={tituloRegion(r)}
               disabled={r === 'izquierda' && !hayIzquierda} onClick={() => alternarRegion(r)}>
               <IconoRegion region={r} />
             </button>
           ))}
         </div>
-        <details className="menu-vista" onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
+        {/* Plain toggle buttons like the File menu (QA of #429): no `role="menu"`, which would
+            promise arrow-key navigation. Escape closes it and gives the focus back to its button. */}
+        <details className="menu-vista" onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          const menu = e.currentTarget as HTMLDetailsElement;
+          menu.open = false;
+          menu.querySelector('summary')?.focus();
+        }}>
           <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
-          <div role="menu" aria-label={S.app.vista}>
+          <div>
             {REGIONES.map((r) => (
-              <button key={r} type="button" role="menuitemcheckbox" aria-checked={visible[r]} title={S.app.tituloRegiones[r]}
+              <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={tituloRegion(r)}
                 disabled={r === 'izquierda' && !hayIzquierda}
                 onClick={(e) => {
                   const menu = e.currentTarget.closest('details')!;
@@ -1535,7 +1550,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                   menu.querySelector('summary')?.focus();
                   alternarRegion(r);
                 }}>
-                <span className="marca-menu" aria-hidden="true">{visible[r] ? '✓' : ''}</span>{S.app.regiones[r]}
+                <span className="marca-menu" aria-hidden="true">{pulsado[r] ? '✓' : ''}</span>{S.app.regiones[r]}
               </button>
             ))}
           </div>

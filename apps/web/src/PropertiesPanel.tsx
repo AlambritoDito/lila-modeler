@@ -394,12 +394,12 @@ function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry
       </section>
       <section className="propiedades-seccion">
         <h3>{S.propiedades.atajos}</h3>
-        {/* Los dos únicos atajos reales de hoy (`ValidationMarkers.ts` los enseña igual, en el
-            lienzo): F2 renombra y ⇥ va a Propiedades, los dos de bpmn-js/diagram-js de serie.
-            «Buscar actividad ⌘K» del artefacto se queda fuera —el buscador de la barra es un
-            campo inerte (`App.tsx`, LILA-066/#66): la paleta de comandos todavía no existe. */}
+        {/* The two real shortcuts today (`ValidationMarkers.ts` shows the same on the canvas):
+            F2 renames (bpmn-js) and Shift+F6 moves the focus from the canvas to this panel
+            (#412 — Tab on the canvas now hides and shows the panel instead). The artboard's
+            «Search activity ⌘K» stays out: the bar's search field is inert (LILA-066/#66). */}
         <FilaResumen etiqueta={S.propiedades.renombrar} valor={<kbd>F2</kbd>} />
-        <FilaResumen etiqueta={S.app.pestanas.propiedades} valor={<kbd>⇥</kbd>} />
+        <FilaResumen etiqueta={S.app.pestanas.propiedades} valor={<kbd>⇧F6</kbd>} />
       </section>
     </div>
   );

@@ -219,6 +219,8 @@ export const es: Strings = {
       diagramas: 'Mostrar u ocultar las pestañas de diagramas',
       estado: 'Mostrar u ocultar la barra de estado',
     },
+    /** El botón de la barra de estado mientras un error la mantiene en pantalla (#412). */
+    tituloEstadoForzado: 'Mostrar u ocultar la barra de estado — sigue mientras muestre un error',
 
     /** Barra de estado. */
     semilla: (valor: string): string => `Semilla ${valor}`,
@@ -910,7 +912,7 @@ export const es: Strings = {
 
     /** Marcador de validación: el disco y su tooltip nativo. */
     marcadorSimbolo: '!',
-    marcadorAcciones: 'F2 renombrar · ⇥ propiedades',
+    marcadorAcciones: 'F2 renombrar · ⇧F6 propiedades',
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
   },

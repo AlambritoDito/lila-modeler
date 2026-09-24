@@ -190,7 +190,7 @@ describe('sincronizarMarcadores sobre el lienzo (LILA-209)', () => {
     expect(falso.discos[0]?.html.className).toBe('lila-validacion lila-validacion-error');
     expect(falso.discos[1]?.html.className).toBe('lila-validacion lila-validacion-aviso');
     expect(falso.discos[0]?.html.textContent).toBe('!');
-    expect(falso.discos[0]?.html.title).toBe('Task_1: algo\nF2 renombrar · ⇥ propiedades');
+    expect(falso.discos[0]?.html.title).toBe('Task_1: algo\nF2 renombrar · ⇧F6 propiedades');
   });
 
   it('ignora los ids que el lienzo no conoce, sin fallar', () => {
