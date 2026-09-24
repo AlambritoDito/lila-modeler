@@ -1,22 +1,39 @@
-/* Available before React and the editor stylesheet; the illustration is never animated. */
-html, body { margin: 0; background: #12101a; }
+/* Available before React and the editor stylesheet; the illustration is never animated.
+ * ponytail (#421): these are literal colours, not `tokens.css` custom properties — the app's
+ * theme tokens are not loaded yet at this point (that is the whole reason this file exists), so
+ * there is nothing to read them from. The default below is Lila Dark's `bg.base`/`fg.primary`/
+ * `border`/`accent.primary` (`theme/themes/lila-dark.json`) instead of the old Eva-01 greys, and
+ * the light override is Lila Light's; `tokens.css` itself stays Eva-01 (only the screen the user
+ * sees before any theme choice loads follows the OS). Ceiling: a saved DARK theme on a LIGHT
+ * system (or vice versa) still flashes this OS-based screen before the saved one paints — reading
+ * `Ajustes.tema` before creating the window would need the renderer's settings file parsed from
+ * main, which does not know its shape (see `main.ts`'s own `ponytail:` next to `fondoVentana`). */
+html, body { margin: 0; background: #1c0f2e; }
 #startup {
   position: fixed;
   inset: 0;
   z-index: 10000;
   display: grid;
   place-items: center;
-  background: #12101a;
-  color: #ece9f5;
+  background: #1c0f2e;
+  color: #f8f8e0;
   font: 15px/1.5 system-ui, sans-serif;
 }
 .startup-content { width: min(560px, calc(100vw - 48px)); text-align: center; }
 .startup-logo { display: block; width: 100%; height: auto; border-radius: 18px; background: #fff; }
-.startup-version { margin: 24px 0 12px; color: #b9b1ce; font: 13px/1.5 ui-monospace, monospace; }
+.startup-version { margin: 24px 0 12px; color: #c7b8dc; font: 13px/1.5 ui-monospace, monospace; }
 #startup-status { margin: 12px 0; }
-.startup-indicator { display: inline-block; width: 18px; height: 18px; border: 2px solid #4e3f7a; border-top-color: #c5a8ff; border-radius: 50%; animation: startup-spin 1s linear infinite; }
+.startup-indicator { display: inline-block; width: 18px; height: 18px; border: 2px solid #4a3468; border-top-color: #a98bff; border-radius: 50%; animation: startup-spin 1s linear infinite; }
 #startup[data-state="error"] .startup-indicator { display: none; }
-#startup-reload { display: inline-block; color: #c5a8ff; padding: 8px 16px; text-underline-offset: 4px; }
+#startup-reload { display: inline-block; color: #a98bff; padding: 8px 16px; text-underline-offset: 4px; }
 #startup-reload:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
 @keyframes startup-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .startup-indicator { animation: none; } }
+
+@media (prefers-color-scheme: light) {
+  html, body { background: #faf8ee; }
+  #startup { background: #faf8ee; color: #280838; }
+  .startup-version { color: #5c4470; }
+  .startup-indicator { border-color: #dcc4e8; border-top-color: #7028f0; }
+  #startup-reload { color: #7028f0; }
+}

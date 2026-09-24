@@ -87,6 +87,19 @@ export const es: Strings = {
     tituloGuardar: 'Guardar proyecto',
     tituloGuardarComo: 'Guardar como',
 
+    /** Menú «Archivo» de escritorio (#411): mismas palabras que el menú nativo
+     * (`apps/desktop/src/strings/es.ts`), letra por letra. */
+    menuEscritorio: {
+      nuevoProyecto: 'Nuevo proyecto',
+      abrirProyecto: 'Abrir proyecto…',
+      abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+      abrirReciente: 'Abrir reciente',
+      ninguno: 'Sin proyectos recientes',
+      guardarProyecto: 'Guardar proyecto',
+      guardarComo: 'Guardar como…',
+      guardarComoCarpeta: 'Guardar como carpeta…',
+    },
+
     /** Buscador inerte de la barra (la paleta de comandos es otro ticket). El de dentro
      * (`buscarPista`) es más corto que el rótulo accesible: a 1400 px con la barra en español el
      * campo apenas tiene sitio, y «Buscar actividad…» se recortaba a mitad de palabra, «Busı»

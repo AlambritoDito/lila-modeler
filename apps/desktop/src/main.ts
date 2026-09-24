@@ -16,7 +16,7 @@
  *   verifica que el mensaje venga del frame principal de la propia app (`isTrustedSender`,
  *   `ipcGuards.ts`) — un frame anidado o una URL de navegación ajena no puede invocar el puente.
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -766,12 +766,26 @@ function attachCloseGuard(win: BrowserWindow): void {
   });
 }
 
+/**
+ * Fondo de la ventana antes de que pinte nada (#421): Lila Dark o Lila Light por
+ * `nativeTheme.shouldUseDarkColors`, en vez del gris de Eva-01 fijo de siempre — así no hay un
+ * parpadeo oscuro→claro en un sistema claro. Mismos hex que `startup.css` (`theme/themes/
+ * lila-{dark,light}.json` → `bg.base`), que es la pantalla que se ve mientras esto está detrás.
+ * ponytail: lee el esquema del SISTEMA, no el tema GUARDADO por el usuario en Ajustes —si guardó
+ * un tema oscuro en un sistema claro (o viceversa), esta ventana sigue parpadeando del esquema del
+ * SO al suyo; techo: leer `Ajustes.tema` de `estado.json` (`sessionState.ts`) antes de crear la
+ * ventana, cosa que este archivo no hace hoy con nada de la apariencia.
+ */
+function fondoVentana(): string {
+  return nativeTheme.shouldUseDarkColors ? '#1C0F2E' : '#FAF8EE';
+}
+
 function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow {
   const icon = path.join(app.getAppPath(), 'resources', 'icons', 'icon.png');
   const win = new BrowserWindow({
     ...(bounds ?? DEFAULT_WINDOW_SIZE),
     show,
-    backgroundColor: '#12101a',
+    backgroundColor: fondoVentana(),
     icon,
     webPreferences: {
       // `.cjs`: un preload sandboxeado no admite ESM (ni con `.mjs` — el `import` revienta con
@@ -800,7 +814,7 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
           useContentSize: true,
           minWidth: 420,
           minHeight: 360,
-          backgroundColor: '#12101a',
+          backgroundColor: fondoVentana(),
           autoHideMenuBar: true,
           icon,
           // Pinned (QA of #391): Electron merges the renderer's features string under these, so

@@ -343,6 +343,49 @@ body {
   color: var(--fg-disabled);
 }
 
+.menu-archivo hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: calc(4px * var(--espacio, 1)) 0;
+}
+
+/* «Abrir reciente» (#411, solo escritorio): mismo `<details>` anidado que el desplegable que lo
+   envuelve, sin flyout lateral. ponytail: una lista que se despliega hacia abajo, dentro del
+   propio menú, es más simple que calcular la posición de un flyout; techo: si molesta, `left:
+   100%; top: 0` aquí y basta. */
+.menu-archivo-reciente {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.menu-archivo-reciente > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: calc(7px * var(--espacio, 1)) 12px;
+}
+
+.menu-archivo-reciente > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-archivo-reciente[open] > summary,
+.menu-archivo-reciente > summary:hover {
+  background: var(--bg-hover);
+}
+
+.menu-archivo-reciente > div {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.menu-archivo-reciente button small {
+  color: var(--fg-disabled);
+  display: block;
+  font-size: 11px;
+}
+
 /* Campo de búsqueda inerte: el artefacto le da sitio y ancho fijos; buscar de verdad es la
    paleta de comandos (LILA-066). */
 .buscador {

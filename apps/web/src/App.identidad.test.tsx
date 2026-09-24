@@ -17,6 +17,7 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
+import { newModelXml } from './project';
 import type { ProjectSessionStore } from './store/ProjectStore';
 import { en as T } from './strings.en';
 
@@ -31,7 +32,10 @@ vi.mock('./Modeler', () => ({
   Lienzo: ({ onListo }: { onListo: (modelo: Modelador) => void }) => {
     useEffect(() => {
       onListo({
-        exportar: vi.fn(), abrir: vi.fn(), cuellos: vi.fn(), ajustar: vi.fn(), zoom: vi.fn(),
+        // #411: «Guardar proyecto»/«Guardar como» del nuevo menú de escritorio pasan por aquí
+        // (`App.tsx`'s `snapshot()` → `modelador.exportar` → `parseBpmn`), así que hace falta un
+        // XML de verdad y no el `undefined` de un `vi.fn()` sin implementación.
+        exportar: vi.fn().mockResolvedValue(newModelXml()), abrir: vi.fn(), cuellos: vi.fn(), ajustar: vi.fn(), zoom: vi.fn(),
         repintar: vi.fn(), validacion: vi.fn(), seleccionar: vi.fn(), simulacionTokens: vi.fn(),
         suscribir: () => () => {},
         servicios: {
@@ -64,7 +68,12 @@ afterEach(async () => {
   localStorage.clear();
 });
 
-async function montarApp(): Promise<HTMLDivElement> {
+/**
+ * `sessionOverrides` (#411) es lo único que añade el desplegable Archivo de escritorio a este
+ * montaje: `openRecent`, para las pruebas que abren un reciente desde el menú. El resto de campos
+ * son los que ya bastaban para `App.identidad.test.tsx`.
+ */
+async function montarApp(sessionOverrides: Record<string, unknown> = {}): Promise<{ contenedor: HTMLDivElement; session: ProjectSessionStore }> {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ name: 'test', tokens: {} }) }));
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; };
@@ -75,33 +84,171 @@ async function montarApp(): Promise<HTMLDivElement> {
     saveProject: vi.fn(async (doc: unknown) => doc),
     setDirty: vi.fn(),
     putProcess: vi.fn(async () => {}),
+    ...sessionOverrides,
   } as unknown as ProjectSessionStore;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
   await act(async () => { root!.render(<App store={session} />); });
-  return container;
+  return { contenedor: container, session };
 }
 
-it('en la web (sin `window.lila`), la marca del producto se enseña junto al icono', async () => {
-  vi.resetModules();
-  const contenedor = await montarApp();
-  const producto = contenedor.querySelector('.identidad .producto');
-  expect(producto).not.toBeNull();
-  expect(producto?.textContent).toBe(T.app.marca);
-});
+/**
+ * El `toggle` de `<details>` es real HTML, no un evento de React: el propio estándar lo pone en
+ * cola (`queue a task`, `setTimeout(0)` en jsdom) en vez de dispararlo en el mismo turno del clic
+ * — así que un test que dependa de `onToggle` (recientes, clic-fuera) tiene que ceder un tick.
+ */
+async function tick(): Promise<void> {
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
 
-it('en Electron (`window.lila` presente) la marca se calla: ya la lleva la barra de título del SO', async () => {
+/** Puente mínimo de escritorio: lo que `App.tsx` invoca al arrancar, más `listRecents` (su mock,
+ * devuelto para que las pruebas de recientes lo aserten sin `window.lila` de por medio). */
+function puenteEscritorio(recientes: readonly { dir: string; name: string; openedAt: string }[] = []) {
+  const listRecents = vi.fn().mockResolvedValue(recientes);
   (window as unknown as { lila: unknown }).lila = {
     readSettings: vi.fn().mockResolvedValue({}),
     writeSettings: vi.fn().mockResolvedValue(undefined),
     onMenu: vi.fn(() => () => {}),
     onOpenPath: vi.fn(() => () => {}),
     pendingOpenPath: vi.fn().mockResolvedValue(null),
+    listRecents,
   };
+  return { listRecents };
+}
+
+it('en la web (sin `window.lila`), la marca del producto se enseña junto al icono', async () => {
   vi.resetModules();
-  const contenedor = await montarApp();
+  const { contenedor } = await montarApp();
+  const producto = contenedor.querySelector('.identidad .producto');
+  expect(producto).not.toBeNull();
+  expect(producto?.textContent).toBe(T.app.marca);
+});
+
+it('en Electron (`window.lila` presente) la marca se calla: ya la lleva la barra de título del SO', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
   expect(contenedor.querySelector('.identidad .producto')).toBeNull();
   // El icono se queda: solo el texto del producto se calla.
   expect(contenedor.querySelector('.identidad .logo')).not.toBeNull();
+});
+
+// ---------- menú Archivo de escritorio (#411) ----------
+
+it('en Electron, el desplegable Archivo se pinta en la barra con el mismo texto que el menú nativo', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  const menu = contenedor.querySelector('.menu-archivo');
+  expect(menu).not.toBeNull();
+  const acciones = [...menu!.querySelectorAll('button')].map((b) => b.textContent);
+  expect(acciones).toEqual(expect.arrayContaining([
+    T.app.menuEscritorio.nuevoProyecto, T.app.menuEscritorio.abrirProyecto, T.app.menuEscritorio.abrirProyectoArchivo,
+    T.app.menuEscritorio.guardarProyecto, T.app.menuEscritorio.guardarComo, T.app.menuEscritorio.guardarComoCarpeta,
+    T.app.acercaDe,
+  ]));
+  // Las entradas de solo-web (abrir/exportar .bpmn) no aplican aquí: `bpmnFilesEnabled` es falso.
+  expect(acciones).not.toContain(T.app.abrirBpmn);
+  expect(acciones).not.toContain(T.app.exportarBpmn);
+});
+
+/**
+ * Una entrada por prueba, cada una con su propio montaje (#411): encadenarlas en una sola —Nuevo,
+ * luego Abrir, luego Guardar— dispara las mismas guardias de `projectAction`/`guardar` que ya
+ * cubren `App.test.tsx` (documento sucio, `ioLock`…) y esas no son lo que este archivo prueba.
+ * Aquí solo importa que cada botón del desplegable de escritorio llegue a la misma función que su
+ * equivalente del menú nativo (`ejecutar`/`projectAction`/`guardar`, ya probados a fondo en
+ * `App.test.tsx`).
+ */
+it('«Nuevo proyecto» crea el proyecto, como el menú nativo', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor, session } = await montarApp();
+  const boton = [...contenedor.querySelectorAll('.menu-archivo button')].find((b) => b.textContent === T.app.menuEscritorio.nuevoProyecto) as HTMLButtonElement;
+  await act(async () => { boton.click(); });
+  expect(session.createProject).toHaveBeenCalledOnce();
+});
+it('«Abrir proyecto…» abre el selector nativo, como el menú nativo', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor, session } = await montarApp();
+  const boton = [...contenedor.querySelectorAll('.menu-archivo button')].find((b) => b.textContent === T.app.menuEscritorio.abrirProyecto) as HTMLButtonElement;
+  await act(async () => { boton.click(); });
+  expect(session.openProject).toHaveBeenCalledOnce();
+});
+it('«Guardar proyecto» guarda, como el menú nativo', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor, session } = await montarApp();
+  const boton = [...contenedor.querySelectorAll('.menu-archivo button')].find((b) => b.textContent === T.app.menuEscritorio.guardarProyecto) as HTMLButtonElement;
+  await act(async () => { boton.click(); });
+  expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+it('«Abrir reciente» pide los recientes al puente al abrirse y abre uno al pulsarlo', async () => {
+  const { listRecents } = puenteEscritorio([
+    { dir: '/p/uno', name: 'Uno', openedAt: new Date().toISOString() },
+    { dir: '/p/dos', name: 'Dos', openedAt: new Date().toISOString() },
+  ]);
+  vi.resetModules();
+  const openRecent = vi.fn().mockResolvedValue(null);
+  const { contenedor } = await montarApp({ openRecent });
+  const menu = contenedor.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  expect(listRecents).toHaveBeenCalledOnce();
+  const submenu = menu.querySelector<HTMLDetailsElement>('.menu-archivo-reciente')!;
+  await act(async () => { submenu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  // Abrir «Abrir reciente» solo abre ESE submenú: el clic en su `<summary>` no debe cerrar el
+  // desplegable Archivo entero (found via a real-Chrome CDP check, not caught by jsdom alone).
+  expect(menu.open).toBe(true);
+  const items = [...submenu.querySelectorAll('div button')];
+  expect(items.map((b) => b.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Uno'), expect.stringContaining('Dos'), expect.stringContaining('/p/uno')]));
+  await act(async () => { (items.find((b) => b.textContent?.includes('Uno')) as HTMLButtonElement).click(); });
+  expect(openRecent).toHaveBeenCalledWith('/p/uno', undefined);
+  // El clic en la entrada cierra el desplegable entero, no solo el submenú (el wrapper `onClick`).
+  expect(menu.open).toBe(false);
+});
+
+it('«Abrir reciente» enseña una entrada deshabilitada cuando el puente no trae ninguno', async () => {
+  puenteEscritorio([]);
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  const menu = contenedor.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  const submenu = menu.querySelector<HTMLDetailsElement>('.menu-archivo-reciente')!;
+  await act(async () => { submenu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  const vacio = submenu.querySelector('button')!;
+  expect(vacio.textContent).toBe(T.app.menuEscritorio.ninguno);
+  expect(vacio.disabled).toBe(true);
+});
+
+it('el menú Archivo de escritorio se cierra con Esc y con un clic fuera', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  const menu = contenedor.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  expect(menu.open).toBe(true);
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect(menu.open).toBe(false);
+
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  expect(menu.open).toBe(true);
+  await act(async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(menu.open).toBe(false);
+
+  // Un clic DENTRO del desplegable (aquí, el summary de "Abrir reciente") no cuenta como fuera.
+  await act(async () => { menu.querySelector('summary')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await tick();
+  expect(menu.open).toBe(true);
+  await act(async () => { menu.querySelector('.menu-archivo-reciente summary')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+  expect(menu.open).toBe(true);
 });

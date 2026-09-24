@@ -132,7 +132,9 @@ Los controles:
 - **Importar**: un `<input type="file" accept=".json">`. El JSON se valida entero antes de tocar
   nada (`validarTema`, `apps/web/src/theme/temas.ts`); si algo falla, el mensaje sale dentro del
   diálogo y no se aplica ni se guarda nada. Si vale, entra como tema del usuario y se aplica.
-- **Eliminar** quita el tema del usuario activo y vuelve a Eva-01.
+- **Eliminar** quita el tema del usuario activo y cae al Lila por defecto del sistema, Oscuro o
+  Claro (`temaPorDefecto`, `apps/web/src/theme/temaPorDefecto.ts`) — la misma regla del primer
+  arranque, ya no el Eva-01 fijo de antes (#422).
 - **Cerrar el diálogo no deshace nada.** El botón «Cerrar» y la tecla Escape hacen lo mismo: lo
   editado ya está aplicado y ya está guardado desde la pulsación que lo cambió, porque el editor no
   tiene «Aceptar». Para volver atrás está «Restablecer». Enter dentro de un campo de texto **no**
