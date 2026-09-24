@@ -2122,7 +2122,7 @@ body {
 .paleta-comandos .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paleta-comandos .tipo { color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
 .paleta-comandos .id { color: var(--fg-disabled); font-family: var(--font-mono); font-size: 11px; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.paleta-comandos kbd { border: 1px solid var(--border); color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; padding: 2px 4px; }
+.paleta-comandos kbd { border: 1px solid var(--border); color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 1px 4px; }
 .paleta-comandos .vacio { color: var(--fg-muted); margin: 0; padding: calc(12px * var(--espacio, 1)) 12px; }
 
 /* ---------- ajustes ---------- */
