@@ -401,13 +401,16 @@ body {
   color: var(--fg-muted);
   box-sizing: border-box;
   display: flex;
-  /* 210 px de fábrica, pero el campo es el único inerte de la barra (LILA-066): tiene que ceder
-     sitio antes que nadie cuando algo no cabe. Its zone (above) is what gives way now: the zone
-     shrinks to 0 before `.identidad` does (flex-basis 0), and the field shrinks inside it down
-     to 120 px, then wraps out of sight (#423) — no more empty 22 px box. */
-  flex: 0 1 210px;
+  /* 210 px at most (the artboard's), but the field is the only inert thing in the bar (LILA-066)
+     and gives way first. Its zone (above) shrinks to 0 before `.identidad` does (flex-basis 0).
+     Inside it the field starts from a 120 px basis — line breaking looks at the basis, so with
+     210 here it wrapped away with 120–209 px still free (QA of #429) — and grows before the
+     spring does (grow 999 against its 1) up to `max-width`. Under 120 px it wraps out of sight
+     (#423): no more empty 22 px box. */
+  flex: 999 1 120px;
   gap: 8px;
   height: 30px;
+  max-width: 210px;
   min-width: 120px;
   padding: 0 10px;
 }

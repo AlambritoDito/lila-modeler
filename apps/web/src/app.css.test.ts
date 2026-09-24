@@ -132,15 +132,17 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   expect(muelle).toContain('flex: 1 0 0');
   // 30 px, not 0: a 0 px first line would leave the wrapped field at the top, in sight.
   expect(muelle).toContain('height: 30px');
-  expect(buscador).toContain('flex: 0 1 210px');
+  // Line breaking uses the basis: 120 px, so the field only wraps with fewer than 120 px free,
+  // and it grows to its 210 px before the spring takes anything (QA of #429).
+  expect(buscador).toContain('flex: 999 1 120px');
+  expect(buscador).toContain('max-width: 210px');
   expect(buscador).toContain('min-width: 120px');
   // And goes away below 1320 px, where even at its minimum it left the Spanish project name short
   // (QA of #393).
   // Only the field: the zone stays as the spring that keeps the right-hand controls at the edge.
   expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.zona-buscador > \.buscador \{\s*display: none;/);
-  // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
-  // solo el `flex`, no los dos.
-  expect(buscador).not.toContain('width: 210px');
+  // No fixed `width` competing with the `flex` above: 210 px is only a ceiling (`max-width`).
+  expect(buscador).not.toMatch(/(^|[\s;])width: 210px/);
 });
 
 it('el nombre del proyecto y el del archivo se recortan con «…» en vez de desbordar la barra (QA de la ronda 2 de #392)', () => {

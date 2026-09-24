@@ -139,11 +139,11 @@ describe('sin selección: resumen del proceso y atajos', () => {
     expect(filaValor(panel, 'Pools / carriles')).toBe('2');
   });
 
-  it('enseña solo los atajos que existen de verdad, F2 y ⇥ — no un ⌘K que todavía no busca nada', () => {
+  it('enseña solo los atajos que existen de verdad, F2 y ⇧F6 (#412) — no un ⌘K que todavía no busca nada', () => {
     const panel = montar(modeladorFalso({ registro }));
     expect(panel.textContent).toContain('Atajos');
     expect(filaValor(panel, 'Renombrar')).toBe('F2');
-    expect(filaValor(panel, 'Propiedades')).toBe('⇥');
+    expect(filaValor(panel, 'Propiedades')).toBe('⇧F6');
     expect(panel.textContent).not.toContain('⌘K');
   });
 
