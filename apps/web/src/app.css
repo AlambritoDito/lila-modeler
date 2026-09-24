@@ -2117,14 +2117,29 @@ body {
 .ajustes-panel { flex: 1 1 auto; min-width: 0; overflow: auto; padding: calc(20px * var(--espacio, 1)) 24px; }
 .ajustes .fila { align-items: center; display: grid; gap: 8px; grid-template-columns: 9rem 1fr; margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .fila > span { color: var(--fg-muted); }
+/* QA must-fix S3 of #407: without this, a long theme name's `<select>`/`<input>` widens the
+   shared `1fr` track past the panel, and the whole tabpanel gains horizontal scroll — a grid
+   item's automatic minimum size is its content's, not 0. */
+.ajustes .fila > * { min-width: 0; }
+/* QA must-fix S2 of #407: the shared `.campo` rule elsewhere is a flex COLUMN with
+   `align-items: center` (it stacks a visible label above its control); inside a `.fila` row that
+   left Theme/Language narrower than the Density row beside them and vertically off from their
+   own label. Stretching it to the full grid cell and dropping its own bottom margin (the row
+   already carries one) makes every row's control fill the column the same way. */
+.ajustes .fila .campo { align-items: stretch; margin-bottom: 0; }
 .ajustes .campo { margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
 
-/* Editor de temas (LILA-114): los grupos son `<details>` y solo el primero viene abierto por
-   defecto. Ni un color literal aquí: todo sale de los tokens, incluidos los del propio editor,
-   que por eso se repinta a la vez que la app cuando se cambia uno. */
+/* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
+   a single literal color here: everything comes from the tokens, including the editor's own,
+   which is why it repaints along with the app whenever one changes. */
 .ajustes .campo input[type='text'] { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; width: 100%; }
-.ajustes .acciones.temas { justify-content: flex-start; margin: 12px 0; }
+/* QA must-fix S1 of #407: `.ajustes .acciones` above is the dialog's footer rule (border-top,
+   24px padding) and also matches this action row, since both share the `acciones` class — it
+   used to only override `justify-content`/`margin`, so Appearance's Duplicate/Reset/Export/Import
+   row inherited a stray divider and the footer's indent. Zeroing both out here keeps the footer
+   rule for the actual footer only. */
+.ajustes .acciones.temas { border-top: 0; justify-content: flex-start; margin: 12px 0; padding: 0; }
 /* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
    y es el que abre el selector nativo (y el que un test acciona). */
 .ajustes .acciones.temas .boton { display: inline-flex; }
@@ -2133,10 +2148,10 @@ body {
 .ajustes .muestras .apagado { color: var(--fg-muted); }
 .ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }
 .ajustes .grupo { border-top: 1px solid var(--border); padding: 6px 0; }
-/* Rótulos en mayúsculas espaciadas, como el artboard (mismo tratamiento que
+/* Group labels go uppercase and letter-spaced, like the artboard (same treatment as
    `.propiedades-seccion h3`). */
 .ajustes .grupo > summary { color: var(--fg-muted); cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; padding: 4px 0; text-transform: uppercase; }
-/* Tarjeta de 1 px por token (artboard), no solo una fila suelta. */
+/* A 1px card per token (artboard), not just a loose row. */
 .ajustes .token { align-items: center; border: 1px solid var(--border); border-radius: 0; display: grid; gap: 8px; grid-template-columns: 1fr auto minmax(6rem, 10rem); margin: 4px 0; padding: calc(6px * var(--espacio, 1)) 8px; }
 .ajustes .token code { color: var(--fg-muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .ajustes .token input { background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 0; color: var(--fg-primary); font: inherit; min-width: 0; padding: 3px 6px; }
@@ -2148,7 +2163,7 @@ body {
    lo dice con el token de error y el tema sigue con el valor bueno. */
 .ajustes input.invalido { border: 1px solid var(--status-error); }
 
-/* Ajustes → Atajos (#407): tabla de solo lectura por grupo, `settings/Atajos.tsx`. */
+/* Settings → Shortcuts (#407): read-only table per group, `settings/Atajos.tsx`. */
 .ajustes-atajos-grupo { margin-bottom: calc(20px * var(--espacio, 1)); }
 .ajustes-atajos-grupo h3 { color: var(--fg-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; margin: 0 0 8px; text-transform: uppercase; }
 .ajustes-atajos-grupo table { border-collapse: collapse; width: 100%; }

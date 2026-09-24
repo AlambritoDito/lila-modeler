@@ -10,7 +10,7 @@
  * `<select>`, …) — they all assume the whole dialog body is in the DOM the moment it opens, which
  * is still true here; only General is *visible* at that moment.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Locale, Preferencia } from '../i18n';
 import { useStrings } from '../i18n';
 import { DENSIDAD_IDS, type Densidad } from '../ids';
@@ -42,6 +42,20 @@ export interface AjustesProps {
 export function Ajustes(props: AjustesProps): React.JSX.Element {
   const S = useStrings();
   const [seccion, setSeccion] = useState<Seccion>('general');
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // QA must-fix S4 of #407: `<Ajustes>` stays mounted inside the always-rendered `<dialog>`, so
+  // `seccion` used to survive `close()` — reopening Settings kept showing whatever tab was last
+  // active instead of General, which is what the docs and the App tests both claim happens. The
+  // dialog's native `close` event (fired by the Close button, Esc, and `cerrarDialogo()` alike)
+  // resets it back.
+  useEffect(() => {
+    const dialog = formRef.current?.closest('dialog');
+    if (dialog === null || dialog === undefined) return undefined;
+    const alCerrar = () => setSeccion('general');
+    dialog.addEventListener('close', alCerrar);
+    return () => dialog.removeEventListener('close', alCerrar);
+  }, []);
 
   // ponytail: C1's shortcut map (`atajos.ts`, #413) feeds this at integration, replacing the
   // two-row placeholder below with `ATAJOS`/`S.atajos`/`etiqueta(·, MAC)`. Until then this repeats
@@ -57,13 +71,28 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
   ];
 
   return (
-    <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
+    <form ref={formRef} method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
       <div className="ajustes-encabezado">
         <h2 id="ajustes-titulo">{S.app.ajustes} / {S.ajustes.secciones[seccion]}</h2>
         <button type="button" className="boton" onClick={() => { props.cerrarDialogo(); props.abrirAcerca(); }}>{S.app.acercaDe}</button>
       </div>
       <div className="ajustes-cuerpo">
-        <nav className="ajustes-nav" role="tablist" aria-label={S.app.ajustes}>
+        <nav
+          className="ajustes-nav"
+          role="tablist"
+          aria-label={S.app.ajustes}
+          aria-orientation="vertical"
+          onKeyDown={(e) => {
+            // WAI-ARIA tabs: arrows move and select; every tab stays in the Tab order too (QA nit
+            // N1 of #407 — `role="tab"` otherwise promises arrow-key support it doesn't deliver).
+            const paso = ({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 } as Record<string, number>)[e.key];
+            if (paso === undefined) return;
+            e.preventDefault();
+            const s = SECCIONES[(SECCIONES.indexOf(seccion) + paso + SECCIONES.length) % SECCIONES.length]!;
+            setSeccion(s);
+            document.getElementById(`ajustes-tab-${s}`)?.focus();
+          }}
+        >
           {SECCIONES.map((s) => (
             <button
               key={s}

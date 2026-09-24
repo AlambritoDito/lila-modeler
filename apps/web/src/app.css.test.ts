@@ -351,3 +351,27 @@ it('token cards and the Shortcuts `<kbd>` are explicit radius-0 boxes on the pla
   expect(kbd).toContain('border-radius: 0');
   expect(kbd).toContain('font-family: var(--font-mono)');
 });
+
+it("Appearance's theme-action row does not inherit the dialog footer's divider or indent (QA must-fix S1 of #407)", () => {
+  // `.ajustes .acciones` (the dialog's actual footer, tested above) and this row share the
+  // `acciones` class, so without an override here Duplicate/Reset/Export/Import inherited a
+  // `border-top` and 24 px of padding meant for the «Close» footer.
+  const temas = bloqueDeLinea('.ajustes .acciones.temas');
+  expect(temas).toContain('border-top: 0');
+  expect(temas).toContain('padding: 0');
+});
+
+it('every `.fila` control fills its column instead of the centered, undersized box the shared `.campo` rule draws (QA must-fix S2 of #407)', () => {
+  // The shared `.campo` rule elsewhere is a flex COLUMN with `align-items: center` for a
+  // label-above-control layout; inside a `.fila` row that left Language/Theme narrower than
+  // Density and off-center from their own label.
+  const campoEnFila = bloqueDeLinea('.ajustes .fila .campo');
+  expect(campoEnFila).toContain('align-items: stretch');
+  expect(campoEnFila).toContain('margin-bottom: 0');
+});
+
+it('a `.fila` cell can shrink below its control\'s content size, so a long theme name cannot force horizontal scroll (QA must-fix S3 of #407)', () => {
+  // A grid item's automatic minimum size is its content's, not 0: without this, a long theme
+  // name's `<select>`/`<input>` widens the shared `1fr` track past the panel.
+  expect(bloqueDeLinea('.ajustes .fila > *')).toContain('min-width: 0');
+});
