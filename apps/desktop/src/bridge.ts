@@ -160,12 +160,29 @@ export interface Ajustes {
   readonly temas?: readonly TemaGuardado[];
   /** Width of the right panel in px (design 2a); the renderer clamps it to 300–520. */
   readonly panelAncho?: number;
+  /** Width of the shape palette in Model, in px (#406); the renderer clamps it to 180–360. */
+  readonly paletaAncho?: number;
+  /** Width of the scenario rail in Simulate, in px (#406); the renderer clamps it to 160–320. */
+  readonly railAncho?: number;
+  /**
+   * Which regions are shown, per mode (#412). Always written whole: `withAjustes` merges shallowly,
+   * so a partial map would forget the other modes. A missing field means visible.
+   */
+  readonly paneles?: { readonly [modo: string]: VisibilidadPaneles };
   /**
    * Last position and size of the detached scenario window (design 2c). Written out instead of
    * importing `WindowBounds`: this file is also type-checked by the web app, which must not pull
    * `sessionState.ts` and its `node:` imports in.
    */
   readonly ventanaEscenario?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+}
+
+/** Visibility of the four hideable regions of one mode (#412). */
+export interface VisibilidadPaneles {
+  readonly izquierda?: boolean;
+  readonly derecha?: boolean;
+  readonly diagramas?: boolean;
+  readonly estado?: boolean;
 }
 
 /**

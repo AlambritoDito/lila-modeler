@@ -108,6 +108,9 @@ async function preferencias(): Promise<Ajustes> {
     const idioma = localStorage.getItem('lila.idioma');
     // Empty or blank is "never saved" (320 by default), not 0 clamped up to 300 (QA of #390).
     const panelAncho = Number(localStorage.getItem('lila.panelAncho')?.trim() || NaN);
+    // Left column widths (#406), same "blank is never saved" rule.
+    const paletaAncho = Number(localStorage.getItem('lila.paletaAncho')?.trim() || NaN);
+    const railAncho = Number(localStorage.getItem('lila.railAncho')?.trim() || NaN);
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -120,11 +123,17 @@ async function preferencias(): Promise<Ajustes> {
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
     let ventana: unknown = null;
     try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
+    // Per-mode panel visibility (#412): its own `try` too; `sanearPaneles` checks the shape.
+    let paneles: unknown = null;
+    try { paneles = JSON.parse(localStorage.getItem('lila.paneles') ?? 'null'); } catch { /* only this one is lost */ }
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
       ...(idioma === null ? {} : { idioma }),
       ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
+      ...(Number.isFinite(paletaAncho) ? { paletaAncho } : {}),
+      ...(Number.isFinite(railAncho) ? { railAncho } : {}),
+      ...(paneles === null ? {} : { paneles: paneles as NonNullable<Ajustes['paneles']> }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
       ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
     };
@@ -146,6 +155,9 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
     if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
+    if (ajustes.paletaAncho !== undefined) localStorage.setItem('lila.paletaAncho', String(ajustes.paletaAncho));
+    if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
+    if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
@@ -225,7 +237,62 @@ function serviciosDe(modelador: Modelador | null): Servicios | null {
 /** Right panel width limits, in px (design 2a, `docs/design/COMPARACION-2026-09-07.md`). */
 const PANEL_MIN = 300;
 const PANEL_MAX = 520;
-const anchoPanel = (px: number): number => Math.min(PANEL_MAX, Math.max(PANEL_MIN, Math.round(px)));
+const limitar = (px: number, min: number, max: number): number => Math.min(max, Math.max(min, Math.round(px)));
+const anchoPanel = (px: number): number => limitar(px, PANEL_MIN, PANEL_MAX);
+/** Left column width limits (#406): the shape palette in Model, the scenario rail in Simulate. */
+const PALETA_MIN = 180;
+const PALETA_MAX = 360;
+const RAIL_MIN = 160;
+const RAIL_MAX = 320;
+/** Width of the compact palette, and the drag width under which the palette snaps to it (#406). */
+const PALETA_COMPACTA = 48;
+const PALETA_SALTO = 114;
+
+/** The four regions that can be hidden, per mode (#412). */
+type Region = 'izquierda' | 'derecha' | 'diagramas' | 'estado';
+const REGIONES: readonly Region[] = ['izquierda', 'derecha', 'diagramas', 'estado'];
+type Paneles = Record<ModoId, Record<Region, boolean>>;
+/** Modes that draw a left column: the palette in Model, the rail in Simulate. */
+const conIzquierda = (modo: ModoId): boolean => modo === 'modelar' || modo === 'simular';
+/**
+ * Saved visibility, trimmed to the known modes and regions: anything missing or not a boolean is
+ * visible, so a corrupt or older value can only show a panel, never lose one.
+ */
+function sanearPaneles(valor: unknown): Paneles {
+  const guardado = (valor !== null && typeof valor === 'object' ? valor : {}) as Record<string, unknown>;
+  return Object.fromEntries(MODO_IDS.map((modo) => {
+    const entrada = (guardado[modo] !== null && typeof guardado[modo] === 'object' ? guardado[modo] : {}) as Record<string, unknown>;
+    return [modo, Object.fromEntries(REGIONES.map((r) => [r, typeof entrada[r] === 'boolean' ? entrada[r] : true]))];
+  })) as Paneles;
+}
+/** Ids of the regions, for `aria-controls` on their toggles. */
+const ID_REGION: Record<Region, string> = { izquierda: 'region-izquierda', derecha: 'region-derecha', diagramas: 'region-diagramas', estado: 'region-estado' };
+/**
+ * Toggle icon (#412): the window frame with the region it stands for as a rectangle, filled
+ * while shown (`app.css`). Square corners, like the rest of the system.
+ */
+const RECT_REGION: Record<Region, { x: number; y: number; width: number; height: number }> = {
+  izquierda: { x: 3, y: 3, width: 3, height: 7 },
+  derecha: { x: 10, y: 3, width: 3, height: 7 },
+  diagramas: { x: 6, y: 10, width: 4, height: 1.5 },
+  estado: { x: 3, y: 11.5, width: 10, height: 1.5 },
+};
+function IconoRegion({ region }: { region: Region | null }): React.JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="11" height="11" />
+      {region === null
+        ? REGIONES.map((r) => <rect key={r} className="region" {...RECT_REGION[r]} />)
+        : <rect className="region" {...RECT_REGION[region]} />}
+    </svg>
+  );
+}
+/** Focus the toggle of `region` that is on screen: the button group or, when narrow, the «View» menu. */
+function enfocarToggle(region: Region): void {
+  const boton = document.querySelector<HTMLElement>(`.vista-grupo [data-region="${region}"]`);
+  if (boton !== null && boton.offsetParent !== null) boton.focus();
+  else document.querySelector<HTMLElement>('.menu-vista > summary')?.focus();
+}
 
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
@@ -363,6 +430,25 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
   const [panelAncho, setPanelAncho] = useState(320);
   const arrastre = useRef<{ x: number; ancho: number } | null>(null);
+  /** Left column widths (#406): the palette in Model and the rail in Simulate, each its own. */
+  const [paletaAncho, setPaletaAncho] = useState(236);
+  const [railAncho, setRailAncho] = useState(212);
+  const arrastreIzquierda = useRef<{ x: number; ancho: number } | null>(null);
+  /** Compact (icons only) palette; lifted from `Paleta` so the divider can snap to it (#406). */
+  const [compacta, setCompacta] = useState(() => {
+    try { return localStorage.getItem('lila.paleta') === 'compacta'; } catch { return false; }
+  });
+  /**
+   * Which regions each mode shows (#412). Written by the toggles only, through the ref, and
+   * always whole — the desktop bridge merges shallowly, so a partial map would forget modes.
+   */
+  const [paneles, setPaneles] = useState<Paneles>(() => sanearPaneles(null));
+  const panelesRef = useRef(paneles);
+  /**
+   * The right panel shown anyway while the scenario window is detached (#412). Not persisted:
+   * the detached window hides the panel it came from, and each detach starts hidden again.
+   */
+  const [verConVentana, setVerConVentana] = useState(false);
   /**
    * Preferencia de idioma (LILA-210): `auto` sigue al sistema. Se guarda la preferencia y no el
    * idioma resuelto, y el idioma vivo lo lleva `i18n.ts` —de ahí `useLocale()`, que es lo que
@@ -647,28 +733,51 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   /**
-   * Divider of the right panel: primary-button drag and arrow keys, persisted when the gesture
-   * ends. Arrows follow the ARIA splitter convention: they move the divider, so ArrowLeft widens
-   * the panel on its right.
+   * A column divider (design 2a, #406): primary-button drag and arrow keys, persisted when the
+   * gesture ends and only if the width changed. Arrows follow the ARIA splitter convention: they
+   * move the divider, so ArrowLeft widens the right panel and narrows the left column (`signo`).
+   * Double-click and Enter hide or show that side (#412) instead; while it is hidden, dragging and
+   * arrows do nothing. `resolver` turns a proposed width into the one to keep (clamped, or the
+   * palette's compact snap).
    */
-  function divisorPanel(): React.HTMLAttributes<HTMLDivElement> {
-    const mover = (x: number): number => anchoPanel(arrastre.current!.ancho + arrastre.current!.x - x);
-    const fijar = (px: number): void => { setPanelAncho(px); recordar({ panelAncho: px }); };
+  function divisor(o: {
+    valor: number;
+    signo: 1 | -1;
+    resolver: (px: number, teclado: boolean) => number;
+    fijar: (px: number) => void;
+    persistir: (px: number) => void;
+    alternar: () => void;
+    oculto: boolean;
+    gesto: React.MutableRefObject<{ x: number; ancho: number } | null>;
+  }): React.HTMLAttributes<HTMLDivElement> {
+    const mover = (x: number): number => o.resolver(o.gesto.current!.ancho + o.signo * (x - o.gesto.current!.x), false);
+    const terminar = (px: number): void => {
+      const inicial = o.gesto.current!.ancho;
+      o.gesto.current = null;
+      o.fijar(px);
+      if (px !== inicial) o.persistir(px);
+    };
     // A cancelled or lost capture ends the drag where the last move left it.
-    const soltar = (): void => { if (arrastre.current !== null) { arrastre.current = null; fijar(panelAncho); } };
+    const soltar = (): void => { if (o.gesto.current !== null) terminar(o.valor); };
     return {
       onPointerDown: (e) => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || o.oculto) return;
         e.currentTarget.setPointerCapture?.(e.pointerId);
-        arrastre.current = { x: e.clientX, ancho: panelAncho };
+        o.gesto.current = { x: e.clientX, ancho: o.valor };
       },
-      onPointerMove: (e) => { if (arrastre.current !== null) setPanelAncho(mover(e.clientX)); },
-      onPointerUp: (e) => { if (arrastre.current !== null) { fijar(mover(e.clientX)); arrastre.current = null; } },
+      onPointerMove: (e) => { if (o.gesto.current !== null) o.fijar(mover(e.clientX)); },
+      onPointerUp: (e) => { if (o.gesto.current !== null) terminar(mover(e.clientX)); },
       onPointerCancel: soltar,
       onLostPointerCapture: soltar,
+      onDoubleClick: o.alternar,
       onKeyDown: (e) => {
-        const paso = e.key === 'ArrowLeft' ? 16 : e.key === 'ArrowRight' ? -16 : 0;
-        if (paso !== 0) { e.preventDefault(); fijar(anchoPanel(panelAncho + paso)); }
+        if (e.key === 'Enter') { e.preventDefault(); o.alternar(); return; }
+        const paso = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+        if (paso === 0 || o.oculto) return;
+        e.preventDefault();
+        const px = o.resolver(o.valor + o.signo * paso, true);
+        o.fijar(px);
+        if (px !== o.valor) o.persistir(px);
       },
     };
   }
@@ -802,6 +911,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
+      if (typeof guardadas.paletaAncho === 'number') setPaletaAncho(limitar(guardadas.paletaAncho, PALETA_MIN, PALETA_MAX));
+      if (typeof guardadas.railAncho === 'number') setRailAncho(limitar(guardadas.railAncho, RAIL_MIN, RAIL_MAX));
+      panelesRef.current = sanearPaneles(guardadas.paneles);
+      setPaneles(panelesRef.current);
       geomEscenario.current = guardadas.ventanaEscenario;
       // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
       // mano— cae en `auto`, que es arrancar en el idioma del sistema.
@@ -952,6 +1065,36 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Panel keys (#412), Ableton style: Tab toggles the right panel and Shift+Tab the left column,
+   * but ONLY while the canvas `<svg>` has the focus — anywhere else Tab keeps moving the focus,
+   * and a field, a select, a button or the label editor (a contenteditable inside the canvas
+   * container) never sees it taken. Not gated by DESKTOP: no native menu item owns these keys.
+   * Since the canvas now keeps Tab, F6 (to the modes) and Shift+F6 (to the right panel, or its
+   * toggle when hidden) are the way out of it with the keyboard (WCAG 2.1.2).
+   * ponytail: #413 owns the final shortcut map; these keys may move there.
+   */
+  useEffect(() => {
+    const teclasPaneles = (e: KeyboardEvent): void => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing) return;
+      if (document.querySelector('dialog[open], .bienvenida') !== null) return;
+      if (e.key === 'F6') {
+        e.preventDefault();
+        if (!e.shiftKey) { document.querySelector<HTMLElement>('.modos .modo')?.focus(); return; }
+        const panel = document.getElementById(ID_REGION.derecha);
+        const destino = panel?.offsetParent === null ? null
+          : panel?.querySelector<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea, [tabindex]:not([tabindex="-1"])');
+        if (destino) destino.focus(); else enfocarToggle('derecha');
+        return;
+      }
+      if (e.key !== 'Tab' || !(e.target as Element | null)?.matches?.('.djs-container > svg')) return;
+      e.preventDefault();
+      alternarRef.current(e.shiftKey ? 'izquierda' : 'derecha');
+    };
+    window.addEventListener('keydown', teclasPaneles);
+    return () => window.removeEventListener('keydown', teclasPaneles);
+  }, []);
+
   /** Only a sane size counts: a window already gone reports zeros. */
   function recordarGeometria(geometria: Geometria): void {
     if (!geometriaValida(geometria)) return;
@@ -962,6 +1105,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   function desacoplar(): void {
     const ventana = abrirVentanaFlotante('lila-escenario', geomEscenario.current);
     if (ventana === null) { setIoError(S.app.ventanaBloqueada); return; }
+    setVerConVentana(false);
     setVentanaEscenario(ventana);
   }
   /** Back to the panel. Idempotent: the child's own `pagehide` lands here too. */
@@ -1110,6 +1254,53 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
+  // --- Hideable regions (#412) ---
+  const visibles = paneles[modo];
+  const hayIzquierda = conIzquierda(modo);
+  /** The detached scenario window counts as «right panel hidden» while it shows the scenario. */
+  const ocultoPorVentana = ventanaEscenario !== null && pestana === 'simulacion' && modo !== 'animar';
+  /**
+   * Anything the status bar has to say right now. A hidden status bar comes back for it: an
+   * error nobody can see is worse than a bar the user asked to hide.
+   */
+  const hayAlerta = suelto || ioError !== null || perdidasAlExportar.length > 0
+    || estado.avisos - estado.perdidas.length > 0 || estado.error !== null || avisoTema !== null;
+  const visible: Record<Region, boolean> = {
+    izquierda: hayIzquierda && visibles.izquierda,
+    derecha: visibles.derecha && !(ocultoPorVentana && !verConVentana),
+    diagramas: visibles.diagramas,
+    estado: visibles.estado || hayAlerta,
+  };
+
+  /** Show or hide `region` in the current mode, and save the whole map. */
+  function alternarRegion(region: Region): void {
+    if (region === 'izquierda' && !hayIzquierda) return;
+    const mostrar = !visible[region];
+    // Hiding the region that holds the focus would drop it on `<body>`: it goes to the toggle.
+    if (!mostrar && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
+    // While detached the right toggle only peeks at the docked panel: the saved choice stays.
+    if (region === 'derecha' && ocultoPorVentana) {
+      setVerConVentana(mostrar);
+      if (!mostrar || visibles.derecha) return;
+    }
+    const actual = panelesRef.current;
+    const siguiente = { ...actual, [modo]: { ...actual[modo], [region]: mostrar } };
+    panelesRef.current = siguiente;
+    setPaneles(siguiente);
+    recordar({ paneles: siguiente });
+  }
+  const alternarRef = useRef(alternarRegion);
+  alternarRef.current = alternarRegion;
+
+  /** The compact palette keeps its own `localStorage` key, as before #406 (web and desktop). */
+  function guardarCompacta(activa: boolean): void {
+    try { localStorage.setItem('lila.paleta', activa ? 'compacta' : 'normal'); } catch { /* modo privado: no persiste, no rompe */ }
+  }
+  function cambiarCompacta(): void {
+    guardarCompacta(!compacta);
+    setCompacta(!compacta);
+  }
+
   /**
    * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
    * error goes to the status bar instead, so Run never fails silently and never shows it twice.
@@ -1141,11 +1332,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   return (
     <div
-      className="app"
+      className={['app', ...(hayIzquierda && !visible.izquierda ? ['sin-izquierda'] : []), ...(visible.derecha ? [] : ['sin-panel']),
+        ...(visible.diagramas ? [] : ['sin-diagramas']), ...(visible.estado ? [] : ['sin-estado'])].join(' ')}
       data-densidad={densidad}
       data-theme={decoratedTheme}
       data-esquema={esquema}
-      style={{ '--panel-ancho': `${panelAncho}px` } as React.CSSProperties}
+      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px` } as React.CSSProperties}
     >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
@@ -1253,13 +1445,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </>}
           </div>
         </details>
-        <span className="hueco" />
         {/* Campo inerte: buscar de verdad es la paleta de comandos (LILA-066, #66). Está aquí
-            porque el artefacto fija su sitio y su ancho, no para que funcione todavía. */}
-        <div className="buscador">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
-          <input type="search" readOnly aria-label={S.app.buscar} placeholder={S.app.buscarPista} title={S.app.buscarPendiente} />
-          <kbd>⌘K</kbd>
+            porque el artefacto fija su sitio y su ancho, no para que funcione todavía. Its zone
+            is the bar's spring: when fewer than 120 px are left the field wraps to a second,
+            clipped line instead of shrinking to an empty box (#423). Out of the Tab order: it
+            does nothing yet. */}
+        <div className="zona-buscador">
+          <div className="buscador">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.6-3.6" /></svg>
+            <input type="search" readOnly tabIndex={-1} aria-label={S.app.buscar} placeholder={S.app.buscarPista} title={S.app.buscarPendiente} />
+            <kbd>⌘K</kbd>
+          </div>
         </div>
         <div className="iconos">
           <button type="button" className="boton icono" aria-label={S.app.deshacer} title={S.app.deshacer} disabled={ioBusy || !modelador?.deshacer} onClick={() => modelador?.deshacer?.()}>
@@ -1298,6 +1494,35 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </button>
         )}
         <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo(',', true)}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
+        {/* Panel toggles (#412): four icon buttons in wide windows, one «View» menu in narrow
+            ones (`app.css` swaps them). Pressed = the region is on screen right now. */}
+        <div className="iconos vista-grupo" role="group" aria-label={S.app.vista}>
+          {REGIONES.map((r) => (
+            <button key={r} type="button" className="boton icono" data-region={r} aria-pressed={visible[r]}
+              aria-controls={r === 'izquierda' && !hayIzquierda ? undefined : ID_REGION[r]}
+              aria-label={S.app.regiones[r]} title={S.app.tituloRegiones[r]}
+              disabled={r === 'izquierda' && !hayIzquierda} onClick={() => alternarRegion(r)}>
+              <IconoRegion region={r} />
+            </button>
+          ))}
+        </div>
+        <details className="menu-vista" onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
+          <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
+          <div role="menu" aria-label={S.app.vista}>
+            {REGIONES.map((r) => (
+              <button key={r} type="button" role="menuitemcheckbox" aria-checked={visible[r]} title={S.app.tituloRegiones[r]}
+                disabled={r === 'izquierda' && !hayIzquierda}
+                onClick={(e) => {
+                  const menu = e.currentTarget.closest('details')!;
+                  menu.open = false;
+                  menu.querySelector('summary')?.focus();
+                  alternarRegion(r);
+                }}>
+                <span className="marca-menu" aria-hidden="true">{visible[r] ? '✓' : ''}</span>{S.app.regiones[r]}
+              </button>
+            ))}
+          </div>
+        </details>
       </header>
 
       <dialog ref={ajustesDialog} className="ajustes" aria-labelledby="ajustes-titulo">
@@ -1385,8 +1610,40 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}, Object.keys(escenarios)); anadirEscenario(copia.archivo, copia.escenario); }}
           onProblema={(id) => modelador?.seleccionar?.(id)}
           enVentana={ventanaEscenario !== null ? escenarioId : null}
+          id={ID_REGION.izquierda}
         />
-      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} /> : null}
+      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
+      {/* Divider of the left column (#406): the palette in Model, the rail in Simulate, each
+          with its own width. It stays on screen when the column is hidden, so a double-click
+          or Enter can bring it back. */}
+      {hayIzquierda && (() => {
+        const rail = modo === 'simular';
+        const valor = rail ? railAncho : compacta ? PALETA_COMPACTA : paletaAncho;
+        return <div className="divisor-izquierdo" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarIzquierda}
+          aria-valuemin={rail ? RAIL_MIN : PALETA_COMPACTA} aria-valuemax={rail ? RAIL_MAX : PALETA_MAX} aria-valuenow={valor} aria-controls={ID_REGION.izquierda}
+          {...divisor({
+            valor,
+            signo: 1,
+            oculto: !visible.izquierda,
+            gesto: arrastreIzquierda,
+            alternar: () => alternarRegion('izquierda'),
+            resolver: rail ? (px) => limitar(px, RAIL_MIN, RAIL_MAX) : (px, teclado) => {
+              if (!teclado) return px < PALETA_SALTO ? PALETA_COMPACTA : limitar(px, PALETA_MIN, PALETA_MAX);
+              // Arrows: below the minimum, a step left lands on 180 first and then on compact;
+              // a step right from compact lands on 180.
+              if (px >= PALETA_MIN) return limitar(px, PALETA_MIN, PALETA_MAX);
+              return px > valor || valor > PALETA_MIN ? PALETA_MIN : PALETA_COMPACTA;
+            },
+            fijar: rail ? setRailAncho : (px) => {
+              setCompacta(px === PALETA_COMPACTA);
+              if (px !== PALETA_COMPACTA) setPaletaAncho(px);
+            },
+            persistir: rail ? (px) => recordar({ railAncho: px }) : (px) => {
+              guardarCompacta(px === PALETA_COMPACTA);
+              if (px !== PALETA_COMPACTA) recordar({ paletaAncho: px });
+            },
+          })} />;
+      })()}
 
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
@@ -1469,8 +1726,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}</p>)}
       </section>}
       <div className="divisor" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarPanel}
-        aria-valuemin={PANEL_MIN} aria-valuemax={PANEL_MAX} aria-valuenow={panelAncho} {...divisorPanel()} />
-      <aside className={panelAncho >= 440 ? 'panel ancho' : 'panel'} inert={ioBusy}>
+        aria-valuemin={PANEL_MIN} aria-valuemax={PANEL_MAX} aria-valuenow={panelAncho} aria-controls={ID_REGION.derecha}
+        {...divisor({
+          valor: panelAncho,
+          signo: -1,
+          oculto: !visible.derecha,
+          gesto: arrastre,
+          alternar: () => alternarRegion('derecha'),
+          resolver: anchoPanel,
+          fijar: setPanelAncho,
+          persistir: (px) => recordar({ panelAncho: px }),
+        })} />
+      <aside id={ID_REGION.derecha} className={panelAncho >= 440 ? 'panel ancho' : 'panel'} inert={ioBusy}>
         {/* En «Animar» el panel entero son los controles de la reproducción: las pestañas de
             propiedades no tienen nada que decir sobre una corrida que ya terminó (#331). */}
         {modo === 'animar' ? (
@@ -1534,7 +1801,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </>}
       </aside>
 
-      <nav className="diagramas">
+      <nav id={ID_REGION.diagramas} className="diagramas">
         {/* Un proyecto = un diagrama por ahora (LILA-208): la pestaña no cambia de nada, así que
             no es un botón; el ✕ cierra el proyecto y el «+» abre uno nuevo, los dos por
             `projectAction('new')`, que ya trae la guardia de cambios sin guardar. */}
@@ -1548,7 +1815,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {/* Barra de estado del artefacto: validación, escenario y semilla a la izquierda; densidad
           y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
           descolocar esa retícula. Los conteos son los mismos que los chips del lienzo (#241). */}
-      <footer className="estado">
+      <footer id={ID_REGION.estado} className="estado">
         <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{S.app.errores(validacion.errores)}</span>
         <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />

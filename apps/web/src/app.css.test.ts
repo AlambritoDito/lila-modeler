@@ -118,13 +118,26 @@ it('los modos no se envuelven: son de lo primero que tiene que caber en la barra
   // inerte —lo único prescindible de la barra— ceda su sitio, y la barra crece de 53 px a 60-67.
   expect(bloque('.modo')).toContain('white-space: nowrap');
 
-  const buscador = bloque('.buscador');
-  // Shrinks before the brand lockup (flex-shrink 1): the project name stays whole above 1280 px.
-  expect(buscador).toContain('flex: 0 99 210px');
+  const buscador = bloqueDeLinea('.buscador');
+  // Its zone is the bar's spring (#423): basis 0, so it gives way before the brand lockup, and the
+  // field inside keeps at least 120 px or wraps out of sight instead of an empty box.
+  const zona = bloque('.zona-buscador');
+  expect(zona).toContain('flex: 1 1 0');
+  expect(zona).toContain('flex-wrap: wrap');
+  expect(zona).toContain('justify-content: flex-end');
+  expect(zona).toContain('height: 30px');
+  expect(zona).toContain('min-width: 0');
+  expect(zona).toContain('overflow: hidden');
+  const muelle = bloque('.zona-buscador::before');
+  expect(muelle).toContain('flex: 1 0 0');
+  // 30 px, not 0: a 0 px first line would leave the wrapped field at the top, in sight.
+  expect(muelle).toContain('height: 30px');
+  expect(buscador).toContain('flex: 0 1 210px');
+  expect(buscador).toContain('min-width: 120px');
   // And goes away below 1320 px, where even at its minimum it left the Spanish project name short
   // (QA of #393).
-  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.buscador \{\s*display: none;/);
-  expect(buscador).toContain('min-width: 0');
+  // Only the field: the zone stays as the spring that keeps the right-hand controls at the edge.
+  expect(appCss).toMatch(/@media \(max-width: 1320px\) \{\s*\.zona-buscador > \.buscador \{\s*display: none;/);
   // El ancho fijo de antes competía con el `flex` de arriba por quién manda; tiene que quedar
   // solo el `flex`, no los dos.
   expect(buscador).not.toContain('width: 210px');
@@ -180,15 +193,12 @@ it('below 1280 px the identity block gives up its file-line floor too, so the ba
   expect(bloqueMedia).toMatch(/\.archivo\s*\{\s*\n\s*min-width: 0;/);
 });
 
-it('the mode tabs give up some padding below 1365 px, not just 1280 (QA of #417)', () => {
-  // Measured worst case: default project name, dirty state («Sin guardar»), Spanish, Simulate —
-  // with `.identidad` shrinkable again (#399) and the scenario toggle (#405, 30 px, flex: none)
-  // in the bar, the bar overflowed by up to 21 px between 1281 and 1303 px, and by up to 13 px
-  // between 1321 and 1328 px (the search field reappearing at 1321 px eats the same room back),
-  // and by 12 px at 1346 fading to 1 px at 1357 once `.producto` stopped wrapping (round 2).
-  // Reverting this to 1280 alone (the QA's mutation test) reproduces the overflows, so the
-  // wider threshold is load-bearing and not just the file-line fix's leftover.
-  expect(appCss).toMatch(/@media \(max-width: 1365px\) \{\s*\n\s*\.modo \{/);
+it('the mode tabs give up some padding below 1400 px, not just 1280 (QA of #417, #412)', () => {
+  // Measured worst case: dirty state («Sin guardar»), Spanish, Simulate. With the scenario toggle
+  // (#405) the bar overflowed up to 1357 px (QA of #417, hence 1365 then); with the «View» menu of
+  // #412 (30 px + gap) it overflowed from 1366 up to 1382 px. Lowering this reproduces it.
+  expect(appCss).toMatch(/@media \(max-width: 1400px\) \{\s*\n\s*\.modo \{/);
+  expect(appCss).not.toContain('@media (max-width: 1365px)');
 });
 
 it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
@@ -233,4 +243,45 @@ it('text fields of the scenario and properties forms are 30 px like the themed s
   const propiedades = bloque(".campos input:not([type='checkbox'])");
   expect(propiedades).toContain('height: 30px');
   expect(propiedades).toContain('box-sizing: border-box');
+});
+
+it('hidden regions collapse with child selectors, and their dividers stay over the canvas edge (#412)', () => {
+  // Child selectors only: the detached window is an `.app` too and its `.panel` must stay.
+  const ocultos = bloque('.app.sin-izquierda > .paleta,\n.app.sin-izquierda > .rail-escenarios,\n.app.sin-panel > .panel,\n.app.sin-diagramas > .diagramas,\n.app.sin-estado > .estado');
+  expect(ocultos).toContain('display: none');
+  expect(appCss).not.toMatch(/\.sin-panel \.panel/);
+  expect(bloque('.app.sin-panel')).toContain('grid-template-columns: auto 1fr 0');
+  expect(bloque('.app.sin-panel > .divisor')).toContain('margin-left: -6px');
+  expect(bloque('.app.sin-izquierda > .divisor-izquierdo')).toContain('margin-right: -6px');
+});
+
+it('the left column divider sits on the right edge of the palette or rail, under the menus (#406)', () => {
+  const divisor = bloqueDeLinea('.divisor-izquierdo');
+  expect(divisor).toContain('grid-area: paleta');
+  expect(divisor).toContain('justify-self: end');
+  expect(divisor).toContain('margin-right: -3px');
+  expect(divisor).toContain('cursor: col-resize');
+  expect(divisor).toContain('width: 6px');
+  const z = Number(/z-index: (\d+)/.exec(divisor)![1]);
+  expect(z).toBeLessThan(Number(/z-index: (\d+)/.exec(bloqueDeLinea('.menu-archivo > div'))![1]));
+  expect(z).toBeLessThan(Number(/z-index: (\d+)/.exec(bloqueDeLinea('.menu-vista > div'))![1]));
+  expect(bloqueDeLinea('.paleta')).toContain('width: var(--paleta-ancho, 236px)');
+  expect(bloqueDeLinea('.paleta.compacta')).toContain('width: 48px');
+  expect(bloqueDeLinea('.rail-escenarios')).toContain('width: var(--rail-ancho, 212px)');
+  const rail = bloque('.rail-nombre,\n.rail-texto,\n.rail-sub');
+  for (const d of ['min-width: 0', 'overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) expect(rail).toContain(d);
+});
+
+it('the panel toggles swap to the single «View» menu below the measured 1480 px (#412)', () => {
+  expect(appCss).toMatch(/@media \(max-width: 1479px\) \{\s*\n\s*\.barra > \.vista-grupo \{\s*\n\s*display: none;[\s\S]*?\.menu-vista \{\s*\n\s*display: block;/);
+  expect(bloqueDeLinea('.menu-vista')).toContain('display: none');
+  expect(bloqueDeLinea('.menu-vista > div')).toContain('right: 0');
+});
+
+it('the run progress gives way on a tight bar instead of overflowing the window (bar sweep of #412)', () => {
+  const progreso = bloqueDeLinea('.progreso');
+  expect(progreso).toContain('flex: 0 1 210px');
+  expect(progreso).toContain('min-width: 96px');
+  expect(progreso).not.toContain('flex: none');
+  expect(bloque('.progreso-cifras > span:first-child')).toContain('text-overflow: ellipsis');
 });

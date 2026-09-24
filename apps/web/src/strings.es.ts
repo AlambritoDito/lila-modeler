@@ -201,6 +201,22 @@ export const es: Strings = {
     nuevoDiagrama: 'Nuevo diagrama',
     /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
     redimensionarPanel: 'Redimensionar el panel derecho',
+    /** Divisor entre la columna izquierda y el lienzo (#406). */
+    redimensionarIzquierda: 'Redimensionar la columna izquierda',
+    /** Botones para mostrar u ocultar paneles, a la derecha de la barra (#412). */
+    vista: 'Vista',
+    regiones: {
+      izquierda: 'Columna izquierda',
+      derecha: 'Panel derecho',
+      diagramas: 'Pestañas de diagramas',
+      estado: 'Barra de estado',
+    },
+    tituloRegiones: {
+      izquierda: 'Mostrar u ocultar la columna izquierda (Mayús+Tab en el lienzo)',
+      derecha: 'Mostrar u ocultar el panel derecho (Tab en el lienzo)',
+      diagramas: 'Mostrar u ocultar las pestañas de diagramas',
+      estado: 'Mostrar u ocultar la barra de estado',
+    },
 
     /** Barra de estado. */
     semilla: (valor: string): string => `Semilla ${valor}`,

@@ -35,12 +35,40 @@ body {
     'paleta    lienzo    panel'
     'paleta    diagramas panel'
     'estado    estado    estado';
-  /* La paleta (LILA-207) fija su propio ancho —236 px, o 48 en compacto— y la columna se
-     encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
-     scenario rail (212 px). The right panel is `--panel-ancho`, set inline by the divider. */
+  /* La paleta (LILA-207) fija su propio ancho —`--paleta-ancho`, o 48 en compacto— y la columna
+     se encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
+     scenario rail (`--rail-ancho`). The right panel is `--panel-ancho`. The three are set inline
+     by their dividers (#406). */
   grid-template-columns: auto 1fr var(--panel-ancho, 320px);
   grid-template-rows: auto 1fr auto auto;
   height: 100vh;
+}
+
+/* Hidden regions (#412) stay mounted — their state (the palette filter, the panel tab, a half-
+   typed field) survives — and give their room to the canvas. Child selectors on purpose: the
+   detached scenario window is an `.app` too, and its `.panel` must never be hidden by these. The
+   left `auto` column collapses by itself once its only content is gone; the right one needs the
+   explicit 0. The rows of the diagram tabs and the status bar are `auto`, so they collapse too. */
+.app.sin-izquierda > .paleta,
+.app.sin-izquierda > .rail-escenarios,
+.app.sin-panel > .panel,
+.app.sin-diagramas > .diagramas,
+.app.sin-estado > .estado {
+  display: none;
+}
+
+.app.sin-panel {
+  grid-template-columns: auto 1fr 0;
+}
+
+/* The dividers stay on screen when their side is hidden — a double-click or Enter brings it back
+   — overlaying the canvas edge instead of taking a column (and adding no horizontal scroll). */
+.app.sin-panel > .divisor {
+  margin-left: -6px;
+}
+
+.app.sin-izquierda > .divisor-izquierdo {
+  margin-right: -6px;
 }
 
 /* ---------- controles nativos: sin chrome del navegador (diseño 2d) ---------- */
@@ -386,6 +414,27 @@ body {
   font-size: 11px;
 }
 
+/* The bar's spring (#423): it takes the free room, pushes the field to its right edge with an
+   invisible first item, and wraps the field to a second line — clipped by `overflow: hidden` and
+   the 30 px height — when fewer than its 120 px minimum are left, instead of letting it shrink to
+   an empty box. The invisible item is 30 px tall, not 0: a 0 px first line would put the wrapped
+   field back at the top of the zone, in sight. */
+.zona-buscador {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  height: 30px;
+  justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.zona-buscador::before {
+  content: '';
+  flex: 1 0 0;
+  height: 30px;
+}
+
 /* Campo de búsqueda inerte: el artefacto le da sitio y ancho fijos; buscar de verdad es la
    paleta de comandos (LILA-066). */
 .buscador {
@@ -393,17 +442,16 @@ body {
   background: var(--bg-base);
   border: 1px solid var(--border);
   color: var(--fg-muted);
+  box-sizing: border-box;
   display: flex;
   /* 210 px de fábrica, pero el campo es el único inerte de la barra (LILA-066): tiene que ceder
-     sitio antes que nadie cuando algo no cabe —el conmutador de escenario de #391 incluido—.
-     `flex-shrink: 99` frente al 1 de `.identidad`: con encoger a 1 los dos (QA de la ronda 1 de
-     #392) se repartían el déficit y el nombre del proyecto se recortaba o desaparecía entre 1281 y
-     1440 px con el buscador aún a 114-201 px. Ahora el nombre solo cede cuando el buscador ya no
-     tiene nada que dar; por debajo de 1320 px el buscador se va (más abajo). */
-  flex: 0 99 210px;
+     sitio antes que nadie cuando algo no cabe. Its zone (above) is what gives way now: the zone
+     shrinks to 0 before `.identidad` does (flex-basis 0), and the field shrinks inside it down
+     to 120 px, then wraps out of sight (#423) — no more empty 22 px box. */
+  flex: 0 1 210px;
   gap: 8px;
   height: 30px;
-  min-width: 0;
+  min-width: 120px;
   padding: 0 10px;
 }
 
@@ -438,9 +486,11 @@ body {
    de #392): con el buscador ya fuera, ceder ese sitio es lo que evita que el nombre del proyecto
    se recorte de más antes de que le toque a los modos. El buscador se va ya a 1320 y no a 1280
    (QA de #393): entre 1281 y ~1301 px, en español y con el conmutador de escenario de #391, el
-   buscador se quedaba en su mínimo de 22 px y aun así el nombre del proyecto no cabía entero. */
+   buscador se quedaba en su mínimo de 22 px y aun así el nombre del proyecto no cabía entero.
+   Only the field goes (#423): its zone stays as the bar's spring, or Undo/Redo, Run, ⚙ and the
+   panel toggles would stop being pushed against the right edge. */
 @media (max-width: 1320px) {
-  .buscador {
+  .zona-buscador > .buscador {
     display: none;
   }
 }
@@ -468,6 +518,102 @@ body {
   }
 }
 
+/* Panel toggles (#412): four icon squares joined like Undo/Redo (`.iconos`), each filling the
+   rectangle of its region while that region is shown. Narrow windows get the single «View» menu
+   instead (the media query below). */
+.vista-grupo .boton.icono {
+  height: 30px;
+  width: 28px;
+}
+
+.vista-grupo .region {
+  fill: none;
+}
+
+.vista-grupo .boton.icono[aria-pressed='true'] {
+  color: var(--fg-primary);
+}
+
+.vista-grupo .boton.icono[aria-pressed='true'] .region {
+  fill: currentColor;
+}
+
+/* Hidden in wide windows, where the group of four above fits (media query below). */
+.menu-vista {
+  display: none;
+  flex: none;
+  position: relative;
+}
+
+.menu-vista > summary {
+  list-style: none;
+}
+
+.menu-vista > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-vista[open] > summary {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.menu-vista > div {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 14rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 2;
+}
+
+.menu-vista button {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: calc(7px * var(--espacio, 1)) 12px;
+  text-align: left;
+}
+
+.menu-vista button:hover:enabled {
+  background: var(--bg-hover);
+}
+
+.menu-vista button:disabled {
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+
+.menu-vista .marca-menu {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  width: 1em;
+}
+
+/* One or the other, never both. The group of four is 75 px wider than the menu (4 × 28 px joined
+   by 1 px rules against one 30 px button); forced into the bar, it overflowed Spanish with «Sin
+   guardar» up to 1424 px in Model and up to 1464 px in Simulate (the scenario toggle), with the
+   mode tabs back at full padding above 1400 px (bar sweep of #412). The group shows from 1480 px,
+   a 15 px margin over the last overflow. */
+@media (max-width: 1479px) {
+  .barra > .vista-grupo {
+    display: none;
+  }
+
+  .menu-vista {
+    display: block;
+  }
+}
+
 /* Deshacer/rehacer: dos cuadrados pegados, separados por la línea de fondo. */
 .iconos {
   background: var(--border);
@@ -480,13 +626,16 @@ body {
   border: none;
 }
 
-/* Progreso de la corrida, en el hueco de la acción primaria (artboard 03). */
+/* Progreso de la corrida, en el hueco de la acción primaria (artboard 03). 210 px when there is
+   room, but it gives way down to 96 px: with Cancel next to it the pair is ~130 px wider than Run,
+   and on a tight bar (Spanish, Simulate, the #412 toggles) that overflowed the window by up to
+   105 px for as long as the run lasted (bar sweep of #412). The counter ellipsizes first. */
 .progreso {
   display: flex;
-  flex: none;
+  flex: 0 1 210px;
   flex-direction: column;
   gap: 5px;
-  width: 210px;
+  min-width: 96px;
 }
 
 .progreso-cifras {
@@ -499,8 +648,17 @@ body {
   justify-content: space-between;
 }
 
+.progreso-cifras > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 .progreso-cifras .por-ciento {
   color: var(--accent-primary);
+  flex: none;
 }
 
 .progreso-pista {
@@ -589,8 +747,22 @@ body {
   z-index: 1;
 }
 
+/* Divider of the left column (#406): the same 6 px strip on the right edge of the palette or the
+   rail, and the same z-index under the File menu. */
+.divisor-izquierdo {
+  cursor: col-resize;
+  grid-area: paleta;
+  justify-self: end;
+  margin-right: -3px;
+  touch-action: none;
+  width: 6px;
+  z-index: 1;
+}
+
 .divisor:hover,
-.divisor:focus-visible {
+.divisor:focus-visible,
+.divisor-izquierdo:hover,
+.divisor-izquierdo:focus-visible {
   background: var(--accent-primary);
   outline: none;
 }
@@ -1479,7 +1651,8 @@ body {
   flex-direction: column;
   grid-area: paleta;
   min-height: 0;
-  width: 236px;
+  /* 180–360 px from the left divider (#406); 236 px is the artboard's. */
+  width: var(--paleta-ancho, 236px);
 }
 
 /* Modo compacto: solo iconos. El nombre sigue en el `title` de cada botón, que es el tooltip. */
@@ -1729,7 +1902,8 @@ body {
   flex-direction: column;
   grid-area: paleta;
   min-height: 0;
-  width: 212px;
+  /* 160–320 px from the left divider (#406); 212 px is design 2a's. */
+  width: var(--rail-ancho, 212px);
 }
 
 .rail-cabecera,
@@ -1800,6 +1974,20 @@ body {
   display: flex;
   font: 500 12px/1.2 var(--font-ui);
   gap: 6px;
+}
+
+/* A narrow rail (#406) ellipsizes the name and the subtitle instead of spilling out. */
+.rail-nombre,
+.rail-texto,
+.rail-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-nombre .insignia-base {
+  flex: none;
 }
 
 .rail-fila[aria-current='true'] .rail-nombre { font-weight: 600; }
@@ -2124,8 +2312,11 @@ body {
    (#405, 30 px, flex: none) in the bar, Spanish on Simulate with «Sin guardar» ran up to 21 px
    short between 1281 and 1303 px, 13 px short between 1321 and 1328 px (`.buscador` reappears)
    and 12 px short at 1346 fading to 1 px at 1357 (QA of #417, rounds 1–2). The modes are the next
-   thing with air to spare; 1365 leaves a margin over the last measured overflow. */
-@media (max-width: 1365px) {
+   thing with air to spare; 1365 leaves a margin over the last measured overflow.
+   1400 since the «View» menu of #412 (30 px + the 10 px gap): with it, Spanish on Simulate with
+   «Sin guardar» ran 16 px short at 1366 px fading to 0.4 px at 1382 px (bar sweep of #412, any
+   project name — the name ellipsizes, the file line is the floor). 1400 keeps an 18 px margin. */
+@media (max-width: 1400px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
   }
