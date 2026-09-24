@@ -243,7 +243,9 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 - **Archivo → Abrir reciente** lista esos proyectos (más nuevo primero) y los reabre sin
   diálogo; si la carpeta ya no existe, desaparece de la lista y la app lo dice en la barra de
   estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), Guardar (`⌘S`), Guardar como
-  (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app.
+  (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app; **Vista** trae la paleta de comandos
+  (`⌘K`) y los seis modos (`⌘1`…`⌘6`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
+  atajos están en [Atajos de teclado](ATAJOS.md).
 
 ### Ajustes
 

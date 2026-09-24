@@ -62,10 +62,6 @@ export const es: Strings = {
     /** El mismo nombre en minúscula, para la barra de estado («Densidad cómoda»). */
     densidadNombre: (id: string): string => (id === 'comoda' ? 'cómoda' : id),
 
-    /** Atajo entre paréntesis detrás del tooltip: `⌘S` en Mac, `Ctrl+S` en el resto. */
-    atajo: (letra: string, shift: boolean, mac: boolean): string =>
-      mac ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`,
-
     /** Nombre por defecto de un proyecto nuevo y del que la app trae de serie. */
     proyectoNuevo: 'Mi proyecto',
     proyectoDemo: 'Pedido de ejemplo',
@@ -214,8 +210,8 @@ export const es: Strings = {
       estado: 'Barra de estado',
     },
     tituloRegiones: {
-      izquierda: 'Mostrar u ocultar la columna izquierda (Mayús+Tab en el lienzo)',
-      derecha: 'Mostrar u ocultar el panel derecho (Tab en el lienzo)',
+      izquierda: 'Mostrar u ocultar la columna izquierda',
+      derecha: 'Mostrar u ocultar el panel derecho',
       diagramas: 'Mostrar u ocultar las pestañas de diagramas',
       estado: 'Mostrar u ocultar la barra de estado',
     },
@@ -1066,6 +1062,55 @@ export const es: Strings = {
     sinLog: 'Esta corrida no tiene event log en memoria (viene de un archivo guardado): vuelve a simular para animarla.',
     fin: 'Fin de la replicación.',
     progreso: (porcentaje: number): string => `${porcentaje}% de la replicación`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Mapa de atajos (`atajos.ts`, #413): un rótulo por id de entrada y un título por grupo.
+   * ------------------------------------------------------------------ */
+  atajos: {
+    grupos: {
+      archivo: 'Archivo',
+      buscar: 'Buscar',
+      modos: 'Modos',
+      simulacion: 'Simulación',
+      lienzo: 'Lienzo',
+      paneles: 'Paneles',
+    },
+    nuevo: 'Nuevo proyecto',
+    abrir: 'Abrir proyecto',
+    guardar: 'Guardar proyecto',
+    guardarComo: 'Guardar como',
+    ajustes: 'Ajustes',
+    paleta: 'Paleta de comandos',
+    'modo:modelar': 'Modelar',
+    'modo:simular': 'Simular',
+    'modo:resultados': 'Resultados',
+    'modo:comparar': 'Comparar',
+    'modo:animar': 'Animar',
+    'modo:rutas': 'Validar rutas',
+    ejecutar: 'Ejecutar la simulación',
+    cancelar: 'Cancelar la corrida',
+    zoomMas: 'Acercar',
+    zoomMenos: 'Alejar',
+    ajustarVista: 'Ajustar el diagrama',
+    renombrar: 'Renombrar el elemento seleccionado',
+    deshacer: 'Deshacer',
+    rehacer: 'Rehacer',
+    borrar: 'Borrar la selección',
+    seleccionarTodo: 'Seleccionar todo',
+    copiar: 'Copiar',
+    pegar: 'Pegar',
+    lazo: 'Herramienta lazo',
+    mano: 'Herramienta mano',
+    conectar: 'Herramienta conectar',
+    editarEtiqueta: 'Editar la etiqueta',
+    reemplazar: 'Reemplazar el elemento',
+    izquierda: 'Mostrar u ocultar la columna izquierda',
+    derecha: 'Mostrar u ocultar el panel derecho',
+    diagramas: 'Mostrar u ocultar las pestañas de diagramas',
+    estado: 'Mostrar u ocultar la barra de estado',
+    irModos: 'Llevar el foco a los modos',
+    irPanel: 'Llevar el foco al panel derecho',
   },
 
   /* ------------------------------------------------------------------ *

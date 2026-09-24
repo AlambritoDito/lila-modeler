@@ -20,6 +20,7 @@ import type { Modelador } from './Modeler';
 import { newModelXml } from './project';
 import type { ProjectSessionStore } from './store/ProjectStore';
 import { en as T } from './strings.en';
+import { atajoPorId, etiqueta } from './atajos';
 
 vi.mock('./simulationGate', () => ({ prepareSimulation: vi.fn() }));
 vi.mock('./simulationClient', () => ({ runInWorker: vi.fn() }));
@@ -106,15 +107,16 @@ async function tick(): Promise<void> {
  * returned so the recents tests can assert on it without going through `window.lila`). */
 function puenteEscritorio(recientes: readonly { dir: string; name: string; openedAt: string }[] = []) {
   const listRecents = vi.fn().mockResolvedValue(recientes);
+  const onMenu = vi.fn((_cb: (accion: unknown) => void) => () => {});
   (window as unknown as { lila: unknown }).lila = {
     readSettings: vi.fn().mockResolvedValue({}),
     writeSettings: vi.fn().mockResolvedValue(undefined),
-    onMenu: vi.fn(() => () => {}),
+    onMenu,
     onOpenPath: vi.fn(() => () => {}),
     pendingOpenPath: vi.fn().mockResolvedValue(null),
     listRecents,
   };
-  return { listRecents };
+  return { listRecents, onMenu };
 }
 
 it('en la web (sin `window.lila`), la marca del producto se enseña junto al icono', async () => {
@@ -250,4 +252,40 @@ it('el menú Archivo de escritorio se cierra con Esc y con un clic fuera', async
   expect(menu.open).toBe(true);
   await act(async () => { menu.querySelector('.menu-archivo-reciente summary')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
   expect(menu.open).toBe(true);
+});
+
+// ---------- shortcut map in the desktop app (#413) ----------
+
+it('en Electron, ⌘K y ⌘1 son del menú nativo: el teclado no los dispara y onMenu({ atajo }) sí', async () => {
+  const { onMenu } = puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  const activo = () => contenedor.querySelector('.modo.activo')?.textContent;
+  const pulsar = async (init: KeyboardEventInit): Promise<boolean> => {
+    const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    await act(async () => { document.body.dispatchEvent(e); });
+    return e.defaultPrevented;
+  };
+  expect(activo()).toBe(T.app.modos.modelar);
+  expect(await pulsar({ key: 'k', metaKey: true })).toBe(false);
+  expect(await pulsar({ key: '2', code: 'Digit2', metaKey: true })).toBe(false);
+  expect(activo()).toBe(T.app.modos.modelar);
+  const menu = onMenu.mock.calls[0]![0];
+  await act(async () => menu({ atajo: 'modo:simular' }));
+  expect(activo()).toBe(T.app.modos.simular);
+  await act(async () => menu({ atajo: 'no-existe' }));
+  await act(async () => menu({ atajo: 'toString' }));
+  expect(activo()).toBe(T.app.modos.simular);
+  // The panel keys have no menu item: the keyboard keeps them in the desktop app too.
+  expect(await pulsar({ key: 'P', metaKey: true, shiftKey: true })).toBe(true);
+  expect(contenedor.querySelector('.app')!.classList.contains('sin-panel')).toBe(true);
+});
+
+it('en Electron, los tooltips de Nuevo y ⚙ enseñan la tecla del menú nativo', async () => {
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  const nuevo = [...contenedor.querySelectorAll<HTMLButtonElement>('.menu-archivo button')].find((b) => b.textContent === T.app.menuEscritorio.nuevoProyecto)!;
+  expect(nuevo.title).toContain(`(${etiqueta(atajoPorId('nuevo'), false)})`);
+  expect(contenedor.querySelector<HTMLButtonElement>(`button[aria-label="${T.app.ajustes}"]`)!.title).toContain(`(${etiqueta(atajoPorId('ajustes'), false)})`);
 });

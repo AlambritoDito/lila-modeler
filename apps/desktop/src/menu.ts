@@ -3,7 +3,8 @@
  * `main.ts` la construye con `Menu.buildFromTemplate` y la vuelve a construir cuando cambian los
  * recientes. Los aceleradores (`CmdOrCtrl+,`, `CmdOrCtrl+S`, …) viven aquí y no en el renderer:
  * en macOS el sistema consume la tecla al despachar el menú, y en Windows/Linux llegaría también
- * al renderer, así que el shell web no registra atajos cuando `window.lila` existe.
+ * al renderer, así que el shell web no despacha desde el teclado las entradas `menu: true` del
+ * mapa de atajos (#413) cuando `window.lila` existe.
  */
 import type { MenuItemConstructorOptions } from 'electron';
 import type { MenuAction } from './bridge.js';
@@ -14,7 +15,12 @@ import type { Strings } from './strings/index.js';
  * The texts come in as an argument (LILA-213) instead of being written here: the catalog is
  * chosen in `main.ts` from the language setting, and the menu is rebuilt with a different one
  * when that setting changes. Only the labels this app owns are translated — `appMenu`,
- * `editMenu`, `viewMenu` and `windowMenu` are roles, and the OS localises them itself.
+ * `editMenu` and `windowMenu` are roles, and the OS localises them itself.
+ *
+ * View and Simulation are this app's own (#413): Electron's `viewMenu` role brought reload (⌘R)
+ * and page zoom (⌘+/⌘−/⌘0), which fought the canvas zoom of the shortcut map. Their items send
+ * `{ atajo: id }`. The accelerators are literals — this package cannot import
+ * `apps/web/src/atajos.ts` — and `menu.test.ts` holds them to that map.
  */
 export function menuTemplate(
   recents: readonly RecentEntry[],
@@ -39,6 +45,8 @@ export function menuTemplate(
   const recientes: MenuItemConstructorOptions[] = recents.length
     ? recents.map((r) => ({ label: r.name, sublabel: r.dir, toolTip: r.dir, click: () => send({ openRecent: r.dir }) }))
     : [{ label: S.ninguno, enabled: false }];
+  const atajo = (label: string, accelerator: string, id: string): MenuItemConstructorOptions =>
+    ({ label, accelerator, click: () => send({ atajo: id }) });
 
   return [
     ...(mac
@@ -85,7 +93,23 @@ export function menuTemplate(
       ],
     },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    {
+      label: S.vista,
+      submenu: [
+        atajo(S.paleta, 'CmdOrCtrl+K', 'paleta'),
+        { type: 'separator' },
+        atajo(S.modoModelar, 'CmdOrCtrl+1', 'modo:modelar'),
+        atajo(S.modoSimular, 'CmdOrCtrl+2', 'modo:simular'),
+        atajo(S.modoResultados, 'CmdOrCtrl+3', 'modo:resultados'),
+        atajo(S.modoComparar, 'CmdOrCtrl+4', 'modo:comparar'),
+        atajo(S.modoAnimar, 'CmdOrCtrl+5', 'modo:animar'),
+        atajo(S.modoRutas, 'CmdOrCtrl+6', 'modo:rutas'),
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    { label: S.simulacion, submenu: [atajo(S.ejecutar, 'CmdOrCtrl+Enter', 'ejecutar')] },
     { role: 'windowMenu' },
   ];
 }

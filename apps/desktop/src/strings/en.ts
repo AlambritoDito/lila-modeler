@@ -9,7 +9,7 @@
  *    `apps/web/src/strings.en.ts`; this one only covers what lives outside it. The two follow the
  *    same convention — base language `as const`, translation annotated with `Strings` — but they
  *    are separate files because `apps/desktop` cannot import `apps/web` sources (see `types.ts`).
- * 2. **Electron's role menus are not here.** `appMenu`, `editMenu`, `viewMenu` and `windowMenu`
+ * 2. **Electron's role menus are not here.** `appMenu`, `editMenu` and `windowMenu`
  *    are localised by the OS from its own language, so translating them here would only make them
  *    disagree with the rest of the menu bar.
  * 3. **The `E-*` messages are not here either.** `projectIO.ts` and the IPC guards in `main.ts`
@@ -37,6 +37,17 @@ export const en = {
     guardarComo: 'Save as…',
     /** «Save as» writes a `.lila` (ADR-027); the folder (ADR-018) stays one entry away. */
     guardarComoCarpeta: 'Save as folder…',
+    /** The View and Simulation menus (#413): same texts as `S.atajos` in the web catalog. */
+    vista: 'View',
+    paleta: 'Command palette',
+    modoModelar: 'Model',
+    modoSimular: 'Simulate',
+    modoResultados: 'Results',
+    modoComparar: 'Compare',
+    modoAnimar: 'Animate',
+    modoRutas: 'Validate paths',
+    simulacion: 'Simulation',
+    ejecutar: 'Run simulation',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {
