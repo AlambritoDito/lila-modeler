@@ -18,7 +18,6 @@
  */
 import { useRef, useState } from 'react';
 import { useStrings } from '../i18n';
-import { DENSIDAD_IDS } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
 import { duplicar, esColor, grupos, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
@@ -30,8 +29,6 @@ export interface AparienciaProps {
   readonly tema: Theme | null;
   /** Temas del usuario, en el orden en que se crearon. */
   readonly temas: readonly TemaGuardado[];
-  readonly densidad: string;
-  readonly onDensidad: (densidad: string) => void;
   /** Guarda la lista y aplica `seleccion` (por defecto, el tema activo). */
   readonly onTemas: (temas: readonly TemaGuardado[], seleccion?: string) => void;
   /** Selecciona otro tema; los integrados los carga `App.tsx` por `fetch`. */
@@ -148,7 +145,7 @@ function Tamano({ token, valor, editar }: EditorProps): React.JSX.Element {
 
 export function Apariencia(props: AparienciaProps): React.JSX.Element {
   const S = useStrings();
-  const { densidad, tema, temaId, temas } = props;
+  const { tema, temaId, temas } = props;
   const [error, setError] = useState<string | null>(null);
   /** Nombre tecleado que todavía no vale (vacío o en blanco): no se persiste, se queda el anterior. */
   const [borradorNombre, setBorradorNombre] = useState<string | null>(null);
@@ -277,15 +274,6 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
       </div>
 
       {error !== null && <p role="alert" className="error">{error}</p>}
-
-      <label className="campo">
-        {S.app.densidad}
-        {/* La densidad sigue siendo una preferencia, no una edición del tema (LILA-113): se aplica
-            encima de cualquier tema y por eso no toca el token `density` del que se está editando. */}
-        <select value={densidad} onChange={(e) => props.onDensidad(e.target.value)}>
-          {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
-        </select>
-      </label>
 
       <div className="muestras">
         <span>{S.apariencia.muestraTexto}</span>
