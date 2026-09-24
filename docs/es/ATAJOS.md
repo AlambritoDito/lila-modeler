@@ -94,6 +94,6 @@ navegador) se los queda el navegador antes de que la página los vea, y la app w
 la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
 los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
 
-La ventana desacoplada del escenario reenvía `⌘S`, `⇧⌘S` y `⌘K` a la ventana principal.
+La ventana desacoplada del escenario reenvía `⌘S` y `⇧⌘S` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
 
 [English version](../SHORTCUTS.md)

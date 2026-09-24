@@ -15,7 +15,8 @@ installer is attached to this version.
 - **Command palette** (#410): ⌘K / Ctrl+K or the search box open a palette that finds the
   diagram's elements by name, id or type (Enter selects and centres the element on the canvas),
   switches scenarios and modes, and runs the app's actions with their keys shown; ↑/↓, Enter and
-  Esc, with the focus returned where it was. It also opens from the detached scenario window.
+  Esc, with the focus returned where it was. In the desktop app it also opens from the detached
+  scenario window.
 - **One shortcut map** (#413): `apps/web/src/atajos.ts` feeds the keyboard, the tooltips, the
   Electron menu and the docs. New keys: ⌘↩ run, Esc cancel, ⌘+ / ⌘− / ⌘0 zoom and fit, F2 rename,
   ⌘⇧L / ⌘⇧P / ⌘⇧D / ⌘⇧B show or hide the left column, the right panel, the diagram tabs and the

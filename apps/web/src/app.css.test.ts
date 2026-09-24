@@ -298,6 +298,8 @@ it('Settings (artboard 09, #407) is an explicit radius-0 box, capped at 760 px/9
   // borders can run edge to edge.
   expect(ajustes).toContain('padding: 0');
   expect(ajustes).toContain('display: flex');
+  // A flex `<dialog>` loses the UA's `display: none` while closed (seams QA of #439).
+  expect(bloqueDeLinea('.ajustes:not([open])')).toContain('display: none');
   expect(ajustes).toContain('flex-direction: column');
 });
 

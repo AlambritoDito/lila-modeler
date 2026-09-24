@@ -2146,6 +2146,9 @@ body {
    stays `--border-strong` (shared rule above); every divider inside this dialog is the plain
    `--border`. Padding lives on the header/nav/panel/footer, not on the dialog itself, so the nav's
    right-hand rule and the footer's top rule can run edge to edge. */
+/* `display: flex` on a `<dialog>` overrides the UA rule that hides it while closed (seams QA of
+   #439): a closed Settings sat on top of the bar and took its clicks. Hidden again explicitly. */
+.ajustes:not([open]) { display: none; }
 .ajustes { border-radius: 0; display: flex; flex-direction: column; height: 70vh; max-height: 82vh; max-width: min(760px, 90vw); min-width: 22rem; overflow: hidden; padding: 0; width: 90vw; }
 /* `.ajustes`'s only DOM child is the `<form method="dialog">` (`settings/Ajustes.tsx`): the flex
    column above lays out that ONE child, not its grandchildren. Without this, the form sizes to

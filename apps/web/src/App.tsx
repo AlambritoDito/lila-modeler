@@ -1124,7 +1124,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         },
       })) ?? [];
     const libre = !ioBusy && modelador !== null;
-    const conLienzo = modelador !== null;
+    // Zoom, fit and rename act on the canvas, hidden in Results and Compare (the keys skip it too).
+    const conLienzo = modelador !== null && modo !== 'resultados' && modo !== 'comparar';
     const corriendo = sim.tipo === 'simulando';
     // The actions are the app's own entries of the shortcut map (#413), with the same labels the
     // Settings → Shortcuts table prints and the same handlers the keys run; modes are their own
@@ -1148,7 +1149,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ...Object.keys(escenarios).map((id): Comando => ({
         grupo: 'escenarios', nombre: etiquetaEscenario(id, escenarios), elegir: () => { elegirEscenario(id); irAModo('simular'); },
       })),
-      ...MODO_IDS.map((m): Comando => ({ grupo: 'modos', nombre: S.app.modos[m], elegir: () => irAModo(m) })),
+      ...MODO_IDS.map((m): Comando => ({ grupo: 'modos', nombre: S.app.modos[m], tecla: teclaDe(`modo:${m}`), elegir: () => irAModo(m) })),
       ...acciones.filter((a): a is Comando => a !== false),
     ];
   }
