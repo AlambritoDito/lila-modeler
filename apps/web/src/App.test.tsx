@@ -905,6 +905,23 @@ it('«brito» closes the About window and plays the karaoke in the main window; 
     expect(v.acerca()).not.toBeNull();
   } finally { vi.useRealTimers(); v.quitar(); }
 });
+it('no shortcut reaches the inert app behind the karaoke (QA of #436, N1)', async () => {
+  const v = ventanaAcercaFalsa();
+  vi.useFakeTimers();
+  try {
+    await act(async () => { ejecutarArchivo(T.app.acercaDe); });
+    await v.clicarImagen(6);
+    await v.enviarClave('brito');
+    expect(document.querySelector('.karaoke')).not.toBeNull();
+    await pulsar(document.body, { key: 'P', metaKey: true, shiftKey: true });
+    expect(conClase('sin-panel')).toBe(false);
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('.karaoke')).toBeNull();
+    // Control: with the karaoke gone the same key works.
+    await pulsar(document.body, { key: 'P', metaKey: true, shiftKey: true });
+    expect(conClase('sin-panel')).toBe(true);
+  } finally { vi.useRealTimers(); v.quitar(); }
+});
 it('el menú nativo despacha a las mismas acciones y abrir reciente activa el proyecto', async () => {
   let menu: ((a: unknown) => void) | null = null;
   const doc = { version: 1, id: 'p2', name: 'Reciente', model: { id: 'Process_2', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
@@ -1610,6 +1627,46 @@ it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', 
   // bpmn-js's own keys (⌘Z, ⌘A…) are left alone.
   expect(await pulsar(svgLienzo(), mod('z'))).toBe(false);
   expect(lienzoVe).toHaveBeenCalledOnce();
+});
+
+it('a held shortcut runs once and every repeat stays swallowed; zoom repeats (QA of #436, M1)', async () => {
+  expect(await pulsar(document.body, mod('s'))).toBe(true);
+  for (let i = 0; i < 3; i += 1) expect(await pulsar(document.body, mod('s', { repeat: true })), `repeat ${i}`).toBe(true);
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(await pulsar(document.body, mod('B', { shiftKey: true }))).toBe(true);
+  expect(await pulsar(document.body, mod('B', { shiftKey: true, repeat: true }))).toBe(true);
+  expect(conClase('sin-estado')).toBe(true);
+  await pulsar(svgLienzo(), mod('+'));
+  expect(await pulsar(svgLienzo(), mod('+', { repeat: true }))).toBe(true);
+  expect(mocks.zoom).toHaveBeenCalledTimes(2);
+});
+
+it('Esc that closes an open bar dropdown does not cancel the run (QA of #436, M2)', async () => {
+  mocks.worker.mockReturnValueOnce(new Promise(() => {}));
+  await pulsar(document.body, mod('Enter'));
+  await act(async () => {});
+  const { signal } = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
+  const menu = container.querySelector<HTMLDetailsElement>('.menu-vista')!;
+  menu.open = true;
+  await pulsar(menu.querySelector('summary')!, { key: 'Escape' });
+  expect(menu.open).toBe(false);
+  expect(signal.aborted).toBe(false);
+  // With the dropdown closed, Esc cancels again.
+  await pulsar(document.body, { key: 'Escape' });
+  expect(signal.aborted).toBe(true);
+});
+
+it('in Results and Compare the hidden canvas keys go back to the browser (QA of #436, S1)', async () => {
+  for (const m of [T.app.modos.resultados, T.app.modos.comparar]) {
+    await click(m);
+    expect(await pulsar(document.body, mod('0')), m).toBe(false);
+    expect(await pulsar(document.body, mod('+')), m).toBe(false);
+  }
+  expect(mocks.ajustar).not.toHaveBeenCalled();
+  expect(mocks.zoom).not.toHaveBeenCalled();
+  await click(T.app.modos.modelar);
+  expect(await pulsar(document.body, mod('0'))).toBe(true);
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
 });
 
 it('tooltips carry the key from the map; the browser-kept ones stay quiet on the web (#413)', async () => {

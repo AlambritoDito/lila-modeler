@@ -256,7 +256,7 @@ it('el menú Archivo de escritorio se cierra con Esc y con un clic fuera', async
 
 // ---------- shortcut map in the desktop app (#413) ----------
 
-it('en Electron, ⌘K y ⌘1 son del menú nativo: el teclado no los dispara y onMenu({ atajo }) sí', async () => {
+it('in Electron ⌘K and ⌘1 belong to the native menu: the keyboard leaves them, onMenu({ atajo }) runs them', async () => {
   const { onMenu } = puenteEscritorio();
   vi.resetModules();
   const { contenedor } = await montarApp();
@@ -276,12 +276,18 @@ it('en Electron, ⌘K y ⌘1 son del menú nativo: el teclado no los dispara y o
   await act(async () => menu({ atajo: 'no-existe' }));
   await act(async () => menu({ atajo: 'toString' }));
   expect(activo()).toBe(T.app.modos.simular);
+  // Not behind an open dialog either (QA of #436, S2).
+  await act(async () => menu('ajustes'));
+  expect(contenedor.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(true);
+  await act(async () => menu({ atajo: 'modo:resultados' }));
+  expect(activo()).toBe(T.app.modos.simular);
+  await act(async () => contenedor.querySelector<HTMLDialogElement>('dialog.ajustes')!.close());
   // The panel keys have no menu item: the keyboard keeps them in the desktop app too.
   expect(await pulsar({ key: 'P', metaKey: true, shiftKey: true })).toBe(true);
   expect(contenedor.querySelector('.app')!.classList.contains('sin-panel')).toBe(true);
 });
 
-it('en Electron, los tooltips de Nuevo y ⚙ enseñan la tecla del menú nativo', async () => {
+it('in Electron the New and ⚙ tooltips show the native menu key', async () => {
   puenteEscritorio();
   vi.resetModules();
   const { contenedor } = await montarApp();

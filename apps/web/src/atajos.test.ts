@@ -44,11 +44,12 @@ describe('the shortcut map (#413)', () => {
     expect(coincide(por('renombrar'), tecla({ key: 'F2', metaKey: true }), true)).toBe(false);
   });
 
-  it('F2, Esc and F6 do not match a held key', () => {
+  it('a held key still matches (App.tsx swallows the repeats, QA of #436 M1)', () => {
     for (const [id, key] of [['renombrar', 'F2'], ['cancelar', 'Escape'], ['irModos', 'F6']] as const) {
       expect(coincide(por(id), tecla({ key }), true), id).toBe(true);
-      expect(coincide(por(id), tecla({ key, repeat: true }), true), id).toBe(false);
+      expect(coincide(por(id), tecla({ key, repeat: true }), true), id).toBe(true);
     }
+    expect(coincide(por('guardar'), tecla({ key: 's', metaKey: true, repeat: true }), true)).toBe(true);
     expect(coincide(por('irPanel'), tecla({ key: 'F6', shiftKey: true }), false)).toBe(true);
   });
 

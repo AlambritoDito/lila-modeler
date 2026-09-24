@@ -226,7 +226,9 @@ function atajo(id: AtajoId): string {
 /** Where a key without ⌘/Ctrl is somebody's typing, not a shortcut. */
 const CAMPO = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 /** A modal dialog or the welcome screen is up: no shortcut reaches what is behind it. */
-const bloqueado = (): boolean => document.querySelector('dialog[open], .bienvenida') !== null;
+const bloqueado = (): boolean => document.querySelector('dialog[open], .bienvenida, .karaoke') !== null;
+/** An open dropdown of the bar takes Esc for itself: it closes on it (QA of #436, M2). */
+const menuAbierto = (): boolean => document.querySelector('.menu-archivo[open], .menu-vista[open]') !== null;
 
 /**
  * Los servicios del lienzo para la paleta (LILA-207). El getter de `Modelador` lanza mientras no
@@ -1397,11 +1399,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (!DESKTOP && a.grupo === 'modos') return;
     const conMod = a.tecla.startsWith('Mod+');
     if (!conMod && (e.target as Element | null)?.closest?.(CAMPO)) return;
-    if ('ambito' in a && enVuelo.current === null) return;
+    if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
+    // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
+    if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
     e.preventDefault();
     // Only the ⌘ keys are hidden from the target (bpmn-js zooms on them too); Esc, F2 and F6 still
     // reach whatever else listens.
     if (conMod) e.stopPropagation();
+    // A held key is swallowed, not repeated (QA of #436, M1): one save / run / toggle per press,
+    // and the browser never gets the repeats (⌘S «Save page as», ⇧⌘B bookmarks bar). Zoom repeats.
+    if (e.repeat && a.id !== 'zoomMas' && a.id !== 'zoomMenos') return;
     atajosRef.current[a.id as AtajoPropio]();
   };
   /**

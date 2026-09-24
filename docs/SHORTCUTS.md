@@ -5,7 +5,8 @@ native menu of the desktop app and this page all come from it, and a test fails 
 misses one of its keys. On Windows and Linux, `Ctrl` takes the place of `⌘`.
 
 Shortcuts without `⌘`/`Ctrl` (F2, F6, Esc) do nothing while you type in a field or edit a label,
-and no shortcut reaches the app while a dialog (Settings, a confirmation) is open.
+and, apart from the desktop app's File menu, no shortcut reaches the app while a dialog
+(Settings, a confirmation) is open.
 
 ## File
 
