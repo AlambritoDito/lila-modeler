@@ -113,7 +113,9 @@ export const en = {
       abrirProyecto: 'Open project…',
       abrirProyectoArchivo: 'Open project file (.lila)…',
       abrirReciente: 'Open recent',
-      ninguno: 'No recent projects',
+      // QA of #432 (N1): word for word with the native menu's own empty state
+      // (`apps/desktop/src/strings/en.ts`'s `menu.ninguno`), not a longer paraphrase.
+      ninguno: 'None',
       guardarProyecto: 'Save project',
       guardarComo: 'Save as…',
       guardarComoCarpeta: 'Save as folder…',

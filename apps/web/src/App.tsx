@@ -315,10 +315,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const [bienvenida, setBienvenida] = useState(false);
   const [recientes, setRecientes] = useState<readonly Recent[]>([]);
-  /** Recientes del desplegable Archivo de escritorio (#411): se piden de nuevo cada vez que se
-   * abre —`alternarMenuArchivo`—, no se reutiliza `recientes` (eso es solo de la Bienvenida) para
-   * que abrir uno y volver a abrir el menú enseñe la lista al día sin depender de cuándo entró la
-   * Bienvenida. */
+  /** Recents for the desktop File dropdown (#411): fetched again every time it opens
+   * (`alternarMenuArchivo`) instead of reusing `recientes` (that one is only for the welcome
+   * screen), so opening one and reopening the menu shows the up-to-date list regardless of when
+   * the welcome screen last ran. */
   const [recientesMenu, setRecientesMenu] = useState<readonly Recent[]>([]);
   const cerrarMenuArchivoFuera = useRef<((e: PointerEvent) => void) | null>(null);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
@@ -854,11 +854,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   ejecutarRef.current = ejecutar;
 
   /**
-   * `onToggle` del desplegable Archivo (#411, en las dos modalidades): al abrirse, en escritorio
-   * pide los recientes al puente (así el desplegable enseña la lista al día, no la que había
-   * cuando arrancó la app) y arma el clic-fuera; al cerrarse —o al volver a abrirse, por si el
-   * cierre anterior no llegó a disparar `toggle`— quita ese oyente. `<details>` no trae clic-fuera
-   * de serie (eso es de `<dialog>`/popover); `Esc` lo sigue cerrando el `onKeyDown` de siempre.
+   * `onToggle` of the File dropdown (#411, in both modes): on opening, in desktop mode it asks the
+   * bridge for the recents (so the dropdown shows the up-to-date list, not whatever was there when
+   * the app started) and arms the click-outside listener; on closing — or on reopening, in case the
+   * previous close never fired `toggle` — it removes that listener. `<details>` has no built-in
+   * click-outside close (that's a `<dialog>`/popover feature); `Esc` is still handled by the usual
+   * `onKeyDown`.
    */
   function alternarMenuArchivo(e: React.SyntheticEvent<HTMLDetailsElement>): void {
     const el = e.currentTarget;
@@ -1130,20 +1131,27 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </button>
           ))}
         </nav>
-        {/* En escritorio (#411) estas mismas acciones también viven aquí, con el mismo texto que
-            el menú nativo (`apps/desktop/src/menu.ts`, que se mantiene con sus aceleradores): el
-            dueño no las encontraba solo ahí. El `<details>` es el mismo elemento en las dos
-            modalidades —sin librería, sin estado en React y con teclado de serie—, solo cambian
-            sus entradas. `Esc` lo cierra a mano —`<details>` no lo trae, eso es de
-            `<dialog>`/popover— con el `onKeyDown` de siempre; el clic fuera lo cierra
-            `alternarMenuArchivo` con un `pointerdown` en `document` (antes no lo había). */}
-        <details className="menu-archivo" onToggle={alternarMenuArchivo} onKeyDown={(e) => { if (e.key === 'Escape') (e.currentTarget as HTMLDetailsElement).open = false; }}>
+        {/* In desktop (#411) these same actions also live here, with the same wording as the
+            native menu (`apps/desktop/src/menu.ts`, which stays with its accelerators): the owner
+            wasn't finding them there alone. The `<details>` is the same element in both modes —no
+            library, no React state, keyboard support for free— only its entries change. `Esc`
+            closes it by hand —`<details>` doesn't ship that, it's a `<dialog>`/popover feature—
+            with the usual `onKeyDown`, which also returns focus to the summary (QA of #432, N2):
+            otherwise it lands on an item hidden inside the now-closed `<details>`. A click outside
+            closes it via `alternarMenuArchivo`'s `pointerdown` on `document` (there was none
+            before). */}
+        <details className="menu-archivo" onToggle={alternarMenuArchivo} onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          const d = e.currentTarget;
+          d.open = false;
+          d.querySelector<HTMLElement>(':scope > summary')?.focus();
+        }}>
           <summary>{S.app.menuArchivo}</summary>
           <div onClick={(e) => {
-            // #411: un clic en el `<summary>` de «Abrir reciente» solo debe abrir/cerrar ESE
-            // submenú (su propio `<details>` nativo ya lo hace); sin este `return`, el clic
-            // también burbujea hasta aquí y cierra el desplegable entero antes de que el usuario
-            // llegue a ver la lista de recientes.
+            // #411: a click on the "Open recent" `<summary>` should only open/close THAT submenu
+            // (its own native `<details>` already does that); without this `return`, the click
+            // also bubbles up here and closes the whole dropdown before the user gets to see the
+            // recents list.
             if ((e.target as HTMLElement).closest('summary') !== null) return;
             (e.currentTarget.parentElement as HTMLDetailsElement).open = false;
           }}>
