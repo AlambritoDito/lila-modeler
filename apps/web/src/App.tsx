@@ -18,9 +18,9 @@ import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
 import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
-import { etiquetaDeTipo, Paleta } from './Paleta';
+import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
-import { PanelPropiedades } from './PropertiesPanel';
+import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
@@ -1087,15 +1087,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     toggleEscenario.current?.focus();
   }
   /**
-   * Command palette (#410). Not over another modal, the welcome screen or the karaoke: those own
-   * the keyboard until they close.
+   * Command palette (#410). Not while a file operation holds the app (`ioBusy`: the canvas and the
+   * rail are inert), nor over another modal, the welcome screen or the karaoke: those own the
+   * keyboard until they close.
    */
   function abrirPaleta(desdeHija = false): void {
-    if (karaoke || document.querySelector('dialog[open], .bienvenida') !== null) return;
-    // ponytail: from the detached scenario window the palette opens in the main one, so that one
-    // is raised first; a browser may ignore `focus()` on another window, and then the palette
-    // waits there unseen. Ceiling: open it inside the child window if that turns out to happen.
-    if (desdeHija) window.focus();
+    if (ioBusy || karaoke || document.querySelector('dialog[open], .bienvenida') !== null) return;
+    // ponytail: from the detached scenario window the palette opens in the main one. A browser
+    // ignores `focus()` on another window (QA of #438, headed Chrome), so there it would open
+    // unseen while the typing kept going to the child: in the browser ⌘K from the child does
+    // nothing. Electron honours `focus()`. Ceiling: render the palette inside the child window.
+    if (desdeHija) {
+      if (!DESKTOP) return;
+      window.focus();
+    }
     setPaletaAbierta(true);
   }
   const abrirPaletaRef = useRef(abrirPaleta);
@@ -1106,10 +1111,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   function comandosPaleta(): Comando[] {
     const irAModo = (m: ModoId): void => { setModo(m); if (m === 'simular') setPestana('simulacion'); };
     const elementos: Comando[] = serviciosDe(modelador)?.elementRegistry.filter((el) =>
-      el.id !== undefined && el.labelTarget === undefined && el.type !== 'bpmn:Process' && el.type !== 'bpmn:Collaboration'
+      // Roots have no parent: the process, the collaboration and each collapsed sub-process's plane.
+      el.id !== undefined && el.labelTarget === undefined && el.parent !== undefined
       && !(el.waypoints !== undefined && !el.businessObject?.name))
       .map((el): Comando => ({
-        grupo: 'elementos', nombre: el.businessObject?.name || el.id!, id: el.id!, tipo: etiquetaDeTipo(el.type ?? ''),
+        grupo: 'elementos', nombre: el.businessObject?.name || el.businessObject?.text || el.id!, id: el.id!, tipo: nombreDeTipo(el.type ?? ''),
         elegir: () => {
           // The canvas is hidden in Results and Compare; it has to be on screen before the focus.
           if (modo === 'resultados' || modo === 'comparar') flushSync(() => setModo('modelar'));

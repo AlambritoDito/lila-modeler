@@ -53,6 +53,7 @@ import { rotularMinimapa } from './minimapa';
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
 import { moduloColoresDelTema } from './TokenSim';
+import { centrar, type CanvasCentrable } from './centrar';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -131,9 +132,9 @@ interface Rectangulo extends Punto { width: number; height: number }
  */
 export interface Elemento {
   x?: number; y?: number; width?: number; height?: number; labelTarget?: unknown; type?: string; parent?: unknown; waypoints?: unknown;
-  /** Id and name, for the command palette's element search (#410). */
+  /** Id and name (a text annotation's is its `text`), for the command palette's search (#410). */
   id?: string;
-  businessObject?: { name?: string };
+  businessObject?: { name?: string; text?: string };
 }
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
@@ -504,9 +505,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           : [...originalIds].find(([, original]) => original === id)?.[0];
         const elemento = interno === undefined ? undefined : registro.get(interno);
         if (elemento === undefined) return;
-        // Scroll first: `scrollToElement` also switches to the element's plane (a collapsed
-        // sub-process), and the selection belongs on the plane that ends up on screen.
-        if (opciones?.centrar && conTamano()) activo.get<Canvas>('canvas').scrollToElement(elemento);
+        // Centre first: it may switch to the element's plane (a collapsed sub-process), and the
+        // selection belongs on the plane that ends up on screen.
+        if (opciones?.centrar && conTamano()) centrar(activo.get<Canvas>('canvas') as unknown as CanvasCentrable, elemento as Elemento);
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },

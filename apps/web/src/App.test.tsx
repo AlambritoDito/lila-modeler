@@ -51,13 +51,21 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // #410: the command palette focuses the canvas after picking an element.
   enfocar: vi.fn() }));
 /**
- * The canvas elements the command palette lists (#410): three named shapes with no box, so the
- * shape palette's drop-target search (which wants a width and a height) still ignores them.
+ * The canvas elements the command palette lists (#410), with no box, so the shape palette's
+ * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
+ * a lane, a named and an unnamed flow, an annotation, and two roots (no parent) that must stay
+ * out: the process and a collapsed sub-process's plane (QA of #438).
  */
 const ELEMENTOS = [
-  { id: 'Task_1', type: 'bpmn:UserTask', businessObject: { name: 'Revisar' } },
-  { id: 'Task_2', type: 'bpmn:Task', businessObject: { name: 'Enviar' } },
-  { id: 'Gateway_1', type: 'bpmn:ExclusiveGateway', businessObject: { name: 'Aprobado' } },
+  { id: 'Task_1', type: 'bpmn:UserTask', parent: 'raiz', businessObject: { name: 'Revisar' } },
+  { id: 'Task_2', type: 'bpmn:Task', parent: 'raiz', businessObject: { name: 'Enviar' } },
+  { id: 'Gateway_1', type: 'bpmn:ExclusiveGateway', parent: 'raiz', businessObject: { name: 'Aprobado' } },
+  { id: 'Lane_1', type: 'bpmn:Lane', parent: 'raiz', businessObject: { name: 'Ventas' } },
+  { id: 'Flow_1', type: 'bpmn:SequenceFlow', parent: 'raiz', waypoints: [], businessObject: { name: 'Sí' } },
+  { id: 'Flow_2', type: 'bpmn:SequenceFlow', parent: 'raiz', waypoints: [], businessObject: {} },
+  { id: 'Ann_1', type: 'bpmn:TextAnnotation', parent: 'raiz', businessObject: { text: 'Llamar al cliente' } },
+  { id: 'Process_1', type: 'bpmn:Process', businessObject: { name: 'Raíz' } },
+  { id: 'Sub_1_plane', type: 'bpmn:SubProcess', businessObject: { name: 'Plano' } },
 ];
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
@@ -65,7 +73,7 @@ vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
-vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
 // Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
 vi.mock('./replay/Replay', () => ({ Replay: () => null }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
@@ -2589,7 +2597,7 @@ it('Esc closes the palette and gives the focus back; the bar button opens it; no
   expect(paleta()).toBeNull();
 });
 
-it('⌘K from the detached scenario window opens the palette in the main one (#410)', async () => {
+it('in the browser ⌘K from the detached window opens nothing: the main window cannot take the focus (#410, QA of #438)', async () => {
   const marco = document.createElement('iframe');
   document.body.append(marco);
   const hijo = marco.contentWindow!;
@@ -2601,8 +2609,8 @@ it('⌘K from the detached scenario window opens the palette in the main one (#4
     await act(async () => {
       hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }));
     });
-    expect(paleta()?.open).toBe(true);
-    expect(enfocarPrincipal).toHaveBeenCalled();
+    expect(paleta()).toBeNull();
+    expect(enfocarPrincipal).not.toHaveBeenCalled();
   } finally {
     abrir.mockRestore();
     enfocarPrincipal.mockRestore();
@@ -2651,4 +2659,56 @@ it('Settings resets to General when the dialog closes, whichever way it closes (
   expect(pestanaAjustes(T.ajustes.secciones.general).getAttribute('aria-selected')).toBe('true');
   expect(panelAjustes('general').hidden).toBe(false);
   expect(panelAjustes('atajos').hidden).toBe(true);
+});
+
+it('roots, labels and unnamed flows stay out; lanes, flows and annotations are found by type or text in Spanish (#410, QA of #438)', async () => {
+  localStorage.setItem('lila.idioma', 'es');
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await abrirConTeclado();
+  await escribir('carril');
+  expect(opciones()).toEqual(['Ventas']);
+  await escribir('flujo');
+  expect(opciones()).toEqual(['Sí']);
+  await escribir('llamar');
+  expect(opciones()).toEqual(['Llamar al cliente']);
+  for (const fuera of ['raíz', 'plano', 'flow_2']) {
+    await escribir(fuera);
+    expect(opciones(), fuera).toEqual([]);
+  }
+});
+
+it('↑ from the first row wraps to the last and ↓ back to the first; a click picks a row (#410)', async () => {
+  await abrirConTeclado();
+  const filas = () => [...paleta()!.querySelectorAll('[role="option"]')];
+  const activa = () => campoPaleta().getAttribute('aria-activedescendant');
+  expect(activa()).toBe(filas()[0]!.id);
+  await teclaPaleta('ArrowUp');
+  expect(activa()).toBe(filas().at(-1)!.id);
+  expect(filas().at(-1)!.getAttribute('aria-selected')).toBe('true');
+  await teclaPaleta('ArrowDown');
+  expect(activa()).toBe(filas()[0]!.id);
+  const comparar = filas().find((f) => f.querySelector('.nombre')!.textContent === T.app.modos.comparar)!;
+  await act(async () => { (comparar as HTMLElement).click(); });
+  expect(paleta()).toBeNull();
+  expect(modoActivo()).toBe(T.app.modos.comparar);
+});
+
+it('Enter that confirms an IME composition does not pick a row (#410)', async () => {
+  await abrirConTeclado();
+  await act(async () => { campoPaleta().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true })); });
+  expect(paleta()?.open).toBe(true);
+});
+
+it('the palette does not open while a file operation holds the app (#410, QA of #438)', async () => {
+  const pending = deferred<ProjectDocument | null>(); vi.mocked(session.openProject).mockReturnValueOnce(pending.promise);
+  await click(T.app.abrir);
+  expect(container.querySelector('.zona-modelo')?.hasAttribute('inert')).toBe(true);
+  await abrirConTeclado();
+  await act(async () => container.querySelector<HTMLButtonElement>('.buscador-boton')!.click());
+  expect(paleta()).toBeNull();
+  await act(async () => pending.resolve(null));
+  await abrirConTeclado();
+  expect(paleta()?.open).toBe(true);
 });
