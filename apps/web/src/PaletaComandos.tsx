@@ -98,6 +98,8 @@ export function PaletaComandos({ comandos, onCerrar }: Props): React.JSX.Element
       e.preventDefault();
       if (n > 0) setActivo((a) => (a + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
     } else if (e.key === 'Enter') {
+      // An IME confirming a composition sends Enter too: that one is not a pick.
+      if (e.nativeEvent.isComposing) return;
       e.preventDefault();
       elegir(filas[activo]);
     } else if (e.key === 'Escape') {

@@ -428,6 +428,7 @@ body {
    an empty box. The invisible item is 30 px tall, not 0: a 0 px first line would put the wrapped
    field back at the top of the zone, in sight. */
 .zona-buscador {
+  container-type: inline-size;
   display: flex;
   flex: 1 1 0;
   flex-wrap: wrap;
@@ -441,6 +442,15 @@ body {
   content: '';
   flex: 1 0 0;
   height: 30px;
+}
+
+/* A wrapped box is out of sight but its button would still be a Tab stop, with the focus ring off
+   screen and the zone scrolled half a line when focused (QA of #438). Under the same 120 px that
+   makes it wrap, it is taken out altogether; ⌘K / Ctrl+K still opens the palette. */
+@container (width < 120px) {
+  .zona-buscador > .buscador {
+    display: none;
+  }
 }
 
 /* Search box: the artboard gives it a fixed place and width; the button inside opens the command
@@ -510,7 +520,8 @@ body {
 /* El artboard está dibujado a 1440 y a 1920. Por debajo de eso la barra no cabe entera y, sin
    esto, el ⚙ y parte de la acción primaria se salían de la ventana y el documento cogía scroll
    horizontal (a 1024 la barra medía 1137 px). Lo primero que se va es el campo de búsqueda, que
-   además es el único inerte; el resto —modos, deshacer/rehacer, ejecutar y ⚙— es alcanzable.
+   no hace falta para buscar (⌘K abre la paleta, #410); el resto —modos, deshacer/rehacer,
+   ejecutar y ⚙— es alcanzable.
    El nombre del producto y la regla que lo separa del proyecto son lo segundo (QA de la ronda 2
    de #392): con el buscador ya fuera, ceder ese sitio es lo que evita que el nombre del proyecto
    se recorte de más antes de que le toque a los modos. El buscador se va ya a 1320 y no a 1280

@@ -25,7 +25,7 @@ vi.mock('./simulationGate', () => ({ prepareSimulation: vi.fn() }));
 vi.mock('./simulationClient', () => ({ runInWorker: vi.fn() }));
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: () => null }));
-vi.mock('./PropertiesPanel', () => ({ PanelPropiedades: () => null }));
+vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
 vi.mock('./ScenarioPanel', () => ({ problemasEscenario: () => [], ScenarioPanel: () => null }));
 vi.mock('./Bienvenida', () => ({ Bienvenida: () => null }));
 vi.mock('./Modeler', () => ({

@@ -154,18 +154,6 @@ export function normalizar(texto: string): string {
 }
 
 /**
- * Translated name of a BPMN `$type` for the command palette (#410): the palette's own shape name
- * when there is a plain one (no event definition), otherwise the type without its `bpmn:` prefix.
- */
-export function etiquetaDeTipo(tipo: string): string {
-  for (const grupo of gruposDeFiguras()) {
-    const figura = grupo.figuras.find((f) => f.tipo === tipo && f.eventDefinitionType === undefined);
-    if (figura !== undefined) return figura.nombre;
-  }
-  return tipo.replace(/^bpmn:/, '');
-}
-
-/**
  * Los grupos que quedan tras el filtro, sin los que se han quedado sin figuras. El nombre del
  * grupo también cuenta: quien escribe «compuerta» busca las cuatro, no ninguna.
  */
