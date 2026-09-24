@@ -137,7 +137,9 @@ The controls:
   anything (`validarTema`, `apps/web/src/theme/temas.ts`); if something fails, the message
   appears inside the dialog and nothing is applied or saved. If it is valid, it comes in as a user
   theme and is applied.
-- **Delete** removes the active user theme and falls back to Eva-01.
+- **Delete** removes the active user theme and falls back to the system default, Lila Dark or
+  Lila Light (`temaPorDefecto`, `apps/web/src/theme/temaPorDefecto.ts`) — the same rule the first
+  launch uses, not the fixed Eva-01 of before (#422).
 - **Closing the dialog undoes nothing.** The «Cerrar» (Close) button and the Escape key do the
   same thing: whatever was edited is already applied and already saved from the keystroke that
   changed it, because the editor has no «Aceptar» (Accept). To go back there is «Restablecer»

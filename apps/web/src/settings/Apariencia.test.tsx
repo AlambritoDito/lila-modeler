@@ -36,7 +36,14 @@ const EVA: Theme = {
   },
 };
 const PAPEL: Theme = { name: 'Papel', tokens: { 'accent.primary': '#EC3013', 'bg.base': '#F3F2F2' } };
-const INTEGRADOS: Record<string, Theme> = { 'eva-01': EVA, papel: PAPEL };
+/**
+ * Fake stand-in for `theme/themes/lila-light.json` (#422): jsdom has no `matchMedia`, so
+ * `temaPorDefecto()` falls back to `'lila-light'` when the active user theme is deleted. Its
+ * `accent.primary` is the real theme's, so the assertion below is the same one a real
+ * `App.tsx`/`fetch('./lila-light.json')` mount would show.
+ */
+const LILA_LIGHT: Theme = { name: 'Lila Light', tokens: { 'accent.primary': '#7028F0', 'bg.base': '#FAF8EE' } };
+const INTEGRADOS: Record<string, Theme> = { 'eva-01': EVA, papel: PAPEL, 'lila-light': LILA_LIGHT };
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
@@ -260,12 +267,13 @@ it('restablecer devuelve el tema del usuario a su origen', () => {
   expect(guardado[0]!.tema.name).toBe('Eva-01 (copia)');
 });
 
-it('eliminar el tema del usuario vuelve al integrado', () => {
+it('eliminar el tema del usuario cae al Lila del sistema (#422), no al fijo eva-01', () => {
   teclear(porEtiqueta('Hex de accent.primary'), '#123456');
   act(() => boton('Eliminar').click());
   expect(guardado).toEqual([]);
-  expect(selectTema().value).toBe('eva-01');
-  expect(variable('--accent-primary')).toBe('#9EF01A');
+  // jsdom no trae `matchMedia`: `temaPorDefecto()` lo lee como "no oscuro" y cae en Lila Light.
+  expect(selectTema().value).toBe('lila-light');
+  expect(variable('--accent-primary')).toBe('#7028F0');
 });
 
 /**
