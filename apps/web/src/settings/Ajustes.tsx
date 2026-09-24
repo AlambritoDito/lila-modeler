@@ -18,6 +18,10 @@ import type { Theme } from '../theme/applyTheme';
 import type { TemaGuardado } from '../theme/temas';
 import { Apariencia } from './Apariencia';
 import { Atajos, type GrupoAtajos } from './Atajos';
+import { ATAJOS, etiqueta, MAC, type GrupoAtajo } from '../atajos';
+
+const GRUPOS: readonly GrupoAtajo[] = ['archivo', 'buscar', 'modos', 'simulacion', 'lienzo', 'paneles'];
+const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
 
 const SECCIONES = ['general', 'apariencia', 'atajos'] as const;
 type Seccion = (typeof SECCIONES)[number];
@@ -43,18 +47,14 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
   const S = useStrings();
   const [seccion, setSeccion] = useState<Seccion>('general');
 
-  // ponytail: C1's shortcut map (`atajos.ts`, #413) feeds this at integration, replacing the
-  // two-row placeholder below with `ATAJOS`/`S.atajos`/`etiqueta(·, MAC)`. Until then this repeats
-  // the only two shortcuts `PropertiesPanel.tsx`'s empty state already documents.
-  const grupos: readonly GrupoAtajos[] = [
-    {
-      titulo: S.ajustes.secciones.atajos,
-      filas: [
-        { etiqueta: S.propiedades.renombrar, tecla: 'F2' },
-        { etiqueta: S.app.pestanas.propiedades, tecla: '⇧F6' },
-      ],
-    },
-  ];
+  // The Shortcuts table is the shortcut map itself (#413): every entry, grouped as the map groups
+  // it, with this platform's keys; the keys the browser keeps for itself (`soloDesktop`) are
+  // listed only inside the desktop app.
+  const grupos: readonly GrupoAtajos[] = GRUPOS.map((g) => ({
+    titulo: S.atajos.grupos[g],
+    filas: ATAJOS.filter((a) => a.grupo === g && !('soloDesktop' in a && !DESKTOP))
+      .map((a) => ({ etiqueta: S.atajos[a.id], tecla: etiqueta(a, MAC) })),
+  })).filter((g) => g.filas.length > 0);
 
   return (
     <form method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>

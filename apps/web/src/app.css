@@ -443,8 +443,8 @@ body {
   height: 30px;
 }
 
-/* Campo de búsqueda inerte: el artefacto le da sitio y ancho fijos; buscar de verdad es la
-   paleta de comandos (LILA-066). */
+/* Search box: the artboard gives it a fixed place and width; the button inside opens the command
+   palette (#410). */
 .buscador {
   align-items: center;
   background: var(--bg-base);
@@ -452,8 +452,8 @@ body {
   color: var(--fg-muted);
   box-sizing: border-box;
   display: flex;
-  /* 210 px at most (the artboard's), but the field is the only inert thing in the bar (LILA-066)
-     and gives way first. Its zone (above) shrinks to 0 before `.identidad` does (flex-basis 0).
+  /* 210 px at most (the artboard's), but the box gives way first: ⌘K opens the palette without
+     it (#410). Its zone (above) shrinks to 0 before `.identidad` does (flex-basis 0).
      Inside it the field starts from a 120 px basis — line breaking looks at the basis, so with
      210 here it wrapped away with 120–209 px still free (QA of #429) — and grows before the
      spring does (grow 999 against its 1) up to `max-width`. Under 120 px it wraps out of sight
@@ -466,19 +466,37 @@ body {
   padding: 0 10px;
 }
 
-.buscador input {
+.buscador-boton {
+  align-items: center;
+  align-self: stretch;
   background: none;
   border: none;
-  color: var(--fg-primary);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
   flex: 1;
   font: inherit;
   font-size: 12px;
+  gap: 8px;
   min-width: 0;
-  padding: 0;
+  /* The whole box is the button: it takes back the box's own 10 px padding. */
+  margin: 0 -10px;
+  padding: 0 10px;
+  text-align: left;
 }
 
-.buscador input::placeholder {
+.buscador-boton:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 0;
+}
+
+.buscador-boton .pista {
   color: var(--fg-disabled);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .buscador kbd {
@@ -2084,11 +2102,31 @@ body {
 .lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
 .confirmar-reemplazo, .confirmar-perdida, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
-.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .ajustes::backdrop { background: rgb(0 0 0 / 50%); }
+.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .ajustes::backdrop, .paleta-comandos::backdrop { background: rgb(0 0 0 / 50%); }
 .confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 .confirmar-perdida ul { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 
 /* ---------- ajustes (artboard 09, #407) ---------- */
+/* ---------- command palette (#410) ---------- */
+
+/* Anchored near the top like the search box it stands for, not centred: the list grows downwards
+   and the field stays where the eye already is. */
+.paleta-comandos { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 0; box-shadow: 0 6px 20px var(--shadow); color: var(--fg-primary); margin: 10vh auto auto; max-height: 70vh; padding: 0; width: min(520px, 90vw); }
+.paleta-comandos[open] { display: flex; flex-direction: column; }
+.paleta-comandos input { background: var(--bg-base); border: none; border-bottom: 1px solid var(--border); border-radius: 0; color: var(--fg-primary); font: inherit; outline: none; padding: calc(10px * var(--espacio, 1)) 12px; }
+.paleta-comandos input::placeholder { color: var(--fg-disabled); }
+.paleta-comandos ul { list-style: none; margin: 0; padding: 0; }
+.paleta-comandos > ul { overflow: auto; }
+.paleta-comandos .grupo { color: var(--fg-muted); display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: calc(8px * var(--espacio, 1)) 12px calc(4px * var(--espacio, 1)); text-transform: uppercase; }
+.paleta-comandos [role='option'] { align-items: center; cursor: pointer; display: flex; gap: 8px; padding: calc(6px * var(--espacio, 1)) 12px; }
+.paleta-comandos [role='option'][aria-selected='true'] { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent-primary); }
+.paleta-comandos .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paleta-comandos .tipo { color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
+.paleta-comandos .id { color: var(--fg-disabled); font-family: var(--font-mono); font-size: 11px; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paleta-comandos kbd { border: 1px solid var(--border); color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 1px 4px; }
+.paleta-comandos .vacio { color: var(--fg-muted); margin: 0; padding: calc(12px * var(--espacio, 1)) 12px; }
+
+/* ---------- ajustes ---------- */
 
 /* Two columns behind a `role="tablist"` nav (General / Appearance / Shortcuts), replacing the old
    single scrolling stack of `<h3>` headings. The dialog is a fixed box — `height`, not

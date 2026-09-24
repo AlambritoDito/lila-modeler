@@ -47,7 +47,18 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   seleccionados: [] as unknown[],
   // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
   // callback para poder empujar un estado de lienzo concreto desde los tests.
-  publicarEstado: (_estado: unknown) => {} }));
+  publicarEstado: (_estado: unknown) => {},
+  // #410: the command palette focuses the canvas after picking an element.
+  enfocar: vi.fn() }));
+/**
+ * The canvas elements the command palette lists (#410): three named shapes with no box, so the
+ * shape palette's drop-target search (which wants a width and a height) still ignores them.
+ */
+const ELEMENTOS = [
+  { id: 'Task_1', type: 'bpmn:UserTask', businessObject: { name: 'Revisar' } },
+  { id: 'Task_2', type: 'bpmn:Task', businessObject: { name: 'Enviar' } },
+  { id: 'Gateway_1', type: 'bpmn:ExclusiveGateway', businessObject: { name: 'Aprobado' } },
+];
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 // Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
@@ -70,7 +81,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar,
-    validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens,
+    validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
     servicios: {
@@ -82,7 +93,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       selection: { get: () => mocks.seleccionados },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
-      elementRegistry: { filter: () => [] },
+      elementRegistry: { filter: (prueba: (el: object) => boolean) => ELEMENTOS.filter(prueba) },
       rules: { allowed: () => true },
     },
   } as unknown as Modelador); if (!mocks.retrasarLienzo) mocks.listo(); }, [onListo]);
@@ -2439,4 +2450,126 @@ it('Close is still the last button of the dialog and About sits in the header, f
   await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
   expect(ultimo().textContent).toBe(T.app.cerrar);
   expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
+});
+
+// ---------- Command palette, ⌘K (#410) ----------
+
+const paleta = () => container.querySelector<HTMLDialogElement>('dialog.paleta-comandos');
+const campoPaleta = () => paleta()!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+const opciones = () => [...paleta()!.querySelectorAll('[role="option"]')].map((o) => o.querySelector('.nombre')!.textContent);
+const modoActivo = () => container.querySelector('.modo.activo')!.textContent;
+async function abrirConTeclado(init: KeyboardEventInit = { metaKey: true }): Promise<void> {
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', cancelable: true, ...init })); });
+}
+async function escribir(texto: string): Promise<void> {
+  const campo = campoPaleta();
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(campo, texto);
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+async function teclaPaleta(key: string): Promise<void> {
+  await act(async () => { campoPaleta().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+}
+
+it('⌘K finds an element by name; ↓ Enter selects and centres it, focuses the canvas and leaves Results for Model (#410)', async () => {
+  await click(T.app.modos.resultados);
+  await abrirConTeclado();
+  expect(paleta()?.open).toBe(true);
+  expect(document.activeElement).toBe(campoPaleta());
+  await escribir('rev');
+  expect(opciones()).toEqual(['Revisar']);
+  const fila = paleta()!.querySelector('[role="option"]')!;
+  expect(campoPaleta().getAttribute('aria-activedescendant')).toBe(fila.id);
+  // One row: ↓ wraps around to it.
+  await teclaPaleta('ArrowDown');
+  await teclaPaleta('Enter');
+  expect(paleta()).toBeNull();
+  expect(mocks.seleccionar).toHaveBeenCalledWith('Task_1', { centrar: true });
+  expect(mocks.enfocar).toHaveBeenCalled();
+  expect(modoActivo()).toBe(T.app.modos.modelar);
+});
+
+it('the palette lists no elements with an empty query, and picks a scenario, a mode or an action (#410)', async () => {
+  await abrirConTeclado({ ctrlKey: true });
+  expect(opciones()).not.toContain('Revisar');
+  expect(opciones()).toEqual(expect.arrayContaining(['AS-IS', 'TO-BE 3 cashiers', T.app.modos.comparar, T.atajos.guardar]));
+  await escribir('to-be');
+  await teclaPaleta('Enter');
+  expect(container.querySelector('footer.estado')!.textContent).toContain('TO-BE 3 cashiers');
+  expect(modoActivo()).toBe(T.app.modos.simular);
+
+  await abrirConTeclado();
+  await escribir(T.app.modos.comparar);
+  await teclaPaleta('Enter');
+  expect(modoActivo()).toBe(T.app.modos.comparar);
+
+  await abrirConTeclado();
+  await escribir(T.atajos.guardar);
+  expect(opciones()[0]).toBe(T.atajos.guardar);
+  await teclaPaleta('Enter');
+  expect(session.saveProject).toHaveBeenCalledOnce();
+});
+
+it('Esc closes the palette and gives the focus back; the bar button opens it; not over Settings (#410)', async () => {
+  const engranaje = porEtiqueta(T.app.ajustes);
+  engranaje.focus();
+  await abrirConTeclado();
+  await teclaPaleta('ArrowUp');
+  await teclaPaleta('Escape');
+  expect(paleta()).toBeNull();
+  expect(document.activeElement).toBe(engranaje);
+
+  await act(async () => container.querySelector<HTMLButtonElement>('.buscador-boton')!.click());
+  expect(paleta()?.open).toBe(true);
+  await teclaPaleta('Escape');
+
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
+  await abrirConTeclado();
+  expect(paleta()).toBeNull();
+});
+
+it('⌘K from the detached scenario window opens the palette in the main one (#410)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const enfocarPrincipal = vi.spyOn(window, 'focus').mockImplementation(() => {});
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    await act(async () => {
+      hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }));
+    });
+    expect(paleta()?.open).toBe(true);
+    expect(enfocarPrincipal).toHaveBeenCalled();
+  } finally {
+    abrir.mockRestore();
+    enfocarPrincipal.mockRestore();
+    marco.remove();
+  }
+});
+
+// ---------- Seams of Lote C: the map feeds Settings → Shortcuts and the palette ----------
+
+it('Settings → Shortcuts lists every entry of the map the web app announces, with this platform\'s keys', async () => {
+  await act(async () => porEtiqueta(T.app.ajustes).click());
+  await act(async () => { pestanaAjustes(T.ajustes.secciones.atajos).click(); });
+  const texto = panelAjustes('atajos').textContent!;
+  // jsdom reports no platform, so the keys print as Ctrl+…; ⌘N and the modes stay desktop-only.
+  expect(texto).toContain(T.atajos.derecha);
+  expect(texto).toContain('Ctrl+Shift+P');
+  expect(texto).toContain(T.atajos.deshacer);
+  expect(texto).not.toContain(T.atajos['modo:simular']);
+  expect(texto).not.toContain(T.atajos.nuevo);
+});
+
+it('the palette\'s actions are the map\'s entries, labelled with their keys, and run the same handlers', async () => {
+  await abrirConTeclado();
+  await escribir(T.atajos.derecha);
+  const fila = paleta()!.querySelector('[role="option"]')!;
+  expect(fila.querySelector('.nombre')!.textContent).toBe(T.atajos.derecha);
+  expect(fila.querySelector('kbd')!.textContent).toBe('Ctrl+Shift+P');
+  await teclaPaleta('Enter');
+  expect(container.querySelector('.app')!.classList.contains('sin-panel')).toBe(true);
 });

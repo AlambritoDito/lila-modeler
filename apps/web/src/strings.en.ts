@@ -117,10 +117,9 @@ export const en = {
       guardarComoCarpeta: 'Save as folder…',
     },
 
-    /** Inert search box of the bar (the command palette is another ticket). */
+    /** The bar's search button: it opens the command palette (#410). */
     buscar: 'Search activity',
     buscarPista: 'Search activity…',
-    buscarPendiente: 'Search and the command palette arrive in LILA-066',
 
     deshacer: 'Undo',
     rehacer: 'Redo',
@@ -384,6 +383,13 @@ export const en = {
     pieTecla: 'Enter',
     pieSufijo: ' to insert',
     sinCoincidencias: (filtro: string): string => `No shape matches «${filtro}».`,
+    /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */
+    comandos: {
+      titulo: 'Command palette',
+      pista: 'Search elements, scenarios, modes and actions',
+      sinResultados: (consulta: string): string => `Nothing matches «${consulta}».`,
+      grupos: { elementos: 'Elements', escenarios: 'Scenarios', modos: 'Modes', acciones: 'Actions' },
+    },
     grupos: {
       eventos: 'Events',
       actividades: 'Activities',

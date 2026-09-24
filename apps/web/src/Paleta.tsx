@@ -149,8 +149,20 @@ export function iconoDeTipo(tipo: string, eventDefinitionType?: string): string 
 }
 
 /** Compara sin acentos ni mayúsculas: «anotacion» encuentra «Anotación». */
-function normalizar(texto: string): string {
+export function normalizar(texto: string): string {
   return texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
+/**
+ * Translated name of a BPMN `$type` for the command palette (#410): the palette's own shape name
+ * when there is a plain one (no event definition), otherwise the type without its `bpmn:` prefix.
+ */
+export function etiquetaDeTipo(tipo: string): string {
+  for (const grupo of gruposDeFiguras()) {
+    const figura = grupo.figuras.find((f) => f.tipo === tipo && f.eventDefinitionType === undefined);
+    if (figura !== undefined) return figura.nombre;
+  }
+  return tipo.replace(/^bpmn:/, '');
 }
 
 /**
