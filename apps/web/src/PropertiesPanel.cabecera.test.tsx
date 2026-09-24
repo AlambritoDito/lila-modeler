@@ -8,6 +8,7 @@
  * `elementRegistry.filter`. Ni `Selection` ni `EventBus` de diagram-js hacen falta porque ningún
  * test de aquí cambia de selección tras montar.
  */
+import { atajoPorId, etiqueta, MAC } from './atajos';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -139,11 +140,12 @@ describe('sin selección: resumen del proceso y atajos', () => {
     expect(filaValor(panel, 'Pools / carriles')).toBe('2');
   });
 
-  it('enseña solo los atajos que existen de verdad, F2 y ⇧F6 (#412) — no un ⌘K que todavía no busca nada', () => {
+  it('enseña F2 y ⇧F6 con la tecla del mapa de atajos (#412, #413) — no un ⌘K que todavía no busca nada', () => {
     const panel = montar(modeladorFalso({ registro }));
     expect(panel.textContent).toContain('Atajos');
     expect(filaValor(panel, 'Renombrar')).toBe('F2');
-    expect(filaValor(panel, 'Propiedades')).toBe('⇧F6');
+    // jsdom is not a Mac: the map formats Shift+F6 the Windows/Linux way there (⇧F6 on a Mac).
+    expect(filaValor(panel, 'Propiedades')).toBe(etiqueta(atajoPorId('irPanel'), MAC));
     expect(panel.textContent).not.toContain('⌘K');
   });
 

@@ -77,10 +77,6 @@ export const en = {
     densidadNombre: (id: string): string =>
       ({ compacta: 'Compact', normal: 'Normal', comoda: 'Comfortable' })[id] ?? id,
 
-    /** Shortcut in parentheses after the tooltip: `⌘S` on Mac, `Ctrl+S` everywhere else. */
-    atajo: (letra: string, shift: boolean, mac: boolean): string =>
-      mac ? ` (${shift ? '⇧' : ''}⌘${letra})` : ` (Ctrl+${shift ? 'Shift+' : ''}${letra})`,
-
     /** Default name of a new project and of the one the app ships with. */
     proyectoNuevo: 'My project',
     proyectoDemo: 'Sample order',
@@ -233,8 +229,8 @@ export const en = {
       estado: 'Status bar',
     },
     tituloRegiones: {
-      izquierda: 'Show or hide the left column (Shift+Tab on the canvas)',
-      derecha: 'Show or hide the right panel (Tab on the canvas)',
+      izquierda: 'Show or hide the left column',
+      derecha: 'Show or hide the right panel',
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
     },
@@ -1097,6 +1093,56 @@ export const en = {
     sinLog: 'This run has no event log in memory (it came from a saved file): run the simulation again to animate it.',
     fin: 'End of the replication.',
     progreso: (porcentaje: number): string => `${porcentaje}% of the replication`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Shortcut map (`atajos.ts`, #413): one label per entry id, and one title per group. The keys
+   * themselves are not text: `etiqueta()` formats them per platform.
+   * ------------------------------------------------------------------ */
+  atajos: {
+    grupos: {
+      archivo: 'File',
+      buscar: 'Search',
+      modos: 'Modes',
+      simulacion: 'Simulation',
+      lienzo: 'Canvas',
+      paneles: 'Panels',
+    },
+    nuevo: 'New project',
+    abrir: 'Open project',
+    guardar: 'Save project',
+    guardarComo: 'Save as',
+    ajustes: 'Settings',
+    paleta: 'Command palette',
+    'modo:modelar': 'Model',
+    'modo:simular': 'Simulate',
+    'modo:resultados': 'Results',
+    'modo:comparar': 'Compare',
+    'modo:animar': 'Animate',
+    'modo:rutas': 'Validate paths',
+    ejecutar: 'Run simulation',
+    cancelar: 'Cancel the run',
+    zoomMas: 'Zoom in',
+    zoomMenos: 'Zoom out',
+    ajustarVista: 'Fit the diagram',
+    renombrar: 'Rename the selected element',
+    deshacer: 'Undo',
+    rehacer: 'Redo',
+    borrar: 'Delete the selection',
+    seleccionarTodo: 'Select all',
+    copiar: 'Copy',
+    pegar: 'Paste',
+    lazo: 'Lasso tool',
+    mano: 'Hand tool',
+    conectar: 'Connect tool',
+    editarEtiqueta: 'Edit the label',
+    reemplazar: 'Replace the element',
+    izquierda: 'Show or hide the left column',
+    derecha: 'Show or hide the right panel',
+    diagramas: 'Show or hide the diagram tabs',
+    estado: 'Show or hide the status bar',
+    irModos: 'Move the focus to the modes',
+    irPanel: 'Move the focus to the right panel',
   },
 
   /* ------------------------------------------------------------------ *

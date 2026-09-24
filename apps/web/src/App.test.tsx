@@ -21,6 +21,7 @@ import { en as T } from './strings.en';
 // that the app switched catalogs, and the only honest way to say that is with the other one.
 import { es as ES } from './strings.es';
 import { version } from '../package.json';
+import { atajoPorId, etiqueta, type AtajoId } from './atajos';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
   // #420: the scenario map the panel last received, to see what the seeding wrote.
@@ -42,6 +43,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   retrasarLienzo: false, listo: (() => {}) as () => void,
   // LILA-207: los servicios que la paleta usa para insertar una figura.
   fabricar: vi.fn(), crearFigura: vi.fn(), editarNombre: vi.fn(), arrastrar: vi.fn(),
+  // #413: what the canvas has selected, for F2.
+  seleccionados: [] as unknown[],
   // LILA-192/193: el shell publica pérdida e ids rotos por `onEstado`; aquí se guarda el
   // callback para poder empujar un estado de lienzo concreto desde los tests.
   publicarEstado: (_estado: unknown) => {} }));
@@ -76,6 +79,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre },
+      selection: { get: () => mocks.seleccionados },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
       elementRegistry: { filter: () => [] },
@@ -116,6 +120,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
+  mocks.seleccionados = [];
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   // LILA-381: «Acerca de» cierra Ajustes con `close()` antes de abrir su propio diálogo; jsdom no
   // implementa ese método tampoco (mismo motivo que `showModal` arriba).
@@ -740,6 +745,10 @@ it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => 
   expect(session.saveProject).not.toHaveBeenCalled();
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true })); });
   expect(dialog.open).toBe(true);
+  // #413: no shortcut reaches what is behind an open dialog.
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
+  expect(session.saveProject).not.toHaveBeenCalled();
+  await act(async () => dialog.close());
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true })); });
   expect(session.saveProject).toHaveBeenCalledOnce();
 });
@@ -1515,32 +1524,95 @@ it('with the desktop bridge the panel map and the left widths go through Ajustes
   expect(localStorage.getItem('lila.paneles')).toBeNull();
 });
 
-it('Tab and Shift+Tab toggle the right panel and the left column only from the canvas (#412)', async () => {
-  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(true);
-  expect(conClase('sin-panel')).toBe(true);
-  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(true);
-  expect(conClase('sin-izquierda')).toBe(true);
-  await pulsar(svgLienzo(), { key: 'Tab' });
-  await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true });
-  expect(conClase('sin-panel') || conClase('sin-izquierda')).toBe(false);
+/** A ⌘/Ctrl key (jsdom is not a Mac: the labels read `Ctrl+…`, and both modifiers match). */
+const mod = (key: string, extra: KeyboardEventInit = {}): KeyboardEventInit => ({ key, metaKey: true, ...extra });
 
-  const nada = async (destino: EventTarget, init: KeyboardEventInit = {}) => {
-    expect(await pulsar(destino, { key: 'Tab', ...init })).toBe(false);
-    expect(conClase('sin-panel')).toBe(false);
-  };
-  await nada(document.body);
-  await nada(selectIdioma());
-  await nada(porEtiqueta(T.app.deshacer));
-  await nada(container.querySelector('.djs-direct-editing-parent')!);
-  await nada(svgLienzo(), { repeat: true });
-  await nada(svgLienzo(), { metaKey: true });
-  await nada(svgLienzo(), { ctrlKey: true });
-  await click(T.app.modos.modelar);
-  await nada(container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!);
-  // Not while a dialog is open.
-  await act(async () => porEtiqueta(T.app.ajustes).click());
-  expect(container.querySelector('dialog.ajustes[open]')).not.toBeNull();
-  await nada(svgLienzo());
+it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#413)', async () => {
+  const casos: [string, string][] = [['L', 'sin-izquierda'], ['P', 'sin-panel'], ['D', 'sin-diagramas'], ['B', 'sin-estado']];
+  for (const [key, clase] of casos) {
+    expect(await pulsar(document.body, mod(key, { shiftKey: true })), key).toBe(true);
+    expect(conClase(clase), key).toBe(true);
+    expect(await pulsar(svgLienzo(), { key, ctrlKey: true, shiftKey: true }), key).toBe(true);
+    expect(conClase(clase), key).toBe(false);
+  }
+  // Without Shift, ⌘P / ⌘D / ⌘B are not ours.
+  expect(await pulsar(document.body, mod('p'))).toBe(false);
+});
+
+it('on the web ⌘1…⌘6 / Ctrl+1…6 stay the browser\'s: no mode change, nothing prevented (#413)', async () => {
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(await pulsar(document.body, { key: '1', code: 'Digit1', ctrlKey: true })).toBe(false);
+  expect(await pulsar(svgLienzo(), mod('3', { code: 'Digit3' }))).toBe(false);
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+});
+
+it('Tab on the canvas no longer toggles anything: it moves the focus again (#413, was #412)', async () => {
+  expect(await pulsar(svgLienzo(), { key: 'Tab' })).toBe(false);
+  expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
+  expect([...appEl().classList].filter((c) => c.startsWith('sin-'))).toEqual([]);
+});
+
+it('F2 renames the one selected element, not from a field and not with several selected (#413)', async () => {
+  mocks.seleccionados = [{ id: 'Task_1' }];
+  expect(await pulsar(svgLienzo(), { key: 'F2' })).toBe(true);
+  expect(mocks.editarNombre).toHaveBeenCalledExactlyOnceWith({ id: 'Task_1' });
+  await pulsar(selectIdioma(), { key: 'F2' });
+  await pulsar(container.querySelector('.djs-direct-editing-parent')!, { key: 'F2' });
+  mocks.seleccionados = [{ id: 'Task_1' }, { id: 'Task_2' }];
+  await pulsar(svgLienzo(), { key: 'F2' });
+  expect(mocks.editarNombre).toHaveBeenCalledOnce();
+});
+
+it('⌘↩ runs the simulation, not while Settings is open; Esc cancels only a run in flight (#413)', async () => {
+  expect(await pulsar(document.body, { key: 'Escape' })).toBe(false);
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => dialog.showModal());
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.gate).not.toHaveBeenCalled();
+  await act(async () => dialog.close());
+
+  mocks.worker.mockReturnValueOnce(new Promise(() => {}));
+  expect(await pulsar(svgLienzo(), mod('Enter'))).toBe(true);
+  await act(async () => {});
+  expect(mocks.worker).toHaveBeenCalledOnce();
+  const { signal } = mocks.worker.mock.calls[0]![2] as { signal: AbortSignal };
+  // A second ⌘↩ while it runs does not restart it: the Run button is not there either.
+  await pulsar(document.body, mod('Enter'));
+  expect(signal.aborted).toBe(false);
+  // Esc typed in a field is typing, not a cancel.
+  await pulsar(selectIdioma(), { key: 'Escape' });
+  expect(signal.aborted).toBe(false);
+  expect(await pulsar(document.body, { key: 'Escape' })).toBe(true);
+  expect(signal.aborted).toBe(true);
+  expect(container.querySelector('.boton.cancelar')).toBeNull();
+});
+
+it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {
+  const lienzoVe = vi.fn();
+  svgLienzo().addEventListener('keydown', lienzoVe);
+  expect(await pulsar(svgLienzo(), mod('0'))).toBe(true);
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
+  await pulsar(svgLienzo(), mod('+', { shiftKey: true }));
+  await pulsar(svgLienzo(), mod('-'));
+  expect(mocks.zoom.mock.calls).toEqual([[1.2], [1 / 1.2]]);
+  expect(lienzoVe).not.toHaveBeenCalled();
+  // bpmn-js's own keys (⌘Z, ⌘A…) are left alone.
+  expect(await pulsar(svgLienzo(), mod('z'))).toBe(false);
+  expect(lienzoVe).toHaveBeenCalledOnce();
+});
+
+it('tooltips carry the key from the map; the browser-kept ones stay quiet on the web (#413)', async () => {
+  const titulo = (texto: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === texto)!.title;
+  const tecla = (id: AtajoId) => `(${etiqueta(atajoPorId(id), false)})`;
+  expect(titulo(T.app.guardar)).toContain(tecla('guardar'));
+  expect(titulo(T.app.guardarComo)).toContain(tecla('guardarComo'));
+  expect(container.querySelector<HTMLButtonElement>('.boton.ejecutar')!.title).toContain(tecla('ejecutar'));
+  for (const r of ['izquierda', 'derecha', 'diagramas', 'estado'] as const) {
+    expect(toggleDe(r).title, r).toContain(tecla(r));
+    expect(itemVista(r).title, r).toContain(tecla(r));
+  }
+  expect(titulo(T.app.nuevo)).toBe(T.app.tituloNuevo);
+  expect(porEtiqueta(T.app.ajustes).title).toBe(T.app.ajustes);
 });
 
 it('F6 goes to the modes and Shift+F6 to the right panel or its toggle, the way out of the canvas (#412)', async () => {
@@ -1624,7 +1696,7 @@ it('a hidden status bar comes back for an error, while its toggle keeps the save
     expect(container.querySelector('footer.estado [role="alert"]')!.textContent).toBe(T.app.ventanaBloqueada);
     // The toggle shows the preference (hidden), and says why the bar is there anyway.
     expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('false');
-    expect(toggleDe('estado').title).toBe(T.app.tituloEstadoForzado);
+    expect(toggleDe('estado').title).toBe(`${T.app.tituloEstadoForzado} (${etiqueta(atajoPorId('estado'), false)})`);
     // Pressing it is not dead: it records «shown»…
     await act(async () => toggleDe('estado').click());
     expect(toggleDe('estado').getAttribute('aria-pressed')).toBe('true');
@@ -1643,7 +1715,7 @@ it('import warnings do not pin the status bar: they are not errors (QA of #429)'
   await act(async () => { mocks.publicarEstado({ zoom: 1, elementos: 3, avisos: 2, perdidas: [], refsRotas: [], error: null }); });
   expect(container.querySelector('footer.estado')!.textContent).toContain(T.app.avisosAlImportar(2));
   expect(conClase('sin-estado')).toBe(true);
-  expect(toggleDe('estado').title).toBe(T.app.tituloRegiones.estado);
+  expect(toggleDe('estado').title).toBe(`${T.app.tituloRegiones.estado} (${etiqueta(atajoPorId('estado'), false)})`);
 });
 
 it('Escape in the View menu closes it and gives the focus back to its button (QA of #429)', async () => {
@@ -1754,8 +1826,8 @@ it('saved left widths are clamped, blank means never saved; no left divider with
     expect(container.querySelector('.divisor-izquierdo')).toBeNull();
     expect(toggleDe('izquierda').disabled).toBe(true);
     expect(toggleDe('izquierda').getAttribute('aria-pressed')).toBe('false');
-    // Nothing to toggle: Shift+Tab falls through and keeps moving the focus backwards.
-    expect(await pulsar(svgLienzo(), { key: 'Tab', shiftKey: true })).toBe(false);
+    // Nothing to toggle: ⌘⇧L does nothing.
+    await pulsar(svgLienzo(), mod('L', { shiftKey: true }));
     expect(conClase('sin-izquierda')).toBe(false);
   }
 });
@@ -2143,15 +2215,17 @@ it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice
   }
 });
 
-it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni Ajustes (QA de #391)', async () => {
+it('desde la ventana desacoplada solo llegan Guardar, Guardar como y ⌘K, no Abrir ni Ajustes (QA de #391, #413)', async () => {
   const marco = document.createElement('iframe');
   document.body.append(marco);
   const hijo = marco.contentWindow!;
   vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
-  const tecla = (key: string) => act(async () => {
-    hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true }));
-  });
+  const tecla = async (key: string): Promise<boolean> => {
+    const e = new (hijo as unknown as typeof globalThis).KeyboardEvent('keydown', { key, metaKey: true, cancelable: true });
+    await act(async () => { hijo.dispatchEvent(e); });
+    return e.defaultPrevented;
+  };
   try {
     await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Open would click the main page's file input with the popup's activation: the browser never
@@ -2165,6 +2239,9 @@ it('desde la ventana desacoplada solo llegan Guardar y Guardar como, no Abrir ni
     expect(container.querySelector<HTMLDialogElement>('dialog.ajustes')!.open).toBe(false);
     await tecla('s');
     expect(session.saveProject).toHaveBeenCalledOnce();
+    // #413: the command palette is forwarded (taken from the popup), Open is not.
+    expect(await tecla('k')).toBe(true);
+    expect(await tecla('o')).toBe(false);
   } finally {
     abrir.mockRestore();
     marco.remove();

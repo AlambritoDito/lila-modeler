@@ -3,6 +3,9 @@ import type { MenuItemConstructorOptions } from 'electron';
 import { menuTemplate } from './menu.js';
 import { desktopStrings } from './strings/index.js';
 import type { DesktopLocale } from './locale.js';
+// The one shortcut map (#413). `menu.ts` cannot import it (`rootDir: src`); vitest can, so the
+// parity between the two is pinned here.
+import { ATAJOS, acelerador } from '../../web/src/atajos.js';
 
 function flat(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
   return items.flatMap((i) => [i, ...(Array.isArray(i.submenu) ? flat(i.submenu) : [])]);
@@ -116,14 +119,54 @@ describe('menuTemplate · the language only changes the labels', () => {
     expect(esqueleto('en')).toEqual(esqueleto('es'));
   });
 
-  // Electron's role submenus (`appMenu`, `editMenu`, `viewMenu`, `windowMenu`) are localised by
-  // the OS, so the template must keep naming them by role and never label them itself.
+  // Electron's role submenus (`appMenu`, `editMenu`, `windowMenu`) are localised by the OS, so
+  // the template must keep naming them by role and never label them itself. View is this app's
+  // own since #413: the `viewMenu` role brought reload and page zoom, which fought the canvas.
   it('the OS-localised role menus are left as roles, without a label', () => {
     for (const locale of IDIOMAS) {
       const items = menuTemplate([], 'darwin', vi.fn(), desktopStrings(locale));
       const roles = items.filter((i) => i.role !== undefined && i.role !== 'quit');
-      expect(roles.map((i) => i.role)).toEqual(['appMenu', 'editMenu', 'viewMenu', 'windowMenu']);
+      expect(roles.map((i) => i.role)).toEqual(['appMenu', 'editMenu', 'windowMenu']);
       expect(roles.filter((i) => i.label !== undefined)).toEqual([]);
     }
+  });
+});
+
+describe('menuTemplate · parity with the shortcut map (#413)', () => {
+  for (const platform of ['darwin', 'win32'] as const) {
+    it(`every accelerator is the map's, every menu entry of the map has its item, none twice (${platform})`, () => {
+      const send = vi.fn();
+      const items = flat(menuTemplate([], platform, send, desktopStrings('en'))).filter((i) => i.accelerator !== undefined);
+      const porId = new Map<string, string>();
+      for (const item of items) {
+        (item.click as () => void)();
+        const accion = send.mock.calls.at(-1)?.[0] as string | { atajo?: string };
+        const id = typeof accion === 'string' ? accion : accion.atajo!;
+        const atajo = ATAJOS.find((a) => a.id === id);
+        expect(atajo, id).toBeDefined();
+        expect(item.accelerator, id).toBe(acelerador(atajo!));
+        porId.set(id, item.accelerator as string);
+      }
+      expect([...porId.keys()].sort()).toEqual(ATAJOS.filter((a) => 'menu' in a).map((a) => a.id).sort());
+      const aceleradores = items.map((i) => i.accelerator);
+      expect(aceleradores.filter((a, i) => aceleradores.indexOf(a) !== i)).toEqual([]);
+    });
+  }
+
+  it.each(IDIOMAS)('View has the palette and the six modes; Simulation has Run (%s)', (locale) => {
+    const S = desktopStrings(locale).menu;
+    const send = vi.fn();
+    const menus = menuTemplate([], 'darwin', send, desktopStrings(locale));
+    const sub = (label: string) => menus.find((m) => m.label === label)!.submenu as MenuItemConstructorOptions[];
+    const enviado = (i: MenuItemConstructorOptions) => { (i.click as () => void)(); return send.mock.calls.at(-1)?.[0]; };
+    const vista = sub(S.vista).filter((i) => i.click !== undefined);
+    expect(vista.map((i) => i.label)).toEqual([S.paleta, S.modoModelar, S.modoSimular, S.modoResultados, S.modoComparar, S.modoAnimar, S.modoRutas]);
+    expect(vista.map(enviado)).toEqual(['paleta', 'modo:modelar', 'modo:simular', 'modo:resultados', 'modo:comparar', 'modo:animar', 'modo:rutas'].map((atajo) => ({ atajo })));
+    expect(sub(S.vista).map((i) => i.role).filter(Boolean)).toEqual(['togglefullscreen', 'toggleDevTools']);
+    const simulacion = sub(S.simulacion);
+    expect(simulacion.map((i) => i.label)).toEqual([S.ejecutar]);
+    expect(enviado(simulacion[0]!)).toEqual({ atajo: 'ejecutar' });
+    // Reload (⌘R) and page zoom (⌘+/⌘−/⌘0) are gone with the role.
+    expect(flat(menus).some((i) => i.role === 'reload' || i.role === 'zoomIn' || i.role === 'resetZoom')).toBe(false);
   });
 });
