@@ -540,6 +540,7 @@ export const en = {
     'Data object reference': 'Data object reference',
     'Expanded pool/participant': 'Expanded pool/participant',
     'Empty pool/participant': 'Empty pool/participant',
+    'Empty pool/participant (removes content)': 'Empty pool/participant (removes content)',
     'Sequence flow': 'Sequence flow',
     'Default flow': 'Default flow',
     'Conditional flow': 'Conditional flow',

@@ -1098,8 +1098,8 @@ describe('ventana desacoplada (diseño 2c)', () => {
   });
 });
 
-describe('problemas del modelo (#455)', () => {
-  it('problemasExtra suma en la cabecera y sale en la lista de validación, como en los chips del lienzo', () => {
+describe('model problems (#455)', () => {
+  it('problemasExtra adds to the header count and shows in the validation list, like the canvas chips', () => {
     const escenario = asIsCorto();
     const propios = problemasEscenario(escenario, ir, 'es');
     const errores = propios.filter((p) => p.severidad === 'error').length;

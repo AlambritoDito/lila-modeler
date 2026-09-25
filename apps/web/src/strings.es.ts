@@ -520,6 +520,7 @@ export const es: Strings = {
     'Data object reference': 'Objeto de datos',
     'Expanded pool/participant': 'Pool expandido',
     'Empty pool/participant': 'Pool vacío',
+    'Empty pool/participant (removes content)': 'Pool vacío (elimina el contenido)',
     'Sequence flow': 'Flujo de secuencia',
     'Default flow': 'Flujo por defecto',
     'Conditional flow': 'Flujo condicional',

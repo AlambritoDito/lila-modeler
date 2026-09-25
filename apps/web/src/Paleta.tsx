@@ -232,14 +232,37 @@ const ACTIVIDAD = /^bpmn:(\w*Task|SubProcess|AdHocSubProcess|Transaction|CallAct
 const CONTENEDOR = /^bpmn:(Participant|Lane)$/;
 
 /**
+ * A stand-in boundary event for asking bpmn-js's `shape.attach` rule before anything is created:
+ * the rule only reads the candidate's type (through `businessObject.$instanceOf`) and that it is
+ * not a label. Creating a real shape per render would claim a new id in the model each time.
+ */
+const CANDIDATO_DE_BORDE = { type: 'bpmn:BoundaryEvent', businessObject: { $instanceOf: (tipo: string) => tipo === 'bpmn:BoundaryEvent' } };
+
+/**
+ * Where the next boundary event goes on `host`: its bottom edge, near the right corner, each
+ * further one 40 px to the left of the previous.
+ * ponytail: once the bottom edge is full the next one lands on the left corner and overlaps; the
+ * way up is bpmn-js's `AttachSupport` placement, or dragging the item onto the activity.
+ */
+function puntoDeBorde(host: Caja): Punto {
+  const previos = (host as { attachers?: unknown[] }).attachers?.length ?? 0;
+  return { x: Math.max(host.x + 18, host.x + host.width - 20 - 40 * previos), y: host.y + host.height };
+}
+
+/**
  * The selected element a figure with `requiere` goes into (#456), or `null` when the selection
- * does not fit: nothing, several elements (`seleccion` is `null` then), or the wrong type.
+ * does not fit: nothing, several elements (`seleccion` is `null` then), the wrong type, or an
+ * activity bpmn-js refuses to attach to (an event sub-process, a compensation activity…).
  */
 export function anfitrion(servicios: Servicios, figura: Figura, seleccion: string | null): Caja & { type: string } | null {
   if (figura.requiere === undefined || seleccion === null) return null;
   const valido = figura.requiere === 'actividad' ? ACTIVIDAD : CONTENEDOR;
   const [elegido] = servicios.elementRegistry.filter((el) => el.id === seleccion && el.labelTarget === undefined);
-  return elegido !== undefined && valido.test(elegido.type ?? '') ? elegido as Caja & { type: string } : null;
+  if (elegido === undefined || !valido.test(elegido.type ?? '')) return null;
+  const host = elegido as Caja & { type: string };
+  if (figura.requiere === 'actividad' &&
+    servicios.rules.allowed('shape.attach', { shape: CANDIDATO_DE_BORDE, target: host, position: puntoDeBorde(host) }) !== 'attach') return null;
+  return host;
 }
 
 interface Punto { x: number; y: number }
@@ -306,10 +329,8 @@ export function insertar(servicios: Servicios, figura: Figura, seleccion: string
 
 /**
  * A lane goes at the bottom of the selected pool (or below the selected lane), as bpmn-js's own
- * «Add lane below» does. A boundary event is attached on the bottom edge of the selected activity,
- * near its right corner, and each further one 40 px to the left of the previous.
- * ponytail: once the bottom edge is full the next one lands on the left corner and overlaps; the
- * way up is bpmn-js's `AttachSupport` placement, or dragging the item onto the activity.
+ * «Add lane below» does. A boundary event is attached on the bottom edge of the selected activity
+ * (`puntoDeBorde`); `anfitrion` has already asked bpmn-js whether it may.
  */
 function insertarEnSeleccion(servicios: Servicios, figura: Figura, seleccion: string | null): void {
   const host = anfitrion(servicios, figura, seleccion);
@@ -318,11 +339,7 @@ function insertarEnSeleccion(servicios: Servicios, figura: Figura, seleccion: st
     servicios.directEditing.activate(servicios.modeling.addLane(host as unknown as Parameters<Servicios['modeling']['addLane']>[0], 'bottom'));
     return;
   }
-  const forma = nueva(servicios, figura);
-  const previos = (host as { attachers?: unknown[] }).attachers?.length ?? 0;
-  const punto = { x: Math.max(host.x + 18, host.x + host.width - 20 - 40 * previos), y: host.y + host.height };
-  if (servicios.rules.allowed('shape.attach', { shape: forma, target: host, position: punto }) !== 'attach') return;
-  servicios.directEditing.activate(servicios.modeling.createShape(forma, punto, host, { attach: true }));
+  servicios.directEditing.activate(servicios.modeling.createShape(nueva(servicios, figura), puntoDeBorde(host), host, { attach: true }));
 }
 
 interface Props {

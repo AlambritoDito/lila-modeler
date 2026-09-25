@@ -77,7 +77,7 @@ describe('filtrar (LILA-207)', () => {
  * #456: a boundary event and a lane go into the selected element, not at the centre of the view.
  * Without a fitting selection nothing is inserted (the item is disabled in the UI).
  */
-describe('figuras que van en la selección (#456)', () => {
+describe('figures that go into the selection (#456)', () => {
   const TAREA_DIBUJADA = { id: 'Task_1', type: 'bpmn:Task', x: 100, y: 100, width: 100, height: 80 };
   const PARTICIPANTE = { id: 'Pool_1', type: 'bpmn:Participant', x: 0, y: 0, width: 600, height: 300 };
   const BORDE: Figura = { tipo: 'bpmn:BoundaryEvent', nombre: 'Borde', icono: 'x', eventDefinitionType: 'bpmn:TimerEventDefinition', requiere: 'actividad' };
@@ -100,7 +100,7 @@ describe('figuras que van en la selección (#456)', () => {
     };
   }
 
-  it('un evento de borde sin selección, o con una selección que no es actividad, no inserta nada', () => {
+  it('a boundary event with no selection, or with a selection that is not an activity, inserts nothing', () => {
     const s = conSeleccion();
     insertar(s.servicios, BORDE);
     insertar(s.servicios, BORDE, 'Pool_1');
@@ -108,7 +108,7 @@ describe('figuras que van en la selección (#456)', () => {
     expect(anfitrion(s.servicios, BORDE, null)).toBeNull();
   });
 
-  it('con una tarea seleccionada, el evento de borde se adjunta a ella en su borde inferior', () => {
+  it('with a task selected, the boundary event is attached to its bottom edge', () => {
     const s = conSeleccion();
     insertar(s.servicios, BORDE, 'Task_1');
     expect(s.createShape).toHaveBeenCalledWith(
@@ -120,12 +120,18 @@ describe('figuras que van en la selección (#456)', () => {
     expect(s.activate).toHaveBeenCalledOnce();
   });
 
-  it('con un pool seleccionado, el carril se añade abajo con addLane', () => {
+  it('with a pool selected, the lane is added at the bottom with addLane', () => {
     const s = conSeleccion();
     insertar(s.servicios, CARRIL, 'Task_1');
     expect(s.addLane).not.toHaveBeenCalled();
     insertar(s.servicios, CARRIL, 'Pool_1');
     expect(s.addLane).toHaveBeenCalledWith(PARTICIPANTE, 'bottom');
     expect(s.activate).toHaveBeenCalledWith({ id: 'Lane_nuevo' });
+  });
+
+  it('an activity bpmn-js refuses to attach to (an event sub-process) disables the boundary items', () => {
+    const s = conSeleccion();
+    (s.servicios as unknown as { rules: { allowed: () => unknown } }).rules.allowed = () => false;
+    expect(anfitrion(s.servicios, BORDE, 'Task_1')).toBeNull();
   });
 });
