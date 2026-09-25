@@ -3,6 +3,20 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.7] - 2026-09-25
+
+Close window and quit from the keyboard in the desktop app on macOS: File gains the native «Close
+Window» entry (⌘W) and ⌘Q keeps quitting from the application menu. No installer is attached to
+this version.
+
+### Added
+
+- **Close Window (⌘W) on macOS**: the File menu ends with Electron's `close` role, which closes
+  the focused window (About or the detached scenario on their own; the main window asks first
+  when there are unsaved changes and, like its red button, quits the app). Windows and Linux
+  already had Close (Ctrl+W) in their Window menu, so nothing is duplicated there. ⌘Q / Ctrl+Q
+  keep their `quit` role, now covered by a test. Documented in `docs/SHORTCUTS.md`.
+
 ## [1.0.0-beta.6] - 2026-09-24
 
 Lote C: keyboard, search and Settings. One shortcut map now drives the keys, the tooltips, the

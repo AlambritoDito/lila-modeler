@@ -83,8 +83,13 @@ export function menuTemplate(
         // desplegable dentro del diálogo: el diálogo nativo de guardar no admite elegir «carpeta o
         // archivo», así que la elección tiene que estar antes de abrirlo.
         { label: S.guardarComoCarpeta, click: () => send('guardarComoCarpeta') },
+        // ⌘W (owner request, 2026-09-25): on macOS the `windowMenu` role brings Minimize, Zoom and
+        // Bring All to Front but not Close, so the key did nothing; on Windows/Linux that same role
+        // already carries Close (Ctrl+W), so adding it here would list it twice. The role closes
+        // the focused window (main, About or the detached scenario) through the same `close`
+        // guard as the red button; closing the main window quits, like the red button does.
         ...(mac
-          ? []
+          ? [{ type: 'separator' as const }, { role: 'close' as const }]
           : [
               { type: 'separator' as const }, preferencias,
               { type: 'separator' as const }, acercaDe,
