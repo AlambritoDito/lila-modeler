@@ -35,6 +35,9 @@ export interface AjustesProps {
   readonly temas: readonly TemaGuardado[];
   readonly densidad: Densidad;
   readonly onDensidad: (densidad: Densidad) => void;
+  /** «Advanced» (#447): BPMN ids next to names in the element lists, heading and ⌘K. */
+  readonly avanzado: boolean;
+  readonly onAvanzado: (valor: boolean) => void;
   readonly onTemas: (temas: readonly TemaGuardado[], seleccion?: string) => void;
   readonly onSeleccionar: (id: string) => void;
   readonly abrirAcerca: () => void;
@@ -126,6 +129,15 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
             <select aria-label={S.app.densidad} value={props.densidad} onChange={(e) => props.onDensidad(e.target.value as Densidad)}>
               {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
             </select>
+          </div>
+          <div className="fila">
+            <span>{S.ajustes.avanzado}</span>
+            {/* Not `.campo`: inside a `.fila` that class is a stretched column, and App's tests
+                find the bottleneck switch as the first `.campo.interruptor`. */}
+            <label className="interruptor">
+              <input type="checkbox" checked={props.avanzado} onChange={(e) => props.onAvanzado(e.target.checked)} />
+              {S.ajustes.avanzadoAyuda}
+            </label>
           </div>
         </section>
         <section className="ajustes-panel" role="tabpanel" id="ajustes-panel-apariencia" aria-labelledby="ajustes-tab-apariencia" hidden={seccion !== 'apariencia'}>

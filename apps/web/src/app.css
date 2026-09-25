@@ -1433,8 +1433,10 @@ body {
   margin-left: auto;
 }
 
-.escenario .lista-paso .nombre {
+/* #447: the BPMN id beside a name, only with Settings → «Advanced». */
+.escenario .id {
   color: var(--fg-muted);
+  font-size: 0.9em;
 }
 
 /* #332: la unidad de una duración y la ayuda breve de un campo del escenario. */
@@ -2255,6 +2257,8 @@ body {
    own label. Stretching it to the full grid cell and dropping its own bottom margin (the row
    already carries one) makes every row's control fill the column the same way. */
 .ajustes .fila .campo { align-items: stretch; margin-bottom: 0; }
+/* «Advanced» (#447): checkbox and its text on one line, in the control column. */
+.ajustes .fila .interruptor { align-items: center; color: var(--fg-primary); display: flex; gap: 8px; }
 .ajustes .campo { margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
 

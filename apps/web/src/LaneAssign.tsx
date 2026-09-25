@@ -27,9 +27,11 @@ export interface LaneAssignProps {
   /** IR of the diagram on the canvas; the lanes and the task names come from here. */
   ir: ProcessIR | null;
   ctx: Contexto;
+  /** Settings → «Advanced» (#447): show BPMN ids next to names. */
+  avanzado?: boolean;
 }
 
-export function LaneAssign({ ir, ctx }: LaneAssignProps): React.JSX.Element | null {
+export function LaneAssign({ ir, ctx, avanzado = false }: LaneAssignProps): React.JSX.Element | null {
   const S = useStrings();
   const porCarril = useMemo(() => tasksByLane(ir), [ir]);
   const carriles = [...porCarril.keys()];
@@ -71,7 +73,7 @@ export function LaneAssign({ ir, ctx }: LaneAssignProps): React.JSX.Element | nu
   /** BPMN name of the task, when the IR has one; the id is what the scenario keys by. */
   function nombre(id: string): string | null {
     const texto = ir?.nodes[id]?.name;
-    return texto !== undefined && texto !== '' ? texto : null;
+    return texto !== undefined && texto.trim() !== '' ? texto : null;
   }
 
   return (
@@ -121,9 +123,10 @@ export function LaneAssign({ ir, ctx }: LaneAssignProps): React.JSX.Element | nu
           </p>
           <ul className="ids">
             {pendientes.map((id) => (
-              <li key={id}>
-                {id}
-                {nombre(id) !== null && <span className="nombre"> {nombre(id)}</span>}
+              <li key={id} data-id={id}>
+                {/* #447: the name, or the id without one; the id beside it only with «Advanced». */}
+                {nombre(id) ?? id}
+                {avanzado && nombre(id) !== null && <span className="id mono"> {id}</span>}
               </li>
             ))}
           </ul>

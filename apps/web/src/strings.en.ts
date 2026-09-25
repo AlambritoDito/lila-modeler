@@ -368,6 +368,9 @@ export const en = {
     /** Column headers of the Shortcuts table. */
     accion: 'Action',
     tecla: 'Key',
+    /** General → «Advanced» switch (#447) and the text beside it. */
+    avanzado: 'Advanced',
+    avanzadoAyuda: 'Show BPMN element ids next to names',
   },
 
   /* ------------------------------------------------------------------ *

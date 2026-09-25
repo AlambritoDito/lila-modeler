@@ -57,10 +57,12 @@ export function filtrarComandos(consulta: string, fuentes: readonly Comando[]): 
 
 interface Props {
   comandos: readonly Comando[];
+  /** Settings → «Advanced» (#447). Hidden or not, the search still matches ids. */
+  mostrarIds?: boolean;
   onCerrar: () => void;
 }
 
-export function PaletaComandos({ comandos, onCerrar }: Props): React.JSX.Element {
+export function PaletaComandos({ comandos, mostrarIds = false, onCerrar }: Props): React.JSX.Element {
   const S = useStrings();
   const dialogo = useRef<HTMLDialogElement>(null);
   const campo = useRef<HTMLInputElement>(null);
@@ -156,7 +158,7 @@ export function PaletaComandos({ comandos, onCerrar }: Props): React.JSX.Element
                     >
                       <span className="nombre">{c.nombre}</span>
                       {c.tipo !== undefined && <span className="tipo">{c.tipo}</span>}
-                      {c.id !== undefined && <span className="id mono">{c.id}</span>}
+                      {mostrarIds && c.id !== undefined && c.id !== c.nombre && <span className="id mono">{c.id}</span>}
                       {c.tecla !== undefined && <kbd>{c.tecla}</kbd>}
                     </li>
                   );

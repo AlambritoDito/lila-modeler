@@ -102,7 +102,7 @@ against the token, and dialogs would shrink when the font size is lowered.
 
 `apps/web/src/settings/Ajustes.tsx` is the content of the Settings dialog (artboard 09); the
 `<dialog>` and how it opens (⚙, ⌘, and the native menu) stay in `App.tsx`. It splits into three
-sections behind a left `role="tablist"` nav — **General** (language, density), **Appearance**
+sections behind a left `role="tablist"` nav — **General** (language, density, and **Advanced**, which shows BPMN element ids next to names), **Appearance**
 (theme editor, below) and **Shortcuts** (a read-only table of the current keyboard map) — all
 three mounted at once and toggled with `hidden`, not remounted, so `Apariencia`'s live-preview
 wiring survives switching tabs and a test can reach any control without first clicking through the
