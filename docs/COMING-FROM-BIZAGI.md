@@ -21,7 +21,7 @@ vocabulary and the same order in the **Simulate** view, as four steps:
 | Process validation | Simulate → step 1 | Run start, duration, replications, seed; max arrival count; gateway percentages; model validation |
 | Time analysis | Simulate → step 2 | Interval between arrivals and processing time per element, constant or distribution |
 | Resource analysis | Simulate → step 3 | Resource pools, availability, costs, and which task uses which pool |
-| Calendar analysis | Simulate → step 4 | Calendars as a weekly grid, resource × calendar, capacity per shift |
+| Calendar analysis | Simulate → step 4 | Calendars as day presets + from–to ranges and a weekly grid, resource × calendar, capacity per shift |
 
 Two things work differently from Bizagi, and both in your favour:
 
@@ -118,7 +118,7 @@ per-task assignment for you.
 | Bizagi | Lila |
 |---|---|
 | Calendars | step 4, `calendars`, keyed by name; the key `default` applies to every pool that declares none |
-| Recurrence + start time + duration | one weekly grid: `intervals[]` of days × `from`–`to` (24 h, `to` exclusive) |
+| Recurrence + start time + duration | «Mon–Fri / Every day / Weekend» or any days + from–to, one `intervals[]` entry per range, and a weekly grid to paint (24 h, `to` exclusive, `"24:00"` allowed) |
 | Resource calendar | `calendar` on the pool |
 | «Resource \| Morning \| Day \| Night» quantities | `capacity` as a list of `{ calendar, capacity }`: one pool, capacity per shift |
 | Holidays | reserved, not in v1; so are monthly/annual recurrences, DST and per-calendar time zones |

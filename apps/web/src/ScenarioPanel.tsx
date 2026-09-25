@@ -717,11 +717,12 @@ function esIntervalosCalendario(ruta: Ruta): boolean {
 }
 
 /**
- * La rejilla del artboard 3 más el interruptor a la lista genérica del esquema.
+ * The range picker, the grid of artboard 3 and the toggle to the schema's generic list.
  *
- * La rejilla es una vista **parcial** del formato —su celda es una hora entera y § 2.3 admite
- * cualquier `"HH:MM"`—, así que un calendario con franjas de minutos se edita solo como lista, con
- * el aviso: redondearlo para poder dibujarlo sería cambiar el escenario por enseñarlo.
+ * The grid is a **partial** view of the format —its cell is a whole hour and § 2.3 accepts any
+ * `"HH:MM"`—, so for a calendar with minute slots the grid is hidden, with the warning, and the
+ * range picker and the list keep editing it (#448): rounding it to draw it would change the
+ * scenario just to show it.
  *
  * ponytail: la lista se dibuja llamando al mismo `Campo` con un `sufijo`, que es lo que corta la
  * recursión (la intercepción de arriba solo mira el campo sin sufijo). Un `Campo` que ya sabe
@@ -758,17 +759,17 @@ function CampoIntervalos({
           {enRejilla ? S.escenario.editarComoLista : S.escenario.editarComoRejilla}
         </button>
       )}
+      {/* #448: the range picker and its list stay in both views; only the grid follows the toggle. */}
+      <CalendarEditor
+        intervals={intervals}
+        rejilla={enRejilla}
+        onCambio={(nuevos) => {
+          // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
+          ctx.editar(ruta, nuevos);
+        }}
+      />
       {enRejilla ? (
-        <>
-          <CalendarEditor
-            intervals={intervals}
-            onCambio={(nuevos) => {
-              // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
-              ctx.editar(ruta, nuevos);
-            }}
-          />
-          <Problemas ruta={ruta} ctx={ctx} />
-        </>
+        <Problemas ruta={ruta} ctx={ctx} />
       ) : (
         <Campo esquema={esquema} ruta={ruta} etiqueta="intervals" requerido ctx={ctx} sufijo="-lista" />
       )}

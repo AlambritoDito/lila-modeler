@@ -749,7 +749,8 @@ export const es: Strings = {
     /** `calendars[clave].intervals` (LILA-203): rejilla semanal o lista genérica. */
     editarComoLista: 'Editar como lista',
     editarComoRejilla: 'Editar como rejilla',
-    calendarioConMinutos: 'este calendario tiene franjas de minutos; edítalo como lista',
+    calendarioConMinutos:
+      'este calendario tiene franjas de minutos, que la rejilla no puede mostrar: usa las franjas o la lista',
 
     /** «Asignar carril a pool» (LILA-334): una edición en bloque de `elements[task].resources`. */
     carrilCarril: 'Carril',
@@ -773,6 +774,18 @@ export const es: Strings = {
   calendario: {
     rejilla: 'Horario semanal: días por horas',
     celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Selector de franjas encima de la rejilla (#448). */
+    nuevaFranja: 'Nueva franja horaria',
+    presets: { laborables: 'Lun–Vie', todos: 'Todos', finDeSemana: 'Fin de semana' },
+    dias: { MON: 'Lun', TUE: 'Mar', WED: 'Mié', THU: 'Jue', FRI: 'Vie', SAT: 'Sáb', SUN: 'Dom' },
+    desde: 'Desde',
+    hasta: 'Hasta',
+    formatoHora: 'HH:MM',
+    anadir: 'Añadir franja',
+    lista: 'Franjas actuales',
+    franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
+    quitar: 'Quitar',
+    quitarFranja: (franja: string): string => `Quitar ${franja}`,
   },
 
   /* ------------------------------------------------------------------ *

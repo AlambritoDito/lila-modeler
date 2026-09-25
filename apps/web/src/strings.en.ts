@@ -768,7 +768,7 @@ export const en = {
     /** `calendars[key].intervals` (LILA-203): weekly grid or generic list. */
     editarComoLista: 'Edit as list',
     editarComoRejilla: 'Edit as grid',
-    calendarioConMinutos: 'this calendar has minute slots; edit it as a list',
+    calendarioConMinutos: 'this calendar has minute slots, which the grid cannot show: use the ranges or the list',
 
     /** «Assign lane to pool» (LILA-334): a bulk edit of `elements[task].resources`. */
     carrilCarril: 'Lane',
@@ -792,6 +792,18 @@ export const en = {
   calendario: {
     rejilla: 'Weekly schedule: days by hours',
     celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Range picker above the grid (#448). */
+    nuevaFranja: 'New time range',
+    presets: { laborables: 'Mon–Fri', todos: 'Every day', finDeSemana: 'Weekend' },
+    dias: { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' },
+    desde: 'From',
+    hasta: 'To',
+    formatoHora: 'HH:MM',
+    anadir: 'Add range',
+    lista: 'Current ranges',
+    franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
+    quitar: 'Remove',
+    quitarFranja: (franja: string): string => `Remove ${franja}`,
   },
 
   /* ------------------------------------------------------------------ *
