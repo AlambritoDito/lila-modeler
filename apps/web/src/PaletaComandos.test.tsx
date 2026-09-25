@@ -1,5 +1,8 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
-import { filtrarComandos, type Comando } from './PaletaComandos';
+import { PaletaComandos, filtrarComandos, type Comando } from './PaletaComandos';
 
 const nada = (): void => {};
 const elemento = (nombre: string, id: string, tipo = 'Task'): Comando => ({ grupo: 'elementos', nombre, id, tipo, elegir: nada });
@@ -42,4 +45,23 @@ it('keeps at most 8 elements and 30 rows', () => {
   const filas = filtrarComandos('step', muchos);
   expect(filas.filter((c) => c.grupo === 'elementos')).toHaveLength(8);
   expect(filas).toHaveLength(30);
+});
+
+it.each([false, true])('typing an id finds the element whether or not ids are shown (#447, mostrarIds=%s)', async (mostrarIds) => {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom has no `showModal`/`close`.
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
+  const contenedor = document.createElement('div');
+  document.body.append(contenedor);
+  const raiz = createRoot(contenedor);
+  await act(async () => raiz.render(<PaletaComandos comandos={fuentes} mostrarIds={mostrarIds} onCerrar={nada} />));
+  const campo = contenedor.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => { setter.call(campo, 'task_rev'); campo.dispatchEvent(new Event('input', { bubbles: true })); });
+  const filas = [...contenedor.querySelectorAll('[role="option"]')];
+  expect(filas.map((f) => f.querySelector('.nombre')?.textContent)).toEqual(['Revisión']);
+  expect(filas[0]!.querySelector('.id.mono')?.textContent).toBe(mostrarIds ? 'Task_Rev' : undefined);
+  await act(async () => raiz.unmount());
+  contenedor.remove();
 });

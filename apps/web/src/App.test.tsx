@@ -202,13 +202,14 @@ it('desmontar termina la corrida activa', async () => {
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
 });
 
-// #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo.
-it.each([['Task_Preparar', T.app.nombreDeCuello('Prepare food', 'Task_Preparar')], ['Task_Anonima', 'Task_Anonima']])(
+// #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo. Since #447
+// the id only comes back with «Advanced» (see the «Advanced» test below).
+it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
     await click(T.app.ejecutar);
-    expect(container.textContent).toContain(texto);
+    expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(texto);
   },
 );
 
@@ -255,7 +256,7 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
 
   expect(mocks.abrir).toHaveBeenCalledOnce();
   expect(container.textContent).toContain(T.app.proyectoDemo);
-  expect(container.textContent).toContain(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
+  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe('Prepare food');
   // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
   expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
@@ -1370,6 +1371,33 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(container.querySelector('.paleta input[type="search"]')).toBeNull();
   expect(figuras().find((b) => b.title === T.paleta.figuras.tareaUsuario)).toBeDefined();
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
+});
+
+// #447: Settings → General → «Advanced» brings the BPMN ids back; off by default, remembered.
+it('the «Advanced» switch is off by default, persists as lila.avanzado and survives a remount (#447)', async () => {
+  const general = container.querySelector('#ajustes-panel-general')!;
+  const casilla = (): HTMLInputElement =>
+    [...container.querySelectorAll<HTMLInputElement>('#ajustes-panel-general .interruptor input[type="checkbox"]')]
+      .find((c) => c.closest('.fila')?.textContent?.includes(T.ajustes.avanzado))!;
+  expect(general.textContent).toContain(T.ajustes.avanzadoAyuda);
+  expect(casilla().checked).toBe(false);
+  expect(localStorage.getItem('lila.avanzado')).toBeNull();
+
+  await act(async () => casilla().click());
+  expect(casilla().checked).toBe(true);
+  expect(localStorage.getItem('lila.avanzado')).toBe('1');
+  // The bottleneck line is one of the places the id returns to.
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click(T.app.ejecutar);
+  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
+
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(casilla().checked).toBe(true);
+
+  await act(async () => casilla().click());
+  expect(localStorage.getItem('lila.avanzado')).toBeNull();
 });
 
 // --- Design 2a: scenario rail and resizable right panel ---

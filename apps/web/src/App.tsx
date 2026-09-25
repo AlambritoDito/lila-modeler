@@ -76,11 +76,13 @@ type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: s
  * entre paréntesis solo cuando aporta algo —tareas sin nombre, o ids sanitizados por el motor—,
  * porque sigue siendo la única clave (regla 5 de BACKLOG.md). `undefined` = no hubo cuellos.
  */
-function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
+function nombreDeCuello(id: string | undefined, ir: ProcessIR | null, avanzado: boolean): string | undefined {
   const S = strings();
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
-  return nombre === undefined || nombre === '' || nombre === id ? id : S.app.nombreDeCuello(nombre, id);
+  if (nombre === undefined || nombre === '' || nombre === id) return id;
+  // #447: the id is noise for a student; «Advanced» brings it back.
+  return avanzado ? S.app.nombreDeCuello(nombre, id) : nombre;
 }
 
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
@@ -116,6 +118,8 @@ async function preferencias(): Promise<Ajustes> {
     // Left column widths (#406), same "blank is never saved" rule.
     const paletaAncho = Number(localStorage.getItem('lila.paletaAncho')?.trim() || NaN);
     const railAncho = Number(localStorage.getItem('lila.railAncho')?.trim() || NaN);
+    // «Advanced» (#447): '1' or absent, like `lila.paleta`; anything else reads as off.
+    const avanzado = localStorage.getItem('lila.avanzado') === '1';
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -138,6 +142,7 @@ async function preferencias(): Promise<Ajustes> {
       ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
       ...(Number.isFinite(paletaAncho) ? { paletaAncho } : {}),
       ...(Number.isFinite(railAncho) ? { railAncho } : {}),
+      ...(avanzado ? { avanzado } : {}),
       ...(paneles === null ? {} : { paneles: paneles as NonNullable<Ajustes['paneles']> }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
       ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
@@ -164,6 +169,8 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
     if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
+    if (ajustes.avanzado === true) localStorage.setItem('lila.avanzado', '1');
+    else if (ajustes.avanzado === false) localStorage.removeItem('lila.avanzado');
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
@@ -433,6 +440,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /** Settings → General → «Advanced» (#447): show BPMN ids next to names. Off by default. */
+  const [avanzado, setAvanzado] = useState(false);
   /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
   const [panelAncho, setPanelAncho] = useState(320);
   const arrastre = useRef<{ x: number; ancho: number } | null>(null);
@@ -916,6 +925,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      setAvanzado(guardadas.avanzado === true);
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
       if (typeof guardadas.paletaAncho === 'number') setPaletaAncho(limitar(guardadas.paletaAncho, PALETA_MIN, PALETA_MAX));
       if (typeof guardadas.railAncho === 'number') setRailAncho(limitar(guardadas.railAncho, RAIL_MIN, RAIL_MAX));
@@ -993,6 +1003,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * de deshacer y la selección siguen ahí); lo imperativo —el `title` del minimapa, la animación
    * de tokens, el overlay de cuellos— lo rehacen sus efectos con el idioma en las dependencias.
    */
+  function cambiarAvanzado(valor: boolean): void {
+    setAvanzado(valor);
+    recordar({ avanzado: valor });
+  }
+
   function cambiarIdioma(preferido: Preferencia): void {
     setIdioma(preferido);
     setLocale(preferido);
@@ -1460,6 +1475,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onDuplicar={anadirEscenario}
       ir={ir}
       seleccion={seleccion}
+      avanzado={avanzado}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -1686,6 +1702,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           temas={temas}
           densidad={densidad}
           onDensidad={(d) => setDensidad(d as Densidad)}
+          avanzado={avanzado}
+          onAvanzado={cambiarAvanzado}
           onTemas={guardarTemas}
           onSeleccionar={(id) => void seleccionarTema(id)}
           abrirAcerca={abrirAcerca}
@@ -1693,7 +1711,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         />
       </dialog>
 
-      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} onCerrar={() => setPaletaAbierta(false)} />}
+      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} mostrarIds={avanzado} onCerrar={() => setPaletaAbierta(false)} />}
 
       {ventanaAcerca !== null && (
         <VentanaFlotante
@@ -1914,7 +1932,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <p className="vacio">
               {corrida === null
                 ? S.app.cuellosSinCorrida
-                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
+                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir, avanzado) ??
                   S.app.cuellosSinEspera)}
             </p>
             {ventanaEscenario === null ? panelEscenario : (

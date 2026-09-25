@@ -351,6 +351,8 @@ export const es: Strings = {
     /** Cabeceras de columna de la tabla de Atajos. */
     accion: 'Acción',
     tecla: 'Tecla',
+    avanzado: 'Avanzado',
+    avanzadoAyuda: 'Mostrar los ids BPMN de los elementos junto a sus nombres',
   },
 
   /* ------------------------------------------------------------------ *

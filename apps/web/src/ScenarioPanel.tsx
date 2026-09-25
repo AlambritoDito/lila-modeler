@@ -1350,12 +1350,50 @@ export function claseDeElemento(ir: ProcessIR | null, id: string | null): ClaseE
   return ir.nodes[id]?.type ?? null;
 }
 
-/** Lo que se lee de un flujo: su nombre BPMN si lo tiene, y si no el de su destino; más el id. */
-function rotuloFlujo(ir: ProcessIR, S: ReturnType<typeof useStrings>, id: string): string {
+/**
+ * What a flow reads: its BPMN name if it has one, else its target's; the id when there is neither,
+ * and next to the name only with «Advanced» (#447).
+ */
+function rotuloFlujo(ir: ProcessIR, S: ReturnType<typeof useStrings>, id: string, avanzado: boolean): string {
   const flujo = ir.flows[id];
   if (flujo === undefined) return id;
   const nombre = flujo.name !== '' ? flujo.name : (ir.nodes[flujo.to]?.name ?? '');
-  return nombre === '' ? id : `${nombre}${S.escenario.nombreEntreParentesis(id)}`;
+  if (nombre === '') return id;
+  return avanzado ? `${nombre}${S.escenario.nombreEntreParentesis(id)}` : nombre;
+}
+
+/** #447: what an element reads — its name, or its id when it has none — plus the id with «Advanced». */
+interface Rotulo {
+  readonly principal: string;
+  readonly id?: string;
+}
+
+/**
+ * A row that selects an element. `data-id` is the key (tests and QA click by it), so the visible
+ * text is free to be the name; the id, when shown, goes in its own mono span.
+ */
+function BotonElemento({
+  id,
+  rotulo,
+  onSeleccionar,
+}: {
+  id: string;
+  rotulo: Rotulo;
+  onSeleccionar: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="enlace"
+      data-id={id}
+      onClick={() => {
+        onSeleccionar(id);
+      }}
+    >
+      {rotulo.principal}
+      {rotulo.id !== undefined && <span className="id mono"> {rotulo.id}</span>}
+    </button>
+  );
 }
 
 /**
@@ -1377,11 +1415,13 @@ function VistaCompuerta({
   id,
   clase,
   ctx,
+  avanzado,
 }: {
   ir: ProcessIR;
   id: string;
   clase: ClaseElemento;
   ctx: Contexto;
+  avanzado: boolean;
 }): React.JSX.Element {
   const S = useStrings();
   const salientes = ir.nodes[id]?.outgoing ?? [];
@@ -1421,7 +1461,7 @@ function VistaCompuerta({
         if (ir.flows[flujo]?.isDefault === true) {
           return (
             <div key={flujo} className="campo-schema">
-              <span className="etiqueta">{rotuloFlujo(ir, S, flujo)}</span>
+              <span className="etiqueta">{rotuloFlujo(ir, S, flujo, avanzado)}</span>
               <span className="aviso">{S.escenario.compuertaPorDefecto}</span>
               {implicito}
             </div>
@@ -1429,7 +1469,7 @@ function VistaCompuerta({
         }
         return (
           <div key={flujo} className="campo-schema">
-            <label htmlFor={idCampo}>{rotuloFlujo(ir, S, flujo)}</label>
+            <label htmlFor={idCampo}>{rotuloFlujo(ir, S, flujo, avanzado)}</label>
             <EntradaNumero
               valor={leer(ctx.resuelto, ruta)}
               ruta={ruta}
@@ -1549,20 +1589,19 @@ function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>): stri
  * actually have while filling in a level. A row selects the element on the canvas, so the list is
  * also a way of walking the diagram without hunting for boxes.
  *
- * The button's text is the **id** and only the id: it is the key of the scenario, and it is what
- * the tests and the e2e click by.
+ * Each row reads the element's name (#447); `BotonElemento` keeps the id as its `data-id`.
  */
 function ListaElementos({
   titulo,
   ids,
-  nombre,
+  rotulo,
   resumen,
   seleccion,
   onSeleccionar,
 }: {
   titulo: string;
   ids: readonly string[];
-  nombre: (id: string) => string | null;
+  rotulo: (id: string) => Rotulo;
   resumen: (id: string) => string;
   seleccion: string | null;
   onSeleccionar: (id: string) => void;
@@ -1574,16 +1613,7 @@ function ListaElementos({
       <ul className="ids">
         {ids.map((id) => (
           <li key={id} className={id === seleccion ? 'activa' : undefined}>
-            <button
-              type="button"
-              className="enlace"
-              onClick={() => {
-                onSeleccionar(id);
-              }}
-            >
-              {id}
-            </button>
-            {nombre(id) !== null && <span className="nombre"> {nombre(id)}</span>}
+            <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
             <span className="resumen">{resumen(id)}</span>
           </li>
         ))}
@@ -1679,6 +1709,8 @@ export interface ScenarioPanelProps {
   /** Id del elemento seleccionado en el lienzo, o `null`. */
   seleccion: string | null;
   onSeleccionar: (id: string | null) => void;
+  /** Settings → «Advanced» (#447): show BPMN ids next to names. */
+  avanzado?: boolean;
   /** Drawn inside the detached window (design 2c): Duplicate and Save move to a footer. */
   enVentana?: boolean;
 }
@@ -1692,6 +1724,7 @@ export function ScenarioPanel({
   ir,
   seleccion,
   onSeleccionar,
+  avanzado = false,
   enVentana = false,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
@@ -1834,14 +1867,19 @@ export function ScenarioPanel({
    * pedir nada nuevo a A (OP-13 conecta el `ir` vigente, este panel solo lo lee). `null` sin IR o
    * con un id que no aparece en él (el diagrama no se ha parseado, o el elemento ya no existe).
    *
-   * Se enseña **junto** al botón que selecciona el id, no dentro de su texto: los gestos de test
-   * seleccionan por el texto exacto del botón (`pulsar('Task_TomarPedido')`), y es también lo que
-   * hace bpmn-js al resaltar el elemento del lienzo — el nombre es contexto para la persona, el id
-   * sigue siendo la única clave que el resto del panel entiende.
+   * The id is still the only key the rest of the panel understands; since #447 the name is what
+   * the person reads and the id goes to the button's `data-id` (see `rotulo`).
    */
   function nombreElemento(id: string): string | null {
     const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name;
     return nombre !== undefined && nombre !== '' ? nombre : null;
+  }
+
+  /** #447: the name, or the id without one; with «Advanced», the id as well. */
+  function rotulo(id: string): Rotulo {
+    const nombre = nombreElemento(id);
+    if (nombre === null) return { principal: id };
+    return avanzado ? { principal: nombre, id } : { principal: nombre };
   }
 
   /** The ids of the IR whose node type is one of `tipos`, in the order the diagram declares. */
@@ -1939,25 +1977,17 @@ export function ScenarioPanel({
           <ul className="ids">
             {Object.keys(elementos).map((id) => (
               <li key={id}>
-                <button
-                  type="button"
-                  className="enlace"
-                  onClick={() => {
-                    onSeleccionar(id);
-                  }}
-                >
-                  {id}
-                </button>
-                {nombreElemento(id) !== null && <span className="nombre"> {nombreElemento(id)}</span>}
+                <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
               </li>
             ))}
           </ul>
         ) : (
           <>
             <p className="vacio">
-              {idSeleccionado}
-              {nombreElemento(idSeleccionado) !== null &&
-                S.escenario.nombreEntreParentesis(nombreElemento(idSeleccionado)!)}
+              {rotulo(idSeleccionado).principal}
+              {rotulo(idSeleccionado).id !== undefined && (
+                <span className="id mono">{S.escenario.nombreEntreParentesis(idSeleccionado)}</span>
+              )}
             </p>
             <Propiedades
               esquema={esquemaEntrada(esquemaDe('elements'))}
@@ -1970,7 +2000,7 @@ export function ScenarioPanel({
             {/* The gateway is where the branching is parameterised, and branching is step 1:
                 what a gateway needs to be runnable is that its outgoing flows add up. */}
             {paso === 'validation' && ir !== null && (clase === 'xor' || clase === 'or') && (
-              <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} />
+              <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} avanzado={avanzado} />
             )}
           </>
         )}
@@ -1982,7 +2012,7 @@ export function ScenarioPanel({
           <ListaElementos
             titulo={S.escenario.listaTiempos}
             ids={idsPorTipo(['start', 'task', 'timer'])}
-            nombre={nombreElemento}
+            rotulo={rotulo}
             resumen={(id) => {
               const campo = ir?.nodes[id]?.type === 'start' ? 'interTriggerTimer' : 'processingTime';
               return resumenDistribucion(
@@ -2001,7 +2031,7 @@ export function ScenarioPanel({
           <ListaElementos
             titulo={S.escenario.listaRecursos}
             ids={idsPorTipo(['task'])}
-            nombre={nombreElemento}
+            rotulo={rotulo}
             resumen={(id) => resumenRecursos(leer(resuelto, ['elements', id, 'resources']), S)}
             seleccion={idSeleccionado}
             onSeleccionar={onSeleccionar}

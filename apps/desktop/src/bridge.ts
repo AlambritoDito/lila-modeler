@@ -164,6 +164,8 @@ export interface Ajustes {
   readonly paletaAncho?: number;
   /** Width of the scenario rail in Simulate, in px (#406); the renderer clamps it to 160–320. */
   readonly railAncho?: number;
+  /** Settings → General → «Advanced» (#447): BPMN ids shown next to names. Absent means off. */
+  readonly avanzado?: boolean;
   /**
    * Which regions are shown, per mode (#412). Always written whole: `withAjustes` merges shallowly,
    * so a partial map would forget the other modes. A missing field means visible.

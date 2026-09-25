@@ -101,7 +101,7 @@ token y los diálogos encogerían al bajar la letra.
 `apps/web/src/settings/Ajustes.tsx` es el contenido del diálogo de Ajustes (artboard 09); el
 `<dialog>` y su apertura (⚙, ⌘, y el menú nativo) se quedan en `App.tsx`. Se divide en tres
 secciones detrás de una navegación `role="tablist"` a la izquierda — **General** (idioma,
-densidad), **Apariencia** (el editor de temas, abajo) y **Atajos** (una tabla de solo lectura con
+densidad y **Avanzado**, que muestra los ids BPMN de los elementos junto a sus nombres), **Apariencia** (el editor de temas, abajo) y **Atajos** (una tabla de solo lectura con
 el mapa de teclado actual) — las tres montadas a la vez y alternadas con `hidden`, no
 desmontadas, así la vista previa en caliente de `Apariencia` sobrevive a cambiar de pestaña y un
 test llega a cualquier control sin tener que pasar antes por la navegación. General es la sección

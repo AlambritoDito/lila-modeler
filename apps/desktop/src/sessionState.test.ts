@@ -215,6 +215,12 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ paletaAncho: '200', railAncho: Number.NaN })).toEqual({});
   });
 
+  it('avanzado (#447) is kept only as a boolean', () => {
+    expect(parseAjustes({ avanzado: true })).toEqual({ avanzado: true });
+    expect(parseAjustes({ avanzado: false })).toEqual({ avanzado: false });
+    expect(parseAjustes({ avanzado: '1' })).toEqual({});
+  });
+
   it('paneles (#412) keeps only plain per-mode objects with the four boolean fields', () => {
     expect(parseAjustes({ paneles: {
       modelar: { izquierda: false, derecha: true, diagramas: 'no', estado: false, extra: false },

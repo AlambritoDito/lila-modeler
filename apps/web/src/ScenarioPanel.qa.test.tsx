@@ -123,10 +123,11 @@ function elegir(id: string, valor: string): void {
   });
 }
 
+/** An element row by its id (`data-id`, #447), else any button by its exact text. */
 function boton(texto: string): HTMLButtonElement {
-  const encontrado = [...document.querySelectorAll('button')].find(
-    (b) => b.textContent?.trim() === texto,
-  );
+  const encontrado =
+    document.querySelector<HTMLButtonElement>(`button[data-id="${texto}"]`) ??
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto);
   if (encontrado === undefined) throw new Error(`no hay botón «${texto}»`);
   return encontrado;
 }

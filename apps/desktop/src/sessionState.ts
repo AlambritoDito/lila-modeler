@@ -83,6 +83,7 @@ export function parseAjustes(value: unknown): Ajustes {
     panelAncho?: number;
     paletaAncho?: number;
     railAncho?: number;
+    avanzado?: boolean;
     paneles?: Record<string, VisibilidadPaneles>;
     ventanaEscenario?: WindowBounds;
   } = {};
@@ -97,6 +98,8 @@ export function parseAjustes(value: unknown): Ajustes {
   // Left column widths (#406): the palette's 180–360 px and the rail's 160–320 px.
   if (typeof value.paletaAncho === 'number' && value.paletaAncho >= 180 && value.paletaAncho <= 360) ajustes.paletaAncho = value.paletaAncho;
   if (typeof value.railAncho === 'number' && value.railAncho >= 160 && value.railAncho <= 320) ajustes.railAncho = value.railAncho;
+  // «Advanced» (#447): a plain on/off switch.
+  if (typeof value.avanzado === 'boolean') ajustes.avanzado = value.avanzado;
   const paneles = parsePaneles(value.paneles);
   if (paneles !== undefined) ajustes.paneles = paneles;
   // Geometry of the detached scenario window (design 2c), no smaller than its `minWidth`/`minHeight`
