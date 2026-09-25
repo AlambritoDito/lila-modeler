@@ -55,11 +55,17 @@ const KARAOKE_LINEA_3 = '"La Mente Maestra"';
 const KARAOKE_PALABRAS_1 = KARAOKE_LINEA_1.split(' ');
 const KARAOKE_PALABRAS_2 = KARAOKE_LINEA_2.split(' ');
 
-/** Milisegundos entre el inicio de cada palabra («staggered») y cuánto tarda en caer cada una. */
-const KARAOKE_RETRASO_MS = 180;
-const KARAOKE_DURACION_MS = 250;
+/**
+ * Milliseconds between the start of each word («staggered») and how long each one takes to fall.
+ * Owner request #446 (2026-09-25): half speed — was 180/250/400 — because the original speed
+ * could not be read. `KARAOKE_DURACION_MS` is no longer dead data: it is now sent as an inline
+ * `animationDuration` on every `.karaoke-palabra` (the CSS used to carry a fixed `250ms` in
+ * `karaoke-caida`, see `app.css`). `KARAOKE_RETRASO_MS` is exported for the test.
+ */
+export const KARAOKE_RETRASO_MS = 360;
+const KARAOKE_DURACION_MS = 500;
 /** La línea épica cae la última, con una animación algo más larga que las palabras sueltas. */
-const KARAOKE_DURACION_EPICA_MS = 400;
+const KARAOKE_DURACION_EPICA_MS = 800;
 /** Cuánto se sostiene la última línea en pantalla antes de abrir el enlace y quitar el overlay. */
 const KARAOKE_ESPERA_MS = 1500;
 const KARAOKE_TOTAL_PALABRAS = KARAOKE_PALABRAS_1.length + KARAOKE_PALABRAS_2.length;
@@ -98,12 +104,12 @@ export function Karaoke({ onTerminar }: { readonly onTerminar: () => void }) {
     <div className="karaoke" role="presentation" aria-live="polite">
       <p className="karaoke-linea">
         {KARAOKE_PALABRAS_1.map((palabra, i) => (
-          <span key={i} className="karaoke-palabra" style={{ animationDelay: `${i * KARAOKE_RETRASO_MS}ms` }}>{palabra}</span>
+          <span key={i} className="karaoke-palabra" style={{ animationDelay: `${i * KARAOKE_RETRASO_MS}ms`, animationDuration: `${KARAOKE_DURACION_MS}ms` }}>{palabra}</span>
         ))}
       </p>
       <p className="karaoke-linea">
         {KARAOKE_PALABRAS_2.map((palabra, i) => (
-          <span key={i} className="karaoke-palabra" style={{ animationDelay: `${(KARAOKE_PALABRAS_1.length + i) * KARAOKE_RETRASO_MS}ms` }}>{palabra}</span>
+          <span key={i} className="karaoke-palabra" style={{ animationDelay: `${(KARAOKE_PALABRAS_1.length + i) * KARAOKE_RETRASO_MS}ms`, animationDuration: `${KARAOKE_DURACION_MS}ms` }}>{palabra}</span>
         ))}
       </p>
       <p className="karaoke-epica" style={{ animationDelay: `${KARAOKE_RETRASO_EPICA_MS}ms`, animationDuration: `${KARAOKE_DURACION_EPICA_MS}ms` }}>
