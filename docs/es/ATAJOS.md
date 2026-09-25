@@ -94,6 +94,12 @@ navegador) se los queda el navegador antes de que la página los vea, y la app w
 la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
 los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
 
+En la app de escritorio `⌘W`/`Ctrl+W` cierra la ventana enfocada (Acerca de o la ventana
+desacoplada del escenario, solas; la principal pregunta antes si hay cambios sin guardar y, como su
+botón rojo, cierra la app) y `⌘Q`/`Ctrl+Q` sale (en Windows, el botón de cerrar de la ventana o
+`Alt+F4`). Las dos vienen de los roles del menú nativo, así que no están en el mapa de arriba y un
+navegador se las queda.
+
 La ventana desacoplada del escenario reenvía `⌘S` y `⇧⌘S` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
 
 [English version](../SHORTCUTS.md)

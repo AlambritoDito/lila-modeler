@@ -5,16 +5,22 @@ All notable changes to Lila Modeler are documented here. The format follows
 
 ## [1.0.0-beta.7] - 2026-09-25
 
-Close window and quit from the keyboard in the desktop app: File gains the native «Close Window»
-entry (⌘W / Ctrl+W) and ⌘Q keeps quitting from the application menu. No installer is attached to
+Close window and quit from the keyboard in the desktop app on macOS: File gains the native «Close
+Window» entry (⌘W) and ⌘Q keeps quitting from the application menu. No installer is attached to
 this version.
 
 ### Added
 
-- **Close window and quit from the keyboard in the desktop app**: File gets the native
-  «Close Window» entry (⌘W / Ctrl+W), which closes the focused window (main, About or the detached
-  scenario) through the same unsaved-changes guard as the red button; ⌘Q quits as before from the
-  application menu. Documented in `docs/SHORTCUTS.md`. No installer is attached to this version.
+- **Close Window (⌘W) on macOS**: the File menu ends with Electron's `close` role, which closes
+  the focused window (About or the detached scenario on their own; the main window asks first
+  when there are unsaved changes and, like its red button, quits the app). Windows and Linux
+  already had Close (Ctrl+W) in their Window menu, so nothing is duplicated there. ⌘Q / Ctrl+Q
+  keep their `quit` role, now covered by a test. Documented in `docs/SHORTCUTS.md`.
+
+### Fixed
+
+- The MCP server reported `1.0.0-beta.6` in `serverInfo.version` while the package was already
+  beta.7: the constant in `packages/mcp/src/server.ts` is bumped with the rest.
 
 ## [1.0.0-beta.6] - 2026-09-24
 

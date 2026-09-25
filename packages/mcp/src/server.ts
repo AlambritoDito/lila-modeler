@@ -50,7 +50,7 @@ import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 
 const NAME = 'lila-mcp';
-const VERSION = '1.0.0-beta.6';
+const VERSION = '1.0.0-beta.7';
 
 /** Idioma por llamada: sobrescribe el del servidor solo para esa respuesta. */
 const localeSchema = z
