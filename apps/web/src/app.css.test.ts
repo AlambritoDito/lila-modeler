@@ -377,3 +377,31 @@ it('a `.fila` cell can shrink below its control\'s content size, so a long theme
   // name's `<select>`/`<input>` widens the shared `1fr` track past the panel.
   expect(bloqueDeLinea('.ajustes .fila > *')).toContain('min-width: 0');
 });
+
+it('the chrome is not text-selectable, but content still is (#463)', () => {
+  // One rule, one region each — not one per element — so this reads the whole comma-list rule
+  // rather than a single selector's own `{…}` (`bloque()`/`bloqueDeLinea()` need the selector
+  // immediately before the brace, which only the last item in the list satisfies).
+  const inicio = appCss.indexOf('chrome no seleccionable');
+  expect(inicio).toBeGreaterThanOrEqual(0);
+  const apertura = appCss.indexOf('{', inicio);
+  const cierre = appCss.indexOf('}', apertura);
+  const cuerpo = appCss.slice(inicio, cierre);
+
+  for (const region of [
+    '.barra', '.menu-archivo', '.menu-vista', '.vista-grupo', '.paleta', '.rail-escenarios',
+    '.modos', '.pestanas', '.estado', '.ajustes-nav', '.escenario summary', '.paleta-grupos summary',
+    '.ajustes .grupo > summary', '.boton', '.chips-validacion', '.calendario',
+  ]) {
+    expect(cuerpo).toContain(region);
+  }
+  expect(cuerpo).toContain('user-select: none');
+  expect(cuerpo).toContain('-webkit-user-select: none');
+
+  // Content the owner explicitly wants to keep selectable — inputs/textarea by definition,
+  // the scenario JSON view, results/compare tables, validation messages, About, the shortcuts
+  // table — must not be swept in by a wider rule.
+  for (const contenido of ['.json-escenario', '.zona-resultados', '.escenario .error', '.escenario .aviso', '.acerca', '.ajustes-atajos-grupo', 'body', '.app {', '.lienzo']) {
+    expect(cuerpo).not.toContain(contenido);
+  }
+});

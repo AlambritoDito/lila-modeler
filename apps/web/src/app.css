@@ -2332,7 +2332,9 @@ body {
   overflow: hidden;
 }
 .karaoke-linea { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em; margin: 0; max-width: 60rem; font-size: clamp(1.1rem, 3vw, 1.7rem); font-weight: 500; }
-.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida 250ms ease-out both; }
+/* No fixed duration here (#446): `About.tsx` sends `animationDuration` inline from
+   `KARAOKE_DURACION_MS`, which the inline style always wins over this shorthand for. */
+.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida ease-out both; }
 /* «La Mente Maestra» cae la última, mucho más grande y con brillo del acento (pedido del dueño). */
 .karaoke-epica {
   margin: 0;
@@ -2541,4 +2543,32 @@ body {
 
 .escenario-pie .boton:not(.primario) {
   background: none;
+}
+
+/* ---------- chrome no seleccionable (#463) ---------- */
+
+/* Owner request: dragging or ⌘A over the app's chrome (top bar, menus, scenario rail, mode tabs,
+   palette, collapsible summaries, buttons, validation chips, the calendar grid) selected its
+   text, which got in the way of lasso-selecting on the canvas and does not happen in native apps
+   or Bizagi. One rule per region, not per element; nothing global or on `.app`, so content is
+   untouched: inputs/textarea, the scenario JSON view, the results/compare tables, validation
+   messages, About and the shortcuts table stay selectable (people copy those). */
+.barra,
+.menu-archivo,
+.menu-vista,
+.vista-grupo,
+.paleta,
+.rail-escenarios,
+.modos,
+.pestanas,
+.estado,
+.ajustes-nav,
+.escenario summary,
+.paleta-grupos summary,
+.ajustes .grupo > summary,
+.boton,
+.chips-validacion,
+.calendario {
+  user-select: none;
+  -webkit-user-select: none;
 }
