@@ -134,6 +134,24 @@
     drawTerm();
   }));
 
+  // --- Hero glow: follows the pointer (mouse, pen or finger) and returns to its spot on leave ---
+  const hero = $('.hero');
+  const point = (e) => {
+    const r = hero.getBoundingClientRect(), x = `${e.clientX - r.left}px`, y = `${e.clientY - r.top}px`;
+    hero.classList.add('pointing');
+    hero.style.setProperty('--gx', x); hero.style.setProperty('--gy', y);
+    hero.style.setProperty('--px', x); hero.style.setProperty('--py', y);
+  };
+  const leave = () => { hero.classList.remove('pointing'); hero.style.removeProperty('--gx'); hero.style.removeProperty('--gy'); };
+  hero.addEventListener('pointermove', point);
+  hero.addEventListener('pointerdown', point);
+  hero.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') leave(); });
+  // A finger lifts (or starts scrolling) right away: let the glow linger where it was touched.
+  let linger;
+  const later = (e) => { if (e.pointerType !== 'mouse') { clearTimeout(linger); linger = setTimeout(leave, 1400); } };
+  hero.addEventListener('pointerup', later);
+  hero.addEventListener('pointercancel', later);
+
   // --- KPI bars: grow when the section scrolls into view --------------------------------------
   new IntersectionObserver((es, o) => { if (es.some((e) => e.isIntersecting)) { $('#kpis').classList.add('on'); o.disconnect(); } }, { threshold: 0.3 }).observe($('#kpis'));
 

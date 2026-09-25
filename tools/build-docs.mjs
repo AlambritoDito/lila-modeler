@@ -56,7 +56,11 @@ function slugger() {
 
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Drops the Markdown's "Read this in / Leer en" line: the site header already links the translation. */
+export const stripLangLine = (markdown) => markdown.replace(/^> (Read this in|Leer en):.*\n+/m, '');
+
 function render(markdown, from, published) {
+  markdown = stripLangLine(markdown);
   const slug = slugger();
   const toc = [];
   const marked = new Marked({

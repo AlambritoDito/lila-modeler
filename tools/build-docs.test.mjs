@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { counterpart, rewriteHref, sidebar } from './build-docs.mjs';
+import { counterpart, rewriteHref, sidebar, stripLangLine } from './build-docs.mjs';
 
 const BLOB = 'https://github.com/AlambritoDito/lila-modeler/blob/main/';
 const published = new Set(['PROJECT_FORMAT.md', 'es/SEMANTICS.md', 'SEMANTICS.md']);
@@ -37,5 +37,13 @@ describe('sidebar and counterpart', () => {
     expect(counterpart('es/ATAJOS.md', published)).toBe('SHORTCUTS.md');
     expect(counterpart('SCENARIO_FORMAT.md', published)).toBe('es/index');
     expect(counterpart('index', published)).toBe('es/index');
+  });
+});
+
+describe('stripLangLine', () => {
+  it('removes the Markdown language switch, which the site header replaces', () => {
+    expect(stripLangLine('# T\n\n> Read this in: [Español](es/T.md)\n\nBody')).toBe('# T\n\nBody');
+    expect(stripLangLine('# T\n\n> Leer en: [English](../T.md)\n\nCuerpo')).toBe('# T\n\nCuerpo');
+    expect(stripLangLine('> Note: keep me')).toBe('> Note: keep me');
   });
 });
