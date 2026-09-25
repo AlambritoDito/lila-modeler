@@ -758,17 +758,17 @@ function CampoIntervalos({
           {enRejilla ? S.escenario.editarComoLista : S.escenario.editarComoRejilla}
         </button>
       )}
+      {/* #448: the range picker and its list stay in both views; only the grid follows the toggle. */}
+      <CalendarEditor
+        intervals={intervals}
+        rejilla={enRejilla}
+        onCambio={(nuevos) => {
+          // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
+          ctx.editar(ruta, nuevos);
+        }}
+      />
       {enRejilla ? (
-        <>
-          <CalendarEditor
-            intervals={intervals}
-            onCambio={(nuevos) => {
-              // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
-              ctx.editar(ruta, nuevos);
-            }}
-          />
-          <Problemas ruta={ruta} ctx={ctx} />
-        </>
+        <Problemas ruta={ruta} ctx={ctx} />
       ) : (
         <Campo esquema={esquema} ruta={ruta} etiqueta="intervals" requerido ctx={ctx} sufijo="-lista" />
       )}

@@ -13,7 +13,7 @@
  *    puras. Pintar es un `add`/`delete` en un `Set`; los `intervals` se recalculan enteros en cada
  *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
  */
-import { Fragment, useRef } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useStrings } from './i18n';
 
 /** Orden canónico del formato; es también el orden en el que sale `days`. */
@@ -109,6 +109,192 @@ export function aCeldas(intervals: readonly Intervalo[]): Set<number> {
 
 const HORAS = [...Array.from({ length: 24 }).keys()];
 
+/** The engine's own patterns (`scenario.ts`, R13): `"24:00"` closes a day and never opens one. */
+const HHMM_FROM = '([01]\\d|2[0-3]):[0-5]\\d';
+const HHMM_TO = `${HHMM_FROM}|24:00`;
+
+/** Day presets of the range picker (#448), the Bizagi «recurrence» in one click. */
+const PRESETS = {
+  laborables: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+  todos: [...DIAS],
+  finDeSemana: ['SAT', 'SUN'],
+} as const satisfies Record<string, readonly Dia[]>;
+
+/**
+ * The range to add, or `null` while the form does not describe a valid interval (#448). The text
+ * is written exactly as typed: `"09:30"` stays `"09:30"` (§ 2.3, no rounding) and `"9:00"`, which
+ * the validator would reject, keeps the button disabled instead of being fixed behind the user's
+ * back. `to > from` compares as text, which is what the engine does too.
+ */
+export function franjaNueva(dias: ReadonlySet<Dia>, from: string, to: string): Intervalo | null {
+  const valida =
+    dias.size > 0 &&
+    new RegExp(`^(${HHMM_FROM})$`).test(from) &&
+    new RegExp(`^(${HHMM_TO})$`).test(to) &&
+    to > from;
+  return valida ? { days: DIAS.filter((d) => dias.has(d)), from, to } : null;
+}
+
+/**
+ * `days` for the list, with runs of three or more consecutive days as a span: `Mon–Fri`,
+ * `Mon, Wed`, `Mon–Wed, Sat`. Anything that is not a format day is shown as written (the
+ * validator already flags it).
+ */
+export function resumenDias(days: readonly string[], nombres: Readonly<Record<Dia, string>>): string {
+  const indices = [...new Set(days.map((d) => DIAS.indexOf(d as Dia)))].sort((a, b) => a - b);
+  if (indices.includes(-1)) return days.join(', ');
+  const tramos: number[][] = [];
+  for (const i of indices) {
+    const ultimo = tramos.at(-1);
+    if (ultimo !== undefined && ultimo.at(-1) === i - 1) ultimo.push(i);
+    else tramos.push([i]);
+  }
+  return tramos
+    .flatMap((t) =>
+      t.length >= 3 ? [`${nombres[DIAS[t[0]!]!]}–${nombres[DIAS[t.at(-1)!]!]}`] : t.map((i) => nombres[DIAS[i]!]),
+    )
+    .join(', ');
+}
+
+/**
+ * Day chips, per-day checkboxes, from/to and «Add range» above the grid (#448). Adding appends
+ * one entry and never merges it with the others: the list below is the file as written, and the
+ * grid keeps showing the union (§ 2.3).
+ */
+function Franjas({
+  intervals,
+  onCambio,
+}: {
+  intervals: readonly Intervalo[];
+  onCambio: (intervals: Intervalo[]) => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const [dias, setDias] = useState<ReadonlySet<Dia>>(new Set(PRESETS.laborables));
+  const [from, setFrom] = useState('09:00');
+  const [to, setTo] = useState('18:00');
+  const nueva = franjaNueva(dias, from, to);
+  const iguales = (preset: readonly Dia[]): boolean =>
+    preset.length === dias.size && preset.every((d) => dias.has(d));
+
+  return (
+    <div className="franjas" role="group" aria-label={S.calendario.nuevaFranja}>
+      <div className="franjas-presets">
+        {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((clave) => (
+          <button
+            key={clave}
+            type="button"
+            className="chip"
+            aria-pressed={iguales(PRESETS[clave])}
+            onClick={() => {
+              setDias(new Set(PRESETS[clave]));
+            }}
+          >
+            {S.calendario.presets[clave]}
+          </button>
+        ))}
+      </div>
+      <div className="franjas-dias">
+        {DIAS.map((dia) => (
+          <label key={dia}>
+            <input
+              type="checkbox"
+              checked={dias.has(dia)}
+              onChange={() => {
+                const otros = new Set(dias);
+                if (otros.has(dia)) otros.delete(dia);
+                else otros.add(dia);
+                setDias(otros);
+              }}
+            />
+            {S.calendario.dias[dia]}
+          </label>
+        ))}
+      </div>
+      <div className="franjas-horas">
+        {/* Text, not `type="time"`: a time input cannot hold `"24:00"`. */}
+        <label>
+          {S.calendario.desde}
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern={HHMM_FROM}
+            placeholder={S.calendario.formatoHora}
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+            }}
+          />
+        </label>
+        <label>
+          {S.calendario.hasta}
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern={HHMM_TO}
+            placeholder={S.calendario.formatoHora}
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="boton"
+          disabled={nueva === null}
+          onClick={() => {
+            if (nueva !== null) onCambio([...intervals, nueva]);
+          }}
+        >
+          {S.calendario.anadir}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The current intervals as written, with remove. It goes **below** the grid: painting adds or
+ * drops rows here, and above the grid that would push the cells down under the pointer mid-drag.
+ */
+function ListaFranjas({
+  intervals,
+  onCambio,
+}: {
+  intervals: readonly Intervalo[];
+  onCambio: (intervals: Intervalo[]) => void;
+}): React.JSX.Element | null {
+  const S = useStrings();
+  if (intervals.length === 0) return null;
+  const rotulo = (intervalo: Intervalo): string =>
+    S.calendario.franja(
+      resumenDias(Array.isArray(intervalo.days) ? intervalo.days : [], S.calendario.dias),
+      String(intervalo.from),
+      String(intervalo.to),
+    );
+  return (
+    <ul className="franjas-lista" aria-label={S.calendario.lista}>
+      {intervals.map((intervalo, k) => (
+        // ponytail: index keys. The list is re-derived from the file on every change and has no
+        // per-row state; stable ids would need a field the format does not have.
+        <li key={k}>
+          <span className="mono">{rotulo(intervalo)}</span>
+          <button
+            type="button"
+            className="enlace"
+            aria-label={S.calendario.quitarFranja(rotulo(intervalo))}
+            onClick={() => {
+              onCambio(intervals.filter((_, i) => i !== k));
+            }}
+          >
+            {S.calendario.quitar}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * La rejilla. Se pinta con eventos de puntero nativos —`pointerdown` marca el sentido (abrir si la
  * celda estaba cerrada, cerrar si estaba abierta) y `pointerenter` con el botón pulsado lo repite—,
@@ -120,9 +306,12 @@ const HORAS = [...Array.from({ length: 24 }).keys()];
 export function CalendarEditor({
   intervals,
   onCambio,
+  rejilla = true,
 }: {
   intervals: readonly Intervalo[];
   onCambio: (intervals: Intervalo[]) => void;
+  /** `false` hides the grid (the panel's «Edit as list»); minute slots hide it regardless. */
+  rejilla?: boolean;
 }): React.JSX.Element {
   const S = useStrings();
   const celdas = aCeldas(intervals);
@@ -147,61 +336,67 @@ export function CalendarEditor({
   }
 
   return (
-    <div
-      className="calendario"
-      role="group"
-      aria-label={S.calendario.rejilla}
-      onPointerUp={() => {
-        sentido.current = null;
-        trazo.current = null;
-      }}
-      onPointerLeave={() => {
-        sentido.current = null;
-        trazo.current = null;
-      }}
-    >
-      <span />
-      {HORAS.filter((hora) => hora % 3 === 0).map((hora) => (
-        // Un rótulo cada tres horas, ocupando las tres columnas: con 24 columnas de 8 px una cifra
-        // de dos dígitos no cabe en la suya y se pisaría con la siguiente.
-        <span key={hora} className="rotulo tramo">
-          {hora}
-        </span>
-      ))}
-      {DIAS.map((nombre, dia) => (
-        <Fragment key={nombre}>
-          <span className="rotulo dia">{nombre}</span>
-          {HORAS.map((hora) => {
-            const id = celda(dia, hora);
-            const abierta = celdas.has(id);
-            return (
-              <button
-                key={hora}
-                type="button"
-                className={abierta ? 'hora abierta' : 'hora'}
-                aria-pressed={abierta}
-                aria-label={S.calendario.celda(nombre, hhmm(hora))}
-                onPointerDown={() => {
-                  sentido.current = !abierta;
-                  trazo.current = new Set(celdas);
-                  aplicar(id, !abierta);
-                }}
-                onPointerEnter={(e) => {
-                  if (e.buttons === 1 && sentido.current !== null) aplicar(id, sentido.current);
-                }}
-                onKeyDown={(e) => {
-                  // El teclado no dispara `pointerdown`; sin esto la rejilla solo sería usable
-                  // con ratón. `click` no vale: ya lo emite el `pointerdown` de arriba.
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    aplicar(id, !abierta);
-                  }
-                }}
-              />
-            );
-          })}
-        </Fragment>
-      ))}
+    <div className="editor-calendario">
+      <Franjas intervals={intervals} onCambio={onCambio} />
+      {rejilla && !tieneMinutos(intervals) && (
+        <div
+          className="calendario"
+          role="group"
+          aria-label={S.calendario.rejilla}
+          onPointerUp={() => {
+            sentido.current = null;
+            trazo.current = null;
+          }}
+          onPointerLeave={() => {
+            sentido.current = null;
+            trazo.current = null;
+          }}
+        >
+          <span />
+          {HORAS.filter((hora) => hora % 3 === 0).map((hora) => (
+            // Un rótulo cada tres horas, ocupando las tres columnas: con 24 columnas de 8 px una cifra
+            // de dos dígitos no cabe en la suya y se pisaría con la siguiente.
+            <span key={hora} className="rotulo tramo">
+              {hora}
+            </span>
+          ))}
+          {DIAS.map((nombre, dia) => (
+            <Fragment key={nombre}>
+              <span className="rotulo dia">{nombre}</span>
+              {HORAS.map((hora) => {
+                const id = celda(dia, hora);
+                const abierta = celdas.has(id);
+                return (
+                  <button
+                    key={hora}
+                    type="button"
+                    className={abierta ? 'hora abierta' : 'hora'}
+                    aria-pressed={abierta}
+                    aria-label={S.calendario.celda(nombre, hhmm(hora))}
+                    onPointerDown={() => {
+                      sentido.current = !abierta;
+                      trazo.current = new Set(celdas);
+                      aplicar(id, !abierta);
+                    }}
+                    onPointerEnter={(e) => {
+                      if (e.buttons === 1 && sentido.current !== null) aplicar(id, sentido.current);
+                    }}
+                    onKeyDown={(e) => {
+                      // El teclado no dispara `pointerdown`; sin esto la rejilla solo sería usable
+                      // con ratón. `click` no vale: ya lo emite el `pointerdown` de arriba.
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        aplicar(id, !abierta);
+                      }
+                    }}
+                  />
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+      )}
+      <ListaFranjas intervals={intervals} onCambio={onCambio} />
     </div>
   );
 }

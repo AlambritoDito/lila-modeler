@@ -827,8 +827,8 @@ body {
 
 .ventana-flotante .escenario :is(details[open], .entrada) > :not(.propiedad),
 .panel.ancho .escenario :is(details[open], .entrada) > :not(.propiedad),
-.ventana-flotante .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario),
-.panel.ancho .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario) {
+.ventana-flotante .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .editor-calendario),
+.panel.ancho .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .editor-calendario) {
   grid-column: 1 / -1;
 }
 
@@ -1548,6 +1548,82 @@ body {
 
 .calendario .hora:focus-visible {
   outline: 1px solid var(--fg-primary);
+}
+
+/* Range picker above the grid (#448): day chips, per-day checkboxes, from/to and «Add range»,
+   then the current intervals as a list with remove. Same rules as the rest of the panel: radius
+   0, 1 px `--border` rules, tokens only, mono for the times. */
+.franjas {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  margin: 4px 0;
+}
+
+.franjas-presets,
+.franjas-dias,
+.franjas-horas {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.franjas-presets {
+  gap: 1px;
+}
+
+.franjas .chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: calc(3px * var(--espacio, 1)) 8px;
+}
+
+.franjas .chip:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.franjas .chip[aria-pressed='true'] {
+  border-color: var(--accent-primary);
+  color: var(--fg-primary);
+}
+
+.franjas-dias label,
+.franjas-horas label {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.franjas-horas input[type='text'] {
+  font-family: var(--font-mono);
+  /* Five mono characters plus the shared field's padding and border (border-box). */
+  width: calc(6ch + 14px);
+}
+
+.franjas-horas input[type='text']:invalid {
+  border-color: var(--status-error);
+}
+
+.franjas-lista {
+  border-top: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.franjas-lista li {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: calc(3px * var(--espacio, 1)) 0;
 }
 
 /* Mantener montado el modelador conserva undo/selección entre modos. */

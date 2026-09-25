@@ -773,6 +773,18 @@ export const es: Strings = {
   calendario: {
     rejilla: 'Horario semanal: días por horas',
     celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Selector de franjas encima de la rejilla (#448). */
+    nuevaFranja: 'Nueva franja horaria',
+    presets: { laborables: 'Lun–Vie', todos: 'Todos', finDeSemana: 'Fin de semana' },
+    dias: { MON: 'Lun', TUE: 'Mar', WED: 'Mié', THU: 'Jue', FRI: 'Vie', SAT: 'Sáb', SUN: 'Dom' },
+    desde: 'Desde',
+    hasta: 'Hasta',
+    formatoHora: 'HH:MM',
+    anadir: 'Añadir franja',
+    lista: 'Franjas actuales',
+    franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
+    quitar: 'Quitar',
+    quitarFranja: (franja: string): string => `Quitar ${franja}`,
   },
 
   /* ------------------------------------------------------------------ *

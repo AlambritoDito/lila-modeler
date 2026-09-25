@@ -792,6 +792,18 @@ export const en = {
   calendario: {
     rejilla: 'Weekly schedule: days by hours',
     celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Range picker above the grid (#448). */
+    nuevaFranja: 'New time range',
+    presets: { laborables: 'Mon–Fri', todos: 'Every day', finDeSemana: 'Weekend' },
+    dias: { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' },
+    desde: 'From',
+    hasta: 'To',
+    formatoHora: 'HH:MM',
+    anadir: 'Add range',
+    lista: 'Current ranges',
+    franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
+    quitar: 'Remove',
+    quitarFranja: (franja: string): string => `Remove ${franja}`,
   },
 
   /* ------------------------------------------------------------------ *

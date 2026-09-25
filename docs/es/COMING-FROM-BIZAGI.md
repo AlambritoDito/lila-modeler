@@ -21,7 +21,7 @@ ese vocabulario y ese orden en la vista **Simulate**, como cuatro pasos:
 | Process validation | Simulate → paso 1 | Inicio, duración, réplicas y semilla de la corrida; max arrival count; porcentajes de las compuertas; validación del modelo |
 | Time analysis | Simulate → paso 2 | Intervalo entre llegadas y tiempo de proceso por elemento, constante o distribución |
 | Resource analysis | Simulate → paso 3 | Pools de recursos, disponibilidad, costos y qué tarea usa qué pool |
-| Calendar analysis | Simulate → paso 4 | Calendarios como rejilla semanal, recurso × calendario, capacidad por turno |
+| Calendar analysis | Simulate → paso 4 | Calendarios con días predefinidos + franjas desde–hasta y una rejilla semanal, recurso × calendario, capacidad por turno |
 
 Dos cosas funcionan distinto que en Bizagi, y las dos a tu favor:
 
@@ -117,7 +117,7 @@ etiquetas; la acción solo escribe por ti la asignación tarea por tarea.
 | Bizagi | Lila |
 |---|---|
 | Calendars | paso 4, `calendars` por clave; la clave `default` la toma todo pool que no declare el suyo |
-| Recurrence + start time + duration | una rejilla semanal: `intervals[]` de días × `from`–`to` (24 h, `to` exclusivo) |
+| Recurrence + start time + duration | «Lun–Vie / Todos / Fin de semana» o cualquier día + desde–hasta, una entrada de `intervals[]` por franja, y una rejilla semanal para pintar (24 h, `to` exclusivo, se admite `"24:00"`) |
 | Calendario del recurso | `calendar` en el pool |
 | Tabla «Resource \| Morning \| Day \| Night» | `capacity` como lista de `{ calendar, capacity }`: un solo pool con capacidad por turno |
 | Holidays | reservado, no está en v1; tampoco las recurrencias mensual/anual, el horario de verano ni la zona horaria por calendario |
