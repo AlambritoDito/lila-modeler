@@ -4,8 +4,25 @@
     {
       "name": "web-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace", "@lila/web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace",
+        "@lila/web"
+      ],
       "port": 5173
+    },
+    {
+      "name": "pages-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "_site"
+      ],
+      "port": 8765
     }
   ]
 }

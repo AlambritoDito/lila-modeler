@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rewriteHref } from './build-docs.mjs';
+import { counterpart, rewriteHref, sidebar } from './build-docs.mjs';
 
 const BLOB = 'https://github.com/AlambritoDito/lila-modeler/blob/main/';
 const published = new Set(['PROJECT_FORMAT.md', 'es/SEMANTICS.md', 'SEMANTICS.md']);
@@ -19,5 +19,23 @@ describe('rewriteHref', () => {
   it('leaves absolute URLs and in-page anchors alone', () => {
     expect(rewriteHref('https://x.org/a.md', 'SEMANTICS.md', published)).toBe('https://x.org/a.md');
     expect(rewriteHref('#top', 'SEMANTICS.md', published)).toBe('#top');
+  });
+});
+
+describe('sidebar and counterpart', () => {
+  const docs = ['MCP.md', 'SHORTCUTS.md', 'SCENARIO_FORMAT.md', 'ZZ_NEW.md', 'es/ATAJOS.md', 'es/MCP.md', 'releases/v1.md'];
+
+  it('orders each language by the mock groups, with unmapped docs under More and releases last', () => {
+    const flat = (lang) => sidebar(docs, lang).flatMap((g) => g.items.map((i) => i.doc));
+    expect(flat('en')).toEqual(['index', 'SHORTCUTS.md', 'SCENARIO_FORMAT.md', 'MCP.md', 'ZZ_NEW.md', 'releases/v1.md']);
+    expect(flat('es')).toEqual(['es/index', 'es/ATAJOS.md', 'es/MCP.md', 'releases/v1.md']);
+  });
+
+  it('links each page to its translation, through the Spanish aliases, or to the other index', () => {
+    const published = new Set(docs);
+    expect(counterpart('SHORTCUTS.md', published)).toBe('es/ATAJOS.md');
+    expect(counterpart('es/ATAJOS.md', published)).toBe('SHORTCUTS.md');
+    expect(counterpart('SCENARIO_FORMAT.md', published)).toBe('es/index');
+    expect(counterpart('index', published)).toBe('es/index');
   });
 });

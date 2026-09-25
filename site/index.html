@@ -1,12 +1,12 @@
 <!doctype html>
 <!--
-  Landing page of Lila Modeler (LILA-067), published to GitHub Pages by
-  `.github/workflows/pages.yml`, which copies this folder to the root of the site and the built
-  web app to `app/`. Hand-written on purpose: no site generator, no framework, no external CSS,
-  JavaScript or fonts, so the page is exactly what is served and it works offline. The
-  screenshots under `img/` are copied from `docs/design/` by that same workflow, so they are not
-  duplicated in git; to preview this page locally, copy them into `site/img/` first (that folder is
-  in `.gitignore`).
+  Landing page of Lila Modeler (LILA-067), from the Claude Design mock `Landing.dc.html`, published
+  to GitHub Pages by `.github/workflows/pages.yml` via `tools/build-pages.mjs`, which copies this
+  folder to the root of the site, the built web app to `app/`, the screenshots from
+  `docs/design/en/` to `img/` and the branding exports to `branding/`. Hand-written on purpose: no
+  site generator, no framework, no external request. The English text lives here and works without
+  JavaScript; `landing.js` adds the animations and swaps `data-i18n` elements to Spanish.
+  To preview locally, run `npm run build:pages` and serve `_site/`.
 -->
 <html lang="en">
   <head>
@@ -15,483 +15,263 @@
     <title>Lila Modeler — BPMN process simulation, open source</title>
     <meta
       name="description"
-      content="Lila Modeler is an open-source discrete-event simulator and modeler for BPMN processes: model, run scenarios with resources, calendars and costs, and compare AS-IS against TO-BE. Runs in the browser, from the CLI or over MCP."
+      content="Lila Modeler is an open-source discrete-event simulator and modeler for BPMN processes: model, run scenarios with resources, calendars and costs, replay every case over the diagram and compare AS-IS against TO-BE. Runs in the browser, on the desktop, from the CLI or over MCP."
     />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="stylesheet" href="site.css" />
     <link rel="icon" href="branding/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="branding/icon-32.png" />
     <link rel="apple-touch-icon" href="branding/icon-180.png" />
+    <script src="landing.js" defer></script>
   </head>
   <body>
-    <header class="top">
-      <div class="wrap">
-        <a class="brand" href="./"><img class="mark" src="branding/lila-transparent.png" alt="" width="32" height="32" /> Lila Modeler</a>
-        <nav aria-label="Sections">
-          <a href="#what">What it does</a>
-          <a href="#cli">Command line</a>
-          <a href="#screenshots">Screenshots</a>
-          <a href="#desktop">Desktop</a>
-          <a href="#colleagues">Getting started</a>
-          <a href="#docs">Docs</a>
-          <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
+    <header class="top" id="top-bar">
+      <div class="wrap top-row">
+        <a class="brand" href="#top"><img src="branding/lila-transparent.png" alt="" width="28" height="28" /> Lila Modeler</a>
+        <nav class="nav" aria-label="Sections">
+          <a href="#capabilities"><span>01</span><i data-i18n="nav1">Capabilities</i></a>
+          <a href="#run"><span>02</span><i data-i18n="nav2">How it runs</i></a>
+          <a href="#compare"><span>03</span><i data-i18n="nav3">Compare</i></a>
+          <a href="#quickstart"><span>04</span><i data-i18n="nav4">Quick start</i></a>
+          <a href="#screens"><span>05</span><i data-i18n="nav5">Screens</i></a>
+          <a href="#faq"><span>06</span>FAQ</a>
         </nav>
+        <div class="top-actions">
+          <button class="chip" id="lang" type="button" title="Language / Idioma">ES</button>
+          <a class="btn btn-sm" href="docs/">Docs</a>
+          <a class="btn btn-sm btn-primary gh" href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
+          <button class="menu-btn" id="menu-btn" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+        </div>
       </div>
+      <nav class="menu" aria-label="Sections">
+        <a href="#capabilities"><span>01</span><i data-i18n="nav1">Capabilities</i></a>
+        <a href="#run"><span>02</span><i data-i18n="nav2">How it runs</i></a>
+        <a href="#compare"><span>03</span><i data-i18n="nav3">Compare</i></a>
+        <a href="#quickstart"><span>04</span><i data-i18n="nav4">Quick start</i></a>
+        <a href="#screens"><span>05</span><i data-i18n="nav5">Screens</i></a>
+        <a href="#faq"><span>06</span>FAQ</a>
+        <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
+      </nav>
     </header>
 
     <main>
-      <div class="hero">
+      <section id="top" class="hero">
         <div class="wrap">
-          <h1 class="hero-brand"><img src="branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" /></h1>
-          <p class="tagline">
-            Open-source discrete-event simulator and modeler for BPMN processes.
+          <div class="logo-plate"><img src="branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" /></div>
+          <br />
+          <a class="badge" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">
+            <b>v1.0.0-beta.1</b><span data-i18n="badge">Desktop beta for macOS · What's new →</span>
+          </a>
+          <h1 data-i18n="h1">Watch your process <span class="hl">run</span> before it runs.</h1>
+          <p class="lede" data-i18n="lede">
+            Open-source discrete-event simulator for BPMN. Draw the process, set times, resources and
+            calendars, and replay every case over the diagram — with
+            <strong>AS-IS vs TO-BE comparisons at 95% confidence</strong>. No account, no server.
           </p>
-          <p class="lede">
-            Draw the process, fill in the scenario in the same four steps Bizagi Modeler teaches —
-            validation, times, resources, calendars — and run it. You get Bizagi-style result
-            tables, a replay of the run over the diagram, and an AS-IS versus TO-BE comparison with
-            95% confidence intervals. Apache-2.0, no account, no server: the same engine runs in
-            the browser, on the desktop, on the command line and behind an MCP server.
-          </p>
-          <div class="actions">
-            <a class="btn btn-primary" href="app/">Try the demo</a>
-            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">Download Beta 1 for macOS (Apple Silicon, unsigned)</a>
-            <a class="btn" href="docs/COMING-FROM-BIZAGI.html">Coming from Bizagi?</a>
-            <a class="btn" href="https://github.com/AlambritoDito/lila-modeler">Source on GitHub</a>
+          <div class="ctas">
+            <a class="btn btn-primary" href="app/">▶ <span data-i18n="ctaDemo">Try the demo</span></a>
+            <a class="btn" href="#quickstart" data-i18n="ctaQuick">Quick start</a>
+            <a class="btn btn-ghost" href="docs/COMING-FROM-BIZAGI.html"><span data-i18n="ctaBizagi">Coming from Bizagi?</span> →</a>
           </div>
-          <p class="note">
-            The demo is the whole web app running in your browser: it starts with the
-            <code>examples/pedido</code> restaurant process loaded, keeps a copy of your work in the
-            browser's local storage, and opens and saves <code>.bpmn</code> files and
-            <code>.lila</code> projects as ordinary downloads. Nothing is uploaded anywhere. See
-            <a href="#colleagues">Getting started for colleagues</a> below for the full flow.
-          </p>
-        </div>
-      </div>
-
-      <section id="what">
-        <div class="wrap">
-          <h2>What it does</h2>
-          <p class="section-lede">
-            One engine, three ways in. The core has no dependencies, so the numbers are the same
-            whether you get them from a browser tab, a terminal or an agent.
-          </p>
-          <ul class="cards">
-            <li>
-              <h3>Model</h3>
-              <p>
-                A BPMN editor built on bpmn-js: start and end events, timers, tasks, call
-                activities, subprocesses, XOR/OR/AND gateways, lanes and pools — with validation
-                errors and warnings marked on the diagram as you draw.
-              </p>
-            </li>
-            <li>
-              <h3>Simulate in four steps</h3>
-              <p>
-                The Simulate panel follows Bizagi's four levels as four steps: process validation,
-                time analysis, resource analysis and calendar analysis. Arrivals, processing times
-                (the 13 BPSim distributions, the empirical one included, or a constant), resource pools with costs, weekly
-                shift calendars. Scenarios are plain JSON files and can extend one another.
-              </p>
-            </li>
-            <li>
-              <h3>Projects</h3>
-              <p>
-                A project is a folder — <code>model.bpmn</code>, scenarios, results — and a
-                <code>.lila</code> file is that folder zipped. The browser downloads it, the desktop
-                app opens it with <b>Open</b> (File menu) or a Finder double-click
-                (verified for Beta 1 through the macOS open-file route; see the beta guide), and the CLI reads the same files.
-              </p>
-            </li>
-            <li>
-              <h3>Replications</h3>
-              <p>
-                Every run is seeded and replicated, so results are reproducible and come with
-                confidence intervals rather than a single lucky number.
-              </p>
-            </li>
-            <li>
-              <h3>Results</h3>
-              <p>
-                Process, element, resource and flow tables in the layout Bizagi Modeler users
-                already read, plus Lila's own extras: ranked bottlenecks, percentiles and cost per
-                case. Export to CSV or to a multi-sheet XLSX workbook.
-              </p>
-            </li>
-            <li>
-              <h3>Animate</h3>
-              <p>
-                Replay the event log of a run over the diagram: a live counter on every task,
-                gateway and end event, tokens walking the flows, the pools' occupancy and a
-                simulated clock, from 1× to instant. No re-run, no second engine.
-              </p>
-            </li>
-            <li>
-              <h3>Compare AS-IS vs TO-BE</h3>
-              <p>
-                Put two or more simulated scenarios side by side, with per-metric deltas and a
-                marker on the differences that are significant at 95% confidence.
-              </p>
-            </li>
-            <li>
-              <h3>Routing on earlier outcomes</h3>
-              <p>
-                A flow out of an exclusive gateway can take a different probability depending on
-                which flow the same case took earlier — the "already rejected once" kind of rule —
-                without splitting the diagram.
-              </p>
-            </li>
-            <li>
-              <h3>Themes and languages</h3>
-              <p>
-                Five themes ship with the app: Eva-01 (dark, the default), Papel (light), Tieso
-                (light, ITESO blues), Akira (dark, Neo-Tokyo) and Montana (purple, bubblegum pink
-                and gold, inspired by Hannah Montana Linux). Your choice persists across sessions.
-                A theme is a JSON file you can edit or add. The interface is available in English
-                and Spanish.
-              </p>
-            </li>
-            <li>
-              <h3>CLI and MCP</h3>
-              <p>
-                <code>lila validate</code>, <code>lila run</code> and <code>lila compare</code> for
-                scripts and CI, with JSON, CSV and XLSX output — and <code>lila mcp</code>, an MCP
-                server that hands the same five tools to an agent.
-              </p>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <section id="cli">
-        <div class="wrap">
-          <h2>Simulate the benchmark in 3 commands</h2>
-          <p class="section-lede">
-            <code>examples/pedido</code> is the repo's reference benchmark: a restaurant process
-            with a parallel branch, an approval and a timer, with the AS-IS and TO-BE scenarios
-            already written. Clone the repo, run <code>npm ci</code> and <code>npm run build</code>, and:
-          </p>
-
-          <div class="step">
-            <h3><span class="num">1</span>Validate the model</h3>
-            <pre><code>npx lila validate examples/pedido/model.bpmn</code></pre>
+          <div class="tags">
+            <span>Apache-2.0</span><span data-i18n="tagPlatforms">Browser · Desktop · CLI · MCP</span><span data-i18n="tagSeeded">Seeded &amp; reproducible</span>
           </div>
 
-          <div class="step">
-            <h3><span class="num">2</span>Simulate the AS-IS scenario</h3>
-            <pre><code>npx lila run \
-  examples/pedido/model.bpmn examples/pedido/as-is.scenario.json \
-  --seed 42 --replications 3 \
-  --json out/result.json --csv out/csv</code></pre>
-          </div>
-
-          <div class="step">
-            <h3><span class="num">3</span>Compare AS-IS against TO-BE</h3>
-            <pre><code>npx lila compare \
-  examples/pedido/model.bpmn \
-  examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json \
-  --seed 42 --replications 3</code></pre>
-          </div>
-
-          <p class="note">
-            Lila is not published to npm (the <code>lila</code> package on the registry is an unrelated
-            project): inside the checkout, after <code>npm ci</code> and <code>npm run build</code>,
-            <code>npx</code> resolves the workspace's own binary with no registry lookup and no global
-            install.
-          </p>
-        </div>
-      </section>
-
-      <section id="screenshots">
-        <div class="wrap">
-          <h2>Screenshots</h2>
-          <p class="section-lede">
-            The web app in Eva-01, its default theme. Four more ship with it — Papel (light),
-            Tieso (light, ITESO blues), Akira (dark, Neo-Tokyo) and Montana (purple, bubblegum pink
-            and gold, Hannah Montana Linux–inspired) — and your choice persists. Themes are plain
-            JSON files you can edit.
-          </p>
-          <div class="shots">
-            <figure>
-              <img
-                src="img/model.png"
-                width="1440"
-                height="900"
-                loading="lazy"
-                alt="The modeling view: a BPMN diagram of a restaurant order process with two pools, a shape palette on the left, a properties panel on the right and a minimap over the canvas."
-              />
-              <figcaption>
-                <b>Model.</b> The bpmn-js editor with the shape palette, the properties panel and
-                validation warnings marked on the elements themselves.
-              </figcaption>
-            </figure>
-            <figure>
-              <img
-                src="img/simulate.png"
-                width="1440"
-                height="900"
-                loading="lazy"
-                alt="The simulation view with the scenario editor beside the restaurant process."
-              />
-              <figcaption>
-                <b>Simulate, in four steps.</b> Run settings, times, resource pools and shift
-                calendars, in the order Bizagi users already know.
-              </figcaption>
-            </figure>
-            <figure>
-              <img
-                src="img/animate.png"
-                width="1440"
-                height="900"
-                loading="lazy"
-                alt="The Animate view: the restaurant diagram with a started/completed counter on every element, tokens on the flows, and the replay controls with the simulated clock and the pools' occupancy."
-              />
-              <figcaption>
-                <b>Animate.</b> The event log of a run replayed over the diagram, with live
-                counters per element and the occupancy of each pool.
-              </figcaption>
-            </figure>
-            <figure>
-              <img
-                src="img/compare-1920.png"
-                width="1920"
-                height="1080"
-                loading="lazy"
-                alt="Comparison of the AS-IS and three-cashier scenarios, showing KPI differences."
-              />
-              <figcaption>
-                <b>Compare scenarios.</b> Inspect KPI differences between the current process and a
-                proposed change, including confidence intervals.
-              </figcaption>
-            </figure>
-            <figure>
-              <img
-                src="img/results.png"
-                width="1440"
-                height="900"
-                loading="lazy"
-                alt="The results view: a ranked bottleneck list, a process-elements table with instances started and completed and minimum, maximum and average times, and a list of simulation warnings."
-              />
-              <figcaption>
-                <b>Results.</b> Bizagi-style tables for elements, resources, the process and the
-                flows, exportable to CSV and XLSX, plus the run's warnings in full.
-              </figcaption>
-            </figure>
-          </div>
-          <p class="note">
-            These captures show the English interface. Spanish is available in Settings.
-          </p>
-        </div>
-      </section>
-
-      <section id="desktop">
-        <div class="wrap">
-          <h2>Desktop beta</h2>
-          <p class="section-lede">
-            The same app packaged with Electron: projects live as folders on your disk,
-            <code>.lila</code> and <code>.bpmn</code> files open with a double-click
-            (the <code>.lila</code> open-file route was verified for Beta 1; a physical Finder double-click and <code>.bpmn</code> that way were not; see the beta guide), and a welcome screen lists your recent projects.
-            Beta 1 (<code>v1.0.0-beta.1</code>) attaches a single installer, for macOS on Apple
-            Silicon (arm64); Windows and Linux builds exist only as untested CI artifacts and are
-            not offered for Beta 1. The app is <b>not signed or notarized</b>: on first launch, go
-            to System Settings ▸ Privacy &amp; Security ▸ <b>Open Anyway</b> after the first
-            blocked attempt, then confirm Open (on older macOS, Control-click the app ▸ Open ▸
-            Open works directly). Do not disable Gatekeeper to work around this.
-            (First-launch flow verified for Beta 1 on macOS 27: the blocked first launch and the Open Anyway step.)
-            <a href="docs/BETA-MAC-GUIDE.html">The beta guide</a>
-            walks through installing it, checksum verification and reading the results.
-          </p>
-          <div class="shots">
-            <figure>
-              <img
-                src="img/welcome.png"
-                width="1440"
-                height="868"
-                loading="lazy"
-                alt="The desktop welcome screen: the Lila mark, buttons to open a project, open a folder, start a new project or open the example, and a list of recent projects."
-              />
-              <figcaption>
-                <b>Welcome.</b> Open a <code>.lila</code> file or a project folder, start a new one,
-                or go back to a recent project.
-              </figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <section id="colleagues">
-        <div class="wrap">
-          <h2>Getting started for colleagues</h2>
-          <p class="section-lede">
-            You got a link to this page. Here is the whole flow, and what to expect.
-          </p>
-
-          <div class="step">
-            <h3><span class="num">1</span>Try it</h3>
-            <p>
-              Open <a href="app/">the demo</a> — it starts with the neutral
-              <code>examples/pedido</code> restaurant process already loaded. Draw or edit a model,
-              open <b>Simulate</b> and run the AS-IS and TO-BE scenarios (already written for the
-              example), then open <b>Compare</b> to see the deltas, and <b>Animate</b> to replay
-              the run over the diagram.
-            </p>
-          </div>
-
-          <div class="step">
-            <h3><span class="num">2</span>Know where your work lives</h3>
-            <p>
-              While you work, the browser keeps a copy in <b>that browser's local storage only</b>
-              — clearing site data, or opening the demo in another browser or profile, loses it.
-              That local copy is not a backup. To keep your work anywhere else, use
-              <b>File ▸ Save</b> (tooltip: Save project): it downloads the whole project — model,
-              scenarios, revisions and saved runs — as one portable <code>.lila</code> file.
-            </p>
-          </div>
-
-          <div class="step">
-            <h3><span class="num">3</span>Send a project to a colleague</h3>
-            <p>
-              Send them the <code>.lila</code> file (email, chat, a shared drive — anything that
-              moves a file). They open it with <b>File ▸ Open</b> (tooltip: Open project) in the web
-              demo, <b>File ▸ Open project…</b> in the desktop app, or by double-clicking it in Finder
-              (verified for Beta 1 through the macOS open-file route; see the beta guide). This is sharing as portable project files, not
-              simultaneous editing: there is no account, no backend and no real-time collaboration
-              — one person edits a copy at a time, and the last <code>.lila</code> sent around is
-              the one everyone should work from next.
-            </p>
-          </div>
-
-          <h3 class="section-lede limits-heading">Known limits</h3>
-          <ul class="links">
-            <li><b>Single-user files</b>Sharing means passing a <code>.lila</code> around, not co-editing one.</li>
-            <li><b>No accounts, backend or real-time sync</b>Everything runs locally, in your browser or the desktop app.</li>
-            <li><b>Mobile editing is untested</b>Beta 1 acceptance ran on desktop browsers at 1440&times;900; narrower editor viewports and mobile editing are untested.</li>
-            <li><b>The macOS beta is unsigned</b>See the desktop section above for the first-launch steps.</li>
-          </ul>
-          <p class="note">
-            Beta 1 was tested on macOS 27 with Chrome 154; Safari and other browsers are untested. Found a reproducible problem?
-            <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Open an issue</a>
-            — the bug template asks for a minimal <code>.bpmn</code> file or scenario that shows it.
-          </p>
-
-          <h3 id="es" class="lang-heading">En español</h3>
-          <div lang="es">
-            <p class="section-lede">Llegaste a esta página por un enlace. Así es el flujo completo, y qué esperar.</p>
-
-            <div class="step">
-              <h4><span class="num">1</span>Pruébalo</h4>
-              <p>
-                Abre <a href="app/">la demo</a> — arranca con el proceso neutral del restaurante,
-                <code>examples/pedido</code>, ya cargado. Dibuja o edita un modelo, abre
-                <b>Simular</b> y corre los escenarios AS-IS y TO-BE (ya escritos para el ejemplo),
-                luego abre <b>Comparar</b> para ver las diferencias, y <b>Animar</b> para reproducir
-                la corrida sobre el diagrama.
-              </p>
+          <div class="card replay">
+            <div class="bar head">
+              <span class="live"><span class="dot"></span><span data-i18n="live">Live replay</span></span>
+              <span>examples/pedido · AS-IS · seed 42</span>
+              <span class="grow"></span>
+              <span><span data-i18n="hudClock">Clock</span> <b id="hud-clock">08:00</b></span>
+              <span><span data-i18n="hudDone">Completed</span> <b id="hud-done">0</b></span>
+              <span>WIP <b id="hud-wip">0</b></span>
+              <span><span data-i18n="hudCycle">Avg cycle</span> <b id="hud-cycle">—</b></span>
             </div>
-
-            <div class="step">
-              <h4><span class="num">2</span>Dónde vive tu trabajo</h4>
-              <p>
-                Mientras trabajas, el navegador guarda una copia solo en el
-                <b>almacenamiento local de ese navegador</b> — borrar los datos del sitio, o abrir la
-                demo en otro navegador o perfil, la pierde. Esa copia local no es un respaldo. Para
-                guardar tu trabajo en cualquier otro lugar, usa <b>Archivo ▸ Guardar</b> (tooltip:
-                Guardar proyecto): descarga el proyecto completo — modelo, escenarios, revisiones y
-                corridas guardadas — como un único archivo <code>.lila</code> portable.
-              </p>
+            <div class="canvas-scroll">
+              <canvas id="hero-canvas" role="img" aria-label="Animated simulation of the restaurant order process: case tokens move through Take order, Prepare food, Pack order and Review order."></canvas>
             </div>
-
-            <div class="step">
-              <h4><span class="num">3</span>Enviar un proyecto a un colega</h4>
-              <p>
-                Envíale el archivo <code>.lila</code> (correo, chat, un drive compartido — cualquier
-                cosa que mueva un archivo). Lo abre con <b>Archivo ▸ Abrir</b> (tooltip: Abrir
-                proyecto) en la demo web, <b>Archivo ▸ Abrir proyecto…</b> en la app de escritorio, o con doble
-                clic en el Finder
-                (verificado en la Beta 1 por la ruta open-file de macOS; ver la guía de la beta). Esto es compartir archivos de proyecto portables, no
-                edición simultánea: no hay cuenta, ni backend, ni colaboración en tiempo real — una
-                persona edita una copia a la vez, y el último <code>.lila</code> que circuló es el que
-                todos deberían usar después.
-              </p>
+            <div class="bar foot">
+              <label class="speed">
+                <span data-i18n="speed">Speed</span>
+                <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1" />
+                <output id="speed-out" for="speed">1×</output>
+              </label>
+              <span class="grow"></span>
+              <span class="lg"><span class="dot"></span><span data-i18n="lgToken">Case token</span></span>
+              <span class="lg"><span class="dot warn"></span><span data-i18n="lgWait">Waiting for a resource</span></span>
+              <span class="lg"><span class="slot"></span><span data-i18n="lgBusy">Pool slot busy</span></span>
+              <span class="lg mono"><b>12/14</b><span data-i18n="lgCount">completed / started</span></span>
             </div>
+          </div>
+          <p class="swipe">← <span data-i18n="swipe">swipe the diagram</span> →</p>
+        </div>
+      </section>
 
-            <h4 class="section-lede limits-heading">Límites conocidos</h4>
-            <ul class="links">
-              <li><b>Archivos de un solo usuario</b>Compartir es pasar un <code>.lila</code>, no coeditar uno.</li>
-              <li><b>Sin cuentas, backend ni sincronización en tiempo real</b>Todo corre localmente, en tu navegador o en la app de escritorio.</li>
-              <li><b>La edición en móvil no está probada</b>La aceptación de la Beta 1 corrió en navegadores de escritorio a 1440&times;900; los viewports de editor más angostos y la edición en móvil no están probados.</li>
-              <li><b>La beta de macOS no está firmada</b>Ver la sección de escritorio arriba para los pasos del primer arranque.</li>
-            </ul>
-            <p class="note">
-              La Beta 1 se probó en macOS 27 con Chrome 154; Safari y otros navegadores no están probados. ¿Encontraste un problema reproducible?
-              <a href="https://github.com/AlambritoDito/lila-modeler/issues/new/choose">Abre un issue</a>
-              — la plantilla de bug pide un archivo <code>.bpmn</code> mínimo o un escenario que lo muestre.
-            </p>
+      <section id="capabilities">
+        <div class="wrap sec">
+          <div class="kicker">01 — <span data-i18n="nav1">Capabilities</span></div>
+          <h2 class="big" data-i18n="capH">One engine, four ways in.</h2>
+          <p class="sec-p" data-i18n="capP">The core has no dependencies, so the numbers are identical from a browser tab, a terminal or an agent.</p>
+          <div class="caps">
+            <div>
+              <div class="path">/model</div>
+              <h3 data-i18n="c1">Model</h3>
+              <ul data-i18n="c1l">
+                <li>BPMN editor on bpmn-js</li><li>XOR / OR / AND gateways</li><li>Timers, subprocesses, lanes</li><li>Validation on the diagram</li>
+              </ul>
+            </div>
+            <div>
+              <div class="path">/simulate</div>
+              <h3 data-i18n="c2">Simulate</h3>
+              <ul data-i18n="c2l">
+                <li>Bizagi's four levels, as steps</li><li>13 BPSim distributions</li><li>Resource pools with costs</li><li>Weekly shift calendars</li>
+              </ul>
+            </div>
+            <div>
+              <div class="path">/analyze</div>
+              <h3 data-i18n="c3">Analyze</h3>
+              <ul data-i18n="c3l">
+                <li>Bizagi-style result tables</li><li>Ranked bottlenecks</li><li>Replay over the diagram</li><li>CSV and XLSX export</li>
+              </ul>
+            </div>
+            <div>
+              <div class="path">/integrate</div>
+              <h3 data-i18n="c4">Integrate</h3>
+              <ul data-i18n="c4l">
+                <li>lila run / compare for CI</li><li>MCP server, five tools</li><li>Portable .lila projects</li><li>Scenarios as plain JSON</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="docs">
-        <div class="wrap">
-          <h2>Documentation and downloads</h2>
-          <p>
-            <a class="btn btn-primary" href="docs/">All documentation</a>
-            Every guide and reference, in English and Spanish, rendered from the repository's
-            <code>docs/</code> folder — new documents appear here automatically.
-            <span lang="es">Toda la documentación, también en español.</span>
-          </p>
-          <ul class="links">
-            <li>
-              <b><a href="https://github.com/AlambritoDito/lila-modeler">Repository</a></b>
-              Source, issues and the full README.
-            </li>
-            <li>
-              <b><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">Beta 1 (v1.0.0-beta.1)</a></b>
-              Desktop build for macOS Apple Silicon, unsigned. Not on <code>/releases/latest</code>
-              — GitHub excludes prereleases from that link.
-            </li>
-            <li>
-              <b><a href="docs/SEMANTICS.html">Engine semantics</a></b>
-              The supported BPMN profile and the engine's exact semantics.
-            </li>
-            <li>
-              <b><a href="docs/MCP.html">MCP server</a></b>
-              The MCP server, its five tools and how to register it.
-            </li>
-            <li>
-              <b><a href="docs/COMING-FROM-BIZAGI.html">Coming from Bizagi</a></b>
-              Where each Bizagi screen and field lives here, and how to reproduce a published example.
-            </li>
-            <li>
-              <b><a href="docs/PROJECT_FORMAT.html">Project format</a></b>
-              The project folder and the <code>.lila</code> file.
-            </li>
-            <li>
-              <b><a href="docs/BETA-MAC-GUIDE.html">Desktop beta guide (macOS)</a></b>
-              Installing and using the unsigned macOS Beta 1.
-            </li>
-            <li>
-              <b><a href="docs/DECISIONS.html">Architecture decisions</a></b>
-              The architecture decision log (ADR-001 to ADR-028).
-            </li>
-          </ul>
+      <section id="run" class="alt">
+        <div class="wrap sec split">
+          <div>
+            <div class="kicker">02 — <span data-i18n="nav2">How it runs</span></div>
+            <h2 class="big" data-i18n="runH">Not one lucky number. Thirty replications.</h2>
+            <p class="sec-p" data-i18n="runP">Every run is seeded and replicated. Each replication drops into the distribution and the confidence interval tightens — same seed, same answer, every time.</p>
+            <ol class="levels" data-i18n="levels">
+              <li><span class="k">L1</span><span><b>Validation</b><span class="d"> — every path reaches an end</span></span></li>
+              <li><span class="k">L2</span><span><b>Time</b><span class="d"> — arrivals and processing times</span></span></li>
+              <li><span class="k">L3</span><span><b>Resources</b><span class="d"> — pools, capacity, cost</span></span></li>
+              <li><span class="k">L4</span><span><b>Calendars</b><span class="d"> — weekly shifts</span></span></li>
+            </ol>
+          </div>
+          <div class="card">
+            <div class="bar head">
+              <b data-i18n="repTitle">Cycle time · min</b><span class="grow"></span>
+              <span>n <b class="acc" id="rep-n">0</b>/30</span>
+              <span><span data-i18n="repMean">mean</span> <b id="rep-mean">—</b></span>
+              <span><span data-i18n="repCi">95% CI</span> <b>± <span id="rep-ci">—</span></b></span>
+            </div>
+            <canvas id="rep-canvas" role="img" aria-label="Histogram of 30 replications of the cycle time, with the mean and the 95% confidence interval."></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="compare">
+        <div class="wrap sec">
+          <div class="kicker">03 — <span data-i18n="nav3">Compare</span></div>
+          <h2 class="big" data-i18n="cmpH">AS-IS vs TO-BE, with the noise taken out.</h2>
+          <p class="sec-p" data-i18n="cmpP">Put scenarios side by side. Deltas that are significant at 95% get a marker; the rest you shouldn't bet on.</p>
+          <div class="kpis" id="kpis">
+            <div class="bar">
+              <span><i class="sw a"></i>as-is</span>
+              <span><i class="sw b"></i>to-be · <span data-i18n="cashiers">3 cashiers</span></span>
+              <span class="grow"></span><span>Δ · <span data-i18n="sigHead">significant</span></span>
+            </div>
+            <div class="kpi"><span class="name" data-i18n="k1">Cycle time</span><div class="bars"><i class="a" style="--w: 92%"></i><i class="b" style="--w: 71%"></i></div><span class="delta"><span>−22%</span><span class="sig" data-i18n="yes">● yes</span></span></div>
+            <div class="kpi"><span class="name" data-i18n="k2">Queue at Take order</span><div class="bars"><i class="a" style="--w: 80%"></i><i class="b" style="--w: 24%"></i></div><span class="delta"><span>−70%</span><span class="sig" data-i18n="yes">● yes</span></span></div>
+            <div class="kpi"><span class="name" data-i18n="k3">Cashier utilization</span><div class="bars"><i class="a" style="--w: 88%"></i><i class="b" style="--w: 62%"></i></div><span class="delta"><span>−26 pp</span><span class="sig" data-i18n="yes">● yes</span></span></div>
+            <div class="kpi"><span class="name" data-i18n="k4">Cost per case</span><div class="bars"><i class="a" style="--w: 54%"></i><i class="b" style="--w: 58%"></i></div><span class="delta"><span>+7%</span><span class="sig no" data-i18n="no">○ no</span></span></div>
+          </div>
+          <p class="note" data-i18n="illus">Illustrative figures · run lila compare on examples/pedido for the real ones.</p>
+        </div>
+      </section>
+
+      <section id="quickstart" class="alt">
+        <div class="wrap sec split">
+          <div>
+            <div class="kicker">04 — <span data-i18n="nav4">Quick start</span></div>
+            <h2 class="big" data-i18n="qsH">Three commands to a benchmark.</h2>
+            <p class="sec-p" data-i18n="qsP">Clone, npm ci &amp;&amp; npm run build, then validate, run and compare the restaurant example. Or hand the same engine to an agent over MCP.</p>
+            <div class="qs-links">
+              <span>web</span><a href="app/" data-i18n="qsWeb">Open the demo in your browser</a>
+              <span>mac</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1" data-i18n="qsMac">Download the desktop beta (Apple Silicon, unsigned)</a>
+              <span>docs</span><a href="docs/" data-i18n="qsDocs">Read the documentation</a>
+            </div>
+          </div>
+          <div class="card term">
+            <div class="tabs" role="tablist">
+              <button type="button" role="tab" aria-selected="true" data-tab="cli">CLI</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="mcp">MCP</button>
+              <span class="path">~/lila-modeler</span>
+            </div>
+            <pre id="term"><span>$ npx lila validate examples/pedido/model.bpmn</span>
+<span class="ok">✓ model.bpmn — 0 errors</span>
+
+<span>$ npx lila run examples/pedido/model.bpmn \</span>
+<span>    examples/pedido/as-is.scenario.json --seed 42 --replications 30</span>
+<span>$ npx lila compare … as-is.scenario.json to-be-3-cajeros.scenario.json</span></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="screens">
+        <div class="wrap sec">
+          <div class="kicker">05 — <span data-i18n="nav5">Screens</span></div>
+          <h2 class="big" data-i18n="scH">Model. Simulate. Replay. Decide.</h2>
+          <div class="pills" id="pills">
+            <button type="button" aria-pressed="true" data-shot="model" data-i18n="s1">Model</button>
+            <button type="button" aria-pressed="false" data-shot="simulate" data-i18n="s2">Simulate</button>
+            <button type="button" aria-pressed="false" data-shot="animate" data-i18n="s3">Animate</button>
+            <button type="button" aria-pressed="false" data-shot="results" data-i18n="s4">Results</button>
+            <button type="button" aria-pressed="false" data-shot="compare" data-i18n="s5">Compare</button>
+          </div>
+          <figure class="shot">
+            <img id="shot-img" src="img/model.png" width="1440" height="900" loading="lazy" alt="" />
+            <figcaption id="shot-cap" data-i18n="s1c">Model — the bpmn-js editor with palette, properties and validation marked on the elements.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="faq">
+        <div class="wrap sec faq">
+          <div class="kicker">06 — FAQ</div>
+          <h2 class="big" style="margin-bottom: 36px" data-i18n="faqH">Questions, answered.</h2>
+          <details open><summary data-i18n="q1">Is Lila Modeler free?</summary><p data-i18n="a1">Yes. Apache-2.0, no account, no paid tier. The same engine runs in the browser, the desktop app, the CLI and the MCP server.</p></details>
+          <details><summary data-i18n="q2">Where does my work live?</summary><p data-i18n="a2">In the browser's local storage while you work — that is not a backup. File ▸ Save downloads the whole project as a portable .lila file.</p></details>
+          <details><summary data-i18n="q3">Do I need Bizagi?</summary><p data-i18n="a3">No. Lila follows the same four-level workflow and result table layout so Bizagi users feel at home, but it is fully independent.</p></details>
+          <details><summary data-i18n="q4">Can two people edit the same project?</summary><p data-i18n="a4">Not simultaneously. Sharing means passing a .lila file around; there is no backend and no real-time sync.</p></details>
+          <details><summary data-i18n="q5">Which platforms are supported?</summary><p data-i18n="a5">Any modern desktop browser for the web app. The desktop beta ships for macOS on Apple Silicon and is not signed or notarized — see the beta guide for the first launch, and do not disable Gatekeeper.</p></details>
         </div>
       </section>
     </main>
 
     <footer>
-      <div class="wrap">
-        <p>
-          Lila Modeler is free software under the
-          <a href="https://github.com/AlambritoDito/lila-modeler/blob/main/LICENSE">Apache-2.0</a>
-          license. Copyright holder: Perfer Process. The editor uses
-          <a href="https://github.com/bpmn-io/bpmn-js">bpmn-js</a> (MIT), whose license requires the
-          "Powered by bpmn.io" mark to stay visible on the canvas.
-        </p>
-        <p class="fine">
-          Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is an independent
-          open-source project, not affiliated with or endorsed by Bizagi; it is cited only as the
-          reference and inspiration for the simulation workflow and the result table layout.
+      <div class="wrap foot-grid">
+        <div>
+          <span class="brand"><img src="branding/lila-transparent.png" alt="" width="22" height="22" /> Lila Modeler</span>
+          <span data-i18n="ftLicense">Free software under Apache-2.0. © Perfer Process.</span>
+        </div>
+        <div>
+          <span class="h" data-i18n="ftRes">Resources</span>
+          <a href="docs/" data-i18n="ftDocs">Documentation</a>
+          <a href="docs/SEMANTICS.html" data-i18n="ftSem">Engine semantics</a>
+          <a href="docs/MCP.html" data-i18n="ftMcp">MCP server</a>
+          <a href="docs/BETA-MAC-GUIDE.html" data-i18n="ftBeta">Desktop beta guide</a>
+        </div>
+        <div>
+          <span class="h" data-i18n="ftProj">Project</span>
+          <a href="https://github.com/AlambritoDito/lila-modeler">GitHub</a>
+          <a href="https://github.com/AlambritoDito/lila-modeler/issues">Issues</a>
+          <a href="https://github.com/AlambritoDito/lila-modeler/releases">Releases</a>
+        </div>
+        <p class="fine" data-i18n="ftTm">
+          Bizagi and Bizagi Modeler are trademarks of Bizagi. Lila Modeler is independent and not
+          affiliated with or endorsed by Bizagi. The editor uses bpmn-js (MIT), whose license keeps
+          the “Powered by bpmn.io” mark visible on the canvas.
         </p>
       </div>
     </footer>
