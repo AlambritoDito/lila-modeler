@@ -138,7 +138,20 @@ export interface LilaBridge {
   readSettings(): Promise<Ajustes>;
   /** FUSIONA con lo guardado: mandar solo `{ tema }` no borra la densidad. */
   writeSettings(ajustes: Ajustes): Promise<void>;
+
+  /**
+   * Saves the diagram as an image (#451) through the native save dialog, proposing
+   * `<nombre>.<tipo>`. `datos` is the SVG text for `svg` and `pdf` (main prints the PDF from it in
+   * a hidden window) and the PNG bytes for `png`. Resolves to the path written, or `null` if the
+   * dialog was cancelled.
+   */
+  exportar(exportacion: Exportacion): Promise<string | null>;
 }
+
+/** What `exportar` saves (#451). */
+export type Exportacion =
+  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf'; readonly datos: string }
+  | { readonly nombre: string; readonly tipo: 'png'; readonly datos: Uint8Array };
 
 /**
  * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`
@@ -215,6 +228,9 @@ export type MenuAction =
   | 'guardar'
   | 'guardarComo'
   | 'guardarComoCarpeta'
+  | 'exportarSvg'
+  | 'exportarPng'
+  | 'exportarPdf'
   | { readonly openRecent: string }
   | { readonly atajo: string };
 

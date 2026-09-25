@@ -18,9 +18,9 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, screen, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
-import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SaveOutcome, Ajustes, OpenPathRequest, Recent } from './bridge.js';
+import type { SaveOutcome, Ajustes, Exportacion, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
@@ -230,6 +230,49 @@ function requireWriteOptions(dir: string, value: unknown): WriteProjectOptions {
   if (typeof opts.diagramOnly === 'boolean') (result as { diagramOnly?: boolean }).diagramOnly = opts.diagramOnly;
   if (modelFile !== undefined) (result as { modelFile?: string }).modelFile = modelFile;
   return result;
+}
+
+/** 64 MB: a PNG of a very large diagram at 2x is a few MB; anything past this is not an export. */
+const MAX_EXPORTACION = 64 * 1024 * 1024;
+
+/** Validates the argument of `lila:exportar` (#451). */
+function requireExportacion(value: unknown): Exportacion {
+  const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const { nombre, tipo, datos } = v;
+  const valido = typeof nombre === 'string' && nombre.length > 0 && nombre.length <= 255
+    && (tipo === 'png' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf') && typeof datos === 'string')
+    && (datos as { length: number }).length <= MAX_EXPORTACION;
+  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf, datos }.');
+  return v as unknown as Exportacion;
+}
+
+/**
+ * Prints a paper SVG (`apps/web/src/exportarDiagrama.ts`) to a one-page A4 PDF, in the diagram's
+ * orientation, from a hidden window with JavaScript off and a CSP that loads nothing. The page is
+ * written to a temporary file rather than a `data:` URL, which Chromium caps at 2 MB. Same layout
+ * as the web's `hojaImpresion` (this package cannot import it).
+ */
+async function pdfDeSvg(svg: string): Promise<Buffer> {
+  const ancho = Number(/\swidth="([\d.]+)"/.exec(svg)?.[1] ?? 1);
+  const alto = Number(/\sheight="([\d.]+)"/.exec(svg)?.[1] ?? 1);
+  const html = '<!doctype html><html><head><meta charset="utf-8">'
+    + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:">'
+    + '<style>html,body{margin:0;height:100%;overflow:hidden;background:#fff}svg{display:block;width:100%;height:100%}</style>'
+    + `</head><body>${svg}</body></html>`;
+  const dir = await mkdtemp(path.join(app.getPath('temp'), 'lila-pdf-'));
+  const hoja = new BrowserWindow({
+    show: false,
+    webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false },
+  });
+  try {
+    const archivo = path.join(dir, 'hoja.html');
+    await writeFile(archivo, html);
+    await hoja.loadFile(archivo);
+    return await hoja.webContents.printToPDF({ landscape: ancho > alto, pageSize: 'A4', printBackground: true });
+  } finally {
+    hoja.destroy();
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -511,6 +554,19 @@ function registerIpcHandlers(win: BrowserWindow): void {
       refreshMenu();
     }
     await persistSessionState();
+  });
+
+  // Diagram export (#451): the renderer draws the image, main owns the save dialog and the PDF.
+  guardedHandle(win, 'lila:exportar', async (_event, value: unknown): Promise<string | null> => {
+    const { nombre, tipo, datos } = requireExportacion(value);
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: `${path.basename(nombre)}.${tipo}`,
+      filters: [{ name: tipo.toUpperCase(), extensions: [tipo] }],
+    });
+    if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
+    await writeFile(result.filePath, tipo === 'pdf' ? await pdfDeSvg(datos) : datos);
+    await e2eLog('exportar', { tipo, result: result.filePath });
+    return result.filePath;
   });
 
   guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown, fileArg: unknown) => {

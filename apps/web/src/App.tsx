@@ -47,6 +47,7 @@ import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
+import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -1023,6 +1024,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
     else if (accion === 'guardarComoCarpeta') void guardar(true, true);
+    else if (accion === 'exportarSvg') void exportarImagen('svg');
+    else if (accion === 'exportarPng') void exportarImagen('png');
+    else if (accion === 'exportarPdf') void exportarImagen('pdf');
     // A shortcut the native menu owns (#413): same handlers as the keyboard; unknown ids are ignored.
     else if ('atajo' in accion) { if (Object.hasOwn(atajosRef.current, accion.atajo) && !bloqueado()) atajosRef.current[accion.atajo as AtajoPropio](); }
     else void projectAction({ recent: accion.openRecent });
@@ -1138,10 +1142,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       cuando && { grupo: 'acciones', nombre: S.atajos[id], tecla: teclaDe(id), elegir: () => atajosRef.current[id]() };
     const acciones: (Comando | false)[] = [
       accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
+      accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
       accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
       accion('ajustes'),
+      // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarPng, elegir: () => ejecutar('exportarPng') },
+      DESKTOP && modelador !== null && { grupo: 'acciones', nombre: S.app.menuEscritorio.exportarPdf, elegir: () => ejecutar('exportarPdf') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
     ];
     return [
@@ -1283,6 +1292,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }
   }
 
+  /**
+   * The diagram as an image (#451): the SVG in the theme's colours, the PNG (2×), the PDF and the
+   * printout on white paper. The web downloads SVG and PNG and hands PDF to the print dialog (where
+   * «Save as PDF» lives); the desktop app saves the three through a native dialog, and prints from
+   * the same throwaway iframe as the web.
+   */
+  async function exportarImagen(tipo: 'svg' | 'png' | 'pdf' | 'imprimir'): Promise<void> {
+    if (modelador === null) return;
+    const nombre = nombreArchivo(projectName);
+    const lila = DESKTOP ? window.lila : undefined;
+    try {
+      const svg = await modelador.exportarSvg({ papel: tipo !== 'svg' });
+      if (tipo === 'imprimir' || (tipo === 'pdf' && lila === undefined)) imprimirSvg(svg, nombre);
+      else if (tipo === 'png') {
+        const png = await aPng(svg);
+        if (lila === undefined) descargar(png, `${nombre}.png`);
+        else await lila.exportar({ nombre, tipo, datos: new Uint8Array(await png.arrayBuffer()) });
+      } else if (lila === undefined) descargar(new Blob([svg], { type: 'image/svg+xml' }), `${nombre}.svg`);
+      else await lila.exportar({ nombre, tipo, datos: svg });
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+  }
+
   async function exportar(): Promise<void> {
     if (modelador === null) return;
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
@@ -1368,6 +1399,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     abrir: () => ejecutar('abrir'),
     guardar: () => ejecutar('guardar'),
     guardarComo: () => ejecutar('guardarComo'),
+    imprimir: () => void exportarImagen('imprimir'),
     ajustes: () => ejecutar('ajustes'),
     paleta: () => abrirPaletaRef.current(desdeHija.current),
     ...Object.fromEntries(MODO_IDS.map((m) => [`modo:${m}`, () => elegirModo(m)])) as Record<`modo:${ModoId}`, () => void>,
@@ -1574,6 +1606,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPdf')}>{S.app.menuEscritorio.exportarPdf}</button>
+              <button type="button" title={`${S.app.menuEscritorio.imprimir}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.menuEscritorio.imprimir}</button>
+              <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </> : <>
               <button type="button" title={`${S.app.tituloNuevo}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
@@ -1584,6 +1621,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
               </>}
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.exportarSvg}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.exportarPng}</button>
+              <button type="button" title={`${S.app.imprimirPdf}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.imprimirPdf}</button>
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </>}
           </div>

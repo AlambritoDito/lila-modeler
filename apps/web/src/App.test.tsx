@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // LILA-113: `repintar` relee los tokens en el modelador vivo. `montajes` cuenta cuántas veces se
   // montó el lienzo: cambiar de tema ya no lo remonta, y ese es justamente el punto del ticket.
   repintar: vi.fn(), montajes: 0,
+  // #451: the diagram as an image, and the browser-only ends of it (print, rasterise, download).
+  exportarSvg: vi.fn(), imprimir: vi.fn(), aPng: vi.fn(), descargar: vi.fn(),
   // LILA-072: con `retrasarLienzo`, el lienzo falso NO avisa de que está listo al montar — el test
   // decide cuándo llamando a `mocks.listo()`, que es lo que separa "la app arrancó" de "el
   // modelador existe" y permite probar una ruta .bpmn que llega en medio.
@@ -69,6 +71,7 @@ const ELEMENTOS = [
 ];
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
+vi.mock('./exportarDiagrama', async (real) => ({ ...(await real<object>()), imprimirSvg: mocks.imprimir, aPng: mocks.aPng, descargar: mocks.descargar }));
 // Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
@@ -88,7 +91,7 @@ vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () =
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
-    repintar: mocks.repintar,
+    repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
@@ -1571,8 +1574,9 @@ it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#4
     expect(await pulsar(svgLienzo(), { key, ctrlKey: true, shiftKey: true }), key).toBe(true);
     expect(conClase(clase), key).toBe(false);
   }
-  // Without Shift, ⌘P / ⌘D / ⌘B are not ours.
-  expect(await pulsar(document.body, mod('p'))).toBe(false);
+  // Without Shift, ⌘D / ⌘B are not ours (⌘P prints since #451).
+  expect(await pulsar(document.body, mod('d'))).toBe(false);
+  expect(await pulsar(document.body, mod('b'))).toBe(false);
 });
 
 it('on the web ⌘1…⌘6 / Ctrl+1…6 stay the browser\'s: no mode change, nothing prevented (#413)', async () => {
@@ -1621,6 +1625,35 @@ it('⌘↩ runs the simulation, not while Settings is open; Esc cancels only a r
   expect(await pulsar(document.body, { key: 'Escape' })).toBe(true);
   expect(signal.aborted).toBe(true);
   expect(container.querySelector('.boton.cancelar')).toBeNull();
+});
+
+it('⌘P prints the diagram alone on paper, from the page or the canvas; not while Settings is open (#451)', async () => {
+  mocks.exportarSvg.mockResolvedValue('<svg/>');
+  expect(await pulsar(svgLienzo(), mod('p'))).toBe(true);
+  await act(async () => {});
+  expect(mocks.exportarSvg).toHaveBeenCalledExactlyOnceWith({ papel: true });
+  expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg/>', T.app.proyectoDemo);
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => dialog.showModal());
+  await pulsar(document.body, mod('p'));
+  await act(async () => {});
+  expect(mocks.exportarSvg).toHaveBeenCalledOnce();
+  await act(async () => dialog.close());
+});
+
+it('the web File menu downloads the SVG in the theme\'s colours and the PNG on paper (#451)', async () => {
+  mocks.exportarSvg.mockImplementation(async ({ papel }: { papel: boolean }) => (papel ? '<svg id="papel"/>' : '<svg id="tema"/>'));
+  const png = new Blob(['png'], { type: 'image/png' });
+  mocks.aPng.mockResolvedValue(png);
+  await act(async () => ejecutarArchivo(T.app.exportarSvg));
+  const [svg, nombreSvg] = mocks.descargar.mock.calls[0]! as [Blob, string];
+  expect([await svg.text(), svg.type, nombreSvg]).toEqual(['<svg id="tema"/>', 'image/svg+xml', `${T.app.proyectoDemo}.svg`]);
+  await act(async () => ejecutarArchivo(T.app.exportarPng));
+  expect(mocks.aPng).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>');
+  expect(mocks.descargar).toHaveBeenLastCalledWith(png, `${T.app.proyectoDemo}.png`);
+  // «Print / Save as PDF» is the print dialog on the web.
+  await act(async () => ejecutarArchivo(T.app.imprimirPdf));
+  expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>', T.app.proyectoDemo);
 });
 
 it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {

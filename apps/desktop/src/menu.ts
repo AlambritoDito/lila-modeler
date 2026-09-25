@@ -83,6 +83,12 @@ export function menuTemplate(
         // desplegable dentro del diálogo: el diálogo nativo de guardar no admite elegir «carpeta o
         // archivo», así que la elección tiene que estar antes de abrirlo.
         { label: S.guardarComoCarpeta, click: () => send('guardarComoCarpeta') },
+        // The diagram as an image (#451); Print is the shortcut map's `imprimir`.
+        { type: 'separator' },
+        { label: S.exportarSvg, click: () => send('exportarSvg') },
+        { label: S.exportarPng, click: () => send('exportarPng') },
+        { label: S.exportarPdf, click: () => send('exportarPdf') },
+        atajo(S.imprimir, 'CmdOrCtrl+P', 'imprimir'),
         // ⌘W (owner request, 2026-09-25): on macOS the `windowMenu` role brings Minimize, Zoom and
         // Bring All to Front but not Close, so the key did nothing; on Windows/Linux that same role
         // already carries Close (Ctrl+W), so adding it here would list it twice. The role closes

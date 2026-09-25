@@ -78,6 +78,9 @@ export const es: Strings = {
     guardarComo: 'Guardar como',
     abrirBpmn: 'Abrir .bpmn',
     exportarBpmn: 'Exportar .bpmn',
+    exportarSvg: 'Exportar diagrama como SVG',
+    exportarPng: 'Exportar diagrama como PNG',
+    imprimirPdf: 'Imprimir / Guardar como PDF…',
     tituloNuevo: 'Nuevo proyecto',
     tituloAbrir: 'Abrir proyecto',
     tituloGuardar: 'Guardar proyecto',
@@ -96,6 +99,10 @@ export const es: Strings = {
       guardarProyecto: 'Guardar proyecto',
       guardarComo: 'Guardar como…',
       guardarComoCarpeta: 'Guardar como carpeta…',
+      exportarSvg: 'Exportar diagrama como SVG…',
+      exportarPng: 'Exportar diagrama como PNG…',
+      exportarPdf: 'Exportar diagrama como PDF…',
+      imprimir: 'Imprimir…',
     },
 
     /** Botón buscador de la barra: abre la paleta de comandos (#410). El texto de dentro
@@ -1100,6 +1107,7 @@ export const es: Strings = {
     abrir: 'Abrir proyecto',
     guardar: 'Guardar proyecto',
     guardarComo: 'Guardar como',
+    imprimir: 'Imprimir el diagrama',
     ajustes: 'Ajustes',
     paleta: 'Paleta de comandos',
     'modo:modelar': 'Modelar',

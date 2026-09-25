@@ -93,6 +93,10 @@ export const en = {
     guardarComo: 'Save as',
     abrirBpmn: 'Open .bpmn',
     exportarBpmn: 'Export .bpmn',
+    /** Diagram export (#451): downloads on the web; PDF is the browser's print dialog. */
+    exportarSvg: 'Export diagram as SVG',
+    exportarPng: 'Export diagram as PNG',
+    imprimirPdf: 'Print / Save as PDF…',
     tituloNuevo: 'New project',
     tituloAbrir: 'Open project',
     tituloGuardar: 'Save project',
@@ -115,6 +119,10 @@ export const en = {
       guardarProyecto: 'Save project',
       guardarComo: 'Save as…',
       guardarComoCarpeta: 'Save as folder…',
+      exportarSvg: 'Export diagram as SVG…',
+      exportarPng: 'Export diagram as PNG…',
+      exportarPdf: 'Export diagram as PDF…',
+      imprimir: 'Print…',
     },
 
     /** The bar's search button: it opens the command palette (#410). */
@@ -1119,6 +1127,7 @@ export const en = {
     abrir: 'Open project',
     guardar: 'Save project',
     guardarComo: 'Save as',
+    imprimir: 'Print the diagram',
     ajustes: 'Settings',
     paleta: 'Command palette',
     'modo:modelar': 'Model',

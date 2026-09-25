@@ -87,6 +87,11 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       // LILA-317: tampoco existía antes — «Guardar como…» pasó a crear un `.lila` y la carpeta
       // necesitaba su propia entrada.
       guardarComoCarpeta: 'Guardar como carpeta…',
+      // #451: the diagram export entries are new too.
+      exportarSvg: 'Exportar diagrama como SVG…',
+      exportarPng: 'Exportar diagrama como PNG…',
+      exportarPdf: 'Exportar diagrama como PDF…',
+      imprimir: 'Imprimir…',
       // #413: the View and Simulation menus are new, the app's own instead of Electron's role.
       vista: 'Vista',
       paleta: 'Paleta de comandos',
