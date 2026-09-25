@@ -74,8 +74,9 @@ Opciones de mcp:
   directorio desde el que se lanzó. No se ejecuta a mano: lo lanza el cliente MCP.
 
 Opciones generales:
-  --lang en|es  Idioma de la salida. Por defecto, LILA_LANG y luego LANG; inglés si no hay.
-  -h, --help    Muestra esta ayuda.`;
+  --lang en|es     Idioma de la salida. Por defecto, LILA_LANG y luego LANG; inglés si no hay.
+  -h, --help       Muestra esta ayuda.
+  -v, --version    Imprime la versión instalada.`;
 
 export const es: Catalog = {
   codes: {

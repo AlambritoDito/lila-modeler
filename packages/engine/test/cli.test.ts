@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { extractLang, main, resolveLocale } from '../src/cli.js';
+import { version } from '../src/version.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const pedido = `${repo}examples/pedido/model.bpmn`;
@@ -94,6 +95,15 @@ test('validate sin ruta sale con 1', async () => {
 
 test('--help sale con 0', async () => {
   expect(await main(['--help'])).toBe(0);
+});
+
+// Aceptación #48: `npx @lila/engine@beta --version` tiene que imprimir la versión y salir con 0.
+test('--version, -v y el subcomando version imprimen la versión y salen con 0', async () => {
+  for (const args of [['--version'], ['-v'], ['version']]) {
+    out = [];
+    expect(await main(args)).toBe(0);
+    expect(out.join('\n').trim()).toBe(version);
+  }
 });
 
 // Aceptación LILA-185: un modelo que perdió elementos al cargarse sale con 1 y lo dice.

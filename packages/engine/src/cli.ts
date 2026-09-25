@@ -59,6 +59,7 @@ import {
 } from './format.js';
 import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './messages/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
+import { version } from './version.js';
 
 export { resolveLocale } from './locale.js';
 
@@ -1002,6 +1003,10 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (command === '--help' || command === '-h') {
     console.log(C.usage());
+    return 0;
+  }
+  if (command === '--version' || command === '-v' || command === 'version') {
+    console.log(version);
     return 0;
   }
 
