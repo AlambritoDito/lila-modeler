@@ -1513,6 +1513,7 @@ body {
   margin: 4px 0;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .calendario .rotulo {
@@ -2545,14 +2546,19 @@ body {
   background: none;
 }
 
-/* ---------- chrome no seleccionable (#463) ---------- */
+/* ---------- unselectable chrome (#463) ---------- */
 
-/* Owner request: dragging or ⌘A over the app's chrome (top bar, menus, scenario rail, mode tabs,
-   palette, collapsible summaries, buttons, validation chips, the calendar grid) selected its
-   text, which got in the way of lasso-selecting on the canvas and does not happen in native apps
-   or Bizagi. One rule per region, not per element; nothing global or on `.app`, so content is
-   untouched: inputs/textarea, the scenario JSON view, the results/compare tables, validation
-   messages, About and the shortcuts table stay selectable (people copy those). */
+/* Owner request: dragging or ⌘A over the app's chrome (top bar, menus, scenario rail, diagram
+   tabs, mode tabs, palette, collapsible summaries, buttons, validation chips, the scenario
+   heading, the step buttons) selected its text, which got in the way of lasso-selecting on the
+   canvas and does not happen in native apps or Bizagi. One rule per region, not per element;
+   nothing global or on `.app`, so content is untouched: inputs/textarea, the scenario JSON view,
+   the results/compare tables, validation messages, About and the shortcuts table stay selectable
+   (people copy those). `.calendario` already had its own `user-select: none` (see above) and is
+   not repeated here. `.djs-container svg` stops Chrome's default select-all from painting the
+   canvas's BPMN labels when a chrome button has focus (QA of #463, should-fix 2); bpmn-js's own
+   label editor is an HTML `contenteditable` outside the `svg`, so it keeps working. Field
+   `<label>`s and the Bottlenecks switch stay selectable on purpose (QA of #463, should-fix 3). */
 .barra,
 .menu-archivo,
 .menu-vista,
@@ -2561,14 +2567,17 @@ body {
 .rail-escenarios,
 .modos,
 .pestanas,
-.estado,
+.diagramas,
+.app > .estado,
 .ajustes-nav,
 .escenario summary,
+.escenario-cabecera,
+.paso,
 .paleta-grupos summary,
 .ajustes .grupo > summary,
 .boton,
 .chips-validacion,
-.calendario {
+.djs-container svg {
   user-select: none;
   -webkit-user-select: none;
 }

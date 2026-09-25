@@ -381,27 +381,47 @@ it('a `.fila` cell can shrink below its control\'s content size, so a long theme
 it('the chrome is not text-selectable, but content still is (#463)', () => {
   // One rule, one region each — not one per element — so this reads the whole comma-list rule
   // rather than a single selector's own `{…}` (`bloque()`/`bloqueDeLinea()` need the selector
-  // immediately before the brace, which only the last item in the list satisfies).
-  const inicio = appCss.indexOf('chrome no seleccionable');
-  expect(inicio).toBeGreaterThanOrEqual(0);
-  const apertura = appCss.indexOf('{', inicio);
+  // immediately before the brace, which only the last item in the list satisfies). The list is
+  // compared with `toEqual`, not a substring check per selector: a substring check let `.paleta,`
+  // be removed without failing (`.paleta-grupos summary` still contains "`.paleta`") and let
+  // `.app,` sneak in undetected (the exclusion check below only looked for the literal `.app {`).
+  const inicioSeccion = appCss.indexOf('unselectable chrome');
+  expect(inicioSeccion).toBeGreaterThanOrEqual(0);
+  // Two comments precede the rule (the section header and the description) — skip past both.
+  const finPrimerComentario = appCss.indexOf('*/', inicioSeccion) + 2;
+  const finComentarios = appCss.indexOf('*/', finPrimerComentario) + 2;
+  const apertura = appCss.indexOf('{', finComentarios);
   const cierre = appCss.indexOf('}', apertura);
-  const cuerpo = appCss.slice(inicio, cierre);
+  const selectores = appCss.slice(finComentarios, apertura).split(',').map((s) => s.trim()).filter(Boolean);
+  const cuerpo = appCss.slice(apertura, cierre);
 
-  for (const region of [
+  expect(selectores).toEqual([
     '.barra', '.menu-archivo', '.menu-vista', '.vista-grupo', '.paleta', '.rail-escenarios',
-    '.modos', '.pestanas', '.estado', '.ajustes-nav', '.escenario summary', '.paleta-grupos summary',
-    '.ajustes .grupo > summary', '.boton', '.chips-validacion', '.calendario',
-  ]) {
-    expect(cuerpo).toContain(region);
-  }
-  expect(cuerpo).toContain('user-select: none');
+    '.modos', '.pestanas', '.diagramas', '.app > .estado', '.ajustes-nav', '.escenario summary',
+    '.escenario-cabecera', '.paso', '.paleta-grupos summary', '.ajustes .grupo > summary',
+    '.boton', '.chips-validacion', '.djs-container svg',
+  ]);
+  // The standard property has to be its own declaration, not just a substring of the prefixed
+  // one: a lone `-webkit-user-select: none;` (no plain `user-select`) still contains the text
+  // "user-select: none" and would pass a substring check.
+  expect(cuerpo).toMatch(/(?<!-webkit-)user-select:\s*none/);
   expect(cuerpo).toContain('-webkit-user-select: none');
 
   // Content the owner explicitly wants to keep selectable — inputs/textarea by definition,
   // the scenario JSON view, results/compare tables, validation messages, About, the shortcuts
-  // table — must not be swept in by a wider rule.
-  for (const contenido of ['.json-escenario', '.zona-resultados', '.escenario .error', '.escenario .aviso', '.acerca', '.ajustes-atajos-grupo', 'body', '.app {', '.lienzo']) {
-    expect(cuerpo).not.toContain(contenido);
+  // table, field labels — must not be swept in by a wider rule.
+  for (const contenido of [
+    '.json-escenario', '.zona-resultados', '.escenario .error', '.escenario .aviso', '.acerca',
+    '.ajustes-atajos-grupo', 'body', '.app', '.lienzo', '.campo', '.interruptor',
+  ]) {
+    expect(selectores).not.toContain(contenido);
   }
+});
+
+it('`.calendario` keeps its own, older `user-select: none` — not repeated in the chrome rule above (#463)', () => {
+  // Grid painting already disabled selection (LILA-203); this PR only added the missing
+  // `-webkit-` prefix there instead of listing `.calendario` a second time in the shared rule.
+  const calendario = bloqueDeLinea('.calendario');
+  expect(calendario).toContain('user-select: none');
+  expect(calendario).toContain('-webkit-user-select: none');
 });
