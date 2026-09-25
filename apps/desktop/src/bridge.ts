@@ -158,6 +158,17 @@ export interface Ajustes {
   readonly idioma?: string;
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   readonly temas?: readonly TemaGuardado[];
+  /**
+   * Follow the system's light/dark scheme (#472); missing means on. While on, the applied theme is
+   * `temaClaro` or `temaOscuro` and `tema` is only the last one picked by hand.
+   */
+  readonly seguirSistema?: boolean;
+  /** Theme id used while the system is light (#472); missing means Lila Light. */
+  readonly temaClaro?: string;
+  /** Theme id used while the system is dark (#472); missing means Lila Dark. */
+  readonly temaOscuro?: string;
+  /** The one-time «theme changed with the system» prompt was already shown (#472). */
+  readonly avisoSeguirSistema?: boolean;
   /** Width of the right panel in px (design 2a); the renderer clamps it to 300–520. */
   readonly panelAncho?: number;
   /** Width of the shape palette in Model, in px (#406); the renderer clamps it to 180–360. */

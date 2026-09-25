@@ -37,7 +37,8 @@ import type { EventLogRow } from '@lila/engine';
 import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
-import { temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
+import { sistemaOscuro, temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
+import type { Ranuras } from './settings/Apariencia';
 // Aliased: `Ajustes` above is already the bridge's settings-payload type (`readSettings`/
 // `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
 import { Ajustes as AjustesDialogo } from './settings/Ajustes';
@@ -125,6 +126,11 @@ async function preferencias(): Promise<Ajustes> {
     // la densidad, que son texto y no pueden romperse.
     let temas: unknown = null;
     try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    // Following the system scheme (#472): two flags stored as '1'/'0' and the two theme slots.
+    const seguirSistema = localStorage.getItem('lila.seguirSistema');
+    const ranuraClara = localStorage.getItem('lila.temaClaro');
+    const ranuraOscura = localStorage.getItem('lila.temaOscuro');
+    const avisoSeguirSistema = localStorage.getItem('lila.avisoSeguirSistema');
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
     let ventana: unknown = null;
     try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
@@ -140,6 +146,10 @@ async function preferencias(): Promise<Ajustes> {
       ...(Number.isFinite(railAncho) ? { railAncho } : {}),
       ...(paneles === null ? {} : { paneles: paneles as NonNullable<Ajustes['paneles']> }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+      ...(seguirSistema === null ? {} : { seguirSistema: seguirSistema !== '0' }),
+      ...(ranuraClara === null ? {} : { temaClaro: ranuraClara }),
+      ...(ranuraOscura === null ? {} : { temaOscuro: ranuraOscura }),
+      ...(avisoSeguirSistema === null ? {} : { avisoSeguirSistema: avisoSeguirSistema === '1' }),
       ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
     };
   } catch { return {}; }
@@ -159,12 +169,32 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
+    if (ajustes.seguirSistema !== undefined) localStorage.setItem('lila.seguirSistema', ajustes.seguirSistema ? '1' : '0');
+    if (ajustes.temaClaro !== undefined) localStorage.setItem('lila.temaClaro', ajustes.temaClaro);
+    if (ajustes.temaOscuro !== undefined) localStorage.setItem('lila.temaOscuro', ajustes.temaOscuro);
+    if (ajustes.avisoSeguirSistema !== undefined) localStorage.setItem('lila.avisoSeguirSistema', ajustes.avisoSeguirSistema ? '1' : '0');
     if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
     if (ajustes.paletaAncho !== undefined) localStorage.setItem('lila.paletaAncho', String(ajustes.paletaAncho));
     if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
     if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
+}
+/** Each system scheme's Lila theme: the slots' defaults (#472). */
+const RANURAS_DEFECTO: Ranuras = { claro: 'lila-light', oscuro: 'lila-dark' };
+/**
+ * The theme slots saved before (#472), or, when none was ever saved, the one-time migration of the
+ * old single `tema`: nothing or a Lila theme gives the Lila defaults, any other theme goes into
+ * both slots, so whoever had picked Akira sees no change until they pick a second theme. Both
+ * slots are always written together (`guardarRanuras`), so this runs until the first write only.
+ */
+function ranurasGuardadas(ajustes: Ajustes): Ranuras {
+  const { tema } = ajustes;
+  if (ajustes.temaClaro !== undefined || ajustes.temaOscuro !== undefined) {
+    return { claro: ajustes.temaClaro ?? RANURAS_DEFECTO.claro, oscuro: ajustes.temaOscuro ?? RANURAS_DEFECTO.oscuro };
+  }
+  if (tema === undefined || tema === '' || tema === 'lila-light' || tema === 'lila-dark') return RANURAS_DEFECTO;
+  return { claro: tema, oscuro: tema };
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
 function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
@@ -432,6 +462,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [temaId, setTemaId] = useState<string>(temaPorDefecto);
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
+  /**
+   * Follow the system's light/dark scheme (#472), on by default: the applied theme is the slot of
+   * the current scheme, and `temaId` is only frozen as an explicit choice when this is off.
+   * `ranurasRef` mirrors `ranuras` because deleting a user theme rewrites the slots and then selects
+   * in the same tick, before React re-renders (same trick as `panelesRef`).
+   */
+  const [seguir, setSeguir] = useState(true);
+  const [ranuras, setRanuras] = useState<Ranuras>(RANURAS_DEFECTO);
+  const ranurasRef = useRef<Ranuras>(RANURAS_DEFECTO);
+  /** The one-time prompt of the first automatic switch (#472): `anterior` is what «Turn off» restores. */
+  const avisoVisto = useRef(false);
+  const [avisoSistema, setAvisoSistema] = useState<{ anterior: string; oscuro: boolean } | null>(null);
+  const avisoDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (avisoSistema !== null && !avisoDialog.current?.open) avisoDialog.current?.showModal();
+  }, [avisoSistema]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
   /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
   const [panelAncho, setPanelAncho] = useState(320);
@@ -913,7 +959,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
       // (o al Lila del esquema del sistema, sin guardarlo), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
+      // #472: a slot that names a deleted or unknown theme falls back to that scheme's Lila theme.
+      const r = ranurasGuardadas(guardadas);
+      const enRanura = (v: string, defecto: TemaId): string => temaDe(v, mios)?.id ?? valido(v, temaIds(), defecto);
+      ranurasRef.current = { claro: enRanura(r.claro, 'lila-light'), oscuro: enRanura(r.oscuro, 'lila-dark') };
+      setRanuras(ranurasRef.current);
+      const sigue = guardadas.seguirSistema !== false;
+      setSeguir(sigue);
+      avisoVisto.current = guardadas.avisoSeguirSistema === true;
+      const id = sigue
+        ? ranurasRef.current[sistemaOscuro() ? 'oscuro' : 'claro']
+        : temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
@@ -959,14 +1015,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /**
    * Único punto donde se aplica un tema: el integrado se pide por `fetch` y el del usuario sale de
    * `lista` (LILA-114), que se pasa a mano porque quien acaba de editarla todavía no la ve en el
-   * estado de React.
+   * estado de React. Applies without persisting anything — the system-scheme listener (#472) goes
+   * through here too, and an automatic switch is not a choice. `alAplicar` runs only once applied,
+   * and synchronously for a user theme (no `fetch`), which is what callers persist in.
    */
-  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
-    // '' means "no explicit choice, follow the system" (Appearance's delete button, #422 QA S1):
-    // resolve it to a concrete Lila id to actually apply and show in the selector, but persist the
-    // ORIGINAL `id` — so '' — instead of the resolved one. Persisting the resolved id would freeze
-    // the app on today's OS scheme, since `preferencias()` would read that concrete id back as an
-    // explicit choice on every future launch, even after the OS scheme changes.
+  async function aplicarTemaId(id: string, lista: readonly TemaGuardado[] = temas, alAplicar?: () => void): Promise<void> {
     const idAplicado = id === '' ? temaPorDefecto() : id;
     try {
       const t = esDelUsuario(idAplicado) ? temaDe(idAplicado, lista)?.tema : await cargarTema(idAplicado as TemaId);
@@ -978,14 +1031,86 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       modelador?.repintar();
       setTema(t);
       setAvisoTema(null);
-      if (idAplicado !== temaId) {
-        setTemaId(idAplicado);
-        recordar({ tema: id });
-      }
+      setTemaId(idAplicado);
+      alAplicar?.();
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
   }
+
+  /** Saves both slots together (see `ranurasGuardadas`), only when one changed. */
+  function guardarRanuras(nuevas: Ranuras): void {
+    if (nuevas.claro === ranurasRef.current.claro && nuevas.oscuro === ranurasRef.current.oscuro) return;
+    ranurasRef.current = nuevas;
+    setRanuras(nuevas);
+    recordar({ temaClaro: nuevas.claro, temaOscuro: nuevas.oscuro });
+  }
+
+  /** Settings → Appearance's «Light theme»/«Dark theme» (#472): applied at once if it is the current scheme's. */
+  function cambiarRanura(esquema: keyof Ranuras, id: string): void {
+    guardarRanuras({ ...ranurasRef.current, [esquema]: id === '' ? RANURAS_DEFECTO[esquema] : id });
+    if (seguir && esquema === (sistemaOscuro() ? 'oscuro' : 'claro')) void aplicarTemaId(ranurasRef.current[esquema]);
+  }
+
+  /**
+   * The user picks a theme. `tema` keeps being saved as the explicit choice (it rules when the
+   * system is not followed); while following, the pick also lands in the current scheme's slot, so
+   * it shows at once and survives the next switch.
+   */
+  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
+    // '' means "no explicit choice, follow the system" (Appearance's delete button, #422 QA S1):
+    // resolve it to a concrete Lila id to actually apply and show in the selector, but persist the
+    // ORIGINAL `id` — so '' — instead of the resolved one. Persisting the resolved id would freeze
+    // the app on today's OS scheme, since `preferencias()` would read that concrete id back as an
+    // explicit choice on every future launch, even after the OS scheme changes.
+    const idAplicado = id === '' ? temaPorDefecto() : id;
+    const cambia = idAplicado !== temaId;
+    await aplicarTemaId(id, lista, () => {
+      if (cambia) recordar({ tema: id });
+      if (seguir) guardarRanuras({ ...ranurasRef.current, [sistemaOscuro() ? 'oscuro' : 'claro']: idAplicado });
+    });
+  }
+
+  /**
+   * The «Follow the system theme» toggle (#472). Off freezes `restaurar` (by default the theme on
+   * screen) as the explicit choice; on applies the current scheme's slot.
+   */
+  function cambiarSeguir(on: boolean, restaurar: string = temaId): void {
+    setSeguir(on);
+    if (on) {
+      recordar({ seguirSistema: true });
+      void aplicarTemaId(ranurasRef.current[sistemaOscuro() ? 'oscuro' : 'claro']);
+    } else {
+      recordar({ seguirSistema: false, tema: restaurar });
+      if (restaurar !== temaId) void aplicarTemaId(restaurar);
+    }
+  }
+
+  // #472: while following, a switch of the OS scheme applies the other slot. The first automatic
+  // switch ever asks once whether to keep it (`avisoSeguirSistema`); the flag is saved as soon as
+  // the prompt shows, so reloading without answering does not ask again. In Electron the renderer
+  // sees the OS scheme through `nativeTheme` (its `themeSource` stays 'system').
+  const temaListo = tema !== undefined;
+  useEffect(() => {
+    if (!seguir || !temaListo || typeof window.matchMedia !== 'function') return undefined;
+    const consulta = window.matchMedia('(prefers-color-scheme: dark)');
+    const alCambiar = (e: MediaQueryListEvent): void => {
+      const id = ranurasRef.current[e.matches ? 'oscuro' : 'claro'];
+      if (id === temaId) return;
+      const anterior = temaId;
+      void aplicarTemaId(id, temas, () => {
+        // Another switch while the prompt is still open only updates what it says.
+        if (avisoVisto.current) { setAvisoSistema((a) => (a === null ? a : { ...a, oscuro: e.matches })); return; }
+        avisoVisto.current = true;
+        recordar({ avisoSeguirSistema: true });
+        setAvisoSistema({ anterior, oscuro: e.matches });
+      });
+    };
+    consulta.addEventListener('change', alCambiar);
+    return () => consulta.removeEventListener('change', alCambiar);
+    // `aplicarTemaId` reads `temas` and `modelador`: re-subscribing with them keeps it current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seguir, temaListo, temaId, temas, modelador]);
 
   /**
    * Cambiar de idioma no recarga nada: `setLocale` avisa a todos los componentes suscritos con
@@ -1007,6 +1132,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   function guardarTemas(lista: readonly TemaGuardado[], seleccion: string = temaId): void {
     setTemas(lista);
     recordar({ temas: lista });
+    // #472: a slot that pointed at a deleted user theme falls back to its Lila default.
+    const vigente = (id: string, defecto: string): string => (esDelUsuario(id) && temaDe(id, lista) === undefined ? defecto : id);
+    guardarRanuras({ claro: vigente(ranurasRef.current.claro, RANURAS_DEFECTO.claro), oscuro: vigente(ranurasRef.current.oscuro, RANURAS_DEFECTO.oscuro) });
     void seleccionarTema(seleccion, lista);
   }
 
@@ -1489,6 +1617,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
+      {/* #472: shown once, the first time the theme follows the system on its own. Esc = Keep. */}
+      {avisoSistema !== null && <dialog ref={avisoDialog} className="aviso-sistema" aria-labelledby="aviso-sistema-titulo" onCancel={(event) => { event.preventDefault(); setAvisoSistema(null); }}>
+        <h2 id="aviso-sistema-titulo">{S.apariencia.avisoTitulo}</h2>
+        <p>{S.apariencia.avisoTexto(temaDe(temaId, temas)?.tema.name ?? S.app.temas[temaId as TemaId] ?? temaId, avisoSistema.oscuro)}</p>
+        <div className="acciones">
+          <button className="boton primario" type="button" onClick={() => setAvisoSistema(null)}>{S.apariencia.mantener}</button>
+          <button className="boton" type="button" onClick={() => { const { anterior } = avisoSistema; setAvisoSistema(null); cambiarSeguir(false, anterior); }}>{S.apariencia.apagar}</button>
+        </div>
+      </dialog>}
       {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>
         <h2 id="perdida-titulo">{S.app.perdidaTitulo(perdidasAlExportar.length)}</h2>
         <p>{S.app.perdidaTexto(confirmarPerdida === 'guardar')}</p>
@@ -1688,6 +1825,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           onDensidad={(d) => setDensidad(d as Densidad)}
           onTemas={guardarTemas}
           onSeleccionar={(id) => void seleccionarTema(id)}
+          seguir={seguir}
+          onSeguir={(on) => cambiarSeguir(on)}
+          ranuras={ranuras}
+          onRanura={(esquema, id) => cambiarRanura(esquema, id)}
           abrirAcerca={abrirAcerca}
           cerrarDialogo={() => ajustesDialog.current?.close()}
         />

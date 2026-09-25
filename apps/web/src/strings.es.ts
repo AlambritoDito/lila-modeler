@@ -292,6 +292,17 @@ export const es: Strings = {
     muestraTexto: 'Texto sobre superficie',
     muestraSecundario: 'Texto secundario',
     muestraBoton: 'Acento',
+    /** Seguir el esquema claro/oscuro del sistema (#472). */
+    seguirSistema: 'Seguir el tema del sistema',
+    seguirSistemaAyuda: 'Cambia entre el tema claro y el oscuro de abajo cuando tu sistema cambia de modo.',
+    temaClaro: 'Tema claro',
+    temaOscuro: 'Tema oscuro',
+    /** Aviso único la primera vez que el tema cambia solo (#472). */
+    avisoTitulo: 'El tema cambió',
+    avisoTexto: (tema: string, oscuro: boolean): string =>
+      `El tema cambió a ${tema} porque tu sistema pasó a modo ${oscuro ? 'oscuro' : 'claro'}. ¿Mantener el cambio automático?`,
+    mantener: 'Mantener',
+    apagar: 'Apagar',
 
     /**
      * Rótulo de cada grupo del editor, por prefijo del token. Son los mismos grupos con los que

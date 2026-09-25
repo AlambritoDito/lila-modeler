@@ -219,7 +219,8 @@ it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar
   expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
   expect(ultimoOverlay()[1]).toBe(true);
 
-  const interruptor = container.querySelector<HTMLInputElement>('.campo.interruptor input')!;
+  // Scoped to the Simulation tab: Settings → Appearance has its own toggle since #472.
+  const interruptor = container.querySelector<HTMLInputElement>('.simulacion .campo.interruptor input')!;
   await act(async () => interruptor.click());
   // Apagar no descarta la corrida: `sincronizarOverlay` limpia el lienzo por `visible = false`.
   expect(ultimoOverlay()[0]).not.toBeNull();
@@ -444,7 +445,7 @@ it('un `lila.temas` ilegible no se lleva por delante el tema ni la densidad (QA 
   expect(fetch).toHaveBeenLastCalledWith('./papel.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
   // La lista ilegible se pierde sola: el selector solo trae los integrados.
-  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+  expect(selectTema().querySelectorAll('optgroup')).toHaveLength(1);
 });
 it('Enter en un campo de texto de Ajustes no cierra el diálogo (QA de #277)', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
@@ -526,9 +527,24 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
 
 // ---------- default theme by prefers-color-scheme (#404) ----------
 
-/** Stubs `matchMedia` so only `(prefers-color-scheme: dark)` answers `oscuro`. */
+/**
+ * A fake OS scheme: `matchMedia` answers only `(prefers-color-scheme: dark)` from it, and
+ * `cambiarEsquema` fires `change` on the subscribed lists, as the OS does (#472).
+ */
+const sistema = { oscuro: false, oyentes: new Set<(e: { matches: boolean }) => void>() };
 function esquemaDelSistema(oscuro: boolean): void {
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: oscuro && query === '(prefers-color-scheme: dark)', media: query }));
+  sistema.oscuro = oscuro;
+  sistema.oyentes.clear();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() { return sistema.oscuro && query === '(prefers-color-scheme: dark)'; },
+    media: query,
+    addEventListener: (_tipo: string, oyente: (e: { matches: boolean }) => void) => { sistema.oyentes.add(oyente); },
+    removeEventListener: (_tipo: string, oyente: (e: { matches: boolean }) => void) => { sistema.oyentes.delete(oyente); },
+  }));
+}
+async function cambiarEsquema(oscuro: boolean): Promise<void> {
+  sistema.oscuro = oscuro;
+  await act(async () => { for (const oyente of [...sistema.oyentes]) oyente({ matches: oscuro }); });
 }
 /** Serves the real built-in theme JSONs, so `data-esquema` is computed from their `bg.base`. */
 function temasReales(): void {
@@ -575,6 +591,111 @@ it('desktop without a saved theme follows the OS and never writes the automatic 
   await rearrancar();
   expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
   expect(escrito.some((a) => 'tema' in a)).toBe(false);
+});
+
+// ---------- theme follows the system scheme (#472) ----------
+
+const avisoSistema = (): HTMLDialogElement | null => container.querySelector<HTMLDialogElement>('dialog.aviso-sistema');
+const ranura = (etiqueta: string): HTMLSelectElement | null =>
+  container.querySelector<HTMLSelectElement>(`dialog.ajustes select[aria-label="${etiqueta}"]`);
+async function responderAviso(texto: string): Promise<void> {
+  const boton = [...avisoSistema()!.querySelectorAll('button')].find((b) => b.textContent === texto);
+  expect(boton, texto).toBeDefined();
+  await act(async () => { boton!.click(); });
+}
+it('follows the system by default: the theme is the current scheme\'s slot (#472)', async () => {
+  esquemaDelSistema(true); temasReales();
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(selectTema().value).toBe('lila-dark');
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .interruptor input')!.checked).toBe(true);
+  expect(ranura(T.apariencia.temaClaro)!.value).toBe('lila-light');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('lila-dark');
+});
+it('a system switch applies the other slot and asks once, saving that it asked (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(container.querySelector('.app')?.getAttribute('data-esquema')).toBe('oscuro');
+  expect(avisoSistema()?.open).toBe(true);
+  expect(avisoSistema()!.textContent).toContain(T.apariencia.avisoTexto(T.app.temas['lila-dark'], true));
+  expect(localStorage.getItem('lila.avisoSeguirSistema')).toBe('1');
+  // An automatic switch is not a choice: nothing but the prompt flag is saved.
+  expect(localStorage.getItem('lila.tema')).toBeNull();
+  expect(localStorage.getItem('lila.temaOscuro')).toBeNull();
+  // A second switch while it is still open follows too, and the one prompt says so.
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(container.querySelectorAll('dialog.aviso-sistema')).toHaveLength(1);
+  expect(avisoSistema()!.textContent).toContain(T.apariencia.avisoTexto(T.app.temas['lila-light'], false));
+});
+it('«Turn off» restores the previous theme, saves it and stops following (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  await responderAviso(T.apariencia.apagar);
+  expect(avisoSistema()).toBeNull();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(localStorage.getItem('lila.seguirSistema')).toBe('0');
+  expect(localStorage.getItem('lila.tema')).toBe('lila-light');
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .interruptor input')!.checked).toBe(false);
+  expect(ranura(T.apariencia.temaOscuro)).toBeNull();
+  vi.mocked(fetch).mockClear();
+  await cambiarEsquema(false);
+  await cambiarEsquema(true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(avisoSistema()).toBeNull();
+  // And it survives a restart: off means the saved `tema` rules, whatever the OS says.
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+});
+it('«Keep» (or Esc) keeps following and the prompt never comes back (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  await responderAviso(T.apariencia.mantener);
+  expect(avisoSistema()).toBeNull();
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(avisoSistema()).toBeNull();
+  expect(localStorage.getItem('lila.seguirSistema')).toBeNull();
+  // Esc on a fresh prompt is «Keep» too.
+  localStorage.removeItem('lila.avisoSeguirSistema');
+  await rearrancar();
+  await cambiarEsquema(true);
+  await act(async () => { avisoSistema()!.dispatchEvent(new Event('cancel', { cancelable: true })); });
+  expect(avisoSistema()).toBeNull();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(localStorage.getItem('lila.seguirSistema')).toBeNull();
+});
+it('migration: a saved non-Lila theme fills both slots, so a system switch changes nothing (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  localStorage.setItem('lila.tema', 'akira');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./akira.json');
+  expect(ranura(T.apariencia.temaClaro)!.value).toBe('akira');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('akira');
+  vi.mocked(fetch).mockClear();
+  await cambiarEsquema(true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(avisoSistema()).toBeNull();
+  expect(localStorage.getItem('lila.avisoSeguirSistema')).toBeNull();
+});
+it('picking a theme while following writes the current scheme\'s slot (#472)', async () => {
+  esquemaDelSistema(true); temasReales();
+  localStorage.setItem('lila.avisoSeguirSistema', '1');
+  await rearrancar();
+  const select = selectTema();
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+  expect(localStorage.getItem('lila.temaOscuro')).toBe('papel');
+  expect(localStorage.getItem('lila.temaClaro')).toBe('lila-light');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('papel');
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  await cambiarEsquema(true);
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
 });
 
 // ---------- idioma (LILA-210) ----------
@@ -756,6 +877,8 @@ it('eliminar el tema activo en escritorio persiste un `tema` vacío, no el id de
   // would freeze the app on today's OS scheme instead of following it on every future launch.
   expect(escrito).toContainEqual(expect.objectContaining({ tema: '' }));
   expect(escrito.some((a) => a.tema === 'lila-light')).toBe(false);
+  // #472: the migration put the deleted theme in both slots; both fall back to their Lila theme.
+  expect(escrito).toContainEqual({ temaClaro: 'lila-light', temaOscuro: 'lila-dark' });
 });
 
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
@@ -2506,7 +2629,7 @@ it('Appearance still shows the theme selector with its optgroup (#407)', async (
   await act(async () => porEtiqueta(T.app.ajustes).click());
   await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
   expect(selectTema()).not.toBeNull();
-  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+  expect(selectTema().querySelectorAll('optgroup')).toHaveLength(1);
 });
 
 it('Close is still the last button of the dialog and About sits in the header, from every tab (#407)', async () => {

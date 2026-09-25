@@ -16,7 +16,7 @@ import { useStrings } from '../i18n';
 import { DENSIDAD_IDS, type Densidad } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TemaGuardado } from '../theme/temas';
-import { Apariencia } from './Apariencia';
+import { Apariencia, type Ranuras } from './Apariencia';
 import { Atajos, type GrupoAtajos } from './Atajos';
 import { ATAJOS, etiqueta, MAC, type GrupoAtajo } from '../atajos';
 
@@ -37,6 +37,10 @@ export interface AjustesProps {
   readonly onDensidad: (densidad: Densidad) => void;
   readonly onTemas: (temas: readonly TemaGuardado[], seleccion?: string) => void;
   readonly onSeleccionar: (id: string) => void;
+  readonly seguir: boolean;
+  readonly onSeguir: (seguir: boolean) => void;
+  readonly ranuras: Ranuras;
+  readonly onRanura: (esquema: keyof Ranuras, id: string) => void;
   readonly abrirAcerca: () => void;
   /** Closes the `<dialog>` imperatively — needed only by the header's «About» button, which is
    * not a `type="submit"` of the form (that one already closes the dialog on its own). */
@@ -135,6 +139,10 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
             temas={props.temas}
             onTemas={props.onTemas}
             onSeleccionar={props.onSeleccionar}
+            seguir={props.seguir}
+            onSeguir={props.onSeguir}
+            ranuras={props.ranuras}
+            onRanura={props.onRanura}
           />
         </section>
         <section className="ajustes-panel" role="tabpanel" id="ajustes-panel-atajos" aria-labelledby="ajustes-tab-atajos" hidden={seccion !== 'atajos'}>

@@ -80,6 +80,10 @@ export function parseAjustes(value: unknown): Ajustes {
     densidad?: string;
     idioma?: string;
     temas?: readonly TemaGuardado[];
+    seguirSistema?: boolean;
+    temaClaro?: string;
+    temaOscuro?: string;
+    avisoSeguirSistema?: boolean;
     panelAncho?: number;
     paletaAncho?: number;
     railAncho?: number;
@@ -92,6 +96,12 @@ export function parseAjustes(value: unknown): Ajustes {
   // valen lo decide el renderer, igual que con el tema y la densidad.
   if (typeof value.idioma === 'string') ajustes.idioma = value.idioma;
   if (Array.isArray(value.temas)) ajustes.temas = value.temas.filter(isTemaGuardado).slice(0, MAX_TEMAS);
+  // Following the system scheme (#472): two flags and two theme ids, whose validity (like `tema`'s)
+  // the renderer decides.
+  if (typeof value.seguirSistema === 'boolean') ajustes.seguirSistema = value.seguirSistema;
+  if (typeof value.temaClaro === 'string') ajustes.temaClaro = value.temaClaro;
+  if (typeof value.temaOscuro === 'string') ajustes.temaOscuro = value.temaOscuro;
+  if (typeof value.avisoSeguirSistema === 'boolean') ajustes.avisoSeguirSistema = value.avisoSeguirSistema;
   // The right panel width (design 2a): the same 300–520 px the renderer's divider allows.
   if (typeof value.panelAncho === 'number' && value.panelAncho >= 300 && value.panelAncho <= 520) ajustes.panelAncho = value.panelAncho;
   // Left column widths (#406): the palette's 180–360 px and the rail's 160–320 px.

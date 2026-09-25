@@ -199,6 +199,13 @@ describe('ajustes de apariencia (LILA-113)', () => {
     });
   });
 
+  it('the four follow-the-system fields (#472) are kept only with their type', () => {
+    const buenos = { seguirSistema: false, temaClaro: 'papel', temaOscuro: 'u:3', avisoSeguirSistema: true };
+    expect(parseAjustes(buenos)).toEqual(buenos);
+    expect(parseAjustes({ seguirSistema: 'false', temaClaro: 7, temaOscuro: null, avisoSeguirSistema: 1 })).toEqual({});
+    expect(parseAjustes({ seguirSistema: true, temaClaro: ['papel'], tema: 'akira' })).toEqual({ seguirSistema: true, tema: 'akira' });
+  });
+
   it('panelAncho (design 2a) is kept only as a number inside 300–520', () => {
     expect(parseAjustes({ panelAncho: 440 })).toEqual({ panelAncho: 440 });
     expect(parseAjustes({ panelAncho: 299 })).toEqual({});
