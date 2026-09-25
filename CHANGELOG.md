@@ -17,11 +17,6 @@ this version.
   already had Close (Ctrl+W) in their Window menu, so nothing is duplicated there. ⌘Q / Ctrl+Q
   keep their `quit` role, now covered by a test. Documented in `docs/SHORTCUTS.md`.
 
-### Fixed
-
-- The MCP server reported `1.0.0-beta.6` in `serverInfo.version` while the package was already
-  beta.7: the constant in `packages/mcp/src/server.ts` is bumped with the rest.
-
 ## [1.0.0-beta.6] - 2026-09-24
 
 Lote C: keyboard, search and Settings. One shortcut map now drives the keys, the tooltips, the
