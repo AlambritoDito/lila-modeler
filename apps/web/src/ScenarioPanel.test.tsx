@@ -1161,3 +1161,27 @@ describe('ids behind «Advanced» (#447)', () => {
     expect(fila('Flow_Start_TomarPedido').querySelector('.id')).toBeNull();
   });
 });
+
+describe('model problems (#455)', () => {
+  it('problemasExtra adds to the header count and shows in the validation list, like the canvas chips', () => {
+    const escenario = asIsCorto();
+    const propios = problemasEscenario(escenario, ir, 'es');
+    const errores = propios.filter((p) => p.severidad === 'error').length;
+    const nosop = { ruta: 'elements.Msg_1', mensaje: 'Msg_1 (bpmn:intermediateCatchEvent): evento de mensaje no soportado por el simulador.', severidad: 'warning' as const };
+    montar(
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': escenario }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        problemasExtra={[nosop]}
+        seleccion={null}
+        onSeleccionar={() => {}}
+      />,
+    );
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.conteo(errores, propios.length - errores + 1));
+    expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
+  });
+});

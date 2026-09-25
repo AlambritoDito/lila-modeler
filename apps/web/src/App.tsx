@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn } from '@lila/engine/bpmn';
+import { parseBpmn, validateBpmnXml } from '@lila/engine/bpmn';
 import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
 import { CompareView } from './CompareView';
@@ -21,7 +21,7 @@ import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Mod
 import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
-import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
@@ -495,6 +495,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // IR del diagrama del lienzo, para que el panel valide con `validateScenario` (reglas R3…R14)
   // y no solo con el esquema. `null` mientras no se haya podido parsear.
   const [ir, setIr] = useState<ProcessIR | null>(null);
+  /**
+   * #455: the `E-NOSOP` of the canvas model (constructs the simulator does not run), from the same
+   * deferred reparse that sets `ir`. Only those: `E-SIN-START`/`E-SIN-END` and the rest of the full
+   * `validate()` stay a Run-time matter (#409, an empty «New» is not an error yet).
+   */
+  const [noSoportados, setNoSoportados] = useState<readonly { id: string; message: string }[]>([]);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
@@ -814,6 +820,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * más los que no cuelgan de ninguna figura: el diagnóstico del proyecto abierto y los avisos
    * de bpmn-js al importar.
    */
+  /**
+   * #455: a construct outside the simulated subset is a correct BPMN diagram while modelling, so
+   * in Model it is a warning; in every other mode it is the error Run is going to raise. Run itself
+   * is untouched: `simulationGate.ts` still fails with the engine's `E-NOSOP`.
+   */
+  const problemasModelo = useMemo<Problema[]>(
+    () => noSoportados.map((p) => ({ ruta: `elements.${p.id}`, mensaje: p.message, severidad: modo === 'modelar' ? 'warning' : 'error' })),
+    [noSoportados, modo],
+  );
+
   const validacion = useMemo(
     () => {
       // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
@@ -821,10 +837,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
-      const problemas = problemasEscenario(resuelto, ir, locale);
-      // ponytail (#409): an empty process («New») is not an error yet. Nothing to filter here:
-      // `E-SIN-START`/`E-SIN-END` come from the engine's full `validate()`, which the web app only
-      // runs at Run time (`simulationGate.ts`); `validateScenario` never emits them.
+      // A copy: the model's problems (#455) are appended to it, not to the lint's own list.
+      const problemas = [...problemasEscenario(resuelto, ir, locale), ...problemasModelo];
+      // ponytail (#409): an empty process («New») is not an error yet. `E-SIN-START`/`E-SIN-END`
+      // come from the engine's full `validate()`: the live reparse runs it since #455 but keeps only
+      // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
@@ -833,7 +850,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
     // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
     // the whole lint— would stay in the language it was resolved in.
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale],
+    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -865,12 +882,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     let vivo = true;
     const timer = setTimeout(() => {
-      void modelador.exportar().then((xml) => parseBpmn(xml)).then(({ ir: parseado }) => {
-        if (vivo) setIr(parseado);
-      }).catch(() => { if (vivo) setIr(null); });
+      // `validateBpmnXml` is `parseBpmn` plus the engine's `validate()`, and never throws for an
+      // invalid model: its `ir` is the same one `parseBpmn` returns (#455).
+      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale })).then((informe) => {
+        if (!vivo) return;
+        setIr(informe.ir);
+        setNoSoportados(informe.errors.filter((p) => p.code === 'E-NOSOP'));
+      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
-  }, [modelador, procesoId, revision]);
+    // The locale reparses because the `E-NOSOP` messages are the engine's, in the active language.
+  }, [modelador, procesoId, revision, locale]);
 
   /**
    * #420: a start or task drawn on the canvas gets `defaultElement` in each BASE scenario (the
@@ -1506,6 +1528,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onGuardar={() => { void guardar(); }}
       onDuplicar={anadirEscenario}
       ir={ir}
+      problemasExtra={problemasModelo}
       seleccion={seleccion}
       avanzado={avanzado}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
@@ -1800,7 +1823,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           enVentana={ventanaEscenario !== null ? escenarioId : null}
           id={ID_REGION.izquierda}
         />
-      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
+      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} seleccion={seleccion} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
       {/* Divider of the left column (#406): the palette in Model, the rail in Simulate, each
           with its own width. It stays on screen when the column is hidden, so a double-click
           or Enter can bring it back. */}
