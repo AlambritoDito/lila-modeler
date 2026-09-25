@@ -23,7 +23,12 @@ npm run build
 ```
 
 `npx lila` resuelve el binario del propio workspace (`packages/engine/bin/lila.js`), sin consultar
-el registro. Cuando se publique `@lila/engine`, los mismos comandos funcionan con:
+el registro.
+
+`npx lila` solo encuentra esta CLI dentro del clon (después de `npm ci`). En cualquier otro lado
+descarga el paquete `lila` ajeno de npm, así que desde otro directorio hay que llamar al binario
+directo (`node <clon>/packages/engine/bin/lila.js …`) o usar `npx --no lila …`, que se niega a
+instalar. Cuando se publique, usar `npx @lila/engine@beta …`:
 
 ```bash
 npx @lila/engine@beta validate model.bpmn
@@ -96,8 +101,8 @@ Código de salida: `0`.
 
 La tabla por defecto es un subconjunto curado de KPI; `--all` imprime todas las métricas que
 produce `compare()` para cada elemento, recurso, flujo y desenlace. `--json <archivo>` escribe el
-`CompareResult`; `--xlsx <archivo>` escribe un libro con una hoja Resumen por escenario más una
-hoja Comparación. `compare` no tiene `--csv`: compara corridas ya terminadas, no reproduce una.
+`CompareResult`; `--xlsx <archivo>` escribe un libro con una pestaña por escenario más una pestaña
+Comparación. `compare` no tiene `--csv`: compara corridas ya terminadas, no reproduce una.
 
 ## `mcp`
 
@@ -162,8 +167,8 @@ abre un `.lila`. Hasta que eso exista, hay que descomprimirlo primero:
 
 ```bash
 unzip proyecto.lila -d proyecto
-npx lila validate proyecto/model.bpmn
-npx lila run proyecto/model.bpmn proyecto/as-is.scenario.json
+node <clon>/packages/engine/bin/lila.js validate proyecto/model.bpmn
+node <clon>/packages/engine/bin/lila.js run proyecto/model.bpmn proyecto/as-is.scenario.json
 ```
 
 Seguimiento en [#466](https://github.com/AlambritoDito/lila-modeler/issues/466) («`.lila` como

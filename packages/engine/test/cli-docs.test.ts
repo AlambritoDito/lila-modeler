@@ -8,12 +8,12 @@
  * Blocks that are not runnable in a test process (the `mcp` example, which blocks on stdin) are
  * fenced as ```text in the doc, not ```bash, so they never match here.
  */
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 
 import { main } from '../src/cli.js';
 import { runResultSchema } from '../src/result.schema.js';
@@ -67,6 +67,9 @@ function toArgv(command: string, outputDir: string): { argv: string[]; outputs: 
     const token = rest[i]!;
     if (VALUE_FLAGS.has(token)) {
       argv.push(token, rest[++i]!);
+    } else if (token === '--json' && head === 'validate') {
+      // `validate --json` is a boolean flag; only `run`/`compare` take `--json <file>`.
+      argv.push(token);
     } else if (OUTPUT_FLAGS.has(token)) {
       const target = join(outputDir, basename(rest[++i]!));
       outputs.set(token, target);
@@ -104,6 +107,7 @@ describe('docs/CLI.md examples run as documented', () => {
   for (const example of examples) {
     test(`\`${example.command.split('\n')[0]}\` exits ${example.exitCode}`, async () => {
       const outputDir = mkdtempSync(join(tmpdir(), 'lila-cli-docs-'));
+      onTestFinished(() => rmSync(outputDir, { recursive: true, force: true }));
       const { argv, outputs } = toArgv(example.command, outputDir);
 
       const code = await main(argv);
@@ -119,9 +123,8 @@ describe('docs/CLI.md examples run as documented', () => {
   }
 });
 
-// Aceptación LILA-188 (README): el ejemplo de `lila run` del README sigue corriendo tal cual.
-describe('README · el ejemplo de `lila run` sigue siendo válido para docs/CLI.md', () => {
-  test('el README sigue enlazando docs/CLI.md', () => {
+describe('README', () => {
+  test('links docs/CLI.md', () => {
     const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
     expect(readme).toContain('docs/CLI.md');
   });

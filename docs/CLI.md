@@ -22,7 +22,12 @@ npm run build
 ```
 
 `npx lila` then resolves the workspace's own binary (`packages/engine/bin/lila.js`), with no
-registry lookup. Once `@lila/engine` is published, the same commands work with:
+registry lookup.
+
+`npx lila` only finds this CLI inside the checkout (after `npm ci`). Anywhere else it would fetch
+the unrelated `lila` package from npm, so from another directory call the bin directly (`node
+<checkout>/packages/engine/bin/lila.js …`) or use `npx --no lila …`, which refuses to install.
+Once published, use `npx @lila/engine@beta …`:
 
 ```bash
 npx @lila/engine@beta validate model.bpmn
@@ -93,8 +98,8 @@ Exit code: `0`.
 
 The default table is a curated KPI subset; `--all` prints every metric `compare()` produces for
 every element, resource, flow and outcome. `--json <file>` writes the `CompareResult`; `--xlsx
-<file>` writes one workbook with a Summary sheet per scenario plus a Comparison sheet. `compare`
-has no `--csv` — it compares finished runs, it does not replay one.
+<file>` writes one workbook with one tab per scenario plus a Comparison tab. `compare` has no
+`--csv` — it compares finished runs, it does not replay one.
 
 ## `mcp`
 
@@ -158,8 +163,8 @@ Until that lands, unzip it first:
 
 ```bash
 unzip project.lila -d project
-npx lila validate project/model.bpmn
-npx lila run project/model.bpmn project/as-is.scenario.json
+node <checkout>/packages/engine/bin/lila.js validate project/model.bpmn
+node <checkout>/packages/engine/bin/lila.js run project/model.bpmn project/as-is.scenario.json
 ```
 
 Tracked in [#466](https://github.com/AlambritoDito/lila-modeler/issues/466) («`.lila` as CLI
