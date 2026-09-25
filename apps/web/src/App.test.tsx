@@ -612,7 +612,7 @@ it('follows the system by default: the theme is the current scheme\'s slot (#472
   await rearrancar();
   expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
   expect(selectTema().value).toBe('lila-dark');
-  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .interruptor input')!.checked).toBe(true);
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .campo.interruptor input')!.checked).toBe(true);
   expect(ranura(T.apariencia.temaClaro)!.value).toBe('lila-light');
   expect(ranura(T.apariencia.temaOscuro)!.value).toBe('lila-dark');
 });
@@ -643,7 +643,7 @@ it('«Turn off» restores the previous theme, saves it and stops following (#472
   expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
   expect(localStorage.getItem('lila.seguirSistema')).toBe('0');
   expect(localStorage.getItem('lila.tema')).toBe('lila-light');
-  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .interruptor input')!.checked).toBe(false);
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .campo.interruptor input')!.checked).toBe(false);
   expect(ranura(T.apariencia.temaOscuro)).toBeNull();
   vi.mocked(fetch).mockClear();
   await cambiarEsquema(false);
