@@ -1101,7 +1101,7 @@ describe('ventana desacoplada (diseño 2c)', () => {
 
 describe('ids behind «Advanced» (#447)', () => {
   /** The AS-IS plus a flow with no BPMN name, which must fall back to its id. */
-  function panel(avanzado: boolean, seleccion: string | null, elegidos: string[] = []): React.JSX.Element {
+  function panel(avanzado: boolean, seleccion: string | null, elegidos: string[] = [], irPanel: ProcessIR = ir): React.JSX.Element {
     const escenario = asIsCorto();
     return (
       <ScenarioPanel
@@ -1115,7 +1115,7 @@ describe('ids behind «Advanced» (#447)', () => {
         onCambio={() => {}}
         onGuardar={() => {}}
         onDuplicar={() => {}}
-        ir={ir}
+        ir={irPanel}
         seleccion={seleccion}
         onSeleccionar={(id) => {
           if (id !== null) elegidos.push(id);
@@ -1145,6 +1145,14 @@ describe('ids behind «Advanced» (#447)', () => {
     expect(encabezado.textContent).toBe(`Take order${es.escenario.nombreEntreParentesis('Task_TomarPedido')}`);
     act(() => raiz!.render(panel(false, 'Task_TomarPedido')));
     expect(document.querySelector('.escenario details > p.vacio')!.textContent).toBe('Take order');
+  });
+
+  it('a blank name counts as none: the row shows the id and stays clickable (QA S1)', () => {
+    const elegidos: string[] = [];
+    montar(panel(false, null, elegidos, { ...ir, nodes: { ...ir.nodes, Task_TomarPedido: { ...ir.nodes['Task_TomarPedido']!, name: '   ' } } }));
+    expect(fila('Task_TomarPedido').textContent).toBe('Task_TomarPedido');
+    act(() => fila('Task_TomarPedido').click());
+    expect(elegidos).toEqual(['Task_TomarPedido']);
   });
 
   it.each([false, true])('an element without a name shows its id either way (avanzado=%s)', (avanzado) => {

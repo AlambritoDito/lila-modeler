@@ -1358,7 +1358,8 @@ function rotuloFlujo(ir: ProcessIR, S: ReturnType<typeof useStrings>, id: string
   const flujo = ir.flows[id];
   if (flujo === undefined) return id;
   const nombre = flujo.name !== '' ? flujo.name : (ir.nodes[flujo.to]?.name ?? '');
-  if (nombre === '') return id;
+  // A blank name counts as none (QA S1 of #447): it would leave the label empty.
+  if (nombre.trim() === '') return id;
   return avanzado ? `${nombre}${S.escenario.nombreEntreParentesis(id)}` : nombre;
 }
 
@@ -1872,7 +1873,7 @@ export function ScenarioPanel({
    */
   function nombreElemento(id: string): string | null {
     const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name;
-    return nombre !== undefined && nombre !== '' ? nombre : null;
+    return nombre !== undefined && nombre.trim() !== '' ? nombre : null;
   }
 
   /** #447: the name, or the id without one; with «Advanced», the id as well. */
@@ -1967,7 +1968,7 @@ export function ScenarioPanel({
             requerido={false}
             ctx={ctx}
           />
-          <LaneAssign ir={ir} ctx={ctx} />
+          <LaneAssign ir={ir} ctx={ctx} avanzado={avanzado} />
         </details>
       )}
 

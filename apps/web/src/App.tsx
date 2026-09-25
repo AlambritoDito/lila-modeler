@@ -80,7 +80,7 @@ function nombreDeCuello(id: string | undefined, ir: ProcessIR | null, avanzado: 
   const S = strings();
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
-  if (nombre === undefined || nombre === '' || nombre === id) return id;
+  if (nombre === undefined || nombre.trim() === '' || nombre === id) return id;
   // #447: the id is noise for a student; «Advanced» brings it back.
   return avanzado ? S.app.nombreDeCuello(nombre, id) : nombre;
 }

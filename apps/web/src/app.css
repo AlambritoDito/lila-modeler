@@ -1433,10 +1433,6 @@ body {
   margin-left: auto;
 }
 
-.escenario .lista-paso .nombre {
-  color: var(--fg-muted);
-}
-
 /* #447: the BPMN id beside a name, only with Settings → «Advanced». */
 .escenario .id {
   color: var(--fg-muted);
