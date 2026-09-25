@@ -111,6 +111,8 @@ it('disables «Add range» while the form is not a valid interval', () => {
   expect(franjaNueva(lunes, '9:00', '18:00')).toBeNull(); // not fixed behind the user's back
   expect(franjaNueva(lunes, '09:00', '24:30')).toBeNull();
   expect(franjaNueva(new Set(), '09:00', '18:00')).toBeNull();
+  // An identical range already present (days in any order) is not added twice.
+  expect(franjaNueva(new Set(['MON', 'TUE'] as const), '09:00', '18:00', [{ days: ['TUE', 'MON'], from: '09:00', to: '18:00' }])).toBeNull();
 });
 
 it('keeps minute slots as typed; the grid goes away and the list stays', () => {

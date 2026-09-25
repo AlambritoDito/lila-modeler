@@ -768,7 +768,7 @@ export const en = {
     /** `calendars[key].intervals` (LILA-203): weekly grid or generic list. */
     editarComoLista: 'Edit as list',
     editarComoRejilla: 'Edit as grid',
-    calendarioConMinutos: 'this calendar has minute slots; edit it as a list',
+    calendarioConMinutos: 'this calendar has minute slots, which the grid cannot show: use the ranges or the list',
 
     /** «Assign lane to pool» (LILA-334): a bulk edit of `elements[task].resources`. */
     carrilCarril: 'Lane',

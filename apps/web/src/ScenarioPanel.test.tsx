@@ -863,7 +863,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     );
     irAPaso('calendars');
     expect(document.body.textContent).toContain(
-      'este calendario tiene franjas de minutos; edítalo como lista',
+      'este calendario tiene franjas de minutos, que la rejilla no puede mostrar: usa las franjas o la lista',
     );
     // No hay rejilla que pueda mentir sobre esos minutos, y la lista sigue enseñando el valor real.
     expect(document.querySelector('.calendario')).toBeNull();

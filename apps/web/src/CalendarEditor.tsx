@@ -5,10 +5,11 @@
  *
  * Dos decisiones que explican el resto:
  *
- * 1. **La celda es una hora entera**, no un minuto. `docs/SCENARIO_FORMAT.md` § 2.3 admite
- *    cualquier `"HH:MM"`, así que la rejilla es una vista **parcial** del formato: un calendario
- *    con franjas a media hora no cabe en ella y se edita como lista, con aviso. Nunca se redondea:
- *    redondear sería cambiar el escenario por dibujarlo.
+ * 1. **A cell is a whole hour**, not a minute. `docs/SCENARIO_FORMAT.md` § 2.3 accepts any
+ *    `"HH:MM"`, so the grid is a **partial** view of the format: a calendar with half-hour slots
+ *    does not fit in it, so the grid is hidden (with a warning) and the range picker and its list
+ *    above and below it keep editing it (#448). Nothing is ever rounded: rounding would change
+ *    the scenario just to draw it.
  * 2. **El modelo interno es un conjunto de celdas** (`dia × 24 + hora`) y las dos conversiones son
  *    puras. Pintar es un `add`/`delete` en un `Set`; los `intervals` se recalculan enteros en cada
  *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
@@ -126,13 +127,27 @@ const PRESETS = {
  * the validator would reject, keeps the button disabled instead of being fixed behind the user's
  * back. `to > from` compares as text, which is what the engine does too.
  */
-export function franjaNueva(dias: ReadonlySet<Dia>, from: string, to: string): Intervalo | null {
+export function franjaNueva(
+  dias: ReadonlySet<Dia>,
+  from: string,
+  to: string,
+  intervals: readonly Intervalo[] = [],
+): Intervalo | null {
   const valida =
     dias.size > 0 &&
     new RegExp(`^(${HHMM_FROM})$`).test(from) &&
     new RegExp(`^(${HHMM_TO})$`).test(to) &&
     to > from;
-  return valida ? { days: DIAS.filter((d) => dias.has(d)), from, to } : null;
+  // An identical entry already in the file would only be a duplicate row (union, § 2.3).
+  const repetida = intervals.some(
+    (iv) =>
+      iv.from === from &&
+      iv.to === to &&
+      Array.isArray(iv.days) &&
+      iv.days.length === dias.size &&
+      iv.days.every((d) => dias.has(d)),
+  );
+  return valida && !repetida ? { days: DIAS.filter((d) => dias.has(d)), from, to } : null;
 }
 
 /**
@@ -172,7 +187,7 @@ function Franjas({
   const [dias, setDias] = useState<ReadonlySet<Dia>>(new Set(PRESETS.laborables));
   const [from, setFrom] = useState('09:00');
   const [to, setTo] = useState('18:00');
-  const nueva = franjaNueva(dias, from, to);
+  const nueva = franjaNueva(dias, from, to, intervals);
   const iguales = (preset: readonly Dia[]): boolean =>
     preset.length === dias.size && preset.every((d) => dias.has(d));
 
@@ -362,7 +377,7 @@ export function CalendarEditor({
           ))}
           {DIAS.map((nombre, dia) => (
             <Fragment key={nombre}>
-              <span className="rotulo dia">{nombre}</span>
+              <span className="rotulo dia">{S.calendario.dias[nombre]}</span>
               {HORAS.map((hora) => {
                 const id = celda(dia, hora);
                 const abierta = celdas.has(id);

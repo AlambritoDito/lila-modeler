@@ -749,7 +749,8 @@ export const es: Strings = {
     /** `calendars[clave].intervals` (LILA-203): rejilla semanal o lista genérica. */
     editarComoLista: 'Editar como lista',
     editarComoRejilla: 'Editar como rejilla',
-    calendarioConMinutos: 'este calendario tiene franjas de minutos; edítalo como lista',
+    calendarioConMinutos:
+      'este calendario tiene franjas de minutos, que la rejilla no puede mostrar: usa las franjas o la lista',
 
     /** «Asignar carril a pool» (LILA-334): una edición en bloque de `elements[task].resources`. */
     carrilCarril: 'Carril',
