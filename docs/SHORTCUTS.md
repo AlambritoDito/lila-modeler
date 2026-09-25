@@ -16,6 +16,7 @@ and, apart from the desktop app's File menu, no shortcut reaches the app while a
 | Open project | `⌘O` | `Ctrl+O` |
 | Save project | `⌘S` | `Ctrl+S` |
 | Save as | `⇧⌘S` | `Ctrl+Shift+S` |
+| Print the diagram ² | `⌘P` | `Ctrl+P` |
 | Settings ¹ | `⌘,` | `Ctrl+,` |
 
 ## Search
@@ -91,6 +92,10 @@ are taken by the browser before the page sees them, and the web app does not lis
 `⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` so they keep switching the browser's tabs: use the bar's buttons, the
 mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
 list these shortcuts next to each item.
+
+² Prints the diagram alone, black on white, on one sheet. In a browser, that print dialog is also
+how you get a PDF (choose «Save as PDF»); the desktop app has «File → Export diagram as PDF…» as
+well. SVG and PNG exports are in the File menu and the command palette, with no key of their own.
 
 In the desktop app `⌘W`/`Ctrl+W` closes the focused window (About or the detached scenario on
 their own; the main window asks first when there are unsaved changes and, like its red button,

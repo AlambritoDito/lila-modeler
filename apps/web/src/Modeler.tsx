@@ -54,6 +54,7 @@ import { rotularMinimapa } from './minimapa';
 // servicios (ver `moduloColoresDelTema`).
 import { moduloColoresDelTema } from './TokenSim';
 import { centrar, type CanvasCentrable } from './centrar';
+import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -142,6 +143,11 @@ export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
   abrir(xml: string): Promise<boolean>;
   exportar(opciones?: OpcionesExportacion): Promise<string>;
+  /**
+   * The diagram as an image (#451): `saveSVG` without the editing chrome, in the theme's colours
+   * or, with `papel`, black on white (`exportarDiagrama.ts`).
+   */
+  exportarSvg(opciones: { papel: boolean }): Promise<string>;
   /** Comprueba parseo y renderizado en una instancia aislada sin tocar el modelo activo. */
   comprobar?(xml: string): Promise<void>;
   ajustar(): void;
@@ -407,6 +413,14 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         autorizarExportacion(perdidas, opciones);
         const xml = (await activo.saveXML({ format: true })).xml ?? '';
         return finalizarExportacion(xml, originalIds);
+      },
+      exportarSvg: async ({ papel }) => {
+        if (activo === null) throw new Error(strings().lienzo.errorSinBpmn);
+        const c = coloresDelDiagrama();
+        return svgDelLienzo(activo as unknown as LienzoExportable, {
+          papel,
+          colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor, fondo: token('--canvas-bg') },
+        });
       },
       comprobar: async (xml) => {
         const { modeler: candidato, staging } = crearCandidato();
