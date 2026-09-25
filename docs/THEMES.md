@@ -58,14 +58,28 @@ changing a value in the JSON and reloading changes the UI without recompiling.
 `lila-dark`), requests `./<id>.json`, and passes it to
 `applyTheme`. Density (`compacta` / `normal` / `comoda`) is written on top of the theme's `density` token
 and comes out as `data-densidad` on `.app` for the CSS. There is no `ThemeProvider`: with two themes and
-a `useState`, a context would be overkill. While no theme is saved, the app picks `lila-dark` when the OS
-reports `prefers-color-scheme: dark` and `lila-light` otherwise, on every launch and without saving
-that choice; once the user picks a theme, the saved one always wins.
+a `useState`, a context would be overkill.
+
+**Following the system scheme (#472).** By default the theme follows the OS light/dark scheme while
+the app runs: there are two theme slots, one for light and one for dark (Lila Light and Lila Dark by
+default), and a `change` listener on `matchMedia('(prefers-color-scheme: dark)')` applies the other
+slot when the OS switches — in Electron too, where `nativeTheme.themeSource` stays `'system'` and
+Chromium reports the OS scheme to the renderer. Picking a theme while following writes the slot of
+the current scheme, so it shows at once. The first time the theme switches on its own, a small
+prompt says so and offers **Keep** (Esc too) or **Turn off**, which restores the previous theme,
+stops following and keeps that theme as the explicit choice; the prompt is shown once. With
+following off, the saved `tema` rules as before #472. The slots start from the old single `tema`
+once: nothing or a Lila theme gives the Lila defaults; any other theme (built-in or the user's)
+goes into both slots, so whoever had picked Akira sees no change until they pick a second theme. A
+slot naming a deleted user theme falls back to its Lila theme.
 
 **Where the choice is stored.** In the browser, in `localStorage['lila.tema']` and
-`localStorage['lila.densidad']`. On desktop, in `<userData>/estado.json`, under `ajustes`, through the
-bridge (`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), where the window and
-recents already live. They are mutually exclusive: if `window.lila` exists, `localStorage` is neither
+`localStorage['lila.densidad']`, plus `lila.seguirSistema` (`'0'` when off), `lila.temaClaro`,
+`lila.temaOscuro` and `lila.avisoSeguirSistema` (`'1'` once the prompt was shown) for #472. On
+desktop, in `<userData>/estado.json`, under `ajustes`, through the bridge (`readSettings()` /
+`writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), where the window and recents already live;
+the #472 four go there as `seguirSistema`, `temaClaro`, `temaOscuro` and `avisoSeguirSistema`
+(booleans and text). They are mutually exclusive: if `window.lila` exists, `localStorage` is neither
 read nor written. Until now it was `localStorage` in both modes, with the — correct — argument that
 `lila://` is a scheme with its own origin and therefore has its own store; what fails is not the
 isolation but the location: that store sits inside the app's Chromium profile, is not visible from
@@ -120,6 +134,8 @@ The controls:
 - **Theme list**: the built-in ones (Eva-01, Papel) and the user's own, each group in an
   `<optgroup>`. Picking one applies it live; built-in themes are requested via `fetch`, user themes
   come from storage and request nothing.
+- **Follow the system theme** (#472): a toggle, on by default, with a **Light theme** and a **Dark
+  theme** selector below it while it is on (see "Following the system scheme" above).
 - **Duplicate**: copies the active theme as a user theme, with an editable name next to it.
 - **Token editor**, grouped just like `TOKEN_NAMES` (Base, Texto/Text, Acentos/Accents,
   Estados/States, Lienzo y diagrama/Canvas and diagram, Simulación/Simulation,

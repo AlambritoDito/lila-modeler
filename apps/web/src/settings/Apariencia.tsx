@@ -33,6 +33,35 @@ export interface AparienciaProps {
   readonly onTemas: (temas: readonly TemaGuardado[], seleccion?: string) => void;
   /** Selecciona otro tema; los integrados los carga `App.tsx` por `fetch`. */
   readonly onSeleccionar: (id: string) => void;
+  /** Follow the system's light/dark scheme (#472). */
+  readonly seguir: boolean;
+  readonly onSeguir: (seguir: boolean) => void;
+  /** The theme of each system scheme while following it (#472). */
+  readonly ranuras: Ranuras;
+  readonly onRanura: (esquema: keyof Ranuras, id: string) => void;
+}
+
+/** Theme id per system scheme (#472). */
+export interface Ranuras {
+  readonly claro: string;
+  readonly oscuro: string;
+}
+
+/** The options of every theme `<select>`: built-in, then the user's. */
+function OpcionesTema({ temas }: { temas: readonly TemaGuardado[] }): React.JSX.Element {
+  const S = useStrings();
+  return (
+    <>
+      <optgroup label={S.apariencia.integrado}>
+        {Object.entries(S.app.temas).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+      </optgroup>
+      {temas.length > 0 && (
+        <optgroup label={S.apariencia.delUsuario}>
+          {temas.map((t) => <option key={t.id} value={t.id}>{t.tema.name}</option>)}
+        </optgroup>
+      )}
+    </>
+  );
 }
 
 /** Nombre de archivo del tema exportado: `Eva-01 (copia)` → `eva-01-copia.json`. */
@@ -223,17 +252,29 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         <span>{S.app.tema}</span>
         <label className="campo">
           <select value={temaId} onChange={(e) => { setError(null); props.onSeleccionar(e.target.value); }}>
-            <optgroup label={S.apariencia.integrado}>
-              {Object.entries(S.app.temas).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
-            </optgroup>
-            {temas.length > 0 && (
-              <optgroup label={S.apariencia.delUsuario}>
-                {temas.map((t) => <option key={t.id} value={t.id}>{t.tema.name}</option>)}
-              </optgroup>
-            )}
+            <OpcionesTema temas={temas} />
           </select>
         </label>
       </div>
+
+      {/* #472: on by default. While on, picking a theme above writes the slot of the current
+          system scheme, and the two slots below rotate with it. */}
+      <label className="campo interruptor">
+        <input type="checkbox" checked={props.seguir} onChange={(e) => props.onSeguir(e.target.checked)} />
+        {S.apariencia.seguirSistema}
+      </label>
+      <p className="ayuda">{S.apariencia.seguirSistemaAyuda}</p>
+      {props.seguir && (['claro', 'oscuro'] as const).map((esquema) => (
+        <div className="fila" key={esquema}>
+          <span>{esquema === 'claro' ? S.apariencia.temaClaro : S.apariencia.temaOscuro}</span>
+          <label className="campo ranura">
+            <select aria-label={esquema === 'claro' ? S.apariencia.temaClaro : S.apariencia.temaOscuro}
+              value={props.ranuras[esquema]} onChange={(e) => props.onRanura(esquema, e.target.value)}>
+              <OpcionesTema temas={temas} />
+            </select>
+          </label>
+        </div>
+      ))}
 
       {activo !== undefined && (
         <div className="fila">

@@ -316,6 +316,17 @@ export const en = {
     muestraTexto: 'Text on surface',
     muestraSecundario: 'Secondary text',
     muestraBoton: 'Accent',
+    /** Following the system's light/dark scheme (#472). */
+    seguirSistema: 'Follow the system theme',
+    seguirSistemaAyuda: 'Switches between the light and dark theme below when your system changes mode.',
+    temaClaro: 'Light theme',
+    temaOscuro: 'Dark theme',
+    /** One-time prompt the first time the theme switches on its own (#472). */
+    avisoTitulo: 'Theme changed',
+    avisoTexto: (tema: string, oscuro: boolean): string =>
+      `The theme changed to ${tema} because your system switched to ${oscuro ? 'dark' : 'light'} mode. Keep it automatic?`,
+    mantener: 'Keep',
+    apagar: 'Turn off',
 
     /**
      * Label of each group of the editor, by token prefix. They are the same groups
