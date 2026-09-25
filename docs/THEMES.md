@@ -75,11 +75,11 @@ slot naming a deleted user theme falls back to its Lila theme.
 
 **Where the choice is stored.** In the browser, in `localStorage['lila.tema']` and
 `localStorage['lila.densidad']`, plus `lila.seguirSistema` (`'0'` when off), `lila.temaClaro`,
-`lila.temaOscuro` and `lila.avisoSeguirSistema` (`'1'` once the prompt was shown) for #472; on
-desktop the same four go into `ajustes` as `seguirSistema`, `temaClaro`, `temaOscuro` and
-`avisoSeguirSistema` (booleans and text). On desktop, in `<userData>/estado.json`, under `ajustes`, through the
-bridge (`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), where the window and
-recents already live. They are mutually exclusive: if `window.lila` exists, `localStorage` is neither
+`lila.temaOscuro` and `lila.avisoSeguirSistema` (`'1'` once the prompt was shown) for #472. On
+desktop, in `<userData>/estado.json`, under `ajustes`, through the bridge (`readSettings()` /
+`writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), where the window and recents already live;
+the #472 four go there as `seguirSistema`, `temaClaro`, `temaOscuro` and `avisoSeguirSistema`
+(booleans and text). They are mutually exclusive: if `window.lila` exists, `localStorage` is neither
 read nor written. Until now it was `localStorage` in both modes, with the — correct — argument that
 `lila://` is a scheme with its own origin and therefore has its own store; what fails is not the
 isolation but the location: that store sits inside the app's Chromium profile, is not visible from

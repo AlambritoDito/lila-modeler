@@ -669,6 +669,20 @@ it('«Keep» (or Esc) keeps following and the prompt never comes back (#472)', a
   expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
   expect(localStorage.getItem('lila.seguirSistema')).toBeNull();
 });
+it('answering the prompt gives the focus back and the prompt describes itself (#472)', async () => {
+  // The suite's `showModal`/`close` polyfill, plus what the browser does with the focus.
+  let previo: HTMLElement | null = null;
+  HTMLDialogElement.prototype.showModal = function () { previo = document.activeElement as HTMLElement; this.open = true; this.querySelector('button')?.focus(); };
+  HTMLDialogElement.prototype.close = function () { this.open = false; previo?.focus(); };
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  const boton = porEtiqueta(T.app.ajustes);
+  boton.focus();
+  await cambiarEsquema(true);
+  expect(avisoSistema()!.getAttribute('aria-describedby')).toBe(avisoSistema()!.querySelector('p')!.id);
+  await responderAviso(T.apariencia.mantener);
+  expect(document.activeElement).toBe(boton);
+});
 it('migration: a saved non-Lila theme fills both slots, so a system switch changes nothing (#472)', async () => {
   esquemaDelSistema(false); temasReales();
   localStorage.setItem('lila.tema', 'akira');

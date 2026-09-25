@@ -1617,13 +1617,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
-      {/* #472: shown once, the first time the theme follows the system on its own. Esc = Keep. */}
-      {avisoSistema !== null && <dialog ref={avisoDialog} className="aviso-sistema" aria-labelledby="aviso-sistema-titulo" onCancel={(event) => { event.preventDefault(); setAvisoSistema(null); }}>
+      {/* #472: shown once, the first time the theme follows the system on its own. Esc = Keep.
+          It opens unasked, so every answer `close()`s it before unmounting: that is what makes the
+          browser give the focus back to whatever had it. */}
+      {avisoSistema !== null && <dialog ref={avisoDialog} className="aviso-sistema" aria-labelledby="aviso-sistema-titulo" aria-describedby="aviso-sistema-texto" onCancel={(event) => { event.preventDefault(); avisoDialog.current?.close(); setAvisoSistema(null); }}>
         <h2 id="aviso-sistema-titulo">{S.apariencia.avisoTitulo}</h2>
-        <p>{S.apariencia.avisoTexto(temaDe(temaId, temas)?.tema.name ?? S.app.temas[temaId as TemaId] ?? temaId, avisoSistema.oscuro)}</p>
+        <p id="aviso-sistema-texto">{S.apariencia.avisoTexto(temaDe(temaId, temas)?.tema.name ?? S.app.temas[temaId as TemaId] ?? temaId, avisoSistema.oscuro)}</p>
         <div className="acciones">
-          <button className="boton primario" type="button" onClick={() => setAvisoSistema(null)}>{S.apariencia.mantener}</button>
-          <button className="boton" type="button" onClick={() => { const { anterior } = avisoSistema; setAvisoSistema(null); cambiarSeguir(false, anterior); }}>{S.apariencia.apagar}</button>
+          <button className="boton primario" type="button" onClick={() => { avisoDialog.current?.close(); setAvisoSistema(null); }}>{S.apariencia.mantener}</button>
+          <button className="boton" type="button" onClick={() => { const { anterior } = avisoSistema; avisoDialog.current?.close(); setAvisoSistema(null); cambiarSeguir(false, anterior); }}>{S.apariencia.apagar}</button>
         </div>
       </dialog>}
       {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>

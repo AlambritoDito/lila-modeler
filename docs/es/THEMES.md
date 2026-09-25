@@ -75,10 +75,10 @@ Una ranura que nombra un tema del usuario borrado vuelve a su tema Lila.
 **Dónde se guarda la elección.** En el navegador, en `localStorage['lila.tema']` y
 `localStorage['lila.densidad']`, más `lila.seguirSistema` (`'0'` cuando está apagado),
 `lila.temaClaro`, `lila.temaOscuro` y `lila.avisoSeguirSistema` (`'1'` una vez mostrado el aviso)
-para #472; en escritorio los mismos cuatro van en `ajustes` como `seguirSistema`, `temaClaro`,
-`temaOscuro` y `avisoSeguirSistema` (booleanos y texto). En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el
-puente (`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), donde ya viven
-la ventana y los recientes. Son excluyentes: si `window.lila` existe, el `localStorage` ni se lee ni
+para #472. En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el puente
+(`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), donde ya viven la
+ventana y los recientes; los cuatro de #472 van ahí como `seguirSistema`, `temaClaro`, `temaOscuro`
+y `avisoSeguirSistema` (booleanos y texto). Son excluyentes: si `window.lila` existe, el `localStorage` ni se lee ni
 se escribe. Hasta ahora era `localStorage` en las dos modalidades, con el argumento —cierto— de que
 `lila://` es un esquema con origen propio y por tanto tiene su propio almacén; lo que falla no es el
 aislamiento sino el sitio: ese almacén está dentro del perfil de Chromium de la app, no se ve desde

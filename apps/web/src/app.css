@@ -2180,9 +2180,9 @@ body {
    already carries one) makes every row's control fill the column the same way. */
 .ajustes .fila .campo { align-items: stretch; margin-bottom: 0; }
 .ajustes .campo { margin-bottom: calc(10px * var(--espacio, 1)); }
-/* #472: the help line under «Follow the system theme», tucked against its toggle. */
 /* The shared `.campo` rule stacks label over control; a toggle reads as checkbox + text on one row. */
 .ajustes .interruptor { align-items: center; color: var(--fg-primary); flex-direction: row; gap: 8px; margin: calc(6px * var(--espacio, 1)) 0 calc(2px * var(--espacio, 1)); }
+/* #472: the help line under «Follow the system theme», tucked against its toggle. */
 .ajustes .ayuda { color: var(--fg-muted); font-size: 0.9em; margin: 0 0 calc(12px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
 
