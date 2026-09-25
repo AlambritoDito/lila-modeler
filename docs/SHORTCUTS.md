@@ -92,6 +92,10 @@ are taken by the browser before the page sees them, and the web app does not lis
 mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
 list these shortcuts next to each item.
 
+In the desktop app `⌘W`/`Ctrl+W` closes the focused window (main, About or the detached scenario;
+with unsaved changes the main window asks first) and `⌘Q` quits; both come from the native menu's
+own roles, so they are not in the map above and a browser keeps them for itself.
+
 The detached scenario window forwards `⌘S` and `⇧⌘S` to the main window; `⌘K` too, but only in the desktop app, where the main window is raised first (a browser cannot bring another window to the front, so there the key does nothing in the detached window).
 
 [Versión en español](es/ATAJOS.md)

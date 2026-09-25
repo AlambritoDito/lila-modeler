@@ -132,6 +132,21 @@ describe('menuTemplate · the language only changes the labels', () => {
   });
 });
 
+describe('menuTemplate · close and quit (owner request 2026-09-25)', () => {
+  for (const platform of ['darwin', 'win32'] as const) {
+    it(`File has the \`close\` role after the save entries and \`quit\` is reachable (${platform})`, () => {
+      const S = desktopStrings('en').menu;
+      const menus = menuTemplate([], platform, vi.fn(), desktopStrings('en'));
+      const archivo = menus.find((m) => m.label === S.archivo)!.submenu as MenuItemConstructorOptions[];
+      const labels = archivo.map((i) => i.label ?? i.role);
+      expect(labels.indexOf('close')).toBeGreaterThan(labels.indexOf(S.guardarComoCarpeta));
+      // The roles carry their own accelerators (⌘W / Ctrl+W, ⌘Q): none is set by hand.
+      expect(archivo.find((i) => i.role === 'close')!.accelerator).toBeUndefined();
+      expect(flat(menus).filter((i) => i.role === 'quit')).toHaveLength(1);
+    });
+  }
+});
+
 describe('menuTemplate · parity with the shortcut map (#413)', () => {
   for (const platform of ['darwin', 'win32'] as const) {
     it(`every accelerator is the map's, every menu entry of the map has its item, none twice (${platform})`, () => {
