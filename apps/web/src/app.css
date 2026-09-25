@@ -1515,6 +1515,7 @@ body {
   margin: 4px 0;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .calendario .rotulo {
@@ -2416,7 +2417,9 @@ body {
   overflow: hidden;
 }
 .karaoke-linea { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em; margin: 0; max-width: 60rem; font-size: clamp(1.1rem, 3vw, 1.7rem); font-weight: 500; }
-.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida 250ms ease-out both; }
+/* No fixed duration here (#446): `About.tsx` sends `animationDuration` inline from
+   `KARAOKE_DURACION_MS`, which the inline style always wins over this shorthand for. */
+.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida ease-out both; }
 /* «La Mente Maestra» cae la última, mucho más grande y con brillo del acento (pedido del dueño). */
 .karaoke-epica {
   margin: 0;
@@ -2625,4 +2628,40 @@ body {
 
 .escenario-pie .boton:not(.primario) {
   background: none;
+}
+
+/* ---------- unselectable chrome (#463) ---------- */
+
+/* Owner request: dragging or ⌘A over the app's chrome (top bar, menus, scenario rail, diagram
+   tabs, mode tabs, palette, collapsible summaries, buttons, validation chips, the scenario
+   heading, the step buttons) selected its text, which got in the way of lasso-selecting on the
+   canvas and does not happen in native apps or Bizagi. One rule per region, not per element;
+   nothing global or on `.app`, so content is untouched: inputs/textarea, the scenario JSON view,
+   the results/compare tables, validation messages, About and the shortcuts table stay selectable
+   (people copy those). `.calendario` already had its own `user-select: none` (see above) and is
+   not repeated here. `.djs-container svg` stops Chrome's default select-all from painting the
+   canvas's BPMN labels when a chrome button has focus (QA of #463, should-fix 2); bpmn-js's own
+   label editor is an HTML `contenteditable` outside the `svg`, so it keeps working. Field
+   `<label>`s and the Bottlenecks switch stay selectable on purpose (QA of #463, should-fix 3). */
+.barra,
+.menu-archivo,
+.menu-vista,
+.vista-grupo,
+.paleta,
+.rail-escenarios,
+.modos,
+.pestanas,
+.diagramas,
+.app > .estado,
+.ajustes-nav,
+.escenario summary,
+.escenario-cabecera,
+.paso,
+.paleta-grupos summary,
+.ajustes .grupo > summary,
+.boton,
+.chips-validacion,
+.djs-container svg {
+  user-select: none;
+  -webkit-user-select: none;
 }
