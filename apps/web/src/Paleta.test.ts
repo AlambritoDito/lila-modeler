@@ -8,7 +8,7 @@
  * entera en verde y rompe la app en su primer clic.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { filtrar, gruposDeFiguras, insertar, type Figura } from './Paleta';
+import { anfitrion, filtrar, gruposDeFiguras, insertar, type Figura } from './Paleta';
 import type { Servicios } from './Modeler';
 import { setLocale } from './i18n';
 
@@ -70,5 +70,62 @@ describe('filtrar (LILA-207)', () => {
     setLocale('en');
     expect(filtrar(gruposDeFiguras(), 'annotation').flatMap((g) => g.figuras.map((f) => f.nombre)))
       .toEqual(['Annotation']);
+  });
+});
+
+/**
+ * #456: a boundary event and a lane go into the selected element, not at the centre of the view.
+ * Without a fitting selection nothing is inserted (the item is disabled in the UI).
+ */
+describe('figuras que van en la selección (#456)', () => {
+  const TAREA_DIBUJADA = { id: 'Task_1', type: 'bpmn:Task', x: 100, y: 100, width: 100, height: 80 };
+  const PARTICIPANTE = { id: 'Pool_1', type: 'bpmn:Participant', x: 0, y: 0, width: 600, height: 300 };
+  const BORDE: Figura = { tipo: 'bpmn:BoundaryEvent', nombre: 'Borde', icono: 'x', eventDefinitionType: 'bpmn:TimerEventDefinition', requiere: 'actividad' };
+  const CARRIL: Figura = { tipo: 'bpmn:Lane', nombre: 'Carril', icono: 'lane', requiere: 'contenedor' };
+
+  function conSeleccion() {
+    const createShape = vi.fn((forma: unknown) => forma);
+    const addLane = vi.fn(() => ({ id: 'Lane_nuevo' }));
+    const activate = vi.fn();
+    const registro = [TAREA_DIBUJADA, PARTICIPANTE];
+    return {
+      createShape, addLane, activate,
+      servicios: {
+        elementFactory: { createShape: (atributos: object) => ({ ...atributos }) },
+        modeling: { createShape, addLane },
+        directEditing: { activate },
+        elementRegistry: { filter: (prueba: (el: object) => boolean) => registro.filter(prueba) },
+        rules: { allowed: (accion: string) => (accion === 'shape.attach' ? 'attach' : false) },
+      } as unknown as Servicios,
+    };
+  }
+
+  it('un evento de borde sin selección, o con una selección que no es actividad, no inserta nada', () => {
+    const s = conSeleccion();
+    insertar(s.servicios, BORDE);
+    insertar(s.servicios, BORDE, 'Pool_1');
+    expect(s.createShape).not.toHaveBeenCalled();
+    expect(anfitrion(s.servicios, BORDE, null)).toBeNull();
+  });
+
+  it('con una tarea seleccionada, el evento de borde se adjunta a ella en su borde inferior', () => {
+    const s = conSeleccion();
+    insertar(s.servicios, BORDE, 'Task_1');
+    expect(s.createShape).toHaveBeenCalledWith(
+      { type: 'bpmn:BoundaryEvent', eventDefinitionType: 'bpmn:TimerEventDefinition', isExpanded: undefined },
+      { x: 180, y: 180 },
+      TAREA_DIBUJADA,
+      { attach: true },
+    );
+    expect(s.activate).toHaveBeenCalledOnce();
+  });
+
+  it('con un pool seleccionado, el carril se añade abajo con addLane', () => {
+    const s = conSeleccion();
+    insertar(s.servicios, CARRIL, 'Task_1');
+    expect(s.addLane).not.toHaveBeenCalled();
+    insertar(s.servicios, CARRIL, 'Pool_1');
+    expect(s.addLane).toHaveBeenCalledWith(PARTICIPANTE, 'bottom');
+    expect(s.activate).toHaveBeenCalledWith({ id: 'Lane_nuevo' });
   });
 });

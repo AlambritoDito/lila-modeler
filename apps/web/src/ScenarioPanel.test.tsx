@@ -1097,3 +1097,27 @@ describe('ventana desacoplada (diseño 2c)', () => {
     expect(guardados).toHaveLength(1);
   });
 });
+
+describe('problemas del modelo (#455)', () => {
+  it('problemasExtra suma en la cabecera y sale en la lista de validación, como en los chips del lienzo', () => {
+    const escenario = asIsCorto();
+    const propios = problemasEscenario(escenario, ir, 'es');
+    const errores = propios.filter((p) => p.severidad === 'error').length;
+    const nosop = { ruta: 'elements.Msg_1', mensaje: 'Msg_1 (bpmn:intermediateCatchEvent): evento de mensaje no soportado por el simulador.', severidad: 'warning' as const };
+    montar(
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': escenario }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        problemasExtra={[nosop]}
+        seleccion={null}
+        onSeleccionar={() => {}}
+      />,
+    );
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.conteo(errores, propios.length - errores + 1));
+    expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
+  });
+});

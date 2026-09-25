@@ -1676,12 +1676,20 @@ export interface ScenarioPanelProps {
   onDuplicar: (archivo: string, escenario: Record<string, unknown>) => void;
   /** IR del diagrama del lienzo. `null` mientras no se haya parseado: solo se valida el esquema. */
   ir: ProcessIR | null;
+  /**
+   * Problems of the model rather than of the scenario (#455: the live `E-NOSOP`), appended to the
+   * lint so the header and the list count what the canvas chips count.
+   */
+  problemasExtra?: readonly Problema[];
   /** Id del elemento seleccionado en el lienzo, o `null`. */
   seleccion: string | null;
   onSeleccionar: (id: string | null) => void;
   /** Drawn inside the detached window (design 2c): Duplicate and Save move to a footer. */
   enVentana?: boolean;
 }
+
+/** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
+const SIN_PROBLEMAS: readonly Problema[] = [];
 
 export function ScenarioPanel({
   archivo,
@@ -1690,6 +1698,7 @@ export function ScenarioPanel({
   onGuardar,
   onDuplicar,
   ir,
+  problemasExtra = SIN_PROBLEMAS,
   seleccion,
   onSeleccionar,
   enVentana = false,
@@ -1747,7 +1756,7 @@ export function ScenarioPanel({
   }, [archivo, delta, lector]);
 
   const problemas = useMemo(() => {
-    const propios = problemasEscenario(resuelto, ir, locale);
+    const propios = [...problemasEscenario(resuelto, ir, locale), ...problemasExtra];
     if (herencia.error === null) return propios;
     return [
       { ruta: 'extends', mensaje: herencia.error, severidad: 'error' as const },
@@ -1755,7 +1764,7 @@ export function ScenarioPanel({
     ];
     // `locale` is a dependency because the messages cached here are the engine's: without it the
     // list would keep the language it was linted in until the scenario or the IR changed.
-  }, [resuelto, ir, herencia.error, locale]);
+  }, [resuelto, ir, herencia.error, locale, problemasExtra]);
   const indice = useMemo(() => porRuta(problemas), [problemas]);
   const errores = problemas.filter((p) => p.severidad === 'error').length;
   const avisos = problemas.length - errores;

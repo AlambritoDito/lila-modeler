@@ -26,6 +26,14 @@ export interface Figura {
   readonly eventDefinitionType?: string;
   /** Subproceso dibujado abierto en vez de plegado. */
   readonly isExpanded?: boolean;
+  /** An event sub-process (#456): a `bpmn:SubProcess` started by an event, drawn dashed. */
+  readonly triggeredByEvent?: boolean;
+  /**
+   * What has to be selected for the figure to be inserted (#456): a boundary event hangs from an
+   * `actividad`, a lane goes into a pool or next to a lane (`contenedor`). Without it the item is
+   * disabled and its title says what to select.
+   */
+  readonly requiere?: 'actividad' | 'contenedor';
 }
 
 interface Grupo {
@@ -35,59 +43,107 @@ interface Grupo {
 
 /**
  * Los grupos y su orden son los del artboard. La lista es estática a propósito: el catálogo BPMN
- * no cambia entre sesiones y sacarlo de `elementFactory` costaría más que escribirlo.
- * ponytail: los carriles no están porque se añaden desde el context pad de un pool, que es donde
- * bpmn-js sabe dónde meterlos; techo: si hiciera falta, un ítem que llame a `modeling.addLane`.
+ * no cambia entre sesiones y sacarlo de `elementFactory` costaría más que escribirlo. #456 split
+ * the events by kind and added the types that only existed in bpmn-js's own context pad and
+ * replace menu, so a model is drawn from here without the stock bpmn-js palette.
  */
 export function gruposDeFiguras(): readonly Grupo[] {
   const S = strings();
+  const F = S.paleta.figuras;
+  const mensaje = 'bpmn:MessageEventDefinition', temporizador = 'bpmn:TimerEventDefinition', senal = 'bpmn:SignalEventDefinition';
+  const condicional = 'bpmn:ConditionalEventDefinition', enlace = 'bpmn:LinkEventDefinition', error = 'bpmn:ErrorEventDefinition';
   return [
     {
-      nombre: S.paleta.grupos.eventos,
+      nombre: S.paleta.grupos.eventosInicio,
       figuras: [
-        { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.inicio, icono: 'start-event-none' },
-        { tipo: 'bpmn:IntermediateThrowEvent', nombre: S.paleta.figuras.intermedio, icono: 'intermediate-event-none' },
-        { tipo: 'bpmn:EndEvent', nombre: S.paleta.figuras.fin, icono: 'end-event-none' },
-        { tipo: 'bpmn:StartEvent', nombre: S.paleta.figuras.mensaje, icono: 'start-event-message', eventDefinitionType: 'bpmn:MessageEventDefinition' },
-        { tipo: 'bpmn:IntermediateCatchEvent', nombre: S.paleta.figuras.temporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: 'bpmn:TimerEventDefinition' },
+        { tipo: 'bpmn:StartEvent', nombre: F.inicio, icono: 'start-event-none' },
+        { tipo: 'bpmn:StartEvent', nombre: F.inicioMensaje, icono: 'start-event-message', eventDefinitionType: mensaje },
+        { tipo: 'bpmn:StartEvent', nombre: F.inicioTemporizador, icono: 'start-event-timer', eventDefinitionType: temporizador },
+        { tipo: 'bpmn:StartEvent', nombre: F.inicioSenal, icono: 'start-event-signal', eventDefinitionType: senal },
+        { tipo: 'bpmn:StartEvent', nombre: F.inicioCondicional, icono: 'start-event-condition', eventDefinitionType: condicional },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.eventosIntermedios,
+      figuras: [
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: F.intermedio, icono: 'intermediate-event-none' },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: F.capturaMensaje, icono: 'intermediate-event-catch-message', eventDefinitionType: mensaje },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: F.capturaTemporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: temporizador },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: F.capturaSenal, icono: 'intermediate-event-catch-signal', eventDefinitionType: senal },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: F.capturaEnlace, icono: 'intermediate-event-catch-link', eventDefinitionType: enlace },
+        { tipo: 'bpmn:IntermediateCatchEvent', nombre: F.capturaCondicional, icono: 'intermediate-event-catch-condition', eventDefinitionType: condicional },
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: F.lanzamientoMensaje, icono: 'intermediate-event-throw-message', eventDefinitionType: mensaje },
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: F.lanzamientoSenal, icono: 'intermediate-event-throw-signal', eventDefinitionType: senal },
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: F.lanzamientoEnlace, icono: 'intermediate-event-throw-link', eventDefinitionType: enlace },
+        { tipo: 'bpmn:IntermediateThrowEvent', nombre: F.lanzamientoEscalado, icono: 'intermediate-event-throw-escalation', eventDefinitionType: 'bpmn:EscalationEventDefinition' },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.eventosFin,
+      figuras: [
+        { tipo: 'bpmn:EndEvent', nombre: F.fin, icono: 'end-event-none' },
+        { tipo: 'bpmn:EndEvent', nombre: F.finMensaje, icono: 'end-event-message', eventDefinitionType: mensaje },
+        { tipo: 'bpmn:EndEvent', nombre: F.finTerminar, icono: 'end-event-terminate', eventDefinitionType: 'bpmn:TerminateEventDefinition' },
+        { tipo: 'bpmn:EndEvent', nombre: F.finError, icono: 'end-event-error', eventDefinitionType: error },
+        { tipo: 'bpmn:EndEvent', nombre: F.finSenal, icono: 'end-event-signal', eventDefinitionType: senal },
+      ],
+    },
+    {
+      nombre: S.paleta.grupos.eventosBorde,
+      figuras: [
+        { tipo: 'bpmn:BoundaryEvent', nombre: F.bordeMensaje, icono: 'intermediate-event-catch-message', eventDefinitionType: mensaje, requiere: 'actividad' },
+        { tipo: 'bpmn:BoundaryEvent', nombre: F.bordeTemporizador, icono: 'intermediate-event-catch-timer', eventDefinitionType: temporizador, requiere: 'actividad' },
+        { tipo: 'bpmn:BoundaryEvent', nombre: F.bordeError, icono: 'intermediate-event-catch-error', eventDefinitionType: error, requiere: 'actividad' },
+        { tipo: 'bpmn:BoundaryEvent', nombre: F.bordeSenal, icono: 'intermediate-event-catch-signal', eventDefinitionType: senal, requiere: 'actividad' },
       ],
     },
     {
       nombre: S.paleta.grupos.actividades,
       figuras: [
-        { tipo: 'bpmn:Task', nombre: S.paleta.figuras.tarea, icono: 'task' },
-        { tipo: 'bpmn:UserTask', nombre: S.paleta.figuras.tareaUsuario, icono: 'user-task' },
-        { tipo: 'bpmn:ServiceTask', nombre: S.paleta.figuras.tareaServicio, icono: 'service-task' },
-        { tipo: 'bpmn:SubProcess', nombre: S.paleta.figuras.subproceso, icono: 'subprocess-expanded', isExpanded: true },
-        { tipo: 'bpmn:CallActivity', nombre: S.paleta.figuras.actividadLlamada, icono: 'call-activity' },
+        { tipo: 'bpmn:Task', nombre: F.tarea, icono: 'task' },
+        { tipo: 'bpmn:UserTask', nombre: F.tareaUsuario, icono: 'user-task' },
+        { tipo: 'bpmn:ServiceTask', nombre: F.tareaServicio, icono: 'service-task' },
+        { tipo: 'bpmn:ManualTask', nombre: F.tareaManual, icono: 'manual-task' },
+        { tipo: 'bpmn:ScriptTask', nombre: F.tareaScript, icono: 'script-task' },
+        { tipo: 'bpmn:SendTask', nombre: F.tareaEnvio, icono: 'send-task' },
+        { tipo: 'bpmn:ReceiveTask', nombre: F.tareaRecepcion, icono: 'receive-task' },
+        { tipo: 'bpmn:BusinessRuleTask', nombre: F.tareaReglaNegocio, icono: 'business-rule-task' },
+        { tipo: 'bpmn:SubProcess', nombre: F.subproceso, icono: 'subprocess-expanded', isExpanded: true },
+        { tipo: 'bpmn:SubProcess', nombre: F.subprocesoPlegado, icono: 'subprocess-collapsed', isExpanded: false },
+        { tipo: 'bpmn:SubProcess', nombre: F.subprocesoEvento, icono: 'event-subprocess-expanded', isExpanded: true, triggeredByEvent: true },
+        { tipo: 'bpmn:Transaction', nombre: F.transaccion, icono: 'transaction', isExpanded: true },
+        { tipo: 'bpmn:CallActivity', nombre: F.actividadLlamada, icono: 'call-activity' },
       ],
     },
     {
       nombre: S.paleta.grupos.compuertas,
       figuras: [
-        { tipo: 'bpmn:ExclusiveGateway', nombre: S.paleta.figuras.exclusiva, icono: 'gateway-xor' },
-        { tipo: 'bpmn:ParallelGateway', nombre: S.paleta.figuras.paralela, icono: 'gateway-parallel' },
-        { tipo: 'bpmn:InclusiveGateway', nombre: S.paleta.figuras.inclusiva, icono: 'gateway-or' },
-        { tipo: 'bpmn:EventBasedGateway', nombre: S.paleta.figuras.basadaEnEventos, icono: 'gateway-eventbased' },
+        { tipo: 'bpmn:ExclusiveGateway', nombre: F.exclusiva, icono: 'gateway-xor' },
+        { tipo: 'bpmn:ParallelGateway', nombre: F.paralela, icono: 'gateway-parallel' },
+        { tipo: 'bpmn:InclusiveGateway', nombre: F.inclusiva, icono: 'gateway-or' },
+        { tipo: 'bpmn:EventBasedGateway', nombre: F.basadaEnEventos, icono: 'gateway-eventbased' },
       ],
     },
     {
       nombre: S.paleta.grupos.datos,
       figuras: [
-        { tipo: 'bpmn:DataObjectReference', nombre: S.paleta.figuras.objetoDeDatos, icono: 'data-object' },
-        { tipo: 'bpmn:DataStoreReference', nombre: S.paleta.figuras.almacenDeDatos, icono: 'data-store' },
+        { tipo: 'bpmn:DataObjectReference', nombre: F.objetoDeDatos, icono: 'data-object' },
+        { tipo: 'bpmn:DataStoreReference', nombre: F.almacenDeDatos, icono: 'data-store' },
       ],
     },
     {
       nombre: S.paleta.grupos.artefactos,
       figuras: [
-        { tipo: 'bpmn:TextAnnotation', nombre: S.paleta.figuras.anotacion, icono: 'text-annotation' },
-        { tipo: 'bpmn:Group', nombre: S.paleta.figuras.grupo, icono: 'group' },
+        { tipo: 'bpmn:TextAnnotation', nombre: F.anotacion, icono: 'text-annotation' },
+        { tipo: 'bpmn:Group', nombre: F.grupo, icono: 'group' },
       ],
     },
     {
       nombre: S.paleta.grupos.poolsYCarriles,
-      figuras: [{ tipo: 'bpmn:Participant', nombre: S.paleta.figuras.pool, icono: 'participant' }],
+      figuras: [
+        { tipo: 'bpmn:Participant', nombre: F.pool, icono: 'participant' },
+        { tipo: 'bpmn:Lane', nombre: F.carril, icono: 'lane', requiere: 'contenedor' },
+      ],
     },
   ];
 }
@@ -111,31 +167,25 @@ const ICONO_POR_DEFINICION: Readonly<Record<string, string>> = {
 };
 
 /**
- * Tipos que no están en ningún grupo de `gruposDeFiguras()` —el catálogo no ofrece crearlos
- * directamente— pero sí tienen icono propio en `bpmn-font`: los subtipos de tarea que faltaban
- * (manual, script, mensaje…) y el flujo de secuencia, que no es una figura y por eso no vive en
- * el catálogo (QA de la ronda 1 de #392: antes se quedaban sin icono en la cabecera del panel).
+ * Tipos que no están en ningún grupo de `gruposDeFiguras()` pero sí tienen icono propio en
+ * `bpmn-font`: el flujo de secuencia, que no es una figura y por eso no vive en el catálogo (QA de
+ * la ronda 1 de #392: antes se quedaba sin icono en la cabecera del panel). The task subtypes that
+ * used to be here are palette figures since #456.
  */
 const ICONO_SIN_FIGURA: Readonly<Record<string, string>> = {
-  'bpmn:ManualTask': 'manual-task',
-  'bpmn:ScriptTask': 'script-task',
-  'bpmn:SendTask': 'send-task',
-  'bpmn:ReceiveTask': 'receive-task',
-  'bpmn:BusinessRuleTask': 'business-rule-task',
   'bpmn:SequenceFlow': 'connection',
 };
 
 /**
  * Clase `bpmn-icon-*` de un `$type` BPMN, para quien necesita el mismo icono que la paleta sin
  * pintar la paleta entera (la cabecera de un elemento seleccionado en `PropertiesPanel.tsx`,
- * diseño 2d). `bpmn:Lane` no es una figura de la paleta —un carril se añade desde el context pad
- * de un pool—, así que se resuelve a mano, igual que el evento intermedio de captura y el de
- * límite, cuyo icono depende de `eventDefinitionType` y no solo del `tipo` (el `find` de abajo
- * solo mira el `tipo`, así que sin este corte antes cogía siempre la primera figura del grupo
- * —temporizador— para cualquier definición). Lo que no está en ninguna rama se queda sin icono.
+ * diseño 2d). El evento intermedio de captura y el de límite se resuelven a mano, porque su icono
+ * depende de `eventDefinitionType` y no solo del `tipo` (el `find` de abajo solo mira el `tipo`,
+ * así que sin este corte antes cogía siempre la primera figura del grupo para cualquier
+ * definición). El resto toma la primera figura de su tipo, que es la «sin definición». Lo que no
+ * está en ninguna rama se queda sin icono.
  */
 export function iconoDeTipo(tipo: string, eventDefinitionType?: string): string | undefined {
-  if (tipo === 'bpmn:Lane') return 'lane';
   if (tipo === 'bpmn:IntermediateCatchEvent' || tipo === 'bpmn:BoundaryEvent') {
     return (eventDefinitionType !== undefined ? ICONO_POR_DEFINICION[eventDefinitionType] : undefined) ?? 'intermediate-event-none';
   }
@@ -169,11 +219,27 @@ export function filtrar(grupos: readonly Grupo[], filtro: string): Grupo[] {
 
 /** La figura recién creada, tal cual la devuelve `elementFactory`. */
 function nueva(servicios: Servicios, figura: Figura): unknown {
-  const { tipo, eventDefinitionType, isExpanded } = figura;
+  const { tipo, eventDefinitionType, isExpanded, triggeredByEvent } = figura;
   // El pool tiene su propia fábrica: `createShape({ type: 'bpmn:Participant' })` no le cuelga el
   // proceso que lo hace un pool de verdad.
   if (tipo === 'bpmn:Participant') return servicios.elementFactory.createParticipantShape();
-  return servicios.elementFactory.createShape({ type: tipo, eventDefinitionType, isExpanded });
+  return servicios.elementFactory.createShape({ type: tipo, eventDefinitionType, isExpanded, ...(triggeredByEvent === true ? { triggeredByEvent } : {}) });
+}
+
+/** What a boundary event can hang from: any task, a sub-process, a transaction, a call activity. */
+const ACTIVIDAD = /^bpmn:(\w*Task|SubProcess|AdHocSubProcess|Transaction|CallActivity)$/;
+/** Where `modeling.addLane` can add a lane: into a pool, or next to one of its lanes. */
+const CONTENEDOR = /^bpmn:(Participant|Lane)$/;
+
+/**
+ * The selected element a figure with `requiere` goes into (#456), or `null` when the selection
+ * does not fit: nothing, several elements (`seleccion` is `null` then), or the wrong type.
+ */
+export function anfitrion(servicios: Servicios, figura: Figura, seleccion: string | null): Caja & { type: string } | null {
+  if (figura.requiere === undefined || seleccion === null) return null;
+  const valido = figura.requiere === 'actividad' ? ACTIVIDAD : CONTENEDOR;
+  const [elegido] = servicios.elementRegistry.filter((el) => el.id === seleccion && el.labelTarget === undefined);
+  return elegido !== undefined && valido.test(elegido.type ?? '') ? elegido as Caja & { type: string } : null;
 }
 
 interface Punto { x: number; y: number }
@@ -219,9 +285,14 @@ function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: u
 
 /**
  * Inserta la figura en el centro de lo que se ve y deja el nombre en edición, que es lo que hace
- * el clic (o `Enter`) sobre un ítem.
+ * el clic (o `Enter`) sobre un ítem. A figure with `requiere` goes into the selected element
+ * instead (#456), and without a fitting selection nothing happens (the item is disabled then).
  */
-export function insertar(servicios: Servicios, figura: Figura): void {
+export function insertar(servicios: Servicios, figura: Figura, seleccion: string | null = null): void {
+  if (figura.requiere !== undefined) {
+    insertarEnSeleccion(servicios, figura, seleccion);
+    return;
+  }
   const vista = servicios.canvas.viewbox();
   const forma = nueva(servicios, figura);
   const { target, punto } = sitio(servicios, forma, centroDe({ ...vista }));
@@ -231,6 +302,27 @@ export function insertar(servicios: Servicios, figura: Figura): void {
   // ciegas. `scrollToElement` no mueve nada si la figura ya se ve.
   servicios.canvas.scrollToElement(creada);
   servicios.directEditing.activate(creada);
+}
+
+/**
+ * A lane goes at the bottom of the selected pool (or below the selected lane), as bpmn-js's own
+ * «Add lane below» does. A boundary event is attached on the bottom edge of the selected activity,
+ * near its right corner, and each further one 40 px to the left of the previous.
+ * ponytail: once the bottom edge is full the next one lands on the left corner and overlaps; the
+ * way up is bpmn-js's `AttachSupport` placement, or dragging the item onto the activity.
+ */
+function insertarEnSeleccion(servicios: Servicios, figura: Figura, seleccion: string | null): void {
+  const host = anfitrion(servicios, figura, seleccion);
+  if (host === null) return;
+  if (figura.requiere === 'contenedor') {
+    servicios.directEditing.activate(servicios.modeling.addLane(host as unknown as Parameters<Servicios['modeling']['addLane']>[0], 'bottom'));
+    return;
+  }
+  const forma = nueva(servicios, figura);
+  const previos = (host as { attachers?: unknown[] }).attachers?.length ?? 0;
+  const punto = { x: Math.max(host.x + 18, host.x + host.width - 20 - 40 * previos), y: host.y + host.height };
+  if (servicios.rules.allowed('shape.attach', { shape: forma, target: host, position: punto }) !== 'attach') return;
+  servicios.directEditing.activate(servicios.modeling.createShape(forma, punto, host, { attach: true }));
 }
 
 interface Props {
@@ -244,9 +336,14 @@ interface Props {
   onCompacta: () => void;
   /** Region id, for the `aria-controls` of the panel toggles (#412). */
   id?: string;
+  /**
+   * The canvas selection (one id, or `null`), for the boundary events and the lane (#456): they
+   * go into the selected element, so they are enabled only while something fitting is selected.
+   */
+  seleccion?: string | null;
 }
 
-export function Paleta({ servicios, compacta, onCompacta, id }: Props): React.JSX.Element {
+export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }: Props): React.JSX.Element {
   const S = useStrings();
   const [filtro, setFiltro] = useState('');
   const grupos = filtrar(gruposDeFiguras(), filtro);
@@ -271,24 +368,31 @@ export function Paleta({ servicios, compacta, onCompacta, id }: Props): React.JS
           // una línea de estado en React. En compacto se fuerza abierto desde el CSS.
           <details key={grupo.nombre} open>
             <summary>{grupo.nombre}</summary>
-            {grupo.figuras.map((figura) => (
-              <button
-                key={`${figura.tipo}/${figura.nombre}`}
-                type="button"
-                className="figura"
-                // `draggable` + `dragstart` es la misma vía que usa la paleta de bpmn-js:
-                // `create.start` acepta el evento nativo y `dragging` toma el punto de ahí.
-                draggable
-                title={figura.nombre}
-                disabled={servicios === null}
-                onDragStart={(e) => servicios?.create.start(e.nativeEvent, nueva(servicios, figura))}
-                onClick={() => { if (servicios !== null) insertar(servicios, figura); }}
-              >
-                <span className={`bpmn-icon-${figura.icono}`} aria-hidden="true" />
-                <span className="nombre">{figura.nombre}</span>
-                <span className="pista" aria-hidden="true">{S.paleta.arrastrar}</span>
-              </button>
-            ))}
+            {grupo.figuras.map((figura) => {
+              // Boundary events and lanes need a fitting selection (#456); the title says which.
+              const falta = figura.requiere !== undefined && (servicios === null || anfitrion(servicios, figura, seleccion) === null);
+              // A lane is only added by `modeling.addLane`: dragging it has no drop target.
+              const arrastrable = figura.tipo !== 'bpmn:Lane';
+              return (
+                <button
+                  key={`${figura.tipo}/${figura.nombre}`}
+                  type="button"
+                  className="figura"
+                  // `draggable` + `dragstart` es la misma vía que usa la paleta de bpmn-js:
+                  // `create.start` acepta el evento nativo y `dragging` toma el punto de ahí.
+                  draggable={arrastrable}
+                  title={!falta ? figura.nombre
+                    : figura.requiere === 'actividad' ? S.paleta.requiereActividad(figura.nombre) : S.paleta.requiereContenedor(figura.nombre)}
+                  disabled={servicios === null || falta}
+                  onDragStart={(e) => { if (arrastrable) servicios?.create.start(e.nativeEvent, nueva(servicios, figura)); }}
+                  onClick={() => { if (servicios !== null) insertar(servicios, figura, seleccion); }}
+                >
+                  <span className={`bpmn-icon-${figura.icono}`} aria-hidden="true" />
+                  <span className="nombre">{figura.nombre}</span>
+                  {arrastrable && <span className="pista" aria-hidden="true">{S.paleta.arrastrar}</span>}
+                </button>
+              );
+            })}
           </details>
         ))}
         {grupos.length === 0 && <p className="vacio">{S.paleta.sinCoincidencias(filtro)}</p>}

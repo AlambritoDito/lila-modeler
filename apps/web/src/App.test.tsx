@@ -2712,3 +2712,50 @@ it('the palette does not open while a file operation holds the app (#410, QA of 
   await abrirConTeclado();
   expect(paleta()?.open).toBe(true);
 });
+
+// --- #455: modelling without simulating ---
+
+/** A message intermediate catch event: correct BPMN, outside the simulated subset (E-NOSOP). */
+const CON_MENSAJE = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_mensaje" isExecutable="false">
+<bpmn:startEvent id="Start_A"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>
+<bpmn:intermediateCatchEvent id="Msg_1" name="Wait"><bpmn:incoming>F1</bpmn:incoming><bpmn:outgoing>F2</bpmn:outgoing><bpmn:messageEventDefinition id="Def_1"/></bpmn:intermediateCatchEvent>
+<bpmn:endEvent id="End_A"><bpmn:incoming>F2</bpmn:incoming></bpmn:endEvent>
+<bpmn:sequenceFlow id="F1" sourceRef="Start_A" targetRef="Msg_1"/><bpmn:sequenceFlow id="F2" sourceRef="Msg_1" targetRef="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
+
+it('an unsupported construct is a warning in Model, an error in Simulate, and only Run fails (#455)', async () => {
+  await click(T.app.modos.modelar);
+  await reparsear(CON_MENSAJE);
+  // One warning and no error while modelling; the other engine errors (E-INALCANZABLE of the end
+  // behind it) stay a Run-time matter.
+  expect(chipsDelLienzo()).toEqual([T.app.avisos(1)]);
+  const marcadores = (mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, { nivel: string; mensajes: string[] }> }).marcadores;
+  expect([...marcadores.keys()]).toEqual(['Msg_1']);
+  expect(marcadores.get('Msg_1')).toEqual({ nivel: 'aviso', mensajes: [expect.stringContaining('not supported by the simulator')] });
+
+  await click(T.app.modos.simular);
+  expect(chipsDelLienzo()).toEqual([T.app.errores(1)]);
+
+  // Run goes through the gate with this model, and the gate's E-NOSOP (pinned for real in
+  // `simulationGate.test.ts`) stops it before the Worker.
+  mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Msg_1'));
+  await click(T.app.ejecutar);
+  expect(mocks.gate.mock.calls.at(-1)![0]).toContain('Msg_1');
+  expect(mocks.worker).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('E-NOSOP: Msg_1');
+});
+
+it('boundary events and the lane wait for a fitting selection, and say which (#456)', async () => {
+  await click(T.app.modos.modelar);
+  const borde = figuras().find((b) => b.textContent!.startsWith(T.paleta.figuras.bordeTemporizador))!;
+  expect(borde.disabled).toBe(true);
+  expect(borde.title).toBe(T.paleta.requiereActividad(T.paleta.figuras.bordeTemporizador));
+  const carril = figuras().find((b) => b.textContent!.startsWith(T.paleta.figuras.carril))!;
+  expect(carril.disabled).toBe(true);
+  expect(carril.title).toBe(T.paleta.requiereContenedor(T.paleta.figuras.carril));
+  expect(carril.draggable).toBe(false);
+  // The rest of the palette is not held back by the selection.
+  expect(figuras().find((b) => b.title === T.paleta.figuras.tareaManual)!.disabled).toBe(false);
+});
