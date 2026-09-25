@@ -3,7 +3,9 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila/engine`, sin lógica propia: cinco tools por ahora.
+`@lila/engine`, sin lógica propia: cinco tools por ahora, sobre el mismo pipeline de validación y
+simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
+terminal en vez de un cliente MCP.
 
 - **`validate_bpmn({ path | xml, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa

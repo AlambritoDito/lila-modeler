@@ -148,7 +148,8 @@ Task_TomarPedido  Take order  Average time (waiting for resource)  0.234564     
 `--json` and `--xlsx` work in `run` and `compare`; `--csv` only in `run`; `--all` shows every
 metric in `compare`. `--lang en|es` (any position) picks the output language; `--help` on any
 subcommand lists the options. Formats: [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md),
-[`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md).
+[`docs/RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md). Full reference, exit codes and a "for agents"
+section: [`docs/CLI.md`](docs/CLI.md).
 
 ### MCP
 
@@ -218,6 +219,8 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — results, CSV and XLSX.
 - [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — the project folder and the `.lila` file.
 - [`BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
+- [`CLI.md`](docs/CLI.md) — the `lila` command line: every subcommand, exit codes, and a
+  "for agents" section.
 - [`MCP.md`](docs/MCP.md) — the MCP server and its five tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
 - [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-028).
