@@ -3,19 +3,21 @@
  * drawing; this file turns it into a file a person can use. Pure apart from `aPng`, `descargar`
  * and `imprimirSvg`, which need a browser (canvas, `<a download>`, an iframe).
  *
- * Two looks, fixed (no setting): the SVG keeps the theme's colours on a transparent background,
- * so it can be edited or dropped on any slide; PNG, PDF and print are «paper» — a white sheet
+ * Two looks, fixed (no setting): the SVG keeps the theme's colours on the theme's canvas
+ * background, a card that stays readable on any slide (a dark theme's cream lines would vanish on a
+ * white one if it were transparent); PNG, PDF and print are «paper» — a white sheet
  * with the theme's three diagram colours turned into white fill and black lines and labels, so a
  * dark theme never prints a dark page. Colours an element carries of its own stay as they are.
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** The resolved `--diagram-fill`, `--diagram-stroke` and `--diagram-label` tokens. */
+/** The resolved `--diagram-fill`, `--diagram-stroke`, `--diagram-label` and `--canvas-bg` tokens. */
 export interface ColoresDiagrama {
   readonly fill: string;
   readonly stroke: string;
   readonly label: string;
+  readonly fondo: string;
 }
 
 /**
@@ -47,9 +49,9 @@ function canonico(color: string): string | null {
 }
 
 /**
- * Removes the editing chrome from a `saveSVG` result and, with `papel`, lays it on white paper:
- * a white rectangle under the whole viewBox and the theme's fill/stroke/label colours replaced by
- * white/black/black. Returns the `<svg>` element alone (no XML prolog), valid both as an `.svg`
+ * Removes the editing chrome from a `saveSVG` result and lays a background under the whole
+ * viewBox: the theme's canvas colour or, with `papel`, white paper, with the theme's
+ * fill/stroke/label colours replaced by white/black/black. Returns the `<svg>` element alone (no XML prolog), valid both as an `.svg`
  * file and inline in an HTML page.
  */
 export function limpiarSvg(svg: string, opciones: { papel: boolean; colores: ColoresDiagrama }): string {
@@ -69,14 +71,31 @@ export function limpiarSvg(svg: string, opciones: { papel: boolean; colores: Col
         if (valor !== null) el.setAttribute(nombre, valor.replace(COLOR, (c) => papel.get(canonico(c)) ?? c));
       }
     }
-    const [x = '0', y = '0', ancho = '100%', alto = '100%'] = (raiz.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/);
-    const hoja = doc.createElementNS(SVG_NS, 'rect');
-    for (const [k, v] of Object.entries({ x, y, width: ancho, height: alto, fill: '#fff' })) hoja.setAttribute(k, v);
-    raiz.insertBefore(hoja, raiz.firstChild);
   }
+  const [x = '0', y = '0', ancho = '100%', alto = '100%'] = (raiz.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/);
+  const hoja = doc.createElementNS(SVG_NS, 'rect');
+  for (const [k, v] of Object.entries({ x, y, width: ancho, height: alto, fill: opciones.papel ? '#fff' : opciones.colores.fondo })) hoja.setAttribute(k, v);
+  raiz.insertBefore(hoja, raiz.firstChild);
   // Serialising the element (not the document) drops bpmn-js's prolog, comment and DOCTYPE;
   // XMLSerializer writes the `xmlns` of the root itself.
   return new XMLSerializer().serializeToString(raiz);
+}
+
+/** The slice of a bpmn-js modeler `svgDelLienzo` needs. */
+export interface LienzoExportable {
+  get(nombre: 'directEditing'): { isActive(): boolean; complete(): void };
+  saveSVG(): Promise<{ svg?: string }>;
+}
+
+/**
+ * `saveSVG` cleaned by `limpiarSvg`. A label being typed is committed first, or the image would
+ * show the old one (QA of #467, N1): ⌘P moves the focus to the print frame, which commits it only
+ * after the sheet was drawn.
+ */
+export async function svgDelLienzo(lienzo: LienzoExportable, opciones: { papel: boolean; colores: ColoresDiagrama }): Promise<string> {
+  const edicion = lienzo.get('directEditing');
+  if (edicion.isActive()) edicion.complete();
+  return limpiarSvg((await lienzo.saveSVG()).svg ?? '', opciones);
 }
 
 /**
@@ -111,8 +130,13 @@ export function descargar(blob: Blob, nombre: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** A file name from the project's: no path separators or characters the OS rejects. */
-export const nombreArchivo = (nombre: string): string => nombre.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').trim() || 'diagram';
+/**
+ * A file name from the project's: no path separators or characters the OS rejects, no trailing
+ * dot or space (Windows drops them), and at most 120 characters (the desktop bridge refuses names
+ * past 255, and the extension still has to fit).
+ */
+export const nombreArchivo = (nombre: string): string =>
+  nombre.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').slice(0, 120).replace(/[. ]+$/, '').trim() || 'diagram';
 
 /**
  * The page a paper SVG is printed on: one sheet, the diagram scaled to fit it whole, in the
@@ -137,6 +161,8 @@ export function hojaImpresion(svg: string, titulo: string): string {
 export function imprimirSvg(svg: string, titulo: string): void {
   // A browser that never fires `afterprint` (headless, some embedded ones) leaves the last one behind.
   document.querySelector('iframe.lila-impresion')?.remove();
+  // The frame takes the focus to print; the app's keys need it back (QA of #467, S2).
+  const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const marco = document.createElement('iframe');
   marco.className = 'lila-impresion';
   marco.setAttribute('aria-hidden', 'true');
@@ -149,7 +175,11 @@ export function imprimirSvg(svg: string, titulo: string): void {
   d.open();
   d.write(hojaImpresion(svg, titulo));
   d.close();
-  ventana.addEventListener('afterprint', () => marco.remove(), { once: true });
+  const cerrar = (): void => { marco.remove(); previo?.focus(); };
+  ventana.addEventListener('afterprint', cerrar, { once: true });
   ventana.focus();
   ventana.print();
+  // `print()` blocks until the dialog closes in Chrome, Firefox and Electron; where it does not,
+  // the focus comes back now and the frame goes on `afterprint`, or at the next print at the latest.
+  previo?.focus();
 }

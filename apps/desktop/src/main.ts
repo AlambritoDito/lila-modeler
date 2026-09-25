@@ -264,6 +264,11 @@ async function pdfDeSvg(svg: string): Promise<Buffer> {
     show: false,
     webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false },
   });
+  // JavaScript is off, but a `<meta http-equiv="refresh">` in the SVG still navigates (QA of #467,
+  // S1): the sheet goes nowhere and opens nothing, like the main window. Not unit-tested: this
+  // file cannot be imported without Electron; the QA reproduced it in Electron dev.
+  hoja.webContents.on('will-navigate', (e) => e.preventDefault());
+  hoja.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   try {
     const archivo = path.join(dir, 'hoja.html');
     await writeFile(archivo, html);

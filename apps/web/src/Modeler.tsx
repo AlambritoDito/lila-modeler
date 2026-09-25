@@ -54,7 +54,7 @@ import { rotularMinimapa } from './minimapa';
 // servicios (ver `moduloColoresDelTema`).
 import { moduloColoresDelTema } from './TokenSim';
 import { centrar, type CanvasCentrable } from './centrar';
-import { limpiarSvg } from './exportarDiagrama';
+import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -416,9 +416,11 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       exportarSvg: async ({ papel }) => {
         if (activo === null) throw new Error(strings().lienzo.errorSinBpmn);
-        const { svg } = await activo.saveSVG();
         const c = coloresDelDiagrama();
-        return limpiarSvg(svg, { papel, colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor } });
+        return svgDelLienzo(activo as unknown as LienzoExportable, {
+          papel,
+          colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor, fondo: token('--canvas-bg') },
+        });
       },
       comprobar: async (xml) => {
         const { modeler: candidato, staging } = crearCandidato();

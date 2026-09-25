@@ -5,10 +5,10 @@
  * in `<defs>`, and the selection outline and hit area of a selected task — with Lila Dark's three
  * diagram colours plus one colour of the element's own (#452) that must survive.
  */
-import { describe, expect, it } from 'vitest';
-import { hojaImpresion, limpiarSvg, nombreArchivo } from './exportarDiagrama';
+import { describe, expect, it, vi } from 'vitest';
+import { hojaImpresion, limpiarSvg, nombreArchivo, svgDelLienzo } from './exportarDiagrama';
 
-const DARK = { fill: '#1F1A36', stroke: '#D9D2F0', label: '#ECE9F5' };
+const DARK = { fill: '#1F1A36', stroke: '#D9D2F0', label: '#ECE9F5', fondo: '#17132A' };
 const PROPIO = 'rgb(255, 0, 128)';
 
 const SAVE_SVG = `<?xml version="1.0" encoding="utf-8"?>
@@ -32,10 +32,11 @@ describe('limpiarSvg (#451)', () => {
     expect(doc.documentElement.getAttribute('viewBox')).toBe('146 76 320 140');
   });
 
-  it('without paper keeps the theme colours on a transparent background', () => {
+  it('without paper keeps the theme colours on the theme\'s canvas background (QA of #467, N5)', () => {
     const svg = limpiarSvg(SAVE_SVG, { papel: false, colores: DARK });
     expect(svg).toContain('fill: rgb(31, 26, 54)');
-    expect(parsear(svg).documentElement.firstElementChild!.tagName).toBe('defs');
+    const fondo = parsear(svg).documentElement.firstElementChild!;
+    expect([fondo.tagName, ...['x', 'y', 'width', 'height', 'fill'].map((a) => fondo.getAttribute(a))]).toEqual(['rect', '146', '76', '320', '140', '#17132A']);
   });
 
   it('on paper lays a white sheet under the viewBox and turns fill/stroke/label into white/black/black', () => {
@@ -60,6 +61,14 @@ describe('limpiarSvg (#451)', () => {
     expect(parsear(svg).querySelector('marker')!.id).toBe('sequenceflow-end-_1F1A36-_D9D2F0-x');
   });
 
+  it('commits a label being typed before drawing the image (QA of #467, N1)', async () => {
+    const orden: string[] = [];
+    const edicion = { isActive: () => true, complete: vi.fn(() => orden.push('complete')) };
+    const lienzo = { get: () => edicion, saveSVG: async () => { orden.push('saveSVG'); return { svg: SAVE_SVG }; } };
+    expect(await svgDelLienzo(lienzo, { papel: false, colores: DARK })).toContain('Task_1');
+    expect(orden).toEqual(['complete', 'saveSVG']);
+  });
+
   it('refuses something that is not an SVG', () => {
     expect(() => limpiarSvg('<html></html>', { papel: false, colores: DARK })).toThrow();
   });
@@ -75,5 +84,8 @@ describe('print sheet and file name (#451)', () => {
   it('turns the project name into a safe file name', () => {
     expect(nombreArchivo('Pedidos: 2026/09')).toBe('Pedidos- 2026-09');
     expect(nombreArchivo('   ')).toBe('diagram');
+    // No trailing dot or space, at most 120 characters (QA of #467, N4).
+    expect(nombreArchivo('Pedidos: 2026/09 <x> "q" *?|.')).toBe('Pedidos- 2026-09 -x- -q- -');
+    expect(nombreArchivo('a'.repeat(300))).toHaveLength(120);
   });
 });
