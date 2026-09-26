@@ -55,6 +55,8 @@ import { rotularMinimapa } from './minimapa';
 import { moduloColoresDelTema } from './TokenSim';
 // bpmn-js's context pad and replace menu in the app's language (#456).
 import { moduloTraduccion } from './bpmnTranslate';
+// Colours per element (#452): the command, the context pad entry and the Bizagi import hook.
+import { moduloColores, type LilaColores } from './colores';
 import { centrar, type CanvasCentrable } from './centrar';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -124,6 +126,8 @@ export interface Servicios {
   elementRegistry: { filter(prueba: (elemento: Elemento) => boolean): Elemento[] };
   /** Las reglas de bpmn-js: quién puede contener a quién. */
   rules: { allowed(accion: string, contexto: object): unknown };
+  /** Paints an element with a palette colour as one undoable command (#452). */
+  colores?: Pick<LilaColores, 'pintar'>;
 }
 
 interface Punto { x: number; y: number }
@@ -272,7 +276,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion],
+      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -460,6 +464,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           directEditing: activo.get<Servicios['directEditing']>('directEditing'),
           elementRegistry: activo.get<Servicios['elementRegistry']>('elementRegistry'),
           rules: activo.get<Servicios['rules']>('rules'),
+          colores: activo.get<LilaColores>('lilaColores'),
         };
       },
       suscribir: (eventos, escuchar) => {

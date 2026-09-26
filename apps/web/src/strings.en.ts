@@ -652,6 +652,20 @@ export const en = {
     id: 'Id',
     copiar: 'Copy',
     copiado: 'Copied',
+    /** Colours per element (#452): the panel row, the context pad entry and the eight colours. */
+    color: 'Color',
+    cambiarColor: 'Change color',
+    colores: {
+      ninguno: 'None',
+      azul: 'Blue',
+      verde: 'Green',
+      amarillo: 'Yellow',
+      naranja: 'Orange',
+      rojo: 'Red',
+      morado: 'Purple',
+      turquesa: 'Teal',
+      gris: 'Gray',
+    },
 
     descripcion: 'Description',
     descripcionProceso: 'Process description',

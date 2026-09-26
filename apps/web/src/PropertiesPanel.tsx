@@ -22,6 +22,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
+import { COLORES, colorActual, type ColorId, type ElementoColoreable } from './colores';
 import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
@@ -344,7 +345,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): Rea
     <>
       <CabeceraElemento elemento={elemento} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} pintar={modelador.servicios.colores?.pintar} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -445,7 +446,9 @@ interface PropsPestana {
   refrescar: () => void;
 }
 
-function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+function Propiedades({ elemento, escritor, refrescar, pintar }: PropsPestana & {
+  pintar?: ((elemento: ElementoColoreable, color: ColorId | null) => void) | undefined;
+}): React.JSX.Element {
   const S = useStrings();
   const [copiado, setCopiado] = useState(false);
   const bo = elemento.businessObject;
@@ -536,6 +539,47 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
             {copiado ? S.propiedades.copiado : S.propiedades.copiar}
           </button>
         </div>
+      </div>
+
+      {pintar !== undefined && <Colores elemento={elemento} pintar={pintar} refrescar={refrescar} />}
+    </div>
+  );
+}
+
+/**
+ * «None» plus the eight colours of `colores.ts` (#452). Shapes and connections only: a process
+ * (its DI is the plane) has nothing to paint. A label paints the element it belongs to.
+ */
+function Colores({ elemento, pintar, refrescar }: {
+  elemento: ElementoLienzo;
+  pintar: (elemento: ElementoColoreable, color: ColorId | null) => void;
+  refrescar: () => void;
+}): React.JSX.Element | null {
+  const S = useStrings();
+  const real = (elemento.type === 'label' && elemento.labelTarget !== undefined ? elemento.labelTarget : elemento) as ElementoColoreable;
+  const tipoDi = real.di?.$type;
+  if (tipoDi !== 'bpmndi:BPMNShape' && tipoDi !== 'bpmndi:BPMNEdge') return null;
+  const actual = colorActual(real);
+  return (
+    <div className="campo">
+      <span>{S.propiedades.color}</span>
+      <div className="colores" role="group" aria-label={S.propiedades.color}>
+        {[{ id: null, fill: undefined, stroke: undefined }, ...COLORES].map((c) => (
+          <button
+            key={c.id ?? 'ninguno'}
+            type="button"
+            className={c.id === null ? 'color-muestra color-ninguno' : 'color-muestra'}
+            aria-label={S.propiedades.colores[c.id ?? 'ninguno']}
+            title={S.propiedades.colores[c.id ?? 'ninguno']}
+            aria-pressed={actual === c.id}
+            // Diagram colours, fixed hex that persist in the XML (`colores.ts`), not theme tokens.
+            style={c.fill === undefined ? undefined : { background: c.fill, borderColor: c.stroke }}
+            onClick={() => {
+              pintar(real, c.id);
+              refrescar();
+            }}
+          />
+        ))}
       </div>
     </div>
   );
