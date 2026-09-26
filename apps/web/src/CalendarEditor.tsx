@@ -111,14 +111,19 @@ export function aCeldas(intervals: readonly Intervalo[]): Set<number> {
 
 /**
  * The grid's new cell set → `intervals`, keeping the file as the person wrote it (#469): every
- * entry whose hours are all still open stays as it is and where it is; only the cells no kept
- * entry covers are re-derived with `aIntervals` and appended. Re-deriving everything would merge,
- * split and re-sort the ranges added with the picker on every click.
+ * entry whose hours are all still open stays as it is and where it is; the open cells no kept
+ * entry covers, plus those of the dropped entries, are re-derived with `aIntervals` and appended.
+ * Re-deriving everything would merge, split and re-sort the ranges added with the picker on every
+ * click.
  */
 export function pintar(intervals: readonly Intervalo[], celdas: ReadonlySet<number>): Intervalo[] {
   const conservadas = intervals.filter((intervalo) => [...aCeldas([intervalo])].every((c) => celdas.has(c)));
   const cubiertas = aCeldas(conservadas);
-  return [...conservadas, ...aIntervals(new Set([...celdas].filter((c) => !cubiertas.has(c))))];
+  // Hours of a dropped entry are re-derived even when a kept one also covers them, so the dropped
+  // range comes back with its own start (Mon–Fri 09–18 stays 09–18 next to «every day 06–10»).
+  const soltadas = aCeldas(intervals.filter((intervalo) => !conservadas.includes(intervalo)));
+  const resto = [...celdas].filter((c) => !cubiertas.has(c) || soltadas.has(c));
+  return [...conservadas, ...aIntervals(new Set(resto))];
 }
 
 const HORAS = [...Array.from({ length: 24 }).keys()];

@@ -875,6 +875,8 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     pulsar('Guardar');
     expect(oficina()[0]).toEqual(todos);
     expect(oficina()).not.toContainEqual(laborables);
+    // The untouched weekdays keep their 09:00 start instead of being clipped by «every day 06–10».
+    expect(oficina()).toContainEqual({ days: ['MON', 'TUE', 'THU', 'FRI'], from: '09:00', to: '18:00' });
     const esperadas = aCeldas([todos, laborables, miercoles]);
     esperadas.delete(celda(2, 12));
     expect(aCeldas(oficina())).toEqual(esperadas);
