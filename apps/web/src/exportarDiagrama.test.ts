@@ -96,7 +96,8 @@ describe('print sheet and file name (#451)', () => {
     svg.focus();
     expect(document.activeElement).toBe(svg);
     vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
-      return { document: { open() {}, write() {}, close() {} }, addEventListener() {}, print() {}, focus() {} } as unknown as Window;
+      // The frame takes the focus like a real one would: without this the test passes without the fix.
+      return { document: { open() {}, write() {}, close() {} }, addEventListener() {}, print() {}, focus() { svg.blur(); } } as unknown as Window;
     });
     imprimirSvg('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>', 'x');
     expect(document.activeElement).toBe(svg);
