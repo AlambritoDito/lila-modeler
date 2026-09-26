@@ -1664,8 +1664,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
     // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
     if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
-    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays the browser's.
-    if (a.id in ALINEACIONES && modo !== 'modelar') return;
+    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays out of the app's own
+    // handling, but it must still be kept from bpmn-js-token-simulation's canvas listener (#492:
+    // Alt+Shift+T toggled the token simulation in Simulate/Validate paths) — same hiding as below.
+    if (a.id in ALINEACIONES && modo !== 'modelar') {
+      if (conMod || e.altKey) e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     // Only the ⌘ and ⌥ keys are hidden from the target (bpmn-js zooms on ⌘ ones, and the token
     // simulation toggles on a T with any modifier, locking the canvas: #453); Esc, F2 and F6 still
