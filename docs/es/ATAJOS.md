@@ -108,8 +108,8 @@ los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entra
 
 ² Imprime solo el diagrama, en negro sobre blanco, en una hoja. En el navegador ese diálogo de
 imprimir es también la forma de sacar un PDF (elige «Guardar como PDF»); la app de escritorio tiene
-además «Archivo → Exportar diagrama como PDF…». Las exportaciones SVG y PNG están en el menú Archivo
-y en la paleta de comandos, sin tecla propia.
+además «Archivo → Exportar diagrama como PDF…». Las exportaciones SVG y PNG, y el documento del
+proceso (Word o HTML), están en el menú Archivo y en la paleta de comandos, sin tecla propia.
 
 En la app de escritorio `⌘W`/`Ctrl+W` cierra la ventana enfocada (Acerca de o la ventana
 desacoplada del escenario, solas; la principal pregunta antes si hay cambios sin guardar y, como su

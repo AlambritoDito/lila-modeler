@@ -241,9 +241,9 @@ function requireExportacion(value: unknown): Exportacion {
   const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
   const { nombre, tipo, datos } = v;
   const valido = typeof nombre === 'string' && nombre.length > 0 && nombre.length <= 255
-    && (tipo === 'png' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf') && typeof datos === 'string')
+    && (tipo === 'png' || tipo === 'docx' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf' || tipo === 'html') && typeof datos === 'string')
     && (datos as { length: number }).length <= MAX_EXPORTACION;
-  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf, datos }.');
+  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf|docx|html, datos }.');
   return v as unknown as Exportacion;
 }
 

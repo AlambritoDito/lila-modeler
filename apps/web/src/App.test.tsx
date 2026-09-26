@@ -1827,6 +1827,27 @@ it('the web File menu downloads the SVG in the theme\'s colours and the PNG on p
   expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>', T.app.proyectoDemo);
 });
 
+it('the web File menu downloads the process document as <project>.docx and <project>.html (#454)', async () => {
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  mocks.aPng.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  await act(async () => ejecutarArchivo(T.app.exportarDocx));
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  const [docx, nombreDocx] = mocks.descargar.mock.calls[0]! as [Blob, string];
+  expect([docx.type, nombreDocx]).toEqual(['application/vnd.openxmlformats-officedocument.wordprocessingml.document', `${T.app.proyectoDemo}.docx`]);
+  // A zip: the local file header signature.
+  expect((await docx.text()).slice(0, 2)).toBe('PK');
+  // The diagram is the paper PNG of #451, never the theme's colours.
+  expect(mocks.exportarSvg).toHaveBeenCalledWith({ papel: true });
+  expect(mocks.aPng).toHaveBeenCalledWith('<svg id="papel"/>');
+  await act(async () => ejecutarArchivo(T.app.exportarHtml));
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledTimes(2));
+  const [html, nombreHtml] = mocks.descargar.mock.calls[1]! as [Blob, string];
+  expect([html.type, nombreHtml]).toEqual(['text/html', `${T.app.proyectoDemo}.html`]);
+  const texto = await html.text();
+  expect(texto).toContain(`<h1>${T.app.proyectoDemo}</h1>`);
+  expect(texto).toContain('<h3>Preparar alimento</h3>');
+});
+
 it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {
   const lienzoVe = vi.fn();
   svgLienzo().addEventListener('keydown', lienzoVe);

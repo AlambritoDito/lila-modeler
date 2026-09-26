@@ -272,6 +272,24 @@ export const es: Catalog = {
     xlsxCi95High: (escenario) => `IC95 superior ${escenario}`,
     xlsxOverlap: (escenario) => `Solape IC95 ${escenario}`,
 
+    docVersion: (version) => `Versión ${version}`,
+    docDate: (date) => `Fecha: ${date}`,
+    docGeneratedBy: (version) => `Generado por Lila Modeler ${version}`,
+    docDescription: () => 'Descripción del proceso',
+    docNoDescription: () => 'El proceso no tiene descripción.',
+    docElements: () => 'Elementos',
+    docNoLane: () => 'Sin carril',
+    docType: () => 'Tipo',
+    docId: () => 'Id',
+    docLane: () => 'Carril',
+    docSubprocess: () => 'Subproceso',
+    docAttachedTo: () => 'Adjunto a',
+    docDocumentation: () => 'Descripción',
+    docResponsibilities: () => 'Responsabilidades (RACI)',
+    docScenario: (name) => `Escenario: ${name}`,
+    docResults: () => 'Resultados',
+    docDiagramAlt: () => 'Diagrama del proceso',
+
     mixedTimeUnit: (unit, others) =>
       `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
       `Declaran otra: ${others}.`,

@@ -27,6 +27,8 @@ export const es: Strings = {
     exportarSvg: 'Exportar diagrama como SVG…',
     exportarPng: 'Exportar diagrama como PNG…',
     exportarPdf: 'Exportar diagrama como PDF…',
+    exportarDocx: 'Exportar documento del proceso (Word)…',
+    exportarHtml: 'Exportar documento del proceso (HTML)…',
     imprimir: 'Imprimir…',
     vista: 'Vista',
     paleta: 'Paleta de comandos',

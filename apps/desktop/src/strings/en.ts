@@ -41,6 +41,8 @@ export const en = {
     exportarSvg: 'Export diagram as SVG…',
     exportarPng: 'Export diagram as PNG…',
     exportarPdf: 'Export diagram as PDF…',
+    exportarDocx: 'Export process document (Word)…',
+    exportarHtml: 'Export process document (HTML)…',
     imprimir: 'Print…',
     /** The View and Simulation menus (#413): same texts as `S.atajos` in the web catalog. */
     vista: 'View',

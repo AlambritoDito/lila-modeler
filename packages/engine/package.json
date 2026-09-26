@@ -51,6 +51,10 @@
     "./xlsx-report": {
       "types": "./dist/xlsx-report.d.ts",
       "default": "./dist/xlsx-report.js"
+    },
+    "./process-document": {
+      "types": "./dist/process-document.d.ts",
+      "default": "./dist/process-document.js"
     }
   },
   "files": [

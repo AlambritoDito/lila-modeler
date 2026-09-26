@@ -105,7 +105,8 @@ list these shortcuts next to each item.
 
 ² Prints the diagram alone, black on white, on one sheet. In a browser, that print dialog is also
 how you get a PDF (choose «Save as PDF»); the desktop app has «File → Export diagram as PDF…» as
-well. SVG and PNG exports are in the File menu and the command palette, with no key of their own.
+well. SVG and PNG exports, and the process document (Word or HTML), are in the File menu and the
+command palette, with no key of their own.
 
 In the desktop app `⌘W`/`Ctrl+W` closes the focused window (About or the detached scenario on
 their own; the main window asks first when there are unsaved changes and, like its red button,

@@ -61,6 +61,13 @@ describe('limpiarSvg (#451)', () => {
     expect(parsear(svg).querySelector('marker')!.id).toBe('sequenceflow-end-_1F1A36-_D9D2F0-x');
   });
 
+  it('resolves the inline var(--token) of the bottleneck heat, which is black outside the page (#454)', () => {
+    const calor = SAVE_SVG.replace('fill: #1f1a36;', 'fill: var(--sim-bottleneck-3);');
+    const token = (nombre: string): string => (nombre === '--sim-bottleneck-3' ? '#e05a4f' : '');
+    expect(limpiarSvg(calor, { papel: true, colores: DARK, token })).toContain('fill: #e05a4f;');
+    expect(limpiarSvg(calor, { papel: true, colores: DARK })).toContain('fill: var(--sim-bottleneck-3);');
+  });
+
   it('commits a label being typed before drawing the image (QA of #467, N1)', async () => {
     const orden: string[] = [];
     const edicion = { isActive: () => true, complete: vi.fn(() => orden.push('complete')) };

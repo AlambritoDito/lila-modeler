@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
@@ -1236,6 +1237,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'exportarSvg') void exportarImagen('svg');
     else if (accion === 'exportarPng') void exportarImagen('png');
     else if (accion === 'exportarPdf') void exportarImagen('pdf');
+    else if (accion === 'exportarDocx') void exportarDocumento('docx');
+    else if (accion === 'exportarHtml') void exportarDocumento('html');
     // A shortcut the native menu owns (#413): same handlers as the keyboard; unknown ids are ignored.
     else if ('atajo' in accion) { if (Object.hasOwn(atajosRef.current, accion.atajo) && !bloqueado()) atajosRef.current[accion.atajo as AtajoPropio](); }
     else void projectAction({ recent: accion.openRecent });
@@ -1361,6 +1364,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarPng, elegir: () => ejecutar('exportarPng') },
       DESKTOP && modelador !== null && { grupo: 'acciones', nombre: S.app.menuEscritorio.exportarPdf, elegir: () => ejecutar('exportarPdf') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarDocx, elegir: () => ejecutar('exportarDocx') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarHtml, elegir: () => ejecutar('exportarHtml') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
     ];
     return [
@@ -1521,6 +1526,42 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         else await lila.exportar({ nombre, tipo, datos: new Uint8Array(await png.arrayBuffer()) });
       } else if (lila === undefined) descargar(new Blob([svg], { type: 'image/svg+xml' }), `${nombre}.svg`);
       else await lila.exportar({ nombre, tipo, datos: svg });
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+  }
+
+  /**
+   * The process document (#454), Word or one HTML page: the diagram on paper (the PNG of #451),
+   * every element's documentation in flow order, and the active scenario with its last run on
+   * this revision — or, without a run, the scenario alone when it resolves.
+   */
+  async function exportarDocumento(tipo: 'docx' | 'html'): Promise<void> {
+    if (modelador === null) return;
+    const nombre = nombreArchivo(projectName);
+    const lila = DESKTOP ? window.lila : undefined;
+    try {
+      const xml = await modelador.exportar();
+      const [{ ir: modelo }, annotations, png] = await Promise.all([
+        parseBpmn(xml),
+        // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
+        readAnnotations(xml).catch(() => ({})),
+        modelador.exportarSvg({ papel: true }).then(aPng).then(async (blob) => new Uint8Array(await blob.arrayBuffer())),
+      ]);
+      const run = corridaActual;
+      const escenario = run !== undefined
+        ? { scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result }
+        : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
+      const hoy = new Date();
+      const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+      const doc = buildProcessDocument({ ir: modelo, annotations, title: projectName, date, locale, png, ...escenario });
+      if (tipo === 'docx') {
+        const datos = toDocx(doc);
+        if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
+        else await lila.exportar({ nombre, tipo, datos });
+      } else {
+        const datos = toHtml(doc);
+        if (lila === undefined) descargar(new Blob([datos], { type: 'text/html' }), `${nombre}.html`);
+        else await lila.exportar({ nombre, tipo, datos });
+      }
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
@@ -1849,6 +1890,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPdf')}>{S.app.menuEscritorio.exportarPdf}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarDocx')}>{S.app.menuEscritorio.exportarDocx}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarHtml')}>{S.app.menuEscritorio.exportarHtml}</button>
               <button type="button" title={`${S.app.menuEscritorio.imprimir}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.menuEscritorio.imprimir}</button>
               <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
@@ -1863,6 +1906,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               </>}
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.exportarPng}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarDocx')}>{S.app.exportarDocx}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarHtml')}>{S.app.exportarHtml}</button>
               <button type="button" title={`${S.app.imprimirPdf}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.imprimirPdf}</button>
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </>}

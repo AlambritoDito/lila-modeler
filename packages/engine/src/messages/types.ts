@@ -207,6 +207,29 @@ export interface CliMessages {
   xlsxCi95High: (scenario: string) => string;
   xlsxOverlap: (scenario: string) => string;
 
+  /* --- process document (`process-document.ts`, #454) --------------- */
+  /** Cover lines: `lila:versionTag` of the process, the export date and the engine version. */
+  docVersion: (version: string) => string;
+  docDate: (date: string) => string;
+  docGeneratedBy: (version: string) => string;
+  docDescription: () => string;
+  docNoDescription: () => string;
+  /** The single Heading 1 when the process has no lanes. */
+  docElements: () => string;
+  /** Heading 1 of the elements outside every lane, when the process has lanes. */
+  docNoLane: () => string;
+  /** Labels of an element's paragraphs. */
+  docType: () => string;
+  docId: () => string;
+  docLane: () => string;
+  docSubprocess: () => string;
+  docAttachedTo: () => string;
+  docDocumentation: () => string;
+  docResponsibilities: () => string;
+  docScenario: (name: string) => string;
+  docResults: () => string;
+  docDiagramAlt: () => string;
+
   /* --- `compareWarnings()` (cli-shared.ts) -------------------------- */
   mixedTimeUnit: (unit: string, others: string) => string;
   differentSeeds: (seeds: string) => string;

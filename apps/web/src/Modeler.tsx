@@ -442,6 +442,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         return svgDelLienzo(activo as unknown as LienzoExportable, {
           papel,
           colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor, fondo: token('--canvas-bg') },
+          token,
         });
       },
       comprobar: async (xml) => {

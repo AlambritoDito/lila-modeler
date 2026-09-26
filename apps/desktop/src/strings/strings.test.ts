@@ -91,6 +91,8 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       exportarSvg: 'Exportar diagrama como SVG…',
       exportarPng: 'Exportar diagrama como PNG…',
       exportarPdf: 'Exportar diagrama como PDF…',
+      exportarDocx: 'Exportar documento del proceso (Word)…',
+      exportarHtml: 'Exportar documento del proceso (HTML)…',
       imprimir: 'Imprimir…',
       // #413: the View and Simulation menus are new, the app's own instead of Electron's role.
       vista: 'Vista',

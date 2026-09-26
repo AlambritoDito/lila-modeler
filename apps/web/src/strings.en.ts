@@ -96,6 +96,9 @@ export const en = {
     /** Diagram export (#451): downloads on the web; PDF is the browser's print dialog. */
     exportarSvg: 'Export diagram as SVG',
     exportarPng: 'Export diagram as PNG',
+    /** Process document (#454): Word or a single HTML page, like Bizagi's «Publish to Word». */
+    exportarDocx: 'Export process document (Word)',
+    exportarHtml: 'Export process document (HTML)',
     imprimirPdf: 'Print / Save as PDF…',
     tituloNuevo: 'New project',
     tituloAbrir: 'Open project',
@@ -122,6 +125,8 @@ export const en = {
       exportarSvg: 'Export diagram as SVG…',
       exportarPng: 'Export diagram as PNG…',
       exportarPdf: 'Export diagram as PDF…',
+      exportarDocx: 'Export process document (Word)…',
+      exportarHtml: 'Export process document (HTML)…',
       imprimir: 'Print…',
     },
 

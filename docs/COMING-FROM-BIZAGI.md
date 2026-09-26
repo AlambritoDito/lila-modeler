@@ -6,8 +6,10 @@ This guide is for someone who has already run simulations in Bizagi Modeler and 
 Modeler for the first time. It says where each thing you know lives here, in Bizagi's own
 vocabulary, so you do not have to relearn the workflow to get your first number out. Lila is a
 discrete-event **simulator** for BPMN: an engine, a CLI, an MCP server and an editor around them.
-It is not a process documentation or publishing suite — there is no Word/Web publishing, no
-document templates, no shared repository of processes. Bizagi Modeler is cited here as the
+It is not a process documentation or publishing suite: File → Export process document writes a
+Word (.docx) file or a single-page HTML with the diagram, each element's documentation and the
+scenario and results tables, but there are no document templates and no shared repository of
+processes. Bizagi Modeler is cited here as the
 reference and inspiration this project learned the workflow from, and as the source of the public
 examples the engine is validated against.
 
@@ -146,6 +148,7 @@ off-hours wait split out from resource wait.
 |---|---|
 | What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2 |
 | Export results to Excel *(Bizagi's name may differ by version)* | CSV per table and a single `.xlsx` (`--csv`, `--xlsx`, or the export buttons in Results) |
+| Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables. No templates or table of contents field; Word's navigation pane lists the headings |
 | Watch the tokens move | **Animate**: Play from Results replays replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. The separate **Validate paths** mode is the didactic bpmn-js animation and reads no scenario at all |
 
 ## Three differences you will feel

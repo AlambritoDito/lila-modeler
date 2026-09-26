@@ -148,10 +148,10 @@ export interface LilaBridge {
   exportar(exportacion: Exportacion): Promise<string | null>;
 }
 
-/** What `exportar` saves (#451). */
+/** What `exportar` saves: the diagram (#451) and the process document (#454). */
 export type Exportacion =
-  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf'; readonly datos: string }
-  | { readonly nombre: string; readonly tipo: 'png'; readonly datos: Uint8Array };
+  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf' | 'html'; readonly datos: string }
+  | { readonly nombre: string; readonly tipo: 'png' | 'docx'; readonly datos: Uint8Array };
 
 /**
  * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`
@@ -244,6 +244,8 @@ export type MenuAction =
   | 'exportarSvg'
   | 'exportarPng'
   | 'exportarPdf'
+  | 'exportarDocx'
+  | 'exportarHtml'
   | { readonly openRecent: string }
   | { readonly atajo: string };
 

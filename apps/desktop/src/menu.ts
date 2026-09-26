@@ -90,6 +90,9 @@ export function menuTemplate(
         { label: S.exportarSvg, click: () => send('exportarSvg') },
         { label: S.exportarPng, click: () => send('exportarPng') },
         { label: S.exportarPdf, click: () => send('exportarPdf') },
+        // The process document (#454), right after the diagram it starts with.
+        { label: S.exportarDocx, click: () => send('exportarDocx') },
+        { label: S.exportarHtml, click: () => send('exportarHtml') },
         atajo(S.imprimir, 'CmdOrCtrl+P', 'imprimir'),
         // ⌘W (owner request, 2026-09-25): on macOS the `windowMenu` role brings Minimize, Zoom and
         // Bring All to Front but not Close, so the key did nothing; on Windows/Linux that same role

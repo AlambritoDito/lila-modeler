@@ -6,8 +6,10 @@ Esta guía es para quien ya ha simulado en Bizagi Modeler y abre Lila Modeler po
 dónde está aquí cada cosa que ya conoces, con el vocabulario de Bizagi, para que no tengas que
 reaprender el flujo antes de sacar tu primer número. Lila es un **simulador** de eventos discretos
 para BPMN: un motor, una CLI, un servidor MCP y un editor alrededor. No es una suite de
-documentación ni de publicación de procesos — no hay publicación a Word o a web, ni plantillas de
-documento, ni repositorio compartido de procesos. Bizagi Modeler se cita como la referencia y la
+documentación ni de publicación de procesos: Archivo → Exportar documento del proceso escribe un
+Word (.docx) o un HTML de una página con el diagrama, la documentación de cada elemento y las
+tablas del escenario y de resultados, pero no hay plantillas de documento ni repositorio compartido
+de procesos. Bizagi Modeler se cita como la referencia y la
 inspiración de la que este proyecto aprendió el flujo, y como origen de los ejemplos públicos
 contra los que se valida el motor.
 
@@ -146,6 +148,7 @@ de eventos por caso y la espera fuera de horario separada de la espera por recur
 |---|---|
 | What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas |
 | Exportar resultados a Excel *(el nombre en Bizagi puede variar según la versión)* | un CSV por tabla y un `.xlsx` único (`--csv`, `--xlsx`, o los botones de exportar en Results) |
+| Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
 | Ver moverse los tokens | **Animate**: Play desde Results reproduce la réplica 1 de la corrida guardada sobre el diagrama, con contadores por elemento que salen del registro de eventos del propio motor, no de un caminante de juguete. El modo **Validate paths**, aparte, es la animación didáctica de bpmn-js y no lee ningún escenario |
 
 ## Tres diferencias que vas a notar
