@@ -752,15 +752,26 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
-  // Autosave (#459): 5 s after the last change, a dirty document goes to main as a `.lila`; main
-  // deletes the copy by itself when the document is clean again. Only the desktop bridge has it.
+  // Autosave (#459): a dirty document goes to main as a `.lila` 5 s after its first unsaved
+  // change, then at most every 5 s while it stays dirty — a throttle, not a debounce, so steady
+  // editing still gets copied. Main deletes the copy by itself when the document is clean again.
+  // Only the desktop bridge has it.
+  const autoguardado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
   useEffect(() => {
-    if (!dirty || modelador === null || window.lila?.writeRecovery === undefined) return;
-    const temporizador = setTimeout(() => {
-      void snapshot().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
+    if (!dirty || modelador === null || window.lila?.writeRecovery === undefined) {
+      if (autoguardado.current !== null) clearTimeout(autoguardado.current);
+      autoguardado.current = null;
+      return;
+    }
+    if (autoguardado.current !== null) return; // The pending write will carry this change too.
+    autoguardado.current = setTimeout(() => {
+      autoguardado.current = null;
+      void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
     }, AUTOGUARDADO_MS);
-    return () => clearTimeout(temporizador);
   }, [currentToken, dirty, modelador]);
+  useEffect(() => () => { if (autoguardado.current !== null) clearTimeout(autoguardado.current); }, []);
   const sessionRestored = useRef(false);
   useEffect(() => {
     if (modelador === null || sessionRestored.current) return;
@@ -1464,7 +1475,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) { copiaPendiente.current = copia; return; }
     ioLock.current = true; setIoBusy(true);
     void (async () => activate(readLila(copia), false, tokenRef.current))()
-      .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
+      .catch((error: unknown) => {
+        setIoError(S.app.errorCopiaRecuperacion(error instanceof Error ? error.message : String(error)));
+        // An unreadable copy must not come back on every launch: a clean document makes main
+        // delete it (the offer is answered by now). The welcome screen takes the startup's place.
+        adapter?.setDirty?.(false);
+        setBienvenida(true);
+      })
       .finally(() => { ioLock.current = false; setIoBusy(false); });
   }
   const restaurarCopiaRef = useRef(restaurarCopia);

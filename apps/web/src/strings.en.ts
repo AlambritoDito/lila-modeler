@@ -276,6 +276,9 @@ export const en = {
     errorRecienteAusente: 'That project is no longer in its folder; it was removed from recents.',
     errorAbrirOcupado: (archivo: string): string =>
       `"${archivo}" was not opened: another operation is in progress. Open it again when it finishes.`,
+    /** The autosave copy offered at launch could not be read (#459); it is deleted. */
+    errorCopiaRecuperacion: (mensaje: string): string =>
+      `The recovery copy of the last session could not be opened and was discarded: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `unknown scenario: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
   },

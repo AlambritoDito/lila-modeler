@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -25,6 +25,15 @@ describe('recovery copy on disk', () => {
     await clearRecoveryFile(file); // Clearing twice is fine: the document was clean already.
   });
 
+  it('reading at launch removes the temporary files a crash left behind, and nothing else', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lila-recovery-'));
+    const file = join(dir, 'recovery.lila');
+    await writeFile(join(dir, 'recovery.lila.tmp-1234'), 'half');
+    await writeFile(join(dir, 'estado.json'), '{}');
+    expect(await readRecoveryFile(file)).toBeNull();
+    expect(await readdir(dir)).toEqual(['estado.json']);
+  });
+
   it('a failed write keeps the previous copy and removes its temporary file', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lila-recovery-'));
     const file = join(dir, 'recovery.lila');
@@ -42,9 +51,9 @@ describe('recovery offer', () => {
   it.each([
     ['en', ['Restore', 'Discard']],
     ['es', ['Restaurar', 'Descartar']],
-  ] as const)('%s: Restore is button 0 and the default, Discard is 1 and the cancel', (locale, buttons) => {
+  ] as const)('%s: Restore is button 0, the default and what Esc answers; Discard takes a click', (locale, buttons) => {
     const opciones = recoveryDialogOptions(desktopStrings(locale), '26 Sep 2026, 10:00');
-    expect(opciones).toMatchObject({ type: 'question', buttons, defaultId: 0, cancelId: 1 });
+    expect(opciones).toMatchObject({ type: 'question', buttons, defaultId: 0, cancelId: 0 });
     expect(opciones.detail).toContain('26 Sep 2026, 10:00');
     expect(recoveryChoice(0)).toBe('restore');
     expect(recoveryChoice(1)).toBe('discard');

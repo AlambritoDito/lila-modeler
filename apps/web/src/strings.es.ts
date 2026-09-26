@@ -258,6 +258,8 @@ export const es: Strings = {
     errorRecienteAusente: 'Ese proyecto ya no está en su carpeta; se quitó de recientes.',
     errorAbrirOcupado: (archivo: string): string =>
       `No se abrió "${archivo}": hay otra operación en curso. Vuelve a abrirlo cuando termine.`,
+    errorCopiaRecuperacion: (mensaje: string): string =>
+      `No se pudo abrir la copia de recuperación de la última sesión y se descartó: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `escenario desconocido: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
   },
