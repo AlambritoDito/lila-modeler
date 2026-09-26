@@ -12,6 +12,10 @@ Nothing converts, migrates or rewrites in between. The folder is what you keep i
 and merges, which is the whole reason it is the primary form. The `.lila` is what you hand to
 somebody: one file to attach, download or double-click.
 
+> **Planned (ADR-029, not implemented):** version 2 turns the project into a *repository* that can
+> hold many processes, maps, a catalog and analyses; each process keeps exactly the layout below
+> under `processes/<slug>/`, so every version 1 project stays valid.
+
 ## Layout
 
 | Entry | What it is |
