@@ -47,12 +47,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function montar(modelador: Modelador): HTMLElement {
+function montar(modelador: Modelador, avanzado = true): HTMLElement {
   const contenedor = document.createElement('div');
   document.body.append(contenedor);
   const raiz = createRoot(contenedor);
   act(() => {
-    raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" avisos={6} />);
+    raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" avisos={6} avanzado={avanzado} />);
   });
   montados.push(() => {
     act(() => {
@@ -241,5 +241,32 @@ describe('con un elemento elegido: su icono, su nombre y su `$type · id`', () =
     const elemento: ElementoLienzo = { id: 'El_1', type: tipo, businessObject: { $type: tipo, id: 'El_1' } };
     const panel = montar(modeladorFalso({ seleccion: [elemento] }));
     expect(panel.querySelector(`.propiedades-cabecera .bpmn-icon-${icono}`)).not.toBeNull();
+  });
+});
+
+describe('con «Avanzado» apagado (#471): sin id en la cabecera ni fila Id', () => {
+  const elemento: ElementoLienzo = {
+    id: 'Activity_1',
+    type: 'bpmn:UserTask',
+    businessObject: { $type: 'bpmn:UserTask', id: 'Activity_1', name: 'Revisar pedido' },
+  };
+
+  it('la línea técnica enseña solo el tipo, sin el id, y la fila Id no se pinta', () => {
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }), false);
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    expect(cabecera!.querySelector('.propiedades-cabecera-tipo')?.textContent).toBe('bpmn:UserTask');
+    expect(panel.textContent).not.toContain('Activity_1');
+    expect([...panel.querySelectorAll('.campo')].some((c) => c.querySelector('span')?.textContent === 'Id')).toBe(
+      false,
+    );
+  });
+
+  it('con «Avanzado» encendido, como siempre: `tipo · id` y la fila Id editable', () => {
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }), true);
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    expect(cabecera!.querySelector('.propiedades-cabecera-tipo')?.textContent).toBe('bpmn:UserTask · Activity_1');
+    expect([...panel.querySelectorAll('.campo')].some((c) => c.querySelector('span')?.textContent === 'Id')).toBe(
+      true,
+    );
   });
 });

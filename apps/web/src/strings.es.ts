@@ -792,7 +792,10 @@ export const es: Strings = {
     claveRepetida: (clave: string): string => `${clave} ya existe; edítalo abajo o usa otro id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'eliminado (null)',
-    estadoReservado: (estado: string, valor: string): string => `${estado}: ${valor}`,
+    /** Etiqueta de `EstadoReservado` `'propio'`/`'heredado'`: nunca el id interno (#477). */
+    estadoPropio: 'propio',
+    estadoHeredado: 'heredado',
+    estadoReservado: (etiquetaEstado: string, valor: string): string => `${etiquetaEstado}: ${valor}`,
     /** Etiqueta de una variante sin discriminador ni tipo conocido. */
     opcionN: (i: number): string => `opción ${i}`,
     /** Tipos JSON del esquema, en español, para el selector de variante. */

@@ -189,7 +189,9 @@ function montar(modelador: Modelador, pestana: 'propiedades' | 'documentacion'):
   document.body.append(contenedor);
   const raiz = createRoot(contenedor);
   act(() => {
-    raiz.render(<PanelPropiedades modelador={modelador} pestana={pestana} />);
+    // `avanzado` en esta suite: la fila Id (con el botón «Copiar») solo se pinta con el ajuste
+    // encendido desde #471; esta suite prueba esa fila, no el ajuste, así que la deja encendida.
+    raiz.render(<PanelPropiedades modelador={modelador} pestana={pestana} avanzado />);
   });
   montados.push(() => {
     act(() => {
