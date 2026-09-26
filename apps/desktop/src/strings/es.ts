@@ -38,6 +38,8 @@ export const es: Strings = {
     modoRutas: 'Validar rutas',
     simulacion: 'Simulación',
     ejecutar: 'Ejecutar la simulación',
+    ayuda: 'Ayuda',
+    documentacion: 'Documentación',
   },
   cierre: {
     guardar: 'Guardar',

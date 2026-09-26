@@ -26,7 +26,7 @@ import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
-import { menuTemplate } from './menu.js';
+import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
@@ -371,6 +371,9 @@ async function recordRecentIfProject(dir: string, name: string): Promise<void> {
   if (await isRecordableProject(dir)) await recordRecent(dir, name);
 }
 
+/** Help › Documentation: the same page the welcome screen links to. */
+const DOCS_URL = 'https://github.com/AlambritoDito/lila-modeler#readme';
+
 /**
  * Menú nativo (plantilla en `menu.ts`): Preferencias… (`CmdOrCtrl+,`), Archivo con Abrir reciente
  * y los aceleradores de guardar/abrir/nuevo. Cada ítem manda su acción al renderer por
@@ -391,6 +394,7 @@ function refreshMenu(): void {
       win.webContents.send('lila:menu', action);
     },
     strings(),
+    { dev: !app.isPackaged, abrirDocs: () => void shell.openExternal(DOCS_URL) },
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -918,6 +922,13 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   win.webContents.on('did-create-window', (hija) => {
     hija.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     hija.webContents.on('will-navigate', (event) => event.preventDefault());
+    hija.webContents.on('before-input-event', (event, input) => {
+      const tecla = teclaDeVentanaHija(input, process.platform);
+      if (tecla === null) return;
+      event.preventDefault();
+      if (tecla === 'cerrar') hija.close();
+      else app.quit(); // Goes through `before-quit`, so unsaved changes still ask first.
+    });
     if (!fitsAnyDisplay(hija.getBounds(), screen.getAllDisplays().map((d) => d.bounds))) hija.center();
     hijas.add(hija);
     hija.on('closed', () => hijas.delete(hija));
