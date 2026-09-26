@@ -831,10 +831,10 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     const delta = guardados.at(-1)!.escenario;
     // § 6: el array entero, no solo el intervalo nuevo.
     expect((delta['calendars'] as Json)['oficina']).toEqual({
-      // Ordenados por franja: el sábado abre a la misma hora pero cierra antes.
+      // #469: the existing entry stays as written and first; the painted hours come after it.
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '11:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '11:00' },
       ],
     });
 
@@ -847,6 +847,37 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
       intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
     });
+  });
+
+  it('painting a cell keeps the ranges added with the picker as written (#469)', () => {
+    const todos: Intervalo = { days: [...DIAS], from: '06:00', to: '10:00' };
+    const laborables: Intervalo = { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' };
+    const miercoles: Intervalo = { days: ['WED'], from: '20:00', to: '21:00' };
+    const inicial: Json = { ...asIsCorto(), calendars: { oficina: { intervals: [todos, laborables] } } };
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': inicial }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    irAPaso('calendars');
+    arrastrar(['WED 20:00']);
+    pulsar('Guardar');
+    const oficina = (): Intervalo[] =>
+      ((guardados.at(-1)!.escenario['calendars'] as Json)['oficina'] as Json)['intervals'] as Intervalo[];
+    expect(oficina()).toEqual([todos, laborables, miercoles]);
+
+    // Closing an hour inside «Mon–Fri» re-derives only that entry; «every day» stays as written.
+    arrastrar(['WED 12:00']);
+    pulsar('Guardar');
+    expect(oficina()[0]).toEqual(todos);
+    expect(oficina()).not.toContainEqual(laborables);
+    const esperadas = aCeldas([todos, laborables, miercoles]);
+    esperadas.delete(celda(2, 12));
+    expect(aCeldas(oficina())).toEqual(esperadas);
   });
 
   it('un calendario con franjas de minutos se edita como lista, sin redondear', () => {
@@ -910,8 +941,8 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     pulsar('Guardar');
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '13:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '13:00' },
       ],
     });
   });
@@ -967,8 +998,8 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     const delta = guardados.at(-1)!.escenario;
     expect((delta['calendars'] as Json)['oficina']).toEqual({
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '10:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '10:00' },
       ],
     });
     // El padre en memoria no se ha tocado y el resuelto conserva lo suyo (`capacity: 3`).
