@@ -1670,6 +1670,39 @@ body {
   width: 30px;
 }
 
+/* Top edge of the canvas (#453): the validation chips on the left and the align group on the
+   right share one wrapping row, so they never overlap; the row lets clicks through its gap. */
+.lienzo-arriba {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  left: 14px;
+  pointer-events: none;
+  position: absolute;
+  right: 15px;
+  top: 14px;
+  z-index: 1;
+}
+
+.lienzo-arriba > * { pointer-events: auto; }
+.lienzo-arriba > .chips-validacion { position: static; }
+
+.alinear-grupo {
+  background: var(--border);
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.alinear-grupo .boton.icono {
+  display: grid;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  width: 28px;
+}
+
 /* ---------- minimapa (LILA-208) ---------- */
 
 /* El plugin `diagram-js-minimap` se pinta arriba a la derecha, en blanco y con esquinas

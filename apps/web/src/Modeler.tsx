@@ -147,6 +147,9 @@ export interface Elemento {
   businessObject?: { name?: string; text?: string };
 }
 
+/** bpmn-js's `alignElements` types plus `distributeElements`' two axes (#453). */
+export type Alineacion = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'horizontal' | 'vertical';
+
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
@@ -208,6 +211,13 @@ export interface Modelador {
   seleccionar?(id: string, opciones?: { centrar?: true }): void;
   /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
   enfocar?(): void;
+  /**
+   * Whether `alinear` would move anything in the current selection (#453): bpmn-js's own rules
+   * decide, so lanes, annotations, a pool's children and the like count as bpmn-js counts them.
+   */
+  alineable?(): { alinear: boolean; distribuir: boolean };
+  /** Aligns or distributes the current selection with bpmn-js's own editor actions: one undo step. */
+  alinear?(tipo: Alineacion): void;
 }
 
 interface Props {
@@ -537,6 +547,23 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },
+      alineable: () => {
+        if (activo === null) return { alinear: false, distribuir: false };
+        const reglas = activo.get<Servicios['rules']>('rules');
+        const elegidos = activo.get<Selection>('selection').get() as Elemento[];
+        return {
+          // The `alignElements` editor action drops lanes before asking; the rules drop the rest.
+          alinear: Boolean(reglas.allowed('elements.align', { elements: elegidos.filter((el) => el.type !== 'bpmn:Lane') })),
+          distribuir: Boolean(reglas.allowed('elements.distribute', { elements: elegidos })),
+        };
+      },
+      // Through `editorActions`, like bpmn-js's own menus: it drops lanes before aligning (moving a
+      // lane reshapes its pool and moves tasks between lanes) and is blocked by the canvas lock of
+      // «Validate paths».
+      alinear: (tipo) => {
+        activo?.get<{ trigger(accion: string, opciones: { type: Alineacion }): void }>('editorActions')
+          .trigger(tipo === 'horizontal' || tipo === 'vertical' ? 'distributeElements' : 'alignElements', { type: tipo });
+      },
     };
     // `onListo` se publica después del import inicial: su primera exportación ya contiene el
     // modelo recibido y nunca el lienzo vacío de una instancia recién creada.
