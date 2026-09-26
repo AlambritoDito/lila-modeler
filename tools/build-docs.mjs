@@ -15,7 +15,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Marked } from 'marked';
 
-export const INTERNAL = new Set(['PAGES.md', 'STABILIZATION-HANDOFF.md', 'DECISIONS-corpus-previo.md']);
+export const INTERNAL = new Set(['PAGES.md', 'STABILIZATION-HANDOFF.md', 'DECISIONS-corpus-previo.md', 'RELEASING.md']);
 const FOLDERS = ['', 'es', 'releases'];
 const BLOB = 'https://github.com/AlambritoDito/lila-modeler/blob/main/';
 

@@ -104,6 +104,8 @@ or text posted to GitHub.
   comment on the PR.
 - PRs are squash-merged.
 
+Cutting a version and publishing to npm are maintainer tasks: see [`docs/RELEASING.md`](docs/RELEASING.md).
+
 ## Filing issues
 
 Please search existing issues before opening a new one. Use the bug report or feature request
