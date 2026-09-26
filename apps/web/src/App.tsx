@@ -45,6 +45,7 @@ import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
+import { proyectoDeEjemplo } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
@@ -1774,7 +1775,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         recientes={recientes}
         temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
         densidadTexto={S.app.densidadEstado(S.app.densidadNombre(densidad))}
-        onAccion={(accion) => { if (accion === 'ejemplo') setBienvenida(false); else void projectAction(accion); }}
+        onAccion={(accion) => {
+          if (typeof accion === 'object' && 'ejemplo' in accion) {
+            // #458: same shape as `sessionRestored` below — a fresh, pathless document activated
+            // straight away, not through `adapter`/`projectAction` (there is nothing to open).
+            ioLock.current = true; setIoBusy(true);
+            void activate(proyectoDeEjemplo(accion.ejemplo), true, tokenRef.current)
+              .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
+              .finally(() => { ioLock.current = false; setIoBusy(false); });
+          } else void projectAction(accion);
+        }}
         onAjustes={() => ejecutar('ajustes')}
       />}
       <header className="barra">
