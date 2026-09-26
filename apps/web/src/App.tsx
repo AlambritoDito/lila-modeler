@@ -25,7 +25,7 @@ import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } f
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
-import { prepareSimulation } from './simulationGate';
+import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { SaveOutcome, Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
@@ -1511,6 +1511,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
   /**
+   * #430: a Run refused only because of orphan scenario entries (a configured shape was deleted)
+   * offers to drop them right beside the error; the scenario panel lists them with the same button.
+   * Changing the scenarios clears the failed run (`cambiarEscenario` → `cancelarCorrida`).
+   */
+  const soloHuerfanas = sim.tipo === 'error' && sim.mensaje.split('\n').every((linea) => linea.startsWith('E-ELEMENTO-DESCONOCIDO:'));
+  const botonHuerfanas = soloHuerfanas && ir !== null && (
+    <button type="button" className="boton" onClick={() => {
+      for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) cambiarEscenario(otro, escenario);
+    }}>{S.escenario.quitarHuerfanas}</button>
+  );
+  /**
    * An error the status bar is showing right now. A hidden status bar comes back for it: an
    * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
    * `.bpmn` notice and the import warnings last as long as the model, and would pin the bar for
@@ -2136,6 +2147,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 {S.app.errorSimular(sim.mensaje)}
               </p>
             )}
+            {botonHuerfanas}
             <label className="campo interruptor">
               <input
                 type="checkbox"
@@ -2181,7 +2193,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
           descolocar esa retícula. Los conteos son los mismos que los chips del lienzo (#241). */}
       <footer id={ID_REGION.estado} className="estado">
-        <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{S.app.errores(validacion.errores)}</span>
+        {/* #430: the counters are the live lint, not the Run gate; a failed Run still marks the chip. */}
+        <span className={`marca${validacion.errores > 0 || sim.tipo === 'error' ? ' error' : ''}`}
+          title={sim.tipo === 'error' ? S.app.errorSimular(sim.mensaje) : undefined}>{S.app.errores(validacion.errores)}</span>
         <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />
         <span>{S.app.escenario} <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
@@ -2204,6 +2218,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
         )}
+        {errorSimOculto !== null && botonHuerfanas}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">
             {S.app.perdidaAlExportar(perdidasAlExportar.length, perdidasAlExportar.join(' · '))}

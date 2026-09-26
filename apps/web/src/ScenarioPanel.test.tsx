@@ -1203,3 +1203,51 @@ describe('model problems (#455)', () => {
     expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * #430: entries for ids the diagram no longer has
+ * ------------------------------------------------------------------ */
+
+describe('entradas huérfanas (#430)', () => {
+  it('el panel lista las huérfanas del proyecto y el botón las quita de la base y del hijo', () => {
+    const fantasma = { processingTime: { type: 'constant', value: 1 } };
+    const base = asIsCorto();
+    const inicial: Record<string, Json> = {
+      'as-is.scenario.json': { ...base, elements: { ...(base['elements'] as Json), Tarea_borrada: fantasma } },
+      'hijo.scenario.json': { extends: 'as-is.scenario.json', elements: { Tarea_borrada: fantasma, Otra_borrada: fantasma } },
+    };
+    const vivos: { actual: Readonly<Record<string, Json>> } = { actual: inicial };
+    function Espejo(): React.JSX.Element {
+      const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
+      vivos.actual = escenarios;
+      return (
+        <ScenarioPanel
+          archivo="hijo.scenario.json"
+          escenarios={escenarios}
+          onCambio={(a, e) => setEscenarios((previos) => ({ ...previos, [a]: e }))}
+          onGuardar={() => {}}
+          onDuplicar={() => {}}
+          ir={ir}
+          seleccion={null}
+          onSeleccionar={() => {}}
+        />
+      );
+    }
+    montar(<Espejo />);
+
+    const lista = document.querySelector('.huerfanas');
+    expect(lista?.textContent).toContain(es.escenario.huerfanas);
+    expect([...lista!.querySelectorAll('li')].map((li) => li.textContent).sort()).toEqual(['Otra_borrada', 'Tarea_borrada']);
+    expect(() => comoLilaRun('hijo.scenario.json', vivos.actual)).not.toThrow();
+    expect(validateScenario(comoLilaRun('hijo.scenario.json', vivos.actual), ir).map((p) => p.code)).toContain('E-ELEMENTO-DESCONOCIDO');
+
+    pulsar(es.escenario.quitarHuerfanas);
+
+    expect(document.querySelector('.huerfanas')).toBeNull();
+    expect(vivos.actual['as-is.scenario.json']!['elements']).toEqual(base['elements']);
+    expect(vivos.actual['hijo.scenario.json']!['elements']).toEqual({});
+    // The gate passes: no E-ELEMENTO-DESCONOCIDO left in the resolved child.
+    const problemas = validateScenario(comoLilaRun('hijo.scenario.json', vivos.actual), ir);
+    expect(problemas.filter((p) => p.severity === 'error')).toEqual([]);
+  });
+});

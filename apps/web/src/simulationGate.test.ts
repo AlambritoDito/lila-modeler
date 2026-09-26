@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { prepareSimulation } from './simulationGate';
+import { entradasHuerfanas, prepareSimulation, sinHuerfanas } from './simulationGate';
 import { setLocale } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
@@ -83,4 +83,26 @@ it('a message intermediate catch event still stops Run with E-NOSOP, even though
   const conMensaje = xml.replace(/<bpmn:task (id="[^"]+")/, '<bpmn:intermediateCatchEvent $1').replace(/<\/bpmn:task>/, '<bpmn:messageEventDefinition id="Def_msg"/></bpmn:intermediateCatchEvent>');
   expect(conMensaje).toContain('messageEventDefinition');
   await expect(prepareSimulation(conMensaje, 'as-is.scenario.json', { 'as-is.scenario.json': raw }, 'model.bpmn', { locale: 'en' })).rejects.toThrow(/E-NOSOP: .*message event not supported by the simulator/);
+});
+
+// #430: deleting a configured shape leaves its entry behind; removing the orphans from the base
+// and from its children is what lets Run pass again, and nothing else is touched.
+it('removing orphan entries from the base and its children lets Run pass (#430)', async () => {
+  const fantasma = { processingTime: { type: 'constant', value: 1 } };
+  const base = { ...raw, elements: { ...(raw['elements'] as Record<string, unknown>), Tarea_fantasma: fantasma } };
+  const hijo = { extends: './base.scenario.json', elements: { Tarea_fantasma: fantasma, Otra_fantasma: fantasma } };
+  const intacto = { extends: './base.scenario.json', name: 'sin huérfanas' };
+  const scenarios = { 'base.scenario.json': base, 'hijo.scenario.json': hijo, 'intacto.scenario.json': intacto };
+  await expect(prepareSimulation(xml, 'hijo.scenario.json', scenarios)).rejects.toThrow('E-ELEMENTO-DESCONOCIDO');
+  const { ir } = await prepareSimulation(xml, 'as-is', { 'as-is': raw });
+
+  expect(entradasHuerfanas(scenarios, ir).sort()).toEqual(['Otra_fantasma', 'Tarea_fantasma']);
+  const cambiados = sinHuerfanas(scenarios, ir);
+  expect(Object.keys(cambiados).sort()).toEqual(['base.scenario.json', 'hijo.scenario.json']);
+  expect(cambiados['base.scenario.json']!['elements']).toEqual(raw['elements']);
+  expect(cambiados['hijo.scenario.json']!['elements']).toEqual({});
+
+  const limpios = { ...scenarios, ...cambiados };
+  expect(entradasHuerfanas(limpios, ir)).toEqual([]);
+  await expect(prepareSimulation(xml, 'hijo.scenario.json', limpios)).resolves.toBeDefined();
 });
