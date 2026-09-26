@@ -4,18 +4,25 @@ Discrete-event simulation for BPMN processes. Part of [Lila Modeler](https://git
 
 ## Preliminary release
 
-Version 1.0.0-beta.1 is the first public beta, published for validation; it does not mark the project's 1.0 milestone complete. Requires Node.js 22 or later. Registry availability depends on the repository owner's first publication.
+This is a pre-1.0 public beta, published for validation; it does not mark the project's 1.0
+milestone complete. See [CHANGELOG.md](https://github.com/AlambritoDito/lila-modeler/blob/main/CHANGELOG.md)
+for the exact version. Requires Node.js 22 or later. Registry availability depends on the
+repository owner's first publication (#48).
 
 ## CLI
 
-After publication:
-
 ```bash
-npx @lila/engine validate model.bpmn --lang en
-npx @lila/engine run model.bpmn scenario.json --seed 42 --json result.json --lang en
+npx @lila/engine@beta validate model.bpmn
+npx @lila/engine@beta run model.bpmn scenario.json --seed 42 --replications 3 --json result.json
+npx @lila/engine@beta compare model.bpmn a.json b.json --seed 42 --replications 3
+npx @lila/engine@beta --version
 ```
 
-English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic codes, model IDs and result columns remain stable. The optional `lila mcp` command requires the separate MCP workspace from a repository checkout; the engine package alone does not include the server.
+English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic
+codes, model IDs and result columns remain stable. The optional `lila mcp` command requires the
+separate MCP workspace from a repository checkout; the engine package alone does not include the
+server. Full reference, worked examples and a "for agents" section:
+[docs/CLI.md](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/CLI.md).
 
 ## Library
 

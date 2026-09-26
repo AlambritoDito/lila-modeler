@@ -53,7 +53,10 @@ import { rotularMinimapa } from './minimapa';
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
 import { moduloColoresDelTema } from './TokenSim';
+// bpmn-js's context pad and replace menu in the app's language (#456).
+import { moduloTraduccion } from './bpmnTranslate';
 import { centrar, type CanvasCentrable } from './centrar';
+import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
 /** Lo que el shell pinta en la barra de estado. */
 export interface EstadoLienzo {
@@ -88,8 +91,11 @@ export interface EstadoLienzo {
  */
 export interface Servicios {
   modeling: Modeling & {
-    /** Cuelga una figura ya fabricada de `target`, en `posicion` del sistema del diagrama. */
-    createShape(figura: unknown, posicion: Punto, target: unknown): unknown;
+    /**
+     * Cuelga una figura ya fabricada de `target`, en `posicion` del sistema del diagrama. With
+     * `{ attach: true }` the target is the host of a boundary event (#456).
+     */
+    createShape(figura: unknown, posicion: Punto, target: unknown, hints?: { attach?: boolean }): unknown;
   };
   bpmnFactory: BpmnFactory;
   selection: Selection;
@@ -102,7 +108,7 @@ export interface Servicios {
    */
   create: { start(evento: Event, figura: unknown): void };
   elementFactory: {
-    createShape(atributos: { type: string; eventDefinitionType?: string | undefined; isExpanded?: boolean | undefined }): unknown;
+    createShape(atributos: { type: string; eventDefinitionType?: string | undefined; isExpanded?: boolean | undefined; triggeredByEvent?: boolean }): unknown;
     createParticipantShape(): unknown;
   };
   canvas: {
@@ -142,6 +148,11 @@ export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
   abrir(xml: string): Promise<boolean>;
   exportar(opciones?: OpcionesExportacion): Promise<string>;
+  /**
+   * The diagram as an image (#451): `saveSVG` without the editing chrome, in the theme's colours
+   * or, with `papel`, black on white (`exportarDiagrama.ts`).
+   */
+  exportarSvg(opciones: { papel: boolean }): Promise<string>;
   /** Comprueba parseo y renderizado en una instancia aislada sin tocar el modelo activo. */
   comprobar?(xml: string): Promise<void>;
   ajustar(): void;
@@ -259,7 +270,9 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // `moduloColoresDelTema` va DETRÁS de `tokenSimulationModule` a propósito: en didi la
       // última definición de un servicio gana, y así la animación pinta el diagrama con los
       // tokens del tema en vez de en blanco y negro (#264).
-      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema],
+      // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
+      // because the minimap writes its title once per toggle and a language change is not one.
+      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -407,6 +420,14 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         autorizarExportacion(perdidas, opciones);
         const xml = (await activo.saveXML({ format: true })).xml ?? '';
         return finalizarExportacion(xml, originalIds);
+      },
+      exportarSvg: async ({ papel }) => {
+        if (activo === null) throw new Error(strings().lienzo.errorSinBpmn);
+        const c = coloresDelDiagrama();
+        return svgDelLienzo(activo as unknown as LienzoExportable, {
+          papel,
+          colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor, fondo: token('--canvas-bg') },
+        });
       },
       comprobar: async (xml) => {
         const { modeler: candidato, staging } = crearCandidato();

@@ -199,6 +199,13 @@ describe('ajustes de apariencia (LILA-113)', () => {
     });
   });
 
+  it('the four follow-the-system fields (#472) are kept only with their type', () => {
+    const buenos = { seguirSistema: false, temaClaro: 'papel', temaOscuro: 'u:3', avisoSeguirSistema: true };
+    expect(parseAjustes(buenos)).toEqual(buenos);
+    expect(parseAjustes({ seguirSistema: 'false', temaClaro: 7, temaOscuro: null, avisoSeguirSistema: 1 })).toEqual({});
+    expect(parseAjustes({ seguirSistema: true, temaClaro: ['papel'], tema: 'akira' })).toEqual({ seguirSistema: true, tema: 'akira' });
+  });
+
   it('panelAncho (design 2a) is kept only as a number inside 300–520', () => {
     expect(parseAjustes({ panelAncho: 440 })).toEqual({ panelAncho: 440 });
     expect(parseAjustes({ panelAncho: 299 })).toEqual({});
@@ -213,6 +220,12 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ paletaAncho: 179, railAncho: 321 })).toEqual({});
     expect(parseAjustes({ paletaAncho: 361, railAncho: 159 })).toEqual({});
     expect(parseAjustes({ paletaAncho: '200', railAncho: Number.NaN })).toEqual({});
+  });
+
+  it('avanzado (#447) is kept only as a boolean', () => {
+    expect(parseAjustes({ avanzado: true })).toEqual({ avanzado: true });
+    expect(parseAjustes({ avanzado: false })).toEqual({ avanzado: false });
+    expect(parseAjustes({ avanzado: '1' })).toEqual({});
   });
 
   it('paneles (#412) keeps only plain per-mode objects with the four boolean fields', () => {

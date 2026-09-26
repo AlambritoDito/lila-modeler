@@ -37,6 +37,11 @@ export const en = {
     guardarComo: 'Save as…',
     /** «Save as» writes a `.lila` (ADR-027); the folder (ADR-018) stays one entry away. */
     guardarComoCarpeta: 'Save as folder…',
+    /** Diagram export (#451): the image of the canvas, not the project. Print is ⌘P. */
+    exportarSvg: 'Export diagram as SVG…',
+    exportarPng: 'Export diagram as PNG…',
+    exportarPdf: 'Export diagram as PDF…',
+    imprimir: 'Print…',
     /** The View and Simulation menus (#413): same texts as `S.atajos` in the web catalog. */
     vista: 'View',
     paleta: 'Command palette',

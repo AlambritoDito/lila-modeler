@@ -201,8 +201,9 @@ describe('overwriting an assigned lane', () => {
     expect(recursos(actual)).toEqual(recursos(asIs));
     const aviso = document.querySelector('.carril-a-pool [role="alert"]');
     expect(aviso?.textContent).toBe(en.escenario.carrilYaAsignadas(tasksByLane(ir).get('Technical Reviewer')!.length));
-    const listados = [...document.querySelectorAll('.carril-a-pool li')].map(
-      (li) => li.textContent?.trim().split(' ')[0] ?? '',
+    // Rows are keyed by `data-id` (#447): the visible text is the task's name.
+    const listados = [...document.querySelectorAll<HTMLElement>('.carril-a-pool li')].map(
+      (li) => li.dataset['id'] ?? '',
     );
     expect(listados).toEqual(tasksByLane(ir).get('Technical Reviewer'));
 

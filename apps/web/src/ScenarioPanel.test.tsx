@@ -119,10 +119,11 @@ function elegir(id: string, valor: string): void {
   });
 }
 
+/** An element row by its id (`data-id`, #447), else any button by its exact text. */
 function boton(texto: string): HTMLButtonElement {
-  const encontrado = [...document.querySelectorAll('button')].find(
-    (b) => b.textContent?.trim() === texto,
-  );
+  const encontrado =
+    document.querySelector<HTMLButtonElement>(`button[data-id="${texto}"]`) ??
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto);
   if (encontrado === undefined) throw new Error(`no hay botón «${texto}»`);
   return encontrado;
 }
@@ -863,7 +864,7 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     );
     irAPaso('calendars');
     expect(document.body.textContent).toContain(
-      'este calendario tiene franjas de minutos; edítalo como lista',
+      'este calendario tiene franjas de minutos, que la rejilla no puede mostrar: usa las franjas o la lista',
     );
     // No hay rejilla que pueda mentir sobre esos minutos, y la lista sigue enseñando el valor real.
     expect(document.querySelector('.calendario')).toBeNull();
@@ -1095,5 +1096,110 @@ describe('ventana desacoplada (diseño 2c)', () => {
     expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
     pulsar(es.escenario.guardar);
     expect(guardados).toHaveLength(1);
+  });
+});
+
+describe('ids behind «Advanced» (#447)', () => {
+  /** The AS-IS plus a flow with no BPMN name, which must fall back to its id. */
+  function panel(avanzado: boolean, seleccion: string | null, elegidos: string[] = [], irPanel: ProcessIR = ir): React.JSX.Element {
+    const escenario = asIsCorto();
+    return (
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{
+          'as-is.scenario.json': {
+            ...escenario,
+            elements: { ...(escenario['elements'] as Json), Flow_Start_TomarPedido: {} },
+          },
+        }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={irPanel}
+        seleccion={seleccion}
+        onSeleccionar={(id) => {
+          if (id !== null) elegidos.push(id);
+        }}
+        avanzado={avanzado}
+      />
+    );
+  }
+  const fila = (id: string): HTMLButtonElement =>
+    document.querySelector<HTMLButtonElement>(`.escenario .ids button[data-id="${id}"]`)!;
+
+  it('by default a row reads the name only, and clicking it still selects the id', () => {
+    const elegidos: string[] = [];
+    montar(panel(false, null, elegidos));
+    expect(fila('Task_TomarPedido').textContent).toBe('Take order');
+    expect(fila('Task_TomarPedido').querySelector('.id')).toBeNull();
+    act(() => fila('Task_TomarPedido').click());
+    expect(elegidos).toEqual(['Task_TomarPedido']);
+  });
+
+  it('with «Advanced» the row and the heading show the id in mono beside the name', () => {
+    montar(panel(true, null));
+    expect(fila('Task_TomarPedido').textContent).toBe('Take order Task_TomarPedido');
+    expect(fila('Task_TomarPedido').querySelector('.id.mono')?.textContent?.trim()).toBe('Task_TomarPedido');
+    act(() => raiz!.render(panel(true, 'Task_TomarPedido')));
+    const encabezado = document.querySelector('.escenario details > p.vacio')!;
+    expect(encabezado.textContent).toBe(`Take order${es.escenario.nombreEntreParentesis('Task_TomarPedido')}`);
+    act(() => raiz!.render(panel(false, 'Task_TomarPedido')));
+    expect(document.querySelector('.escenario details > p.vacio')!.textContent).toBe('Take order');
+  });
+
+  it('a blank name counts as none: the row shows the id and stays clickable (QA S1)', () => {
+    const elegidos: string[] = [];
+    montar(panel(false, null, elegidos, { ...ir, nodes: { ...ir.nodes, Task_TomarPedido: { ...ir.nodes['Task_TomarPedido']!, name: '   ' } } }));
+    expect(fila('Task_TomarPedido').textContent).toBe('Task_TomarPedido');
+    act(() => fila('Task_TomarPedido').click());
+    expect(elegidos).toEqual(['Task_TomarPedido']);
+  });
+
+  it.each([false, true])('an element without a name shows its id either way (avanzado=%s)', (avanzado) => {
+    montar(panel(avanzado, null));
+    expect(fila('Flow_Start_TomarPedido').textContent).toBe('Flow_Start_TomarPedido');
+    expect(fila('Flow_Start_TomarPedido').querySelector('.id')).toBeNull();
+  });
+});
+
+describe('model problems (#455)', () => {
+  it('an unsupported element (not in the IR) reads its canvas name in the heading (seams QA of #476)', () => {
+    const escenario = asIsCorto();
+    montar(
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': { ...escenario, elements: { ...(escenario['elements'] as Json), Msg_1: {} } } }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        nombresExtra={{ Msg_1: 'Esperar pago' }}
+        seleccion="Msg_1"
+        onSeleccionar={() => {}}
+      />,
+    );
+    expect(document.querySelector('.escenario details > p.vacio')!.textContent).toBe('Esperar pago');
+  });
+
+  it('problemasExtra adds to the header count and shows in the validation list, like the canvas chips', () => {
+    const escenario = asIsCorto();
+    const propios = problemasEscenario(escenario, ir, 'es');
+    const errores = propios.filter((p) => p.severidad === 'error').length;
+    const nosop = { ruta: 'elements.Msg_1', mensaje: 'Msg_1 (bpmn:intermediateCatchEvent): evento de mensaje no soportado por el simulador.', severidad: 'warning' as const };
+    montar(
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': escenario }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        problemasExtra={[nosop]}
+        seleccion={null}
+        onSeleccionar={() => {}}
+      />,
+    );
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.conteo(errores, propios.length - errores + 1));
+    expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
   });
 });

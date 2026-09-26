@@ -16,6 +16,7 @@ and, apart from the desktop app's File menu, no shortcut reaches the app while a
 | Open project | `⌘O` | `Ctrl+O` |
 | Save project | `⌘S` | `Ctrl+S` |
 | Save as | `⇧⌘S` | `Ctrl+Shift+S` |
+| Print the diagram ² | `⌘P` | `Ctrl+P` |
 | Settings ¹ | `⌘,` | `Ctrl+,` |
 
 ## Search
@@ -92,12 +93,16 @@ are taken by the browser before the page sees them, and the web app does not lis
 mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
 list these shortcuts next to each item.
 
+² Prints the diagram alone, black on white, on one sheet. In a browser, that print dialog is also
+how you get a PDF (choose «Save as PDF»); the desktop app has «File → Export diagram as PDF…» as
+well. SVG and PNG exports are in the File menu and the command palette, with no key of their own.
+
 In the desktop app `⌘W`/`Ctrl+W` closes the focused window (About or the detached scenario on
 their own; the main window asks first when there are unsaved changes and, like its red button,
 quits the app) and `⌘Q`/`Ctrl+Q` quits (on Windows use the window's close button or `Alt+F4`).
 Both come from the native menu's own roles, so they are not in the map above and a browser keeps
 them for itself.
 
-The detached scenario window forwards `⌘S` and `⇧⌘S` to the main window; `⌘K` too, but only in the desktop app, where the main window is raised first (a browser cannot bring another window to the front, so there the key does nothing in the detached window).
+The detached scenario window forwards `⌘S`, `⇧⌘S` and `⌘P` to the main window; `⌘K` too, but only in the desktop app, where the main window is raised first (a browser cannot bring another window to the front, so there the key does nothing in the detached window).
 
 [Versión en español](es/ATAJOS.md)

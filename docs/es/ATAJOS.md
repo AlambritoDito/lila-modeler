@@ -17,6 +17,7 @@ hay un diálogo abierto (Ajustes, una confirmación).
 | Abrir proyecto | `⌘O` | `Ctrl+O` |
 | Guardar proyecto | `⌘S` | `Ctrl+S` |
 | Guardar como | `⇧⌘S` | `Ctrl+Shift+S` |
+| Imprimir el diagrama ² | `⌘P` | `Ctrl+P` |
 | Ajustes ¹ | `⌘,` | `Ctrl+,` |
 
 ## Buscar
@@ -94,12 +95,17 @@ navegador) se los queda el navegador antes de que la página los vea, y la app w
 la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
 los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
 
+² Imprime solo el diagrama, en negro sobre blanco, en una hoja. En el navegador ese diálogo de
+imprimir es también la forma de sacar un PDF (elige «Guardar como PDF»); la app de escritorio tiene
+además «Archivo → Exportar diagrama como PDF…». Las exportaciones SVG y PNG están en el menú Archivo
+y en la paleta de comandos, sin tecla propia.
+
 En la app de escritorio `⌘W`/`Ctrl+W` cierra la ventana enfocada (Acerca de o la ventana
 desacoplada del escenario, solas; la principal pregunta antes si hay cambios sin guardar y, como su
 botón rojo, cierra la app) y `⌘Q`/`Ctrl+Q` sale (en Windows, el botón de cerrar de la ventana o
 `Alt+F4`). Las dos vienen de los roles del menú nativo, así que no están en el mapa de arriba y un
 navegador se las queda.
 
-La ventana desacoplada del escenario reenvía `⌘S` y `⇧⌘S` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
+La ventana desacoplada del escenario reenvía `⌘S`, `⇧⌘S` y `⌘P` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
 
 [English version](../SHORTCUTS.md)

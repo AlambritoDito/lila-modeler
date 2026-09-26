@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // LILA-113: `repintar` relee los tokens en el modelador vivo. `montajes` cuenta cuántas veces se
   // montó el lienzo: cambiar de tema ya no lo remonta, y ese es justamente el punto del ticket.
   repintar: vi.fn(), montajes: 0,
+  // #451: the diagram as an image, and the browser-only ends of it (print, rasterise, download).
+  exportarSvg: vi.fn(), imprimir: vi.fn(), aPng: vi.fn(), descargar: vi.fn(),
   // LILA-072: con `retrasarLienzo`, el lienzo falso NO avisa de que está listo al montar — el test
   // decide cuándo llamando a `mocks.listo()`, que es lo que separa "la app arrancó" de "el
   // modelador existe" y permite probar una ruta .bpmn que llega en medio.
@@ -69,6 +71,7 @@ const ELEMENTOS = [
 ];
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
+vi.mock('./exportarDiagrama', async (real) => ({ ...(await real<object>()), imprimirSvg: mocks.imprimir, aPng: mocks.aPng, descargar: mocks.descargar }));
 // Mock parcial: `applyTheme` es un espía, pero `tokenToCssVar` sigue siendo el de verdad porque
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
@@ -88,7 +91,7 @@ vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () =
 vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
-    repintar: mocks.repintar,
+    repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (_events: string[], callback: () => void) => { mocks.changed = callback; return () => {}; },
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
@@ -202,13 +205,14 @@ it('desmontar termina la corrida activa', async () => {
   await act(async () => root.unmount()); expect(options.signal.aborted).toBe(true);
 });
 
-// #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo.
-it.each([['Task_Preparar', T.app.nombreDeCuello('Prepare food', 'Task_Preparar')], ['Task_Anonima', 'Task_Anonima']])(
+// #226 punto 4: el panel enseñaba `corrida.result.bottlenecks[0].elementId` en crudo. Since #447
+// the id only comes back with «Advanced» (see the «Advanced» test below).
+it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
     await click(T.app.ejecutar);
-    expect(container.textContent).toContain(texto);
+    expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(texto);
   },
 );
 
@@ -219,7 +223,8 @@ it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar
   expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
   expect(ultimoOverlay()[1]).toBe(true);
 
-  const interruptor = container.querySelector<HTMLInputElement>('.campo.interruptor input')!;
+  // Scoped to the Simulation tab: Settings → Appearance has its own toggle since #472.
+  const interruptor = container.querySelector<HTMLInputElement>('.simulacion .campo.interruptor input')!;
   await act(async () => interruptor.click());
   // Apagar no descarta la corrida: `sincronizarOverlay` limpia el lienzo por `visible = false`.
   expect(ultimoOverlay()[0]).not.toBeNull();
@@ -255,7 +260,7 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
 
   expect(mocks.abrir).toHaveBeenCalledOnce();
   expect(container.textContent).toContain(T.app.proyectoDemo);
-  expect(container.textContent).toContain(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
+  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe('Prepare food');
   // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
   expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
@@ -444,7 +449,7 @@ it('un `lila.temas` ilegible no se lleva por delante el tema ni la densidad (QA 
   expect(fetch).toHaveBeenLastCalledWith('./papel.json');
   expect(container.querySelector('.app')?.getAttribute('data-densidad')).toBe('compacta');
   // La lista ilegible se pierde sola: el selector solo trae los integrados.
-  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+  expect(selectTema().querySelectorAll('optgroup')).toHaveLength(1);
 });
 it('Enter en un campo de texto de Ajustes no cierra el diálogo (QA de #277)', async () => {
   const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
@@ -526,9 +531,24 @@ it('un valor guardado que ya no existe cae al de fábrica sin pedirlo por fetch 
 
 // ---------- default theme by prefers-color-scheme (#404) ----------
 
-/** Stubs `matchMedia` so only `(prefers-color-scheme: dark)` answers `oscuro`. */
+/**
+ * A fake OS scheme: `matchMedia` answers only `(prefers-color-scheme: dark)` from it, and
+ * `cambiarEsquema` fires `change` on the subscribed lists, as the OS does (#472).
+ */
+const sistema = { oscuro: false, oyentes: new Set<(e: { matches: boolean }) => void>() };
 function esquemaDelSistema(oscuro: boolean): void {
-  vi.stubGlobal('matchMedia', (query: string) => ({ matches: oscuro && query === '(prefers-color-scheme: dark)', media: query }));
+  sistema.oscuro = oscuro;
+  sistema.oyentes.clear();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() { return sistema.oscuro && query === '(prefers-color-scheme: dark)'; },
+    media: query,
+    addEventListener: (_tipo: string, oyente: (e: { matches: boolean }) => void) => { sistema.oyentes.add(oyente); },
+    removeEventListener: (_tipo: string, oyente: (e: { matches: boolean }) => void) => { sistema.oyentes.delete(oyente); },
+  }));
+}
+async function cambiarEsquema(oscuro: boolean): Promise<void> {
+  sistema.oscuro = oscuro;
+  await act(async () => { for (const oyente of [...sistema.oyentes]) oyente({ matches: oscuro }); });
 }
 /** Serves the real built-in theme JSONs, so `data-esquema` is computed from their `bg.base`. */
 function temasReales(): void {
@@ -575,6 +595,125 @@ it('desktop without a saved theme follows the OS and never writes the automatic 
   await rearrancar();
   expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
   expect(escrito.some((a) => 'tema' in a)).toBe(false);
+});
+
+// ---------- theme follows the system scheme (#472) ----------
+
+const avisoSistema = (): HTMLDialogElement | null => container.querySelector<HTMLDialogElement>('dialog.aviso-sistema');
+const ranura = (etiqueta: string): HTMLSelectElement | null =>
+  container.querySelector<HTMLSelectElement>(`dialog.ajustes select[aria-label="${etiqueta}"]`);
+async function responderAviso(texto: string): Promise<void> {
+  const boton = [...avisoSistema()!.querySelectorAll('button')].find((b) => b.textContent === texto);
+  expect(boton, texto).toBeDefined();
+  await act(async () => { boton!.click(); });
+}
+it('follows the system by default: the theme is the current scheme\'s slot (#472)', async () => {
+  esquemaDelSistema(true); temasReales();
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(selectTema().value).toBe('lila-dark');
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .campo.interruptor input')!.checked).toBe(true);
+  expect(ranura(T.apariencia.temaClaro)!.value).toBe('lila-light');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('lila-dark');
+});
+it('a system switch applies the other slot and asks once, saving that it asked (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(container.querySelector('.app')?.getAttribute('data-esquema')).toBe('oscuro');
+  expect(avisoSistema()?.open).toBe(true);
+  expect(avisoSistema()!.textContent).toContain(T.apariencia.avisoTexto(T.app.temas['lila-dark'], true));
+  expect(localStorage.getItem('lila.avisoSeguirSistema')).toBe('1');
+  // An automatic switch is not a choice: nothing but the prompt flag is saved.
+  expect(localStorage.getItem('lila.tema')).toBeNull();
+  expect(localStorage.getItem('lila.temaOscuro')).toBeNull();
+  // A second switch while it is still open follows too, and the one prompt says so.
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(container.querySelectorAll('dialog.aviso-sistema')).toHaveLength(1);
+  expect(avisoSistema()!.textContent).toContain(T.apariencia.avisoTexto(T.app.temas['lila-light'], false));
+});
+it('«Turn off» restores the previous theme, saves it and stops following (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  await responderAviso(T.apariencia.apagar);
+  expect(avisoSistema()).toBeNull();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(localStorage.getItem('lila.seguirSistema')).toBe('0');
+  expect(localStorage.getItem('lila.tema')).toBe('lila-light');
+  expect(container.querySelector<HTMLInputElement>('dialog.ajustes .campo.interruptor input')!.checked).toBe(false);
+  expect(ranura(T.apariencia.temaOscuro)).toBeNull();
+  vi.mocked(fetch).mockClear();
+  await cambiarEsquema(false);
+  await cambiarEsquema(true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(avisoSistema()).toBeNull();
+  // And it survives a restart: off means the saved `tema` rules, whatever the OS says.
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+});
+it('«Keep» (or Esc) keeps following and the prompt never comes back (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  await cambiarEsquema(true);
+  await responderAviso(T.apariencia.mantener);
+  expect(avisoSistema()).toBeNull();
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  expect(avisoSistema()).toBeNull();
+  expect(localStorage.getItem('lila.seguirSistema')).toBeNull();
+  // Esc on a fresh prompt is «Keep» too.
+  localStorage.removeItem('lila.avisoSeguirSistema');
+  await rearrancar();
+  await cambiarEsquema(true);
+  await act(async () => { avisoSistema()!.dispatchEvent(new Event('cancel', { cancelable: true })); });
+  expect(avisoSistema()).toBeNull();
+  expect(fetch).toHaveBeenLastCalledWith('./lila-dark.json');
+  expect(localStorage.getItem('lila.seguirSistema')).toBeNull();
+});
+it('answering the prompt gives the focus back and the prompt describes itself (#472)', async () => {
+  // The suite's `showModal`/`close` polyfill, plus what the browser does with the focus.
+  let previo: HTMLElement | null = null;
+  HTMLDialogElement.prototype.showModal = function () { previo = document.activeElement as HTMLElement; this.open = true; this.querySelector('button')?.focus(); };
+  HTMLDialogElement.prototype.close = function () { this.open = false; previo?.focus(); };
+  esquemaDelSistema(false); temasReales();
+  await rearrancar();
+  const boton = porEtiqueta(T.app.ajustes);
+  boton.focus();
+  await cambiarEsquema(true);
+  expect(avisoSistema()!.getAttribute('aria-describedby')).toBe(avisoSistema()!.querySelector('p')!.id);
+  await responderAviso(T.apariencia.mantener);
+  expect(document.activeElement).toBe(boton);
+});
+it('migration: a saved non-Lila theme fills both slots, so a system switch changes nothing (#472)', async () => {
+  esquemaDelSistema(false); temasReales();
+  localStorage.setItem('lila.tema', 'akira');
+  await rearrancar();
+  expect(fetch).toHaveBeenLastCalledWith('./akira.json');
+  expect(ranura(T.apariencia.temaClaro)!.value).toBe('akira');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('akira');
+  vi.mocked(fetch).mockClear();
+  await cambiarEsquema(true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(avisoSistema()).toBeNull();
+  expect(localStorage.getItem('lila.avisoSeguirSistema')).toBeNull();
+});
+it('picking a theme while following writes the current scheme\'s slot (#472)', async () => {
+  esquemaDelSistema(true); temasReales();
+  localStorage.setItem('lila.avisoSeguirSistema', '1');
+  await rearrancar();
+  const select = selectTema();
+  await act(async () => { select.value = 'papel'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
+  expect(localStorage.getItem('lila.temaOscuro')).toBe('papel');
+  expect(localStorage.getItem('lila.temaClaro')).toBe('lila-light');
+  expect(ranura(T.apariencia.temaOscuro)!.value).toBe('papel');
+  await cambiarEsquema(false);
+  expect(fetch).toHaveBeenLastCalledWith('./lila-light.json');
+  await cambiarEsquema(true);
+  expect(fetch).toHaveBeenLastCalledWith('./papel.json');
 });
 
 // ---------- idioma (LILA-210) ----------
@@ -756,6 +895,8 @@ it('eliminar el tema activo en escritorio persiste un `tema` vacío, no el id de
   // would freeze the app on today's OS scheme instead of following it on every future launch.
   expect(escrito).toContainEqual(expect.objectContaining({ tema: '' }));
   expect(escrito.some((a) => a.tema === 'lila-light')).toBe(false);
+  // #472: the migration put the deleted theme in both slots; both fall back to their Lila theme.
+  expect(escrito).toContainEqual({ temaClaro: 'lila-light', temaOscuro: 'lila-dark' });
 });
 
 it('⌘, abre Ajustes y ⌘S guarda; sin modificador no pasa nada', async () => {
@@ -1372,6 +1513,33 @@ it('la paleta inserta una tarea de usuario con el teclado, filtra la lista y se 
   expect(localStorage.getItem('lila.paleta')).toBe('compacta');
 });
 
+// #447: Settings → General → «Advanced» brings the BPMN ids back; off by default, remembered.
+it('the «Advanced» switch is off by default, persists as lila.avanzado and survives a remount (#447)', async () => {
+  const general = container.querySelector('#ajustes-panel-general')!;
+  const casilla = (): HTMLInputElement =>
+    [...container.querySelectorAll<HTMLInputElement>('#ajustes-panel-general .interruptor input[type="checkbox"]')]
+      .find((c) => c.closest('.fila')?.textContent?.includes(T.ajustes.avanzado))!;
+  expect(general.textContent).toContain(T.ajustes.avanzadoAyuda);
+  expect(casilla().checked).toBe(false);
+  expect(localStorage.getItem('lila.avanzado')).toBeNull();
+
+  await act(async () => casilla().click());
+  expect(casilla().checked).toBe(true);
+  expect(localStorage.getItem('lila.avanzado')).toBe('1');
+  // The bottleneck line is one of the places the id returns to.
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click(T.app.ejecutar);
+  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
+
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  expect(casilla().checked).toBe(true);
+
+  await act(async () => casilla().click());
+  expect(localStorage.getItem('lila.avanzado')).toBeNull();
+});
+
 // --- Design 2a: scenario rail and resizable right panel ---
 
 it('in Simulate the rail replaces the palette; a row picks the scenario and clears the result', async () => {
@@ -1571,8 +1739,9 @@ it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#4
     expect(await pulsar(svgLienzo(), { key, ctrlKey: true, shiftKey: true }), key).toBe(true);
     expect(conClase(clase), key).toBe(false);
   }
-  // Without Shift, ⌘P / ⌘D / ⌘B are not ours.
-  expect(await pulsar(document.body, mod('p'))).toBe(false);
+  // Without Shift, ⌘D / ⌘B are not ours (⌘P prints since #451).
+  expect(await pulsar(document.body, mod('d'))).toBe(false);
+  expect(await pulsar(document.body, mod('b'))).toBe(false);
 });
 
 it('on the web ⌘1…⌘6 / Ctrl+1…6 stay the browser\'s: no mode change, nothing prevented (#413)', async () => {
@@ -1621,6 +1790,35 @@ it('⌘↩ runs the simulation, not while Settings is open; Esc cancels only a r
   expect(await pulsar(document.body, { key: 'Escape' })).toBe(true);
   expect(signal.aborted).toBe(true);
   expect(container.querySelector('.boton.cancelar')).toBeNull();
+});
+
+it('⌘P prints the diagram alone on paper, from the page or the canvas; not while Settings is open (#451)', async () => {
+  mocks.exportarSvg.mockResolvedValue('<svg/>');
+  expect(await pulsar(svgLienzo(), mod('p'))).toBe(true);
+  await act(async () => {});
+  expect(mocks.exportarSvg).toHaveBeenCalledExactlyOnceWith({ papel: true });
+  expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg/>', T.app.proyectoDemo);
+  const dialog = container.querySelector<HTMLDialogElement>('dialog.ajustes')!;
+  await act(async () => dialog.showModal());
+  await pulsar(document.body, mod('p'));
+  await act(async () => {});
+  expect(mocks.exportarSvg).toHaveBeenCalledOnce();
+  await act(async () => dialog.close());
+});
+
+it('the web File menu downloads the SVG in the theme\'s colours and the PNG on paper (#451)', async () => {
+  mocks.exportarSvg.mockImplementation(async ({ papel }: { papel: boolean }) => (papel ? '<svg id="papel"/>' : '<svg id="tema"/>'));
+  const png = new Blob(['png'], { type: 'image/png' });
+  mocks.aPng.mockResolvedValue(png);
+  await act(async () => ejecutarArchivo(T.app.exportarSvg));
+  const [svg, nombreSvg] = mocks.descargar.mock.calls[0]! as [Blob, string];
+  expect([await svg.text(), svg.type, nombreSvg]).toEqual(['<svg id="tema"/>', 'image/svg+xml', `${T.app.proyectoDemo}.svg`]);
+  await act(async () => ejecutarArchivo(T.app.exportarPng));
+  expect(mocks.aPng).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>');
+  expect(mocks.descargar).toHaveBeenLastCalledWith(png, `${T.app.proyectoDemo}.png`);
+  // «Print / Save as PDF» is the print dialog on the web.
+  await act(async () => ejecutarArchivo(T.app.imprimirPdf));
+  expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>', T.app.proyectoDemo);
 });
 
 it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {
@@ -2506,7 +2704,7 @@ it('Appearance still shows the theme selector with its optgroup (#407)', async (
   await act(async () => porEtiqueta(T.app.ajustes).click());
   await act(async () => { pestanaAjustes(T.ajustes.secciones.apariencia).click(); });
   expect(selectTema()).not.toBeNull();
-  expect(container.querySelectorAll('dialog.ajustes select optgroup')).toHaveLength(1);
+  expect(selectTema().querySelectorAll('optgroup')).toHaveLength(1);
 });
 
 it('Close is still the last button of the dialog and About sits in the header, from every tab (#407)', async () => {
@@ -2711,4 +2909,51 @@ it('the palette does not open while a file operation holds the app (#410, QA of 
   await act(async () => pending.resolve(null));
   await abrirConTeclado();
   expect(paleta()?.open).toBe(true);
+});
+
+// --- #455: modelling without simulating ---
+
+/** A message intermediate catch event: correct BPMN, outside the simulated subset (E-NOSOP). */
+const CON_MENSAJE = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_mensaje" isExecutable="false">
+<bpmn:startEvent id="Start_A"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>
+<bpmn:intermediateCatchEvent id="Msg_1" name="Wait"><bpmn:incoming>F1</bpmn:incoming><bpmn:outgoing>F2</bpmn:outgoing><bpmn:messageEventDefinition id="Def_1"/></bpmn:intermediateCatchEvent>
+<bpmn:endEvent id="End_A"><bpmn:incoming>F2</bpmn:incoming></bpmn:endEvent>
+<bpmn:sequenceFlow id="F1" sourceRef="Start_A" targetRef="Msg_1"/><bpmn:sequenceFlow id="F2" sourceRef="Msg_1" targetRef="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
+
+it('an unsupported construct is a warning in Model, an error in Simulate, and only Run fails (#455)', async () => {
+  await click(T.app.modos.modelar);
+  await reparsear(CON_MENSAJE);
+  // One warning and no error while modelling; the other engine errors (E-INALCANZABLE of the end
+  // behind it) stay a Run-time matter.
+  expect(chipsDelLienzo()).toEqual([T.app.avisos(1)]);
+  const marcadores = (mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, { nivel: string; mensajes: string[] }> }).marcadores;
+  expect([...marcadores.keys()]).toEqual(['Msg_1']);
+  expect(marcadores.get('Msg_1')).toEqual({ nivel: 'aviso', mensajes: [expect.stringContaining('not supported by the simulator')] });
+
+  await click(T.app.modos.simular);
+  expect(chipsDelLienzo()).toEqual([T.app.errores(1)]);
+
+  // Run goes through the gate with this model, and the gate's E-NOSOP (pinned for real in
+  // `simulationGate.test.ts`) stops it before the Worker.
+  mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Msg_1'));
+  await click(T.app.ejecutar);
+  expect(mocks.gate.mock.calls.at(-1)![0]).toContain('Msg_1');
+  expect(mocks.worker).not.toHaveBeenCalled();
+  expect(container.textContent).toContain('E-NOSOP: Msg_1');
+});
+
+it('boundary events and the lane wait for a fitting selection, and say which (#456)', async () => {
+  await click(T.app.modos.modelar);
+  const borde = figuras().find((b) => b.textContent!.startsWith(T.paleta.figuras.bordeTemporizador))!;
+  expect(borde.disabled).toBe(true);
+  expect(borde.title).toBe(T.paleta.requiereActividad(T.paleta.figuras.bordeTemporizador));
+  const carril = figuras().find((b) => b.textContent!.startsWith(T.paleta.figuras.carril))!;
+  expect(carril.disabled).toBe(true);
+  expect(carril.title).toBe(T.paleta.requiereContenedor(T.paleta.figuras.carril));
+  expect(carril.draggable).toBe(false);
+  // The rest of the palette is not held back by the selection.
+  expect(figuras().find((b) => b.title === T.paleta.figuras.tareaManual)!.disabled).toBe(false);
 });

@@ -91,7 +91,24 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
       S.guardarProyecto,
       S.guardarComo,
       S.guardarComoCarpeta,
+      S.exportarSvg,
+      S.exportarPng,
+      S.exportarPdf,
+      S.imprimir,
     ]);
+  });
+
+  it('File exports the diagram as SVG, PNG and PDF and prints it with CmdOrCtrl+P (#451)', () => {
+    const send = vi.fn();
+    const archivo = menuTemplate([], 'win32', send, desktopStrings(locale))[0]!.submenu as MenuItemConstructorOptions[];
+    const enviado = (label: string): unknown => { (archivo.find((i) => i.label === label)!.click as () => void)(); return send.mock.calls.at(-1)?.[0]; };
+    expect([S.exportarSvg, S.exportarPng, S.exportarPdf, S.imprimir].map(enviado))
+      .toEqual(['exportarSvg', 'exportarPng', 'exportarPdf', { atajo: 'imprimir' }]);
+    expect(archivo.find((i) => i.label === S.imprimir)!.accelerator).toBe('CmdOrCtrl+P');
+    // After the save entries, behind their own separator.
+    const i = archivo.findIndex((x) => x.label === S.exportarSvg);
+    expect(archivo[i - 1]!.type).toBe('separator');
+    expect(i).toBeGreaterThan(archivo.findIndex((x) => x.label === S.guardarComoCarpeta));
   });
 });
 

@@ -827,8 +827,8 @@ body {
 
 .ventana-flotante .escenario :is(details[open], .entrada) > :not(.propiedad),
 .panel.ancho .escenario :is(details[open], .entrada) > :not(.propiedad),
-.ventana-flotante .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario),
-.panel.ancho .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .calendario) {
+.ventana-flotante .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .editor-calendario),
+.panel.ancho .escenario :is(details[open], .entrada) > .propiedad:has(.entrada, .anidado, .editor-calendario) {
   grid-column: 1 / -1;
 }
 
@@ -1433,8 +1433,10 @@ body {
   margin-left: auto;
 }
 
-.escenario .lista-paso .nombre {
+/* #447: the BPMN id beside a name, only with Settings → «Advanced». */
+.escenario .id {
   color: var(--fg-muted);
+  font-size: 0.9em;
 }
 
 /* #332: la unidad de una duración y la ayuda breve de un campo del escenario. */
@@ -1513,6 +1515,7 @@ body {
   margin: 4px 0;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .calendario .rotulo {
@@ -1548,6 +1551,82 @@ body {
 
 .calendario .hora:focus-visible {
   outline: 1px solid var(--fg-primary);
+}
+
+/* Range picker above the grid (#448): day chips, per-day checkboxes, from/to and «Add range»,
+   then the current intervals as a list with remove. Same rules as the rest of the panel: radius
+   0, 1 px `--border` rules, tokens only, mono for the times. */
+.franjas {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  margin: 4px 0;
+}
+
+.franjas-presets,
+.franjas-dias,
+.franjas-horas {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.franjas-presets {
+  gap: 1px;
+}
+
+.franjas .chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: calc(3px * var(--espacio, 1)) 8px;
+}
+
+.franjas .chip:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.franjas .chip[aria-pressed='true'] {
+  border-color: var(--accent-primary);
+  color: var(--fg-primary);
+}
+
+.franjas-dias label,
+.franjas-horas label {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.franjas-horas input[type='text'] {
+  font-family: var(--font-mono);
+  /* Five mono characters plus the shared field's padding and border (border-box). */
+  width: calc(6ch + 14px);
+}
+
+.franjas-horas input[type='text']:invalid {
+  border-color: var(--status-error);
+}
+
+.franjas-lista {
+  border-top: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.franjas-lista li {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: calc(3px * var(--espacio, 1)) 0;
 }
 
 /* Mantener montado el modelador conserva undo/selección entre modos. */
@@ -2112,9 +2191,9 @@ body {
 
 .lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
-.confirmar-reemplazo, .confirmar-perdida, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
-.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .ajustes::backdrop, .paleta-comandos::backdrop { background: rgb(0 0 0 / 50%); }
-.confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirmar-reemplazo, .confirmar-perdida, .aviso-sistema, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
+.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .aviso-sistema::backdrop, .ajustes::backdrop, .paleta-comandos::backdrop { background: rgb(0 0 0 / 50%); }
+.confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .aviso-sistema .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 .confirmar-perdida ul { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 
 /* ---------- ajustes (artboard 09, #407) ---------- */
@@ -2179,7 +2258,13 @@ body {
    own label. Stretching it to the full grid cell and dropping its own bottom margin (the row
    already carries one) makes every row's control fill the column the same way. */
 .ajustes .fila .campo { align-items: stretch; margin-bottom: 0; }
+/* «Advanced» (#447): checkbox and its text on one line, in the control column. */
+.ajustes .fila .interruptor { align-items: center; color: var(--fg-primary); display: flex; gap: 8px; }
 .ajustes .campo { margin-bottom: calc(10px * var(--espacio, 1)); }
+/* The shared `.campo` rule stacks label over control; a toggle reads as checkbox + text on one row. */
+.ajustes .interruptor { align-items: center; color: var(--fg-primary); flex-direction: row; gap: 8px; margin: calc(6px * var(--espacio, 1)) 0 calc(2px * var(--espacio, 1)); }
+/* #472: the help line under «Follow the system theme», tucked against its toggle. */
+.ajustes .ayuda { color: var(--fg-muted); font-size: 0.9em; margin: 0 0 calc(12px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
 
 /* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
@@ -2332,7 +2417,9 @@ body {
   overflow: hidden;
 }
 .karaoke-linea { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em; margin: 0; max-width: 60rem; font-size: clamp(1.1rem, 3vw, 1.7rem); font-weight: 500; }
-.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida 250ms ease-out both; }
+/* No fixed duration here (#446): `About.tsx` sends `animationDuration` inline from
+   `KARAOKE_DURACION_MS`, which the inline style always wins over this shorthand for. */
+.karaoke-palabra { display: inline-block; opacity: 0; animation: karaoke-caida ease-out both; }
 /* «La Mente Maestra» cae la última, mucho más grande y con brillo del acento (pedido del dueño). */
 .karaoke-epica {
   margin: 0;
@@ -2541,4 +2628,41 @@ body {
 
 .escenario-pie .boton:not(.primario) {
   background: none;
+}
+
+/* ---------- unselectable chrome (#463) ---------- */
+
+/* Owner request: dragging or ⌘A over the app's chrome (top bar, menus, scenario rail, diagram
+   tabs, mode tabs, palette, collapsible summaries, buttons, validation chips, the scenario
+   heading, the step buttons) selected its text, which got in the way of lasso-selecting on the
+   canvas and does not happen in native apps or Bizagi. One rule per region, not per element;
+   nothing global or on `.app`, so content is untouched: inputs/textarea, the scenario JSON view,
+   the results/compare tables, validation messages, About and the shortcuts table stay selectable
+   (people copy those). `.calendario` already had its own `user-select: none` (see above) and is
+   not repeated here. `.djs-container svg` stops Chrome's default select-all from painting the
+   canvas's BPMN labels when a chrome button has focus (QA of #463, should-fix 2); bpmn-js's own
+   label editor is an HTML `contenteditable` outside the `svg`, so it keeps working. Field
+   `<label>`s and the Bottlenecks switch stay selectable on purpose (QA of #463, should-fix 3). */
+.barra,
+.menu-archivo,
+.menu-vista,
+.vista-grupo,
+.paleta,
+.rail-escenarios,
+.modos,
+.pestanas,
+.diagramas,
+.app > .estado,
+.ajustes-nav,
+.escenario summary,
+.escenario-cabecera,
+.paso,
+.paleta-grupos summary,
+.ajustes .grupo > summary,
+.boton,
+.chips-validacion,
+.franjas-presets,
+.djs-container svg {
+  user-select: none;
+  -webkit-user-select: none;
 }

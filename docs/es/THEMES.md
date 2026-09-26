@@ -56,14 +56,29 @@ que cambiar un valor del JSON y recargar cambia la UI sin recompilar.
 `lila-light`, `lila-dark`), pide `./<id>.json` y lo pasa a
 `applyTheme`. La densidad (`compacta` / `normal` / `comoda`) se escribe encima del token `density`
 del tema y sale como `data-densidad` en `.app` para el CSS. No hay `ThemeProvider`: con dos temas y
-un `useState` sobra un contexto. Mientras no haya tema guardado, la app elige `lila-dark` cuando el
-sistema operativo reporta `prefers-color-scheme: dark` y `lila-light` en caso contrario, en cada
-arranque y sin guardar esa elección; en cuanto el usuario elige un tema, el guardado gana siempre.
+un `useState` sobra un contexto.
+
+**Seguir el esquema del sistema (#472).** De fábrica el tema sigue el modo claro/oscuro del sistema
+operativo mientras la app está abierta: hay dos ranuras de tema, una para claro y otra para oscuro
+(Lila Light y Lila Dark de fábrica), y un oyente de `change` sobre
+`matchMedia('(prefers-color-scheme: dark)')` aplica la otra ranura cuando el sistema cambia —también
+en Electron, donde `nativeTheme.themeSource` se queda en `'system'` y Chromium le pasa el esquema
+del sistema al renderer—. Elegir un tema mientras se sigue al sistema escribe la ranura del esquema
+actual, así que se ve al instante. La primera vez que el tema cambia solo, un aviso pequeño lo dice
+y ofrece **Mantener** (también Esc) o **Apagar**, que devuelve el tema anterior, deja de seguir al
+sistema y guarda ese tema como elección explícita; el aviso sale una sola vez. Con el seguimiento
+apagado manda el `tema` guardado, como antes de #472. Las ranuras salen una vez del `tema` único de
+antes: nada o un tema Lila da las ranuras de fábrica; cualquier otro tema (integrado o del usuario)
+va a las dos, así que quien había elegido Akira no ve ningún cambio hasta que elija un segundo tema.
+Una ranura que nombra un tema del usuario borrado vuelve a su tema Lila.
 
 **Dónde se guarda la elección.** En el navegador, en `localStorage['lila.tema']` y
-`localStorage['lila.densidad']`. En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el
-puente (`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), donde ya viven
-la ventana y los recientes. Son excluyentes: si `window.lila` existe, el `localStorage` ni se lee ni
+`localStorage['lila.densidad']`, más `lila.seguirSistema` (`'0'` cuando está apagado),
+`lila.temaClaro`, `lila.temaOscuro` y `lila.avisoSeguirSistema` (`'1'` una vez mostrado el aviso)
+para #472. En escritorio, en `<userData>/estado.json`, bajo `ajustes`, por el puente
+(`readSettings()` / `writeSettings(ajustes)`, `apps/desktop/src/bridge.ts`), donde ya viven la
+ventana y los recientes; los cuatro de #472 van ahí como `seguirSistema`, `temaClaro`, `temaOscuro`
+y `avisoSeguirSistema` (booleanos y texto). Son excluyentes: si `window.lila` existe, el `localStorage` ni se lee ni
 se escribe. Hasta ahora era `localStorage` en las dos modalidades, con el argumento —cierto— de que
 `lila://` es un esquema con origen propio y por tanto tiene su propio almacén; lo que falla no es el
 aislamiento sino el sitio: ese almacén está dentro del perfil de Chromium de la app, no se ve desde
@@ -101,7 +116,7 @@ token y los diálogos encogerían al bajar la letra.
 `apps/web/src/settings/Ajustes.tsx` es el contenido del diálogo de Ajustes (artboard 09); el
 `<dialog>` y su apertura (⚙, ⌘, y el menú nativo) se quedan en `App.tsx`. Se divide en tres
 secciones detrás de una navegación `role="tablist"` a la izquierda — **General** (idioma,
-densidad), **Apariencia** (el editor de temas, abajo) y **Atajos** (una tabla de solo lectura con
+densidad y **Avanzado**, que muestra los ids BPMN de los elementos junto a sus nombres), **Apariencia** (el editor de temas, abajo) y **Atajos** (una tabla de solo lectura con
 el mapa de teclado actual) — las tres montadas a la vez y alternadas con `hidden`, no
 desmontadas, así la vista previa en caliente de `Apariencia` sobrevive a cambiar de pestaña y un
 test llega a cualquier control sin tener que pasar antes por la navegación. General es la sección
@@ -119,6 +134,9 @@ Los controles:
 - **Lista de temas**: los integrados (Eva-01, Papel) y los del usuario, en un `<optgroup>` cada
   grupo. Elegir uno lo aplica en caliente; los integrados se piden por `fetch`, los del usuario
   salen del almacén y no piden nada.
+- **Seguir el tema del sistema** (#472): un interruptor, encendido de fábrica, con los selectores
+  **Tema claro** y **Tema oscuro** debajo mientras está encendido (ver «Seguir el esquema del
+  sistema» arriba).
 - **Duplicar**: copia el tema activo como tema del usuario, con el nombre editable al lado.
 - **Editor de tokens**, agrupado igual que `TOKEN_NAMES` (Base, Texto, Acentos, Estados, Lienzo y
   diagrama, Simulación, Tipografía), un `<details>` por grupo. Los colores llevan

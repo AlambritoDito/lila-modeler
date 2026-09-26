@@ -152,7 +152,8 @@ Task_TomarPedido  Take order  Average time (waiting for resource)  0.234564     
 todas las métricas en `compare`. `--lang en|es` (en cualquier posición) elige el idioma de la
 salida; `--help` en cualquier subcomando lista las opciones. Formatos:
 [`docs/es/SCENARIO_FORMAT.md`](docs/es/SCENARIO_FORMAT.md),
-[`docs/es/RESULTS_FORMAT.md`](docs/es/RESULTS_FORMAT.md).
+[`docs/es/RESULTS_FORMAT.md`](docs/es/RESULTS_FORMAT.md). Referencia completa, códigos de salida
+y una sección «para agentes»: [`docs/es/CLI.md`](docs/es/CLI.md).
 
 ### MCP
 
@@ -225,6 +226,8 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — la carpeta de proyecto y el archivo `.lila`
   (en inglés).
 - [`BPMN_EXTENSION.md`](docs/es/BPMN_EXTENSION.md) — el namespace `lila:` y la política de ids.
+- [`CLI.md`](docs/es/CLI.md) — la línea de comandos `lila`: cada subcomando, códigos de salida y
+  una sección «para agentes».
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus cinco tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …

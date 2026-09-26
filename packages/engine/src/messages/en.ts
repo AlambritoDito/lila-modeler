@@ -70,8 +70,9 @@ mcp options:
   directory it was launched from. Not run by hand: the MCP client launches it.
 
 General options:
-  --lang en|es  Language of the output. Default: LILA_LANG, then LANG; English if neither.
-  -h, --help    Shows this help.`;
+  --lang en|es     Language of the output. Default: LILA_LANG, then LANG; English if neither.
+  -h, --help       Shows this help.
+  -v, --version    Prints the installed version.`;
 
 export const en: Catalog = {
   codes: {

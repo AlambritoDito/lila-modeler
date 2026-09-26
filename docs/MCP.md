@@ -3,7 +3,8 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila/engine`. Its five tools reuse the CLI validation and simulation pipeline.
+backed by `@lila/engine`. Its five tools reuse the CLI validation and simulation pipeline — see
+[`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
 

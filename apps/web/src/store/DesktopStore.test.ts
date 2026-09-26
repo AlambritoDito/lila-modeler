@@ -144,6 +144,10 @@ class FakeBridge implements LilaBridge {
     this.ajustes = { ...this.ajustes, ...ajustes };
   }
 
+  async exportar(): Promise<string | null> {
+    return null;
+  }
+
   triggerOpenPath(path: OpenPathRequest): void {
     if (this.openPathCb === null) {
       throw new Error('FakeBridge.triggerOpenPath: no hay callback registrado (onOpenPath).');

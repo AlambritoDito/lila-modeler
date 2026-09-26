@@ -3,6 +3,52 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.8] - 2026-09-25
+
+Lote E: what a class hands in and how it is drawn. The diagram exports as SVG, PNG and PDF and
+prints from the File menu (⌘P); BPMN ids are hidden behind an «Advanced» setting; calendars get
+Bizagi-style day presets and from–to ranges; unsupported constructs warn while modelling and only
+block Run; the palette carries the full BPMN set and bpmn-js speaks Spanish; the theme follows the
+system's light/dark scheme with two slots; the app's chrome is no longer text-selectable; the About
+karaoke plays at half speed; and the CLI has a reference written for agents. No installer is
+attached to this version.
+
+### Added
+
+- **Export the diagram as SVG, PNG and PDF, and print it (#451)**: File → Export as SVG… / PNG… /
+  PDF… and Print… (⌘P / Ctrl+P) on desktop; SVG and PNG downloads plus «Print / Save as PDF…» in
+  the browser. The image carries no selection outline and no editor chrome. SVG keeps the theme's
+  colours on the theme's canvas background; PNG (2×), PDF and print go on white paper with black
+  strokes and labels, keeping any per-element colours.
+- **Calendar ranges like Bizagi (#448)**: above the weekly grid, day presets (Mon–Fri / Every day /
+  Weekend), per-day checkboxes, from–to as `HH:MM` (`24:00` allowed in «to») and «Add range», which
+  appends exactly one `intervals[]` entry as typed — no rounding, no merging. A list of the current
+  ranges with remove; the grid still paints the same array.
+- **Model without simulating (#455, #456)**: constructs the engine does not simulate (`E-NOSOP`)
+  now show while modelling as warnings in Model mode (marker, chips, validation list) and as errors
+  in the other modes; Run keeps failing with the engine's own `E-NOSOP`. The palette carries every
+  start/intermediate/end event type, task subtype, collapsed and event sub-processes, transactions,
+  boundary events (attached to the selected activity) and lanes. bpmn-js's context pad, replace
+  menu and popups follow the app language (Spanish translation of 131 templates).
+- **Theme follows the system (#472)**: Settings → Appearance gains «Follow the system theme» (on by
+  default) with a light slot and a dark slot (Lila Light / Lila Dark by default) that rotate with
+  the OS scheme while the app runs. The first automatic switch asks once whether to keep it
+  automatic. Someone who had chosen another theme keeps it in both slots until they pick a second.
+- **CLI reference for agents (#450)**: `docs/CLI.md` / `docs/es/CLI.md` with a runnable example per
+  command, exit codes, output flags and a «For agents» loop; `lila --version` (#48).
+
+### Changed
+
+- **BPMN ids hidden by default (#447)**: the scenario panel, the step lists, gateway flow labels,
+  the bottleneck line and ⌘K show the element's name (the id only when it has no name). Settings →
+  General → «Advanced» shows the id beside the name. Clicking a row still selects the element.
+- **Chrome is not text-selectable (#463)**: the top bar and its menus, the palette, the scenario
+  rail, mode, panel and diagram tabs, panel headings, the status bar, the Settings tablist, buttons
+  and chips no longer select as text; inputs, the scenario JSON, results and compare tables,
+  validation messages, About and the shortcuts table still do.
+- **About karaoke at half speed (#446)**: the words can be read; the link opens when the last line
+  has landed.
+
 ## [1.0.0-beta.7] - 2026-09-25
 
 Close window and quit from the keyboard in the desktop app on macOS: File gains the native «Close

@@ -36,6 +36,7 @@ export const ATAJOS = [
   { id: 'abrir', grupo: 'archivo', tecla: 'Mod+O', menu: true },
   { id: 'guardar', grupo: 'archivo', tecla: 'Mod+S', menu: true, hija: true },
   { id: 'guardarComo', grupo: 'archivo', tecla: 'Mod+Shift+S', menu: true, hija: true },
+  { id: 'imprimir', grupo: 'archivo', tecla: 'Mod+P', menu: true, hija: true },
   { id: 'ajustes', grupo: 'archivo', tecla: 'Mod+,', menu: true, soloDesktop: true },
   { id: 'paleta', grupo: 'buscar', tecla: 'Mod+K', menu: true, hija: true },
   { id: 'modo:modelar', grupo: 'modos', tecla: 'Mod+Digit1', menu: true, soloDesktop: true },

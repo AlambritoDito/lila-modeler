@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn } from '@lila/engine/bpmn';
+import { parseBpmn, validateBpmnXml } from '@lila/engine/bpmn';
 import { resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
 import { compare } from '@lila/engine';
 import { CompareView } from './CompareView';
@@ -21,7 +21,7 @@ import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Mod
 import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
-import { duplicarEscenario, problemasEscenario, ScenarioPanel } from './ScenarioPanel';
+import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
@@ -37,7 +37,8 @@ import type { EventLogRow } from '@lila/engine';
 import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
-import { temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
+import { sistemaOscuro, temaPorDefecto, type TemaId } from './theme/temaPorDefecto';
+import type { Ranuras } from './settings/Apariencia';
 // Aliased: `Ajustes` above is already the bridge's settings-payload type (`readSettings`/
 // `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
 import { Ajustes as AjustesDialogo } from './settings/Ajustes';
@@ -47,6 +48,7 @@ import { Bienvenida } from './Bienvenida';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
+import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -76,11 +78,13 @@ type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: s
  * entre paréntesis solo cuando aporta algo —tareas sin nombre, o ids sanitizados por el motor—,
  * porque sigue siendo la única clave (regla 5 de BACKLOG.md). `undefined` = no hubo cuellos.
  */
-function nombreDeCuello(id: string | undefined, ir: ProcessIR | null): string | undefined {
+function nombreDeCuello(id: string | undefined, ir: ProcessIR | null, avanzado: boolean): string | undefined {
   const S = strings();
   if (id === undefined) return undefined;
   const nombre = ir?.nodes[id]?.name;
-  return nombre === undefined || nombre === '' || nombre === id ? id : S.app.nombreDeCuello(nombre, id);
+  if (nombre === undefined || nombre.trim() === '' || nombre === id) return id;
+  // #447: the id is noise for a student; «Advanced» brings it back.
+  return avanzado ? S.app.nombreDeCuello(nombre, id) : nombre;
 }
 
 /** Temas integrados, servidos como JSON estáticos (`vite.config.ts`): editar y recargar cambia la UI. */
@@ -116,6 +120,8 @@ async function preferencias(): Promise<Ajustes> {
     // Left column widths (#406), same "blank is never saved" rule.
     const paletaAncho = Number(localStorage.getItem('lila.paletaAncho')?.trim() || NaN);
     const railAncho = Number(localStorage.getItem('lila.railAncho')?.trim() || NaN);
+    // «Advanced» (#447): '1' or absent, like `lila.paleta`; anything else reads as off.
+    const avanzado = localStorage.getItem('lila.avanzado') === '1';
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -125,6 +131,11 @@ async function preferencias(): Promise<Ajustes> {
     // la densidad, que son texto y no pueden romperse.
     let temas: unknown = null;
     try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    // Following the system scheme (#472): two flags stored as '1'/'0' and the two theme slots.
+    const seguirSistema = localStorage.getItem('lila.seguirSistema');
+    const ranuraClara = localStorage.getItem('lila.temaClaro');
+    const ranuraOscura = localStorage.getItem('lila.temaOscuro');
+    const avisoSeguirSistema = localStorage.getItem('lila.avisoSeguirSistema');
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
     let ventana: unknown = null;
     try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
@@ -138,8 +149,13 @@ async function preferencias(): Promise<Ajustes> {
       ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
       ...(Number.isFinite(paletaAncho) ? { paletaAncho } : {}),
       ...(Number.isFinite(railAncho) ? { railAncho } : {}),
+      ...(avanzado ? { avanzado } : {}),
       ...(paneles === null ? {} : { paneles: paneles as NonNullable<Ajustes['paneles']> }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
+      ...(seguirSistema === null ? {} : { seguirSistema: seguirSistema !== '0' }),
+      ...(ranuraClara === null ? {} : { temaClaro: ranuraClara }),
+      ...(ranuraOscura === null ? {} : { temaOscuro: ranuraOscura }),
+      ...(avisoSeguirSistema === null ? {} : { avisoSeguirSistema: avisoSeguirSistema === '1' }),
       ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
     };
   } catch { return {}; }
@@ -159,12 +175,34 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
     if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
     if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
+    if (ajustes.seguirSistema !== undefined) localStorage.setItem('lila.seguirSistema', ajustes.seguirSistema ? '1' : '0');
+    if (ajustes.temaClaro !== undefined) localStorage.setItem('lila.temaClaro', ajustes.temaClaro);
+    if (ajustes.temaOscuro !== undefined) localStorage.setItem('lila.temaOscuro', ajustes.temaOscuro);
+    if (ajustes.avisoSeguirSistema !== undefined) localStorage.setItem('lila.avisoSeguirSistema', ajustes.avisoSeguirSistema ? '1' : '0');
     if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
     if (ajustes.paletaAncho !== undefined) localStorage.setItem('lila.paletaAncho', String(ajustes.paletaAncho));
     if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
     if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
+    if (ajustes.avanzado === true) localStorage.setItem('lila.avanzado', '1');
+    else if (ajustes.avanzado === false) localStorage.removeItem('lila.avanzado');
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
+}
+/** Each system scheme's Lila theme: the slots' defaults (#472). */
+const RANURAS_DEFECTO: Ranuras = { claro: 'lila-light', oscuro: 'lila-dark' };
+/**
+ * The theme slots saved before (#472), or, when none was ever saved, the one-time migration of the
+ * old single `tema`: nothing or a Lila theme gives the Lila defaults, any other theme goes into
+ * both slots, so whoever had picked Akira sees no change until they pick a second theme. Both
+ * slots are always written together (`guardarRanuras`), so this runs until the first write only.
+ */
+function ranurasGuardadas(ajustes: Ajustes): Ranuras {
+  const { tema } = ajustes;
+  if (ajustes.temaClaro !== undefined || ajustes.temaOscuro !== undefined) {
+    return { claro: ajustes.temaClaro ?? RANURAS_DEFECTO.claro, oscuro: ajustes.temaOscuro ?? RANURAS_DEFECTO.oscuro };
+  }
+  if (tema === undefined || tema === '' || tema === 'lila-light' || tema === 'lila-dark') return RANURAS_DEFECTO;
+  return { claro: tema, oscuro: tema };
 }
 /** El valor guardado, si sigue siendo uno de los válidos; si no, el de fábrica. */
 function valido<T extends string>(valor: string | undefined, validas: readonly T[], porDefecto: T): T {
@@ -432,7 +470,25 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [temaId, setTemaId] = useState<string>(temaPorDefecto);
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
+  /**
+   * Follow the system's light/dark scheme (#472), on by default: the applied theme is the slot of
+   * the current scheme, and `temaId` is only frozen as an explicit choice when this is off.
+   * `ranurasRef` mirrors `ranuras` because deleting a user theme rewrites the slots and then selects
+   * in the same tick, before React re-renders (same trick as `panelesRef`).
+   */
+  const [seguir, setSeguir] = useState(true);
+  const [ranuras, setRanuras] = useState<Ranuras>(RANURAS_DEFECTO);
+  const ranurasRef = useRef<Ranuras>(RANURAS_DEFECTO);
+  /** The one-time prompt of the first automatic switch (#472): `anterior` is what «Turn off» restores. */
+  const avisoVisto = useRef(false);
+  const [avisoSistema, setAvisoSistema] = useState<{ anterior: string; oscuro: boolean } | null>(null);
+  const avisoDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (avisoSistema !== null && !avisoDialog.current?.open) avisoDialog.current?.showModal();
+  }, [avisoSistema]);
   const [densidad, setDensidad] = useState<Densidad>('normal');
+  /** Settings → General → «Advanced» (#447): show BPMN ids next to names. Off by default. */
+  const [avanzado, setAvanzado] = useState(false);
   /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
   const [panelAncho, setPanelAncho] = useState(320);
   const arrastre = useRef<{ x: number; ancho: number } | null>(null);
@@ -485,6 +541,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // IR del diagrama del lienzo, para que el panel valide con `validateScenario` (reglas R3…R14)
   // y no solo con el esquema. `null` mientras no se haya podido parsear.
   const [ir, setIr] = useState<ProcessIR | null>(null);
+  /**
+   * #455: the `E-NOSOP` of the canvas model (constructs the simulator does not run), from the same
+   * deferred reparse that sets `ir`. Only those: `E-SIN-START`/`E-SIN-END` and the rest of the full
+   * `validate()` stay a Run-time matter (#409, an empty «New» is not an error yet).
+   */
+  const [noSoportados, setNoSoportados] = useState<readonly { id: string; message: string; name?: string }[]>([]);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
@@ -804,6 +866,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * más los que no cuelgan de ninguna figura: el diagnóstico del proyecto abierto y los avisos
    * de bpmn-js al importar.
    */
+  /**
+   * #455: a construct outside the simulated subset is a correct BPMN diagram while modelling, so
+   * in Model it is a warning; in every other mode it is the error Run is going to raise. Run itself
+   * is untouched: `simulationGate.ts` still fails with the engine's `E-NOSOP`.
+   */
+  /** Names of the unsupported elements, for the panel's headings (seams QA of #476). */
+  const nombresModelo = useMemo(
+    () => Object.fromEntries(noSoportados.flatMap((p) => (p.name?.trim() ? [[p.id, p.name] as const] : []))),
+    [noSoportados],
+  );
+  const problemasModelo = useMemo<Problema[]>(
+    () => noSoportados.map((p) => ({ ruta: `elements.${p.id}`, mensaje: p.message, severidad: modo === 'modelar' ? 'warning' : 'error' })),
+    [noSoportados, modo],
+  );
+
   const validacion = useMemo(
     () => {
       // Misma lista que la cabecera del panel de escenario: el fallo de la cadena `extends` va
@@ -811,10 +888,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
-      const problemas = problemasEscenario(resuelto, ir, locale);
-      // ponytail (#409): an empty process («New») is not an error yet. Nothing to filter here:
-      // `E-SIN-START`/`E-SIN-END` come from the engine's full `validate()`, which the web app only
-      // runs at Run time (`simulationGate.ts`); `validateScenario` never emits them.
+      // A copy: the model's problems (#455) are appended to it, not to the lint's own list.
+      const problemas = [...problemasEscenario(resuelto, ir, locale), ...problemasModelo];
+      // ponytail (#409): an empty process («New») is not an error yet. `E-SIN-START`/`E-SIN-END`
+      // come from the engine's full `validate()`: the live reparse runs it since #455 but keeps only
+      // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
@@ -823,7 +901,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
     // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
     // the whole lint— would stay in the language it was resolved in.
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale],
+    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -855,12 +933,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     let vivo = true;
     const timer = setTimeout(() => {
-      void modelador.exportar().then((xml) => parseBpmn(xml)).then(({ ir: parseado }) => {
-        if (vivo) setIr(parseado);
-      }).catch(() => { if (vivo) setIr(null); });
+      // `validateBpmnXml` is `parseBpmn` plus the engine's `validate()`, and never throws for an
+      // invalid model: its `ir` is the same one `parseBpmn` returns (#455).
+      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale })).then((informe) => {
+        if (!vivo) return;
+        setIr(informe.ir);
+        // Unsupported elements never enter the IR, so the panel cannot read their name from it:
+        // it comes from the canvas (seams QA of #476, E2 × E5).
+        const nosop = informe.errors.filter((p) => p.code === 'E-NOSOP');
+        const ids = new Set(nosop.map((p) => p.id));
+        const nombres = new Map(modelador.servicios.elementRegistry.filter((el) => el.id !== undefined && ids.has(el.id)).map((el) => [el.id, el.businessObject?.name]));
+        setNoSoportados(nosop.map((p) => { const name = nombres.get(p.id); return name === undefined ? { id: p.id, message: p.message } : { id: p.id, message: p.message, name }; }));
+      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
-  }, [modelador, procesoId, revision]);
+    // The locale reparses because the `E-NOSOP` messages are the engine's, in the active language.
+  }, [modelador, procesoId, revision, locale]);
 
   /**
    * #420: a start or task drawn on the canvas gets `defaultElement` in each BASE scenario (the
@@ -913,9 +1001,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setTemas(mios);
       // Un tema del usuario que sigue en la lista vale como elección; si no, se cae al integrado
       // (o al Lila del esquema del sistema, sin guardarlo), igual que con un id de tema borrado.
-      const id = temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
+      // #472: a slot that names a deleted or unknown theme falls back to that scheme's Lila theme.
+      const r = ranurasGuardadas(guardadas);
+      const enRanura = (v: string, defecto: TemaId): string => temaDe(v, mios)?.id ?? valido(v, temaIds(), defecto);
+      ranurasRef.current = { claro: enRanura(r.claro, 'lila-light'), oscuro: enRanura(r.oscuro, 'lila-dark') };
+      setRanuras(ranurasRef.current);
+      const sigue = guardadas.seguirSistema !== false;
+      setSeguir(sigue);
+      avisoVisto.current = guardadas.avisoSeguirSistema === true;
+      const id = sigue
+        ? ranurasRef.current[sistemaOscuro() ? 'oscuro' : 'claro']
+        : temaDe(guardadas.tema ?? '', mios)?.id ?? valido(guardadas.tema, temaIds(), temaPorDefecto());
       setTemaId(id);
       setDensidad(valido(guardadas.densidad, DENSIDAD_IDS, 'normal'));
+      setAvanzado(guardadas.avanzado === true);
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
       if (typeof guardadas.paletaAncho === 'number') setPaletaAncho(limitar(guardadas.paletaAncho, PALETA_MIN, PALETA_MAX));
       if (typeof guardadas.railAncho === 'number') setRailAncho(limitar(guardadas.railAncho, RAIL_MIN, RAIL_MAX));
@@ -959,14 +1058,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /**
    * Único punto donde se aplica un tema: el integrado se pide por `fetch` y el del usuario sale de
    * `lista` (LILA-114), que se pasa a mano porque quien acaba de editarla todavía no la ve en el
-   * estado de React.
+   * estado de React. Applies without persisting anything — the system-scheme listener (#472) goes
+   * through here too, and an automatic switch is not a choice. `alAplicar` runs only once applied,
+   * and synchronously for a user theme (no `fetch`), which is what callers persist in.
    */
-  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
-    // '' means "no explicit choice, follow the system" (Appearance's delete button, #422 QA S1):
-    // resolve it to a concrete Lila id to actually apply and show in the selector, but persist the
-    // ORIGINAL `id` — so '' — instead of the resolved one. Persisting the resolved id would freeze
-    // the app on today's OS scheme, since `preferencias()` would read that concrete id back as an
-    // explicit choice on every future launch, even after the OS scheme changes.
+  async function aplicarTemaId(id: string, lista: readonly TemaGuardado[] = temas, alAplicar?: () => void): Promise<void> {
     const idAplicado = id === '' ? temaPorDefecto() : id;
     try {
       const t = esDelUsuario(idAplicado) ? temaDe(idAplicado, lista)?.tema : await cargarTema(idAplicado as TemaId);
@@ -978,14 +1074,86 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       modelador?.repintar();
       setTema(t);
       setAvisoTema(null);
-      if (idAplicado !== temaId) {
-        setTemaId(idAplicado);
-        recordar({ tema: id });
-      }
+      setTemaId(idAplicado);
+      alAplicar?.();
     } catch (e: unknown) {
       setAvisoTema(e instanceof Error ? e.message : String(e));
     }
   }
+
+  /** Saves both slots together (see `ranurasGuardadas`), only when one changed. */
+  function guardarRanuras(nuevas: Ranuras): void {
+    if (nuevas.claro === ranurasRef.current.claro && nuevas.oscuro === ranurasRef.current.oscuro) return;
+    ranurasRef.current = nuevas;
+    setRanuras(nuevas);
+    recordar({ temaClaro: nuevas.claro, temaOscuro: nuevas.oscuro });
+  }
+
+  /** Settings → Appearance's «Light theme»/«Dark theme» (#472): applied at once if it is the current scheme's. */
+  function cambiarRanura(esquema: keyof Ranuras, id: string): void {
+    guardarRanuras({ ...ranurasRef.current, [esquema]: id === '' ? RANURAS_DEFECTO[esquema] : id });
+    if (seguir && esquema === (sistemaOscuro() ? 'oscuro' : 'claro')) void aplicarTemaId(ranurasRef.current[esquema]);
+  }
+
+  /**
+   * The user picks a theme. `tema` keeps being saved as the explicit choice (it rules when the
+   * system is not followed); while following, the pick also lands in the current scheme's slot, so
+   * it shows at once and survives the next switch.
+   */
+  async function seleccionarTema(id: string, lista: readonly TemaGuardado[] = temas): Promise<void> {
+    // '' means "no explicit choice, follow the system" (Appearance's delete button, #422 QA S1):
+    // resolve it to a concrete Lila id to actually apply and show in the selector, but persist the
+    // ORIGINAL `id` — so '' — instead of the resolved one. Persisting the resolved id would freeze
+    // the app on today's OS scheme, since `preferencias()` would read that concrete id back as an
+    // explicit choice on every future launch, even after the OS scheme changes.
+    const idAplicado = id === '' ? temaPorDefecto() : id;
+    const cambia = idAplicado !== temaId;
+    await aplicarTemaId(id, lista, () => {
+      if (cambia) recordar({ tema: id });
+      if (seguir) guardarRanuras({ ...ranurasRef.current, [sistemaOscuro() ? 'oscuro' : 'claro']: idAplicado });
+    });
+  }
+
+  /**
+   * The «Follow the system theme» toggle (#472). Off freezes `restaurar` (by default the theme on
+   * screen) as the explicit choice; on applies the current scheme's slot.
+   */
+  function cambiarSeguir(on: boolean, restaurar: string = temaId): void {
+    setSeguir(on);
+    if (on) {
+      recordar({ seguirSistema: true });
+      void aplicarTemaId(ranurasRef.current[sistemaOscuro() ? 'oscuro' : 'claro']);
+    } else {
+      recordar({ seguirSistema: false, tema: restaurar });
+      if (restaurar !== temaId) void aplicarTemaId(restaurar);
+    }
+  }
+
+  // #472: while following, a switch of the OS scheme applies the other slot. The first automatic
+  // switch ever asks once whether to keep it (`avisoSeguirSistema`); the flag is saved as soon as
+  // the prompt shows, so reloading without answering does not ask again. In Electron the renderer
+  // sees the OS scheme through `nativeTheme` (its `themeSource` stays 'system').
+  const temaListo = tema !== undefined;
+  useEffect(() => {
+    if (!seguir || !temaListo || typeof window.matchMedia !== 'function') return undefined;
+    const consulta = window.matchMedia('(prefers-color-scheme: dark)');
+    const alCambiar = (e: MediaQueryListEvent): void => {
+      const id = ranurasRef.current[e.matches ? 'oscuro' : 'claro'];
+      if (id === temaId) return;
+      const anterior = temaId;
+      void aplicarTemaId(id, temas, () => {
+        // Another switch while the prompt is still open only updates what it says.
+        if (avisoVisto.current) { setAvisoSistema((a) => (a === null ? a : { ...a, oscuro: e.matches })); return; }
+        avisoVisto.current = true;
+        recordar({ avisoSeguirSistema: true });
+        setAvisoSistema({ anterior, oscuro: e.matches });
+      });
+    };
+    consulta.addEventListener('change', alCambiar);
+    return () => consulta.removeEventListener('change', alCambiar);
+    // `aplicarTemaId` reads `temas` and `modelador`: re-subscribing with them keeps it current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seguir, temaListo, temaId, temas, modelador]);
 
   /**
    * Cambiar de idioma no recarga nada: `setLocale` avisa a todos los componentes suscritos con
@@ -993,6 +1161,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * de deshacer y la selección siguen ahí); lo imperativo —el `title` del minimapa, la animación
    * de tokens, el overlay de cuellos— lo rehacen sus efectos con el idioma en las dependencias.
    */
+  function cambiarAvanzado(valor: boolean): void {
+    setAvanzado(valor);
+    recordar({ avanzado: valor });
+  }
+
   function cambiarIdioma(preferido: Preferencia): void {
     setIdioma(preferido);
     setLocale(preferido);
@@ -1007,6 +1180,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   function guardarTemas(lista: readonly TemaGuardado[], seleccion: string = temaId): void {
     setTemas(lista);
     recordar({ temas: lista });
+    // #472: a slot that pointed at a deleted user theme falls back to its Lila default.
+    const vigente = (id: string, defecto: string): string => (esDelUsuario(id) && temaDe(id, lista) === undefined ? defecto : id);
+    guardarRanuras({ claro: vigente(ranurasRef.current.claro, RANURAS_DEFECTO.claro), oscuro: vigente(ranurasRef.current.oscuro, RANURAS_DEFECTO.oscuro) });
     void seleccionarTema(seleccion, lista);
   }
 
@@ -1023,6 +1199,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
     else if (accion === 'guardarComoCarpeta') void guardar(true, true);
+    else if (accion === 'exportarSvg') void exportarImagen('svg');
+    else if (accion === 'exportarPng') void exportarImagen('png');
+    else if (accion === 'exportarPdf') void exportarImagen('pdf');
     // A shortcut the native menu owns (#413): same handlers as the keyboard; unknown ids are ignored.
     else if ('atajo' in accion) { if (Object.hasOwn(atajosRef.current, accion.atajo) && !bloqueado()) atajosRef.current[accion.atajo as AtajoPropio](); }
     else void projectAction({ recent: accion.openRecent });
@@ -1138,10 +1317,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       cuando && { grupo: 'acciones', nombre: S.atajos[id], tecla: teclaDe(id), elegir: () => atajosRef.current[id]() };
     const acciones: (Comando | false)[] = [
       accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
+      accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
       accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
       accion('ajustes'),
+      // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarPng, elegir: () => ejecutar('exportarPng') },
+      DESKTOP && modelador !== null && { grupo: 'acciones', nombre: S.app.menuEscritorio.exportarPdf, elegir: () => ejecutar('exportarPdf') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
     ];
     return [
@@ -1283,6 +1467,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }
   }
 
+  /**
+   * The diagram as an image (#451): the SVG in the theme's colours, the PNG (2×), the PDF and the
+   * printout on white paper. The web downloads SVG and PNG and hands PDF to the print dialog (where
+   * «Save as PDF» lives); the desktop app saves the three through a native dialog, and prints from
+   * the same throwaway iframe as the web.
+   */
+  async function exportarImagen(tipo: 'svg' | 'png' | 'pdf' | 'imprimir'): Promise<void> {
+    if (modelador === null) return;
+    const nombre = nombreArchivo(projectName);
+    const lila = DESKTOP ? window.lila : undefined;
+    try {
+      const svg = await modelador.exportarSvg({ papel: tipo !== 'svg' });
+      if (tipo === 'imprimir' || (tipo === 'pdf' && lila === undefined)) imprimirSvg(svg, nombre);
+      else if (tipo === 'png') {
+        const png = await aPng(svg);
+        if (lila === undefined) descargar(png, `${nombre}.png`);
+        else await lila.exportar({ nombre, tipo, datos: new Uint8Array(await png.arrayBuffer()) });
+      } else if (lila === undefined) descargar(new Blob([svg], { type: 'image/svg+xml' }), `${nombre}.svg`);
+      else await lila.exportar({ nombre, tipo, datos: svg });
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+  }
+
   async function exportar(): Promise<void> {
     if (modelador === null) return;
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
@@ -1368,6 +1574,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     abrir: () => ejecutar('abrir'),
     guardar: () => ejecutar('guardar'),
     guardarComo: () => ejecutar('guardarComo'),
+    imprimir: () => void exportarImagen('imprimir'),
     ajustes: () => ejecutar('ajustes'),
     paleta: () => abrirPaletaRef.current(desdeHija.current),
     ...Object.fromEntries(MODO_IDS.map((m) => [`modo:${m}`, () => elegirModo(m)])) as Record<`modo:${ModoId}`, () => void>,
@@ -1459,7 +1666,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onGuardar={() => { void guardar(); }}
       onDuplicar={anadirEscenario}
       ir={ir}
+      problemasExtra={problemasModelo}
+      nombresExtra={nombresModelo}
       seleccion={seleccion}
+      avanzado={avanzado}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -1487,6 +1697,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           })()}>{S.app.guardarYContinuar}</button>
           <button className="boton" disabled={ioBusy} onClick={() => { const next = pendingAction; setPendingAction(null); void projectAction(next, true); }}>{S.app.descartar}</button>
           <button className="boton" disabled={ioBusy} onClick={() => setPendingAction(null)}>{S.app.cancelar}</button>
+        </div>
+      </dialog>}
+      {/* #472: shown once, the first time the theme follows the system on its own. Esc = Keep.
+          It opens unasked, so every answer `close()`s it before unmounting: that is what makes the
+          browser give the focus back to whatever had it. */}
+      {avisoSistema !== null && <dialog ref={avisoDialog} className="aviso-sistema" aria-labelledby="aviso-sistema-titulo" aria-describedby="aviso-sistema-texto" onCancel={(event) => { event.preventDefault(); avisoDialog.current?.close(); setAvisoSistema(null); }}>
+        <h2 id="aviso-sistema-titulo">{S.apariencia.avisoTitulo}</h2>
+        <p id="aviso-sistema-texto">{S.apariencia.avisoTexto(temaDe(temaId, temas)?.tema.name ?? S.app.temas[temaId as TemaId] ?? temaId, avisoSistema.oscuro)}</p>
+        <div className="acciones">
+          <button className="boton primario" type="button" onClick={() => { avisoDialog.current?.close(); setAvisoSistema(null); }}>{S.apariencia.mantener}</button>
+          <button className="boton" type="button" onClick={() => { const { anterior } = avisoSistema; avisoDialog.current?.close(); setAvisoSistema(null); cambiarSeguir(false, anterior); }}>{S.apariencia.apagar}</button>
         </div>
       </dialog>}
       {confirmarPerdida !== null && <dialog ref={exportDialog} className="confirmar-perdida" aria-labelledby="perdida-titulo" onCancel={(event) => { event.preventDefault(); responderPerdida(false); }}>
@@ -1574,6 +1795,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPdf')}>{S.app.menuEscritorio.exportarPdf}</button>
+              <button type="button" title={`${S.app.menuEscritorio.imprimir}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.menuEscritorio.imprimir}</button>
+              <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </> : <>
               <button type="button" title={`${S.app.tituloNuevo}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
@@ -1584,6 +1810,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
               </>}
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.exportarSvg}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.exportarPng}</button>
+              <button type="button" title={`${S.app.imprimirPdf}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.imprimirPdf}</button>
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </>}
           </div>
@@ -1686,14 +1915,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           temas={temas}
           densidad={densidad}
           onDensidad={(d) => setDensidad(d as Densidad)}
+          avanzado={avanzado}
+          onAvanzado={cambiarAvanzado}
           onTemas={guardarTemas}
           onSeleccionar={(id) => void seleccionarTema(id)}
+          seguir={seguir}
+          onSeguir={(on) => cambiarSeguir(on)}
+          ranuras={ranuras}
+          onRanura={(esquema, id) => cambiarRanura(esquema, id)}
           abrirAcerca={abrirAcerca}
           cerrarDialogo={() => ajustesDialog.current?.close()}
         />
       </dialog>
 
-      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} onCerrar={() => setPaletaAbierta(false)} />}
+      {paletaAbierta && <PaletaComandos comandos={comandosPaleta()} mostrarIds={avanzado} onCerrar={() => setPaletaAbierta(false)} />}
 
       {ventanaAcerca !== null && (
         <VentanaFlotante
@@ -1742,7 +1977,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           enVentana={ventanaEscenario !== null ? escenarioId : null}
           id={ID_REGION.izquierda}
         />
-      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
+      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} seleccion={seleccion} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
       {/* Divider of the left column (#406): the palette in Model, the rail in Simulate, each
           with its own width. It stays on screen when the column is hidden, so a double-click
           or Enter can bring it back. */}
@@ -1914,7 +2149,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <p className="vacio">
               {corrida === null
                 ? S.app.cuellosSinCorrida
-                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir) ??
+                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir, avanzado) ??
                   S.app.cuellosSinEspera)}
             </p>
             {ventanaEscenario === null ? panelEscenario : (

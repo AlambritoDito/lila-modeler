@@ -14,7 +14,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { applyTheme, type Theme } from '../theme/applyTheme';
 import { esDelUsuario, temaDe, type TemaGuardado } from '../theme/temas';
 import { temaPorDefecto } from '../theme/temaPorDefecto';
-import { Apariencia } from './Apariencia';
+import { Apariencia, type Ranuras } from './Apariencia';
 import { setLocale } from '../i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
@@ -64,6 +64,9 @@ function Banco(): React.JSX.Element {
   const [temaId, setTemaId] = useState('eva-01');
   const [tema, setTema] = useState<Theme>(EVA);
   const [temas, setTemas] = useState<readonly TemaGuardado[]>([]);
+  // #472: the toggle and the two slots are plain state here; `App.tsx` owns what they do.
+  const [seguir, setSeguir] = useState(true);
+  const [ranuras, setRanuras] = useState<Ranuras>({ claro: 'lila-light', oscuro: 'lila-dark' });
   function seleccionar(id: string, lista: readonly TemaGuardado[]): void {
     // '' ("no theme saved", #422 QA S1) resolves to the system rule for applying/displaying, same
     // as `App.tsx`'s `seleccionarTema`; what gets tracked as "saved" (`temaGuardado`, below) stays
@@ -83,6 +86,10 @@ function Banco(): React.JSX.Element {
       temas={temas}
       onTemas={(lista, seleccion = temaId) => { guardado = lista; setTemas(lista); seleccionar(seleccion, lista); }}
       onSeleccionar={(id) => seleccionar(id, temas)}
+      seguir={seguir}
+      onSeguir={setSeguir}
+      ranuras={ranuras}
+      onRanura={(esquema, id) => setRanuras((r) => ({ ...r, [esquema]: id }))}
     />
   );
 }
@@ -377,4 +384,21 @@ it.each(['-5', '0', '999'])('el tamaño base fuera de rango (%s) no se aplica ni
   expect(porEtiqueta('Tamaño base (px)').getAttribute('aria-invalid')).toBe('true');
   expect(variable('--font-size-base')).toBe('13px');
   expect(guardado).toEqual([]);
+});
+
+it('the light and dark theme selects show only while following the system (#472)', () => {
+  const ranura = (etiqueta: string) => container.querySelector<HTMLSelectElement>(`select[aria-label="${etiqueta}"]`);
+  const interruptor = [...container.querySelectorAll<HTMLLabelElement>('label.interruptor')]
+    .find((l) => l.textContent === 'Seguir el tema del sistema')!.querySelector('input')!;
+  expect(interruptor.checked).toBe(true);
+  expect(ranura('Tema claro')?.value).toBe('lila-light');
+  expect(ranura('Tema oscuro')?.value).toBe('lila-dark');
+  // The main selector stays the first `<select>`: the slots come after it.
+  expect(selectTema().getAttribute('aria-label')).toBeNull();
+  act(() => { interruptor.click(); });
+  expect(interruptor.checked).toBe(false);
+  expect(ranura('Tema claro')).toBeNull();
+  expect(ranura('Tema oscuro')).toBeNull();
+  act(() => { interruptor.click(); });
+  expect(ranura('Tema oscuro')).not.toBeNull();
 });

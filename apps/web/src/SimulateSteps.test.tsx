@@ -66,10 +66,11 @@ afterEach(() => {
   contenedor = null;
 });
 
+/** An element row by its id (`data-id`, #447), else any button by its exact text. */
 function boton(texto: string): HTMLButtonElement {
-  const encontrado = [...document.querySelectorAll('button')].find(
-    (b) => b.textContent?.trim() === texto,
-  );
+  const encontrado =
+    document.querySelector<HTMLButtonElement>(`button[data-id="${texto}"]`) ??
+    [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto);
   if (encontrado === undefined) throw new Error(`no hay botón «${texto}»`);
   return encontrado;
 }
@@ -274,23 +275,18 @@ describe('la lista de elementos del paso', () => {
     montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
     irAPaso('times');
 
-    const filas = [...document.querySelectorAll('.lista-paso li')].map(
-      (li) => li.textContent?.trim() ?? '',
-    );
-    expect(filas.some((f) => f.startsWith('Task_PrepareService'))).toBe(true);
-    expect(filas.find((f) => f.startsWith('Task_PrepareService'))).toContain(en.escenario.sinResumen);
+    // Rows are found by their `data-id` (#447): the visible text is the element's name.
+    const fila = (id: string): string =>
+      document.querySelector(`.lista-paso li:has(button[data-id="${id}"])`)?.textContent ?? '';
+    expect(fila('Task_PrepareService')).toContain(en.escenario.sinResumen);
     // La que sí lo tiene lo enseña con el nombre de su distribución.
-    expect(filas.find((f) => f.startsWith('Task_RegisterRequest'))).toContain(
-      en.escenario.distribuciones['constant'],
-    );
+    expect(fila('Task_RegisterRequest')).toContain(en.escenario.distribuciones['constant']);
   });
 
   it('una fila de la lista selecciona el elemento en el lienzo', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('resources');
-    const fila = [...document.querySelectorAll('.lista-paso li button')].find(
-      (b) => b.textContent?.trim() === 'Task_PrepareService',
-    ) as HTMLButtonElement;
+    const fila = document.querySelector<HTMLButtonElement>('.lista-paso li button[data-id="Task_PrepareService"]')!;
     expect(fila).toBeInstanceOf(HTMLButtonElement);
     act(() => {
       fila.dispatchEvent(new MouseEvent('click', { bubbles: true }));

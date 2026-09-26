@@ -16,7 +16,7 @@ import { useStrings } from '../i18n';
 import { DENSIDAD_IDS, type Densidad } from '../ids';
 import type { Theme } from '../theme/applyTheme';
 import type { TemaGuardado } from '../theme/temas';
-import { Apariencia } from './Apariencia';
+import { Apariencia, type Ranuras } from './Apariencia';
 import { Atajos, type GrupoAtajos } from './Atajos';
 import { ATAJOS, etiqueta, MAC, type GrupoAtajo } from '../atajos';
 
@@ -35,8 +35,15 @@ export interface AjustesProps {
   readonly temas: readonly TemaGuardado[];
   readonly densidad: Densidad;
   readonly onDensidad: (densidad: Densidad) => void;
+  /** «Advanced» (#447): BPMN ids next to names in the element lists, heading and ⌘K. */
+  readonly avanzado: boolean;
+  readonly onAvanzado: (valor: boolean) => void;
   readonly onTemas: (temas: readonly TemaGuardado[], seleccion?: string) => void;
   readonly onSeleccionar: (id: string) => void;
+  readonly seguir: boolean;
+  readonly onSeguir: (seguir: boolean) => void;
+  readonly ranuras: Ranuras;
+  readonly onRanura: (esquema: keyof Ranuras, id: string) => void;
   readonly abrirAcerca: () => void;
   /** Closes the `<dialog>` imperatively — needed only by the header's «About» button, which is
    * not a `type="submit"` of the form (that one already closes the dialog on its own). */
@@ -127,6 +134,15 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
               {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
             </select>
           </div>
+          <div className="fila">
+            <span>{S.ajustes.avanzado}</span>
+            {/* Not `.campo`: inside a `.fila` that class is a stretched column, and App's tests
+                find the bottleneck switch as the first `.campo.interruptor`. */}
+            <label className="interruptor">
+              <input type="checkbox" checked={props.avanzado} onChange={(e) => props.onAvanzado(e.target.checked)} />
+              {S.ajustes.avanzadoAyuda}
+            </label>
+          </div>
         </section>
         <section className="ajustes-panel" role="tabpanel" id="ajustes-panel-apariencia" aria-labelledby="ajustes-tab-apariencia" hidden={seccion !== 'apariencia'}>
           <Apariencia
@@ -135,6 +151,10 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
             temas={props.temas}
             onTemas={props.onTemas}
             onSeleccionar={props.onSeleccionar}
+            seguir={props.seguir}
+            onSeguir={props.onSeguir}
+            ranuras={props.ranuras}
+            onRanura={props.onRanura}
           />
         </section>
         <section className="ajustes-panel" role="tabpanel" id="ajustes-panel-atajos" aria-labelledby="ajustes-tab-atajos" hidden={seccion !== 'atajos'}>

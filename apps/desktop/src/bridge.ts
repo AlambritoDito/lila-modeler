@@ -138,7 +138,20 @@ export interface LilaBridge {
   readSettings(): Promise<Ajustes>;
   /** FUSIONA con lo guardado: mandar solo `{ tema }` no borra la densidad. */
   writeSettings(ajustes: Ajustes): Promise<void>;
+
+  /**
+   * Saves the diagram as an image (#451) through the native save dialog, proposing
+   * `<nombre>.<tipo>`. `datos` is the SVG text for `svg` and `pdf` (main prints the PDF from it in
+   * a hidden window) and the PNG bytes for `png`. Resolves to the path written, or `null` if the
+   * dialog was cancelled.
+   */
+  exportar(exportacion: Exportacion): Promise<string | null>;
 }
+
+/** What `exportar` saves (#451). */
+export type Exportacion =
+  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf'; readonly datos: string }
+  | { readonly nombre: string; readonly tipo: 'png'; readonly datos: Uint8Array };
 
 /**
  * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`
@@ -158,12 +171,25 @@ export interface Ajustes {
   readonly idioma?: string;
   /** Temas creados por el usuario en Ajustes → Apariencia (LILA-114). */
   readonly temas?: readonly TemaGuardado[];
+  /**
+   * Follow the system's light/dark scheme (#472); missing means on. While on, the applied theme is
+   * `temaClaro` or `temaOscuro` and `tema` is only the last one picked by hand.
+   */
+  readonly seguirSistema?: boolean;
+  /** Theme id used while the system is light (#472); missing means Lila Light. */
+  readonly temaClaro?: string;
+  /** Theme id used while the system is dark (#472); missing means Lila Dark. */
+  readonly temaOscuro?: string;
+  /** The one-time «theme changed with the system» prompt was already shown (#472). */
+  readonly avisoSeguirSistema?: boolean;
   /** Width of the right panel in px (design 2a); the renderer clamps it to 300–520. */
   readonly panelAncho?: number;
   /** Width of the shape palette in Model, in px (#406); the renderer clamps it to 180–360. */
   readonly paletaAncho?: number;
   /** Width of the scenario rail in Simulate, in px (#406); the renderer clamps it to 160–320. */
   readonly railAncho?: number;
+  /** Settings → General → «Advanced» (#447): BPMN ids shown next to names. Absent means off. */
+  readonly avanzado?: boolean;
   /**
    * Which regions are shown, per mode (#412). Always written whole: `withAjustes` merges shallowly,
    * so a partial map would forget the other modes. A missing field means visible.
@@ -215,6 +241,9 @@ export type MenuAction =
   | 'guardar'
   | 'guardarComo'
   | 'guardarComoCarpeta'
+  | 'exportarSvg'
+  | 'exportarPng'
+  | 'exportarPdf'
   | { readonly openRecent: string }
   | { readonly atajo: string };
 

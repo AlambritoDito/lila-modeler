@@ -78,3 +78,9 @@ it('a scenario entry for an unknown id cites its path exactly once (#419)', asyn
   expect(line).toMatch(/^E-ELEMENTO-DESCONOCIDO: elements\.Tarea_fantasma: /);
   expect(line.split('elements.Tarea_fantasma')).toHaveLength(2);
 });
+
+it('a message intermediate catch event still stops Run with E-NOSOP, even though it only warns while modelling (#455)', async () => {
+  const conMensaje = xml.replace(/<bpmn:task (id="[^"]+")/, '<bpmn:intermediateCatchEvent $1').replace(/<\/bpmn:task>/, '<bpmn:messageEventDefinition id="Def_msg"/></bpmn:intermediateCatchEvent>');
+  expect(conMensaje).toContain('messageEventDefinition');
+  await expect(prepareSimulation(conMensaje, 'as-is.scenario.json', { 'as-is.scenario.json': raw }, 'model.bpmn', { locale: 'en' })).rejects.toThrow(/E-NOSOP: .*message event not supported by the simulator/);
+});

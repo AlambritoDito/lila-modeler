@@ -10,7 +10,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { About, Karaoke, KARAOKE_DURACION_TOTAL_MS } from './About';
+import { About, Karaoke, KARAOKE_DURACION_TOTAL_MS, KARAOKE_RETRASO_MS } from './About';
 import { setLocale } from './i18n';
 import { version } from '../package.json';
 
@@ -167,6 +167,20 @@ it('the key field offers no autocomplete or spellcheck (QA of #387, Low)', async
 });
 
 // ---------- karaoke ----------
+
+it('plays at half speed (#446: the words used to go by too fast to read)', async () => {
+  // The owner asked to double the per-word stagger; the epic line's delay and the total derive
+  // from it (see `About.tsx`), so a floor on the constant plus proof the DOM actually uses it —
+  // not the previous, now-doubled value — is enough to guard the regression.
+  expect(KARAOKE_RETRASO_MS).toBeGreaterThanOrEqual(360);
+  await montarKaraoke();
+  const palabras = document.querySelectorAll('.karaoke-palabra');
+  expect(palabras.length).toBeGreaterThan(1);
+  expect((palabras[1] as HTMLElement).style.animationDelay).toBe(`${KARAOKE_RETRASO_MS}ms`);
+  expect(Number.parseInt((palabras[1] as HTMLElement).style.animationDuration, 10)).toBeGreaterThanOrEqual(500);
+  // The total still covers every word's stagger plus room for the epic line and the final hold.
+  expect(KARAOKE_DURACION_TOTAL_MS).toBeGreaterThan(palabras.length * KARAOKE_RETRASO_MS);
+});
 
 it('the karaoke shows the three lines and only at the end opens its link and finishes', async () => {
   vi.useFakeTimers();
