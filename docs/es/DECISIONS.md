@@ -464,6 +464,74 @@ Techos, todos deliberados:
 
 ---
 
+## ADR-029 — El repositorio: un `.lila` puede contener una organización entera
+
+**Estado:** Aceptada (dirección, decidida por Brito el 2026-09-26). El layout exacto de abajo lo fija el primer ticket de implementación; nada de esto está implementado todavía.
+
+Lila Modeler crece de alternativa a Bizagi a plataforma de modelado, análisis, diseño, simulación
+y calidad al estilo de ADONIS: mapas de procesos desde los macroprocesos, RACI, riesgos y
+controles, Ishikawa y otros análisis, dashboards, gestión de calidad. La automatización queda
+fuera: motores como n8n consumen el BPMN estándar y la API/MCP. La única suposición de ADR-018 y
+ADR-027 que no sobrevive es **un proyecto es un modelo**. La sustituye el **repositorio**: una
+carpeta (en zip, un `.lila`) que puede contener un proceso o una organización entera.
+
+```
+mi-empresa/                          carpeta (git) · zip = mi-empresa.lila
+  lila-repository.json               manifiesto, version 2
+  maps/<slug>.map.json               mapas de procesos; cada nodo apunta a un modelo por id
+  processes/<slug>/                  exactamente el layout de proyecto de la versión 1:
+    model.bpmn                         un proceso por .bpmn (pools solo para colaboraciones)
+    <nombre>.scenario.json
+    runs/<id>.result.json
+    process.json                       dueño, estado Borrador/Liberado, vigencia, padre
+  analysis/<slug>.<tipo>.json        Ishikawa y otros análisis
+  catalog/<tipo>/<id>.json           roles, unidades, sistemas, documentos, riesgos, controles, KPIs, requisitos
+  dashboards/<slug>.dashboard.json   solo la definición; las cifras se calculan
+  records/<tipo>/<id>.json           registros de calidad opcionales (ver abajo)
+```
+
+Reglas:
+
+- **Un proyecto de la versión 1 es un repositorio con un proceso.** `processes/<slug>/` es el
+  layout de ADR-027 byte a byte, así que un `.lila` o carpeta de la versión 1 se abre como
+  repositorio de un proceso y nada se migra. El lector de la versión 2 acepta la 1; el de la
+  versión 1 rechaza la 2, como ya exige `docs/PROJECT_FORMAT.md` § Versioning.
+- **Un proceso, un `.bpmn`.** Cada proceso tiene su dueño, versión y liberación, así que es su
+  propio archivo. Varios `bpmn:process` en un archivo solo en diagramas de colaboración. Las
+  pestañas del lienzo son los modelos abiertos del repositorio; `+` crea un modelo en el mismo
+  repositorio.
+- **Referencias por id, nunca por ruta.** Las carpetas se pueden renombrar o mover sin romper
+  enlaces. El índice id → archivo se deriva al abrir y nunca se guarda.
+- **Un archivo por objeto del catálogo.** Mantiene separados los merges de git y las ediciones
+  concurrentes, y corresponde uno a uno con una fila del servidor. Completa el `catalog.json` de
+  ADR-013.
+- **BPMN es el único formato estándar.** Mapas, análisis, organigramas y dashboards no tienen un
+  estándar de intercambio útil, así que son JSON propio con esquema versionado (ADR-001: BPMN para
+  intercambiar, no necesariamente el único almacenamiento).
+- **La carpeta es la exportación sin pérdida del servidor.** La modalidad servidor (ADR-023)
+  guarda los mismos objetos como filas; ir de carpeta a servidor y de vuelta no pierde nada. La
+  colaboración en tiempo real llega con el servidor (un CRDT sobre estos objetos) y no cambia el
+  formato.
+- **Las corridas son opcionales en un `.lila` compartido.** Son lo único pesado; el modelo es
+  texto y se comprime bien.
+
+**Registros de calidad** — auditorías, hallazgos, no conformidades, acciones correctivas (CAPA) —
+son datos operativos: cambian a diario, los tocan muchas personas y necesitan asignación, fechas
+límite, avisos e historial. Su lugar es la modalidad servidor. Quien no tenga servidor (un
+consultor que trabaja solo, por ejemplo) puede guardarlos en el repositorio bajo `records/`, por
+elección propia y sin recomendarlo: la interfaz lo advierte, y los archivos no protegen contra dos
+personas editando dos copias. Los registros apuntan a objetos del diseño por id (NC-034 → control,
+proceso), que es lo que permite a un dashboard contar no conformidades por control.
+
+**Consecuencia para la app:** el `ProjectDocument` completo deja de cruzar el IPC y el espejo de
+`localStorage` de una vez. `ProjectStore` pasa a listar/leer/escribir por objeto con carga
+perezosa; la demo en línea puede mantener un repositorio pequeño en memoria.
+
+No se decide aquí, y no se construye hasta que se pida uno por uno: los esquemas de mapas,
+análisis, dashboards y registros, el flujo de liberación, el CRDT del servidor.
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).
