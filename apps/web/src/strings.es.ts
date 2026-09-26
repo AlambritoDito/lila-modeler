@@ -631,6 +631,20 @@ export const es: Strings = {
     id: 'Id',
     copiar: 'Copiar',
     copiado: 'Copiado',
+    /** Colores por elemento (#452): la fila del panel, la entrada del context pad y los ocho colores. */
+    color: 'Color',
+    cambiarColor: 'Cambiar color',
+    colores: {
+      ninguno: 'Ninguno',
+      azul: 'Azul',
+      verde: 'Verde',
+      amarillo: 'Amarillo',
+      naranja: 'Naranja',
+      rojo: 'Rojo',
+      morado: 'Morado',
+      turquesa: 'Turquesa',
+      gris: 'Gris',
+    },
 
     descripcion: 'Descripción',
     descripcionProceso: 'Descripción del proceso',

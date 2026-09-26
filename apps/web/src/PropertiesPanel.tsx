@@ -22,6 +22,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
+import { COLORES, colorComun, pintable, type ColorId, type ElementoColoreable } from './colores';
 import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
@@ -334,11 +335,19 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
 
   // Sin lienzo, o varios elementos a la vez: el mensaje suelto de siempre. Lo de varios sigue
   // sin acción propia (LILA-060); la cabecera rica de abajo es solo para «nada» o «uno».
-  if (modelador === null || seleccion.length > 1) {
+  if (modelador === null) return <p className="vacio">{S.propiedades.sinSeleccion}</p>;
+  if (seleccion.length > 1) {
+    // Colour is the one action that works on several at once (#452): one command, one ⌘Z.
+    const pintar = modelador.servicios.colores?.pintar;
     return (
-      <p className="vacio">
-        {seleccion.length > 1 ? S.propiedades.variosSeleccionados(seleccion.length) : S.propiedades.sinSeleccion}
-      </p>
+      <>
+        <p className="vacio">{S.propiedades.variosSeleccionados(seleccion.length)}</p>
+        {pintar !== undefined && (
+          <div className="campos">
+            <Colores elementos={seleccion} pintar={pintar} refrescar={refrescar} />
+          </div>
+        )}
+      </>
     );
   }
 
@@ -350,7 +359,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
     <>
       <CabeceraElemento elemento={elemento} avanzado={avanzado} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -469,7 +478,11 @@ function Propiedades({
   escritor,
   refrescar,
   avanzado = false,
-}: PropsPestana & { avanzado?: boolean }): React.JSX.Element {
+  pintar,
+}: PropsPestana & {
+  avanzado?: boolean;
+  pintar?: ((elementos: ElementoColoreable[], color: ColorId | null) => void) | undefined;
+}): React.JSX.Element {
   const S = useStrings();
   const [copiado, setCopiado] = useState(false);
   const bo = elemento.businessObject;
@@ -563,6 +576,48 @@ function Propiedades({
           </div>
         </div>
       )}
+
+      {pintar !== undefined && <Colores elementos={[elemento]} pintar={pintar} refrescar={refrescar} />}
+    </div>
+  );
+}
+
+/**
+ * «None» plus the eight colours of `colores.ts` (#452), for one element or several. Shapes and
+ * connections only: a process (its DI is the plane) has nothing to paint. A label paints the
+ * element it belongs to.
+ */
+function Colores({ elementos, pintar, refrescar }: {
+  elementos: ElementoLienzo[];
+  pintar: (elementos: ElementoColoreable[], color: ColorId | null) => void;
+  refrescar: () => void;
+}): React.JSX.Element | null {
+  const S = useStrings();
+  const reales = [...new Set(elementos.map((el) =>
+    (el.type === 'label' && el.labelTarget !== undefined ? el.labelTarget : el) as ElementoColoreable))].filter(pintable);
+  if (reales.length === 0) return null;
+  const actual = colorComun(reales);
+  return (
+    <div className="campo">
+      <span>{S.propiedades.color}</span>
+      <div className="colores" role="group" aria-label={S.propiedades.color}>
+        {[{ id: null, fill: undefined, stroke: undefined }, ...COLORES].map((c) => (
+          <button
+            key={c.id ?? 'ninguno'}
+            type="button"
+            className={c.id === null ? 'color-muestra color-ninguno' : 'color-muestra'}
+            aria-label={S.propiedades.colores[c.id ?? 'ninguno']}
+            title={S.propiedades.colores[c.id ?? 'ninguno']}
+            aria-pressed={actual === c.id}
+            // Diagram colours, fixed hex that persist in the XML (`colores.ts`), not theme tokens.
+            style={c.fill === undefined ? undefined : { background: c.fill, borderColor: c.stroke }}
+            onClick={() => {
+              pintar(reales, c.id);
+              refrescar();
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

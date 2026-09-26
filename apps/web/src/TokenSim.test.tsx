@@ -153,14 +153,14 @@ describe('«Validar rutas»: el diagrama conserva los colores del tema (#264)', 
   }
 
   /** Dobles de los tres servicios de bpmn-js que usa `ColoresNeutrosDelTema`. */
-  function inyectorDePrueba(): {
+  function inyectorDePrueba(extra: object[] = []): {
     activar: () => void;
     pintados: Array<{ elemento: object; id: string; colores: { fill?: string; stroke?: string } }>;
     injector: Injector;
   } {
     const escuchas: Array<(evento: { active: boolean }) => void> = [];
     const pintados: Array<{ elemento: object; id: string; colores: { fill?: string; stroke?: string } }> = [];
-    const elementos = [{ id: 'Tarea_1' }, { id: 'Flujo_1' }];
+    const elementos = [{ id: 'Tarea_1' }, { id: 'Flujo_1' }, ...extra];
     const dobles = {
       eventBus: ['value', {
         // `EventBus.on` admite `(evento, fn)` y `(evento, prioridad, fn)`.
@@ -225,6 +225,18 @@ describe('«Validar rutas»: el diagrama conserva los colores del tema (#264)', 
     // Los dos valores del bug: figura blanca con borde casi negro sobre el lienzo oscuro.
     expect(pintados.map((p) => p.colores.fill)).not.toContain('#fff');
     expect(pintados.map((p) => p.colores.stroke)).not.toContain('#212121');
+  });
+
+  it('deja con su color a un elemento pintado (#452): su etiqueta sigue a su trazo, no al tema', () => {
+    conTema({ '--diagram-fill': '#1F1A36', '--diagram-stroke': '#D9D2F0' });
+    const pintada = {
+      id: 'Tarea_azul',
+      di: { $type: 'bpmndi:BPMNShape', get: (n: string) => (n === 'color:background-color' ? '#BBDEFB' : undefined) },
+    };
+    const { pintados, activar } = inyectorDePrueba([pintada]);
+    activar();
+    expect(pintados.map((p) => p.elemento)).not.toContain(pintada);
+    expect(pintados).toHaveLength(2);
   });
 
   it('no pinta nada al salir del modo (de eso se encarga el `elementColors` del módulo)', () => {
