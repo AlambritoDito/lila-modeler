@@ -56,10 +56,10 @@ class MinimapaLila extends Minimapa {
     this._firstDebounceTime = null;
 
     const visible = this._canvas.viewbox();
-    const numeros = [visible.x, visible.y, visible.width, visible.height, visible.inner.x, visible.inner.y];
+    const numeros = [visible.x, visible.y, visible.width, visible.height, visible.inner.x, visible.inner.y, visible.inner.width, visible.inner.height];
     if (!numeros.every(Number.isFinite)) return;
 
-    const marco = this._lastViewbox = this._congelado ? this._lastViewbox : marcoMinimapa(visible.inner, visible);
+    const marco = this._lastViewbox = (this._congelado && this._lastViewbox) || marcoMinimapa(visible.inner, visible);
     this._svg.setAttribute('viewBox', `${marco.x} ${marco.y} ${marco.width} ${marco.height}`);
     this._viewport.setAttribute('x', String(visible.x));
     this._viewport.setAttribute('y', String(visible.y));
