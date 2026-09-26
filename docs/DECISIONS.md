@@ -463,6 +463,71 @@ Ceilings, all deliberate:
 
 ---
 
+## ADR-029 — The repository: one `.lila` can hold a whole organization
+
+**Status:** Accepted (direction, decided by Brito on 2026-09-26). The exact layout below is settled by the first implementation ticket; nothing in it is implemented yet.
+
+Lila Modeler grows past a Bizagi alternative into a modelling, analysis, design, simulation and
+quality platform in the spirit of ADONIS: process maps down from macroprocesses, RACI, risks and
+controls, Ishikawa and other analyses, dashboards, quality management. Automation stays out —
+engines such as n8n consume the standard BPMN and the API/MCP. The one assumption of ADR-018 and
+ADR-027 that does not survive that is **a project is one model**. It is replaced by a
+**repository**: a folder (zipped, a `.lila`) that can hold one process or an entire organization.
+
+```
+mi-empresa/                          folder (git) · zip = mi-empresa.lila
+  lila-repository.json               manifest, version 2
+  maps/<slug>.map.json               process maps; each node points at a model by id
+  processes/<slug>/                  exactly the version 1 project layout:
+    model.bpmn                         one process per .bpmn (pools only for collaborations)
+    <name>.scenario.json
+    runs/<id>.result.json
+    process.json                       owner, status Draft/Released, validity, parent
+  analysis/<slug>.<kind>.json        Ishikawa and other analyses
+  catalog/<type>/<id>.json           roles, units, systems, documents, risks, controls, KPIs, requirements
+  dashboards/<slug>.dashboard.json   the definition only; figures are computed
+  records/<type>/<id>.json           optional quality records (see below)
+```
+
+Rules:
+
+- **A version 1 project is a repository with one process.** `processes/<slug>/` is the ADR-027
+  layout byte for byte, so a version 1 `.lila` or folder opens as a one-process repository and
+  nothing migrates. A version 2 reader accepts version 1; a version 1 reader refuses version 2, as
+  `docs/PROJECT_FORMAT.md` § Versioning already requires.
+- **One process, one `.bpmn`.** Each process has its own owner, version and release, so it is
+  its own file. Several `bpmn:process` in one file only for collaboration diagrams. The canvas
+  tabs are the repository's open models; `+` creates a model in the same repository.
+- **References by id, never by path.** Folders can be renamed or moved without breaking links.
+  The id → file index is derived on open and never stored.
+- **One file per catalog object.** It keeps git merges and concurrent edits apart, and it maps
+  one to one onto a server row. Completes ADR-013's `catalog.json`.
+- **BPMN is the only standard format.** Maps, analyses, org charts and dashboards have no useful
+  interchange standard, so they are our own JSON with a versioned schema (ADR-001: BPMN for
+  interchange, not necessarily the only store).
+- **The folder is the server's lossless export.** Server mode (ADR-023) stores the same objects
+  as rows; going folder → server → folder loses nothing. Real-time collaboration arrives with the
+  server (a CRDT over these objects) and does not change the format.
+- **Runs are optional in a shared `.lila`.** They are the only heavy part; the model is text and
+  compresses well.
+
+**Quality records** — audits, findings, nonconformities, corrective actions (CAPA) — are
+operational data: they change daily, many people touch them, and they need assignment, due dates,
+notifications and an audit trail. Their home is server mode. A user without a server (a consultant
+working alone, say) may keep them in the repository under `records/`, opt-in and not recommended:
+the UI says so, and the files carry no guarantee against two people editing two copies. Records
+point at design objects by id (NC-034 → control, process), which is what lets a dashboard count
+nonconformities per control.
+
+**Consequence for the app:** the whole `ProjectDocument` no longer crosses IPC and the
+`localStorage` mirror at once. `ProjectStore` becomes list/read/write per object with lazy loading;
+the online demo may keep a small repository in memory.
+
+Not decided here, and not built until asked for one by one: the schemas of maps, analyses,
+dashboards and records, the release workflow, the server's CRDT.
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).
