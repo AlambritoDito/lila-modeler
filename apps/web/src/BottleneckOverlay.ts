@@ -35,9 +35,9 @@ import type GraphicsFactory from 'diagram-js/lib/core/GraphicsFactory';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { ElementLike } from 'diagram-js/lib/model/Types';
 import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
-import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila/engine/format';
-import type { ResolvedScenario } from '@lila/engine/schema';
-import type { RunResult } from '@lila/engine';
+import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { RunResult } from '@lila-modeler/engine';
 import { strings } from './i18n';
 
 const PRIORITY = 1500;

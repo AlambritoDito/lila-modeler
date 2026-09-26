@@ -42,9 +42,9 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm run build -w @lila/engine
-      - run: npm run build -w @lila/web
-      - run: npm run build -w @lila/desktop
+      - run: npm run build -w @lila-modeler/engine
+      - run: npm run build -w @lila-modeler/web
+      - run: npm run build -w @lila-modeler/desktop
       - run: npx electron-builder ${{ matrix.flags }} --publish never
         working-directory: apps/desktop
       - name: Verify macOS artifact is arm64, ad-hoc signed and carries the tagged version

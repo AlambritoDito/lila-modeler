@@ -6,12 +6,12 @@
  * Un objeto inline se ancla a un archivo virtual `<escenario-inline>.json` en el cwd del proceso:
  * si declara `extends`, esa referencia (y cualquier `model` relativo) se resuelve contra el cwd,
  * igual que si el agente hubiera guardado el objeto ahí antes de pasarlo. `loadResolvedScenario`
- * (de `@lila/engine/cli-shared`, LILA-054) hace la misma validación de escenario resuelto para
+ * (de `@lila-modeler/engine/cli-shared`, LILA-054) hace la misma validación de escenario resuelto para
  * ambos casos: no se duplica frente a la CLI.
  */
-import { absolutePath, loadResolvedScenario, readJsonFile } from '@lila/engine/cli-shared';
-import { messages, type Locale } from '@lila/engine/messages';
-import type { ResolvedScenario } from '@lila/engine/schema';
+import { absolutePath, loadResolvedScenario, readJsonFile } from '@lila-modeler/engine/cli-shared';
+import { messages, type Locale } from '@lila-modeler/engine/messages';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 
 export type ScenarioInput = string | Record<string, unknown>;
 

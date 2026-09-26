@@ -58,7 +58,7 @@ simplification for provenance only; it is never used by the application.
 
 ## Reproducible exports
 
-Run `npm run icons -w @lila/desktop` on macOS with Playwright available. Optional
+Run `npm run icons -w @lila-modeler/desktop` on macOS with Playwright available. Optional
 `PLAYWRIGHT_MODULE` points to its index.mjs; `CHROME_PATH` selects installed Chrome,
 matching the existing screenshot tools. No AI calls or network access are involved.
 Canvas rescales the original and applies only the native icon's container. `sips`
@@ -92,5 +92,5 @@ and writes review screenshots into `output/branding/review/`. After building web
 the default base and desktop, `node tools/check-branding-desktop.mjs` uses a temporary
 profile to verify that file-open requests received during startup are preserved.
 It uses the existing `pendingOpenPath` handshake, without new IPC channels.
-`npm run smoke -w @lila/desktop` also checks logo loading and startup dismissal.
+`npm run smoke -w @lila-modeler/desktop` also checks logo loading and startup dismissal.
 See [review/README.md](review/README.md) for the saved visual evidence.

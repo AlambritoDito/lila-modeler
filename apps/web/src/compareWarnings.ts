@@ -11,9 +11,9 @@
  * `run` (`packages/engine/src/scenario.ts`, `RunSchema`) para que `CompareView` decida qué no
  * mostrar como si fuera comparable.
  */
-import type { BaseTimeUnit } from '@lila/engine/format';
-import type { RunResult } from '@lila/engine';
-import type { ResolvedScenario } from '@lila/engine/schema';
+import type { BaseTimeUnit } from '@lila-modeler/engine/format';
+import type { RunResult } from '@lila-modeler/engine';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import { strings } from './i18n';
 
 /**

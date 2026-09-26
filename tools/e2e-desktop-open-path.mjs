@@ -6,7 +6,7 @@
  * `tools/check-branding-desktop.mjs`. No dependency is added to the repo: Playwright lives
  * outside it (`PLAYWRIGHT_MODULE` points at that install).
  *
- *   npm run build -w @lila/engine && npm run build -w @lila/web && npm run build -w @lila/desktop
+ *   npm run build -w @lila-modeler/engine && npm run build -w @lila-modeler/web && npm run build -w @lila-modeler/desktop
  *   PLAYWRIGHT_MODULE=<qa-runtime>/node_modules/playwright/index.mjs node tools/e2e-desktop-open-path.mjs
  *
  * Every profile is a fresh `--user-data-dir` under a temp work dir; every fixture lives under a
@@ -36,10 +36,10 @@ await mkdir(DOWNLOADS, { recursive: true });
 const EVIDENCE_DIR = process.env.LILA_E2E_EVIDENCE_DIR || join(WORK, 'evidence');
 await mkdir(EVIDENCE_DIR, { recursive: true });
 
-const { parseBpmn } = await import('@lila/engine/bpmn');
-const { simulate } = await import('@lila/engine');
-const { ScenarioSchema } = await import('@lila/engine/schema');
-const { decodeLila, encodeLila } = await import('@lila/engine/project');
+const { parseBpmn } = await import('@lila-modeler/engine/bpmn');
+const { simulate } = await import('@lila-modeler/engine');
+const { ScenarioSchema } = await import('@lila-modeler/engine/schema');
+const { decodeLila, encodeLila } = await import('@lila-modeler/engine/project');
 
 const PEDIDO_DIR = join(ROOT, 'examples/pedido');
 const AS_IS = 'as-is.scenario.json';

@@ -5,17 +5,17 @@
  * (LILA-057) sigue en otra rama.
  *
  * `to-be-3-cajeros.scenario.json` declara `"extends": "as-is.scenario.json"` (solo sube
- * `cajero.capacity` a 3): se resuelve con `resolveExtends` (`@lila/engine/schema`) pasándole un
+ * `cajero.capacity` a 3): se resuelve con `resolveExtends` (`@lila-modeler/engine/schema`) pasándole un
  * `ScenarioReader` que lee de los dos JSON ya importados por Vite, en vez de `node:fs` — la
  * cadena de herencia es la misma función que usa `lila compare` en la CLI, solo cambia de dónde
  * lee cada archivo.
  */
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { resolveExtends, ScenarioSchema, type ResolvedScenario } from '@lila/engine/schema';
-import type { BaseTimeUnit } from '@lila/engine/format';
-import { compare, type CompareResult, type ProcessIR, type RunResult, type SimulationProgress } from '@lila/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { resolveExtends, ScenarioSchema, type ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { BaseTimeUnit } from '@lila-modeler/engine/format';
+import { compare, type CompareResult, type ProcessIR, type RunResult, type SimulationProgress } from '@lila-modeler/engine';
 import { runInWorker } from './simulationClient.js';
 import { CompareView } from './CompareView.js';
 import { strings } from './i18n';

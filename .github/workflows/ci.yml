@@ -20,7 +20,7 @@ jobs:
           cache: npm
       - run: npm ci
       # El build va antes de los tests: packages/mcp y apps/web consumen
-      # @lila/engine por sus subpaths publicados (dist/), no por las fuentes.
+      # @lila-modeler/engine por sus subpaths publicados (dist/), no por las fuentes.
       - run: npm run check:links
       - run: npm run build
       - run: npm test
@@ -30,4 +30,4 @@ jobs:
       - run: npm run typecheck
       # `npm run build` (tsc --build) no produce la app web: solo Vite la compila.
       # Sin este paso un import roto o un asset ausente en apps/web pasa el CI.
-      - run: npm run build -w @lila/web
+      - run: npm run build -w @lila-modeler/web

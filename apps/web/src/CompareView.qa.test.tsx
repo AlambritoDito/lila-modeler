@@ -18,9 +18,9 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, test } from 'vitest';
 
-import { parseBpmn } from '@lila/engine/bpmn';
-import { resolveExtends } from '@lila/engine/schema';
-import { formatDuration } from '@lila/engine/format';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { resolveExtends } from '@lila-modeler/engine/schema';
+import { formatDuration } from '@lila-modeler/engine/format';
 import {
   compare,
   simulate,
@@ -32,7 +32,7 @@ import {
   type ReplicationSummary,
   type RunResult,
   type SimScenario,
-} from '@lila/engine';
+} from '@lila-modeler/engine';
 
 import { compareColumns, CompareView, compareMetricLabel, visibleCompareRows } from './CompareView.js';
 import { DataTable, sortRows } from './ResultsView.js';

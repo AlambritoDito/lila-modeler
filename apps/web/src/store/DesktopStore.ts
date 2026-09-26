@@ -9,8 +9,8 @@
  * importando de aquí), que revienta con `TS6059` — ver el comentario de cabecera de
  * `apps/desktop/src/projectTypes.ts`.
  */
-import type { RunResult } from '@lila/engine';
-import type { Scenario } from '@lila/engine/schema';
+import type { RunResult } from '@lila-modeler/engine';
+import type { Scenario } from '@lila-modeler/engine/schema';
 import type { SaveOutcome, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import type {
   ProcessData,
@@ -39,9 +39,9 @@ function requireWindowLila(): LilaBridge {
  * `App.tsx#activate` lee `doc.problems` directamente del documento que devuelven
  * `createProject`/`openProject`/`saveProject`/`openRecent`). También se expone en
  * `this.problems`/`lastProblems` por compatibilidad con el resto de esta clase, y se castea
- * `runs[].result` de `unknown` (lo que tipa el puente, que no depende de `@lila/engine`) a
+ * `runs[].result` de `unknown` (lo que tipa el puente, que no depende de `@lila-modeler/engine`) a
  * `RunResult` — el único cast de esta clase: no oculta una invalidez de dominio, solo repara una
- * frontera IPC entre dos paquetes que no comparten el tipo de `@lila/engine`, el valor en tiempo
+ * frontera IPC entre dos paquetes que no comparten el tipo de `@lila-modeler/engine`, el valor en tiempo
  * de ejecución es exactamente el `RunResult` que `putRun`/`saveProject` escribieron.
  */
 function toProjectDocument(

@@ -1,5 +1,5 @@
 /**
- * Lógica compartida entre `cli.ts` (`lila run`/`lila compare`) y `@lila/mcp`
+ * Lógica compartida entre `cli.ts` (`lila run`/`lila compare`) y `@lila-modeler/mcp`
  * (`run_simulation`/`compare_scenarios`, LILA-054): cargar y validar un modelo, resolver un
  * escenario con `extends`, aplicar overrides de `--seed`/`--replications`, fusionar avisos de
  * frontera (`resultWithBoundaryWarnings`), los avisos de `lila compare` que no caben en
@@ -68,7 +68,7 @@ export function readJsonFile(file: string, locale: Locale = 'en'): unknown {
 }
 
 /**
- * `read` es `readJsonFile` por defecto (la ruta es un archivo real, como en la CLI). `@lila/mcp`
+ * `read` es `readJsonFile` por defecto (la ruta es un archivo real, como en la CLI). `@lila-modeler/mcp`
  * pasa un lector propio para aceptar un escenario ya en memoria (`run_simulation`/
  * `compare_scenarios` con `scenario` inline): `file` es entonces una ruta virtual anclada al cwd
  * del proceso, y su `extends` (si lo tiene) sigue resolviéndose contra archivos reales.

@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { decodeLila, encodeLila } from '@lila/engine/project';
+import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SITE = join(ROOT, '_site');

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { buildDocs } from './build-docs.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build', '-w', '@lila/web'], {
+const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build', '-w', '@lila-modeler/web'], {
   cwd: root, stdio: 'inherit', env: { ...process.env, LILA_WEB_BASE: '/lila-modeler/app/' },
 });
 if (result.error) throw result.error;

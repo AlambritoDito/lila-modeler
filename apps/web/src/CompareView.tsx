@@ -8,7 +8,7 @@
  * resalta la celda cuyo texto mostrado difiere del de la base, ver `cellChanged()`; nunca la
  * columna base, que se compara contra sí misma.
  *
- * Los nombres de columna salen del mapa único de `@lila/engine/format` (docs/RESULTS_FORMAT.md
+ * Los nombres de columna salen del mapa único de `@lila-modeler/engine/format` (docs/RESULTS_FORMAT.md
  * §10, LILA-201), el mismo que usan `lila run`, `lila compare` y los CSV.
  *
  * ponytail: el subconjunto curado de KPIs sí se repite aquí en vez de importarse de
@@ -25,9 +25,9 @@ import {
   isDurationMetric,
   splitOutcomeMetric,
   type BaseTimeUnit,
-} from '@lila/engine/format';
-import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila/engine';
-import { compareWorkbook, type CompareEntry } from '@lila/engine/xlsx-report';
+} from '@lila-modeler/engine/format';
+import type { CompareResult, CompareRow, CompareScope, ProcessIR } from '@lila-modeler/engine';
+import { compareWorkbook, type CompareEntry } from '@lila-modeler/engine/xlsx-report';
 import {
   DataTable,
   downloadXlsx,

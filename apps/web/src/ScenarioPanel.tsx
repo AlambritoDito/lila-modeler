@@ -5,7 +5,7 @@
  * Tres decisiones que explican todo lo demás:
  *
  * 1. **Los formularios se generan desde el JSON Schema en tiempo de ejecución**, no a mano. El
- *    esquema sale de `toJsonSchema()` de `@lila/engine/schema` —el mismo que publica
+ *    esquema sale de `toJsonSchema()` de `@lila-modeler/engine/schema` —el mismo que publica
  *    `docs/scenario.schema.json`—, así que un campo nuevo en `scenario.ts` aparece en el panel
  *    sin tocar este archivo. Las uniones (`oneOf`/`anyOf`) se dibujan como un selector de
  *    variante más el cuerpo de la elegida: es lo que hace que las 14 distribuciones funcionen
@@ -39,7 +39,7 @@
  */
 import { useMemo, useState } from 'react';
 
-import type { ProcessIR } from '@lila/engine';
+import type { ProcessIR } from '@lila-modeler/engine';
 import {
   parseScenario,
   resolveExtends,
@@ -47,7 +47,7 @@ import {
   toJsonSchema,
   validateScenario,
   type ScenarioReader,
-} from '@lila/engine/schema';
+} from '@lila-modeler/engine/schema';
 
 import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { PASO_IDS, type PasoId } from './ids.js';

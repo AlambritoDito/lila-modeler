@@ -15,8 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, test } from 'vitest';
 
-import { parseBpmn } from '@lila/engine/bpmn';
-import { resolveExtends } from '@lila/engine/schema';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { resolveExtends } from '@lila-modeler/engine/schema';
 import {
   compare,
   simulate,
@@ -28,7 +28,7 @@ import {
   type ResourceMetrics,
   type RunResult,
   type SimScenario,
-} from '@lila/engine';
+} from '@lila-modeler/engine';
 
 import { CompareView, compareMetricLabel, visibleCompareRows, type CompareRunMeta } from './CompareView.js';
 import { setLocale } from './i18n';

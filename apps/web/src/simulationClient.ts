@@ -11,7 +11,7 @@
  * **rechaza** con `AbortError`. Recuperar el parcial exigiría o bien `SharedArrayBuffer` —y con él
  * cabeceras COOP/COEP que GitHub Pages (LILA-067) no sirve— o un `simulate` por trozos.
  */
-import type { ProcessIR, RunResult, EventLogRow, SimScenario, SimulationProgress } from '@lila/engine';
+import type { ProcessIR, RunResult, EventLogRow, SimScenario, SimulationProgress } from '@lila-modeler/engine';
 import type { DoneResponse, WorkerRequest, WorkerResponse } from './worker.js';
 import { getLocale, strings, type Locale } from './i18n';
 

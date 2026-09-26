@@ -12,9 +12,9 @@
  * is unavailable, corrupt or full, the store keeps working in memory and only warns on the
  * console.
  */
-import type { RunResult } from '@lila/engine';
-import type { Scenario } from '@lila/engine/schema';
-import { encodeLila } from '@lila/engine/project';
+import type { RunResult } from '@lila-modeler/engine';
+import type { Scenario } from '@lila-modeler/engine/schema';
+import { encodeLila } from '@lila-modeler/engine/project';
 import { readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 

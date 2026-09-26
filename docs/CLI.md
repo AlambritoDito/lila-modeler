@@ -2,7 +2,7 @@
 
 > Read this in: [Español](es/CLI.md)
 
-`lila` is the command-line front end of `@lila/engine`: the same validation and simulation
+`lila` is the command-line front end of `@lila-modeler/engine`: the same validation and simulation
 pipeline used by the web app, the desktop app and the MCP server, driven from a terminal. This
 page is the reference an agent or a script needs: every command with one real example, its exit
 codes, what `--json`/`--csv`/`--xlsx` write, and how to read the result.
@@ -27,10 +27,10 @@ registry lookup.
 `npx lila` only finds this CLI inside the checkout (after `npm ci`). Anywhere else it would fetch
 the unrelated `lila` package from npm, so from another directory call the bin directly (`node
 <checkout>/packages/engine/bin/lila.js …`) or use `npx --no lila …`, which refuses to install.
-Once published, use `npx @lila/engine@beta …`:
+Once published, use `npx @lila-modeler/engine@beta …`:
 
 ```bash
-npx @lila/engine@beta validate model.bpmn
+npx @lila-modeler/engine@beta validate model.bpmn
 ```
 
 ## `validate`
@@ -70,7 +70,7 @@ npx lila run \
 Exit code: `0`.
 
 - `--json <file>` writes the deterministic `RunResult` (`docs/RESULTS_FORMAT.md`) as one JSON
-  document. Its shape is `runResultSchema`, exported from `@lila/engine/result-schema` — validate
+  document. Its shape is `runResultSchema`, exported from `@lila-modeler/engine/result-schema` — validate
   against it before trusting a parsed file.
 - `--csv <directory>` writes `elements.csv`, `flows.csv`, `resources.csv`, `process.csv` (RFC
   4180) and `log.csv` (the event log, streamed while the run executes, ISO timestamps from
@@ -103,7 +103,7 @@ every element, resource, flow and outcome. `--json <file>` writes the `CompareRe
 
 ## `mcp`
 
-Starts the MCP server (`@lila/mcp`) over stdio, for an MCP client to launch — not something you
+Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you
 run directly in a terminal and read from. Details, tool contracts and client registration are in
 [`docs/MCP.md`](MCP.md); the underlying command is:
 
@@ -118,7 +118,7 @@ Apply to every subcommand, in any position on the command line:
 - `--lang en|es` — language of the output (messages, not column names or BPMN IDs, which are a
   stable contract). Default: `LILA_LANG`, then `LANG`, English if neither is set.
 - `-h`, `--help` — usage for `lila` or `lila <command> --help`.
-- `-v`, `--version`, or the `version` subcommand — prints the installed `@lila/engine` version
+- `-v`, `--version`, or the `version` subcommand — prints the installed `@lila-modeler/engine` version
   and exits `0`.
 
 ```bash
@@ -143,7 +143,7 @@ can decide without parsing prose:
 2. **Run with a fixed seed and enough replications** for a narrow confidence interval:
    `lila run model.bpmn scenario.json --seed 1 --replications 30 --json results/run.json`.
 3. **Read `results/run.json`** with any JSON tool. Its shape matches `docs/RESULTS_FORMAT.md`
-   and validates against `runResultSchema` (`@lila/engine/result-schema`); column names are the
+   and validates against `runResultSchema` (`@lila-modeler/engine/result-schema`); column names are the
    Bizagi-parity contract in `docs/BIZAGI_PARITY.md`, not renamed per language.
 4. **To evaluate a change**, write a second scenario that `extends` the first with only the
    changed keys (`docs/SCENARIO_FORMAT.md`), then `lila compare model.bpmn base.json

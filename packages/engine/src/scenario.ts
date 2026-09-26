@@ -91,7 +91,7 @@ export function zodErrorMap(locale: Locale = 'en'): z.core.$ZodErrorMap {
 /**
  * @deprecated Usa `parseScenario(raw, { locale: 'es' })`, o
  * `scenarioSchema('es').safeParse(raw, { error: zodErrorMap('es') })` si necesitas el esquema
- * suelto. Se conserva porque es público por `@lila/engine/schema`.
+ * suelto. Se conserva porque es público por `@lila-modeler/engine/schema`.
  *
  * Cuidado: desde LILA-211 el mapa de errores **por sí solo ya no basta** para tener el escenario
  * en español. Zod no consulta el mapa para los `message:` que viven dentro del esquema (`refine`,
@@ -424,7 +424,7 @@ export interface LocaleOptions {
  * MCP (`packages/mcp`) y el panel de escenario la usan, y por eso los tres dicen exactamente lo
  * mismo (LILA-202).
  *
- * Es un `safeParse` con mapa, no un `z.config()` global: `@lila/engine` es una librería y
+ * Es un `safeParse` con mapa, no un `z.config()` global: `@lila-modeler/engine` es una librería y
  * reconfigurar el zod del proceso al importarla cambiaría también los mensajes de esquemas que
  * no son suyos (los `inputSchema` del servidor MCP, por ejemplo).
  */

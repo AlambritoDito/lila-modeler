@@ -19,7 +19,7 @@ npm run build
 ```
 
 `npm run build` runs `tsc --build` for `packages/engine` and `packages/mcp`: the CLI and the MCP
-server consume `@lila/engine` through its published subpaths (`dist/`), not its sources, so the
+server consume `@lila-modeler/engine` through its published subpaths (`dist/`), not its sources, so the
 build has to run before the tests.
 
 ## Running the checks
@@ -37,7 +37,7 @@ means it passed; anything else means there's type-checking output to read.
 For the web app in development:
 
 ```bash
-npm run dev -w @lila/web    # builds the engine if needed + starts Vite on http://localhost:5173
+npm run dev -w @lila-modeler/web    # builds the engine if needed + starts Vite on http://localhost:5173
 ```
 
 ## Repo rules

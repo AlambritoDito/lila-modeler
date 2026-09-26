@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 
 import { compareWarnings, runMetaFrom, type CompareRunMeta } from './compareWarnings.js';
-import type { ResolvedScenario } from '@lila/engine/schema';
-import type { RunResult } from '@lila/engine';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { RunResult } from '@lila-modeler/engine';
 import { setLocale } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since

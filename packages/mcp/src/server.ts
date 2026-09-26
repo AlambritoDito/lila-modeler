@@ -1,7 +1,7 @@
 /**
- * Servidor MCP de Lila Modeler: tools sobre `@lila/engine`, sin lógica propia. `validate_bpmn` y
+ * Servidor MCP de Lila Modeler: tools sobre `@lila-modeler/engine`, sin lógica propia. `validate_bpmn` y
  * `describe_process` son de LILA-053; `run_simulation` y `compare_scenarios` de LILA-054, sobre
- * `@lila/engine/cli-shared` (extraído de `cli.ts` en el mismo ticket, sin cambiar su salida).
+ * `@lila-modeler/engine/cli-shared` (extraído de `cli.ts` en el mismo ticket, sin cambiar su salida).
  * `createServer()` solo registra tools; conectar un transporte (stdio, in-memory para tests) es
  * responsabilidad de quien lo use — ver `src/bin.ts` para el caso stdio real.
  *
@@ -14,7 +14,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
-import { validateBpmnXml, type ValidateBpmnReport, type ValidationResult } from '@lila/engine/bpmn';
+import { validateBpmnXml, type ValidateBpmnReport, type ValidationResult } from '@lila-modeler/engine/bpmn';
 import {
   absolutePath,
   comparablePath,
@@ -27,8 +27,8 @@ import {
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
-} from '@lila/engine/cli-shared';
-import { runResultSchema } from '@lila/engine/result-schema';
+} from '@lila-modeler/engine/cli-shared';
+import { runResultSchema } from '@lila-modeler/engine/result-schema';
 import {
   resolveExtends,
   schemaIssueLines,
@@ -38,9 +38,9 @@ import {
   type ResolvedScenario,
   type Scenario,
   type ScenarioProblem,
-} from '@lila/engine/schema';
-import { compare, simulate, type CompareResult, type RunResult } from '@lila/engine';
-import { messages, resolveLocale, type Locale } from '@lila/engine/messages';
+} from '@lila-modeler/engine/schema';
+import { compare, simulate, type CompareResult, type RunResult } from '@lila-modeler/engine';
+import { messages, resolveLocale, type Locale } from '@lila-modeler/engine/messages';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -50,7 +50,7 @@ import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 
 const NAME = 'lila-mcp';
-const VERSION = '1.0.0-beta.8';
+const VERSION = '1.0.0-beta.9';
 
 /** Idioma por llamada: sobrescribe el del servidor solo para esa respuesta. */
 const localeSchema = z
@@ -245,7 +245,7 @@ interface RunSimulationInput {
 }
 
 /**
- * Igual pipeline que `runCommand` de `cli.ts` (compartida en `@lila/engine/cli-shared`): valida
+ * Igual pipeline que `runCommand` de `cli.ts` (compartida en `@lila-modeler/engine/cli-shared`): valida
  * modelo y escenario, aplica overrides y simula con `log: false`. Ningún campo de nivel 2/3 se
  * rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
@@ -757,7 +757,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
 
 /**
  * Arranca el servidor sobre stdio. Lo usan el bin `lila-mcp` de este paquete y el subcomando
- * `lila mcp` de `@lila/engine` (LILA-056), que lo carga con `import()` dinámico para no crear un
+ * `lila mcp` de `@lila-modeler/engine` (LILA-056), que lo carga con `import()` dinámico para no crear un
  * ciclo de dependencia entre los dos paquetes. stdout es el transporte: nada más puede escribir ahí.
  *
  * Sin `locale`, el idioma sale del entorno (`LILA_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`), la misma

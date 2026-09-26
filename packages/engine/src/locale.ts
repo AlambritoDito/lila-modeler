@@ -3,7 +3,7 @@
  *
  * Vive fuera de `core/` y no importa nada: la CLI (`cli.ts`), el bin del servidor MCP
  * (`packages/mcp/src/bin.ts`) y cualquier consumidor futuro comparten esta única regla de
- * precedencia en vez de rehacerla cada uno. Se reexporta por `@lila/engine/messages`.
+ * precedencia en vez de rehacerla cada uno. Se reexporta por `@lila-modeler/engine/messages`.
  */
 import type { Locale } from './messages/types.js';
 

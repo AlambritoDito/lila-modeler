@@ -19,9 +19,9 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import type { ProcessIR } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { parseScenario, validateScenario } from '@lila/engine/schema';
+import type { ProcessIR } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { parseScenario, validateScenario } from '@lila-modeler/engine/schema';
 
 import { ScenarioPanel } from './ScenarioPanel.js';
 import { setLocale } from './i18n';

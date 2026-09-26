@@ -346,8 +346,8 @@ Retomar ambos puntos con los comentarios de las pruebas del usuario; no iniciar 
 
 #### LILA-048 · Publicación en npm y `npx lila`
 - Épica E6 · Hito M3 · Tamaño S · Depende de LILA-046, LILA-047, LILA-044
-- Qué: `@lila/engine` con `bin: lila`, `exports` (`.`, `./bpmn`, `./schema`), `files`, versión 0.x; publicación desde CI con tag.
-- Aceptación: en una máquina limpia con Node 22, `npx @lila/engine run …` funciona.
+- Qué: `@lila-modeler/engine` con `bin: lila`, `exports` (`.`, `./bpmn`, `./schema`), `files`, versión 0.x; publicación desde CI con tag.
+- Aceptación: en una máquina limpia con Node 22, `npx @lila-modeler/engine run …` funciona.
 - Archivos: `packages/engine/package.json`, `.github/workflows/release.yml`.
 
 ### E7 — Validación numérica y oráculos (M1–M3)
@@ -399,7 +399,7 @@ Retomar ambos puntos con los comentarios de las pruebas del usuario; no iniciar 
 #### LILA-056 · `lila mcp` y prueba de humo con Claude Code
 - Épica E8 · Hito M4 · Tamaño S · Depende de LILA-054, LILA-055
 - Qué: subcomando `lila mcp` (stdio); `docs/MCP.md` con la configuración para Claude Code/Desktop; test E2E con el cliente MCP oficial.
-- Aceptación: "simula examples/pedido con as-is y dime el cuello de botella" devuelve el mismo `bottlenecks[0]` que `lila run`; "qué pasa si agrego un cajero" produce un escenario con `extends` y una comparación coherente, sin cambios en `@lila/engine`.
+- Aceptación: "simula examples/pedido con as-is y dime el cuello de botella" devuelve el mismo `bottlenecks[0]` que `lila run`; "qué pasa si agrego un cajero" produce un escenario con `extends` y una comparación coherente, sin cambios en `@lila-modeler/engine`.
 - Archivos: `packages/engine/src/cli.ts`, `docs/MCP.md`, test E2E.
 
 ### E9 — App web: editor, escenario, resultados (M5)
@@ -418,7 +418,7 @@ Retomar ambos puntos con los comentarios de las pruebas del usuario; no iniciar 
 
 #### LILA-059 · Worker de simulación
 - Épica E9 · Hito M5 · Tamaño S · Depende de LILA-029, LILA-032, LILA-057
-- Qué: `worker.ts` importa `@lila/engine` core y ejecuta `simulate`; progreso, cancelación, muestreo del log (solo primera replicación en memoria).
+- Qué: `worker.ts` importa `@lila-modeler/engine` core y ejecuta `simulate`; progreso, cancelación, muestreo del log (solo primera replicación en memoria).
 - Aceptación: 10 000 × 30 en < 15 s sin congelar la UI; resultado byte a byte igual a `lila run --json` con la misma semilla; el bundle del Worker < 100 KB y sin bpmn-js/React.
 - Archivos: `apps/web/src/worker.ts`.
 

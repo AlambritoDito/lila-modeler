@@ -1,6 +1,6 @@
 /**
  * Reading and writing a `.lila` project file (ADR-027): the same ADR-018 project, zipped into one
- * file instead of spread over a folder. The format itself lives in `@lila/engine/project` — this
+ * file instead of spread over a folder. The format itself lives in `@lila-modeler/engine/project` — this
  * module is only the disk half, kept apart from `projectIO.ts` so that the folder reader stays
  * the pure `node:fs` module its header promises.
  *
@@ -9,8 +9,8 @@
  * decides whether a path may be touched.
  */
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { decodeLila, encodeLila, ProjectFormatError } from '@lila/engine/project';
-import type { ProjectErrorCode } from '@lila/engine/project';
+import { decodeLila, encodeLila, ProjectFormatError } from '@lila-modeler/engine/project';
+import type { ProjectErrorCode } from '@lila-modeler/engine/project';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,

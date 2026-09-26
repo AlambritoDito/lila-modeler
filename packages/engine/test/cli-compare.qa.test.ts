@@ -620,7 +620,7 @@ describe('QA LILA-047 · ataque 11: calidad del código', () => {
   test('cli.ts y format.ts no usan `any` ni dejan a compare duplicando la carga del modelo', () => {
     const cli = readFileSync(join(sourceDir, 'cli.ts'), 'utf8');
     // LILA-054: `loadValidatedModel` se extrajo de `cli.ts` a `cli-shared.ts` para que
-    // `@lila/mcp` (`run_simulation`/`compare_scenarios`) también lo use, sin duplicarlo.
+    // `@lila-modeler/mcp` (`run_simulation`/`compare_scenarios`) también lo use, sin duplicarlo.
     const cliShared = readFileSync(join(sourceDir, 'cli-shared.ts'), 'utf8');
     const format = readFileSync(join(sourceDir, 'format.ts'), 'utf8');
 

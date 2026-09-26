@@ -199,15 +199,15 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
   (interruptor o no), compuerta basada en eventos con ramas de tiempo o de mensaje, tareas (todas
   las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
-- **Todavía no está en npm**: no hay `npm install @lila/engine`; clona y compila como arriba.
+- **Todavía no está en npm**: no hay `npm install @lila-modeler/engine`; clona y compila como arriba.
 - **Los calendarios son semanales**; la recurrencia mensual/anual y los festivos son campos
   reservados.
 
 ## Estructura del proyecto
 
-- `packages/engine` — `@lila/engine`: el núcleo del motor (`src/core/`, sin dependencias), el
+- `packages/engine` — `@lila-modeler/engine`: el núcleo del motor (`src/core/`, sin dependencias), el
   parser BPMN, los esquemas, los escritores CSV/XLSX y la CLI `lila`.
-- `packages/mcp` — `@lila/mcp` (privado): el servidor MCP, capa fina sobre el motor.
+- `packages/mcp` — `@lila-modeler/mcp` (privado): el servidor MCP, capa fina sobre el motor.
 - `apps/web` — editor y visor en React 19 + Vite + bpmn-js.
 - `apps/desktop` — empaquetado Electron de `apps/web`; `.github/workflows/desktop.yml` construye
   los tres instaladores con tags `v*` y deja un Release en borrador.
@@ -250,7 +250,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - **#335** — semántica pendiente para la paridad numérica con Bizagi: eventos de mensaje, de borde
   y basados en eventos, saturación, denominador de utilización.
 - **#336** — confianza y adopción: guía de inicio, firma y notarización (#109), publicación de
-  `@lila/engine` en npm (#48), validación de usabilidad.
+  `@lila-modeler/engine` en npm (#48), validación de usabilidad.
 - **#125** — servidor autoalojado. **#130** — minería de procesos (parámetros desde logs de
   eventos).
 

@@ -8,13 +8,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { validateBpmnXml } from '@lila/engine/bpmn';
+import { validateBpmnXml } from '@lila-modeler/engine/bpmn';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 import { main } from '../../engine/src/cli.js';
-import { runResultSchema } from '@lila/engine/result-schema';
+import { runResultSchema } from '@lila-modeler/engine/result-schema';
 
 import {
   canonicalJson,

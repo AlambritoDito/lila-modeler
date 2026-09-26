@@ -151,7 +151,7 @@ function escribirAtributo(tag: string, name: string, value: string): string {
 
 /**
  * Marca el XML como escrito por Lila: `exporter="Lila Modeler"` y `exporterVersion` con la
- * versión de `@lila/engine`, tal y como exige `docs/BPMN_EXTENSION.md` sección 3. Es el único
+ * versión de `@lila-modeler/engine`, tal y como exige `docs/BPMN_EXTENSION.md` sección 3. Es el único
  * sitio del repo que escribe esos atributos: toda escritura de `.bpmn` (la app web al exportar,
  * y cualquier camino futuro de la CLI) pasa por aquí. `exporter` sustituye al del archivo de
  * origen; `parseBpmn` sigue leyendo el que trae el archivo de entrada y lo conserva en

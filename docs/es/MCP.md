@@ -2,8 +2,8 @@
 
 > Leer en: [English](../MCP.md)
 
-`packages/mcp` (`@lila/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila/engine`, sin lógica propia: cinco tools por ahora, sobre el mismo pipeline de validación y
+`packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
+`@lila-modeler/engine`, sin lógica propia: cinco tools por ahora, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -28,7 +28,7 @@ terminal en vez de un cliente MCP.
   inline; `model` es opcional y por defecto es `scenario.model`; se rechaza un modelo distinto.
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
-  `outputSchema` (`@lila/engine/result-schema`) y responde `structuredContent` además del texto.
+  `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
 - **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
@@ -66,7 +66,7 @@ terminal en vez de un cliente MCP.
   de `[0, 1]`, `capacity < 1`, una `ref` que no existe en `resources`, un `id` que no existe en el
   modelo, … — es `isError: true` y **no escribe nada**, en ninguno de los dos modos.
 
-Las tres tools de LILA-054/055 reutilizan `@lila/engine/cli-shared`, extraído de `cli.ts` en
+Las tres tools de LILA-054/055 reutilizan `@lila-modeler/engine/cli-shared`, extraído de `cli.ts` en
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 
@@ -99,14 +99,14 @@ npm run build
 Eso deja listos los dos puntos de entrada, que arrancan **el mismo servidor**:
 
 - `node packages/engine/bin/lila.js mcp` — el subcomando `lila mcp` (LILA-056), el que se registra.
-- `./node_modules/.bin/lila-mcp` — el bin del propio `@lila/mcp`, equivalente.
+- `./node_modules/.bin/lila-mcp` — el bin del propio `@lila-modeler/mcp`, equivalente.
 
-`lila mcp` vive en `@lila/engine` porque el ticket lo pide ahí y porque es el binario que la gente
-ya tiene instalado. Como `@lila/mcp` depende de `@lila/engine`, importarlo estáticamente desde
+`lila mcp` vive en `@lila-modeler/engine` porque el ticket lo pide ahí y porque es el binario que la gente
+ya tiene instalado. Como `@lila-modeler/mcp` depende de `@lila-modeler/engine`, importarlo estáticamente desde
 `cli.ts` sería un ciclo entre paquetes: se carga con `import()` dinámico
 (`packages/engine/src/cli.ts`, `dispatchMcp`) y, si el paquete no está, el comando lo dice por
 stderr y sale con 1 en vez de romperse. Instalar el paquete del motor no instala el workspace
-privado `@lila/mcp`. Usa el checkout hasta que exista una distribución MCP instalable por separado.
+privado `@lila-modeler/mcp`. Usa el checkout hasta que exista una distribución MCP instalable por separado.
 
 `lila mcp` habla MCP por **stdout**: nada más puede escribir ahí. Todo diagnóstico (paquete
 ausente, fallo de arranque) sale por stderr, que es lo único que ve quien registró el servidor.

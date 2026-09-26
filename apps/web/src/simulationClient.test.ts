@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInWorker } from './simulationClient.js';
 import type { WorkerRequest, WorkerResponse } from './worker.js';
-import type { ProcessIR, SimScenario } from '@lila/engine';
+import type { ProcessIR, SimScenario } from '@lila-modeler/engine';
 import { setLocale } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since

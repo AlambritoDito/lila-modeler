@@ -936,12 +936,12 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
 }
 
 /**
- * `@lila/mcp` depende de `@lila/engine`, así que importarlo estáticamente desde aquí sería un ciclo
+ * `@lila-modeler/mcp` depende de `@lila-modeler/engine`, así que importarlo estáticamente desde aquí sería un ciclo
  * entre paquetes. Se carga con `import()` y el especificador en una constante: así el especificador
  * no es literal para TypeScript, `tsc --build` de este paquete no pasa a depender del `dist/` de
- * `@lila/mcp` (que se compila después) y el paquete solo se resuelve cuando alguien corre `lila mcp`.
+ * `@lila-modeler/mcp` (que se compila después) y el paquete solo se resuelve cuando alguien corre `lila mcp`.
  */
-const MCP_PACKAGE = '@lila/mcp';
+const MCP_PACKAGE = '@lila-modeler/mcp';
 
 async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({

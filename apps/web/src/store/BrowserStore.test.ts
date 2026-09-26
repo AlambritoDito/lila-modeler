@@ -12,7 +12,7 @@
  * full quota leaves the store working in memory.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeLila, encodeLila } from '@lila/engine/project';
+import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 import { es } from '../strings.es';
 import { getPreferencia, setLocale } from '../i18n';
 import { BrowserStore } from './BrowserStore';

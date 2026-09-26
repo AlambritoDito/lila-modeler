@@ -1,5 +1,5 @@
-import { validateBpmnXml } from '@lila/engine/bpmn';
-import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
+import { validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { getLocale, strings, type Locale } from './i18n';
 
 /** Fifth argument of `prepareSimulation`; an object so the language is named at the call site. */

@@ -195,14 +195,14 @@ not a claim of parity: the full checklist, with every documented difference and 
   (interrupting and not), event-based gateway with timer or message branches, tasks (all
   variants), call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
   ([`docs/SEMANTICS.md`](docs/SEMANTICS.md) §§ 2–3).
-- **Not on npm yet**: no `npm install @lila/engine`; clone and build as above.
+- **Not on npm yet**: no `npm install @lila-modeler/engine`; clone and build as above.
 - **Calendars are weekly**; monthly/annual recurrence and holidays are reserved fields.
 
 ## Project layout
 
-- `packages/engine` — `@lila/engine`: the engine core (`src/core/`, no dependencies), the BPMN
+- `packages/engine` — `@lila-modeler/engine`: the engine core (`src/core/`, no dependencies), the BPMN
   parser, schemas, CSV/XLSX writers and the `lila` CLI.
-- `packages/mcp` — `@lila/mcp` (private): the MCP server, a thin layer over the engine.
+- `packages/mcp` — `@lila-modeler/mcp` (private): the MCP server, a thin layer over the engine.
 - `apps/web` — React 19 + Vite + bpmn-js editor and viewer.
 - `apps/desktop` — Electron packaging of `apps/web`; `.github/workflows/desktop.yml` builds the
   three installers on `v*` tags and leaves a draft Release.
@@ -240,7 +240,7 @@ Open epics, in [GitHub Issues](https://github.com/AlambritoDito/lila-modeler/iss
 - **#335** — semantics still pending for numeric parity with Bizagi: message, boundary and
   event-based events, saturation, utilization denominator.
 - **#336** — trust and adoption: getting-started guide, signing and notarization (#109), publishing
-  `@lila/engine` on npm (#48), usability validation.
+  `@lila-modeler/engine` on npm (#48), usability validation.
 - **#125** — self-hosted server. **#130** — process mining (parameters from event logs).
 
 ## Contributing

@@ -18,9 +18,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import type { ProcessIR, RunResult } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
-import type { ResolvedScenario } from '@lila/engine/schema';
+import type { ProcessIR, RunResult } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 
 import { ResultsView } from './ResultsView.js';
 import { setLocale } from './i18n';

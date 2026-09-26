@@ -19,7 +19,7 @@ export type {
   StatSd,
 } from './core/result.js';
 export type { AbortSignalLike, SimElement, SimResource, SimRun, SimScenario } from './core/sim.js';
-// Solo el tipo: el catálogo completo vive en `@lila/engine/messages` y no entra al bundle del
+// Solo el tipo: el catálogo completo vive en `@lila-modeler/engine/messages` y no entra al bundle del
 // worker, que es `core/` (LILA-211).
 export type { Locale } from './core/messages/index.js';
 

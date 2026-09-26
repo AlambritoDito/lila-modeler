@@ -16,8 +16,8 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import type { ProcessIR } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
+import type { ProcessIR } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import {
   ScenarioSchema,
   resolveExtends,
@@ -25,7 +25,7 @@ import {
   scenarioErrors,
   validateScenario,
   type Scenario,
-} from '@lila/engine/schema';
+} from '@lila-modeler/engine/schema';
 
 import { ScenarioPanel, duplicarEscenario } from './ScenarioPanel.js';
 import { setLocale } from './i18n';

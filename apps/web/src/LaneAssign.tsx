@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from 'react';
 
-import type { ProcessIR } from '@lila/engine';
+import type { ProcessIR } from '@lila-modeler/engine';
 
 import { useStrings } from './i18n';
 import { laneAssignmentDelta, tasksByLane } from './laneToPool.js';

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { loadResolvedScenario } from '@lila/engine/cli-shared';
+import { loadResolvedScenario } from '@lila-modeler/engine/cli-shared';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, expect, test } from 'vitest';

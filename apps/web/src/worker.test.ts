@@ -7,7 +7,7 @@
  * `src/bpmn/parse.ts`, cuyo shim de tipos de `bpmn-moddle` (`src/bpmn/bpmn-moddle.d.ts`) solo se
  * incluye en el *programa* de TypeScript de `packages/engine` (su `tsconfig.json` lo agrega vía
  * `include`); bajo el `tsconfig.json` de `apps/web` esos mismos símbolos llegan como `any` (falla
- * `tsc --noEmit`). Aquí se consumen solo los subpaths públicos y ya compilados de `@lila/engine`
+ * `tsc --noEmit`). Aquí se consumen solo los subpaths públicos y ya compilados de `@lila-modeler/engine`
  * (`.`, `./bpmn`, `./schema`), que es exactamente lo que hará la UI real.
  *
  * Criterio (a), igualdad byte a byte, contra dos oráculos externos —nunca contra el mismo
@@ -21,8 +21,8 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseBpmn, validate } from '@lila/engine/bpmn';
-import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario } from '@lila/engine/schema';
+import { parseBpmn, validate } from '@lila-modeler/engine/bpmn';
+import { ScenarioSchema, scenarioErrors, validateScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import {
   simulate,
   type EventLogRow,
@@ -30,7 +30,7 @@ import {
   type RunResult,
   type SimScenario,
   type SimulationProgress,
-} from '@lila/engine';
+} from '@lila-modeler/engine';
 import { DEFAULT_LOG_SAMPLE_LIMIT, handleMessage, type WorkerResponse } from './worker.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));

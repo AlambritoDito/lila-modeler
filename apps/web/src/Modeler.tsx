@@ -31,7 +31,7 @@ import { useEffect, useRef } from 'react';
 // El descriptor de la extensión `lila:` es el de `packages/engine/src/bpmn/lila.moddle.json`,
 // única definición del namespace (ADR-012). Se importa del paquete compilado, así que
 // `npm run build` de la raíz tiene que haber corrido antes de `vite` (ver package.json).
-import lila from '@lila/engine/bpmn/lila.moddle.json';
+import lila from '@lila-modeler/engine/bpmn/lila.moddle.json';
 // El overlay de cuellos de botella (LILA-064) es el único módulo fuera de este archivo que
 // necesita el `Modeler` de bpmn-js en crudo; en vez de exponerlo, `Modelador.cuellos` le pasa
 // el modelador desde aquí y el resto del shell sigue sin ver bpmn-js.

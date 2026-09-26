@@ -8,7 +8,7 @@
         "run",
         "dev",
         "--workspace",
-        "@lila/web"
+        "@lila-modeler/web"
       ],
       "port": 5173
     },
