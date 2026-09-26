@@ -548,7 +548,11 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
       <span className={`estado estado-${estado}`}>
         {estado === 'eliminado'
           ? S.escenario.eliminadoNull
-          : S.escenario.estadoReservado(estado, JSON.stringify(valorMostrado))}
+          : S.escenario.estadoReservado(
+              // #477: la etiqueta traducida, nunca el id interno `'propio'`/`'heredado'`.
+              estado === 'propio' ? S.escenario.estadoPropio : S.escenario.estadoHeredado,
+              JSON.stringify(valorMostrado),
+            )}
       </span>
       {estado === 'eliminado' ? (
         <button
