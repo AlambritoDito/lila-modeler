@@ -3,6 +3,39 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.10] - 2026-09-26
+
+Lote F: fixes for what students hit in class, and two Bizagi-style diagram tools. Deleting a
+configured task no longer strands Run; a partial OR declaration warns while modelling; painting the
+calendar grid keeps the ranges as written; the English UI no longer leaks internal state ids; and
+elements can be coloured, aligned and distributed. No installer is attached to this version.
+
+### Added
+
+- **Colours per element (#452)**: eight colours plus «None» in Properties (also with several
+  elements selected) and in the context pad, one undo step. Written as `bioc:fill/stroke` and
+  `color:background-color/border-color` (what bpmn-js, Camunda and Bizagi exchange) plus the
+  internal label colour; Bizagi `bgColor`/`borderColor` are read on import. Colours survive theme
+  changes, «Validate paths» and PNG/PDF export; the engine ignores them.
+- **Align and distribute (#453)**: a group at the top right of the canvas in Model, the ⌘K palette
+  and ⌥⇧L/C/R/T/M/B (align) and ⌥⇧H/V (distribute), through bpmn-js's own editor actions (lanes are
+  left alone, the canvas lock is respected). Buttons enable only when bpmn-js would move something.
+- **`W-OR-PROB-PARCIAL` (#398)**: the scenario lint warns on each outgoing flow of an inclusive (OR)
+  gateway that has no `probability` while a sibling declares one (R-OR-2: it counts as 1, so it is
+  always taken). Live in Model and Simulate; never blocks Run; results unchanged.
+
+### Fixed
+
+- **Orphan scenario entries (#430)**: the scenario panel lists entries whose element is no longer
+  in the model, with «Remove orphan entries» (base and children); the same button appears in the
+  status bar when Run fails only with `E-ELEMENTO-DESCONOCIDO`, and the error counter marks a failed
+  Run. Nothing is removed automatically, so ⌘Z after deleting a shape keeps its configuration.
+- **Calendar grid keeps picker ranges (#469)**: painting a cell keeps the ranges that are still
+  fully open as written and in order; only the rest is re-derived.
+- **Reserved-field status translated (#477)**: «own» / «inherited» instead of the internal id.
+- **Properties header follows «Advanced» (#471)**: with it off, the header shows the readable type
+  and the Id row is hidden.
+
 ## [1.0.0-beta.9] - 2026-09-26
 
 First npm publication. The engine and CLI now ship as @lila-modeler/engine (the @lila scope
