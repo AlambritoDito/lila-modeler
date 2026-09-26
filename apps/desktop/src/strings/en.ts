@@ -53,6 +53,9 @@ export const en = {
     modoRutas: 'Validate paths',
     simulacion: 'Simulation',
     ejecutar: 'Run simulation',
+    /** The Help menu: on macOS it also carries the system's menu search (⇧⌘/). */
+    ayuda: 'Help',
+    documentacion: 'Documentation',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MenuItemConstructorOptions } from 'electron';
-import { menuTemplate } from './menu.js';
+import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { desktopStrings } from './strings/index.js';
 import type { DesktopLocale } from './locale.js';
 // The one shortcut map (#413). `menu.ts` cannot import it (`rootDir: src`); vitest can, so the
@@ -142,7 +142,7 @@ describe('menuTemplate · the language only changes the labels', () => {
   it('the OS-localised role menus are left as roles, without a label', () => {
     for (const locale of IDIOMAS) {
       const items = menuTemplate([], 'darwin', vi.fn(), desktopStrings(locale));
-      const roles = items.filter((i) => i.role !== undefined && i.role !== 'quit');
+      const roles = items.filter((i) => i.role !== undefined && i.role !== 'quit' && i.role !== 'help');
       expect(roles.map((i) => i.role)).toEqual(['appMenu', 'editMenu', 'windowMenu']);
       expect(roles.filter((i) => i.label !== undefined)).toEqual([]);
     }
@@ -201,11 +201,58 @@ describe('menuTemplate · parity with the shortcut map (#413)', () => {
     const vista = sub(S.vista).filter((i) => i.click !== undefined);
     expect(vista.map((i) => i.label)).toEqual([S.paleta, S.modoModelar, S.modoSimular, S.modoResultados, S.modoComparar, S.modoAnimar, S.modoRutas]);
     expect(vista.map(enviado)).toEqual(['paleta', 'modo:modelar', 'modo:simular', 'modo:resultados', 'modo:comparar', 'modo:animar', 'modo:rutas'].map((atajo) => ({ atajo })));
-    expect(sub(S.vista).map((i) => i.role).filter(Boolean)).toEqual(['togglefullscreen', 'toggleDevTools']);
+    expect(sub(S.vista).map((i) => i.role).filter(Boolean)).toEqual(['togglefullscreen']);
     const simulacion = sub(S.simulacion);
     expect(simulacion.map((i) => i.label)).toEqual([S.ejecutar]);
     expect(enviado(simulacion[0]!)).toEqual({ atajo: 'ejecutar' });
     // Reload (⌘R) and page zoom (⌘+/⌘−/⌘0) are gone with the role.
     expect(flat(menus).some((i) => i.role === 'reload' || i.role === 'zoomIn' || i.role === 'resetZoom')).toBe(false);
+  });
+});
+
+describe('menuTemplate · DevTools and Help', () => {
+  it('DevTools (⌥⌘I) are in View only when the app is not packaged', () => {
+    const roles = (dev: boolean) => flat(menuTemplate([], 'darwin', vi.fn(), desktopStrings('en'), { dev })).map((i) => i.role);
+    expect(roles(false)).not.toContain('toggleDevTools');
+    expect(roles(true)).toContain('toggleDevTools');
+  });
+
+  it.each(IDIOMAS)('the last menu is Help, with Documentation opening the docs (%s)', (locale) => {
+    const S = desktopStrings(locale).menu;
+    const abrirDocs = vi.fn();
+    const ayuda = menuTemplate([], 'darwin', vi.fn(), desktopStrings(locale), { abrirDocs }).at(-1)!;
+    expect([ayuda.role, ayuda.label]).toEqual(['help', S.ayuda]);
+    const docs = (ayuda.submenu as MenuItemConstructorOptions[]).find((i) => i.label === S.documentacion)!;
+    (docs.click as () => void)();
+    expect(abrirDocs).toHaveBeenCalledOnce();
+  });
+});
+
+describe('teclaDeVentanaHija · ⌘W / ⌘Q in the About and detached windows', () => {
+  const tecla = (key: string, mods: Partial<Record<'meta' | 'control' | 'alt' | 'shift', boolean>>, type = 'keyDown') =>
+    ({ type, key, meta: false, control: false, alt: false, shift: false, ...mods });
+
+  it('on macOS ⌘W closes the child and ⌘Q quits', () => {
+    expect(teclaDeVentanaHija(tecla('w', { meta: true }), 'darwin')).toBe('cerrar');
+    expect(teclaDeVentanaHija(tecla('W', { meta: true }), 'darwin')).toBe('cerrar');
+    expect(teclaDeVentanaHija(tecla('q', { meta: true }), 'darwin')).toBe('salir');
+  });
+
+  it('leaves everything else to the page and the menu', () => {
+    for (const [key, mods, type] of [
+      ['w', { meta: true }, 'keyUp'],
+      ['w', { meta: true, alt: true }], // Close All
+      ['q', { meta: true, alt: true }], // Quit and Keep Windows
+      ['w', { meta: true, shift: true }],
+      ['w', { control: true }], // ⌃W on a Mac is not Close
+      ['w', {}],
+      ['s', { meta: true }],
+    ] as const) expect(teclaDeVentanaHija(tecla(key, mods, type), 'darwin'), `${key} ${JSON.stringify(mods)}`).toBeNull();
+  });
+
+  it('outside macOS only Ctrl+W, and no quit key', () => {
+    expect(teclaDeVentanaHija(tecla('w', { control: true }), 'win32')).toBe('cerrar');
+    expect(teclaDeVentanaHija(tecla('q', { control: true }), 'linux')).toBeNull();
+    expect(teclaDeVentanaHija(tecla('w', { meta: true }), 'win32')).toBeNull();
   });
 });

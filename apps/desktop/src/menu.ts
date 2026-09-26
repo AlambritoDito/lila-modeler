@@ -27,6 +27,8 @@ export function menuTemplate(
   platform: NodeJS.Platform,
   send: (action: MenuAction) => void,
   strings: Strings,
+  // `dev`: the unpackaged app. DevTools (⌥⌘I) are for us, not for the people using a release.
+  { dev = false, abrirDocs = () => {} }: { dev?: boolean; abrirDocs?: () => void } = {},
 ): MenuItemConstructorOptions[] {
   const mac = platform === 'darwin';
   const S = strings.menu;
@@ -117,10 +119,35 @@ export function menuTemplate(
         atajo(S.modoRutas, 'CmdOrCtrl+6', 'modo:rutas'),
         { type: 'separator' },
         { role: 'togglefullscreen' },
-        { role: 'toggleDevTools' },
+        ...(dev ? [{ role: 'toggleDevTools' as const }] : []),
       ],
     },
     { label: S.simulacion, submenu: [atajo(S.ejecutar, 'CmdOrCtrl+Enter', 'ejecutar')] },
     { role: 'windowMenu' },
+    // `role: 'help'` makes it the macOS Help menu, which brings the system's menu search (⇧⌘/).
+    { label: S.ayuda, role: 'help', submenu: [{ label: S.documentacion, click: abrirDocs }] },
   ];
+}
+
+/** What a key pressed in a child window (About, detached scenario) asks of the main process. */
+export type TeclaHija = 'cerrar' | 'salir' | null;
+
+/**
+ * ⌘W / ⌘Q in a `window.open` child (About, detached scenario), handled from `before-input-event`
+ * instead of trusting the menu to see them: in the installed beta.11, with the About window in
+ * front, neither closed nor quit, while the same keys worked in the main window. Only the bare
+ * chord counts (⌥⌘W is Close All, ⌥⌘Q Quit and Keep Windows; both stay the menu's). Outside
+ * macOS only Ctrl+W: there is no Ctrl+Q convention (Alt+F4 is the OS's).
+ */
+export function teclaDeVentanaHija(
+  input: { type: string; key: string; meta: boolean; control: boolean; alt: boolean; shift: boolean },
+  platform: NodeJS.Platform,
+): TeclaHija {
+  const mac = platform === 'darwin';
+  if (input.type !== 'keyDown' || input.alt || input.shift) return null;
+  if (mac ? !input.meta || input.control : !input.control || input.meta) return null;
+  const tecla = input.key.toLowerCase();
+  if (tecla === 'w') return 'cerrar';
+  if (tecla === 'q' && mac) return 'salir';
+  return null;
 }
