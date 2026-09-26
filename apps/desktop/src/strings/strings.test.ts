@@ -103,6 +103,9 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       modoRutas: 'Validar rutas',
       simulacion: 'Simulación',
       ejecutar: 'Ejecutar la simulación',
+      // The Help menu is new.
+      ayuda: 'Ayuda',
+      documentacion: 'Documentación',
     });
     expect(es.cierre).toEqual({
       guardar: 'Guardar',

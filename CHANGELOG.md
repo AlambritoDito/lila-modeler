@@ -3,6 +3,23 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.13] - 2026-09-26
+
+Standard macOS keys in the desktop app. No installer is attached to this version.
+
+### Fixed
+
+- **⌘W / ⌘Q in the About and detached scenario windows**: they are handled by the main process
+  from `before-input-event` instead of trusting the menu to see them. In the installed beta.11,
+  with the About window in front, neither closed it nor quit. ⌥⌘W (Close All) and ⌥⌘Q still
+  belong to the menu; outside macOS only Ctrl+W.
+- **DevTools (⌥⌘I) are no longer in View in a packaged build**: only when running unpackaged.
+
+### Added
+
+- **Help menu**: the macOS Help menu (with the system's menu search, ⇧⌘/) and Documentation,
+  which opens the same page as the welcome screen.
+
 ## [1.0.0-beta.12] - 2026-09-26
 
 The minimap keeps the view in sight: its box no longer leaves the map when you zoom out or pan
