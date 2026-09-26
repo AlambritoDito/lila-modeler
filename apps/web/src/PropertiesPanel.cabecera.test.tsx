@@ -14,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Elemento } from './Modeler.js';
 import type { Modelador } from './Modeler.js';
-import { PanelPropiedades, type ElementoLienzo } from './PropertiesPanel.js';
+import { nombreDeTipo, PanelPropiedades, type ElementoLienzo } from './PropertiesPanel.js';
 import { setLocale } from './i18n';
 
 // Igual que `PropertiesPanel.qa.test.tsx`: la traducción base es inglés desde LILA-210, así que
@@ -47,12 +47,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function montar(modelador: Modelador): HTMLElement {
+function montar(modelador: Modelador, avanzado = true): HTMLElement {
   const contenedor = document.createElement('div');
   document.body.append(contenedor);
   const raiz = createRoot(contenedor);
   act(() => {
-    raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" avisos={6} />);
+    raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" avisos={6} avanzado={avanzado} />);
   });
   montados.push(() => {
     act(() => {
@@ -241,5 +241,52 @@ describe('con un elemento elegido: su icono, su nombre y su `$type · id`', () =
     const elemento: ElementoLienzo = { id: 'El_1', type: tipo, businessObject: { $type: tipo, id: 'El_1' } };
     const panel = montar(modeladorFalso({ seleccion: [elemento] }));
     expect(panel.querySelector(`.propiedades-cabecera .bpmn-icon-${icono}`)).not.toBeNull();
+  });
+});
+
+describe('con «Avanzado» apagado (#471): sin id en la cabecera ni fila Id', () => {
+  const elemento: ElementoLienzo = {
+    id: 'Activity_1',
+    type: 'bpmn:UserTask',
+    businessObject: { $type: 'bpmn:UserTask', id: 'Activity_1', name: 'Revisar pedido' },
+  };
+
+  it('la línea técnica enseña el tipo legible (no el `$type` crudo), sin el id, y la fila Id no se pinta', () => {
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }), false);
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    const linea = cabecera!.querySelector('.propiedades-cabecera-tipo');
+    // Must-fix del QA de #480: `bpmn:UserTask` crudo no le dice nada a quien no conoce el
+    // `$type`; `nombreDeTipo` sí, y sin la clase `mono` (que es para ids/números, no prosa).
+    expect(linea?.textContent).toBe(nombreDeTipo('bpmn:UserTask'));
+    expect(linea?.className).not.toContain('mono');
+    expect(panel.textContent).not.toContain('Activity_1');
+    expect([...panel.querySelectorAll('.campo')].some((c) => c.querySelector('span')?.textContent === 'Id')).toBe(
+      false,
+    );
+  });
+
+  it('con «Avanzado» encendido, como siempre: `tipo · id` en mono y la fila Id visible y copiable', () => {
+    const panel = montar(modeladorFalso({ seleccion: [elemento] }), true);
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    const linea = cabecera!.querySelector('.propiedades-cabecera-tipo');
+    expect(linea?.textContent).toBe('bpmn:UserTask · Activity_1');
+    expect(linea?.className).toContain('mono');
+    expect([...panel.querySelectorAll('.campo')].some((c) => c.querySelector('span')?.textContent === 'Id')).toBe(
+      true,
+    );
+  });
+
+  it('sin nombre propio, la línea técnica repetiría el mismo texto que ya está arriba: se omite', () => {
+    // `nombre` ya cae a `nombreDeTipo(real.type)` cuando no hay `name`: con Avanzado apagado la
+    // línea técnica sería idéntica («Sequence flow» sobre «Sequence flow»), así que no se pinta.
+    const sinNombre: ElementoLienzo = {
+      id: 'Flow_1',
+      type: 'bpmn:SequenceFlow',
+      businessObject: { $type: 'bpmn:SequenceFlow', id: 'Flow_1' },
+    };
+    const panel = montar(modeladorFalso({ seleccion: [sinNombre] }), false);
+    const cabecera = panel.querySelector('.propiedades-cabecera');
+    expect(cabecera!.querySelector('.propiedades-cabecera-nombre')?.textContent).toBe(nombreDeTipo('bpmn:SequenceFlow'));
+    expect(cabecera!.querySelector('.propiedades-cabecera-tipo')).toBeNull();
   });
 });

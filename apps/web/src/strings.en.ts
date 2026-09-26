@@ -813,7 +813,10 @@ export const en = {
     claveRepetida: (clave: string): string => `${clave} already exists; edit it below or use another id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'deleted (null)',
-    estadoReservado: (estado: string, valor: string): string => `${estado}: ${valor}`,
+    /** Label for `EstadoReservado`'s `'propio'`/`'heredado'`: never the internal state id (#477). */
+    estadoPropio: 'own',
+    estadoHeredado: 'inherited',
+    estadoReservado: (etiquetaEstado: string, valor: string): string => `${etiquetaEstado}: ${valor}`,
     /** Label of a variant with neither discriminator nor known type. */
     opcionN: (i: number): string => `option ${i}`,
     /** JSON types of the schema, in English, for the variant selector. */

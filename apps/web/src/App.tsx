@@ -2161,7 +2161,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             )}
           </div>
         ) : (
-          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} avisos={validacion.avisos} />
+          <PanelPropiedades
+            key={projectId}
+            modelador={modelador}
+            pestana={pestana}
+            avisos={validacion.avisos}
+            avanzado={avanzado}
+          />
         )}
         </>}
       </aside>

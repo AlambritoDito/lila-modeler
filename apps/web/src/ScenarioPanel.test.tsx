@@ -741,6 +741,37 @@ describe('campos reservados: quitar heredado', () => {
     expect(resuelto.resources?.['cajero']?.priority).toBeUndefined();
     expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
   });
+
+  it('en inglés muestra la etiqueta traducida, nunca el id interno `propio`/`heredado` (#477)', () => {
+    // Reproduce el hallazgo del issue: `priority` propio del hijo (no heredado del padre), visto
+    // en inglés. Antes de #477 esto leía «propio: 5» —el id interno de `EstadoReservado`, no una
+    // traducción— porque `estadoReservado()` interpolaba el estado tal cual.
+    const hijo: Json = {
+      version: 1,
+      name: 'Hijo',
+      extends: 'as-is.scenario.json',
+      elements: { Task_TomarPedido: { priority: 5 } },
+    };
+
+    try {
+      setLocale('en');
+      montar(
+        <Anfitrion
+          inicial={{ 'as-is.scenario.json': asIsCorto(), 'hijo.scenario.json': hijo }}
+          archivoInicial="hijo.scenario.json"
+          guardados={[]}
+          irActual={ir}
+        />,
+      );
+      pulsar('Task_TomarPedido');
+
+      expect(document.body.textContent).toContain('own: 5');
+      expect(document.body.textContent).not.toContain('propio: 5');
+      expect(document.body.textContent).not.toContain('heredado');
+    } finally {
+      setLocale('es');
+    }
+  });
 });
 
 /* ------------------------------------------------------------------ *

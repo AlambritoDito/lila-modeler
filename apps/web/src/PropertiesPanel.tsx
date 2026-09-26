@@ -290,9 +290,15 @@ interface Props {
    * —no conoce el escenario activo ni el lint—, así que se lo pasan de fuera.
    */
   avisos?: number;
+  /**
+   * Ajuste «Avanzado» (#447/#471): con él apagado la cabecera enseña solo el tipo legible y la
+   * fila Id se oculta —coherente con el resto del panel de escenario, ⌘K y la línea de cuello—;
+   * con él encendido, como siempre (`tipo · id` + fila Id visible y copiable).
+   */
+  avanzado?: boolean;
 }
 
-export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): React.JSX.Element {
+export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = false }: Props): React.JSX.Element {
   const S = useStrings();
   const [seleccion, setSeleccion] = useState<ElementoLienzo[]>([]);
   // El moddle no es estado de React: se lee en cada render. Este contador es lo que fuerza a
@@ -342,9 +348,9 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0 }: Props): Rea
 
   return (
     <>
-      <CabeceraElemento elemento={elemento} />
+      <CabeceraElemento elemento={elemento} avanzado={avanzado} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -418,8 +424,15 @@ function FilaResumen({ etiqueta, valor }: { etiqueta: string; valor: React.React
  * Cabecera con un elemento elegido (diseño 2d): su icono de la paleta, el nombre (o el tipo
  * legible si no tiene) y la línea técnica `$type · id`. `Propiedades`/`Documentacion` no cambian:
  * esto solo se pinta encima de las dos.
+ *
+ * Con «Avanzado» apagado (#471, must-fix del QA de #480) la línea técnica enseña el tipo
+ * **legible** (`nombreDeTipo`, sin `mono`: eso es para ids y números, no para prosa) en vez del
+ * `$type` crudo (`bpmn:Task`) —sigue siendo lo único que le dice el tipo a quien no conoce el
+ * `$type`— y se omite del todo si coincide con el nombre ya enseñado arriba (un elemento sin
+ * nombre repetiría «Sequence flow / Sequence flow»). El id sigue visible (y copiable, no
+ * editable) en la fila «Id» de `Propiedades` cuando el ajuste está encendido, coherente con #447.
  */
-function CabeceraElemento({ elemento }: { elemento: ElementoLienzo }): React.JSX.Element {
+function CabeceraElemento({ elemento, avanzado }: { elemento: ElementoLienzo; avanzado: boolean }): React.JSX.Element {
   // Un clic en la etiqueta flotante selecciona la etiqueta, no la figura: sin esto el encabezado
   // enseñaría el `type` genérico `'label'` y el id con el sufijo `_label` en vez de los de verdad.
   const real = elemento.type === 'label' && elemento.labelTarget !== undefined ? elemento.labelTarget : elemento;
@@ -428,12 +441,18 @@ function CabeceraElemento({ elemento }: { elemento: ElementoLienzo }): React.JSX
   const eventDefinitionType = real.businessObject.eventDefinitions?.[0]?.$type;
   const icono = iconoDeTipo(real.type, eventDefinitionType);
   const nombre = real.businessObject.name?.trim() || nombreDeTipo(real.type);
+  const tipoLegible = nombreDeTipo(real.type);
+  const lineaTecnica = avanzado ? `${real.type} · ${real.id}` : tipoLegible;
   return (
     <div className="propiedades-cabecera">
       {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
       <div>
         <div className="propiedades-cabecera-nombre">{nombre}</div>
-        <div className="propiedades-cabecera-tipo mono">{`${real.type} · ${real.id}`}</div>
+        {(avanzado || lineaTecnica !== nombre) && (
+          <div className={avanzado ? 'propiedades-cabecera-tipo mono' : 'propiedades-cabecera-tipo'}>
+            {lineaTecnica}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -445,7 +464,12 @@ interface PropsPestana {
   refrescar: () => void;
 }
 
-function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+function Propiedades({
+  elemento,
+  escritor,
+  refrescar,
+  avanzado = false,
+}: PropsPestana & { avanzado?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [copiado, setCopiado] = useState(false);
   const bo = elemento.businessObject;
@@ -509,34 +533,36 @@ function Propiedades({ elemento, escritor, refrescar }: PropsPestana): React.JSX
         <output>{nombreDeTipo(elemento.type)}</output>
       </div>
 
-      <div className="campo">
-        <span>{S.propiedades.id}</span>
-        <div className="fila">
-          <output className="mono">{elemento.id}</output>
-          <button
-            type="button"
-            className="boton"
-            onClick={() => {
-              // Sin contexto seguro (la demo servida por http desde otra máquina) el navegador
-              // no expone `navigator.clipboard`, y con el permiso denegado `writeText` rechaza:
-              // ni una cosa ni la otra pueden tumbar el panel. El id se queda a la vista y se
-              // copia a mano, que es lo que se puede hacer ahí.
-              const portapapeles = navigator.clipboard as Clipboard | undefined;
-              void portapapeles
-                ?.writeText(elemento.id)
-                .then(() => {
-                  setCopiado(true);
-                  setTimeout(() => {
-                    setCopiado(false);
-                  }, 1200);
-                })
-                .catch(() => undefined);
-            }}
-          >
-            {copiado ? S.propiedades.copiado : S.propiedades.copiar}
-          </button>
+      {avanzado && (
+        <div className="campo">
+          <span>{S.propiedades.id}</span>
+          <div className="fila">
+            <output className="mono">{elemento.id}</output>
+            <button
+              type="button"
+              className="boton"
+              onClick={() => {
+                // Sin contexto seguro (la demo servida por http desde otra máquina) el navegador
+                // no expone `navigator.clipboard`, y con el permiso denegado `writeText` rechaza:
+                // ni una cosa ni la otra pueden tumbar el panel. El id se queda a la vista y se
+                // copia a mano, que es lo que se puede hacer ahí.
+                const portapapeles = navigator.clipboard as Clipboard | undefined;
+                void portapapeles
+                  ?.writeText(elemento.id)
+                  .then(() => {
+                    setCopiado(true);
+                    setTimeout(() => {
+                      setCopiado(false);
+                    }, 1200);
+                  })
+                  .catch(() => undefined);
+              }}
+            >
+              {copiado ? S.propiedades.copiado : S.propiedades.copiar}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
