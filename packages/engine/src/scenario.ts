@@ -587,12 +587,11 @@ function checkXorGateway(
 }
 
 /**
- * R-OR-2, #398 — un OR divergente cuyas salidas declaran `probability` en algunas pero no en
- * todas: las no declaradas siempre se toman (valen 1, `core/sim.ts::orWeights`), lo que casi nunca
- * es la intención de quien modela. Un aviso por cada salida sin declarar, con el gateway y el
- * propio flujo. Si **ninguna** salida declara probability (AND fork implícito, R-OR-2) o **todas**
- * la declaran, no hay nada parcial y no se avisa; ese caso completo ya lo cubre
- * `W-OR-SIN-PROBABILIDAD` en el motor.
+ * R-OR-2, #398 — a diverging OR whose outgoing flows declare `probability` on some but not all:
+ * the undeclared ones are always taken (they count as 1, `core/sim.ts::orWeights`), which is
+ * rarely what the modeller meant. One warning per undeclared flow, naming the flow and the
+ * gateway. With none declared (implicit AND fork, covered by `W-OR-SIN-PROBABILIDAD` at run
+ * time) or all declared there is nothing partial and no warning.
  */
 function checkOrGateway(
   problems: ScenarioProblem[],
@@ -934,7 +933,7 @@ export function validateScenario(
   }
 
   // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
-  // R-OR-2 / #398 — mismo trato para un OR divergente con declaración parcial.
+  // R-OR-2 / #398 — same treatment for a diverging OR with a partial declaration.
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
     if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
     if (node.type === 'or') checkOrGateway(problems, gatewayId, node.outgoing, elements, M);
