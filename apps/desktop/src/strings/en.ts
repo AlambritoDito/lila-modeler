@@ -68,4 +68,11 @@ export const en = {
     errorMensaje: 'Could not save.',
     errorDetalle: 'Closing was cancelled so no changes are lost. Try saving manually again.',
   },
+  /** Update notice on launch (`updateCheck.ts`, #487). Buttons: `defaultId` 0, `cancelId` 1. */
+  actualizacion: {
+    descargar: 'Download',
+    despues: 'Later',
+    mensaje: (version: string) => `Lila Modeler ${version} is available.`,
+    detalle: (actual: string) => `You have version ${actual}. “Download” opens the release page in your browser.`,
+  },
 } as const;

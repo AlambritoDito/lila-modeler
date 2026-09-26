@@ -50,4 +50,10 @@ export const es: Strings = {
     errorMensaje: 'No se pudo guardar.',
     errorDetalle: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
   },
+  actualizacion: {
+    descargar: 'Descargar',
+    despues: 'Más tarde',
+    mensaje: (version) => `Lila Modeler ${version} está disponible.`,
+    detalle: (actual) => `Tienes la versión ${actual}. «Descargar» abre la página del release en tu navegador.`,
+  },
 };
