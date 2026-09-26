@@ -765,6 +765,9 @@ export const es: Strings = {
     /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
     listaRecursos: 'Recursos por elemento',
+    /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
+    huerfanas: 'Entradas de elementos que ya no están en el diagrama',
+    quitarHuerfanas: 'Quitar entradas huérfanas',
     sinResumen: '—',
     resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
 
