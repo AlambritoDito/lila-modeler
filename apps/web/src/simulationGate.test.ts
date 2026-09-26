@@ -106,3 +106,16 @@ it('removing orphan entries from the base and its children lets Run pass (#430)'
   expect(entradasHuerfanas(limpios, ir)).toEqual([]);
   await expect(prepareSimulation(xml, 'hijo.scenario.json', limpios)).resolves.toBeDefined();
 });
+
+// #430, QA: same rule as the engine for a flattened subprocess id. An entry with its own time,
+// resources or cost is E-SUBPROC-PARAMETRO (not an orphan); any other entry is E-ELEMENTO-DESCONOCIDO.
+it('a subprocess id is an orphan unless its entry carries processingTime, resources or fixedCost (#430)', async () => {
+  const { parseBpmn } = await import('@lila/engine/bpmn');
+  const { ir } = await parseBpmn(readFileSync('packages/engine/test/fixtures/subproceso-and.bpmn', 'utf8'));
+  const con = (entrada: Record<string, unknown>) => ({ s: { elements: { SubProcess_Preparacion: entrada } } });
+  expect(entradasHuerfanas(con({ calendar: 'x' }), ir)).toEqual(['SubProcess_Preparacion']);
+  expect(entradasHuerfanas(con({}), ir)).toEqual(['SubProcess_Preparacion']);
+  expect(Object.keys(sinHuerfanas(con({ calendar: 'x' }), ir))).toEqual(['s']);
+  expect(entradasHuerfanas(con({ processingTime: { type: 'constant', value: 1 } }), ir)).toEqual([]);
+  expect(entradasHuerfanas(con({ fixedCost: 3 }), ir)).toEqual([]);
+});

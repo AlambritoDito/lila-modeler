@@ -1512,11 +1512,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
   /**
    * #430: a Run refused only because of orphan scenario entries (a configured shape was deleted)
-   * offers to drop them right beside the error; the scenario panel lists them with the same button.
+   * offers to drop them in the status bar; the scenario panel lists them with the same button.
    * Changing the scenarios clears the failed run (`cambiarEscenario` → `cancelarCorrida`).
    */
   const soloHuerfanas = sim.tipo === 'error' && sim.mensaje.split('\n').every((linea) => linea.startsWith('E-ELEMENTO-DESCONOCIDO:'));
-  const botonHuerfanas = soloHuerfanas && ir !== null && (
+  // Only in the status bar: with the Simulation tab on screen the scenario panel already offers it.
+  const botonHuerfanas = errorSimOculto !== null && soloHuerfanas && ir !== null && Object.keys(sinHuerfanas(escenarios, ir)).length > 0 && (
     <button type="button" className="boton" onClick={() => {
       for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) cambiarEscenario(otro, escenario);
     }}>{S.escenario.quitarHuerfanas}</button>
@@ -2147,7 +2148,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 {S.app.errorSimular(sim.mensaje)}
               </p>
             )}
-            {botonHuerfanas}
             <label className="campo interruptor">
               <input
                 type="checkbox"
@@ -2218,7 +2218,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
         )}
-        {errorSimOculto !== null && botonHuerfanas}
+        {botonHuerfanas}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">
             {S.app.perdidaAlExportar(perdidasAlExportar.length, perdidasAlExportar.join(' · '))}
