@@ -33,6 +33,7 @@ import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFol
 import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
+import { pickUpdate, RELEASES_URL, updateDialogOptions } from './updateCheck.js';
 import {
   addRecent,
   fitsAnyDisplay,
@@ -1011,6 +1012,27 @@ async function runSmoke(win: BrowserWindow, loadPromise: Promise<void>): Promise
   app.exit(ok ? 0 : 1);
 }
 
+/**
+ * Update notice (#487): asks GitHub once per launch and, if a newer release is out, offers to open
+ * its page. Silent on any failure — offline, rate-limited or a malformed reply is not the user's
+ * problem. Only the packaged app runs it; smoke, E2E and `npm run dev` never touch the network.
+ */
+async function checkForUpdate(win: BrowserWindow): Promise<void> {
+  try {
+    const res = await fetch(RELEASES_URL, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return;
+    const release = pickUpdate(await res.json(), app.getVersion());
+    if (release === null || win.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(win, updateDialogOptions(strings(), release, app.getVersion()));
+    if (response === 0) await shell.openExternal(release.url);
+  } catch {
+    // Sin red o respuesta rara: no hay aviso.
+  }
+}
+
 app.whenReady().then(async () => {
   registerLilaProtocol();
 
@@ -1050,6 +1072,7 @@ app.whenReady().then(async () => {
   }
 
   await loadPromise;
+  if (app.isPackaged && process.env.LILA_E2E_LOG === undefined) void checkForUpdate(win);
 });
 
 // Esta beta tiene una sola ventana de proyecto (la del escenario desacoplado se cierra con ella):
