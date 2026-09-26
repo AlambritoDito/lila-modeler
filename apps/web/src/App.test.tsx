@@ -2415,9 +2415,10 @@ const EDITADO = () => seedModelXml().replace(/(<bpmn:task id="[^"]+" name=")[^"]
 
 it('5 s after an edit the desktop sends writeRecovery a .lila with the edit; with no changes it writes nothing (#459)', async () => {
   const puente = puenteRecuperacion(null);
-  await montar();
+  // Fake timers before mounting: a timer armed at mount must be one this test can run.
   vi.useFakeTimers();
   try {
+    await montar();
     await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
     expect(puente.writeRecovery).not.toHaveBeenCalled();
     mocks.exportXml.mockResolvedValue(EDITADO());
@@ -2429,6 +2430,32 @@ it('5 s after an edit the desktop sends writeRecovery a .lila with the edit; wit
     const copia = decodeLila(puente.writeRecovery.mock.calls[0]![0] as Uint8Array);
     expect(copia.model.xml).toContain('Tarea renombrada');
   } finally { vi.useRealTimers(); }
+});
+
+it('steady editing every 3 s still writes a copy at most every 5 s (#459, a throttle, not a debounce)', async () => {
+  const puente = puenteRecuperacion(null);
+  vi.useFakeTimers();
+  try {
+    await montar();
+    for (let t = 0; t < 21; t += 3) {
+      mocks.exportXml.mockResolvedValue(seedModelXml().replace(/(<bpmn:task id="[^"]+" name=")[^"]*/, `$1Edit at ${t}s`));
+      await act(async () => mocks.changed());
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    }
+    // Edits at 0, 3, …, 18 s: writes at 5, 11 and 17 s.
+    expect(puente.writeRecovery.mock.calls.length).toBeGreaterThanOrEqual(3);
+  } finally { vi.useRealTimers(); }
+});
+
+it('an unreadable copy says so, shows the welcome screen and lets main delete it (#459)', async () => {
+  const puente = puenteRecuperacion(new Uint8Array([1, 2, 3]));
+  await montar();
+  expect(container.textContent).toContain(T.app.errorCopiaRecuperacion('').trim());
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+  // A clean document AFTER the offer: main ignored the one sent at mount, while it was pending.
+  const setDirty = session.setDirty as unknown as ReturnType<typeof vi.fn>;
+  expect(setDirty).toHaveBeenLastCalledWith(false);
+  expect(Math.max(...setDirty.mock.invocationCallOrder)).toBeGreaterThan(puente.takeRecovery.mock.invocationCallOrder[0]!);
 });
 
 it('takeRecovery opens the copy dirty, without the welcome screen (#459)', async () => {

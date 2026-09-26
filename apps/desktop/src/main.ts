@@ -618,7 +618,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     if (recoveryOffered || recoveryAtLaunch === null) return null;
     recoveryOffered = true;
     const cuando = recoveryAtLaunch.savedAt.toLocaleString(desktopLocale, { dateStyle: 'medium', timeStyle: 'short' });
-    // Seam E2E (`LILA_E2E_RECOVERY`, ver `e2e.ts`): sin diálogo nativo.
+    // E2E seam (`LILA_E2E_RECOVERY`, see `e2e.ts`): no native dialog.
     const choice = e2e.recovery
       ?? recoveryChoice((await dialog.showMessageBox(win, recoveryDialogOptions(strings(), cuando))).response);
     const { bytes } = recoveryAtLaunch;
