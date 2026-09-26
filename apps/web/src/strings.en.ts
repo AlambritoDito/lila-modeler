@@ -786,6 +786,9 @@ export const en = {
     /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
     listaRecursos: 'Resources by element',
+    /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
+    huerfanas: 'Entries for elements that are no longer in the diagram',
+    quitarHuerfanas: 'Remove orphan entries',
     sinResumen: '—',
     resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
 
