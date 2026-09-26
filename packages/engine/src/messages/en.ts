@@ -129,6 +129,8 @@ export const en: Catalog = {
       `${path}: the element exists in the model and has no parameters; it takes its defaults.`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
       `${path}: ${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it.`,
+    'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
+      `${path}: ${flowId} declares no probability, but ${gatewayId} has other outgoing flows that do; the undeclared flow is always taken (missing probability counts as 1).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },

@@ -741,6 +741,37 @@ describe('campos reservados: quitar heredado', () => {
     expect(resuelto.resources?.['cajero']?.priority).toBeUndefined();
     expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
   });
+
+  it('en inglés muestra la etiqueta traducida, nunca el id interno `propio`/`heredado` (#477)', () => {
+    // Reproduce el hallazgo del issue: `priority` propio del hijo (no heredado del padre), visto
+    // en inglés. Antes de #477 esto leía «propio: 5» —el id interno de `EstadoReservado`, no una
+    // traducción— porque `estadoReservado()` interpolaba el estado tal cual.
+    const hijo: Json = {
+      version: 1,
+      name: 'Hijo',
+      extends: 'as-is.scenario.json',
+      elements: { Task_TomarPedido: { priority: 5 } },
+    };
+
+    try {
+      setLocale('en');
+      montar(
+        <Anfitrion
+          inicial={{ 'as-is.scenario.json': asIsCorto(), 'hijo.scenario.json': hijo }}
+          archivoInicial="hijo.scenario.json"
+          guardados={[]}
+          irActual={ir}
+        />,
+      );
+      pulsar('Task_TomarPedido');
+
+      expect(document.body.textContent).toContain('own: 5');
+      expect(document.body.textContent).not.toContain('propio: 5');
+      expect(document.body.textContent).not.toContain('heredado');
+    } finally {
+      setLocale('es');
+    }
+  });
 });
 
 /* ------------------------------------------------------------------ *
@@ -831,10 +862,10 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     const delta = guardados.at(-1)!.escenario;
     // § 6: el array entero, no solo el intervalo nuevo.
     expect((delta['calendars'] as Json)['oficina']).toEqual({
-      // Ordenados por franja: el sábado abre a la misma hora pero cierra antes.
+      // #469: the existing entry stays as written and first; the painted hours come after it.
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '11:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '11:00' },
       ],
     });
 
@@ -847,6 +878,39 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
       intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
     });
+  });
+
+  it('painting a cell keeps the ranges added with the picker as written (#469)', () => {
+    const todos: Intervalo = { days: [...DIAS], from: '06:00', to: '10:00' };
+    const laborables: Intervalo = { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' };
+    const miercoles: Intervalo = { days: ['WED'], from: '20:00', to: '21:00' };
+    const inicial: Json = { ...asIsCorto(), calendars: { oficina: { intervals: [todos, laborables] } } };
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': inicial }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    irAPaso('calendars');
+    arrastrar(['WED 20:00']);
+    pulsar('Guardar');
+    const oficina = (): Intervalo[] =>
+      ((guardados.at(-1)!.escenario['calendars'] as Json)['oficina'] as Json)['intervals'] as Intervalo[];
+    expect(oficina()).toEqual([todos, laborables, miercoles]);
+
+    // Closing an hour inside «Mon–Fri» re-derives only that entry; «every day» stays as written.
+    arrastrar(['WED 12:00']);
+    pulsar('Guardar');
+    expect(oficina()[0]).toEqual(todos);
+    expect(oficina()).not.toContainEqual(laborables);
+    // The untouched weekdays keep their 09:00 start instead of being clipped by «every day 06–10».
+    expect(oficina()).toContainEqual({ days: ['MON', 'TUE', 'THU', 'FRI'], from: '09:00', to: '18:00' });
+    const esperadas = aCeldas([todos, laborables, miercoles]);
+    esperadas.delete(celda(2, 12));
+    expect(aCeldas(oficina())).toEqual(esperadas);
   });
 
   it('un calendario con franjas de minutos se edita como lista, sin redondear', () => {
@@ -910,8 +974,8 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     pulsar('Guardar');
     expect((guardados.at(-1)!.escenario['calendars'] as Json)['oficina']).toEqual({
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '13:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '13:00' },
       ],
     });
   });
@@ -967,8 +1031,8 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     const delta = guardados.at(-1)!.escenario;
     expect((delta['calendars'] as Json)['oficina']).toEqual({
       intervals: [
-        { days: ['SAT'], from: '09:00', to: '10:00' },
         { days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' },
+        { days: ['SAT'], from: '09:00', to: '10:00' },
       ],
     });
     // El padre en memoria no se ha tocado y el resuelto conserva lo suyo (`capacity: 3`).
@@ -1201,5 +1265,53 @@ describe('model problems (#455)', () => {
     );
     expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.conteo(errores, propios.length - errores + 1));
     expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #430: entries for ids the diagram no longer has
+ * ------------------------------------------------------------------ */
+
+describe('entradas huérfanas (#430)', () => {
+  it('el panel lista las huérfanas del proyecto y el botón las quita de la base y del hijo', () => {
+    const fantasma = { processingTime: { type: 'constant', value: 1 } };
+    const base = asIsCorto();
+    const inicial: Record<string, Json> = {
+      'as-is.scenario.json': { ...base, elements: { ...(base['elements'] as Json), Tarea_borrada: fantasma } },
+      'hijo.scenario.json': { extends: 'as-is.scenario.json', elements: { Tarea_borrada: fantasma, Otra_borrada: fantasma } },
+    };
+    const vivos: { actual: Readonly<Record<string, Json>> } = { actual: inicial };
+    function Espejo(): React.JSX.Element {
+      const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
+      vivos.actual = escenarios;
+      return (
+        <ScenarioPanel
+          archivo="hijo.scenario.json"
+          escenarios={escenarios}
+          onCambio={(a, e) => setEscenarios((previos) => ({ ...previos, [a]: e }))}
+          onGuardar={() => {}}
+          onDuplicar={() => {}}
+          ir={ir}
+          seleccion={null}
+          onSeleccionar={() => {}}
+        />
+      );
+    }
+    montar(<Espejo />);
+
+    const lista = document.querySelector('.huerfanas');
+    expect(lista?.textContent).toContain(es.escenario.huerfanas);
+    expect([...lista!.querySelectorAll('li')].map((li) => li.textContent).sort()).toEqual(['Otra_borrada', 'Tarea_borrada']);
+    expect(() => comoLilaRun('hijo.scenario.json', vivos.actual)).not.toThrow();
+    expect(validateScenario(comoLilaRun('hijo.scenario.json', vivos.actual), ir).map((p) => p.code)).toContain('E-ELEMENTO-DESCONOCIDO');
+
+    pulsar(es.escenario.quitarHuerfanas);
+
+    expect(document.querySelector('.huerfanas')).toBeNull();
+    expect(vivos.actual['as-is.scenario.json']!['elements']).toEqual(base['elements']);
+    expect(vivos.actual['hijo.scenario.json']!['elements']).toEqual({});
+    // The gate passes: no E-ELEMENTO-DESCONOCIDO left in the resolved child.
+    const problemas = validateScenario(comoLilaRun('hijo.scenario.json', vivos.actual), ir);
+    expect(problemas.filter((p) => p.severity === 'error')).toEqual([]);
   });
 });

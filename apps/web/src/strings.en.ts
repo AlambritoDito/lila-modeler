@@ -229,6 +229,8 @@ export const en = {
      * items of the «View» menu that replaces them in narrow windows; the titles carry the key.
      */
     vista: 'View',
+    /** Group of align and distribute buttons on the canvas, in Model (#453). */
+    alinear: 'Align and distribute',
     regiones: {
       izquierda: 'Left column',
       derecha: 'Right panel',
@@ -628,8 +630,8 @@ export const en = {
   propiedades: {
     sinSeleccion: 'Select an element of the canvas to see its properties.',
     variosSeleccionados: (n: number): string =>
-      `${n} elements selected: acting on several at once is not there yet. ` +
-      'Select a single one to edit it.',
+      `${n} elements selected. Colour applies to all of them; ` +
+      'select a single one to edit its other properties.',
 
     /* Right-panel header with nothing selected (design "Turno 2", block 2d). */
     nadaSeleccionado: 'Nothing selected',
@@ -652,6 +654,20 @@ export const en = {
     id: 'Id',
     copiar: 'Copy',
     copiado: 'Copied',
+    /** Colours per element (#452): the panel row, the context pad entry and the eight colours. */
+    color: 'Color',
+    cambiarColor: 'Change color',
+    colores: {
+      ninguno: 'None',
+      azul: 'Blue',
+      verde: 'Green',
+      amarillo: 'Yellow',
+      naranja: 'Orange',
+      rojo: 'Red',
+      morado: 'Purple',
+      turquesa: 'Teal',
+      gris: 'Gray',
+    },
 
     descripcion: 'Description',
     descripcionProceso: 'Process description',
@@ -786,6 +802,9 @@ export const en = {
     /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
     listaRecursos: 'Resources by element',
+    /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
+    huerfanas: 'Entries for elements that are no longer in the diagram',
+    quitarHuerfanas: 'Remove orphan entries',
     sinResumen: '—',
     resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
 
@@ -813,7 +832,10 @@ export const en = {
     claveRepetida: (clave: string): string => `${clave} already exists; edit it below or use another id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'deleted (null)',
-    estadoReservado: (estado: string, valor: string): string => `${estado}: ${valor}`,
+    /** Label for `EstadoReservado`'s `'propio'`/`'heredado'`: never the internal state id (#477). */
+    estadoPropio: 'own',
+    estadoHeredado: 'inherited',
+    estadoReservado: (etiquetaEstado: string, valor: string): string => `${etiquetaEstado}: ${valor}`,
     /** Label of a variant with neither discriminator nor known type. */
     opcionN: (i: number): string => `option ${i}`,
     /** JSON types of the schema, in English, for the variant selector. */
@@ -1358,6 +1380,14 @@ export const en = {
     conectar: 'Connect tool',
     editarEtiqueta: 'Edit the label',
     reemplazar: 'Replace the element',
+    alinearIzquierda: 'Align left',
+    alinearCentro: 'Align center',
+    alinearDerecha: 'Align right',
+    alinearArriba: 'Align top',
+    alinearMedio: 'Align middle',
+    alinearAbajo: 'Align bottom',
+    distribuirHorizontal: 'Distribute horizontally',
+    distribuirVertical: 'Distribute vertically',
     izquierda: 'Show or hide the left column',
     derecha: 'Show or hide the right panel',
     diagramas: 'Show or hide the diagram tabs',

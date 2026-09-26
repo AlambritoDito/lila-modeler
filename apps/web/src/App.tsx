@@ -17,7 +17,7 @@ import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
-import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
+import { Lienzo, type Alineacion, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
@@ -25,7 +25,7 @@ import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } f
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
 import { TokenSim } from './TokenSim';
-import { prepareSimulation } from './simulationGate';
+import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { SaveOutcome, Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
 import type { Corrida } from './BottleneckOverlay';
@@ -330,6 +330,34 @@ function IconoRegion({ region }: { region: Region | null }): React.JSX.Element {
     </svg>
   );
 }
+/** The align and distribute entries of the shortcut map and what each asks bpmn-js (#453). */
+const ALINEACIONES = {
+  alinearIzquierda: 'left', alinearCentro: 'center', alinearDerecha: 'right',
+  alinearArriba: 'top', alinearMedio: 'middle', alinearAbajo: 'bottom',
+  distribuirHorizontal: 'horizontal', distribuirVertical: 'vertical',
+} as const satisfies Record<string, Alineacion>;
+type AtajoAlinear = keyof typeof ALINEACIONES;
+const ALINEAR_IDS = Object.keys(ALINEACIONES) as AtajoAlinear[];
+/** A guide line plus the shapes on it, per alignment (24×24). */
+const TRAZO_ALINEAR: Record<Alineacion, [string, ...[number, number, number, number][]]> = {
+  left: ['M4 3v18', [4, 6, 14, 4], [4, 14, 9, 4]],
+  center: ['M12 3v18', [5, 6, 14, 4], [7.5, 14, 9, 4]],
+  right: ['M20 3v18', [6, 6, 14, 4], [11, 14, 9, 4]],
+  top: ['M3 4h18', [6, 4, 4, 14], [14, 4, 4, 9]],
+  middle: ['M3 12h18', [6, 5, 4, 14], [14, 7.5, 4, 9]],
+  bottom: ['M3 20h18', [6, 6, 4, 14], [14, 11, 4, 9]],
+  horizontal: ['M3 3v18M21 3v18', [7, 7, 3, 10], [14, 7, 3, 10]],
+  vertical: ['M3 3h18M3 21h18', [7, 7, 10, 3], [7, 14, 10, 3]],
+};
+function IconoAlinear({ tipo }: { tipo: Alineacion }): React.JSX.Element {
+  const [linea, ...cajas] = TRAZO_ALINEAR[tipo];
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d={linea} />
+      {cajas.map(([x, y, width, height]) => <rect key={`${x},${y}`} x={x} y={y} width={width} height={height} />)}
+    </svg>
+  );
+}
 /** Focus the toggle of `region` that is on screen: the button group or, when narrow, the «View» menu. */
 function enfocarToggle(region: Region): void {
   const boton = document.querySelector<HTMLElement>(`.vista-grupo [data-region="${region}"]`);
@@ -397,6 +425,12 @@ type EstadoSim =
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
+  // Re-render on every selection change: the align group (#453) counts the selected shapes.
+  const [, setCambioSeleccion] = useState(0);
+  useEffect(() => modelador?.suscribir(['selection.changed'], () => setCambioSeleccion((n) => n + 1)), [modelador]);
+  const alineable = modelador?.alineable?.() ?? { alinear: false, distribuir: false };
+  /** Whether an align entry would move anything: only in Model, the one mode that edits the layout. */
+  const puedeAlinear = (id: AtajoAlinear): boolean => modo === 'modelar' && alineable[id.startsWith('distribuir') ? 'distribuir' : 'alinear'];
   useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -1320,6 +1354,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
+      ...ALINEAR_IDS.map((id) => accion(id, puedeAlinear(id))),
       accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
       accion('ajustes'),
       // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
@@ -1511,6 +1546,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
   /**
+   * #430: a Run refused only because of orphan scenario entries (a configured shape was deleted)
+   * offers to drop them in the status bar; the scenario panel lists them with the same button.
+   * Changing the scenarios clears the failed run (`cambiarEscenario` → `cancelarCorrida`).
+   */
+  const soloHuerfanas = sim.tipo === 'error' && sim.mensaje.split('\n').every((linea) => linea.startsWith('E-ELEMENTO-DESCONOCIDO:'));
+  // Only in the status bar: with the Simulation tab on screen the scenario panel already offers it.
+  const botonHuerfanas = errorSimOculto !== null && soloHuerfanas && ir !== null && Object.keys(sinHuerfanas(escenarios, ir)).length > 0 && (
+    <button type="button" className="boton" onClick={() => {
+      for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) cambiarEscenario(otro, escenario);
+    }}>{S.escenario.quitarHuerfanas}</button>
+  );
+  /**
    * An error the status bar is showing right now. A hidden status bar comes back for it: an
    * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
    * `.bpmn` notice and the import warnings last as long as the model, and would pin the bar for
@@ -1585,6 +1632,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     zoomMenos: () => modelador?.zoom(1 / 1.2),
     ajustarVista: () => modelador?.ajustar(),
     renombrar,
+    ...Object.fromEntries(ALINEAR_IDS.map((id) => [id, () => { if (modo === 'modelar') modelador?.alinear?.(ALINEACIONES[id]); }])) as Record<AtajoAlinear, () => void>,
     izquierda: () => alternarRegion('izquierda'),
     derecha: () => alternarRegion('derecha'),
     diagramas: () => alternarRegion('diagramas'),
@@ -1616,10 +1664,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
     // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
     if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
+    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays the browser's.
+    if (a.id in ALINEACIONES && modo !== 'modelar') return;
     e.preventDefault();
-    // Only the ⌘ keys are hidden from the target (bpmn-js zooms on them too); Esc, F2 and F6 still
+    // Only the ⌘ and ⌥ keys are hidden from the target (bpmn-js zooms on ⌘ ones, and the token
+    // simulation toggles on a T with any modifier, locking the canvas: #453); Esc, F2 and F6 still
     // reach whatever else listens.
-    if (conMod) e.stopPropagation();
+    if (conMod || e.altKey) e.stopPropagation();
     // A held key is swallowed, not repeated (QA of #436, M1): one save / run / toggle per press,
     // and the browser never gets the repeats (⌘S «Save page as», ⇧⌘B bookmarks bar). Zoom repeats.
     if (e.repeat && a.id !== 'zoomMas' && a.id !== 'zoomMenos') return;
@@ -2047,22 +2098,39 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'rutas' && (
         <TokenSim key={`${locale}|${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
       )}
-      {(validacion.errores > 0 || validacion.avisos > 0) && (
-        <div className="chips-validacion">
-          {validacion.errores > 0 && (
-            <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{S.app.errores(validacion.errores)}
-            </button>
-          )}
-          {validacion.avisos > 0 && (
-            <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{S.app.avisos(validacion.avisos)}
-            </button>
-          )}
-        </div>
-      )}
+      {/* The top edge of the canvas (#453): validation chips on the left, the align group on the
+          right; one wrapping row, so a narrow canvas drops the group below the chips instead of
+          stacking one on the other. */}
+      <div className="lienzo-arriba">
+        {(validacion.errores > 0 || validacion.avisos > 0) && (
+          <div className="chips-validacion">
+            {validacion.errores > 0 && (
+              <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
+                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+                <span className="punto" />{S.app.errores(validacion.errores)}
+              </button>
+            )}
+            {validacion.avisos > 0 && (
+              <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
+                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+                <span className="punto" />{S.app.avisos(validacion.avisos)}
+              </button>
+            )}
+          </div>
+        )}
+        {/* Align and distribute (#453): on the canvas, not in the top bar, which is already full at
+            1440 px. Disabled until bpmn-js would move something. */}
+        {modo === 'modelar' && (
+          <div className="alinear-grupo" role="group" aria-label={S.app.alinear}>
+            {ALINEAR_IDS.map((id) => (
+              <button key={id} type="button" className="boton icono" aria-label={S.atajos[id]} title={`${S.atajos[id]}${atajo(id)}`}
+                disabled={!puedeAlinear(id)} onClick={() => atajos[id]()}>
+                <IconoAlinear tipo={ALINEACIONES[id]} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       </div>
       {modo === 'resultados' && (
         <section className="zona-resultados">
@@ -2161,7 +2229,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             )}
           </div>
         ) : (
-          <PanelPropiedades key={projectId} modelador={modelador} pestana={pestana} avisos={validacion.avisos} />
+          <PanelPropiedades
+            key={projectId}
+            modelador={modelador}
+            pestana={pestana}
+            avisos={validacion.avisos}
+            avanzado={avanzado}
+          />
         )}
         </>}
       </aside>
@@ -2181,7 +2255,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
           descolocar esa retícula. Los conteos son los mismos que los chips del lienzo (#241). */}
       <footer id={ID_REGION.estado} className="estado">
-        <span className={`marca${validacion.errores > 0 ? ' error' : ''}`}>{S.app.errores(validacion.errores)}</span>
+        {/* #430: the counters are the live lint, not the Run gate; a failed Run still marks the chip. */}
+        <span className={`marca${validacion.errores > 0 || sim.tipo === 'error' ? ' error' : ''}`}
+          title={sim.tipo === 'error' ? S.app.errorSimular(sim.mensaje) : undefined}>{S.app.errores(validacion.errores)}</span>
         <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />
         <span>{S.app.escenario} <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
@@ -2204,6 +2280,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
         )}
+        {botonHuerfanas}
         {perdidasAlExportar.length > 0 && (
           <span role="alert" className="error">
             {S.app.perdidaAlExportar(perdidasAlExportar.length, perdidasAlExportar.join(' · '))}

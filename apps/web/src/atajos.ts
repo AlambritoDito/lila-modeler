@@ -4,8 +4,8 @@
  * is held to it by `menu.test.ts` (it cannot import this file: `rootDir: src`), and
  * `docs/SHORTCUTS.md` is held to it by `atajos.test.ts`. The labels live in `S.atajos.<id>`.
  *
- * `tecla` is `'+'`-separated: optional `Mod` (⌘ on macOS, Ctrl elsewhere) and `Shift`, then the key —
- * a letter, `DigitN` (matched by `e.code`, so it works on any layout), `Plus`/`Minus` (matched
+ * `tecla` is `'+'`-separated: optional `Mod` (⌘ on macOS, Ctrl elsewhere), `Alt` and `Shift`, then the
+ * key — a letter (matched by `e.code` when Alt is held: ⌥ types other characters on macOS), `DigitN` (matched by `e.code`, so it works on any layout), `Plus`/`Minus` (matched
  * as bpmn-js does, by `e.key`), or a `KeyboardEvent.key` name (`F2`, `Escape`, `Enter`, `,`…).
  * `teclaMac` only exists where macOS uses a different key. Flags:
  * - `menu`: an item of the native Electron menu owns it; in the desktop app the keyboard handler
@@ -62,6 +62,15 @@ export const ATAJOS = [
   { id: 'conectar', grupo: 'lienzo', tecla: 'C', lienzo: true },
   { id: 'editarEtiqueta', grupo: 'lienzo', tecla: 'E', lienzo: true },
   { id: 'reemplazar', grupo: 'lienzo', tecla: 'R', lienzo: true },
+  // Align and distribute the selection (#453), draw.io's keys.
+  { id: 'alinearIzquierda', grupo: 'lienzo', tecla: 'Alt+Shift+L' },
+  { id: 'alinearCentro', grupo: 'lienzo', tecla: 'Alt+Shift+C' },
+  { id: 'alinearDerecha', grupo: 'lienzo', tecla: 'Alt+Shift+R' },
+  { id: 'alinearArriba', grupo: 'lienzo', tecla: 'Alt+Shift+T' },
+  { id: 'alinearMedio', grupo: 'lienzo', tecla: 'Alt+Shift+M' },
+  { id: 'alinearAbajo', grupo: 'lienzo', tecla: 'Alt+Shift+B' },
+  { id: 'distribuirHorizontal', grupo: 'lienzo', tecla: 'Alt+Shift+H' },
+  { id: 'distribuirVertical', grupo: 'lienzo', tecla: 'Alt+Shift+V' },
   { id: 'izquierda', grupo: 'paneles', tecla: 'Mod+Shift+L' },
   { id: 'derecha', grupo: 'paneles', tecla: 'Mod+Shift+P' },
   { id: 'diagramas', grupo: 'paneles', tecla: 'Mod+Shift+D' },
@@ -81,43 +90,45 @@ export const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(na
 
 export const atajoPorId = (id: AtajoId): Atajo => ATAJOS.find((a) => a.id === id)!;
 
-function partes(atajo: Atajo, mac: boolean): { mod: boolean; shift: boolean; tecla: string } {
+function partes(atajo: Atajo, mac: boolean): { mod: boolean; alt: boolean; shift: boolean; tecla: string } {
   const p = ((mac ? atajo.teclaMac : undefined) ?? atajo.tecla).split('+');
   const tecla = p.pop()!;
-  return { mod: p.includes('Mod'), shift: p.includes('Shift'), tecla };
+  return { mod: p.includes('Mod'), alt: p.includes('Alt'), shift: p.includes('Shift'), tecla };
 }
 
 /**
  * Whether `e` is `atajo`. ⌘ or Ctrl both count as `Mod` on every platform, like bpmn-js's
- * `isCmd` (and like the handler this replaces); Alt never matches (AltGr types characters).
+ * `isCmd` (and like the handler this replaces); Alt only where the entry asks for it (AltGr, which
+ * types characters, arrives as Ctrl+Alt and so never matches an Alt entry).
  * Held keys (`repeat`) match too: `App.tsx` swallows them without running the handler again.
  */
 export function coincide(atajo: Atajo, e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'repeat'>, mac: boolean): boolean {
-  const { mod, shift, tecla } = partes(atajo, mac);
-  if (e.altKey || mod !== (e.metaKey || e.ctrlKey)) return false;
+  const { mod, alt, shift, tecla } = partes(atajo, mac);
+  if (alt !== e.altKey || mod !== (e.metaKey || e.ctrlKey)) return false;
   // `+` needs Shift on many layouts, so zoom ignores it (bpmn-js does the same).
   if (tecla === 'Plus') return ['+', '=', 'Add'].includes(e.key);
   if (tecla === 'Minus') return ['-', 'Subtract'].includes(e.key);
   if (shift !== e.shiftKey) return false;
   if (tecla.startsWith('Digit')) return e.code === tecla;
+  if (alt) return e.code === `Key${tecla}`;
   return tecla.length === 1 ? e.key.toLowerCase() === tecla.toLowerCase() : e.key === tecla;
 }
 
 const NOMBRE_MAC: Record<string, string> = { Enter: '↩', Escape: 'Esc', Plus: '+', Minus: '−', Backspace: '⌫', Delete: '⌦' };
 const NOMBRE: Record<string, string> = { Escape: 'Esc', Plus: '+', Minus: '-', Delete: 'Del' };
 
-/** `⇧⌘S` / `Ctrl+Shift+S`, `⌘↩` / `Ctrl+Enter`, `⇧F6` / `Shift+F6`. */
+/** `⇧⌘S` / `Ctrl+Shift+S`, `⌘↩` / `Ctrl+Enter`, `⇧F6` / `Shift+F6`, `⌥⇧L` / `Alt+Shift+L`. */
 export function etiqueta(atajo: Atajo, mac: boolean): string {
-  const { mod, shift, tecla } = partes(atajo, mac);
+  const { mod, alt, shift, tecla } = partes(atajo, mac);
   const t = tecla.replace(/^Digit/, '');
-  if (mac) return `${shift ? '⇧' : ''}${mod ? '⌘' : ''}${NOMBRE_MAC[t] ?? t}`;
-  return [mod && 'Ctrl', shift && 'Shift', NOMBRE[t] ?? t].filter(Boolean).join('+');
+  if (mac) return `${alt ? '⌥' : ''}${shift ? '⇧' : ''}${mod ? '⌘' : ''}${NOMBRE_MAC[t] ?? t}`;
+  return [mod && 'Ctrl', alt && 'Alt', shift && 'Shift', NOMBRE[t] ?? t].filter(Boolean).join('+');
 }
 
 /** Electron accelerator for the native menu (`CmdOrCtrl+Shift+S`); `menu.test.ts` pins parity. */
 export function acelerador(atajo: Atajo): string {
-  const { mod, shift, tecla } = partes(atajo, false);
-  return [mod && 'CmdOrCtrl', shift && 'Shift', tecla.replace(/^Digit/, '')].filter(Boolean).join('+');
+  const { mod, alt, shift, tecla } = partes(atajo, false);
+  return [mod && 'CmdOrCtrl', alt && 'Alt', shift && 'Shift', tecla.replace(/^Digit/, '')].filter(Boolean).join('+');
 }
 
 /** What a tooltip appends: ` (⇧⌘S)` / ` (Ctrl+Shift+S)`. */

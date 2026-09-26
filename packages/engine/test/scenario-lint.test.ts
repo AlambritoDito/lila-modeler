@@ -44,6 +44,12 @@ function xorIr(outs: readonly string[] = ['Flow_A', 'Flow_B', 'Flow_C']): Proces
   };
 }
 
+/** Igual que `xorIr`, pero el gateway divergente es un `or` (R-OR-1…3, #398). */
+function orIr(outs: readonly string[] = ['Flow_A', 'Flow_B', 'Flow_C']): ProcessIR {
+  const ir = xorIr(outs);
+  return { ...ir, nodes: { ...ir.nodes, Gateway_X: { ...ir.nodes.Gateway_X!, type: 'or' } } };
+}
+
 const BASE = {
   version: 1 as const,
   name: 'xor',
@@ -124,6 +130,51 @@ describe('R10 — probabilidades de un XOR (LILA-042)', () => {
     });
     const errors = scenarioErrors(validateScenario(scenario, xorIr()));
     expect(errors.map((e) => e.code)).toContain('E-XOR-SUMA-CERO');
+  });
+});
+
+describe('R-OR-2 — declaración parcial de probability en un OR (#398)', () => {
+  test('1 de 2 salidas con probability: un W-OR-PROB-PARCIAL con el id de la salida sin declarar', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      elements: { Flow_A: { probability: 0.5 } }, // Flow_B sin declarar
+    });
+    const problems = validateScenario(scenario, orIr(['Flow_A', 'Flow_B']));
+
+    const warnings = problems.filter((p) => p.code === 'W-OR-PROB-PARCIAL');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ severity: 'warning', path: 'elements.Gateway_X' });
+    expect(warnings[0]?.message).toContain('Flow_B');
+    expect(warnings[0]?.message).toContain('Gateway_X');
+    expect(warnings[0]?.message).not.toContain('Flow_A');
+  });
+
+  test('varias salidas sin declarar: un aviso por cada una', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      elements: { Flow_A: { probability: 0.5 } }, // Flow_B y Flow_C sin declarar
+    });
+    const problems = validateScenario(scenario, orIr());
+
+    const warnings = problems.filter((p) => p.code === 'W-OR-PROB-PARCIAL');
+    expect(warnings.map((w) => w.message).join(' ')).toContain('Flow_B');
+    expect(warnings.map((w) => w.message).join(' ')).toContain('Flow_C');
+    expect(warnings).toHaveLength(2);
+  });
+
+  test('todas las salidas declaran probability: sin aviso', () => {
+    const scenario = ScenarioSchema.parse({
+      ...BASE,
+      elements: { Flow_A: { probability: 0.5 }, Flow_B: { probability: 0.3 } },
+    });
+    const problems = validateScenario(scenario, orIr(['Flow_A', 'Flow_B']));
+    expect(problems.some((p) => p.code === 'W-OR-PROB-PARCIAL')).toBe(false);
+  });
+
+  test('ninguna salida declara probability: sin aviso (comportamiento de AND fork, R-OR-2)', () => {
+    const scenario = ScenarioSchema.parse({ ...BASE, elements: {} });
+    const problems = validateScenario(scenario, orIr(['Flow_A', 'Flow_B']));
+    expect(problems.some((p) => p.code === 'W-OR-PROB-PARCIAL')).toBe(false);
   });
 });
 

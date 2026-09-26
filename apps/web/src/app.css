@@ -989,6 +989,15 @@ body {
   white-space: nowrap;
 }
 
+/* #430: «Remove orphan entries» in the bar is as tall as the text beside it: no vertical padding,
+   and the 1 px border eats into the margin so the bar keeps its height. */
+.estado .boton {
+  flex: none;
+  line-height: inherit;
+  margin-block: -1px;
+  padding: 0 calc(8px * var(--espacio, 1));
+}
+
 .enlace {
   background: none;
   border: none;
@@ -1659,6 +1668,39 @@ body {
   padding: 0;
   place-items: center;
   width: 30px;
+}
+
+/* Top edge of the canvas (#453): the validation chips on the left and the align group on the
+   right share one wrapping row, so they never overlap; the row lets clicks through its gap. */
+.lienzo-arriba {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  left: 14px;
+  pointer-events: none;
+  position: absolute;
+  right: 15px;
+  top: 14px;
+  z-index: 1;
+}
+
+.lienzo-arriba > * { pointer-events: auto; }
+.lienzo-arriba > .chips-validacion { position: static; }
+
+.alinear-grupo {
+  background: var(--border);
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.alinear-grupo .boton.icono {
+  display: grid;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  width: 28px;
 }
 
 /* ---------- minimapa (LILA-208) ---------- */
@@ -2665,4 +2707,50 @@ body {
 .djs-container svg {
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Colours per element (#452): «none» and the eight swatches of the properties panel, and the
+   context pad entry that opens the same list. The swatches' own colours come inline from
+   `colores.ts` (diagram data, not theme). */
+.colores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.color-muestra {
+  border: 1px solid var(--border);
+  cursor: pointer;
+  height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.color-ninguno {
+  background: linear-gradient(to top right, transparent 45%, var(--fg-muted) 45% 55%, transparent 55%);
+}
+
+.color-muestra[aria-pressed='true'] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.djs-context-pad .lila-color-entrada::before {
+  background: conic-gradient(var(--accent-primary), var(--accent-secondary), var(--accent-tertiary), var(--status-info), var(--accent-primary));
+  content: '';
+  display: block;
+  height: 14px;
+  margin: 3px;
+  width: 14px;
+}
+
+/* Keyboard focus reads apart from the «current colour» outline (QA of #452). */
+.color-muestra:focus-visible {
+  outline: 2px dashed var(--fg-primary);
+  outline-offset: 1px;
+}
+
+/* The current colour in the context pad's popup. */
+.djs-popup .lila-color-actual {
+  font-weight: 700;
 }

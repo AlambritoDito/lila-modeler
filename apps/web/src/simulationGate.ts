@@ -1,3 +1,4 @@
+import type { ProcessIR } from '@lila-modeler/engine';
 import { validateBpmnXml } from '@lila-modeler/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { getLocale, strings, type Locale } from './i18n';
@@ -54,4 +55,40 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
     ...problems.filter((p) => p.severity === 'warning').map((p) => `${p.code}: ${p.message}`),
   ];
   return { ir: model.ir, scenario: scenario as ResolvedScenario, warnings };
+}
+
+/**
+ * #430: `elements` keys, in any scenario of the project, that name nothing in the diagram — what
+ * `validateScenario` rejects with E-ELEMENTO-DESCONOCIDO. Same rule as the engine: a flattened
+ * subprocess id is known only for an entry with `processingTime`, `resources` or `fixedCost`
+ * (that one is E-SUBPROC-PARAMETRO instead). Deleting a configured shape leaves one behind; Run
+ * refuses it, and the app offers to drop them rather than dropping them by itself, so ⌘Z after
+ * deleting a shape still finds its configuration.
+ */
+export function entradasHuerfanas(scenarios: Readonly<Record<string, Record<string, unknown>>>, ir: ProcessIR): string[] {
+  const subprocesos = new Set(Object.values(ir.nodes).flatMap((node) => (node.subprocessId === undefined ? [] : [node.subprocessId])));
+  const huerfanas = new Set<string>();
+  for (const scenario of Object.values(scenarios)) {
+    const elements = scenario['elements'];
+    if (elements === null || typeof elements !== 'object') continue;
+    for (const [id, element] of Object.entries(elements as Record<string, Record<string, unknown> | null>)) {
+      if (id in ir.nodes || id in ir.flows) continue;
+      if (subprocesos.has(id) && (['processingTime', 'resources', 'fixedCost'] as const).some((campo) => element?.[campo] !== undefined)) continue;
+      huerfanas.add(id);
+    }
+  }
+  return [...huerfanas];
+}
+
+/** The scenarios that change once the orphan entries are removed from them, and only those. */
+export function sinHuerfanas(scenarios: Readonly<Record<string, Record<string, unknown>>>, ir: ProcessIR): Record<string, Record<string, unknown>> {
+  const cambiados: Record<string, Record<string, unknown>> = {};
+  for (const [file, scenario] of Object.entries(scenarios)) {
+    const huerfanas = entradasHuerfanas({ [file]: scenario }, ir);
+    if (huerfanas.length === 0) continue;
+    const elements = { ...(scenario['elements'] as Record<string, unknown>) };
+    for (const id of huerfanas) delete elements[id];
+    cambiados[file] = { ...scenario, elements };
+  }
+  return cambiados;
 }

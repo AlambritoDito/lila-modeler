@@ -209,6 +209,8 @@ export const es: Strings = {
     redimensionarIzquierda: 'Redimensionar la columna izquierda',
     /** Botones para mostrar u ocultar paneles, a la derecha de la barra (#412). */
     vista: 'Vista',
+    /** Grupo de botones de alinear y distribuir sobre el lienzo, en Modelar (#453). */
+    alinear: 'Alinear y distribuir',
     regiones: {
       izquierda: 'Columna izquierda',
       derecha: 'Panel derecho',
@@ -607,8 +609,8 @@ export const es: Strings = {
   propiedades: {
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
     variosSeleccionados: (n: number): string =>
-      `${n} elementos seleccionados: las acciones sobre varios a la vez todavía no están. ` +
-      'Selecciona uno solo para editarlo.',
+      `${n} elementos seleccionados. El color se aplica a todos; ` +
+      'selecciona uno solo para editar lo demás.',
 
     /* Cabecera del panel derecho sin nada seleccionado (diseño "Turno 2", bloque 2d). */
     nadaSeleccionado: 'Nada seleccionado',
@@ -631,6 +633,20 @@ export const es: Strings = {
     id: 'Id',
     copiar: 'Copiar',
     copiado: 'Copiado',
+    /** Colores por elemento (#452): la fila del panel, la entrada del context pad y los ocho colores. */
+    color: 'Color',
+    cambiarColor: 'Cambiar color',
+    colores: {
+      ninguno: 'Ninguno',
+      azul: 'Azul',
+      verde: 'Verde',
+      amarillo: 'Amarillo',
+      naranja: 'Naranja',
+      rojo: 'Rojo',
+      morado: 'Morado',
+      turquesa: 'Turquesa',
+      gris: 'Gris',
+    },
 
     descripcion: 'Descripción',
     descripcionProceso: 'Descripción del proceso',
@@ -765,6 +781,9 @@ export const es: Strings = {
     /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
     listaRecursos: 'Recursos por elemento',
+    /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
+    huerfanas: 'Entradas de elementos que ya no están en el diagrama',
+    quitarHuerfanas: 'Quitar entradas huérfanas',
     sinResumen: '—',
     resumenAsignacion: (pool: string, cantidad: number): string => `${pool} ×${cantidad}`,
 
@@ -792,7 +811,10 @@ export const es: Strings = {
     claveRepetida: (clave: string): string => `${clave} ya existe; edítalo abajo o usa otro id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'eliminado (null)',
-    estadoReservado: (estado: string, valor: string): string => `${estado}: ${valor}`,
+    /** Etiqueta de `EstadoReservado` `'propio'`/`'heredado'`: nunca el id interno (#477). */
+    estadoPropio: 'propio',
+    estadoHeredado: 'heredado',
+    estadoReservado: (etiquetaEstado: string, valor: string): string => `${etiquetaEstado}: ${valor}`,
     /** Etiqueta de una variante sin discriminador ni tipo conocido. */
     opcionN: (i: number): string => `opción ${i}`,
     /** Tipos JSON del esquema, en español, para el selector de variante. */
@@ -1337,6 +1359,14 @@ export const es: Strings = {
     conectar: 'Herramienta conectar',
     editarEtiqueta: 'Editar la etiqueta',
     reemplazar: 'Reemplazar el elemento',
+    alinearIzquierda: 'Alinear a la izquierda',
+    alinearCentro: 'Centrar en horizontal',
+    alinearDerecha: 'Alinear a la derecha',
+    alinearArriba: 'Alinear arriba',
+    alinearMedio: 'Centrar en vertical',
+    alinearAbajo: 'Alinear abajo',
+    distribuirHorizontal: 'Distribuir en horizontal',
+    distribuirVertical: 'Distribuir en vertical',
     izquierda: 'Mostrar u ocultar la columna izquierda',
     derecha: 'Mostrar u ocultar el panel derecho',
     diagramas: 'Mostrar u ocultar las pestañas de diagramas',

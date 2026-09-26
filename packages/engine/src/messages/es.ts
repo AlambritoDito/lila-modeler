@@ -132,6 +132,8 @@ export const es: Catalog = {
       `${path}: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
       `${path}: ${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre.`,
+    'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
+      `${path}: ${flowId} no declara probability, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma (la probabilidad ausente vale 1).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },

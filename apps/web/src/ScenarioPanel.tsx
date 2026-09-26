@@ -53,6 +53,7 @@ import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.j
 import { PASO_IDS, type PasoId } from './ids.js';
 import { LaneAssign } from './LaneAssign.js';
 import { esEscenarioBase } from './RailEscenarios.js';
+import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
 import {
   DESFASES,
   aSegundos,
@@ -548,7 +549,11 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
       <span className={`estado estado-${estado}`}>
         {estado === 'eliminado'
           ? S.escenario.eliminadoNull
-          : S.escenario.estadoReservado(estado, JSON.stringify(valorMostrado))}
+          : S.escenario.estadoReservado(
+              // #477: la etiqueta traducida, nunca el id interno `'propio'`/`'heredado'`.
+              estado === 'propio' ? S.escenario.estadoPropio : S.escenario.estadoHeredado,
+              JSON.stringify(valorMostrado),
+            )}
       </span>
       {estado === 'eliminado' ? (
         <button
@@ -1906,6 +1911,8 @@ export function ScenarioPanel({
   }
 
   const unidad = unidadBase(ctx);
+  /** #430: orphan entries of the whole project, since Run resolves any of its scenarios. */
+  const huerfanas = useMemo(() => (ir === null ? [] : entradasHuerfanas(escenarios, ir)), [escenarios, ir]);
 
   const guardarBoton = (
     <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
@@ -1939,6 +1946,24 @@ export function ScenarioPanel({
 
       <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
       <Problemas ruta={['extends']} ctx={ctx} />
+
+      {huerfanas.length > 0 && ir !== null && (
+        <div className="lista-paso huerfanas">
+          <p className="etiqueta">{S.escenario.huerfanas}</p>
+          <ul className="ids">
+            {huerfanas.map((id) => <li key={id} className="mono">{id}</li>)}
+          </ul>
+          <button
+            type="button"
+            className="boton"
+            onClick={() => {
+              for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) onCambio(otro, escenario);
+            }}
+          >
+            {S.escenario.quitarHuerfanas}
+          </button>
+        </div>
+      )}
 
       <BarraPasos paso={paso} onPaso={setPaso} />
 

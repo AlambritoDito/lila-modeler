@@ -55,6 +55,8 @@ import { rotularMinimapa } from './minimapa';
 import { moduloColoresDelTema } from './TokenSim';
 // bpmn-js's context pad and replace menu in the app's language (#456).
 import { moduloTraduccion } from './bpmnTranslate';
+// Colours per element (#452): the command, the context pad entry and the Bizagi import hook.
+import { moduloColores, type LilaColores } from './colores';
 import { centrar, type CanvasCentrable } from './centrar';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -124,6 +126,8 @@ export interface Servicios {
   elementRegistry: { filter(prueba: (elemento: Elemento) => boolean): Elemento[] };
   /** Las reglas de bpmn-js: quién puede contener a quién. */
   rules: { allowed(accion: string, contexto: object): unknown };
+  /** Paints an element with a palette colour as one undoable command (#452). */
+  colores?: Pick<LilaColores, 'pintar'>;
 }
 
 interface Punto { x: number; y: number }
@@ -142,6 +146,9 @@ export interface Elemento {
   id?: string;
   businessObject?: { name?: string; text?: string };
 }
+
+/** bpmn-js's `alignElements` types plus `distributeElements`' two axes (#453). */
+export type Alineacion = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'horizontal' | 'vertical';
 
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
@@ -204,6 +211,13 @@ export interface Modelador {
   seleccionar?(id: string, opciones?: { centrar?: true }): void;
   /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
   enfocar?(): void;
+  /**
+   * Whether `alinear` would move anything in the current selection (#453): bpmn-js's own rules
+   * decide, so lanes, annotations, a pool's children and the like count as bpmn-js counts them.
+   */
+  alineable?(): { alinear: boolean; distribuir: boolean };
+  /** Aligns or distributes the current selection with bpmn-js's own editor actions: one undo step. */
+  alinear?(tipo: Alineacion): void;
 }
 
 interface Props {
@@ -272,7 +286,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion],
+      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -460,6 +474,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           directEditing: activo.get<Servicios['directEditing']>('directEditing'),
           elementRegistry: activo.get<Servicios['elementRegistry']>('elementRegistry'),
           rules: activo.get<Servicios['rules']>('rules'),
+          colores: activo.get<LilaColores>('lilaColores'),
         };
       },
       suscribir: (eventos, escuchar) => {
@@ -532,6 +547,23 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },
+      alineable: () => {
+        if (activo === null) return { alinear: false, distribuir: false };
+        const reglas = activo.get<Servicios['rules']>('rules');
+        const elegidos = activo.get<Selection>('selection').get() as Elemento[];
+        return {
+          // The `alignElements` editor action drops lanes before asking; the rules drop the rest.
+          alinear: Boolean(reglas.allowed('elements.align', { elements: elegidos.filter((el) => el.type !== 'bpmn:Lane') })),
+          distribuir: Boolean(reglas.allowed('elements.distribute', { elements: elegidos })),
+        };
+      },
+      // Through `editorActions`, like bpmn-js's own menus: it drops lanes before aligning (moving a
+      // lane reshapes its pool and moves tasks between lanes) and is blocked by the canvas lock of
+      // «Validate paths».
+      alinear: (tipo) => {
+        activo?.get<{ trigger(accion: string, opciones: { type: Alineacion }): void }>('editorActions')
+          .trigger(tipo === 'horizontal' || tipo === 'vertical' ? 'distributeElements' : 'alignElements', { type: tipo });
+      },
     };
     // `onListo` se publica después del import inicial: su primera exportación ya contiene el
     // modelo recibido y nunca el lienzo vacío de una instancia recién creada.
