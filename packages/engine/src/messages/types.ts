@@ -58,6 +58,8 @@ export interface OuterCodeMessages {
   'W-SIN-SEED': (path: string) => string;
   'W-ELEMENTO-SIN-PARAMETROS': (path: string) => string;
   'W-COND-INALCANZABLE': (path: string, flowId: string, gatewayId: string) => string;
+  /** R-OR-2, #398: one entry per undeclared flow of an OR that declares probability on some others. */
+  'W-OR-PROB-PARCIAL': (path: string, flowId: string, gatewayId: string) => string;
 
   /* --- scenario.ts (schema) ----------------------------------------- */
   'E-CLAVE-DESCONOCIDA': (keys: string) => string;

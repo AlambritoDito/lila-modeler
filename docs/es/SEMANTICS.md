@@ -421,7 +421,11 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   `[0, n]`. *(prueba: LILA-026)*
 - **R-OR-2 — Salida sin `probability` en un OR vale 1.** Un `or` sin ninguna probabilidad declarada
   se comporta como un `and` fork (todas las ramas). Se emite aviso `W-OR-SIN-PROBABILIDAD` la
-  primera vez. *(prueba: LILA-026)*
+  primera vez. *(prueba: LILA-026)* Cuando algunas salidas declaran `probability` y otras no, el
+  lint de escenario (`scenario.ts`, no `core/`) emite `W-OR-PROB-PARCIAL` por cada flujo sin
+  declarar, nombrando el gateway: el flujo se toma igual, pero quien declaró unas probabilidades
+  casi nunca quiere dejar otras siempre activas. Un `or` con todas las salidas declaradas, o
+  ninguna, no tiene nada parcial y no recibe `W-OR-PROB-PARCIAL`. *(prueba: #398)*
 - **R-OR-3 — Al menos una salida.** Si los `n` sorteos fallan, se activa el flujo `isDefault`; si no
   hay `isDefault`, el de mayor `p`, con desempate por orden de documento. Se cuenta y se reporta
   aviso `W-OR-VACIO` con el id del gateway y el número de veces que ocurrió. *(prueba: LILA-026)*
@@ -1136,7 +1140,8 @@ rama de un gateway basado en eventos nunca dispara, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
 dispara sobre su host, interrumpa o no, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (un `flowTaken` que no puede
-preceder a su gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
+preceder a su gateway, R-COND-4), `W-OR-PROB-PARCIAL` (un OR con `probability` en algunas salidas
+pero no en todas, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (`bpmn:default` que apunta a un flujo inexistente: se ignora la marca
 `isDefault`, texto exacto en §3 R-NOSOP-6, junto con los tres textos de `W-PARSE`),
 `W-RECURSO-SATURADO`, `W-REPLICACIONES-SIN-OBSERVACIONES` (R-ARR-9).

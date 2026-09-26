@@ -468,6 +468,7 @@ export type ScenarioProblemCode =
   | 'W-XOR-NORMALIZADA'
   | 'W-XOR-RESIDUO-COMPARTIDO'
   | 'W-COND-INALCANZABLE'
+  | 'W-OR-PROB-PARCIAL'
   | 'W-NORMAL-NEGATIVA'
   | 'W-USER-NORMALIZADA';
 
@@ -581,6 +582,34 @@ function checkXorGateway(
       path: `elements.${gatewayId}`,
       severity: 'warning',
       message: M['W-XOR-NORMALIZADA'](gatewayId, total),
+    });
+  }
+}
+
+/**
+ * R-OR-2, #398 — a diverging OR whose outgoing flows declare `probability` on some but not all:
+ * the undeclared ones are always taken (they count as 1, `core/sim.ts::orWeights`), which is
+ * rarely what the modeller meant. One warning per undeclared flow, naming the flow and the
+ * gateway. With none declared (implicit AND fork, covered by `W-OR-SIN-PROBABILIDAD` at run
+ * time) or all declared there is nothing partial and no warning.
+ */
+function checkOrGateway(
+  problems: ScenarioProblem[],
+  gatewayId: string,
+  outs: readonly string[],
+  elements: Record<string, ElementSpec>,
+  M: Catalog['codes'],
+): void {
+  const declared = outs.map((flowId) => elements[flowId]?.probability !== undefined);
+  const missing = outs.filter((_, i) => !declared[i]);
+  if (missing.length === 0 || missing.length === outs.length) return;
+
+  for (const flowId of missing) {
+    problems.push({
+      code: 'W-OR-PROB-PARCIAL',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: M['W-OR-PROB-PARCIAL'](`elements.${gatewayId}`, flowId, gatewayId),
     });
   }
 }
@@ -904,8 +933,10 @@ export function validateScenario(
   }
 
   // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
+  // R-OR-2 / #398 — same treatment for a diverging OR with a partial declaration.
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
     if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
+    if (node.type === 'or') checkOrGateway(problems, gatewayId, node.outgoing, elements, M);
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.
