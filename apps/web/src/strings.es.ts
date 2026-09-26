@@ -209,6 +209,7 @@ export const es: Strings = {
     redimensionarIzquierda: 'Redimensionar la columna izquierda',
     /** Botones para mostrar u ocultar paneles, a la derecha de la barra (#412). */
     vista: 'Vista',
+    /** Grupo de botones de alinear y distribuir sobre el lienzo, en Modelar (#453). */
     alinear: 'Alinear y distribuir',
     regiones: {
       izquierda: 'Columna izquierda',

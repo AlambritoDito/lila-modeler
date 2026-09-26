@@ -77,9 +77,9 @@ With the canvas focused (click on it first):
 | Distribute horizontally | `⌥⇧H` | `Alt+Shift+H` |
 | Distribute vertically | `⌥⇧V` | `Alt+Shift+V` |
 
-Zoom and fit work from anywhere in the window, not only from the canvas. The align keys act on the
-selected shapes (two or more; three or more to distribute), like the align buttons of the Model
-bar and the command palette. The shape palette on the
+Zoom and fit work from anywhere in the window, not only from the canvas. The align keys work in Model
+only and act on the selected shapes (two or more; three or more to distribute), like the align
+buttons at the top right of the canvas and the command palette. Lanes are not aligned. The shape palette on the
 left filters as you type and inserts the highlighted shape with `Enter`.
 
 ## Panels

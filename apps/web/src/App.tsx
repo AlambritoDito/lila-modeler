@@ -338,8 +338,6 @@ const ALINEACIONES = {
 } as const satisfies Record<string, Alineacion>;
 type AtajoAlinear = keyof typeof ALINEACIONES;
 const ALINEAR_IDS = Object.keys(ALINEACIONES) as AtajoAlinear[];
-/** Shapes each entry needs selected: bpmn-js aligns two, but only distributes three or more. */
-const minimoAlinear = (id: AtajoAlinear): number => (id.startsWith('distribuir') ? 3 : 2);
 /** A guide line plus the shapes on it, per alignment (24×24). */
 const TRAZO_ALINEAR: Record<Alineacion, [string, ...[number, number, number, number][]]> = {
   left: ['M4 3v18', [4, 6, 14, 4], [4, 14, 9, 4]],
@@ -430,7 +428,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Re-render on every selection change: the align group (#453) counts the selected shapes.
   const [, setCambioSeleccion] = useState(0);
   useEffect(() => modelador?.suscribir(['selection.changed'], () => setCambioSeleccion((n) => n + 1)), [modelador]);
-  const alineables = modelador?.alineables?.() ?? 0;
+  const alineable = modelador?.alineable?.() ?? { alinear: false, distribuir: false };
+  /** Whether an align entry would move anything: only in Model, the one mode that edits the layout. */
+  const puedeAlinear = (id: AtajoAlinear): boolean => modo === 'modelar' && alineable[id.startsWith('distribuir') ? 'distribuir' : 'alinear'];
   useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -1354,7 +1354,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
-      ...ALINEAR_IDS.map((id) => accion(id, conLienzo && alineables >= minimoAlinear(id))),
+      ...ALINEAR_IDS.map((id) => accion(id, puedeAlinear(id))),
       accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
       accion('ajustes'),
       // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
@@ -1620,7 +1620,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     zoomMenos: () => modelador?.zoom(1 / 1.2),
     ajustarVista: () => modelador?.ajustar(),
     renombrar,
-    ...Object.fromEntries(ALINEAR_IDS.map((id) => [id, () => modelador?.alinear?.(ALINEACIONES[id])])) as Record<AtajoAlinear, () => void>,
+    ...Object.fromEntries(ALINEAR_IDS.map((id) => [id, () => { if (modo === 'modelar') modelador?.alinear?.(ALINEACIONES[id]); }])) as Record<AtajoAlinear, () => void>,
     izquierda: () => alternarRegion('izquierda'),
     derecha: () => alternarRegion('derecha'),
     diagramas: () => alternarRegion('diagramas'),
@@ -1652,10 +1652,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
     // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
     if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
+    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays the browser's.
+    if (a.id in ALINEACIONES && modo !== 'modelar') return;
     e.preventDefault();
-    // Only the ⌘ keys are hidden from the target (bpmn-js zooms on them too); Esc, F2 and F6 still
+    // Only the ⌘ and ⌥ keys are hidden from the target (bpmn-js zooms on ⌘ ones, and the token
+    // simulation toggles on a T with any modifier, locking the canvas: #453); Esc, F2 and F6 still
     // reach whatever else listens.
-    if (conMod) e.stopPropagation();
+    if (conMod || e.altKey) e.stopPropagation();
     // A held key is swallowed, not repeated (QA of #436, M1): one save / run / toggle per press,
     // and the browser never gets the repeats (⌘S «Save page as», ⇧⌘B bookmarks bar). Zoom repeats.
     if (e.repeat && a.id !== 'zoomMas' && a.id !== 'zoomMenos') return;
@@ -2069,18 +2072,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
         </div>
-      {/* Align and distribute (#453): on the canvas, not in the top bar, which is already full at
-          1440 px. Disabled until the selection has enough shapes to move. */}
-      {modo === 'modelar' && (
-        <div className="alinear-grupo" role="group" aria-label={S.app.alinear}>
-          {ALINEAR_IDS.map((id) => (
-            <button key={id} type="button" className="boton icono" aria-label={S.atajos[id]} title={`${S.atajos[id]}${atajo(id)}`}
-              disabled={alineables < minimoAlinear(id)} onClick={() => atajos[id]()}>
-              <IconoAlinear tipo={ALINEACIONES[id]} />
-            </button>
-          ))}
-        </div>
-      )}
       {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
           simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
       {/* La `key`: los colores neutros del modo se escriben en el DI al activarlo
@@ -2095,22 +2086,39 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'rutas' && (
         <TokenSim key={`${locale}|${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
       )}
-      {(validacion.errores > 0 || validacion.avisos > 0) && (
-        <div className="chips-validacion">
-          {validacion.errores > 0 && (
-            <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{S.app.errores(validacion.errores)}
-            </button>
-          )}
-          {validacion.avisos > 0 && (
-            <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-              onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
-              <span className="punto" />{S.app.avisos(validacion.avisos)}
-            </button>
-          )}
-        </div>
-      )}
+      {/* The top edge of the canvas (#453): validation chips on the left, the align group on the
+          right; one wrapping row, so a narrow canvas drops the group below the chips instead of
+          stacking one on the other. */}
+      <div className="lienzo-arriba">
+        {(validacion.errores > 0 || validacion.avisos > 0) && (
+          <div className="chips-validacion">
+            {validacion.errores > 0 && (
+              <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
+                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+                <span className="punto" />{S.app.errores(validacion.errores)}
+              </button>
+            )}
+            {validacion.avisos > 0 && (
+              <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
+                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+                <span className="punto" />{S.app.avisos(validacion.avisos)}
+              </button>
+            )}
+          </div>
+        )}
+        {/* Align and distribute (#453): on the canvas, not in the top bar, which is already full at
+            1440 px. Disabled until bpmn-js would move something. */}
+        {modo === 'modelar' && (
+          <div className="alinear-grupo" role="group" aria-label={S.app.alinear}>
+            {ALINEAR_IDS.map((id) => (
+              <button key={id} type="button" className="boton icono" aria-label={S.atajos[id]} title={`${S.atajos[id]}${atajo(id)}`}
+                disabled={!puedeAlinear(id)} onClick={() => atajos[id]()}>
+                <IconoAlinear tipo={ALINEACIONES[id]} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       </div>
       {modo === 'resultados' && (
         <section className="zona-resultados">

@@ -229,7 +229,7 @@ export const en = {
      * items of the «View» menu that replaces them in narrow windows; the titles carry the key.
      */
     vista: 'View',
-    /** Group of the Model bar with the align and distribute buttons (#453). */
+    /** Group of align and distribute buttons on the canvas, in Model (#453). */
     alinear: 'Align and distribute',
     regiones: {
       izquierda: 'Left column',

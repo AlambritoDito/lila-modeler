@@ -53,7 +53,7 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // #410: the command palette focuses the canvas after picking an element.
   enfocar: vi.fn(),
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
-  alineables: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {} }));
+  alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {} }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -99,7 +99,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       if (events.includes('selection.changed')) mocks.seleccionCambio = callback; else mocks.changed = callback;
       return () => {};
     },
-    alineables: () => mocks.alineables(), alinear: mocks.alinear,
+    alineable: () => mocks.alineable(), alinear: mocks.alinear,
     // El viewbox es fijo: su centro (500, 250) es donde la paleta tiene que soltar la figura.
     servicios: {
       modeling: { createShape: mocks.crearFigura },
@@ -2966,29 +2966,46 @@ it('boundary events and the lane wait for a fitting selection, and say which (#4
 
 // ---------- Align and distribute (#453) ----------
 
-it('the Model bar aligns and distributes the selection, disabled below 2 (3) shapes; keys and ⌘K do the same (#453)', async () => {
-  expect(container.querySelector('.alinear-grupo')).toBeNull();
-  await click(T.app.modos.modelar);
+it('the canvas group aligns and distributes when bpmn-js would move something; keys and ⌘K too, in Model only (#453)', async () => {
   const boton = (id: AtajoId) => container.querySelector<HTMLButtonElement>(`.alinear-grupo button[aria-label="${T.atajos[id as keyof typeof T.atajos]}"]`)!;
-  const seleccionar = async (n: number) => { mocks.alineables.mockReturnValue(n); await act(async () => mocks.seleccionCambio()); };
+  const seleccionar = async (alinear: boolean, distribuir: boolean) => { mocks.alineable.mockReturnValue({ alinear, distribuir }); await act(async () => mocks.seleccionCambio()); };
+  const altShift = (letra: string) => ({ key: letra, code: `Key${letra}`, altKey: true, shiftKey: true });
+  // Simulate: no group, the keys stay the browser's and ⌘K offers nothing to align.
+  await seleccionar(true, true);
+  expect(container.querySelector('.alinear-grupo')).toBeNull();
+  expect(await pulsar(svgLienzo(), altShift('T'))).toBe(false);
+  await abrirConTeclado();
+  await escribir(T.atajos.alinearArriba);
+  expect(opciones()).toEqual([]);
+  await teclaPaleta('Escape');
+  expect(mocks.alinear).not.toHaveBeenCalled();
+
+  await click(T.app.modos.modelar);
+  await seleccionar(false, false);
   expect(boton('alinearArriba').disabled).toBe(true);
-  await seleccionar(2);
+  await seleccionar(true, false);
   expect(boton('alinearArriba').disabled).toBe(false);
   expect(boton('distribuirHorizontal').disabled).toBe(true);
-  await seleccionar(3);
+  await seleccionar(true, true);
   expect(boton('distribuirHorizontal').disabled).toBe(false);
   await act(async () => boton('alinearArriba').click());
   expect(mocks.alinear).toHaveBeenLastCalledWith('top');
-  // ⌥⇧H on a Mac types «Ó»: the key is matched by its position.
+  // ⌥⇧H on a Mac types «Ó»: the key is matched by its position. It never reaches the canvas:
+  // bpmn-js's token simulation toggles on a T with any modifier and would lock it.
+  const alLienzo = vi.fn();
+  svgLienzo().addEventListener('keydown', alLienzo);
   expect(await pulsar(svgLienzo(), { key: 'Ó', code: 'KeyH', altKey: true, shiftKey: true })).toBe(true);
   expect(mocks.alinear).toHaveBeenLastCalledWith('horizontal');
+  expect(await pulsar(svgLienzo(), altShift('T'))).toBe(true);
+  expect(mocks.alinear).toHaveBeenLastCalledWith('top');
+  expect(alLienzo).not.toHaveBeenCalled();
   await abrirConTeclado();
   await escribir(T.atajos.distribuirVertical);
   expect(opciones()).toEqual([T.atajos.distribuirVertical]);
   await teclaPaleta('Enter');
   expect(mocks.alinear).toHaveBeenLastCalledWith('vertical');
-  // Two shapes: the palette offers aligning, not distributing.
-  await seleccionar(2);
+  // Aligning, but nothing to distribute: the palette offers only the first.
+  await seleccionar(true, false);
   await abrirConTeclado();
   await escribir(T.atajos.distribuirVertical);
   expect(opciones()).toEqual([]);
