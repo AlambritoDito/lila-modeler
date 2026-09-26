@@ -12,7 +12,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { coloresDeBizagi, escribirColor, type ElementoColoreable } from './colores.js';
+import { coloresDeBizagi, escribirColor, lista, type ElementoColoreable } from './colores.js';
 import { setLocale } from './i18n';
 import type { Modelador } from './Modeler.js';
 import { PanelPropiedades, type ElementoModdle, type Escritor } from './PropertiesPanel.js';
@@ -99,6 +99,17 @@ describe('writing a colour', () => {
     expect(di).toContain('color:border-color="#831311"');
     expect(di).not.toContain('background-color');
     expect(di).not.toContain('bioc:fill');
+  });
+});
+
+describe('context pad target', () => {
+  it('an external label stands for its owner, once even if the owner is selected too', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    const compuerta = m.elemento('Gateway_ANDFork');
+    const tarea = m.elemento('Task_Preparar');
+    const etiqueta: ElementoColoreable = { id: 'Gateway_ANDFork_label', type: 'label', businessObject: compuerta.businessObject, di: compuerta.di!, labelTarget: compuerta };
+    expect(lista([etiqueta, tarea])).toEqual([compuerta, tarea]);
+    expect(lista([compuerta, etiqueta])).toEqual([compuerta]);
   });
 });
 

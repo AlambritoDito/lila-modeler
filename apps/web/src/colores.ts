@@ -169,7 +169,11 @@ interface Inyectados {
 }
 
 type Destino = ElementoColoreable | ElementoColoreable[];
-const lista = (destino: Destino): ElementoColoreable[] => (Array.isArray(destino) ? destino : [destino]);
+/** The elements a target stands for: a label stands for its owner, each one once (re-QA of #452). */
+export const lista = (destino: Destino): ElementoColoreable[] => [...new Set(
+  (Array.isArray(destino) ? destino : [destino]).map((el) =>
+    (el.type === 'label' && el.labelTarget !== undefined ? el.labelTarget : el) as ElementoColoreable),
+)];
 
 /** What can be painted: a shape or a connection (not a label, not the root's plane). */
 export const pintable = (el: ElementoColoreable): boolean =>
