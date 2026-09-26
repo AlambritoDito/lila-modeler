@@ -3,7 +3,7 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
-## [1.0.0-beta.10] - 2026-09-26
+## [1.0.0-beta.11] - 2026-09-26
 
 Lote F: fixes for what students hit in class, and two Bizagi-style diagram tools. Deleting a
 configured task no longer strands Run; a partial OR declaration warns while modelling; painting the
@@ -35,6 +35,17 @@ elements can be coloured, aligned and distributed. No installer is attached to t
 - **Reserved-field status translated (#477)**: «own» / «inherited» instead of the internal id.
 - **Properties header follows «Advanced» (#471)**: with it off, the header shows the readable type
   and the Id row is hidden.
+
+## [1.0.0-beta.10] - 2026-09-26
+
+The desktop app now tells you when a newer version of Lila Modeler is on GitHub and opens its
+release page for you.
+
+### Added
+
+- **Update notice (#487)**: on launch, the packaged desktop app checks GitHub's releases and, when a
+  newer version is out, offers to open its release page. Silent offline; nothing is installed in
+  place yet, that waits on a Developer ID signature (#486).
 
 ## [1.0.0-beta.9] - 2026-09-26
 
