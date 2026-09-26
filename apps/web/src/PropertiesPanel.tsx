@@ -293,7 +293,7 @@ interface Props {
   /**
    * Ajuste «Avanzado» (#447/#471): con él apagado la cabecera enseña solo el tipo legible y la
    * fila Id se oculta —coherente con el resto del panel de escenario, ⌘K y la línea de cuello—;
-   * con él encendido, como siempre (`tipo · id` + fila Id editable).
+   * con él encendido, como siempre (`tipo · id` + fila Id visible y copiable).
    */
   avanzado?: boolean;
 }
@@ -425,8 +425,12 @@ function FilaResumen({ etiqueta, valor }: { etiqueta: string; valor: React.React
  * legible si no tiene) y la línea técnica `$type · id`. `Propiedades`/`Documentacion` no cambian:
  * esto solo se pinta encima de las dos.
  *
- * Con «Avanzado» apagado (#471) se omite el id de la línea técnica —el id sigue editable en la
- * fila «Id» de `Propiedades` cuando el ajuste está encendido, coherente con #447.
+ * Con «Avanzado» apagado (#471, must-fix del QA de #480) la línea técnica enseña el tipo
+ * **legible** (`nombreDeTipo`, sin `mono`: eso es para ids y números, no para prosa) en vez del
+ * `$type` crudo (`bpmn:Task`) —sigue siendo lo único que le dice el tipo a quien no conoce el
+ * `$type`— y se omite del todo si coincide con el nombre ya enseñado arriba (un elemento sin
+ * nombre repetiría «Sequence flow / Sequence flow»). El id sigue visible (y copiable, no
+ * editable) en la fila «Id» de `Propiedades` cuando el ajuste está encendido, coherente con #447.
  */
 function CabeceraElemento({ elemento, avanzado }: { elemento: ElementoLienzo; avanzado: boolean }): React.JSX.Element {
   // Un clic en la etiqueta flotante selecciona la etiqueta, no la figura: sin esto el encabezado
@@ -437,14 +441,18 @@ function CabeceraElemento({ elemento, avanzado }: { elemento: ElementoLienzo; av
   const eventDefinitionType = real.businessObject.eventDefinitions?.[0]?.$type;
   const icono = iconoDeTipo(real.type, eventDefinitionType);
   const nombre = real.businessObject.name?.trim() || nombreDeTipo(real.type);
+  const tipoLegible = nombreDeTipo(real.type);
+  const lineaTecnica = avanzado ? `${real.type} · ${real.id}` : tipoLegible;
   return (
     <div className="propiedades-cabecera">
       {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
       <div>
         <div className="propiedades-cabecera-nombre">{nombre}</div>
-        <div className="propiedades-cabecera-tipo mono">
-          {avanzado ? `${real.type} · ${real.id}` : real.type}
-        </div>
+        {(avanzado || lineaTecnica !== nombre) && (
+          <div className={avanzado ? 'propiedades-cabecera-tipo mono' : 'propiedades-cabecera-tipo'}>
+            {lineaTecnica}
+          </div>
+        )}
       </div>
     </div>
   );
