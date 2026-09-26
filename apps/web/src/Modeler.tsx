@@ -13,7 +13,8 @@ import BpmnRenderer from 'bpmn-js/lib/draw/BpmnRenderer';
 // Minimapa del lienzo (LILA-208). Es un módulo de diagram-js: se monta solo dentro del
 // contenedor del canvas y viaja con él en `attachTo`, así que el shell no lo dibuja ni lo
 // conoce. Su CSS se importa aquí y se viste con tokens en `app.css` (bloque «minimapa»).
-import minimapModule from 'diagram-js-minimap';
+// `moduloMinimapa` es el plugin con un encuadre que siempre contiene el viewport.
+import { moduloMinimapa } from './moduloMinimapa';
 import 'diagram-js-minimap/assets/diagram-js-minimap.css';
 // Animación de tokens para la pestaña «Validar rutas» (LILA-065). No es la simulación DES del
 // motor: solo anima el recorrido de tokens sobre el BPMN ya importado, por eso vive junto al
@@ -286,7 +287,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [minimapModule, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },

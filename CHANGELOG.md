@@ -3,6 +3,18 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.12] - 2026-09-26
+
+The minimap keeps the view in sight: its box no longer leaves the map when you zoom out or pan
+away, so there is always something to click to come back.
+
+### Fixed
+
+- **Minimap viewport box**: the minimap now frames the diagram together with the part of it on
+  screen, so the box stays inside the map at any zoom or distance instead of spilling over the
+  header or vanishing. The frame holds still while the button is down, so a click centres where
+  you clicked instead of jumping elsewhere, and every press re-measures the map.
+
 ## [1.0.0-beta.11] - 2026-09-26
 
 Lote F: fixes for what students hit in class, and two Bizagi-style diagram tools. Deleting a

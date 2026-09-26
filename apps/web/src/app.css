@@ -1742,7 +1742,11 @@ body {
   justify-content: space-between;
   letter-spacing: 0.12em;
   padding: 0 7px;
-  position: static;
+  /* En el flujo, pero por encima del recuadro del viewport: mientras se arrastra, el recuadro
+     puede pasar por debajo de la cabecera y el click de plegar no debe caerle a él. */
+  background-color: var(--canvas-bg);
+  position: relative;
+  z-index: 1;
   text-align: start;
   text-transform: uppercase;
 }

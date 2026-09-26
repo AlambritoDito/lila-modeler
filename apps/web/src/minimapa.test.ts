@@ -8,8 +8,8 @@
  * word of its own.
  */
 import { readFileSync } from 'node:fs';
-import { afterEach, expect, it } from 'vitest';
-import { rotularMinimapa } from './minimapa';
+import { afterEach, describe, expect, it } from 'vitest';
+import { marcoMinimapa, rotularMinimapa, type Rect } from './minimapa';
 import { setLocale } from './i18n';
 import { en } from './strings.en';
 import { es } from './strings.es';
@@ -66,4 +66,27 @@ it('app.css dibuja el atributo y no una palabra suya', () => {
   const sinComentarios = appCss.replaceAll(/\/\*[\s\S]*?\*\//g, '');
   const contenidos = [...sinComentarios.matchAll(/(?<![\w-])content:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
   expect(contenidos.filter((valor) => /\p{Letter}{3,}/u.test(valor.replace(/^attr\([^)]*\)$/u, '')))).toEqual([]);
+});
+
+describe('marcoMinimapa', () => {
+  const diagrama = { x: 100, y: 0, width: 1000, height: 500 };
+  const contiene = (marco: Rect, r: Rect): boolean =>
+    marco.x <= r.x && marco.y <= r.y
+    && marco.x + marco.width >= r.x + r.width && marco.y + marco.height >= r.y + r.height;
+
+  it('con la vista dentro del diagrama, encuadra el diagrama más el margen', () => {
+    expect(marcoMinimapa(diagrama, { x: 200, y: 100, width: 300, height: 200 }))
+      .toEqual({ x: 50, y: -50, width: 1100, height: 600 });
+  });
+
+  it('con la vista lejos o con zoom alejado, el recuadro sigue dentro del minimapa', () => {
+    for (const vista of [
+      { x: 5000, y: 3000, width: 800, height: 600 },
+      { x: -2000, y: -1500, width: 6000, height: 4000 },
+    ]) {
+      const marco = marcoMinimapa(diagrama, vista);
+      expect(contiene(marco, vista)).toBe(true);
+      expect(contiene(marco, diagrama)).toBe(true);
+    }
+  });
 });
