@@ -103,6 +103,6 @@ quits the app) and `⌘Q`/`Ctrl+Q` quits (on Windows use the window's close butt
 Both come from the native menu's own roles, so they are not in the map above and a browser keeps
 them for itself.
 
-The detached scenario window forwards `⌘S` and `⇧⌘S` to the main window; `⌘K` too, but only in the desktop app, where the main window is raised first (a browser cannot bring another window to the front, so there the key does nothing in the detached window).
+The detached scenario window forwards `⌘S`, `⇧⌘S` and `⌘P` to the main window; `⌘K` too, but only in the desktop app, where the main window is raised first (a browser cannot bring another window to the front, so there the key does nothing in the detached window).
 
 [Versión en español](es/ATAJOS.md)

@@ -6,7 +6,7 @@
  * diagram colours plus one colour of the element's own (#452) that must survive.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { hojaImpresion, limpiarSvg, nombreArchivo, svgDelLienzo } from './exportarDiagrama';
+import { hojaImpresion, imprimirSvg, limpiarSvg, nombreArchivo, svgDelLienzo } from './exportarDiagrama';
 
 const DARK = { fill: '#1F1A36', stroke: '#D9D2F0', label: '#ECE9F5', fondo: '#17132A' };
 const PROPIO = 'rgb(255, 0, 128)';
@@ -87,5 +87,20 @@ describe('print sheet and file name (#451)', () => {
     // No trailing dot or space, at most 120 characters (QA of #467, N4).
     expect(nombreArchivo('Pedidos: 2026/09 <x> "q" *?|.')).toBe('Pedidos- 2026-09 -x- -q- -');
     expect(nombreArchivo('a'.repeat(300))).toHaveLength(120);
+  });
+
+  it('gives the focus back to the canvas svg after printing (seams QA of #476)', () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('tabindex', '0');
+    document.body.append(svg);
+    svg.focus();
+    expect(document.activeElement).toBe(svg);
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      return { document: { open() {}, write() {}, close() {} }, addEventListener() {}, print() {}, focus() {} } as unknown as Window;
+    });
+    imprimirSvg('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>', 'x');
+    expect(document.activeElement).toBe(svg);
+    vi.restoreAllMocks();
+    svg.remove();
   });
 });

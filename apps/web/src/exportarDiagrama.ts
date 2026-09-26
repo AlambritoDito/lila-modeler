@@ -162,7 +162,10 @@ export function imprimirSvg(svg: string, titulo: string): void {
   // A browser that never fires `afterprint` (headless, some embedded ones) leaves the last one behind.
   document.querySelector('iframe.lila-impresion')?.remove();
   // The frame takes the focus to print; the app's keys need it back (QA of #467, S2).
-  const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  // The canvas is an `SVGElement` (bpmn-js focuses the `<svg>`), not an `HTMLElement`: without it
+  // the keyboard died after printing from the canvas (seams QA of #476).
+  const activo = document.activeElement;
+  const previo = activo instanceof HTMLElement || activo instanceof SVGElement ? activo : null;
   const marco = document.createElement('iframe');
   marco.className = 'lila-impresion';
   marco.setAttribute('aria-hidden', 'true');

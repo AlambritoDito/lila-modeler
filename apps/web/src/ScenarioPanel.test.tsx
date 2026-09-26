@@ -1163,6 +1163,24 @@ describe('ids behind «Advanced» (#447)', () => {
 });
 
 describe('model problems (#455)', () => {
+  it('an unsupported element (not in the IR) reads its canvas name in the heading (seams QA of #476)', () => {
+    const escenario = asIsCorto();
+    montar(
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': { ...escenario, elements: { ...(escenario['elements'] as Json), Msg_1: {} } } }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        nombresExtra={{ Msg_1: 'Esperar pago' }}
+        seleccion="Msg_1"
+        onSeleccionar={() => {}}
+      />,
+    );
+    expect(document.querySelector('.escenario details > p.vacio')!.textContent).toBe('Esperar pago');
+  });
+
   it('problemasExtra adds to the header count and shows in the validation list, like the canvas chips', () => {
     const escenario = asIsCorto();
     const propios = problemasEscenario(escenario, ir, 'es');

@@ -2661,6 +2661,7 @@ body {
 .ajustes .grupo > summary,
 .boton,
 .chips-validacion,
+.franjas-presets,
 .djs-container svg {
   user-select: none;
   -webkit-user-select: none;

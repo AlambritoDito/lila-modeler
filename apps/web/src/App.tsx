@@ -546,7 +546,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * deferred reparse that sets `ir`. Only those: `E-SIN-START`/`E-SIN-END` and the rest of the full
    * `validate()` stay a Run-time matter (#409, an empty «New» is not an error yet).
    */
-  const [noSoportados, setNoSoportados] = useState<readonly { id: string; message: string }[]>([]);
+  const [noSoportados, setNoSoportados] = useState<readonly { id: string; message: string; name?: string }[]>([]);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
@@ -871,6 +871,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * in Model it is a warning; in every other mode it is the error Run is going to raise. Run itself
    * is untouched: `simulationGate.ts` still fails with the engine's `E-NOSOP`.
    */
+  /** Names of the unsupported elements, for the panel's headings (seams QA of #476). */
+  const nombresModelo = useMemo(
+    () => Object.fromEntries(noSoportados.flatMap((p) => (p.name?.trim() ? [[p.id, p.name] as const] : []))),
+    [noSoportados],
+  );
   const problemasModelo = useMemo<Problema[]>(
     () => noSoportados.map((p) => ({ ruta: `elements.${p.id}`, mensaje: p.message, severidad: modo === 'modelar' ? 'warning' : 'error' })),
     [noSoportados, modo],
@@ -933,7 +938,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale })).then((informe) => {
         if (!vivo) return;
         setIr(informe.ir);
-        setNoSoportados(informe.errors.filter((p) => p.code === 'E-NOSOP'));
+        // Unsupported elements never enter the IR, so the panel cannot read their name from it:
+        // it comes from the canvas (seams QA of #476, E2 × E5).
+        const nosop = informe.errors.filter((p) => p.code === 'E-NOSOP');
+        const ids = new Set(nosop.map((p) => p.id));
+        const nombres = new Map(modelador.servicios.elementRegistry.filter((el) => el.id !== undefined && ids.has(el.id)).map((el) => [el.id, el.businessObject?.name]));
+        setNoSoportados(nosop.map((p) => { const name = nombres.get(p.id); return name === undefined ? { id: p.id, message: p.message } : { id: p.id, message: p.message, name }; }));
       }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
@@ -1657,6 +1667,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onDuplicar={anadirEscenario}
       ir={ir}
       problemasExtra={problemasModelo}
+      nombresExtra={nombresModelo}
       seleccion={seleccion}
       avanzado={avanzado}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}

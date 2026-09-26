@@ -106,6 +106,6 @@ botón rojo, cierra la app) y `⌘Q`/`Ctrl+Q` sale (en Windows, el botón de cer
 `Alt+F4`). Las dos vienen de los roles del menú nativo, así que no están en el mapa de arriba y un
 navegador se las queda.
 
-La ventana desacoplada del escenario reenvía `⌘S` y `⇧⌘S` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
+La ventana desacoplada del escenario reenvía `⌘S`, `⇧⌘S` y `⌘P` a la ventana principal; `⌘K` también, pero solo en la app de escritorio, que trae la ventana principal al frente (un navegador no puede levantar otra ventana, así que ahí la tecla no hace nada en la desacoplada).
 
 [English version](../SHORTCUTS.md)

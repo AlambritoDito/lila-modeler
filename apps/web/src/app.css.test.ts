@@ -399,7 +399,7 @@ it('the chrome is not text-selectable, but content still is (#463)', () => {
     '.barra', '.menu-archivo', '.menu-vista', '.vista-grupo', '.paleta', '.rail-escenarios',
     '.modos', '.pestanas', '.diagramas', '.app > .estado', '.ajustes-nav', '.escenario summary',
     '.escenario-cabecera', '.paso', '.paleta-grupos summary', '.ajustes .grupo > summary',
-    '.boton', '.chips-validacion', '.djs-container svg',
+    '.boton', '.chips-validacion', '.franjas-presets', '.djs-container svg',
   ]);
   // The standard property has to be its own declaration, not just a substring of the prefixed
   // one: a lone `-webkit-user-select: none;` (no plain `user-select`) still contains the text

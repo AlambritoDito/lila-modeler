@@ -1713,6 +1713,8 @@ export interface ScenarioPanelProps {
    * lint so the header and the list count what the canvas chips count.
    */
   problemasExtra?: readonly Problema[];
+  /** Names the IR does not have (unsupported elements, #455), read from the canvas. */
+  nombresExtra?: Readonly<Record<string, string>>;
   /** Id del elemento seleccionado en el lienzo, o `null`. */
   seleccion: string | null;
   onSeleccionar: (id: string | null) => void;
@@ -1724,6 +1726,7 @@ export interface ScenarioPanelProps {
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
 const SIN_PROBLEMAS: readonly Problema[] = [];
+const SIN_NOMBRES: Readonly<Record<string, string>> = {};
 
 export function ScenarioPanel({
   archivo,
@@ -1733,6 +1736,7 @@ export function ScenarioPanel({
   onDuplicar,
   ir,
   problemasExtra = SIN_PROBLEMAS,
+  nombresExtra = SIN_NOMBRES,
   seleccion,
   onSeleccionar,
   avanzado = false,
@@ -1882,7 +1886,7 @@ export function ScenarioPanel({
    * the person reads and the id goes to the button's `data-id` (see `rotulo`).
    */
   function nombreElemento(id: string): string | null {
-    const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name;
+    const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name ?? nombresExtra[id];
     return nombre !== undefined && nombre.trim() !== '' ? nombre : null;
   }
 
