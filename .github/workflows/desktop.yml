@@ -72,6 +72,62 @@ jobs:
           name: lila-desktop-${{ matrix.os }}-${{ github.sha }}
           path: apps/desktop/release/**
           if-no-files-found: error
+      - name: Upload the Windows installer alone, for SignPath
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lila-win-unsigned-${{ github.sha }}
+          path: apps/desktop/release/*-win-*.exe
+          if-no-files-found: error
+
+  sign-windows:
+    # SignPath Foundation signs the NSIS installer (free code signing for open source; see
+    # "Signing the Windows installer" in docs/RELEASING.md). Tags and manual runs only, and only
+    # once the SignPath variables exist, so PRs and forks skip it. Every request waits for a
+    # manual approval in SignPath. The signed installer stays a CI artifact, like the unsigned one.
+    # ponytail: signs the installer only; the app exe inside it stays unsigned (SignPath cannot
+    # deep-sign NSIS). Sign win-unpacked before packing when SmartScreen complains about the app.
+    needs: build
+    if: (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') && vars.SIGNPATH_ORGANIZATION_ID != ''
+    runs-on: windows-latest
+    permissions:
+      actions: read # SignPath downloads the unsigned artifact with this job's token
+    steps:
+      - name: Find the unsigned installer artifact
+        id: unsigned
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+            --jq ".artifacts[] | select(.name == \"lila-win-unsigned-$GITHUB_SHA\") | .id")
+          test -n "$id" || { echo "::error::artifact lila-win-unsigned-$GITHUB_SHA not found"; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      - uses: signpath/github-action-submit-signing-request@v3 # must be on the repository's Actions allowlist
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600 # the approval is manual
+          output-artifact-directory: signed
+      - name: Verify the Authenticode signature
+        shell: pwsh
+        run: |
+          $exe = @(Get-ChildItem signed -Filter *.exe)
+          if ($exe.Count -ne 1) { throw "expected one signed .exe, found $($exe.Count)" }
+          $sig = Get-AuthenticodeSignature $exe[0].FullName
+          $sig | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
+          if ($sig.Status -ne 'Valid') { throw "signature status: $($sig.Status)" }
+          if (-not $sig.TimeStamperCertificate) { throw "signature has no timestamp" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lila-desktop-windows-signed-${{ github.sha }}
+          path: signed/*.exe
+          if-no-files-found: error
 
   release:
     # Only the validated platform reaches the release, only from a tag, only as a draft.

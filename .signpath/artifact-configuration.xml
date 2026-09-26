@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paste into SignPath (project ▸ Artifact configurations ▸ default). The artifact is the
+     lila-win-unsigned-<sha> zip that desktop.yml uploads: one NSIS installer at its root. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Lila-Modeler-*-win-*.exe" max-matches="1">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
