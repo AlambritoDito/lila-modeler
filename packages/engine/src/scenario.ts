@@ -468,6 +468,7 @@ export type ScenarioProblemCode =
   | 'W-XOR-NORMALIZADA'
   | 'W-XOR-RESIDUO-COMPARTIDO'
   | 'W-COND-INALCANZABLE'
+  | 'W-OR-PROB-PARCIAL'
   | 'W-NORMAL-NEGATIVA'
   | 'W-USER-NORMALIZADA';
 
@@ -581,6 +582,35 @@ function checkXorGateway(
       path: `elements.${gatewayId}`,
       severity: 'warning',
       message: M['W-XOR-NORMALIZADA'](gatewayId, total),
+    });
+  }
+}
+
+/**
+ * R-OR-2, #398 — un OR divergente cuyas salidas declaran `probability` en algunas pero no en
+ * todas: las no declaradas siempre se toman (valen 1, `core/sim.ts::orWeights`), lo que casi nunca
+ * es la intención de quien modela. Un aviso por cada salida sin declarar, con el gateway y el
+ * propio flujo. Si **ninguna** salida declara probability (AND fork implícito, R-OR-2) o **todas**
+ * la declaran, no hay nada parcial y no se avisa; ese caso completo ya lo cubre
+ * `W-OR-SIN-PROBABILIDAD` en el motor.
+ */
+function checkOrGateway(
+  problems: ScenarioProblem[],
+  gatewayId: string,
+  outs: readonly string[],
+  elements: Record<string, ElementSpec>,
+  M: Catalog['codes'],
+): void {
+  const declared = outs.map((flowId) => elements[flowId]?.probability !== undefined);
+  const missing = outs.filter((_, i) => !declared[i]);
+  if (missing.length === 0 || missing.length === outs.length) return;
+
+  for (const flowId of missing) {
+    problems.push({
+      code: 'W-OR-PROB-PARCIAL',
+      path: `elements.${gatewayId}`,
+      severity: 'warning',
+      message: M['W-OR-PROB-PARCIAL'](`elements.${gatewayId}`, flowId, gatewayId),
     });
   }
 }
@@ -904,8 +934,10 @@ export function validateScenario(
   }
 
   // R10 — probabilidades de cada XOR divergente del IR (independiente de si algún caso lo visita).
+  // R-OR-2 / #398 — mismo trato para un OR divergente con declaración parcial.
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
     if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
+    if (node.type === 'or') checkOrGateway(problems, gatewayId, node.outgoing, elements, M);
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.
