@@ -174,6 +174,10 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
 it('valida antes del Worker y abre Resultados con avisos preservados', async () => {
+  // The startup reparse (150 ms) settles and rewrites `ir`/`noSoportados` on its own timer; wait
+  // it out before running, same fix as «abrir un .bpmn inválido...» below (#494): under CI load
+  // it could land mid-assertion instead of before the click and fail only there.
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
@@ -1375,6 +1379,19 @@ it('entrar en «Validar rutas» activa la animación de tokens y salir la desact
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
   await click(T.app.modos.modelar);
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
+});
+
+it('Alt+Shift+T stays out of bpmn-js-token-simulation in «Validar rutas» (#492)', async () => {
+  // `alinearArriba` is Alt+Shift+T (#453); its own `despachar` guard used to `return` before the
+  // `stopPropagation` below whenever outside Model, so this let bpmn-js-token-simulation's
+  // any-modifier `T` binding through and it toggled the token simulation / locked the canvas.
+  await click(T.app.modos.rutas);
+  const alLienzo = vi.fn();
+  svgLienzo().addEventListener('keydown', alLienzo);
+  mocks.simulacionTokens.mockClear();
+  expect(await pulsar(svgLienzo(), { key: 'T', code: 'KeyT', altKey: true, shiftKey: true })).toBe(false);
+  expect(alLienzo).not.toHaveBeenCalled();
+  expect(mocks.simulacionTokens).not.toHaveBeenCalled();
 });
 
 it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)', async () => {

@@ -82,7 +82,9 @@ Con el lienzo enfocado (haz clic en él primero):
 Acercar, alejar y ajustar funcionan desde cualquier parte de la ventana, no solo desde el lienzo.
 Los atajos de alinear solo funcionan en Modelar y actúan sobre las figuras seleccionadas (dos o
 más; tres o más para distribuir), igual que los botones de alinear de la esquina superior derecha
-del lienzo y la paleta de comandos. Los carriles no se alinean.
+del lienzo y la paleta de comandos. Los carriles no se alinean. Distribuir deja huecos
+aproximadamente iguales, no exactamente iguales: es el comportamiento propio de diagram-js, que
+agrupa las figuras a ±5 px entre sí y fija los dos grupos de los extremos (#488).
 La paleta de figuras de la izquierda filtra al teclear e inserta la figura resaltada con `Enter`.
 
 ## Paneles

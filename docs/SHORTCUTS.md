@@ -79,7 +79,9 @@ With the canvas focused (click on it first):
 
 Zoom and fit work from anywhere in the window, not only from the canvas. The align keys work in Model
 only and act on the selected shapes (two or more; three or more to distribute), like the align
-buttons at the top right of the canvas and the command palette. Lanes are not aligned. The shape palette on the
+buttons at the top right of the canvas and the command palette. Lanes are not aligned. Distributing
+gives approximately equal gaps, not exactly equal ones: it is diagram-js's own behaviour, which
+groups shapes within ±5 px of each other and keeps the two end groups fixed (#488). The shape palette on the
 left filters as you type and inserts the highlighted shape with `Enter`.
 
 ## Panels

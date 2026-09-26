@@ -491,6 +491,9 @@ function Propiedades({
   const admiteNombre = bo.$descriptor?.propertiesByName?.name !== undefined;
   const esAnotacion = bo.$type === 'bpmn:TextAnnotation';
   const proceso = procesoRelacionado(elemento);
+  // A floating label's own `type`/`id` are the diagram's `_label` shape, not the labelled
+  // element's — same resolution as `CabeceraElemento` (#485).
+  const real = elemento.type === 'label' && elemento.labelTarget !== undefined ? elemento.labelTarget : elemento;
 
   return (
     <div className="campos">
@@ -543,14 +546,14 @@ function Propiedades({
 
       <div className="campo">
         <span>{S.propiedades.tipo}</span>
-        <output>{nombreDeTipo(elemento.type)}</output>
+        <output>{nombreDeTipo(real.type)}</output>
       </div>
 
       {avanzado && (
         <div className="campo">
           <span>{S.propiedades.id}</span>
           <div className="fila">
-            <output className="mono">{elemento.id}</output>
+            <output className="mono">{real.id}</output>
             <button
               type="button"
               className="boton"
@@ -561,7 +564,7 @@ function Propiedades({
                 // copia a mano, que es lo que se puede hacer ahí.
                 const portapapeles = navigator.clipboard as Clipboard | undefined;
                 void portapapeles
-                  ?.writeText(elemento.id)
+                  ?.writeText(real.id)
                   .then(() => {
                     setCopiado(true);
                     setTimeout(() => {
