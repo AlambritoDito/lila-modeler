@@ -9,6 +9,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
+import { DesktopStore } from './store/DesktopStore';
 import { newModelXml, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';
@@ -2425,6 +2427,69 @@ it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble cl
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector('.bienvenida')).toBeNull();
+});
+
+// ---------- autosave and recovery on desktop (#459) ----------
+
+/** A desktop bridge with the two autosave methods; the rest is the minimum the shell reads. */
+function puenteRecuperacion(copia: Uint8Array | null, extra: object = {}) {
+  const puente = {
+    pendingOpenPath: vi.fn().mockResolvedValue(null), onOpenPath: () => () => {},
+    onMenu: (cb: (a: unknown) => void) => { puente.menu = cb; return () => {}; },
+    readSettings: async () => ({}), writeSettings: async () => {},
+    writeRecovery: vi.fn().mockResolvedValue(undefined), takeRecovery: vi.fn().mockResolvedValue(copia),
+    menu: (_a: unknown) => {}, ...extra,
+  };
+  vi.stubGlobal('lila', puente);
+  return puente;
+}
+async function montar(store: ProjectSessionStore = session) {
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={store} />));
+  await act(async () => {});
+}
+const EDITADO = () => seedModelXml().replace(/(<bpmn:task id="[^"]+" name=")[^"]*/, '$1Tarea renombrada');
+
+it('5 s after an edit the desktop sends writeRecovery a .lila with the edit; with no changes it writes nothing (#459)', async () => {
+  const puente = puenteRecuperacion(null);
+  await montar();
+  vi.useFakeTimers();
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+    expect(puente.writeRecovery).not.toHaveBeenCalled();
+    mocks.exportXml.mockResolvedValue(EDITADO());
+    await act(async () => mocks.changed());
+    await act(async () => { await vi.advanceTimersByTimeAsync(4900); });
+    expect(puente.writeRecovery).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(puente.writeRecovery).toHaveBeenCalledOnce();
+    const copia = decodeLila(puente.writeRecovery.mock.calls[0]![0] as Uint8Array);
+    expect(copia.model.xml).toContain('Tarea renombrada');
+  } finally { vi.useRealTimers(); }
+});
+
+it('takeRecovery opens the copy dirty, without the welcome screen (#459)', async () => {
+  const doc = proyecto('p9', 'Recuperado') as ProjectDocument;
+  const puente = puenteRecuperacion(encodeLila(doc));
+  await montar();
+  expect(puente.takeRecovery).toHaveBeenCalledOnce();
+  expect(mocks.abrir).toHaveBeenLastCalledWith(doc.model.xml);
+  expect(container.textContent).toContain('Recuperado');
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  expect(container.querySelector('.bienvenida')).toBeNull();
+});
+
+it('saving a restored copy goes through «Save as», never back to a file (#459)', async () => {
+  const chooseSaveFile = vi.fn().mockResolvedValue('/p/nuevo.lila');
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const puente = puenteRecuperacion(encodeLila(proyecto('p9', 'Recuperado') as ProjectDocument),
+    { chooseSaveFile, writeProject, setDirty: vi.fn(), onCloseRequested: () => () => {} });
+  await montar(new DesktopStore(puente as never));
+  await act(async () => { puente.menu('guardar'); });
+  expect(chooseSaveFile).toHaveBeenCalledWith('Recuperado.lila');
+  expect(writeProject).toHaveBeenCalledWith('/p/nuevo.lila', expect.objectContaining({ id: 'p9' }), expect.objectContaining({ saveAs: true }));
+  expect(container.textContent).toContain(T.app.guardado);
 });
 
 

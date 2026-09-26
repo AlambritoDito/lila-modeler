@@ -60,4 +60,10 @@ export const es: Strings = {
     mensaje: (version) => `Lila Modeler ${version} está disponible.`,
     detalle: (actual) => `Tienes la versión ${actual}. «Descargar» abre la página del release en tu navegador.`,
   },
+  recuperacion: {
+    restaurar: 'Restaurar',
+    descartar: 'Descartar',
+    mensaje: 'Lila Modeler no se cerró correctamente.',
+    detalle: (cuando) => `Hay cambios sin guardar del ${cuando}. ¿Quieres restaurarlos? El proyecto restaurado no se guarda hasta que elijas dónde con «Guardar como…».`,
+  },
 };

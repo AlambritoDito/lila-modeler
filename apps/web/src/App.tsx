@@ -16,7 +16,8 @@ import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/sche
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
+import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readLila, readProject } from './project';
+import { encodeLila } from '@lila-modeler/engine/project';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
@@ -258,6 +259,8 @@ async function cargarTema(id: TemaId): Promise<Theme> {
  * `soloDesktop` entries are announced only inside Electron: the browser keeps ⌘N, ⌘, and ⌘1…⌘6.
  */
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
+/** Desktop autosave (#459): the recovery copy is written this long after the last change. */
+const AUTOGUARDADO_MS = 5000;
 function atajo(id: AtajoId): string {
   const a = atajoPorId(id);
   return a.soloDesktop && !DESKTOP ? '' : tooltip(a, MAC);
@@ -748,6 +751,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
+  // Autosave (#459): 5 s after the last change, a dirty document goes to main as a `.lila`; main
+  // deletes the copy by itself when the document is clean again. Only the desktop bridge has it.
+  useEffect(() => {
+    if (!dirty || modelador === null || window.lila?.writeRecovery === undefined) return;
+    const temporizador = setTimeout(() => {
+      void snapshot().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
+    }, AUTOGUARDADO_MS);
+    return () => clearTimeout(temporizador);
+  }, [currentToken, dirty, modelador]);
   const sessionRestored = useRef(false);
   useEffect(() => {
     if (modelador === null || sessionRestored.current) return;
@@ -1437,15 +1449,50 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   const abrirRutaRef = useRef(abrirRuta);
   abrirRutaRef.current = abrirRuta;
+
+  /** The autosave copy the user chose to restore (#459), waiting for the canvas like `rutaPendiente`. */
+  const copiaPendiente = useRef<Uint8Array | null>(null);
+  /**
+   * Opens the recovery copy DIRTY and with no file behind it (`saved = false`, and the store has
+   * no folder yet on this launch): the first Save goes through «Save as», so the user's own file is
+   * never overwritten without them choosing it.
+   * ponytail: the copy does not remember where the project came from, so Save cannot go back to
+   * it; upgrade path: store the source path in the copy and re-authorize it in main on restore.
+   */
+  function restaurarCopia(copia: Uint8Array): void {
+    if (modelador === null) { copiaPendiente.current = copia; return; }
+    ioLock.current = true; setIoBusy(true);
+    void (async () => activate(readLila(copia), false, tokenRef.current))()
+      .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
+      .finally(() => { ioLock.current = false; setIoBusy(false); });
+  }
+  const restaurarCopiaRef = useRef(restaurarCopia);
+  restaurarCopiaRef.current = restaurarCopia;
   useEffect(() => {
     const abrir = (ruta: OpenPathRequest): void => abrirRutaRef.current(ruta);
-    const unsubscribe = window.lila?.onOpenPath(abrir);
-    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); else setBienvenida(true); });
+    const lila = window.lila;
+    const unsubscribe = lila?.onOpenPath(abrir);
+    if (lila !== undefined) void (async () => {
+      // The recovery offer comes first (#459). `pendingOpenPath` is still asked for: it is the
+      // handshake that lets main forward later double-clicks. A file double-clicked on this same
+      // launch then meets the restore in progress and says so (`errorAbrirOcupado`).
+      const copia = await lila.takeRecovery?.().catch(() => null) ?? null;
+      if (copia !== null) restaurarCopiaRef.current(copia);
+      const ruta = await lila.pendingOpenPath();
+      if (ruta !== null) abrir(ruta); else if (copia === null) setBienvenida(true);
+    })();
     return unsubscribe;
   }, []);
   useEffect(() => {
     if (bienvenida) void adapter?.listRecents?.().then(setRecientes).catch(() => setRecientes([]));
   }, [bienvenida, adapter]);
+  // Before the pending path below: the restore takes the I/O lock first.
+  useEffect(() => {
+    const copia = copiaPendiente.current;
+    if (modelador === null || copia === null) return;
+    copiaPendiente.current = null;
+    restaurarCopiaRef.current(copia);
+  }, [modelador]);
   useEffect(() => {
     const ruta = rutaPendiente.current;
     if (modelador === null || ruta === null) return;
