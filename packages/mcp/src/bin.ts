@@ -4,7 +4,7 @@
  * pasando el idioma que resolvió de `--lang`; aquí no hay línea de comandos, así que sale del
  * entorno con la misma regla (`LILA_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`; inglés si no hay).
  */
-import { resolveLocale } from '@lila/engine/messages';
+import { resolveLocale } from '@lila-modeler/engine/messages';
 
 import { startStdioServer } from './server.js';
 

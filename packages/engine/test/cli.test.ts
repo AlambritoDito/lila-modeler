@@ -97,7 +97,7 @@ test('--help sale con 0', async () => {
   expect(await main(['--help'])).toBe(0);
 });
 
-// Aceptación #48: `npx @lila/engine@beta --version` tiene que imprimir la versión y salir con 0.
+// Aceptación #48: `npx @lila-modeler/engine@beta --version` tiene que imprimir la versión y salir con 0.
 test('--version, -v y el subcomando version imprimen la versión y salen con 0', async () => {
   for (const args of [['--version'], ['-v'], ['version']]) {
     out = [];

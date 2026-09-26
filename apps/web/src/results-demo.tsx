@@ -7,9 +7,9 @@
  */
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { ScenarioSchema, type ResolvedScenario } from '@lila/engine/schema';
-import type { ProcessIR, RunResult, SimulationProgress } from '@lila/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { ScenarioSchema, type ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { ProcessIR, RunResult, SimulationProgress } from '@lila-modeler/engine';
 import { runInWorker } from './simulationClient.js';
 import { ResultsView } from './ResultsView.js';
 import { strings } from './i18n';

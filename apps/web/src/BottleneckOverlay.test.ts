@@ -21,9 +21,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { parseBpmn } from '@lila/engine/bpmn';
-import { ScenarioSchema, resolveExtends, type ResolvedScenario } from '@lila/engine/schema';
-import { simulate, type ProcessIR, type RunResult } from '@lila/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { ScenarioSchema, resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
+import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 import type ModelerType from 'bpmn-js/lib/Modeler';
 
 import {

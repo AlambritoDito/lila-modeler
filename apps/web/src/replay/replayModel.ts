@@ -13,9 +13,9 @@
  * incremental cursor: 461 rows for the reference example, ~1 000 for a big one, which is nothing
  * at 60 fps and means seeking backwards costs exactly the same as playing forwards.
  */
-import type { ProcessIR } from '@lila/engine';
-import type { ResolvedScenario } from '@lila/engine/schema';
-import type { EventLogRow } from '@lila/engine';
+import type { ProcessIR } from '@lila-modeler/engine';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { EventLogRow } from '@lila-modeler/engine';
 
 /** One activity occurrence (all the log rows that share an `activityInstanceId`). */
 export interface ReplayActivity {

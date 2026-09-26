@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { compare, simulate } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
+import { compare, simulate } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { defaultScenarios, newModelXml, nextScenarioRevisions, readProject, seedModelXml } from './project';
 import { prepareSimulation } from './simulationGate';
 import type { ProjectDocument } from './store/ProjectStore';

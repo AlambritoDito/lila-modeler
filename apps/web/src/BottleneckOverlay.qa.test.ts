@@ -15,8 +15,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ScenarioSchema, type ResolvedScenario } from '@lila/engine/schema';
-import type { RunResult } from '@lila/engine';
+import { ScenarioSchema, type ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { RunResult } from '@lila-modeler/engine';
 import type ModelerType from 'bpmn-js/lib/Modeler';
 
 import {

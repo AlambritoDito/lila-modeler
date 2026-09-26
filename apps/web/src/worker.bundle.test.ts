@@ -2,7 +2,7 @@
  * Criterio (c) de LILA-059: el bundle de `worker.ts` pesa menos de 100 KB minificado y no arrastra
  * bpmn-js, React, bpmn-moddle ni zod. Misma técnica que
  * packages/engine/test/worker-bundle.test.ts (esbuild, `platform: 'browser'`): aquí se apunta
- * `@lila/engine` directo al código fuente de `packages/engine/src/index.ts` — que ya es solo
+ * `@lila-modeler/engine` directo al código fuente de `packages/engine/src/index.ts` — que ya es solo
  * `core/` (ver ese test) — para no depender de que `dist/` esté construido al correr esta prueba.
  */
 import { dirname, resolve } from 'node:path';
@@ -21,7 +21,7 @@ const FORBIDDEN = ['bpmn-js', 'bpmn-moddle', 'react', 'zod'];
 describe('bundle del worker (LILA-059, criterio c)', () => {
   it('pesa menos de 100 KB minificado y no importa bpmn-js/React/bpmn-moddle/zod', async () => {
     const result = await build({
-      alias: { '@lila/engine': ENGINE_SOURCE_ENTRY },
+      alias: { '@lila-modeler/engine': ENGINE_SOURCE_ENTRY },
       bundle: true,
       entryPoints: [WORKER_ENTRY],
       format: 'esm',

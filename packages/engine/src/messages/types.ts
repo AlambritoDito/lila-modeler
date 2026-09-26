@@ -6,7 +6,7 @@
  * rules for an entry are the ones documented in `src/core/messages/types.ts`.
  *
  * PR-2 (CLI `--lang`, MCP `locale`) adds the `cli` and `mcp` namespaces here: the chrome of
- * `cli.ts`/`cli-shared.ts` and of `@lila/mcp`. They live here and **not** in `core/messages/` on
+ * `cli.ts`/`cli-shared.ts` and of `@lila-modeler/mcp`. They live here and **not** in `core/messages/` on
  * purpose: the web worker bundles `core/` only, and it has no console and no tools to describe.
  */
 import type { CoreChrome, CoreCodeMessages } from '../core/messages/types.js';

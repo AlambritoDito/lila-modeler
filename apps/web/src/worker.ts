@@ -1,5 +1,5 @@
 /**
- * Worker de simulación (LILA-059). Importa solo `@lila/engine` (que a su vez solo re-exporta
+ * Worker de simulación (LILA-059). Importa solo `@lila-modeler/engine` (que a su vez solo re-exporta
  * `core/`, sin bpmn-moddle/zod/React — ver packages/engine/test/worker-bundle.test.ts) y ejecuta
  * `simulate` fuera del hilo principal: progreso y muestreo del log.
  *
@@ -20,10 +20,10 @@ import {
   type RunResult,
   type SimScenario,
   type SimulationProgress,
-} from '@lila/engine';
+} from '@lila-modeler/engine';
 // Type-only import: `import type` is erased before bundling, so naming the engine's `Locale`
 // here costs the worker bundle nothing (`worker.bundle.test.ts` keeps it under 100 KB).
-import type { Locale } from '@lila/engine/messages';
+import type { Locale } from '@lila-modeler/engine/messages';
 
 /** ponytail: tope por defecto de filas retenidas de la primera replicación (docs/RESULTS_FORMAT.md §7). */
 export const DEFAULT_LOG_SAMPLE_LIMIT = 10_000;

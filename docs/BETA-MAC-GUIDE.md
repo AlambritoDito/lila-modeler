@@ -19,7 +19,7 @@ something is not yet wired up, this is stated explicitly under "Limitations of t
 
 ## Where the installer is and how to open it unsigned
 
-The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila/desktop`),
+The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
 named `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` for this release (hyphens, no spaces, matching the
 `SHA256SUMS` file's entry). Download both from
 [the `v1.0.0-beta.1` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
@@ -312,9 +312,9 @@ From the repository root, in order:
 
 ```bash
 npm ci                              # solo la primera vez, o si package-lock.json cambió
-npm run build -w @lila/engine       # compila el motor de simulación (TypeScript)
-npm run build -w @lila/web          # compila engine (si hiciera falta) + build de Vite
-npm run dist:mac -w @lila/desktop   # tsc + copia dist/web + electron-builder --mac --arm64
+npm run build -w @lila-modeler/engine       # compila el motor de simulación (TypeScript)
+npm run build -w @lila-modeler/web          # compila engine (si hiciera falta) + build de Vite
+npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-builder --mac --arm64
 ```
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
@@ -328,7 +328,7 @@ The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`
   (`uname -m`), written by `apps/desktop/scripts/origen.mjs` at the end of `dist:mac`.
 
-If Vite is already running on the machine (for example `npm run dev -w @lila/web` from another
+If Vite is already running on the machine (for example `npm run dev -w @lila-modeler/web` from another
 session), stop it before building `dist:mac`: the production build does not need it, and two
 processes fighting over the same port only adds noise to the logs, though it does not break the
 build itself (the final binary loads via the `lila://` protocol, not `http://localhost`).
@@ -336,7 +336,7 @@ build itself (the final binary loads via the `lila://` protocol, not `http://loc
 To try the `.app` without generating the DMG (faster, useful in development):
 
 ```bash
-npm run pack:mac -w @lila/desktop   # mismo build, pero --dir en vez de --mac
+npm run pack:mac -w @lila-modeler/desktop   # mismo build, pero --dir en vez de --mac
 ```
 
 A minimal check that the package launches, without opening a window:

@@ -37,7 +37,7 @@ by id — with a fixed timestamp, so saving the same project twice produces iden
 }
 ```
 
-`engine` is the only field the folder layout does not have: the version of `@lila/engine` that
+`engine` is the only field the folder layout does not have: the version of `@lila-modeler/engine` that
 wrote the runs in this archive. It is informational — readers record it and move on — and it is
 deliberately not part of the in-memory document, so an open/save round-trip re-stamps it rather
 than carrying somebody else's version forward.
@@ -84,7 +84,7 @@ mistake one for the other, since a Lila project starts with the ZIP magic `PK`.
 
 `packages/engine/src/project/` — `types.ts` (the document contract), `document.ts` (structural
 validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`).
-Published as `@lila/engine/project`. The folder reader/writer is
+Published as `@lila-modeler/engine/project`. The folder reader/writer is
 `apps/desktop/src/projectIO.ts`; the `.lila` half of the desktop is `apps/desktop/src/lilaFile.ts`.
 
 The engine's codes are `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LILA-NO-MODEL`,

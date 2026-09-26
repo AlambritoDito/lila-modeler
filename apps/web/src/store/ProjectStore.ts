@@ -10,15 +10,15 @@
  * - `RemoteStore` (LILA-086): servidor self-hosted (`packages/server`, M6), sobre su REST.
  *
  * Tipos: `xml` es el `.bpmn` tal cual lo produce `Modelador.exportar()` (ver `Modeler.tsx`);
- * `scenario` es el `Scenario` de `@lila/engine/schema` — el formato v1 de
+ * `scenario` es el `Scenario` de `@lila-modeler/engine/schema` — el formato v1 de
  * `docs/SCENARIO_FORMAT.md`, sin resolver `extends`; `result` es el `RunResult` de
  * `docs/RESULTS_FORMAT.md`. Ningún método aquí es especulativo: son exactamente los seis que
  * pide el ticket, ni uno más.
  */
 import type { Recent, SaveOutcome } from '../../../desktop/src/bridge.js';
-import type { RunResult } from '@lila/engine';
-import type { Scenario } from '@lila/engine/schema';
-import type { ProjectDocument } from '@lila/engine/project';
+import type { RunResult } from '@lila-modeler/engine';
+import type { Scenario } from '@lila-modeler/engine/schema';
+import type { ProjectDocument } from '@lila-modeler/engine/project';
 
 /** Lo mínimo para listar un proceso sin cargar su XML. */
 export interface ProcessSummary {
@@ -53,12 +53,12 @@ export interface ProjectStore {
 }
 
 /**
- * The project document contract now lives in `@lila/engine/project` (ADR-027): `apps/desktop`
+ * The project document contract now lives in `@lila-modeler/engine/project` (ADR-027): `apps/desktop`
  * kept a hand-maintained copy of these same four shapes and the `.lila` container needs them
  * too, so the definition moved to the one package both already depend on. Re-exported here
  * because this module is what the SPA imports — the rest of the app did not have to change.
  */
-export type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '@lila/engine/project';
+export type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '@lila-modeler/engine/project';
 
 /** Snapshot coherente; null es cancelación, error rechaza la promesa. */
 export interface ProjectSessionStore extends ProjectStore {

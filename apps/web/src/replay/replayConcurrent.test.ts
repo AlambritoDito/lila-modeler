@@ -1,9 +1,9 @@
 /** Synthetic regression models for #363. No private inputs or golden updates. */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { simulate, type EventLogRow } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { parseScenario, type ResolvedScenario } from '@lila/engine/schema';
+import { simulate, type EventLogRow } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { parseScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { buildReplay, stateAt } from './replayModel';
 import { prepareSimulation } from '../simulationGate';
 

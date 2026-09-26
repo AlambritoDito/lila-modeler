@@ -19,7 +19,7 @@ explícitamente en «Limitaciones de esta beta».
 
 ## Dónde está el instalador y cómo abrirlo sin firma
 
-El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila/desktop`),
+El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
 llamado `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` para esta versión (guiones, sin espacios,
 igual que la entrada del archivo `SHA256SUMS`). Descarga ambos desde
 [la versión `v1.0.0-beta.1`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
@@ -292,9 +292,9 @@ Desde la raíz del repositorio, en orden:
 
 ```bash
 npm ci                              # solo la primera vez, o si package-lock.json cambió
-npm run build -w @lila/engine       # compila el motor de simulación (TypeScript)
-npm run build -w @lila/web          # compila engine (si hiciera falta) + build de Vite
-npm run dist:mac -w @lila/desktop   # tsc + copia dist/web + electron-builder --mac --arm64
+npm run build -w @lila-modeler/engine       # compila el motor de simulación (TypeScript)
+npm run build -w @lila-modeler/web          # compila engine (si hiciera falta) + build de Vite
+npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-builder --mac --arm64
 ```
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
@@ -308,7 +308,7 @@ El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,
   escrito por `apps/desktop/scripts/origen.mjs` al final de `dist:mac`.
 
-Si Vite ya está corriendo en la máquina (por ejemplo `npm run dev -w @lila/web` de otra sesión),
+Si Vite ya está corriendo en la máquina (por ejemplo `npm run dev -w @lila-modeler/web` de otra sesión),
 apágalo antes de compilar `dist:mac`: el build de producción no lo necesita y dos procesos
 compitiendo por el mismo puerto solo añade ruido a los logs, aunque no rompe el build en sí (el
 binario final carga por el protocolo `lila://`, no por `http://localhost`).
@@ -316,7 +316,7 @@ binario final carga por el protocolo `lila://`, no por `http://localhost`).
 Para probar el `.app` sin generar el DMG (más rápido, útil en desarrollo):
 
 ```bash
-npm run pack:mac -w @lila/desktop   # mismo build, pero --dir en vez de --mac
+npm run pack:mac -w @lila-modeler/desktop   # mismo build, pero --dir en vez de --mac
 ```
 
 Verificación mínima de que el paquete arranca, sin abrir ventana:

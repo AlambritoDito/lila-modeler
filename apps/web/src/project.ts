@@ -1,8 +1,8 @@
-import { resolveScenarioPath } from '@lila/engine/schema';
-import { marcarExportador } from '@lila/engine/bpmn';
-import type { ProcessIR } from '@lila/engine';
-import { decodeLila, ProjectFormatError, readProjectDocument } from '@lila/engine/project';
-import type { ProjectErrorCode } from '@lila/engine/project';
+import { resolveScenarioPath } from '@lila-modeler/engine/schema';
+import { marcarExportador } from '@lila-modeler/engine/bpmn';
+import type { ProcessIR } from '@lila-modeler/engine';
+import { decodeLila, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
+import type { ProjectErrorCode } from '@lila-modeler/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
 
@@ -13,7 +13,7 @@ export function projectStore(store: ProjectStore): ProjectSessionStore | null {
 }
 /**
  * Localized wrapper over the engine's structural validation (ADR-027). The rules themselves moved
- * to `@lila/engine/project` so that the `.lila` container, the desktop folder reader and this app
+ * to `@lila-modeler/engine/project` so that the `.lila` container, the desktop folder reader and this app
  * cannot disagree about what a project is; what stays here is the wording, keyed by the stable
  * `code` each failure carries instead of by its English message.
  */

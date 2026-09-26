@@ -8,7 +8,7 @@ import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
-import { parseBpmn } from '@lila/engine/bpmn';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { newModelXml, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';

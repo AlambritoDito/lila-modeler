@@ -2,7 +2,7 @@
 
 > Leer en: [English](../CLI.md)
 
-`lila` es la interfaz de línea de comandos de `@lila/engine`: el mismo motor de validación y
+`lila` es la interfaz de línea de comandos de `@lila-modeler/engine`: el mismo motor de validación y
 simulación que usan la app web, la app de escritorio y el servidor MCP, manejado desde una
 terminal. Esta página es la referencia que necesita un agente o un script: cada comando con un
 ejemplo real, sus códigos de salida, qué escriben `--json`/`--csv`/`--xlsx` y cómo leer el
@@ -28,10 +28,10 @@ el registro.
 `npx lila` solo encuentra esta CLI dentro del clon (después de `npm ci`). En cualquier otro lado
 descarga el paquete `lila` ajeno de npm, así que desde otro directorio hay que llamar al binario
 directo (`node <clon>/packages/engine/bin/lila.js …`) o usar `npx --no lila …`, que se niega a
-instalar. Cuando se publique, usar `npx @lila/engine@beta …`:
+instalar. Cuando se publique, usar `npx @lila-modeler/engine@beta …`:
 
 ```bash
-npx @lila/engine@beta validate model.bpmn
+npx @lila-modeler/engine@beta validate model.bpmn
 ```
 
 ## `validate`
@@ -73,7 +73,7 @@ npx lila run \
 Código de salida: `0`.
 
 - `--json <archivo>` escribe el `RunResult` determinista (`docs/RESULTS_FORMAT.md`) como un único
-  documento JSON. Su forma es `runResultSchema`, exportado desde `@lila/engine/result-schema`:
+  documento JSON. Su forma es `runResultSchema`, exportado desde `@lila-modeler/engine/result-schema`:
   validar contra él antes de confiar en un archivo parseado.
 - `--csv <directorio>` escribe `elements.csv`, `flows.csv`, `resources.csv`, `process.csv` (RFC
   4180) y `log.csv` (el event log, escrito en streaming mientras corre la simulación, con
@@ -106,7 +106,7 @@ Comparación. `compare` no tiene `--csv`: compara corridas ya terminadas, no rep
 
 ## `mcp`
 
-Arranca el servidor MCP (`@lila/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
+Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
 corre a mano en una terminal para leer su salida. Los detalles, el contrato de las tools y el
 registro en clientes están en [`docs/es/MCP.md`](MCP.md); el comando de fondo es:
 
@@ -121,7 +121,7 @@ Aplican a cualquier subcomando, en cualquier posición de la línea de comandos:
 - `--lang en|es` — idioma de la salida (los mensajes, no los nombres de columna ni los ids BPMN,
   que son un contrato estable). Por defecto: `LILA_LANG`, luego `LANG`, inglés si ninguna existe.
 - `-h`, `--help` — uso de `lila` o de `lila <comando> --help`.
-- `-v`, `--version`, o el subcomando `version` — imprime la versión instalada de `@lila/engine` y
+- `-v`, `--version`, o el subcomando `version` — imprime la versión instalada de `@lila-modeler/engine` y
   sale con `0`.
 
 ```bash
@@ -147,7 +147,7 @@ Un cambio de modelo solo es seguro de entregar después de este ciclo, todo sobr
 2. **Correr con una semilla fija y réplicas suficientes** para un intervalo de confianza angosto:
    `lila run model.bpmn escenario.json --seed 1 --replications 30 --json results/run.json`.
 3. **Leer `results/run.json`** con cualquier herramienta JSON. Su forma sigue
-   `docs/RESULTS_FORMAT.md` y valida contra `runResultSchema` (`@lila/engine/result-schema`); los
+   `docs/RESULTS_FORMAT.md` y valida contra `runResultSchema` (`@lila-modeler/engine/result-schema`); los
    nombres de columna son el contrato de paridad de `docs/BIZAGI_PARITY.md`, no se traducen.
 4. **Para evaluar un cambio**, escribir un segundo escenario que extienda (`extends`) al primero
    con solo las claves que cambian (`docs/SCENARIO_FORMAT.md`), y luego `lila compare

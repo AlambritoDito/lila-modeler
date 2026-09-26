@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { decodeLila, encodeLila } from '@lila/engine/project';
+import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { isLilaPath, withLilaExtension } from './openPath.js';
 import { ProjectIOError } from './projectIO.js';

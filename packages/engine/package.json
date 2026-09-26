@@ -1,6 +1,6 @@
 {
-  "name": "@lila/engine",
-  "version": "1.0.0-beta.8",
+  "name": "@lila-modeler/engine",
+  "version": "1.0.0-beta.9",
   "description": "Discrete-event simulation engine for BPMN processes, inspired by the simulation workflow of Bizagi Modeler and validated against public examples",
   "license": "Apache-2.0",
   "type": "module",
@@ -72,7 +72,7 @@
     "zod": "^4.5.4"
   },
   "bin": {
-    "lila": "./bin/lila.js"
+    "lila": "bin/lila.js"
   },
   "repository": {
     "type": "git",

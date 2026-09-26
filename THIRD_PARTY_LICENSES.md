@@ -69,7 +69,7 @@ its `dependencies`, i.e. what actually enters the bundle via bpmn-js → diagram
 | htm | 3.1.1 | Apache-2.0 | https://github.com/developit/htm |
 | preact | 10.29.8 | MIT | https://github.com/preactjs/preact |
 
-`bpmn-moddle` appears twice in the tree (direct dependency of `@lila/engine` and transitive
+`bpmn-moddle` appears twice in the tree (direct dependency of `@lila-modeler/engine` and transitive
 dependency of `bpmn-js`); npm resolves a single instance in `node_modules/bpmn-moddle`, listed only
 once above.
 
@@ -83,7 +83,7 @@ just the CLI)
 | fflate | 0.8.3 | MIT | https://github.com/101arrowz/fflate — the zip writer behind the XLSX export (issue #80); it ends up in the bundle because `ResultsView`/`CompareView` build the workbook in the browser |
 
 Confirmed that `zod` ends up in the final artifact, not just in the Node CLI: after
-`npm run build -w @lila/web`, `grep -c zod apps/web/dist/assets/index-*.js` returns matches in the
+`npm run build -w @lila-modeler/web`, `grep -c zod apps/web/dist/assets/index-*.js` returns matches in the
 main bundle (the one loaded by the Electron window).
 
 ## Electron and its embedded runtime
@@ -106,7 +106,7 @@ source instead of being copied.
 - Development dependencies that don't ship in the `.dmg`: `vite`, `typescript`, `vitest`,
   `electron-builder`, `esbuild`, `tsx`, `jsdom`, `@types/*`.
 - The `lila` CLI (`packages/engine/bin/lila.js`) is not part of the desktop artifact: it uses Node
-  directly, not Electron. Its dependencies are the same `@lila/engine` ones already listed above
+  directly, not Electron. Its dependencies are the same `@lila-modeler/engine` ones already listed above
   (`zod`, `bpmn-moddle` and what the latter pulls in: `moddle`, `moddle-xml`, `min-dash`, `saxen`),
   with nothing additional.
 
@@ -117,7 +117,7 @@ source instead of being copied.
 python3 -c "import json; d=json.load(open('node_modules/<package>/package.json')); print(d['version'], d.get('license'))"
 
 # Confirm that a specific package ends up in the final bundle (not just in node_modules):
-npm run build -w @lila/web
+npm run build -w @lila-modeler/web
 grep -c '<package>' apps/web/dist/assets/index-*.js
 
 # Chromium/Node embedded in the exact Electron version used by apps/desktop:

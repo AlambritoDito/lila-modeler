@@ -14,8 +14,8 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { simulate, type ProcessIR } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
+import { simulate, type ProcessIR } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import {
   ScenarioSchema,
   parseScenario,
@@ -23,7 +23,7 @@ import {
   scenarioErrors,
   validateScenario,
   type ResolvedScenario,
-} from '@lila/engine/schema';
+} from '@lila-modeler/engine/schema';
 
 import {
   Campo,

@@ -3,7 +3,7 @@
  * `apps/web/src/strings.types.ts`, and the `Widen` trick is copied from there verbatim.
  *
  * It is copied and not imported because `apps/desktop` cannot reach into `apps/web`: its
- * `tsconfig.json` has `rootDir: "src"` and the package does not depend on `@lila/web`, so a
+ * `tsconfig.json` has `rootDir: "src"` and the package does not depend on `@lila-modeler/web`, so a
  * shared module would have to become a package of its own — far more machinery than the fourteen
  * texts this app owns are worth.
  */

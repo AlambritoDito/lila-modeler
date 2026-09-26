@@ -1,13 +1,13 @@
 {
-  "name": "@lila/web",
-  "version": "1.0.0-beta.8",
+  "name": "@lila-modeler/web",
+  "version": "1.0.0-beta.9",
   "private": true,
   "description": "App web de Lila Modeler: editor BPMN, escenarios y resultados",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build -w @lila/engine && vite",
-    "build": "npm run build -w @lila/engine && vite build",
+    "dev": "npm run build -w @lila-modeler/engine && vite",
+    "build": "npm run build -w @lila-modeler/engine && vite build",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "devDependencies": {
@@ -21,7 +21,7 @@
   "dependencies": {
     "@fontsource/archivo": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "@lila/engine": "1.0.0-beta.8",
+    "@lila-modeler/engine": "1.0.0-beta.9",
     "bpmn-js": "^18.28.0",
     "bpmn-js-token-simulation": "^0.40.0",
     "diagram-js-minimap": "^5.4.1"

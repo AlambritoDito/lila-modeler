@@ -10,11 +10,11 @@ import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { parseBpmn } from '@lila/engine/bpmn';
-import { columnLabel, formatDuration, formatNumber } from '@lila/engine/format';
-import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '@lila/engine/csv';
-import type { ResolvedScenario } from '@lila/engine/schema';
-import type { BottleneckEntry, ProcessIR, RunResult } from '@lila/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { columnLabel, formatDuration, formatNumber } from '@lila-modeler/engine/format';
+import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '@lila-modeler/engine/csv';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
+import type { BottleneckEntry, ProcessIR, RunResult } from '@lila-modeler/engine';
 
 import { buildResultCsvExports, ResultsView, sortRows, type ColumnDef } from './ResultsView.js';
 import { setLocale, strings } from './i18n';
@@ -228,7 +228,7 @@ describe('ResultsView (LILA-062)', () => {
     }
   });
 
-  it('los encabezados salen del mapa único de `@lila/engine/format` (LILA-201)', async () => {
+  it('los encabezados salen del mapa único de `@lila-modeler/engine/format` (LILA-201)', async () => {
     const ir = await loadIr();
     const result = loadGolden();
     const scenario = scenarioWithUnit('min');

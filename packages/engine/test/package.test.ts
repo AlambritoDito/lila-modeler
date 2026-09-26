@@ -74,7 +74,7 @@ describe('lo que se publica', () => {
     expect(npmCli, 'corre este test vía npm/npx, no invocando vitest a pelo').toBeTruthy();
     const result = spawnSync(
       process.execPath,
-      [npmCli as string, 'pack', '--workspace', '@lila/engine', '--dry-run', '--json'],
+      [npmCli as string, 'pack', '--workspace', '@lila-modeler/engine', '--dry-run', '--json'],
       { cwd: REPO_ROOT, encoding: 'utf8' },
     );
     expect(result.status, result.stderr).toBe(0);

@@ -10,7 +10,7 @@ const target = path.resolve(here, '..', 'dist', 'web');
 
 if (!existsSync(webDist)) {
   console.error(
-    `No se encontró ${webDist}. Corre "npm run build -w @lila/web" antes de "npm run build -w @lila/desktop".`,
+    `No se encontró ${webDist}. Corre "npm run build -w @lila-modeler/web" antes de "npm run build -w @lila-modeler/desktop".`,
   );
   process.exit(1);
 }

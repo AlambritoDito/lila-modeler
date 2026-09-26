@@ -19,21 +19,21 @@ function run(command, args, cwd = consumer) {
 }
 function json(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 console.log(`Checking package in ${consumer}`);
-run(process.execPath, [npmCli, 'pack', '--workspace', '@lila/engine', '--pack-destination', consumer], root);
+run(process.execPath, [npmCli, 'pack', '--workspace', '@lila-modeler/engine', '--pack-destination', consumer], root);
 const archives = readdirSync(consumer).filter((name) => name.endsWith('.tgz'));
 assert.equal(archives.length, 1);
 writeFileSync(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
 const typescript = json(join(root, 'node_modules/typescript/package.json')).version;
 const nodeTypes = json(join(root, 'node_modules/@types/node/package.json')).version;
 run(process.execPath, [npmCli, 'install', '--ignore-scripts', '--no-audit', '--no-fund', join(consumer, archives[0]), `typescript@${typescript}`, `@types/node@${nodeTypes}`]);
-const installed = join(consumer, 'node_modules/@lila/engine');
+const installed = join(consumer, 'node_modules/@lila-modeler/engine');
 const manifest = json(join(installed, 'package.json'));
 assert.equal(manifest.version, json(join(root, 'packages/engine/package.json')).version);
 for (const file of ['LICENSE', 'NOTICE', 'README.md']) assert.ok(existsSync(join(installed, file)), file);
 for (const file of ['src', 'test']) assert.ok(!existsSync(join(installed, file)), file);
 const imports = [], runtime = [];
 for (const [index, subpath] of Object.keys(manifest.exports).entries()) {
-  const specifier = `@lila/engine${subpath.slice(1)}`;
+  const specifier = `@lila-modeler/engine${subpath.slice(1)}`;
   if (specifier.endsWith('.json')) {
     runtime.push(`assert.ok((await import('${specifier}', { with: { type: 'json' } })).default);`);
   } else {

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ElementSchema } from '@lila/engine/schema';
+import { ElementSchema } from '@lila-modeler/engine/schema';
 
 import {
   DESFASES,

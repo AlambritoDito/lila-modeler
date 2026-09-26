@@ -3,7 +3,7 @@
  * formato numérico de Bizagi (docs/RESULTS_FORMAT.md §10), tabla de Flujos, tarjeta de cuellos
  * de botella (orden ya decidido por `result.bottlenecks`, sección 6) y exportación a CSV
  * byte a byte igual a `lila run --csv` (reutiliza `elementsCsv`/`flowsCsv`/`resourcesCsv`/
- * `processCsv` de `@lila/engine/csv`, nunca reimplementadas aquí).
+ * `processCsv` de `@lila-modeler/engine/csv`, nunca reimplementadas aquí).
  *
  * Tablas HTML planas, sin librería de grid ni gráficas (BACKLOG.md LILA-062): ordenar por
  * columna y encabezado fijo se resuelven con `useState` + `position: sticky`.
@@ -19,16 +19,16 @@ import {
   flowsCsv,
   processCsv,
   resourcesCsv,
-} from '@lila/engine/csv';
-import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila/engine/xlsx-report';
+} from '@lila-modeler/engine/csv';
+import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
 import {
   columnLabel,
   formatDuration,
   formatNumber,
   type BaseTimeUnit,
   type ResultScope,
-} from '@lila/engine/format';
-import type { ResolvedScenario } from '@lila/engine/schema';
+} from '@lila-modeler/engine/format';
+import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type {
   BottleneckEntry,
   ElementMetrics,
@@ -37,7 +37,7 @@ import type {
   ProcessIR,
   ResourceMetrics,
   RunResult,
-} from '@lila/engine';
+} from '@lila-modeler/engine';
 import { hasLegacyReplications } from './compareWarnings.js';
 import { getLocale, strings, useStrings } from './i18n';
 
@@ -204,7 +204,7 @@ function downloadCsv(filename: string, contents: string): void {
 }
 
 /**
- * Descarga el libro `.xlsx` que produce `@lila/engine/xlsx-report` (issue #80). Los bytes se
+ * Descarga el libro `.xlsx` que produce `@lila-modeler/engine/xlsx-report` (issue #80). Los bytes se
  * generan **al pulsar** y no en cada render: construir el zip de una corrida grande en cada
  * repintado de la tabla se notaría en la interfaz y casi siempre se tiraría sin usar.
  */
@@ -403,7 +403,7 @@ function idNameColumns<Row extends { id: string; name: string }>(): ColumnDef<Ro
 
 /**
  * El `key` de cada columna es la ruta de la métrica dentro de `RunResult`, así que el rótulo sale
- * del mapa único de `@lila/engine/format` (docs/RESULTS_FORMAT.md § 10, LILA-201): esta vista, la
+ * del mapa único de `@lila-modeler/engine/format` (docs/RESULTS_FORMAT.md § 10, LILA-201): esta vista, la
  * CLI y los CSV no pueden llamar distinto a la misma columna.
  */
 function numberColumn<Row>(scope: ResultScope, key: string, get: (row: Row) => number): ColumnDef<Row> {

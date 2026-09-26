@@ -16,7 +16,7 @@
  *   delta would copy the inherited fields of `extends` into the child; writing just the array
  *   replaces it whole, which is what § 6 of `docs/SCENARIO_FORMAT.md` says arrays do.
  */
-import type { ProcessIR } from '@lila/engine';
+import type { ProcessIR } from '@lila-modeler/engine';
 
 /** One entry of `elements[task].resources`. */
 export interface ResourceRef {

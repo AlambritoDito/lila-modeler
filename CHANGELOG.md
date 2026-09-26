@@ -3,6 +3,21 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.9] - 2026-09-26
+
+First npm publication. The engine and CLI now ship as @lila-modeler/engine (the @lila scope
+belongs to another npm account), under the `beta` dist-tag. No installer is attached to this version.
+
+### Changed
+
+- **npm scope (#48)**: workspace packages renamed from `@lila/*` to `@lila-modeler/*`; install the CLI
+  with `npm install -g @lila-modeler/engine`. Historical notes keep the old names.
+
+### Fixed
+
+- **`lila` bin kept on publish**: the `bin` path no longer starts with `./`, which npm 11 rejected
+  and silently dropped from the published manifest.
+
 ## [1.0.0-beta.8] - 2026-09-25
 
 Lote E: what a class hands in and how it is drawn. The diagram exports as SVG, PNG and PDF and

@@ -1,4 +1,4 @@
-# @lila/engine
+# @lila-modeler/engine
 
 Discrete-event simulation for BPMN processes. Part of [Lila Modeler](https://github.com/AlambritoDito/lila-modeler), inspired by the simulation workflow of Bizagi Modeler and validated against public examples. Coverage and remaining differences are documented in [BIZAGI_PARITY.md](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/BIZAGI_PARITY.md).
 
@@ -12,10 +12,10 @@ repository owner's first publication (#48).
 ## CLI
 
 ```bash
-npx @lila/engine@beta validate model.bpmn
-npx @lila/engine@beta run model.bpmn scenario.json --seed 42 --replications 3 --json result.json
-npx @lila/engine@beta compare model.bpmn a.json b.json --seed 42 --replications 3
-npx @lila/engine@beta --version
+npx @lila-modeler/engine@beta validate model.bpmn
+npx @lila-modeler/engine@beta run model.bpmn scenario.json --seed 42 --replications 3 --json result.json
+npx @lila-modeler/engine@beta compare model.bpmn a.json b.json --seed 42 --replications 3
+npx @lila-modeler/engine@beta --version
 ```
 
 English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic
@@ -27,9 +27,9 @@ server. Full reference, worked examples and a "for agents" section:
 ## Library
 
 ```ts
-import { simulate } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { validateScenario } from '@lila/engine/schema';
+import { simulate } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { validateScenario } from '@lila-modeler/engine/schema';
 ```
 
 Typed entry points also include `messages`, `cli-shared`, `result-schema`, `csv`, and `format`. The dependency-free simulation core runs in Node.js and browser Web Workers.

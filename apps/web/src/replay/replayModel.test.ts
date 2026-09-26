@@ -7,9 +7,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { simulate, type EventLogRow, type ProcessIR, type RunResult } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
-import { parseScenario, type ResolvedScenario } from '@lila/engine/schema';
+import { simulate, type EventLogRow, type ProcessIR, type RunResult } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { parseScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { buildReplay, stateAt, type Replay } from './replayModel';
 
 const dir = fileURLToPath(new URL('../../../../packages/engine/test/fixtures/service-request/', import.meta.url));

@@ -91,7 +91,7 @@ preview. Run the screenshot script only in its disposable browser context; it ch
 image files and must be followed by visual review and another Pages build.
 
 For desktop, always build the regular web app before desktop:
-`npm run build -w @lila/web` then `npm run build -w @lila/desktop`. Never package the Pages-base
+`npm run build -w @lila-modeler/web` then `npm run build -w @lila-modeler/desktop`. Never package the Pages-base
 web build. On the distribution branch, run `npm run test:package` after integration.
 
 At the stabilization handoff, the original integration checkout and existing release worktree were preserved. Review worktrees

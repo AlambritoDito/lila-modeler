@@ -1,4 +1,4 @@
-import { marcarExportador, sanitizeXmlIds } from '@lila/engine/bpmn';
+import { marcarExportador, sanitizeXmlIds } from '@lila-modeler/engine/bpmn';
 import { strings } from './i18n';
 
 const XML_ATTR = /(\s[A-Za-z_][A-Za-z0-9_.:-]*\s*=\s*)(?:"([^"]*)"|'([^']*)')/g;
@@ -155,7 +155,7 @@ export function autorizarExportacion(
 /**
  * Restituye identidad externa y marca inequívocamente la versión que escribió el archivo. La
  * marca la pone `marcarExportador` del motor (LILA-194): un único sitio escribe
- * `exporter`/`exporterVersion`, con la versión de `@lila/engine`, no la de esta app.
+ * `exporter`/`exporterVersion`, con la versión de `@lila-modeler/engine`, no la de esta app.
  */
 export function finalizarExportacion(
   xml: string,

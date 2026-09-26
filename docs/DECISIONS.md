@@ -58,7 +58,7 @@ Domain operations must be exposed through reusable services.
 
 The UI and MCP will use those services.
 
-> **Note:** ADR-019 makes this concrete: the API is the exported functions of `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI; MCP arrives in M4 on top of the same functions, ahead of REST.
+> **Note:** ADR-019 makes this concrete: the API is the exported functions of `@lila-modeler/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI; MCP arrives in M4 on top of the same functions, ahead of REST.
 
 ---
 
@@ -229,7 +229,7 @@ A project is a folder (`model.bpmn` + `*.scenario.json`). In the desktop app: op
 
 **Status:** Accepted
 
-The MVP's API is the exported functions of `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) arrives in M4, right after the CLI matches Bizagi Modeler's reference results and before the UI, with 5 tools: it costs ~100 lines, does not depend on the UI, and Brito works with agents; from there an agent can validate, simulate, patch scenarios, and compare on its own machine. REST (hono/fastify, one screen) arrives with the server and the repository. No logic lives at the edge. This satisfies ADR-003 (the UI and agents do the same thing) without building a server that serves no one today.
+The MVP's API is the exported functions of `@lila-modeler/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) and the CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) arrives in M4, right after the CLI matches Bizagi Modeler's reference results and before the UI, with 5 tools: it costs ~100 lines, does not depend on the UI, and Brito works with agents; from there an agent can validate, simulate, patch scenarios, and compare on its own machine. REST (hono/fastify, one screen) arrives with the server and the repository. No logic lives at the edge. This satisfies ADR-003 (the UI and agents do the same thing) without building a server that serves no one today.
 
 ---
 
@@ -263,7 +263,7 @@ Supported in v1: the list in section 3 of `LILA_MODELER_ESTRUCTURA.md` (see `doc
 
 (1) **Desktop app**: the `apps/web` SPA packaged with **Electron** in `apps/desktop` (main process + `preload`), built with electron-builder for macOS (dmg), Windows (nsis), and Linux (AppImage and deb) from a CI matrix; `fileAssociations` to open `.bpmn` on double click; optional auto-update once releases are frequent. The engine runs in the renderer's Web Worker; persistence is ADR-018. Direct precedent: Camunda Desktop Modeler (MIT) is Electron + bpmn-js + electron-builder with a `.bpmn` file association; its `electron-builder.json` is the template.
 
-(2) **Self-hosted server**: `packages/server` (M6) in Node serves **the same compiled SPA**, exposes REST and MCP over HTTP on top of `@lila/engine`'s functions, authenticates users, stores processes/versions/scenarios/runs in SQLite or PostgreSQL, and ships as a Docker image with `docker-compose.yml`. Interactive simulation keeps running in each user's browser Worker; the server only simulates when agents, the remote CLI, or scheduled runs ask for it.
+(2) **Self-hosted server**: `packages/server` (M6) in Node serves **the same compiled SPA**, exposes REST and MCP over HTTP on top of `@lila-modeler/engine`'s functions, authenticates users, stores processes/versions/scenarios/runs in SQLite or PostgreSQL, and ships as a Docker image with `docker-compose.yml`. Interactive simulation keeps running in each user's browser Worker; the server only simulates when agents, the remote CLI, or scheduled runs ask for it.
 
 **The seam between the two** is a `ProjectStore` interface in the SPA (list/read/write processes, scenarios, and runs) with `DesktopStore` (IPC → `fs`), `RemoteStore` (REST, M6), and a minimal `BrowserStore` (input/download) for the online demo. Defined in M5; the remote one arrives in M6 without touching views or the engine.
 
@@ -401,7 +401,7 @@ and anyone can inspect or repair a `.lila` with the unzip tool their system alre
 `fflate` is the only new dependency (MIT, ~30 KB, no transitive dependencies, works unchanged in
 Node and in the browser worker) — a hand-rolled DEFLATE is not a thing this project should own,
 and the alternatives either assume Node (`node:zlib`, unusable in the SPA) or pull a tree of
-packages. The shared document types moved to `@lila/engine/project`, ending the hand-maintained
+packages. The shared document types moved to `@lila-modeler/engine/project`, ending the hand-maintained
 copy `apps/desktop/src/projectTypes.ts` kept of `apps/web`'s.
 
 Unknown entries inside a `.lila` (`notes.md`, `attachments/…`) are reported in `problems` and

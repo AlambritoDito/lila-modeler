@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import type { ProcessIR } from '@lila/engine';
-import { parseBpmn } from '@lila/engine/bpmn';
+import type { ProcessIR } from '@lila-modeler/engine';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
 
 import { laneAssignmentDelta, tasksByLane } from './laneToPool.js';
 

@@ -58,7 +58,7 @@ Las operaciones de dominio deberán exponerse mediante servicios reutilizables.
 
 UI y MCP utilizarán esos servicios.
 
-> **Nota:** ADR-019 concreta esto: la API son las funciones exportadas de `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI; MCP llega en M4 sobre las mismas funciones, antes que REST.
+> **Nota:** ADR-019 concreta esto: la API son las funciones exportadas de `@lila-modeler/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI; MCP llega en M4 sobre las mismas funciones, antes que REST.
 
 ---
 
@@ -229,7 +229,7 @@ Un proyecto es una carpeta (`model.bpmn` + `*.scenario.json`). En la app de escr
 
 **Status:** Accepted
 
-La API del MVP son las funciones exportadas de `@lila/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) llega en M4, justo después de la paridad en CLI y antes de la UI, con 5 tools: cuesta ~100 líneas, no depende de la UI y Brito trabaja con agentes; desde ahí un agente valida, simula, parchea escenarios y compara en su computadora. REST (hono/fastify, una pantalla) llega con el servidor y el repositorio. Ninguna lógica vive en el borde. Cumple ADR-003 (UI y agentes hacen lo mismo) sin construir un servidor que hoy no sirve a nadie.
+La API del MVP son las funciones exportadas de `@lila-modeler/engine` (`parseBpmn`, `validate`, `resolveScenario`, `simulate`, `compare`) y la CLI. `packages/mcp` (stdio, `@modelcontextprotocol/server` 2.0.0, spec 2026-07-28) llega en M4, justo después de la paridad en CLI y antes de la UI, con 5 tools: cuesta ~100 líneas, no depende de la UI y Brito trabaja con agentes; desde ahí un agente valida, simula, parchea escenarios y compara en su computadora. REST (hono/fastify, una pantalla) llega con el servidor y el repositorio. Ninguna lógica vive en el borde. Cumple ADR-003 (UI y agentes hacen lo mismo) sin construir un servidor que hoy no sirve a nadie.
 
 ---
 
@@ -263,7 +263,7 @@ Soportado en v1: la lista de la sección 3 de `LILA_MODELER_ESTRUCTURA.md` (ver 
 
 (1) **App de escritorio**: la SPA de `apps/web` empaquetada con **Electron** en `apps/desktop` (proceso principal + `preload`), construida con electron-builder para macOS (dmg), Windows (nsis) y Linux (AppImage y deb) desde una matriz de CI; `fileAssociations` para abrir `.bpmn` con doble clic; auto-update opcional cuando haya releases frecuentes. El motor corre en el Web Worker del renderer; la persistencia es ADR-018. Precedente directo: Camunda Desktop Modeler (MIT) es Electron + bpmn-js + electron-builder con asociación de `.bpmn`; su `electron-builder.json` es la plantilla.
 
-(2) **Servidor self-hosted**: `packages/server` (M6) en Node sirve **la misma SPA compilada**, expone REST y MCP por HTTP sobre las funciones de `@lila/engine`, autentica usuarios, guarda procesos/versiones/escenarios/runs en SQLite o PostgreSQL, y se distribuye como imagen Docker con `docker-compose.yml`. La simulación interactiva sigue corriendo en el Worker del navegador de cada usuario; el servidor solo simula cuando lo piden agentes, la CLI remota o corridas programadas.
+(2) **Servidor self-hosted**: `packages/server` (M6) en Node sirve **la misma SPA compilada**, expone REST y MCP por HTTP sobre las funciones de `@lila-modeler/engine`, autentica usuarios, guarda procesos/versiones/escenarios/runs en SQLite o PostgreSQL, y se distribuye como imagen Docker con `docker-compose.yml`. La simulación interactiva sigue corriendo en el Worker del navegador de cada usuario; el servidor solo simula cuando lo piden agentes, la CLI remota o corridas programadas.
 
 **La costura entre ambas** es una interfaz `ProjectStore` en la SPA (listar/leer/escribir procesos, escenarios y runs) con implementaciones `DesktopStore` (IPC → `fs`), `RemoteStore` (REST, M6) y un `BrowserStore` mínimo (input/descarga) para la demo online. Se define en M5; la remota llega en M6 sin tocar vistas ni motor.
 
@@ -401,7 +401,7 @@ con la herramienta de descompresión que ya trae su sistema.
 `fflate` es la única dependencia nueva (MIT, ~30 KB, sin dependencias transitivas, funciona igual
 en Node y en el worker del navegador) — un DEFLATE hecho a mano no es algo que este proyecto deba
 mantener, y las alternativas o asumen Node (`node:zlib`, inservible en la SPA) o arrastran un árbol
-de paquetes. Los tipos de documento compartidos se mudaron a `@lila/engine/project`, con lo que
+de paquetes. Los tipos de documento compartidos se mudaron a `@lila-modeler/engine/project`, con lo que
 termina la copia a mano que `apps/desktop/src/projectTypes.ts` mantenía de la de `apps/web`.
 
 Las entradas desconocidas dentro de un `.lila` (`notes.md`, `attachments/…`) se reportan en

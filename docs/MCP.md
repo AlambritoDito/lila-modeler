@@ -2,8 +2,8 @@
 
 > Read this in: [Español](es/MCP.md)
 
-`packages/mcp` (`@lila/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila/engine`. Its five tools reuse the CLI validation and simulation pipeline — see
+`packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
+backed by `@lila-modeler/engine`. Its five tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
@@ -74,7 +74,7 @@ node packages/engine/bin/lila.js mcp
 ./node_modules/.bin/lila-mcp
 ```
 
-`lila mcp` dynamically loads `@lila/mcp` to avoid a static package cycle. Installing the engine
+`lila mcp` dynamically loads `@lila-modeler/mcp` to avoid a static package cycle. Installing the engine
 package alone does not install the private MCP workspace. Use the checkout until a separately
 installable MCP distribution exists. Missing packages and startup diagnostics go to stderr;
 stdout carries only MCP protocol messages.

@@ -238,7 +238,7 @@ export interface ReplicationOptions {
  * no el id interno de la instancia (R-REC-2, R-DURA-4). `validateScenario` reporta los mismos
  * códigos fuera de `core/`; este guard los repite porque `core/` no importa el validador zod.
  * Se exporta solo desde el módulo interno para que `simulate` y `runReplication` compartan
- * exactamente el mismo guard; no forma parte del barrel de `@lila/engine`.
+ * exactamente el mismo guard; no forma parte del barrel de `@lila-modeler/engine`.
  */
 export function assertSupportedResourceScenario(scenario: SimScenario, locale: Locale = 'en'): void {
   const M = coreMessages(locale).codes;
