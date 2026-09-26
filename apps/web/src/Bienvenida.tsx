@@ -9,12 +9,13 @@
  * puente guarda diez y con la tarjeta de novedades no caben en 900 px de alto.
  */
 import type { Recent } from '../../desktop/src/bridge.js';
+import { EJEMPLOS, type EjemploId } from './ejemplos';
 import { useLocale, useStrings } from './i18n';
 import { version } from '../package.json';
 
 export const REPO_URL = 'https://github.com/AlambritoDito/lila-modeler';
 
-export type AccionBienvenida = 'openFile' | 'open' | 'new' | 'ejemplo' | { readonly recent: string };
+export type AccionBienvenida = 'openFile' | 'open' | 'new' | { readonly recent: string } | { readonly ejemplo: EjemploId };
 
 const UNIDADES: readonly (readonly [number, Intl.RelativeTimeFormatUnit])[] = [
   [60, 'second'], [3600, 'minute'], [86_400, 'hour'], [7 * 86_400, 'day'], [30 * 86_400, 'week'], [365 * 86_400, 'month'],
@@ -45,7 +46,6 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
     { kind: 'openFile', titulo: S.abrirLila, pista: S.abrirLilaPista, clase: 'primaria', icono: <path d="M3 7h6l2 2h10v10H3z" /> },
     { kind: 'open', titulo: S.abrirCarpeta, pista: S.abrirCarpetaPista, clase: '', icono: <path d="M3 7h6l2 2h10v10H3z" /> },
     { kind: 'new', titulo: S.nuevo, pista: S.nuevoPista, clase: '', icono: <path d="M12 5v14M5 12h14" /> },
-    { kind: 'ejemplo', titulo: S.ejemplo, pista: S.ejemploPista, clase: '', icono: <><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /></> },
   ] as const;
   return (
     <section className="bienvenida" aria-label={S.titulo}>
@@ -62,6 +62,19 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
               <span><strong>{a.titulo}</strong><small>{a.pista}</small></span>
             </button>
           ))}
+          {/* #458: the public examples (`docs/EXAMPLES_POLICY.md`), each opened as a fresh, pathless
+              project — the same row shape as «Recent» (title + one-line hint), reused instead of a
+              new style. */}
+          <h3>{S.ejemplosTitulo}</h3>
+          <ul className="bienvenida-ejemplos">
+            {EJEMPLOS.map((ej) => (
+              <li key={ej.id}>
+                <button type="button" onClick={() => onAccion({ ejemplo: ej.id })}>
+                  <span><strong>{S.ejemplos[ej.id].titulo}</strong><small>{S.ejemplos[ej.id].pista}</small></span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
         <footer>
           <a href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer">{S.documentacion}</a>

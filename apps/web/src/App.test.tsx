@@ -2376,7 +2376,7 @@ function puenteBienvenida(pendiente: { dir: string; file: string } | null) {
     readSettings: async () => ({}), writeSettings: async () => {},
   });
 }
-it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y «Abrir el ejemplo» solo la cierra', async () => {
+it('la bienvenida sale en escritorio con los recientes y abre uno al pulsarlo', async () => {
   const doc = { version: 1, id: 'p3', name: 'Click&Go', model: { id: 'Process_3', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
   puenteBienvenida(null);
   const listRecents = vi.fn().mockResolvedValue([{ dir: '/p/clickandgo.lila', name: 'Click&Go', openedAt: new Date(Date.now() - 7_200_000).toISOString() }]);
@@ -2409,16 +2409,36 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(container.querySelector('.bienvenida')).toBeNull();
   expect(container.textContent).toContain('Click&Go');
 
-  // Sin recientes: el hueco lo dice; «Abrir el ejemplo» cierra sin tocar el store.
+  // Sin recientes: el hueco lo dice. La galería (#458) lista los ejemplos públicos junto a los
+  // botones de arriba; pulsar uno los abre sin pasar por `openProject`/`openRecent`.
   listRecents.mockResolvedValue([]);
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector('.bienvenida')!.textContent).toContain(T.bienvenida.sinRecientes);
-  await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.bienvenida-accion')].find((b) => b.querySelector('strong')!.textContent === T.bienvenida.ejemplo)!.click(); });
+  expect(container.querySelectorAll('.bienvenida-ejemplos li')).toHaveLength(7);
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
   expect(container.querySelector('.bienvenida')).toBeNull();
   expect(session.openProject).not.toHaveBeenCalled();
   expect(openRecent).toHaveBeenCalledOnce();
+});
+it('abrir un ejemplo deja el proyecto limpio (sin ruta) y con su nombre', async () => {
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]) });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  // Clean and pathless: `dirty` reads false (no «unsaved» footer) and «Save» would ask for a
+  // folder (`saveAs`), exactly like today's built-in `pedido` demo — never `session.createProject`
+  // or `session.openProject`, neither of which this path touches.
+  expect(container.textContent).not.toContain(T.app.sinGuardar);
+  expect(container.textContent).toContain(nivel1.titulo);
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(session.openProject).not.toHaveBeenCalled();
 });
 it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble clic)', async () => {
   puenteBienvenida({ dir: '/p/suelto', file: 'ventas.bpmn' });

@@ -294,8 +294,18 @@ export const en = {
     abrirCarpetaPista: '⌘O · a folder with model.bpmn',
     nuevo: 'New process',
     nuevoPista: '⌘N · creates an empty .bpmn',
-    ejemplo: 'Open the example',
-    ejemploPista: 'Restaurant order with AS-IS / TO-BE scenarios',
+    // #458: one row per public example (`docs/EXAMPLES_POLICY.md`), keyed by `Ejemplo['id']`
+    // (`ejemplos.ts`) so `strings.test.ts` (LILA-210) catches a catalog and a gallery that drift.
+    ejemplosTitulo: 'Examples',
+    ejemplos: {
+      pedido: { titulo: 'Restaurant order', pista: 'Counter service with AS-IS / TO-BE scenarios' },
+      'bizagi-level-1': { titulo: 'Bizagi level 1', pista: 'Routes only, no processing time, resources or costs' },
+      'bizagi-level-2': { titulo: 'Bizagi level 2', pista: 'Adds processing times with infinite resources' },
+      'bizagi-level-3': { titulo: 'Bizagi level 3', pista: 'Adds resources: three nurses' },
+      'bizagi-level-4': { titulo: 'Bizagi level 4', pista: 'Adds resource calendars and shifts' },
+      'mm1-rho08': { titulo: 'M/M/1 queue (ρ=0.8)', pista: 'Single-server queue validated against Erlang C' },
+      mm3: { titulo: 'M/M/3 queue (ρ=0.8)', pista: 'Three-server queue validated against Erlang C' },
+    },
     documentacion: 'Documentation',
     repositorio: 'Repository',
     recientes: 'Recent',
