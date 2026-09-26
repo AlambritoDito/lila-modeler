@@ -4,7 +4,7 @@ Lila Modeler has one shortcut map (`apps/web/src/atajos.ts`): the keyboard, the 
 native menu of the desktop app and this page all come from it, and a test fails if this page
 misses one of its keys. On Windows and Linux, `Ctrl` takes the place of `⌘`.
 
-Shortcuts without `⌘`/`Ctrl` (F2, F6, Esc) do nothing while you type in a field or edit a label,
+Shortcuts without `⌘`/`Ctrl` (F2, F6, Esc, the align keys) do nothing while you type in a field or edit a label,
 and, apart from the desktop app's File menu, no shortcut reaches the app while a dialog
 (Settings, a confirmation) is open.
 
@@ -68,8 +68,18 @@ With the canvas focused (click on it first):
 | Connect tool | `C` | `C` |
 | Edit the label | `E` | `E` |
 | Replace the element | `R` | `R` |
+| Align left | `⌥⇧L` | `Alt+Shift+L` |
+| Align center | `⌥⇧C` | `Alt+Shift+C` |
+| Align right | `⌥⇧R` | `Alt+Shift+R` |
+| Align top | `⌥⇧T` | `Alt+Shift+T` |
+| Align middle | `⌥⇧M` | `Alt+Shift+M` |
+| Align bottom | `⌥⇧B` | `Alt+Shift+B` |
+| Distribute horizontally | `⌥⇧H` | `Alt+Shift+H` |
+| Distribute vertically | `⌥⇧V` | `Alt+Shift+V` |
 
-Zoom and fit work from anywhere in the window, not only from the canvas. The shape palette on the
+Zoom and fit work from anywhere in the window, not only from the canvas. The align keys act on the
+selected shapes (two or more; three or more to distribute), like the align buttons of the Model
+bar and the command palette. The shape palette on the
 left filters as you type and inserts the highlighted shape with `Enter`.
 
 ## Panels

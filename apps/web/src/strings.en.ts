@@ -229,6 +229,8 @@ export const en = {
      * items of the «View» menu that replaces them in narrow windows; the titles carry the key.
      */
     vista: 'View',
+    /** Group of the Model bar with the align and distribute buttons (#453). */
+    alinear: 'Align and distribute',
     regiones: {
       izquierda: 'Left column',
       derecha: 'Right panel',
@@ -1358,6 +1360,14 @@ export const en = {
     conectar: 'Connect tool',
     editarEtiqueta: 'Edit the label',
     reemplazar: 'Replace the element',
+    alinearIzquierda: 'Align left',
+    alinearCentro: 'Align center',
+    alinearDerecha: 'Align right',
+    alinearArriba: 'Align top',
+    alinearMedio: 'Align middle',
+    alinearAbajo: 'Align bottom',
+    distribuirHorizontal: 'Distribute horizontally',
+    distribuirVertical: 'Distribute vertically',
     izquierda: 'Show or hide the left column',
     derecha: 'Show or hide the right panel',
     diagramas: 'Show or hide the diagram tabs',

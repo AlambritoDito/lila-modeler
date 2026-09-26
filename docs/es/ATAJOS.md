@@ -5,7 +5,7 @@ el menú nativo de la app de escritorio y esta página salen de él, y un test f
 inglés de esta página ([SHORTCUTS.md](../SHORTCUTS.md)) no trae alguna de sus teclas. En Windows y
 Linux, `Ctrl` ocupa el lugar de `⌘`.
 
-Los atajos sin `⌘`/`Ctrl` (F2, F6, Esc) no hacen nada mientras escribes en un campo o editas una
+Los atajos sin `⌘`/`Ctrl` (F2, F6, Esc, los de alinear) no hacen nada mientras escribes en un campo o editas una
 etiqueta, y, salvo el menú Archivo de la app de escritorio, ningún atajo llega a la app mientras
 hay un diálogo abierto (Ajustes, una confirmación).
 
@@ -70,8 +70,18 @@ Con el lienzo enfocado (haz clic en él primero):
 | Herramienta conectar | `C` | `C` |
 | Editar la etiqueta | `E` | `E` |
 | Reemplazar el elemento | `R` | `R` |
+| Alinear a la izquierda | `⌥⇧L` | `Alt+Shift+L` |
+| Centrar en horizontal | `⌥⇧C` | `Alt+Shift+C` |
+| Alinear a la derecha | `⌥⇧R` | `Alt+Shift+R` |
+| Alinear arriba | `⌥⇧T` | `Alt+Shift+T` |
+| Centrar en vertical | `⌥⇧M` | `Alt+Shift+M` |
+| Alinear abajo | `⌥⇧B` | `Alt+Shift+B` |
+| Distribuir en horizontal | `⌥⇧H` | `Alt+Shift+H` |
+| Distribuir en vertical | `⌥⇧V` | `Alt+Shift+V` |
 
 Acercar, alejar y ajustar funcionan desde cualquier parte de la ventana, no solo desde el lienzo.
+Los atajos de alinear actúan sobre las figuras seleccionadas (dos o más; tres o más para
+distribuir), igual que los botones de alinear de la barra de Modelar y la paleta de comandos.
 La paleta de figuras de la izquierda filtra al teclear e inserta la figura resaltada con `Enter`.
 
 ## Paneles

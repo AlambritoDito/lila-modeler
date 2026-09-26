@@ -53,6 +53,19 @@ describe('the shortcut map (#413)', () => {
     expect(coincide(por('irPanel'), tecla({ key: 'F6', shiftKey: true }), false)).toBe(true);
   });
 
+  it('Alt entries match by position with Alt only, never AltGr (Ctrl+Alt) or plain Shift (#453)', () => {
+    const arriba = por('alinearArriba');
+    // ⌥⇧T types «ˇ» on a US Mac layout.
+    expect(coincide(arriba, tecla({ key: 'ˇ', code: 'KeyT', altKey: true, shiftKey: true }), true)).toBe(true);
+    expect(coincide(arriba, tecla({ key: 'T', code: 'KeyT', altKey: true, shiftKey: true }), false)).toBe(true);
+    expect(coincide(arriba, tecla({ key: 'T', code: 'KeyT', shiftKey: true }), false)).toBe(false);
+    expect(coincide(arriba, tecla({ key: 'T', code: 'KeyT', altKey: true, ctrlKey: true, shiftKey: true }), false)).toBe(false);
+    expect(coincide(por('lazo'), tecla({ key: 'l', code: 'KeyL', altKey: true }), false)).toBe(false);
+    expect(etiqueta(arriba, true)).toBe('⌥⇧T');
+    expect(etiqueta(arriba, false)).toBe('Alt+Shift+T');
+    expect(acelerador(arriba)).toBe('Alt+Shift+T');
+  });
+
   it('formats labels, tooltips and Electron accelerators per platform', () => {
     expect(etiqueta(por('guardarComo'), true)).toBe('⇧⌘S');
     expect(etiqueta(por('guardarComo'), false)).toBe('Ctrl+Shift+S');
