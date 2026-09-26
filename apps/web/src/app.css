@@ -1661,6 +1661,25 @@ body {
   width: 30px;
 }
 
+/* Align and distribute (#453): the top right corner of the canvas, free in Model. */
+.alinear-grupo {
+  background: var(--border);
+  display: flex;
+  gap: 1px;
+  position: absolute;
+  right: 15px;
+  top: 14px;
+  z-index: 1;
+}
+
+.alinear-grupo .boton.icono {
+  display: grid;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  width: 28px;
+}
+
 /* ---------- minimapa (LILA-208) ---------- */
 
 /* El plugin `diagram-js-minimap` se pinta arriba a la derecha, en blanco y con esquinas

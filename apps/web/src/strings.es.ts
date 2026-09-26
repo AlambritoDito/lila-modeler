@@ -209,6 +209,7 @@ export const es: Strings = {
     redimensionarIzquierda: 'Redimensionar la columna izquierda',
     /** Botones para mostrar u ocultar paneles, a la derecha de la barra (#412). */
     vista: 'Vista',
+    alinear: 'Alinear y distribuir',
     regiones: {
       izquierda: 'Columna izquierda',
       derecha: 'Panel derecho',
@@ -1337,6 +1338,14 @@ export const es: Strings = {
     conectar: 'Herramienta conectar',
     editarEtiqueta: 'Editar la etiqueta',
     reemplazar: 'Reemplazar el elemento',
+    alinearIzquierda: 'Alinear a la izquierda',
+    alinearCentro: 'Centrar en horizontal',
+    alinearDerecha: 'Alinear a la derecha',
+    alinearArriba: 'Alinear arriba',
+    alinearMedio: 'Centrar en vertical',
+    alinearAbajo: 'Alinear abajo',
+    distribuirHorizontal: 'Distribuir en horizontal',
+    distribuirVertical: 'Distribuir en vertical',
     izquierda: 'Mostrar u ocultar la columna izquierda',
     derecha: 'Mostrar u ocultar el panel derecho',
     diagramas: 'Mostrar u ocultar las pestañas de diagramas',

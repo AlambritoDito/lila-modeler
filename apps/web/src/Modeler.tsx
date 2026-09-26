@@ -143,6 +143,13 @@ export interface Elemento {
   businessObject?: { name?: string; text?: string };
 }
 
+/** bpmn-js's `alignElements` types plus `distributeElements`' two axes (#453). */
+export type Alineacion = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'horizontal' | 'vertical';
+
+/** Shapes of `elegidos` that align and distribute move: bpmn-js skips connections, labels and boundary events. */
+const alineables = (elegidos: readonly Elemento[]): number =>
+  elegidos.filter((el) => el.waypoints === undefined && el.labelTarget == null && (el as { host?: unknown }).host == null).length;
+
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
@@ -204,6 +211,10 @@ export interface Modelador {
   seleccionar?(id: string, opciones?: { centrar?: true }): void;
   /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
   enfocar?(): void;
+  /** How many selected shapes `alinear` would move: 2 to align, 3 to distribute (#453). */
+  alineables?(): number;
+  /** Aligns or distributes the current selection with bpmn-js's own commands: one undo step. */
+  alinear?(tipo: Alineacion): void;
 }
 
 interface Props {
@@ -532,6 +543,13 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },
+      alineables: () => (activo === null ? 0 : alineables(activo.get<Selection>('selection').get() as Elemento[])),
+      alinear: (tipo) => {
+        if (activo === null) return;
+        const elegidos = activo.get<Selection>('selection').get();
+        const servicio = tipo === 'horizontal' || tipo === 'vertical' ? 'distributeElements' : 'alignElements';
+        activo.get<{ trigger(elementos: unknown[], tipo: Alineacion): void }>(servicio).trigger(elegidos, tipo);
+      },
     };
     // `onListo` se publica después del import inicial: su primera exportación ya contiene el
     // modelo recibido y nunca el lienzo vacío de una instancia recién creada.

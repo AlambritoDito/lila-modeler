@@ -17,7 +17,7 @@ import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
 import type { ProcessIR, SimulationProgress } from '@lila/engine';
-import { Lienzo, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
+import { Lienzo, type Alineacion, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
@@ -330,6 +330,36 @@ function IconoRegion({ region }: { region: Region | null }): React.JSX.Element {
     </svg>
   );
 }
+/** The align and distribute entries of the shortcut map and what each asks bpmn-js (#453). */
+const ALINEACIONES = {
+  alinearIzquierda: 'left', alinearCentro: 'center', alinearDerecha: 'right',
+  alinearArriba: 'top', alinearMedio: 'middle', alinearAbajo: 'bottom',
+  distribuirHorizontal: 'horizontal', distribuirVertical: 'vertical',
+} as const satisfies Record<string, Alineacion>;
+type AtajoAlinear = keyof typeof ALINEACIONES;
+const ALINEAR_IDS = Object.keys(ALINEACIONES) as AtajoAlinear[];
+/** Shapes each entry needs selected: bpmn-js aligns two, but only distributes three or more. */
+const minimoAlinear = (id: AtajoAlinear): number => (id.startsWith('distribuir') ? 3 : 2);
+/** A guide line plus the shapes on it, per alignment (24×24). */
+const TRAZO_ALINEAR: Record<Alineacion, [string, ...[number, number, number, number][]]> = {
+  left: ['M4 3v18', [4, 6, 14, 4], [4, 14, 9, 4]],
+  center: ['M12 3v18', [5, 6, 14, 4], [7.5, 14, 9, 4]],
+  right: ['M20 3v18', [6, 6, 14, 4], [11, 14, 9, 4]],
+  top: ['M3 4h18', [6, 4, 4, 14], [14, 4, 4, 9]],
+  middle: ['M3 12h18', [6, 5, 4, 14], [14, 7.5, 4, 9]],
+  bottom: ['M3 20h18', [6, 6, 4, 14], [14, 11, 4, 9]],
+  horizontal: ['M3 3v18M21 3v18', [7, 7, 3, 10], [14, 7, 3, 10]],
+  vertical: ['M3 3h18M3 21h18', [7, 7, 10, 3], [7, 14, 10, 3]],
+};
+function IconoAlinear({ tipo }: { tipo: Alineacion }): React.JSX.Element {
+  const [linea, ...cajas] = TRAZO_ALINEAR[tipo];
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d={linea} />
+      {cajas.map(([x, y, width, height]) => <rect key={`${x},${y}`} x={x} y={y} width={width} height={height} />)}
+    </svg>
+  );
+}
 /** Focus the toggle of `region` that is on screen: the button group or, when narrow, the «View» menu. */
 function enfocarToggle(region: Region): void {
   const boton = document.querySelector<HTMLElement>(`.vista-grupo [data-region="${region}"]`);
@@ -397,6 +427,10 @@ type EstadoSim =
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
+  // Re-render on every selection change: the align group (#453) counts the selected shapes.
+  const [, setCambioSeleccion] = useState(0);
+  useEffect(() => modelador?.suscribir(['selection.changed'], () => setCambioSeleccion((n) => n + 1)), [modelador]);
+  const alineables = modelador?.alineables?.() ?? 0;
   useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
@@ -1320,6 +1354,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
+      ...ALINEAR_IDS.map((id) => accion(id, conLienzo && alineables >= minimoAlinear(id))),
       accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
       accion('ajustes'),
       // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
@@ -1585,6 +1620,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     zoomMenos: () => modelador?.zoom(1 / 1.2),
     ajustarVista: () => modelador?.ajustar(),
     renombrar,
+    ...Object.fromEntries(ALINEAR_IDS.map((id) => [id, () => modelador?.alinear?.(ALINEACIONES[id])])) as Record<AtajoAlinear, () => void>,
     izquierda: () => alternarRegion('izquierda'),
     derecha: () => alternarRegion('derecha'),
     diagramas: () => alternarRegion('diagramas'),
@@ -2033,6 +2069,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
           </button>
         </div>
+      {/* Align and distribute (#453): on the canvas, not in the top bar, which is already full at
+          1440 px. Disabled until the selection has enough shapes to move. */}
+      {modo === 'modelar' && (
+        <div className="alinear-grupo" role="group" aria-label={S.app.alinear}>
+          {ALINEAR_IDS.map((id) => (
+            <button key={id} type="button" className="boton icono" aria-label={S.atajos[id]} title={`${S.atajos[id]}${atajo(id)}`}
+              disabled={alineables < minimoAlinear(id)} onClick={() => atajos[id]()}>
+              <IconoAlinear tipo={ALINEACIONES[id]} />
+            </button>
+          ))}
+        </div>
+      )}
       {/* Aviso de «Validar rutas» (LILA-065): deja claro que la animación de tokens no es la
           simulación DES del motor antes de que alguien la confunda con una corrida de verdad. */}
       {/* La `key`: los colores neutros del modo se escriben en el DI al activarlo
