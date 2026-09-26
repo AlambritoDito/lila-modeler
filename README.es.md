@@ -240,6 +240,8 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — política de ejemplos, oráculos de test, despliegue de Pages (este
   último en inglés).
+- [`RELEASING.md`](docs/RELEASING.md) — cortar una versión y publicar `@lila-modeler/engine` en npm (en
+  inglés).
 - `LILA_MODELER_ESTRUCTURA.md` — estructura del proyecto e hitos; `BACKLOG.md` — desglose del
   trabajo (los tickets viven en GitHub Issues).
 

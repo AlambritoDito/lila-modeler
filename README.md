@@ -230,6 +230,7 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
 - [`EXAMPLES_POLICY.md`](docs/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — examples policy, test oracles, Pages deployment.
+- [`RELEASING.md`](docs/RELEASING.md) — cutting a version and publishing `@lila-modeler/engine` to npm.
 - `LILA_MODELER_ESTRUCTURA.md` — project structure and milestones; `BACKLOG.md` — work breakdown
   (tickets live in GitHub Issues).
 
