@@ -74,6 +74,24 @@ describe('writing a colour', () => {
     expect(di).not.toMatch(/bioc:|color:/);
   });
 
+  it('an external label (event, gateway, flow) keeps the theme colour: it sits on the canvas, not on the fill', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    for (const id of ['StartEvent_Pedido', 'Gateway_ANDFork', 'Flow_Aprobado']) escribirColor(m.escritor, m.elemento(id), 'azul');
+    const xml = await m.exportar();
+    for (const id of ['StartEvent_Pedido', 'Gateway_ANDFork', 'Flow_Aprobado']) {
+      expect(diDe(xml, id), id).toContain('color:border-color="#0D4372"');
+      expect(diDe(xml, id), id).not.toContain('color:color');
+    }
+  });
+
+  it('«none» on a task that had no label leaves no empty BPMNLabel behind', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    const tarea = m.elemento('Task_Preparar');
+    escribirColor(m.escritor, tarea, 'verde');
+    escribirColor(m.escritor, tarea, null);
+    expect(diDe(await m.exportar(), 'Task_Preparar')).not.toContain('BPMNLabel');
+  });
+
   it('a connection gets the stroke only', async () => {
     const m = await abrir(leer('examples/pedido/model.bpmn'));
     escribirColor(m.escritor, m.elemento('Flow_Start_TomarPedido'), 'rojo');
@@ -107,6 +125,37 @@ describe('Bizagi colours on import', () => {
   });
 });
 
+/** Synthetic, Bizagi-style (`docs/EXAMPLES_POLICY.md`): a coloured task and event, a default-white one. */
+const BIZAGI_SINTETICO = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:bizagi="http://www.bizagi.com/bpmn20" id="D1" targetNamespace="http://example.com/synthetic">
+  <process id="P1">
+    <startEvent id="S1"><extensionElements><bizagi:BizagiExtensions><bizagi:BizagiProperties><bizagi:BizagiProperty name="bgColor" value="#FFCC00" /><bizagi:BizagiProperty name="borderColor" value="#996600" /></bizagi:BizagiProperties></bizagi:BizagiExtensions></extensionElements></startEvent>
+    <task id="T1" name="Coloured"><extensionElements><bizagi:BizagiExtensions><bizagi:BizagiProperties><bizagi:BizagiProperty name="bgColor" value="#FFE0B2" /><bizagi:BizagiProperty name="borderColor" value="#6B3C00" /></bizagi:BizagiProperties></bizagi:BizagiExtensions></extensionElements></task>
+    <task id="T2" name="Default"><extensionElements><bizagi:BizagiExtensions><bizagi:BizagiProperties><bizagi:BizagiProperty name="bgColor" value="White" /><bizagi:BizagiProperty name="borderColor" value="Black" /></bizagi:BizagiProperties></bizagi:BizagiExtensions></extensionElements></task>
+  </process>
+  <bpmndi:BPMNDiagram id="Dg"><bpmndi:BPMNPlane id="Pl" bpmnElement="P1">
+    <bpmndi:BPMNShape id="S1_di" bpmnElement="S1"><dc:Bounds x="100" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="T1_di" bpmnElement="T1"><dc:Bounds x="200" y="98" width="100" height="80" /></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="T2_di" bpmnElement="T2"><dc:Bounds x="350" y="98" width="100" height="80" /></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>`;
+
+describe('Bizagi colours on a visible task (synthetic)', () => {
+  it('the task gets fill, stroke and its embedded label colour; the event no label colour; White/Black nothing', async () => {
+    const m = await abrir(BIZAGI_SINTETICO);
+    coloresDeBizagi(m.definitions);
+    const xml = await m.exportar();
+    const t1 = diDe(xml, 'T1');
+    expect(t1).toContain('color:background-color="#FFE0B2"');
+    expect(t1).toContain('bioc:stroke="#6B3C00"');
+    expect(t1).toMatch(/BPMNLabel[^>]*color:color="#6B3C00"/);
+    const s1 = diDe(xml, 'S1');
+    expect(s1).toContain('color:background-color="#FFCC00"');
+    expect(s1).not.toContain('color:color');
+    expect(diDe(xml, 'T2')).not.toMatch(/bioc:|color:/);
+  });
+});
+
 describe('properties panel', () => {
   const montados: Array<() => void> = [];
   afterEach(() => {
@@ -134,8 +183,27 @@ describe('properties panel', () => {
     );
     expect(botones.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.title)).toEqual(['Green']);
     act(() => botones[5]!.click());
-    expect(pintar).toHaveBeenCalledWith(tarea, 'rojo');
+    expect(pintar).toHaveBeenCalledWith([tarea], 'rojo');
     act(() => botones[0]!.click());
-    expect(pintar).toHaveBeenLastCalledWith(tarea, null);
+    expect(pintar).toHaveBeenLastCalledWith([tarea], null);
+  });
+
+  it('with several selected, one click paints them all (one call, so one command and one ⌘Z)', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    const elegidos = [m.elemento('Task_Preparar'), m.elemento('Task_Empacar'), m.elemento('Flow_Aprobado')];
+    const pintar = vi.fn();
+    const modelador = {
+      servicios: { selection: { get: () => elegidos }, rootElement: () => undefined, elementRegistry: { filter: () => [] }, colores: { pintar } },
+      suscribir: () => () => undefined,
+    } as unknown as Modelador;
+    const contenedor = document.createElement('div');
+    document.body.append(contenedor);
+    const raiz = createRoot(contenedor);
+    act(() => raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" />));
+    montados.push(() => { act(() => raiz.unmount()); contenedor.remove(); });
+    expect(contenedor.textContent).toContain('3 elements selected');
+    act(() => contenedor.querySelector<HTMLButtonElement>('.colores button[aria-label="Teal"]')!.click());
+    expect(pintar).toHaveBeenCalledTimes(1);
+    expect(pintar).toHaveBeenCalledWith(elegidos, 'turquesa');
   });
 });

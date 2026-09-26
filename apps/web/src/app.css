@@ -2701,3 +2701,14 @@ body {
   margin: 3px;
   width: 14px;
 }
+
+/* Keyboard focus reads apart from the «current colour» outline (QA of #452). */
+.color-muestra:focus-visible {
+  outline: 2px dashed var(--fg-primary);
+  outline-offset: 1px;
+}
+
+/* The current colour in the context pad's popup. */
+.djs-popup .lila-color-actual {
+  font-weight: 700;
+}

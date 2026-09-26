@@ -2,8 +2,10 @@
  * Colours per element (#452): eight colours plus «none», from the properties panel and the context
  * pad. They are written to the element's DI in both namespaces bpmn-js renders and Camunda/Bizagi
  * exchange: `bioc:fill`/`bioc:stroke` and `color:background-color`/`color:border-color`
- * (bpmn-in-color). The label colour (`color:color` on the `bpmndi:BPMNLabel`) follows the stroke,
- * so the text stays readable on the pastel fill in a dark theme, whose default label is light.
+ * (bpmn-in-color). An embedded label (tasks, sub-processes, pools, lanes, annotations) takes the
+ * stroke as its colour (`color:color` on the `bpmndi:BPMNLabel`), so the text stays readable on
+ * the pastel fill in a dark theme, whose default label is light. External labels (events,
+ * gateways, data, flows) sit on the canvas, not on the fill: they keep the theme's colour.
  *
  * On import, Bizagi's own `bgColor`/`borderColor` are copied to the DI when the element has no
  * colour of its own.
@@ -12,6 +14,7 @@
  * the same in every theme and in the PNG/PDF export (the same colours as bpmn-js-color-picker, so a
  * Camunda user finds the ones they know).
  */
+import { isLabelExternal } from 'bpmn-js/lib/util/LabelUtil';
 import { strings } from './i18n';
 import type { ElementoLienzo, ElementoModdle, Escritor } from './PropertiesPanel';
 
@@ -57,6 +60,17 @@ export function colorActual(elemento: ElementoColoreable): ColorId | null | unde
   return COLORES.find((c) => (conexion ? c.stroke : c.fill).toLowerCase() === valor.toLowerCase())?.id;
 }
 
+/** An embedded label sits on the element's fill; an external one on the canvas (QA of #452). */
+function etiquetaSobreRelleno(di: Di, bo: ElementoModdle | undefined): boolean {
+  return di.$type !== 'bpmndi:BPMNEdge' && bo !== undefined && !isLabelExternal(bo as unknown as Parameters<typeof isLabelExternal>[0]);
+}
+
+/** The colour several elements share, `null` if none has one, `undefined` if they differ. */
+export function colorComun(elementos: readonly ElementoColoreable[]): ColorId | null | undefined {
+  const colores = new Set(elementos.map(colorActual));
+  return colores.size === 1 ? [...colores][0] : undefined;
+}
+
 /**
  * Paints the element with a palette colour, or clears its colour with `null`. Goes through
  * `modeling`, so the canvas repaints; `moduloColores` wraps the calls in one command, so a single
@@ -67,12 +81,21 @@ export function escribirColor(escritor: Escritor, elemento: ElementoColoreable, 
   if (di === undefined) return;
   const elegido = COLORES.find((c) => c.id === color);
   escritor.modeling.updateModdleProperties(elemento, di, atributos(di, elegido?.fill, elegido?.stroke));
-  if (di.label !== undefined) {
-    escritor.modeling.updateModdleProperties(elemento, di.label, { 'color:color': elegido?.stroke });
-  } else if (elegido !== undefined) {
-    const label = escritor.bpmnFactory.create('bpmndi:BPMNLabel', { 'color:color': elegido.stroke });
-    label.$parent = di;
-    escritor.modeling.updateModdleProperties(elemento, di, { label });
+  const label = di.label;
+  if (elegido === undefined) {
+    if (label === undefined) return;
+    // A label with no bounds only carried the colour: drop it rather than leave an empty tag.
+    if (label.get('bounds') === undefined) escritor.modeling.updateModdleProperties(elemento, di, { label: undefined });
+    else escritor.modeling.updateModdleProperties(elemento, label, { 'color:color': undefined });
+    return;
+  }
+  if (!etiquetaSobreRelleno(di, elemento.businessObject)) return;
+  if (label !== undefined) {
+    escritor.modeling.updateModdleProperties(elemento, label, { 'color:color': elegido.stroke });
+  } else {
+    const nueva = escritor.bpmnFactory.create('bpmndi:BPMNLabel', { 'color:color': elegido.stroke });
+    nueva.$parent = di;
+    escritor.modeling.updateModdleProperties(elemento, di, { label: nueva });
   }
 }
 
@@ -94,8 +117,8 @@ function propiedadesBizagi(bo: ElementoModdle): Map<string, string> {
 
 /**
  * Copies Bizagi's `bgColor`/`borderColor` to the DI of each element that has no colour of its own
- * (the label follows the border, as in `escribirColor`). Runs on the parsed tree, before bpmn-js
- * draws it, so it is not a command and not an edit.
+ * (an embedded label follows the border, as in `escribirColor`). Runs on the parsed tree, before
+ * bpmn-js draws it, so it is not a command and not an edit.
  *
  * ponytail: only hex values; Bizagi's named colours other than its white/black defaults are left
  * out. A name table (or a canvas to convert them) is the way up if a real file needs it.
@@ -114,7 +137,7 @@ export function coloresDeBizagi(definitions: { diagrams?: Array<{ plane?: { plan
     for (const [nombre, valor] of Object.entries(atributos(di, fill, stroke))) {
       if (valor !== undefined) di.set(nombre, valor);
     }
-    if (stroke !== undefined && di.$model !== undefined) {
+    if (stroke !== undefined && di.$model !== undefined && etiquetaSobreRelleno(di, bo)) {
       di.label ??= Object.assign(di.$model.create('bpmndi:BPMNLabel'), { $parent: di });
       di.label.set('color:color', stroke);
     }
@@ -125,28 +148,37 @@ export function coloresDeBizagi(definitions: { diagrams?: Array<{ plane?: { plan
  * bpmn-js module: the command, the context pad entry, its popup menu and the import hook.
  * ------------------------------------------------------------------ */
 
+interface Contexto { elementos: ElementoColoreable[]; color: ColorId | null }
+
 interface Inyectados {
   commandStack: {
-    register(nombre: string, handler: { postExecute(ctx: { elemento: ElementoColoreable; color: ColorId | null }): void }): void;
-    execute(nombre: string, ctx: object): void;
+    register(nombre: string, handler: { postExecute(ctx: Contexto): void }): void;
+    execute(nombre: string, ctx: Contexto): void;
   };
   modeling: Escritor['modeling'];
   bpmnFactory: Escritor['bpmnFactory'];
   eventBus: { on(evento: string, oyente: (e: { definitions?: Parameters<typeof coloresDeBizagi>[0] }) => void): void };
   contextPad: {
     registerProvider(prioridad: number, proveedor: object): void;
-    getPad(elemento: unknown): { html: HTMLElement };
+    getPad(elementos: unknown): { html: HTMLElement };
   };
   popupMenu: {
     registerProvider(id: string, proveedor: object): void;
-    open(elemento: unknown, id: string, posicion: object, opciones: object): void;
+    open(elementos: unknown, id: string, posicion: object, opciones: object): void;
   };
 }
 
-/** The service `lilaColores`: `pintar` is one undoable command. */
+type Destino = ElementoColoreable | ElementoColoreable[];
+const lista = (destino: Destino): ElementoColoreable[] => (Array.isArray(destino) ? destino : [destino]);
+
+/** What can be painted: a shape or a connection (not a label, not the root's plane). */
+export const pintable = (el: ElementoColoreable): boolean =>
+  el.type !== 'label' && (el.di?.$type === 'bpmndi:BPMNShape' || el.di?.$type === 'bpmndi:BPMNEdge');
+
+/** The service `lilaColores`: `pintar` is one undoable command, for one element or several. */
 export class LilaColores {
   static $inject = ['commandStack', 'modeling', 'bpmnFactory', 'eventBus', 'contextPad', 'popupMenu'];
-  readonly pintar: (elemento: ElementoColoreable, color: ColorId | null) => void;
+  readonly pintar: (elementos: Destino, color: ColorId | null) => void;
 
   constructor(
     commandStack: Inyectados['commandStack'],
@@ -158,37 +190,39 @@ export class LilaColores {
   ) {
     // Nested `modeling` calls in `postExecute` are recorded as part of this command: one ⌘Z.
     commandStack.register('lila.color', {
-      postExecute: ({ elemento, color }) => escribirColor({ modeling, bpmnFactory }, elemento, color),
+      postExecute: ({ elementos, color }) => {
+        for (const el of elementos) escribirColor({ modeling, bpmnFactory }, el, color);
+      },
     });
-    this.pintar = (elemento, color) => commandStack.execute('lila.color', { elemento, color });
+    this.pintar = (destino, color) =>
+      commandStack.execute('lila.color', { elementos: lista(destino).filter(pintable), color });
 
     eventBus.on('import.parse.complete', ({ definitions }) => {
       if (definitions !== undefined) coloresDeBizagi(definitions);
     });
 
-    const pintables = (el: ElementoColoreable): boolean => el.di !== undefined && el.type !== 'label';
-    contextPad.registerProvider(500, {
-      getContextPadEntries: (elemento: ElementoColoreable) => (entradas: Record<string, unknown>) =>
-        !pintables(elemento) ? entradas : {
-          ...entradas,
-          'lila-color': {
-            group: 'edit',
-            className: 'lila-color-entrada',
-            title: strings().propiedades.cambiarColor,
-            action: {
-              click: (evento: MouseEvent, el: ElementoColoreable) => {
-                const caja = contextPad.getPad(el).html.getBoundingClientRect();
-                popupMenu.open(el, 'lila-colores', { x: caja.left, y: caja.bottom + 5, cursor: { x: evento.x, y: evento.y } }, {
-                  title: strings().propiedades.cambiarColor,
-                });
-              },
+    const entrada = (destino: Destino) => (entradas: Record<string, unknown>) =>
+      !lista(destino).some(pintable) ? entradas : {
+        ...entradas,
+        'lila-color': {
+          group: 'edit',
+          className: 'lila-color-entrada',
+          title: strings().propiedades.cambiarColor,
+          action: {
+            click: (evento: MouseEvent, el: Destino) => {
+              const caja = contextPad.getPad(el).html.getBoundingClientRect();
+              popupMenu.open(el, 'lila-colores', { x: caja.left, y: caja.bottom + 5, cursor: { x: evento.x, y: evento.y } }, {
+                title: strings().propiedades.cambiarColor,
+              });
             },
           },
         },
-    });
+      };
+    contextPad.registerProvider(500, { getContextPadEntries: entrada, getMultiElementContextPadEntries: entrada });
     popupMenu.registerProvider('lila-colores', {
-      getPopupMenuEntries: (elemento: ElementoColoreable) => {
+      getPopupMenuEntries: (destino: Destino) => {
         const S = strings().propiedades.colores;
+        const actual = colorComun(lista(destino).filter(pintable));
         const muestra = (fill: string, stroke: string): string =>
           `<div style="width:14px;height:14px;background:${fill};border:1px solid ${stroke}"></div>`;
         return Object.fromEntries(
@@ -197,7 +231,8 @@ export class LilaColores {
             {
               label: S[c.id],
               imageHtml: muestra(c.fill, c.stroke),
-              action: () => this.pintar(elemento, c.id === 'ninguno' ? null : c.id),
+              ...(actual === (c.id === 'ninguno' ? null : c.id) ? { className: 'lila-color-actual' } : {}),
+              action: () => this.pintar(destino, c.id === 'ninguno' ? null : c.id),
             },
           ]),
         );

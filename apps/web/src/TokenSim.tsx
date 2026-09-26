@@ -23,6 +23,7 @@
  */
 import { useEffect } from 'react';
 import type { Modelador } from './Modeler';
+import { colorActual, type ElementoColoreable } from './colores';
 import { strings, useLocale, useStrings } from './i18n';
 
 interface Props {
@@ -202,6 +203,9 @@ export class ColoresNeutrosDelTema {
       // original decidía sus colores.
       const delTema = { fill: token('--diagram-fill'), stroke: token('--diagram-stroke') };
       registro.forEach((elemento) => {
+        // An element with its own colour (#452) keeps it: its embedded label follows its stroke,
+        // and a dark theme fill under that label would be the 1.15:1 of #264 again.
+        if (colorActual(elemento as ElementoColoreable) !== null) return;
         colores.add(elemento, 'neutral-element-colors', delTema);
       });
     });
