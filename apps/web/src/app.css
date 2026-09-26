@@ -2666,3 +2666,38 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* Colours per element (#452): «none» and the eight swatches of the properties panel, and the
+   context pad entry that opens the same list. The swatches' own colours come inline from
+   `colores.ts` (diagram data, not theme). */
+.colores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.color-muestra {
+  border: 1px solid var(--border);
+  cursor: pointer;
+  height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.color-ninguno {
+  background: linear-gradient(to top right, transparent 45%, var(--fg-muted) 45% 55%, transparent 55%);
+}
+
+.color-muestra[aria-pressed='true'] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.djs-context-pad .lila-color-entrada::before {
+  background: conic-gradient(var(--accent-primary), var(--accent-secondary), var(--accent-tertiary), var(--status-info), var(--accent-primary));
+  content: '';
+  display: block;
+  height: 14px;
+  margin: 3px;
+  width: 14px;
+}
