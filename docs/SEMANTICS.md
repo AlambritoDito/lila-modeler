@@ -427,7 +427,12 @@ pair), without introducing case variables or an expression language.
   `[0, n]`. *(test: LILA-026)*
 - **R-OR-2 — An outgoing flow with no `probability` in an OR is worth 1.** An `or` with no
   probability declared at all behaves like an `and` fork (every branch). Warning
-  `W-OR-SIN-PROBABILIDAD` is emitted the first time. *(test: LILA-026)*
+  `W-OR-SIN-PROBABILIDAD` is emitted the first time. *(test: LILA-026)* When some outgoing flows
+  declare `probability` and others do not, the scenario lint (`scenario.ts`, not `core/`) emits
+  `W-OR-PROB-PARCIAL` for each undeclared flow, naming the gateway: the flow is still always taken,
+  but a model author who declared some probabilities almost never means to leave others always on.
+  An `or` with all flows declared, or none, has nothing partial and gets no `W-OR-PROB-PARCIAL`.
+  *(test: #398)*
 - **R-OR-3 — At least one outgoing flow.** If all `n` draws fail, the `isDefault` flow is
   activated; if there is no `isDefault`, the one with the highest `p`, tie-broken by document
   order. It is counted and reported as warning `W-OR-VACIO` with the gateway's id and the number
@@ -1150,7 +1155,8 @@ a branch of an event-based gateway it never fires instead, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
 fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
-precede its gateway, R-COND-4), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
+precede its gateway, R-COND-4), `W-OR-PROB-PARCIAL` (an OR with `probability` on some outgoing
+flows but not all, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
 `W-XOR-DEFAULT-ROTO` (a `bpmn:default` pointing to a nonexistent flow: the `isDefault` mark is
 ignored, exact text in §3 R-NOSOP-6, along with the three `W-PARSE` texts), `W-RECURSO-SATURADO`,
 `W-REPLICACIONES-SIN-OBSERVACIONES` (R-ARR-9).
