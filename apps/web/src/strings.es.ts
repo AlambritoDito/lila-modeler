@@ -609,8 +609,8 @@ export const es: Strings = {
   propiedades: {
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
     variosSeleccionados: (n: number): string =>
-      `${n} elementos seleccionados: las acciones sobre varios a la vez todavía no están. ` +
-      'Selecciona uno solo para editarlo.',
+      `${n} elementos seleccionados. El color se aplica a todos; ` +
+      'selecciona uno solo para editar lo demás.',
 
     /* Cabecera del panel derecho sin nada seleccionado (diseño "Turno 2", bloque 2d). */
     nadaSeleccionado: 'Nada seleccionado',

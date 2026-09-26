@@ -630,8 +630,8 @@ export const en = {
   propiedades: {
     sinSeleccion: 'Select an element of the canvas to see its properties.',
     variosSeleccionados: (n: number): string =>
-      `${n} elements selected: acting on several at once is not there yet. ` +
-      'Select a single one to edit it.',
+      `${n} elements selected. Colour applies to all of them; ` +
+      'select a single one to edit its other properties.',
 
     /* Right-panel header with nothing selected (design "Turno 2", block 2d). */
     nadaSeleccionado: 'Nothing selected',
