@@ -11,8 +11,9 @@
  *    above and below it keep editing it (#448). Nothing is ever rounded: rounding would change
  *    the scenario just to draw it.
  * 2. **El modelo interno es un conjunto de celdas** (`dia × 24 + hora`) y las dos conversiones son
- *    puras. Pintar es un `add`/`delete` en un `Set`; los `intervals` se recalculan enteros en cada
- *    gesto, que es además lo que § 6 exige del delta (los arrays se reemplazan enteros).
+ *    puras. Painting is an `add`/`delete` on a `Set`; the whole `intervals` array is written on every
+ *    gesture (§ 6 replaces arrays whole), but entries that stay fully open are kept as written
+ *    and only the rest is re-derived (`pintar`, #469).
  */
 import { Fragment, useRef, useState } from 'react';
 import { useStrings } from './i18n';
@@ -106,6 +107,23 @@ export function aCeldas(intervals: readonly Intervalo[]): Set<number> {
     }
   }
   return salida;
+}
+
+/**
+ * The grid's new cell set → `intervals`, keeping the file as the person wrote it (#469): every
+ * entry whose hours are all still open stays as it is and where it is; the open cells no kept
+ * entry covers, plus those of the dropped entries, are re-derived with `aIntervals` and appended.
+ * Re-deriving everything would merge, split and re-sort the ranges added with the picker on every
+ * click.
+ */
+export function pintar(intervals: readonly Intervalo[], celdas: ReadonlySet<number>): Intervalo[] {
+  const conservadas = intervals.filter((intervalo) => [...aCeldas([intervalo])].every((c) => celdas.has(c)));
+  const cubiertas = aCeldas(conservadas);
+  // Hours of a dropped entry are re-derived even when a kept one also covers them, so the dropped
+  // range comes back with its own start (Mon–Fri 09–18 stays 09–18 next to «every day 06–10»).
+  const soltadas = aCeldas(intervals.filter((intervalo) => !conservadas.includes(intervalo)));
+  const resto = [...celdas].filter((c) => !cubiertas.has(c) || soltadas.has(c));
+  return [...conservadas, ...aIntervals(new Set(resto))];
 }
 
 const HORAS = [...Array.from({ length: 24 }).keys()];
@@ -339,6 +357,8 @@ export function CalendarEditor({
    * leerían el mismo estado viejo y el arrastre solo pintaría la última celda.
    */
   const trazo = useRef<Set<number> | null>(null);
+  /** `intervals` when the stroke began (#469): what `pintar` keeps as written. */
+  const origen = useRef<readonly Intervalo[] | null>(null);
 
   function aplicar(id: number, abrir: boolean): void {
     const base = trazo.current ?? celdas;
@@ -347,7 +367,9 @@ export function CalendarEditor({
     const nuevas = trazo.current ?? new Set(celdas);
     if (abrir) nuevas.add(id);
     else nuevas.delete(id);
-    onCambio(aIntervals(nuevas));
+    // Against the entries from before the stroke: the ones the stroke itself appended would
+    // otherwise be kept as written and a drag would leave one entry per cell.
+    onCambio(pintar(origen.current ?? intervals, nuevas));
   }
 
   return (
@@ -361,10 +383,12 @@ export function CalendarEditor({
           onPointerUp={() => {
             sentido.current = null;
             trazo.current = null;
+            origen.current = null;
           }}
           onPointerLeave={() => {
             sentido.current = null;
             trazo.current = null;
+            origen.current = null;
           }}
         >
           <span />
@@ -391,6 +415,7 @@ export function CalendarEditor({
                     onPointerDown={() => {
                       sentido.current = !abierta;
                       trazo.current = new Set(celdas);
+                      origen.current = intervals;
                       aplicar(id, !abierta);
                     }}
                     onPointerEnter={(e) => {
