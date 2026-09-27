@@ -1795,7 +1795,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // This runs before the `ATAJOS` lookup below: Ctrl+T/⌘T/Alt+T and their ⇧ variants match no
     // entry of Lila's own map (QA of #504, M1), so without this line they would fall straight
     // through the `a === undefined` return just below and reach bpmn-js untouched.
-    if (e.code === 'KeyT' && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
+    // `e.key`, not `e.code`: the library reads the typed character, so on Dvorak the physical T
+    // types «y» and «t» sits on KeyK (QA of #504, second pass).
+    if ((e.key === 't' || e.key === 'T') && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
     if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
     // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
