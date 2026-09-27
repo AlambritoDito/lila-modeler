@@ -184,7 +184,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Live-counter animation | ✓ | ✓ Animate replays the event log |
 | Platforms | Windows only | web app, macOS, Windows, Linux |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
-| Document publishing (Word/PDF/web) | ✓ | ✗ not a documentation suite |
+| Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
 | Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
 | Standalone message/signal/link events | partial | ✗ explicit validation error |
 | Multi-instance, complex gateway, choreography | ✗ | ✗ out of scope |

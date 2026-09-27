@@ -114,6 +114,45 @@ describe('process document (#454)', () => {
     expect(html).toContain('<html lang="es">');
     expect(html).toContain('<h2>Descripción del proceso</h2>');
     expect(html).toContain('<h2>Resultados</h2>');
+    // Printed to A4, the 15 columns of Elements fit (QA of #503, M1); on screen each table scrolls.
+    expect(html).toContain('@media print{body{padding:0;max-width:none}table{font-size:8px}th,td{padding:2px 3px}.scroll{overflow:visible}');
+    expect(html.match(/<div class="scroll"><table>/g)).toHaveLength(5);
+    expect(html).toContain('.scroll{overflow-x:auto}');
+  });
+
+  test('a flattened sub-process gets its own section, documentation and lane (QA of #503, S2)', async () => {
+    const sub = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:laneSet id="LS">
+      <bpmn:lane id="L1" name="Front"><bpmn:flowNodeRef>Start</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="L2" name="Back"><bpmn:flowNodeRef>Sub</bpmn:flowNodeRef><bpmn:flowNodeRef>End</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" name="Start" />
+    <bpmn:subProcess id="Sub" name="Sub &amp; co"><bpmn:documentation>sub doc</bpmn:documentation>
+      <bpmn:startEvent id="SStart" name="Sub start" />
+      <bpmn:task id="STask" name="Inner task"><bpmn:documentation>a	b</bpmn:documentation></bpmn:task>
+      <bpmn:endEvent id="SEnd" name="Sub end" />
+      <bpmn:sequenceFlow id="S1" sourceRef="SStart" targetRef="STask" />
+      <bpmn:sequenceFlow id="S2" sourceRef="STask" targetRef="SEnd" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End" name="End" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Sub" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Sub" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>`;
+    const { ir, subprocesses } = await parseBpmn(sub);
+    const doc = buildProcessDocument({ ir, annotations: await readAnnotations(sub), subprocesses, title: 't', date: 'd' });
+    const headings = doc.blocks.filter((b) => b.kind === 'heading').map((b) => (b as { text: string }).text);
+    // Flattening drops the sub-process's own start and end (R-PLAN-1): one H2 per node plus the sub-process.
+    expect(headings).toEqual(['Process description', 'Front', 'Start', 'Back', 'Sub & co', 'Inner task', 'End']);
+    expect(headings.length - 3).toBe(Object.keys(ir.nodes).length + 1);
+    const paragraphs = doc.blocks.filter((b) => b.kind === 'paragraph') as { label?: string; text: string }[];
+    expect(paragraphs).toContainEqual({ kind: 'paragraph', label: 'Description', text: 'sub doc' });
+    expect(paragraphs).toContainEqual({ kind: 'paragraph', label: 'Sub-process', text: 'Sub & co' });
+    expect(paragraphs.filter((p) => p.label === 'Lane' && p.text === 'Back')).toHaveLength(3);
+    // A tab in a description is Word's tab, not a literal character inside the text.
+    expect(strFromU8(parts(toDocx(doc))['word/document.xml']!)).toContain('<w:t xml:space="preserve">a</w:t><w:tab/><w:t xml:space="preserve">b</w:t>');
   });
 
   test('flow order walks from the starts, boundary events first; lanes group in order of appearance', () => {

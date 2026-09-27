@@ -188,7 +188,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
 | Plataformas | solo Windows | app web, macOS, Windows, Linux |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
-| Publicación de documentos (Word/PDF/web) | ✓ | ✗ no es una suite de documentación |
+| Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
 | Eventos de mensaje/señal/enlace sueltos | parcial | ✗ error de validación explícito |
 | Multi-instancia, compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
