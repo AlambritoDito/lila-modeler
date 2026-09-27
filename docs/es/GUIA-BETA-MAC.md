@@ -74,6 +74,20 @@ perfil. Trata un `.lila` descargado como la copia durable.
 
 ## Qué muestra la ventana al abrir
 
+El arranque en el navegador y en escritorio muestra el logo horizontal detallado de Lila y la
+versión del manifiesto hasta que el lienzo inicial está listo. El arranque ofrece recarga con
+recuperación localizada ante un fallo y respeta el movimiento reducido. Ver la [decisión de
+marca](design/branding/DECISION.md) y el [registro de instalación local del
+2026-09-14](design/branding/INSTALLATION-2026-09-14.md).
+
+Cuando no se hizo doble clic sobre nada, la app de escritorio muestra entonces una superposición
+de **bienvenida** (artboard 08 del diseño): abrir un archivo de proyecto `.lila`, abrir una
+carpeta de proyecto, crear un proceso nuevo, o elegir uno de los ejemplos públicos de la galería
+**Ejemplos** (`pedido`, los cuatro niveles del tutorial de Bizagi, y las dos colas M/M/c —
+`docs/EXAMPLES_POLICY.md`); la columna derecha lista los proyectos recientes (la misma lista de
+Archivo → Abrir reciente), las novedades de esta versión, y el tema y la densidad actuales. Abrir
+cualquier proyecto, o un ejemplo, la cierra. Hacer doble clic en un `.lila` o `.bpmn` la salta.
+
 La app arranca siempre con el mismo diagrama de ejemplo incluido en el propio bundle: el proceso
 `pedido` de `examples/pedido/model.bpmn` (import directo en `apps/web/src/main.tsx`, no un archivo
 externo). Hasta que elijas un tema se ve con **Lila oscuro** si el sistema está en modo oscuro y

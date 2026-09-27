@@ -59,12 +59,14 @@ export const EJEMPLOS: readonly Ejemplo[] = [
       'to-be-3-cajeros.scenario.json': pedidoToBe as Record<string, unknown>,
     },
   },
-  { id: 'bizagi-level-1', modelo: level1Model, escenarios: { 'scenario.json': level1Scenario as Record<string, unknown> } },
-  { id: 'bizagi-level-2', modelo: level2Model, escenarios: { 'scenario.json': level2Scenario as Record<string, unknown> } },
-  { id: 'bizagi-level-3', modelo: level3Model, escenarios: { 'scenario.json': level3Scenario as Record<string, unknown> } },
-  { id: 'bizagi-level-4', modelo: level4Model, escenarios: { 'scenario.json': level4Scenario as Record<string, unknown> } },
-  { id: 'mm1-rho08', modelo: mm1Model, escenarios: { 'scenario.json': mm1Scenario as Record<string, unknown> } },
-  { id: 'mm3', modelo: mm3Model, escenarios: { 'scenario.json': mm3Scenario as Record<string, unknown> } },
+  // #458, QA of #505 (M1): the key has to be a flat `<name>.scenario.json` — the desktop writer's
+  // `requireFlatName` rejects the source files' own name, plain `scenario.json`, on save.
+  { id: 'bizagi-level-1', modelo: level1Model, escenarios: { 'bizagi-level-1.scenario.json': level1Scenario as Record<string, unknown> } },
+  { id: 'bizagi-level-2', modelo: level2Model, escenarios: { 'bizagi-level-2.scenario.json': level2Scenario as Record<string, unknown> } },
+  { id: 'bizagi-level-3', modelo: level3Model, escenarios: { 'bizagi-level-3.scenario.json': level3Scenario as Record<string, unknown> } },
+  { id: 'bizagi-level-4', modelo: level4Model, escenarios: { 'bizagi-level-4.scenario.json': level4Scenario as Record<string, unknown> } },
+  { id: 'mm1-rho08', modelo: mm1Model, escenarios: { 'mm1-rho08.scenario.json': mm1Scenario as Record<string, unknown> } },
+  { id: 'mm3', modelo: mm3Model, escenarios: { 'mm3.scenario.json': mm3Scenario as Record<string, unknown> } },
 ];
 
 const POR_ID = new Map(EJEMPLOS.map((ejemplo) => [ejemplo.id, ejemplo]));
@@ -90,7 +92,9 @@ export function proyectoDeEjemplo(id: EjemploId): ProjectDocument {
     id: `ejemplo-${id}`,
     name: strings().bienvenida.ejemplos[id].titulo,
     model: { id: idDeProceso(ejemplo.modelo), name: 'model.bpmn', xml: ejemplo.modelo, revision: 0 },
-    scenarios: ejemplo.escenarios,
+    // A copy (QA of #505, N3): nothing mutates the catalog's `escenarios` in place today, but
+    // handing out the same reference would make a future in-place edit silently corrupt it.
+    scenarios: { ...ejemplo.escenarios },
     scenarioRevisions: {},
     runs: [],
   };

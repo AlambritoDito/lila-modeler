@@ -439,3 +439,24 @@ it('`.calendario` keeps its own, older `user-select: none` — not repeated in t
   expect(calendario).toContain('user-select: none');
   expect(calendario).toContain('-webkit-user-select: none');
 });
+
+it('la galería de ejemplos crece hasta el alto disponible en vez de cortar siempre la misma fila (QA de #505, S3)', () => {
+  // A fixed `max-height: 220px` always showed 3 of the 7 rows, even with 300+ px of free space
+  // below at a taller window. `flex: 1` on the column that holds it, plus `min-height: 0` on its
+  // flex parent (the only way a flex child is allowed to shrink under its content size), is what
+  // lets it take the leftover height instead — see the `app.css` comments next to each rule.
+  const columna = bloqueDeLinea('.bienvenida-izq > div');
+  expect(columna).toContain('min-height: 0');
+  const galeria = bloqueDeLinea('.bienvenida-ejemplos');
+  expect(galeria).toMatch(/flex:\s*1/);
+  expect(galeria).not.toMatch(/max-height:\s*\d/);
+  expect(galeria).toContain('overflow-y: auto');
+});
+
+it('solo «Recientes» resalta su primera fila como «más reciente»; la galería de ejemplos no (QA de #505, N1)', () => {
+  const primeraRecientes = bloqueDeLinea('.bienvenida-recientes li:first-child button');
+  expect(primeraRecientes).toContain('var(--accent-primary)');
+  // La regla ya no es compartida: `.bienvenida-ejemplos li:first-child button` no debe existir
+  // en ningún selector de la hoja.
+  expect(appCss).not.toContain('.bienvenida-ejemplos li:first-child');
+});
