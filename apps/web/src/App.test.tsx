@@ -1403,11 +1403,18 @@ it.each([
     { key: 't', code: 'KeyT', ctrlKey: true, shiftKey: true },
     { key: 't', code: 'KeyT', metaKey: true, shiftKey: true },
     { key: 't', code: 'KeyT', ctrlKey: true, altKey: true },
+    // Dvorak: «t» sits on the physical K key; the guard reads the typed character.
+    { key: 't', code: 'KeyK', ctrlKey: true },
+    { key: 't', code: 'KeyK', altKey: true },
   ]) {
     alLienzo.mockClear();
     await pulsar(svgLienzo(), init);
     expect(alLienzo).not.toHaveBeenCalled();
   }
+  // Dvorak: the physical T key types «y», which must still reach the canvas (Ctrl+Y = redo).
+  alLienzo.mockClear();
+  await pulsar(svgLienzo(), { key: 'y', code: 'KeyT', ctrlKey: true });
+  expect(alLienzo).toHaveBeenCalled();
 });
 
 it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)', async () => {
