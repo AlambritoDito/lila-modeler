@@ -30,6 +30,7 @@
 import { strFromU8, strToU8, zipSync } from 'fflate';
 
 import type { Annotations } from './bpmn/annotate.js';
+import type { SubprocessInfo } from './bpmn/parse.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
 import { messages, type Locale } from './messages/index.js';
@@ -63,6 +64,8 @@ export interface ProcessDocumentInput {
   readonly date: string;
   readonly locale?: Locale;
   readonly png?: Uint8Array;
+  /** `parseBpmn(xml).subprocesses`: names and lanes of the flattened sub-processes. */
+  readonly subprocesses?: Readonly<Record<string, SubprocessInfo>> | undefined;
   readonly scenario?: ResolvedScenario;
   /** A run of `scenario`; ignored without it. */
   readonly result?: RunResult;
@@ -147,31 +150,52 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   blocks.push({ kind: 'heading', level: 1, text: C.docDescription() });
   blocks.push({ kind: 'paragraph', text: process.documentation ?? C.docNoDescription() });
 
+  // Flattened sub-processes (R-PLAN-1): their children inherit the lane of the sub-process, which
+  // is the only shape the lane lists, and the sub-process gets its own section before them.
+  const subs = input.subprocesses ?? {};
+  const subLane = (sub: string | undefined): string | undefined =>
+    sub === undefined ? undefined : (subs[sub]?.lane ?? subLane(subs[sub]?.parent));
+  const subName = (sub: string): string => subs[sub]?.name || original(sub);
+  const laneOf = (id: string): string | undefined => ir.nodes[id]!.lane ?? subLane(ir.nodes[id]!.subprocessId);
+
+  const line = (label: string, text: string | undefined): void => {
+    if (text !== undefined && text !== '') blocks.push({ kind: 'paragraph', label, text });
+  };
+  const section = (id: string, heading: string, type: string, lane: string | undefined, sub: string | undefined): void => {
+    const notes = notesOf(id);
+    blocks.push({ kind: 'heading', level: 2, text: heading || original(id) });
+    line(C.docType(), type);
+    line(C.docId(), original(id));
+    line(C.docLane(), lane);
+    line(C.docSubprocess(), sub === undefined ? undefined : subName(sub));
+    const host = ir.nodes[id]?.attachedTo;
+    if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
+    line(C.docDocumentation(), notes.documentation);
+    line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
+    for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
+  };
+  const opened = new Set<string>();
+  const openSub = (sub: string | undefined): void => {
+    if (sub === undefined || opened.has(sub)) return;
+    opened.add(sub);
+    openSub(subs[sub]?.parent);
+    section(sub, subName(sub), C.docSubprocess(), subLane(sub), subs[sub]?.parent);
+  };
+
   // Lanes in order of first appearance along the flow; `null` gathers the nodes outside every lane.
   const order = flowOrder(ir);
   const lanes = new Map<string | null, string[]>();
   for (const id of order) {
-    const lane = ir.nodes[id]!.lane ?? null;
+    const lane = laneOf(id) ?? null;
     lanes.set(lane, [...(lanes.get(lane) ?? []), id]);
   }
-  const withLanes = order.some((id) => ir.nodes[id]!.lane !== undefined);
+  const withLanes = order.some((id) => laneOf(id) !== undefined);
   for (const [lane, ids] of withLanes ? lanes : new Map([[null, order]])) {
     blocks.push({ kind: 'heading', level: 1, text: !withLanes ? C.docElements() : lane ?? C.docNoLane() });
     for (const id of ids) {
       const node = ir.nodes[id]!;
-      const notes = notesOf(id);
-      const line = (label: string, text: string | undefined): void => {
-        if (text !== undefined && text !== '') blocks.push({ kind: 'paragraph', label, text });
-      };
-      blocks.push({ kind: 'heading', level: 2, text: node.name || original(id) });
-      line(C.docType(), M.mcp.nodeType(node.type));
-      line(C.docId(), original(id));
-      line(C.docLane(), node.lane);
-      line(C.docSubprocess(), node.subprocessId === undefined ? undefined : original(node.subprocessId));
-      if (node.attachedTo !== undefined) line(C.docAttachedTo(), ir.nodes[node.attachedTo]?.name || original(node.attachedTo));
-      line(C.docDocumentation(), notes.documentation);
-      line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
-      for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
+      openSub(node.subprocessId);
+      section(id, node.name, M.mcp.nodeType(node.type), laneOf(id), node.subprocessId);
     }
   }
 
@@ -213,10 +237,12 @@ const EMU_PER_PX = 9525;
 
 const BRAND = '7028F0';
 
-/** One run; `\n` becomes `<w:br/>` so a multi-line description keeps its lines. */
+/** One run; `\n` becomes `<w:br/>` and `\t` `<w:tab/>`, so a description keeps its layout. */
 function run(text: string, bold = false): string {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  const body = lines.map((line) => `<w:t xml:space="preserve">${escapeXml(line)}</w:t>`).join('<w:br/>');
+  const body = lines
+    .map((line) => line.split('\t').map((part) => `<w:t xml:space="preserve">${escapeXml(part)}</w:t>`).join('<w:tab/>'))
+    .join('<w:br/>');
   return `<w:r>${bold ? '<w:rPr><w:b/></w:rPr>' : ''}${body}</w:r>`;
 }
 
@@ -385,7 +411,13 @@ const HTML_STYLE =
   'table{border-collapse:collapse;width:100%;margin:8px 0 16px;font-size:12px}' +
   'th,td{border:1px solid #c8c0d0;padding:3px 6px;text-align:left;vertical-align:top}' +
   'th{background:#f3eefb}' +
-  '@media print{body{padding:0;max-width:none}h2,h3{break-after:avoid}tr,img{break-inside:avoid}}';
+  '.scroll{overflow-x:auto}' +
+  // ponytail: 8 px is what fits the 15 columns of Elements on a portrait A4 (measured); a very long
+  // unbroken id (Bizagi's `sid-<UUID>`) can still push a table past the page. Upgrade path: a
+  // landscape `@page` for the results.
+  // The screen's scrolling wrapper would clip the table on paper, hence `overflow:visible` there.
+  '@media print{body{padding:0;max-width:none}table{font-size:8px}th,td{padding:2px 3px}.scroll{overflow:visible}' +
+  'h2,h3{break-after:avoid}tr,img{break-inside:avoid}}';
 
 /** The single-page HTML, with the same text as `toDocx`. Title → `h1`, levels 1/2 → `h2`/`h3`. */
 export function toHtml(doc: ProcessDocument): string {
@@ -407,8 +439,8 @@ export function toHtml(doc: ProcessDocument): string {
           const cells = (row: readonly string[], tag: 'th' | 'td'): string =>
             `<tr>${row.map((text) => `<${tag}>${htmlText(text)}</${tag}>`).join('')}</tr>`;
           return (
-            `<table><thead>${cells(block.headers, 'th')}</thead>` +
-            `<tbody>${block.rows.map((row) => cells(row, 'td')).join('')}</tbody></table>`
+            `<div class="scroll"><table><thead>${cells(block.headers, 'th')}</thead>` +
+            `<tbody>${block.rows.map((row) => cells(row, 'td')).join('')}</tbody></table></div>`
           );
         }
       }

@@ -1627,7 +1627,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const lila = DESKTOP ? window.lila : undefined;
     try {
       const xml = await modelador.exportar();
-      const [{ ir: modelo }, annotations, png] = await Promise.all([
+      const [{ ir: modelo, subprocesses }, annotations, png] = await Promise.all([
         parseBpmn(xml),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
@@ -1639,7 +1639,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
-      const doc = buildProcessDocument({ ir: modelo, annotations, title: projectName, date, locale, png, ...escenario });
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: projectName, date, locale, png, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
