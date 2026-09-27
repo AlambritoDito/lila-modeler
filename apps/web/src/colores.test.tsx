@@ -218,6 +218,10 @@ describe('dark themes, at render time only (#489)', () => {
     const evento = { elements: [pool, flujo] };
     oyentes.get('elements.changed')!(evento);
     expect(evento.elements).toEqual([pool, flujo, etiqueta, sub.children[0]]);
+    // Painting the sub-process itself (second pass of the QA of #507) redraws its own contents too.
+    const soloSub = { elements: [sub] as unknown[] };
+    oyentes.get('elements.changed')!(soloSub);
+    expect(soloSub.elements).toEqual([sub, sub.children[0]]);
   });
 
   it('inside an expanded sub-process the background is the sub-process, not the pool around it (QA M1 of #507)', async () => {
