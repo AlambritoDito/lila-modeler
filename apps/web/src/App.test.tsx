@@ -2400,6 +2400,45 @@ it('abrir un ejemplo deja el proyecto limpio (sin ruta) y con su nombre', async 
   expect(session.createProject).not.toHaveBeenCalled();
   expect(session.openProject).not.toHaveBeenCalled();
 });
+it('a dirty project plus a click on an example asks first, and only activates it after Discard (QA of #505, S3)', async () => {
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]), forget: vi.fn() });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await act(async () => mocks.changed()); // the project behind the welcome overlay is now dirty.
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  // Asks first: the example isn't opened yet, and the welcome overlay stays up behind the dialog.
+  expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+  expect(session.forget).not.toHaveBeenCalled();
+  await click(T.app.descartar);
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  expect(container.textContent).toContain(nivel1.titulo);
+  expect(session.forget).toHaveBeenCalledOnce();
+});
+it("forget() runs only after the example's activation succeeds, not before (QA N3 of #505)", async () => {
+  // If `activate` fails (`modelador.abrir` returning false), the old project must stay exactly as
+  // it was — including the adapter's folder, which forgetting it early would have discarded even
+  // though nothing new was actually activated.
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]), forget: vi.fn() });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  mocks.abrir.mockResolvedValueOnce(false);
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(session.forget).not.toHaveBeenCalled();
+  // The failed activation left the welcome overlay up (`setBienvenida(false)` only runs inside a
+  // successful `activate`).
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(session.forget).toHaveBeenCalledOnce();
+  expect(container.querySelector('.bienvenida')).toBeNull();
+});
 it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble clic)', async () => {
   puenteBienvenida({ dir: '/p/suelto', file: 'ventas.bpmn' });
   Object.assign(session, { openRecent: vi.fn().mockResolvedValue(null) });

@@ -777,11 +777,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         if (doc) await activate(doc, true, beforeToken); return;
       }
       if (typeof kind === 'object' && 'ejemplo' in kind) {
-        // #458, QA of #505 (S2c): forget the adapter's previously active folder/document first,
-        // so the next «Save» treats this pathless project as a first save instead of comparing
-        // its id against whatever was active before (E-PROYECTO-DISTINTO).
-        adapter.forget?.();
-        await activate(proyectoDeEjemplo(kind.ejemplo), true, beforeToken);
+        // #458, QA of #505 (S2c, N3): forget the adapter's previously active folder/document so
+        // the next «Save» treats this pathless project as a first save instead of comparing its
+        // id against whatever was active before (E-PROYECTO-DISTINTO) — but only AFTER `activate`
+        // succeeds. Forgetting first and then failing (`modelador.abrir` returning false) left the
+        // old project on screen with the adapter's folder already gone, so the next ⌘S would have
+        // asked «Save as» instead of saving it in place.
+        const activado = await activate(proyectoDeEjemplo(kind.ejemplo), true, beforeToken);
+        if (activado) adapter.forget?.();
         return;
       }
       if (typeof kind === 'object') {
