@@ -1381,17 +1381,33 @@ it('entrar en «Validar rutas» activa la animación de tokens y salir la desact
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
 });
 
-it('Alt+Shift+T stays out of bpmn-js-token-simulation in «Validar rutas» (#492)', async () => {
-  // `alinearArriba` is Alt+Shift+T (#453); its own `despachar` guard used to `return` before the
-  // `stopPropagation` below whenever outside Model, so this let bpmn-js-token-simulation's
-  // any-modifier `T` binding through and it toggled the token simulation / locked the canvas.
-  await click(T.app.modos.rutas);
+it.each([
+  ['Validar rutas', () => click(T.app.modos.rutas)],
+  ['Modelar', () => click(T.app.modos.modelar)],
+] as const)('a T with any modifier never reaches bpmn-js-token-simulation, in %s (#492, QA of #504 M1)', async (_modo, entrar) => {
+  // `alinearArriba` is Alt+Shift+T (#453) and matches Lila's own `ATAJOS` map, so its
+  // `stopPropagation` used to run late, inside the `ALINEACIONES` branch, only for modes other
+  // than Model. Ctrl+T, ⌘T, Alt+T and their ⇧ variants match no entry at all, so they used to fall
+  // straight through `despachar`'s `a === undefined` return — in every mode, Model included — and
+  // reach bpmn-js-token-simulation's any-modifier `T` binding, which locks the canvas. The listener
+  // below is the assertion that can actually fail: `mocks.simulacionTokens` is Lila's own toggle
+  // and a keypress never calls it either way (QA of #504, N2).
+  await entrar();
   const alLienzo = vi.fn();
   svgLienzo().addEventListener('keydown', alLienzo);
-  mocks.simulacionTokens.mockClear();
-  expect(await pulsar(svgLienzo(), { key: 'T', code: 'KeyT', altKey: true, shiftKey: true })).toBe(false);
-  expect(alLienzo).not.toHaveBeenCalled();
-  expect(mocks.simulacionTokens).not.toHaveBeenCalled();
+  for (const init of [
+    { key: 'T', code: 'KeyT', altKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true },
+    { key: 't', code: 'KeyT', metaKey: true },
+    { key: 't', code: 'KeyT', altKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', metaKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true, altKey: true },
+  ]) {
+    alLienzo.mockClear();
+    await pulsar(svgLienzo(), init);
+    expect(alLienzo).not.toHaveBeenCalled();
+  }
 });
 
 it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)', async () => {
