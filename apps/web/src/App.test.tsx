@@ -2634,6 +2634,26 @@ it('a start configured with only an inter-arrival timer counts as the first star
   expect(asIs()).toEqual({ Start_A: soloTimer });
 });
 
+it('Run pressed right after drawing waits for the reparse and the seeding, and keeps its results (#431)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  // The gate parses what it is given, like the real one: its IR is the canvas's, not the fixture's.
+  mocks.gate.mockImplementation(async (xml: string) => ({ ir: (await parseBpmn(xml)).ir, scenario, warnings: [] }));
+  // A start and a task drawn, and Run pressed before React has even rendered the edit (one act).
+  mocks.exportXml.mockResolvedValue(modelo(['Start_A'], ['Task_A']));
+  await act(async () => {
+    mocks.changed();
+    [...container.querySelectorAll('button')].find((b) => b.textContent === T.app.ejecutar)!.click();
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
+  const escenarios = mocks.gate.mock.calls[0]![2] as typeof mocks.escenarios;
+  expect(Object.keys(escenarios['as-is.scenario.json']!.elements ?? {}).sort()).toEqual(['Start_A', 'Task_A']);
+  expect(container.textContent).toContain('Resultado actual');
+});
+
 it('a failed Run in Animate shows in the status bar (#419)', async () => {
   mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
   await click(T.app.modos.animar);

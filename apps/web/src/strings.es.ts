@@ -1084,6 +1084,9 @@ export const es: Strings = {
     notaReplicacionesSinObservaciones:
       'Algunas replicaciones no observaron el sujeto que nombra el aviso; sus estadísticas usan ' +
       'solo las replicaciones que sí lo hicieron (ver n en el archivo de resultados).',
+    /** #431: every arrival fell inside the warm-up (the web's notice, not an engine `W-*`). */
+    todoEnCalentamiento:
+      'Todas las llegadas cayeron en el calentamiento, así que no se midió nada: alarga la duración o acorta el calentamiento.',
   },
 
   /* ------------------------------------------------------------------ *

@@ -487,6 +487,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [modo, setModo] = useState<ModoId>('modelar');
   const [revision, setRevision] = useState(0);
   const revisionRef = useRef(0);
+  /**
+   * #431: an edit is not settled until its deferred reparse and the #420 seeding it triggers have
+   * landed; a Run pressed before that waits (`ejecutarPendiente`) instead of running without the
+   * seeds and being cancelled by them a moment later. The ref is what Run reads: it is set in the
+   * canvas's own event, before React renders the edit; the state is what wakes the waiting Run.
+   */
+  const [reparseando, setReparseandoEstado] = useState(false);
+  const reparseandoRef = useRef(false);
+  const setReparseando = (valor: boolean): void => { reparseandoRef.current = valor; setReparseandoEstado(valor); };
+  const [ejecutarPendiente, setEjecutarPendiente] = useState(false);
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
@@ -955,6 +965,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     return modelador.suscribir(['commandStack.changed'], () => {
       revisionRef.current += 1;
       setRevision(revisionRef.current);
+      setReparseando(true);
       cancelarCorrida();
       setCorrida(null);
     });
@@ -978,7 +989,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         const ids = new Set(nosop.map((p) => p.id));
         const nombres = new Map(modelador.servicios.elementRegistry.filter((el) => el.id !== undefined && ids.has(el.id)).map((el) => [el.id, el.businessObject?.name]));
         setNoSoportados(nosop.map((p) => { const name = nombres.get(p.id); return name === undefined ? { id: p.id, message: p.message } : { id: p.id, message: p.message, name }; }));
-      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); } });
+      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); setReparseando(false); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
     // The locale reparses because the `E-NOSOP` messages are the engine's, in the active language.
@@ -997,6 +1008,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const nodosVistos = useRef<Set<string> | null>(null);
   const sembrados = useRef(new Map<string, Record<string, unknown>>());
   useEffect(() => {
+    // #431: batched with the seeding below, so a waiting Run sees the seeded scenarios.
+    setReparseando(false);
     if (ir === null) return;
     const vistos = nodosVistos.current;
     nodosVistos.current = new Set(Object.keys(ir.nodes));
@@ -1456,6 +1469,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function simular(): Promise<void> {
     if (modelador === null) return;
+    if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();
     enVuelo.current = control;
@@ -1501,6 +1515,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (enVuelo.current === control) enVuelo.current = null;
     }
   }
+
+  useEffect(() => {
+    if (reparseando || !ejecutarPendiente) return;
+    setEjecutarPendiente(false);
+    void simular();
+    // `simular` is this render's, the one with the settled scenarios.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reparseando, ejecutarPendiente]);
 
   /**
    * The diagram as an image (#451): the SVG in the theme's colours, the PNG (2×), the PDF and the
@@ -1786,7 +1808,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="separador" aria-hidden="true" />
           <div>
             <div className="proyecto">{projectName}</div>
-            <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>
+            <div className={dirty ? 'archivo sucio' : 'archivo'} title={`${archivo} · ${dirty ? S.app.sinGuardar : S.app.guardado}`}>
+              {archivo}<span className="archivo-estado"> · {dirty ? S.app.sinGuardar : S.app.guardado}</span>
+            </div>
           </div>
         </div>
         <nav className="modos">

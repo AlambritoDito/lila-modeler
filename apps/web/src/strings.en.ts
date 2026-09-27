@@ -1123,6 +1123,9 @@ export const en = {
     notaReplicacionesSinObservaciones:
       'Some replications did not observe the subject named in the warning; its statistics use ' +
       'only the replications that did (see n in the results file).',
+    /** #431: every arrival fell inside the warm-up (the web's notice, not an engine `W-*`). */
+    todoEnCalentamiento:
+      'Every arrival fell inside the warm-up, so nothing was measured: lengthen the run or shorten the warm-up.',
   },
 
   /* ------------------------------------------------------------------ *
