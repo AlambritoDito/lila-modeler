@@ -40,7 +40,10 @@ for (const ejemplo of EJEMPLOS) {
       // gate `App.tsx` runs before «Run»): a rejection here is exactly what «simulates without
       // E-*» rules out.
       const { ir, scenario } = await prepareSimulation(ejemplo.modelo, archivo, ejemplo.escenarios);
-      const result = simulate(ir, scenario);
+      // One replication and at most a day: the M/M/c oracles ask for 30 × 30 days, which is
+      // minutes of CPU on a loaded CI runner and proves nothing more here than a single day does.
+      const run = { ...scenario.run, replications: 1, duration: Math.min(scenario.run.duration ?? 86_400, 86_400) };
+      const result = simulate(ir, { ...scenario, run });
       // Not just "did not throw": a scenario whose arrivals all land inside the warm-up would
       // resolve and simulate cleanly while never producing a single started case (#431's
       // warm-up bug) — silently teaching nothing. `started > 0` is the same signal `App.tsx`

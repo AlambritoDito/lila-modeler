@@ -281,12 +281,11 @@ export const es: Strings = {
     ejemplosTitulo: 'Ejemplos',
     ejemplos: {
       pedido: { titulo: 'Pedido de restaurante', pista: 'Atención en mostrador con escenarios AS-IS / TO-BE' },
-      // QA de #505, N5/M1: en una sola línea corta — una más larga forzaba a `.bienvenida-izq` a
-      // su ancho mínimo de contenido por `white-space: nowrap` y aplastaba la columna derecha
-      // (must-fix M1 del QA).
+      // QA of #505, N5/M1: one short line each — a longer one forced `.bienvenida-izq` to its
+      // min-content width through `white-space: nowrap` and crushed the right column.
       'bizagi-level-1': { titulo: 'Bizagi nivel 1', pista: 'Reconstrucción del tutorial de Bizagi: solo rutas' },
-      'bizagi-level-2': { titulo: 'Bizagi nivel 2', pista: 'Reconstrucción del tutorial de Bizagi: añade tiempos' },
-      'bizagi-level-3': { titulo: 'Bizagi nivel 3', pista: 'Reconstrucción del tutorial de Bizagi: añade enfermeras' },
+      'bizagi-level-2': { titulo: 'Bizagi nivel 2', pista: 'Reconstrucción del tutorial de Bizagi: añade tiempos de proceso' },
+      'bizagi-level-3': { titulo: 'Bizagi nivel 3', pista: 'Reconstrucción del tutorial de Bizagi: añade tres enfermeras' },
       'bizagi-level-4': { titulo: 'Bizagi nivel 4', pista: 'Reconstrucción del tutorial de Bizagi: añade turnos' },
       'mm1-rho08': { titulo: 'Cola M/M/1 (ρ=0,8)', pista: 'Cola de un servidor validada contra Erlang C' },
       mm3: { titulo: 'Cola M/M/3 (ρ=0,8)', pista: 'Cola de tres servidores validada contra Erlang C' },
