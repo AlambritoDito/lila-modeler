@@ -203,6 +203,20 @@ it('the mode tabs give up some padding below 1400 px, not just 1280 (QA of #417,
   expect(appCss).not.toContain('@media (max-width: 1365px)');
 });
 
+it('below 1230 px the save state folds into a dot and the bar tightens, so the Spanish file line fits from 1024 px (#434)', () => {
+  // Desktop sweep (File + View in the bar), Spanish, «Sin guardar», 39-character name: the file
+  // line clipped from 1024 up to 1164 px (1216 with a run in progress) and the project name was
+  // 2 px wide at 1024. The rules live after the 1400 px `.modo` one, or that one would win.
+  const desde = appCss.indexOf('@media (max-width: 1230px)');
+  expect(desde).toBeGreaterThan(appCss.indexOf('@media (max-width: 1400px)'));
+  const media = appCss.slice(desde, desde + appCss.slice(desde).indexOf('\n}'));
+  expect(media).toMatch(/\.barra \{\s*\n\s*gap: 8px;/);
+  expect(media).toMatch(/\.modo \{\s*\n\s*padding: calc\(2px \* var\(--espacio, 1\)\) 4px;/);
+  // The words stay in the DOM (screen readers, `title`); only their glyphs go, a dot stays if dirty.
+  expect(media).toMatch(/\.archivo-estado \{\s*\n\s*font-size: 0;/);
+  expect(media).toMatch(/\.archivo\.sucio \.archivo-estado::after \{[^}]*content: ' ●';/);
+});
+
 it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
   expect(bloqueDeLinea('.producto')).toContain('white-space: nowrap');
 });

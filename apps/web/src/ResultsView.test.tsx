@@ -261,6 +261,18 @@ describe('ResultsView (LILA-062)', () => {
     expect(html).toContain('Sin espera por recurso detectada.');
   });
 
+  it('warns when every arrival fell inside the warm-up, and only then (#431)', async () => {
+    const ir = await loadIr();
+    const golden = loadGolden();
+    const vacio = { ...golden, process: { ...golden.process, started: 0 } };
+    const conCalentamiento = (warmup: number): ResolvedScenario =>
+      ({ ...scenarioWithUnit('min'), run: { ...scenarioWithUnit('min').run, warmup } }) as ResolvedScenario;
+    const aviso = strings().resultados.todoEnCalentamiento;
+    expect(renderToStaticMarkup(<ResultsView ir={ir} scenario={conCalentamiento(3600)} result={vacio} />)).toContain(aviso);
+    expect(renderToStaticMarkup(<ResultsView ir={ir} scenario={conCalentamiento(0)} result={vacio} />)).not.toContain(aviso);
+    expect(renderToStaticMarkup(<ResultsView ir={ir} scenario={conCalentamiento(3600)} result={golden} />)).not.toContain(aviso);
+  });
+
   it('el botón de animar se deshabilita cuando la corrida no tiene event log en memoria (#331)', async () => {
     const ir = await loadIr();
     const result = loadGolden();

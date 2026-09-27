@@ -2564,6 +2564,30 @@ body {
   }
 }
 
+/* #434: the desktop bar (File and View menus) clipped the Spanish file line up to 1164 px, and up
+   to 1216 px while a run shows its progress and Cancel, and left the project name 2 px wide at
+   1024 (dirty, 39-character name, Simulate). Below 1230 px the tabs give up 6 px a side more, the
+   bar's gaps 2 px, and the save state folds into a dot: its words keep their place in the DOM for
+   screen readers and in the line's `title`, only their glyphs go. */
+@media (max-width: 1230px) {
+  .barra {
+    gap: 8px;
+  }
+
+  .modo {
+    padding: calc(2px * var(--espacio, 1)) 4px;
+  }
+
+  .archivo-estado {
+    font-size: 0;
+  }
+
+  .archivo.sucio .archivo-estado::after {
+    content: ' ●';
+    font-size: 10px;
+  }
+}
+
 /* What stays in the docked panel while the scenario lives in its own window. */
 .panel-desacoplado {
   align-items: center;

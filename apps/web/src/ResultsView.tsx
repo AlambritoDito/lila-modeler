@@ -638,6 +638,9 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
   const outcomes = outcomeRows(ir, result);
   // #356/#385: `undefined` (no replications summary at all) is falsy here same as `false`.
   const legacyReplications = hasLegacyReplications(result) === true;
+  // #431: every arrival fell inside the warm-up, so every table is zero. The web's own notice, not
+  // an engine `W-*`: the contract's catalogue stays as it is.
+  const todoEnCalentamiento = result.process.started === 0 && scenario.run.warmup > 0;
   // Un solo libro para toda la vista: las cinco hojas ya llevan las cuatro tablas, así que el
   // botón exporta lo mismo esté abierta la pestaña que esté.
   const xlsxFilename = `${scenario.name}.xlsx`;
@@ -736,11 +739,12 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
 
-      {(result.warnings.length > 0 || legacyReplications) && (
+      {(result.warnings.length > 0 || legacyReplications || todoEnCalentamiento) && (
         <section style={sectionStyle}>
           <h2 style={h2Style}>{S.resultados.avisos}</h2>
-          {result.warnings.length > 0 && (
+          {(result.warnings.length > 0 || todoEnCalentamiento) && (
             <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
+              {todoEnCalentamiento && <li>{S.resultados.todoEnCalentamiento}</li>}
               {result.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
