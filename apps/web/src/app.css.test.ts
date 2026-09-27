@@ -460,3 +460,33 @@ it('solo «Recientes» resalta su primera fila como «más reciente»; la galer�
   // en ningún selector de la hoja.
   expect(appCss).not.toContain('.bienvenida-ejemplos li:first-child');
 });
+
+it('the welcome\'s left column can shrink below its content, so a long hint cannot crush the right column (QA must-fix M1 of #505)', () => {
+  // A flex item's default is `min-width: auto` — its content's own min-content size. With the
+  // Bizagi hints' `white-space: nowrap` (`.bienvenida-ejemplos small`, above), that made
+  // `.bienvenida-izq` 793px wide at every window width instead of its intended `min(640px, 48vw)`,
+  // crushing `.bienvenida-der` to 231px at 1024px (search, «What's new», the theme line all
+  // clipped or wrapped). `min-width: 0` is what lets the column actually shrink to its flex-basis.
+  const izq = bloqueDeLinea('.bienvenida-izq');
+  expect(izq).toContain('min-width: 0');
+  // The horizontal padding is a flat 56px, not `calc(56px * var(--espacio, 1))` like the
+  // vertical one: scaled, the "comfortable" density (1.2x) pushed the column to 776px, past the
+  // owner's 760px ceiling (measured live over CDP at 1440x900 and 1920x1080, every language).
+  expect(izq).toMatch(/padding:\s*calc\(64px \* var\(--espacio, 1\)\) 56px;/);
+});
+
+it('the gallery rows are tighter than the recent-projects rows, so more of the 7 examples fit without scrolling (QA should-fix S1 of #505)', () => {
+  const filaEjemplos = bloqueDeLinea('.bienvenida-ejemplos button');
+  expect(filaEjemplos).toMatch(/padding:\s*calc\(6px/);
+  // Narrower than `.bienvenida-recientes button`'s own 15px, not a shared value that would also
+  // shrink the recent-projects list (which only ever shows one row at a time in practice).
+  expect(bloque('.bienvenida-recientes button, .bienvenida-ejemplos button')).toContain('calc(15px');
+});
+
+it('the gallery never keeps a 130px floor that can overlap the footer at a short window (QA should-fix S2 of #505)', () => {
+  // At 1024x700 comfortable, a 130px `min-height` refused to shrink while its `min-height: 0`
+  // parent did, so the list overflowed its column and drew over Documentation/Repository. One
+  // row's height is enough to avoid collapsing to nothing while still yielding to the footer.
+  const galeria = bloqueDeLinea('.bienvenida-ejemplos');
+  expect(Number.parseInt(/min-height:\s*(\d+)px/.exec(galeria)?.[1] ?? '999', 10)).toBeLessThan(60);
+});

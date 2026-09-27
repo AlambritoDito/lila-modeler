@@ -77,8 +77,8 @@ perfil. Trata un `.lila` descargado como la copia durable.
 El arranque en el navegador y en escritorio muestra el logo horizontal detallado de Lila y la
 versión del manifiesto hasta que el lienzo inicial está listo. El arranque ofrece recarga con
 recuperación localizada ante un fallo y respeta el movimiento reducido. Ver la [decisión de
-marca](design/branding/DECISION.md) y el [registro de instalación local del
-2026-09-14](design/branding/INSTALLATION-2026-09-14.md).
+marca](../design/branding/DECISION.md) y el [registro de instalación local del
+2026-09-14](../design/branding/INSTALLATION-2026-09-14.md).
 
 Cuando no se hizo doble clic sobre nada, la app de escritorio muestra entonces una superposición
 de **bienvenida** (artboard 08 del diseño): abrir un archivo de proyecto `.lila`, abrir una

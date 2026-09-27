@@ -2500,7 +2500,13 @@ body {
 .bienvenida small, .bienvenida time, .bienvenida-marca span, .bienvenida-tema { color: var(--fg-disabled); font-family: var(--font-mono); font-size: 11px; }
 .bienvenida a { color: var(--fg-muted); text-decoration: none; }
 .bienvenida a:hover, .bienvenida .enlace:hover { color: var(--accent-primary); }
-.bienvenida-izq { border-right: 2px solid var(--border); display: flex; flex: 0 0 min(640px, 48vw); flex-direction: column; justify-content: space-between; padding: calc(64px * var(--espacio, 1)) calc(56px * var(--espacio, 1)); }
+/* `min-width: 0` (QA of #505, must-fix M1): without it a flex item defaults to `min-width: auto`,
+   its content's own min-content size — and the Bizagi hints' `white-space: nowrap` (below) made
+   that content 793px wide at every window width, crushing `.bienvenida-der` to 231px at 1024px.
+   The horizontal padding does NOT scale with `--espacio` (unlike the vertical one): at the
+   "comfortable" density (1.2x) that would have pushed the column past the owner's 760px ceiling
+   (640px flex-basis + 2 * 67px), so it stays a flat 56px and the column tops out at 752px. */
+.bienvenida-izq { border-right: 2px solid var(--border); display: flex; flex: 0 0 min(640px, 48vw); flex-direction: column; justify-content: space-between; min-width: 0; padding: calc(64px * var(--espacio, 1)) 56px; }
 /* `flex: 1; min-height: 0` (QA of #505, S3): lets `.bienvenida-ejemplos` below grow into the
    leftover height instead of a fixed `max-height` that always cut off the same row count. */
 .bienvenida-izq > div { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
@@ -2523,6 +2529,11 @@ body {
 .bienvenida-vacio { color: var(--fg-muted); margin: 0; }
 .bienvenida-recientes, .bienvenida-ejemplos { background: var(--border); display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0; padding: 0; }
 .bienvenida-recientes button, .bienvenida-ejemplos button { align-items: center; background: var(--bg-base); border: 0; border-left: 3px solid transparent; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: calc(15px * var(--espacio, 1)) 18px; text-align: left; width: 100%; }
+/* Tighter rows than `.bienvenida-recientes` (QA of #505, should-fix S1): with 7 examples and only
+   one recent project at a time visible, the gallery is the one that needs to fit more rows in the
+   same leftover height. Measured live (CDP) against the 1440x900/normal-density acceptance point:
+   9px still only fit 6 of 7 rows there; 6px is what gets all 7 on screen. */
+.bienvenida-ejemplos button { padding: calc(6px * var(--espacio, 1)) 18px; }
 /* Only the recent-projects list marks its first row as "most recent" (QA of #505, N1): the same
    rule on `.bienvenida-ejemplos` made the first example read as pre-selected. */
 .bienvenida-recientes li:first-child button { background: var(--bg-elevated); border-left-color: var(--accent-primary); }
@@ -2533,8 +2544,12 @@ body {
 .bienvenida-recientes time { color: var(--fg-muted); flex: none; }
 /* Grows into whatever height is left under the three actions (QA of #505, S3); scrolls only when
    the column itself is too short to fit everything (`.bienvenida-izq > div`'s own `min-height: 0`
-   is what lets this shrink instead of overflowing the page). */
-.bienvenida-ejemplos { flex: 1 1 auto; max-height: none; min-height: 130px; overflow-y: auto; }
+   is what lets this shrink instead of overflowing the page). `min-height` is under one row, not
+   the 130px of the first fix (QA must-fix S2): at 1024x700 comfortable, that floor refused to
+   shrink below 130px while its `min-height: 0` parent shrank to fit, so the list overflowed its
+   column and sat on top of the footer — a small floor still leaves the list visible instead of
+   collapsing to nothing, and it scrolls sooner instead of ever overlapping. */
+.bienvenida-ejemplos { flex: 1 1 auto; max-height: none; min-height: 40px; overflow-y: auto; }
 .bienvenida-novedades { border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding: 18px; }
 .bienvenida-novedades h3::before { background: var(--accent-secondary); content: ''; display: inline-block; height: 13px; margin-right: 10px; vertical-align: -2px; width: 3px; }
 .bienvenida-novedades p { color: var(--fg-muted); font-size: 13px; line-height: 1.6; margin: 0; text-wrap: pretty; }

@@ -302,11 +302,13 @@ export const en = {
     ejemplosTitulo: 'Examples',
     ejemplos: {
       pedido: { titulo: 'Restaurant order', pista: 'Counter service with AS-IS / TO-BE scenarios' },
-      // QA of #505, N5: name these as reconstructions, matching `examples/bizagi-levels/README.md`.
-      'bizagi-level-1': { titulo: 'Bizagi level 1', pista: 'Reconstruction of the public Bizagi tutorial: routes only, no processing time, resources or costs' },
-      'bizagi-level-2': { titulo: 'Bizagi level 2', pista: 'Reconstruction of the public Bizagi tutorial: adds processing times with infinite resources' },
-      'bizagi-level-3': { titulo: 'Bizagi level 3', pista: 'Reconstruction of the public Bizagi tutorial: adds resources — three nurses' },
-      'bizagi-level-4': { titulo: 'Bizagi level 4', pista: 'Reconstruction of the public Bizagi tutorial: adds resource calendars and shifts' },
+      // QA of #505, N5/M1: name these as reconstructions, matching `examples/bizagi-levels/
+      // README.md`, but in one short line — a longer one forced `.bienvenida-izq` to its
+      // `white-space: nowrap` min-content width and crushed the right column (QA must-fix M1).
+      'bizagi-level-1': { titulo: 'Bizagi level 1', pista: "Reconstruction of Bizagi's tutorial: routes only" },
+      'bizagi-level-2': { titulo: 'Bizagi level 2', pista: "Reconstruction of Bizagi's tutorial: adds processing times" },
+      'bizagi-level-3': { titulo: 'Bizagi level 3', pista: "Reconstruction of Bizagi's tutorial: adds three nurses" },
+      'bizagi-level-4': { titulo: 'Bizagi level 4', pista: "Reconstruction of Bizagi's tutorial: adds shifts" },
       'mm1-rho08': { titulo: 'M/M/1 queue (ρ=0.8)', pista: 'Single-server queue validated against Erlang C' },
       mm3: { titulo: 'M/M/3 queue (ρ=0.8)', pista: 'Three-server queue validated against Erlang C' },
     },
