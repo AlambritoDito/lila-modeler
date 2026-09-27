@@ -434,7 +434,8 @@ it('la galería de ejemplos crece hasta el alto disponible en vez de cortar siem
   const columna = bloqueDeLinea('.bienvenida-izq > div');
   expect(columna).toContain('min-height: 0');
   const galeria = bloqueDeLinea('.bienvenida-ejemplos');
-  expect(galeria).toMatch(/flex:\s*1/);
+  // Shrinks (`0 1 auto`) but never grows: growing painted a border-coloured block under the rows.
+  expect(galeria).toMatch(/flex:\s*0 1 auto/);
   expect(galeria).not.toMatch(/max-height:\s*\d/);
   expect(galeria).toContain('overflow-y: auto');
 });

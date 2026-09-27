@@ -2549,7 +2549,10 @@ body {
    shrink below 130px while its `min-height: 0` parent shrank to fit, so the list overflowed its
    column and sat on top of the footer — a small floor still leaves the list visible instead of
    collapsing to nothing, and it scrolls sooner instead of ever overlapping. */
-.bienvenida-ejemplos { flex: 1 1 auto; max-height: none; min-height: 40px; overflow-y: auto; }
+/* `flex: 0 1 auto`, not `1 1`: the list shrinks to fit but never grows past its rows (its
+   `background: var(--border)` draws the dividers, so any spare height would show as a solid
+   block under the last example — QA of #505, third pass). */
+.bienvenida-ejemplos { flex: 0 1 auto; max-height: none; min-height: 40px; overflow-y: auto; }
 .bienvenida-novedades { border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding: 18px; }
 .bienvenida-novedades h3::before { background: var(--accent-secondary); content: ''; display: inline-block; height: 13px; margin-right: 10px; vertical-align: -2px; width: 3px; }
 .bienvenida-novedades p { color: var(--fg-muted); font-size: 13px; line-height: 1.6; margin: 0; text-wrap: pretty; }

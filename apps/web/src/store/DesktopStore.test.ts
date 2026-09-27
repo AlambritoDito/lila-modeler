@@ -66,7 +66,7 @@ class FakeBridge implements LilaBridge {
     return this.siguienteDestino('chooseFolder');
   }
 
-  /** Nombres sugeridos pasados a `chooseSaveFile`, en orden (S1 del QA de #505: `nombreArchivo`). */
+  /** Suggested names passed to `chooseSaveFile`, in order (QA of #505, S1: `nombreArchivo`). */
   readonly nombresSugeridos: string[] = [];
 
   async chooseSaveFile(suggestedName?: string): Promise<string | null> {
