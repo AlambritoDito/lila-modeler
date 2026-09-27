@@ -1782,6 +1782,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const despachar = (e: KeyboardEvent, soloHija = false): void => {
     if (e.isComposing) return;
+    // bpmn-js-token-simulation toggles on a T with any modifier and locks the canvas (#492); only
+    // «Validate paths» turns it on and off, so a modified T never reaches the canvas, in any mode.
+    // This runs before the `ATAJOS` lookup below: Ctrl+T/⌘T/Alt+T and their ⇧ variants match no
+    // entry of Lila's own map (QA of #504, M1), so without this line they would fall straight
+    // through the `a === undefined` return just below and reach bpmn-js untouched.
+    if (e.code === 'KeyT' && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
     if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
     // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
