@@ -127,13 +127,15 @@ export class TrazoDelTema extends BaseRenderer {
   static $inject = ['eventBus', 'bpmnRenderer'];
   constructor(eventBus: EventBus, private readonly bpmn: BpmnRenderer) {
     super(eventBus, 1100);
-    // A pool's colour is the background of the flows and labels inside it: when the pool changes,
-    // they are redrawn with it (before `ChangeSupport`, which reads this same list).
+    // A container's colour is the background of the flows and labels inside it: when a pool or an
+    // expanded sub-process changes, they are redrawn with it (before `ChangeSupport`, which reads
+    // this same list). Second pass of the QA of #507: painting a sub-process from the palette left
+    // its contents in the old colours until a reload.
     interface Nodo { type: string; waypoints?: unknown; children?: Nodo[] }
     const dentro = (el: Nodo): Nodo[] => (el.children ?? []).flatMap((h) => [h, ...dentro(h)]);
     eventBus.on('elements.changed', 1500, (e: { elements: Nodo[] }) => {
       const ya = new Set(e.elements);
-      for (const el of e.elements.filter((x) => x.type === 'bpmn:Participant').flatMap(dentro)) {
+      for (const el of e.elements.filter((x) => x.type === 'bpmn:Participant' || x.type === 'bpmn:SubProcess').flatMap(dentro)) {
         if ((el.type === 'label' || el.waypoints !== undefined) && !ya.has(el)) { ya.add(el); e.elements.push(el); }
       }
     });
