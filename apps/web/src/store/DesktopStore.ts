@@ -21,6 +21,7 @@ import type {
   StoredRun,
 } from './ProjectStore';
 import { strings } from '../i18n';
+import { nombreArchivo } from '../exportarDiagrama';
 
 type ProjectProblem = LilaProjectDocument['problems'][number];
 
@@ -151,7 +152,10 @@ export class DesktopStore implements ProjectSessionStore {
       const chosen =
         options?.asFolder === true
           ? await this.bridge.chooseFolder()
-          : await this.bridge.chooseSaveFile(`${document.name}.lila`);
+          // `nombreArchivo` (QA of #505, hallazgo S1): a project name with `/` (an example title
+          // like «M/M/1 queue») would otherwise reach a native save dialog as a path, which keeps
+          // only its last segment as the suggested file name.
+          : await this.bridge.chooseSaveFile(`${nombreArchivo(document.name)}.lila`);
       // Cancelar «Guardar como» (o el primer guardado sin carpeta activa) no cambia la carpeta
       // activa: se devuelve `null` tal cual, sin tocar `this.activeDir`/`this.activeDocument`.
       if (chosen === null) return null;
@@ -199,6 +203,21 @@ export class DesktopStore implements ProjectSessionStore {
 
   setDirty(dirty: boolean): void {
     this.bridge.setDirty(dirty);
+  }
+
+  /**
+   * Olvida la carpeta/documento activos (#458, QA de #505, hallazgo S2c): `App.tsx` la llama
+   * antes de activar un proyecto sin ruta (un ejemplo de la galería), para que el siguiente
+   * `saveProject` lo trate como un primer guardado —pide carpeta— en vez de compararlo contra el
+   * documento que estaba abierto antes y rechazarlo con `E-PROYECTO-DISTINTO`. No toca disco ni
+   * el bridge: solo el estado en memoria de esta clase.
+   */
+  forget(): void {
+    this.activeDir = null;
+    this.activeDocument = null;
+    this.problems = [];
+    this.activeModelFile = undefined;
+    this.activeLoose = false;
   }
 
   /**

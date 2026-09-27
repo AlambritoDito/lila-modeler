@@ -79,10 +79,12 @@ on failure and respects reduced motion. See the [branding decision](design/brand
 and the [2026-09-14 local installation record](design/branding/INSTALLATION-2026-09-14.md).
 
 When nothing was double-clicked, the desktop app then shows a **welcome** overlay (design
-artboard 08): open a `.lila` project file, open a project folder, create a new process, or open
-the bundled example; the right column lists recent projects (the same list as File → Open
-recent), what's new in this version, and the current theme and density. Opening any project,
-or the example, dismisses it. Double-clicking a `.lila` or `.bpmn` skips it.
+artboard 08): open a `.lila` project file, open a project folder, create a new process, or pick
+one of the public examples from the **Examples** gallery (`pedido`, the four Bizagi tutorial
+levels, and the two M/M/c queues — `docs/EXAMPLES_POLICY.md`); the right column lists recent
+projects (the same list as File → Open recent), what's new in this version, and the current
+theme and density. Opening any project, or an example, dismisses it. Double-clicking a `.lila`
+or `.bpmn` skips it.
 
 
 The app always starts with the same example diagram bundled with it: the `pedido` process from

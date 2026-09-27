@@ -2501,7 +2501,9 @@ body {
 .bienvenida a { color: var(--fg-muted); text-decoration: none; }
 .bienvenida a:hover, .bienvenida .enlace:hover { color: var(--accent-primary); }
 .bienvenida-izq { border-right: 2px solid var(--border); display: flex; flex: 0 0 min(640px, 48vw); flex-direction: column; justify-content: space-between; padding: calc(64px * var(--espacio, 1)) calc(56px * var(--espacio, 1)); }
-.bienvenida-izq > div { display: flex; flex-direction: column; gap: 12px; }
+/* `flex: 1; min-height: 0` (QA of #505, S3): lets `.bienvenida-ejemplos` below grow into the
+   leftover height instead of a fixed `max-height` that always cut off the same row count. */
+.bienvenida-izq > div { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
 .bienvenida-marca { align-items: center; border-bottom: 2px solid var(--border); display: flex; gap: 14px; margin-bottom: 24px; padding-bottom: 36px; }
 .bienvenida-marca img { height: 38px; width: 38px; }
 .bienvenida-marca div { display: flex; flex-direction: column; gap: 5px; }
@@ -2521,13 +2523,18 @@ body {
 .bienvenida-vacio { color: var(--fg-muted); margin: 0; }
 .bienvenida-recientes, .bienvenida-ejemplos { background: var(--border); display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0; padding: 0; }
 .bienvenida-recientes button, .bienvenida-ejemplos button { align-items: center; background: var(--bg-base); border: 0; border-left: 3px solid transparent; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: calc(15px * var(--espacio, 1)) 18px; text-align: left; width: 100%; }
-.bienvenida-recientes li:first-child button, .bienvenida-ejemplos li:first-child button { background: var(--bg-elevated); border-left-color: var(--accent-primary); }
+/* Only the recent-projects list marks its first row as "most recent" (QA of #505, N1): the same
+   rule on `.bienvenida-ejemplos` made the first example read as pre-selected. */
+.bienvenida-recientes li:first-child button { background: var(--bg-elevated); border-left-color: var(--accent-primary); }
 .bienvenida-recientes button:hover, .bienvenida-ejemplos button:hover { background: var(--bg-hover); }
 .bienvenida-recientes button > span, .bienvenida-ejemplos button > span { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
 .bienvenida-recientes strong, .bienvenida-ejemplos strong { font-size: 14px; font-weight: 500; }
 .bienvenida-recientes small, .bienvenida-ejemplos small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bienvenida-recientes time { color: var(--fg-muted); flex: none; }
-.bienvenida-ejemplos { max-height: 220px; overflow-y: auto; }
+/* Grows into whatever height is left under the three actions (QA of #505, S3); scrolls only when
+   the column itself is too short to fit everything (`.bienvenida-izq > div`'s own `min-height: 0`
+   is what lets this shrink instead of overflowing the page). */
+.bienvenida-ejemplos { flex: 1 1 auto; max-height: none; min-height: 130px; overflow-y: auto; }
 .bienvenida-novedades { border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding: 18px; }
 .bienvenida-novedades h3::before { background: var(--accent-secondary); content: ''; display: inline-block; height: 13px; margin-right: 10px; vertical-align: -2px; width: 3px; }
 .bienvenida-novedades p { color: var(--fg-muted); font-size: 13px; line-height: 1.6; margin: 0; text-wrap: pretty; }

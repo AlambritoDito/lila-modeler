@@ -45,7 +45,7 @@ import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
-import { proyectoDeEjemplo } from './ejemplos';
+import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
@@ -71,7 +71,7 @@ import './app.css';
 import './theme/montana.css';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -775,6 +775,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
         if (doc) await activate(doc, true, beforeToken); return;
+      }
+      if (typeof kind === 'object' && 'ejemplo' in kind) {
+        // #458, QA of #505 (S2c): forget the adapter's previously active folder/document first,
+        // so the next «Save» treats this pathless project as a first save instead of comparing
+        // its id against whatever was active before (E-PROYECTO-DISTINTO).
+        adapter.forget?.();
+        await activate(proyectoDeEjemplo(kind.ejemplo), true, beforeToken);
+        return;
       }
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
@@ -1775,16 +1783,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         recientes={recientes}
         temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
         densidadTexto={S.app.densidadEstado(S.app.densidadNombre(densidad))}
-        onAccion={(accion) => {
-          if (typeof accion === 'object' && 'ejemplo' in accion) {
-            // #458: same shape as `sessionRestored` below — a fresh, pathless document activated
-            // straight away, not through `adapter`/`projectAction` (there is nothing to open).
-            ioLock.current = true; setIoBusy(true);
-            void activate(proyectoDeEjemplo(accion.ejemplo), true, tokenRef.current)
-              .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
-              .finally(() => { ioLock.current = false; setIoBusy(false); });
-          } else void projectAction(accion);
-        }}
+        // #458, QA of #505 (S2): every action from the welcome screen — including an example —
+        // goes through `projectAction`, so it gets the same dirty confirmation, `ioLock` and
+        // `respuestaPerdida` guard as «New»/«Open»/a recent project.
+        onAccion={(accion) => void projectAction(accion)}
         onAjustes={() => ejecutar('ajustes')}
       />}
       <header className="barra">
