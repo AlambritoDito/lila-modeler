@@ -12,24 +12,46 @@
  *
  * These are diagram data, not theme tokens: they persist in the XML as fixed hex and have to look
  * the same in every theme and in the PNG/PDF export (the same colours as bpmn-js-color-picker, so a
- * Camunda user finds the ones they know).
+ * Camunda user finds the ones they know). The one exception is drawn, never written (#489): on a
+ * canvas where the palette's dark stroke would vanish, a flow is painted with `strokeOscuro`, a
+ * light tone of the same hue, and inside a coloured pool the theme's light flows and labels take
+ * the pool's stroke (`trazoAlPintar`, `TrazoDelTema`).
  */
+import type BpmnRenderer from 'bpmn-js/lib/draw/BpmnRenderer';
 import { isLabelExternal } from 'bpmn-js/lib/util/LabelUtil';
+import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer';
+import type EventBus from 'diagram-js/lib/core/EventBus';
 import { strings } from './i18n';
 import type { ElementoLienzo, ElementoModdle, Escritor } from './PropertiesPanel';
 
 export const COLORES = [
-  { id: 'azul', fill: '#BBDEFB', stroke: '#0D4372' },
-  { id: 'verde', fill: '#C8E6C9', stroke: '#205022' },
-  { id: 'amarillo', fill: '#FFF59D', stroke: '#5F4B00' },
-  { id: 'naranja', fill: '#FFE0B2', stroke: '#6B3C00' },
-  { id: 'rojo', fill: '#FFCDD2', stroke: '#831311' },
-  { id: 'morado', fill: '#E1BEE7', stroke: '#5B176D' },
-  { id: 'turquesa', fill: '#B2DFDB', stroke: '#004D40' },
-  { id: 'gris', fill: '#E0E0E0', stroke: '#424242' },
+  { id: 'azul', fill: '#BBDEFB', stroke: '#0D4372', strokeOscuro: '#64B5F6' },
+  { id: 'verde', fill: '#C8E6C9', stroke: '#205022', strokeOscuro: '#81C784' },
+  { id: 'amarillo', fill: '#FFF59D', stroke: '#5F4B00', strokeOscuro: '#FFF176' },
+  { id: 'naranja', fill: '#FFE0B2', stroke: '#6B3C00', strokeOscuro: '#FFB74D' },
+  { id: 'rojo', fill: '#FFCDD2', stroke: '#831311', strokeOscuro: '#E57373' },
+  { id: 'morado', fill: '#E1BEE7', stroke: '#5B176D', strokeOscuro: '#CE93D8' },
+  { id: 'turquesa', fill: '#B2DFDB', stroke: '#004D40', strokeOscuro: '#4DB6AC' },
+  { id: 'gris', fill: '#E0E0E0', stroke: '#424242', strokeOscuro: '#BDBDBD' },
 ] as const;
 
 export type ColorId = (typeof COLORES)[number]['id'];
+
+/**
+ * WCAG contrast ratio of two `#rrggbb` colours; `NaN` for anything else, which every comparison
+ * below treats as «leave the colour alone».
+ * ponytail: six-digit hex only, what every bundled theme and the palette use; parse through a
+ * canvas if an imported theme ever writes `rgb()` or a name.
+ */
+export function contraste(a: string, b: string): number {
+  const luz = (hex: string): number => /^#[0-9a-f]{6}$/i.test(hex)
+    ? [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+      .reduce((suma, c, i) => suma + c * [0.2126, 0.7152, 0.0722][i]!, 0)
+    : NaN;
+  const [x, y] = [luz(a), luz(b)].sort((m, n) => n - m) as [number, number];
+  return (x + 0.05) / (y + 0.05);
+}
 
 /** A DI element (`bpmndi:BPMNShape`/`BPMNEdge`), with moddle's generic accessors. */
 interface Di extends ElementoModdle {
@@ -39,8 +61,8 @@ interface Di extends ElementoModdle {
   $model?: { create(tipo: string, atributos?: Record<string, unknown>): Di };
 }
 
-/** A canvas element with its DI, as bpmn-js hands it out (`element.di`). */
-export type ElementoColoreable = ElementoLienzo & { di?: Di };
+/** A canvas element with its DI and its parent, as bpmn-js hands it out (`element.di`). */
+export type ElementoColoreable = ElementoLienzo & { di?: Di; parent?: ElementoColoreable };
 
 /** The DI attributes for a fill and a stroke; a connection has no fill. */
 function atributos(di: Di, fill: string | undefined, stroke: string | undefined): Record<string, string | undefined> {
@@ -63,6 +85,79 @@ export function colorActual(elemento: ElementoColoreable): ColorId | null | unde
 /** An embedded label sits on the element's fill; an external one on the canvas (QA of #452). */
 function etiquetaSobreRelleno(di: Di, bo: ElementoModdle | undefined): boolean {
   return di.$type !== 'bpmndi:BPMNEdge' && bo !== undefined && !isLabelExternal(bo as unknown as Parameters<typeof isLabelExternal>[0]);
+}
+
+/** The theme colours a flow or a label is drawn against: `--canvas-bg`, `--diagram-stroke`, `--diagram-label`. */
+export interface ColoresTema { canvas: string; trazo: string; etiqueta: string }
+
+/**
+ * The stroke a flow or an external label is drawn with instead of the one bpmn-js would pick, or
+ * `undefined` to leave it alone (#489). Its background is the fill of its direct container (a pool
+ * or an expanded sub-process) if that wears a palette colour, or else the canvas: an uncoloured
+ * sub-process paints the theme's fill, whatever the pool around it wears (QA M1 of #507). A
+ * coloured flow takes whichever of its palette stroke and `strokeOscuro` stands out more there; an
+ * uncoloured flow or label in a coloured container takes the container's stroke when the theme's
+ * own colour falls under 3:1 on that fill. A colour from outside the palette (Bizagi's, or the one
+ * token simulation writes to mark the chosen branch, QA M2 of #507) is never replaced.
+ * ponytail: only direct containers and palette colours. A coloured lane or a label that merely
+ * overlaps a pool without belonging to it (a message flow's, whose parent is the collaboration)
+ * keeps bpmn-js's choice; test bounds against the coloured pools and lanes here if that matters.
+ */
+export function trazoAlPintar(el: ElementoColoreable, tema: ColoresTema): string | undefined {
+  const etiqueta = el.type === 'label';
+  if (!etiqueta && el.di?.$type !== 'bpmndi:BPMNEdge') return undefined;
+  const actual = etiqueta ? null : colorActual(el);
+  if (actual === undefined) return undefined;
+  const padre = el.parent;
+  const contenedor = padre === undefined ? undefined : COLORES.find((c) => c.id === colorActual(padre));
+  const fondo = contenedor?.fill ?? tema.canvas;
+  const propio = COLORES.find((c) => c.id === actual);
+  if (propio !== undefined) return contraste(propio.strokeOscuro, fondo) > contraste(propio.stroke, fondo) ? propio.strokeOscuro : undefined;
+  if (contenedor === undefined) return undefined;
+  return contraste(etiqueta ? tema.etiqueta : tema.trazo, fondo) < 3 ? contenedor.stroke : undefined;
+}
+
+/**
+ * Draws what `trazoAlPintar` changes through bpmn-js's own renderer with a `stroke` override (the
+ * parameter bpmn-js reads before the DI), so arrowheads and label text follow and the XML is never
+ * touched. Above bpmn-js's 1000; below the bottleneck overlay's 1500, which only draws tasks. The
+ * theme is read at draw time, so `Modelador.repintar()` after a theme change is enough.
+ */
+export class TrazoDelTema extends BaseRenderer {
+  static $inject = ['eventBus', 'bpmnRenderer'];
+  constructor(eventBus: EventBus, private readonly bpmn: BpmnRenderer) {
+    super(eventBus, 1100);
+    // A container's colour is the background of the flows and labels inside it: when a pool or an
+    // expanded sub-process changes, they are redrawn with it (before `ChangeSupport`, which reads
+    // this same list). Second pass of the QA of #507: painting a sub-process from the palette left
+    // its contents in the old colours until a reload.
+    interface Nodo { type: string; waypoints?: unknown; children?: Nodo[] }
+    const dentro = (el: Nodo): Nodo[] => (el.children ?? []).flatMap((h) => [h, ...dentro(h)]);
+    eventBus.on('elements.changed', 1500, (e: { elements: Nodo[] }) => {
+      const ya = new Set(e.elements);
+      for (const el of e.elements.filter((x) => x.type === 'bpmn:Participant' || x.type === 'bpmn:SubProcess').flatMap(dentro)) {
+        if ((el.type === 'label' || el.waypoints !== undefined) && !ya.has(el)) { ya.add(el); e.elements.push(el); }
+      }
+    });
+  }
+
+  private trazo(el: unknown): string | undefined {
+    const raiz = getComputedStyle(document.documentElement);
+    const token = (nombre: string): string => raiz.getPropertyValue(nombre).trim();
+    return trazoAlPintar(el as ElementoColoreable, { canvas: token('--canvas-bg'), trazo: token('--diagram-stroke'), etiqueta: token('--diagram-label') });
+  }
+
+  override canRender(el: unknown): boolean {
+    return this.trazo(el) !== undefined;
+  }
+
+  override drawShape(gfx: SVGElement, el: Parameters<BpmnRenderer['drawShape']>[1], attrs?: object): SVGElement {
+    return this.bpmn.drawShape(gfx, el, { ...attrs, stroke: this.trazo(el)! });
+  }
+
+  override drawConnection(gfx: SVGElement, el: Parameters<BpmnRenderer['drawConnection']>[1], attrs?: object): SVGElement {
+    return this.bpmn.drawConnection(gfx, el, { ...attrs, stroke: this.trazo(el)! });
+  }
 }
 
 /** The colour several elements share, `null` if none has one, `undefined` if they differ. */
@@ -246,4 +341,8 @@ export class LilaColores {
 }
 
 /** didi module for `additionalModules` in `Modeler.tsx`. */
-export const moduloColores = { __init__: ['lilaColores'], lilaColores: ['type', LilaColores] };
+export const moduloColores = {
+  __init__: ['lilaColores', 'lilaTrazoDelTema'],
+  lilaColores: ['type', LilaColores],
+  lilaTrazoDelTema: ['type', TrazoDelTema],
+};

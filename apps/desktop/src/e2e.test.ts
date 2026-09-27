@@ -46,6 +46,12 @@ describe('e2eOverrides', () => {
     expect(e2eOverrides({ LILA_E2E_CLOSE: '' })).toEqual({});
   });
 
+  it('LILA_E2E_RECOVERY=restore|discard answers the launch offer; anything else is ignored (#459)', () => {
+    expect(e2eOverrides({ LILA_E2E_RECOVERY: 'restore' })).toEqual({ recovery: 'restore' });
+    expect(e2eOverrides({ LILA_E2E_RECOVERY: 'discard' })).toEqual({ recovery: 'discard' });
+    expect(e2eOverrides({ LILA_E2E_RECOVERY: 'yes' })).toEqual({});
+  });
+
   it('LILA_E2E_LOG con una ruta: se toma tal cual', () => {
     expect(e2eOverrides({ LILA_E2E_LOG: '/tmp/lila-e2e.log' })).toEqual({ logPath: '/tmp/lila-e2e.log' });
   });

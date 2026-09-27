@@ -203,6 +203,20 @@ it('the mode tabs give up some padding below 1400 px, not just 1280 (QA of #417,
   expect(appCss).not.toContain('@media (max-width: 1365px)');
 });
 
+it('below 1230 px the save state folds into a dot and the bar tightens, so the Spanish file line fits from 1024 px (#434)', () => {
+  // Desktop sweep (File + View in the bar), Spanish, «Sin guardar», 39-character name: the file
+  // line clipped from 1024 up to 1164 px (1216 with a run in progress) and the project name was
+  // 2 px wide at 1024. The rules live after the 1400 px `.modo` one, or that one would win.
+  const desde = appCss.indexOf('@media (max-width: 1230px)');
+  expect(desde).toBeGreaterThan(appCss.indexOf('@media (max-width: 1400px)'));
+  const media = appCss.slice(desde, desde + appCss.slice(desde).indexOf('\n}'));
+  expect(media).toMatch(/\.barra \{\s*\n\s*gap: 8px;/);
+  expect(media).toMatch(/\.modo \{\s*\n\s*padding: calc\(2px \* var\(--espacio, 1\)\) 4px;/);
+  // The words stay in the DOM (screen readers, `title`); only their glyphs go, a dot stays if dirty.
+  expect(media).toMatch(/\.archivo-estado \{\s*\n\s*font-size: 0;/);
+  expect(media).toMatch(/\.archivo\.sucio \.archivo-estado::after \{[^}]*content: ' ●' \/ '';/);
+});
+
 it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
   expect(bloqueDeLinea('.producto')).toContain('white-space: nowrap');
 });
@@ -424,4 +438,56 @@ it('`.calendario` keeps its own, older `user-select: none` — not repeated in t
   const calendario = bloqueDeLinea('.calendario');
   expect(calendario).toContain('user-select: none');
   expect(calendario).toContain('-webkit-user-select: none');
+});
+
+it('la galería de ejemplos crece hasta el alto disponible en vez de cortar siempre la misma fila (QA de #505, S3)', () => {
+  // A fixed `max-height: 220px` always showed 3 of the 7 rows, even with 300+ px of free space
+  // below at a taller window. `flex: 1` on the column that holds it, plus `min-height: 0` on its
+  // flex parent (the only way a flex child is allowed to shrink under its content size), is what
+  // lets it take the leftover height instead — see the `app.css` comments next to each rule.
+  const columna = bloqueDeLinea('.bienvenida-izq > div');
+  expect(columna).toContain('min-height: 0');
+  const galeria = bloqueDeLinea('.bienvenida-ejemplos');
+  // Shrinks (`0 1 auto`) but never grows: growing painted a border-coloured block under the rows.
+  expect(galeria).toMatch(/flex:\s*0 1 auto/);
+  expect(galeria).not.toMatch(/max-height:\s*\d/);
+  expect(galeria).toContain('overflow-y: auto');
+});
+
+it('solo «Recientes» resalta su primera fila como «más reciente»; la galería de ejemplos no (QA de #505, N1)', () => {
+  const primeraRecientes = bloqueDeLinea('.bienvenida-recientes li:first-child button');
+  expect(primeraRecientes).toContain('var(--accent-primary)');
+  // La regla ya no es compartida: `.bienvenida-ejemplos li:first-child button` no debe existir
+  // en ningún selector de la hoja.
+  expect(appCss).not.toContain('.bienvenida-ejemplos li:first-child');
+});
+
+it('the welcome\'s left column can shrink below its content, so a long hint cannot crush the right column (QA must-fix M1 of #505)', () => {
+  // A flex item's default is `min-width: auto` — its content's own min-content size. With the
+  // Bizagi hints' `white-space: nowrap` (`.bienvenida-ejemplos small`, above), that made
+  // `.bienvenida-izq` 793px wide at every window width instead of its intended `min(640px, 48vw)`,
+  // crushing `.bienvenida-der` to 231px at 1024px (search, «What's new», the theme line all
+  // clipped or wrapped). `min-width: 0` is what lets the column actually shrink to its flex-basis.
+  const izq = bloqueDeLinea('.bienvenida-izq');
+  expect(izq).toContain('min-width: 0');
+  // The horizontal padding is a flat 56px, not `calc(56px * var(--espacio, 1))` like the
+  // vertical one: scaled, the "comfortable" density (1.2x) pushed the column to 776px, past the
+  // owner's 760px ceiling (measured live over CDP at 1440x900 and 1920x1080, every language).
+  expect(izq).toMatch(/padding:\s*calc\(64px \* var\(--espacio, 1\)\) 56px;/);
+});
+
+it('the gallery rows are tighter than the recent-projects rows, so more of the 7 examples fit without scrolling (QA should-fix S1 of #505)', () => {
+  const filaEjemplos = bloqueDeLinea('.bienvenida-ejemplos button');
+  expect(filaEjemplos).toMatch(/padding:\s*calc\(6px/);
+  // Narrower than `.bienvenida-recientes button`'s own 15px, not a shared value that would also
+  // shrink the recent-projects list (which only ever shows one row at a time in practice).
+  expect(bloque('.bienvenida-recientes button, .bienvenida-ejemplos button')).toContain('calc(15px');
+});
+
+it('the gallery never keeps a 130px floor that can overlap the footer at a short window (QA should-fix S2 of #505)', () => {
+  // At 1024x700 comfortable, a 130px `min-height` refused to shrink while its `min-height: 0`
+  // parent did, so the list overflowed its column and drew over Documentation/Repository. One
+  // row's height is enough to avoid collapsing to nothing while still yielding to the footer.
+  const galeria = bloqueDeLinea('.bienvenida-ejemplos');
+  expect(Number.parseInt(/min-height:\s*(\d+)px/.exec(galeria)?.[1] ?? '999', 10)).toBeLessThan(60);
 });

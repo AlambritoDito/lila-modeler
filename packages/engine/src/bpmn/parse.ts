@@ -344,6 +344,18 @@ export interface UnsupportedElement {
   construction?: UnsupportedConstruction;
 }
 
+/**
+ * What flattening drops of an embedded sub-process (R-PLAN-1): its name, its lane and the
+ * sub-process that contains it. The IR only keeps `Node.subprocessId`; the process document
+ * (#454) needs the rest to give the sub-process its own section.
+ */
+export interface SubprocessInfo {
+  name: string;
+  lane?: string;
+  /** Id of the enclosing sub-process, when it is nested. */
+  parent?: string;
+}
+
 /** Un `bpmn:subProcess` embebido: solo existe hasta que se aplana (R-PLAN-1). */
 interface SubprocessBox {
   id: string;
@@ -372,6 +384,7 @@ interface Collector {
   /** Subprocesos en post-orden: el más interno se aplana primero. */
   boxes: SubprocessBox[];
   boxIds: Set<string>;
+  subprocesses: Record<string, SubprocessInfo>;
   /** Posición en el documento de cada `flowElement`, para ordenar `unsupported`. */
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
@@ -489,6 +502,12 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     if (el.$type === 'bpmn:SubProcess' && construction === undefined) {
       const id = claimId(el, c);
       c.boxIds.add(id);
+      const lane = c.laneOf.get(el.id);
+      c.subprocesses[id] = {
+        name: el.name ?? '',
+        ...(lane === undefined ? {} : { lane }),
+        ...(subprocessId === undefined ? {} : { parent: subprocessId }),
+      };
       walk(el, id, c);
 
       const box: SubprocessBox = { id, startIds: [], endIds: [] };
@@ -599,6 +618,8 @@ export interface ParseResult {
   messageFlowCount: number;
   /** Ids de sequence flows del proceso elegido cuya condición se ignora (R-PERF-4). */
   conditionFlowIds: string[];
+  /** The flattened embedded sub-processes, by IR id (#454). Optional for hand-built results. */
+  subprocesses?: Record<string, SubprocessInfo>;
 }
 
 /** Construcciones de coreografía/conversación que no viven dentro de `process.flowElements`. */
@@ -849,6 +870,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     sequenceFlows: [],
     boxes: [],
     boxIds: new Set(),
+    subprocesses: {},
     order: new Map(),
     unsupportedEls: new Set(),
     boundaryHosts: new Map(),
@@ -935,6 +957,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     conditionFlowIds: c.sequenceFlows
       .filter((flow) => flow.conditionExpression !== undefined)
       .map((flow) => flow.id),
+    subprocesses: c.subprocesses,
   };
 }
 

@@ -79,7 +79,10 @@ With the canvas focused (click on it first):
 
 Zoom and fit work from anywhere in the window, not only from the canvas. The align keys work in Model
 only and act on the selected shapes (two or more; three or more to distribute), like the align
-buttons at the top right of the canvas and the command palette. Lanes are not aligned. The shape palette on the
+buttons at the top right of the canvas and the command palette. Lanes are not aligned. Distribute
+keeps the first and last shapes where they are and spaces the rest approximately evenly:
+diagram-js leaves the first gap a few pixels (about 5 px) shorter than the others. Shapes that
+overlap along that axis move together as one column or row. The shape palette on the
 left filters as you type and inserts the highlighted shape with `Enter`.
 
 ## Panels
@@ -105,7 +108,8 @@ list these shortcuts next to each item.
 
 ² Prints the diagram alone, black on white, on one sheet. In a browser, that print dialog is also
 how you get a PDF (choose «Save as PDF»); the desktop app has «File → Export diagram as PDF…» as
-well. SVG and PNG exports are in the File menu and the command palette, with no key of their own.
+well. SVG and PNG exports, and the process document (Word or HTML), are in the File menu and the
+command palette, with no key of their own.
 
 In the desktop app `⌘W`/`Ctrl+W` closes the focused window (About or the detached scenario on
 their own; the main window asks first when there are unsaved changes and, like its red button,

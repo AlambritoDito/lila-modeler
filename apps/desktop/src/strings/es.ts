@@ -27,6 +27,8 @@ export const es: Strings = {
     exportarSvg: 'Exportar diagrama como SVG…',
     exportarPng: 'Exportar diagrama como PNG…',
     exportarPdf: 'Exportar diagrama como PDF…',
+    exportarDocx: 'Exportar documento del proceso (Word)…',
+    exportarHtml: 'Exportar documento del proceso (HTML)…',
     imprimir: 'Imprimir…',
     vista: 'Vista',
     paleta: 'Paleta de comandos',
@@ -57,5 +59,11 @@ export const es: Strings = {
     despues: 'Más tarde',
     mensaje: (version) => `Lila Modeler ${version} está disponible.`,
     detalle: (actual) => `Tienes la versión ${actual}. «Descargar» abre la página del release en tu navegador.`,
+  },
+  recuperacion: {
+    restaurar: 'Restaurar',
+    descartar: 'Descartar',
+    mensaje: 'Lila Modeler no se cerró correctamente.',
+    detalle: (cuando) => `Hay cambios sin guardar del ${cuando}. ¿Quieres restaurarlos? El proyecto restaurado no se guarda hasta que elijas dónde con «Guardar como…».`,
   },
 };

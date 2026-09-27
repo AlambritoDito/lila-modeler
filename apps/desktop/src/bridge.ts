@@ -146,12 +146,26 @@ export interface LilaBridge {
    * dialog was cancelled.
    */
   exportar(exportacion: Exportacion): Promise<string | null>;
+
+  /**
+   * Autosave (#459): replaces the recovery copy in `userData/recovery.lila` with `bytes` (an
+   * encoded `.lila`). Main ignores it while the document is clean or while the launch offer is
+   * still unanswered, and deletes the copy on its own when the document stops being dirty.
+   * Optional, like `takeRecovery`: test doubles of this bridge are partial.
+   */
+  writeRecovery?(bytes: Uint8Array): Promise<void>;
+  /**
+   * Asks once per launch, with a native dialog, whether to restore the copy the previous session
+   * left behind. Resolves to its bytes on «Restore», and to `null` when there was no copy or the
+   * user discarded it (which deletes it).
+   */
+  takeRecovery?(): Promise<Uint8Array | null>;
 }
 
-/** What `exportar` saves (#451). */
+/** What `exportar` saves: the diagram (#451) and the process document (#454). */
 export type Exportacion =
-  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf'; readonly datos: string }
-  | { readonly nombre: string; readonly tipo: 'png'; readonly datos: Uint8Array };
+  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf' | 'html'; readonly datos: string }
+  | { readonly nombre: string; readonly tipo: 'png' | 'docx'; readonly datos: Uint8Array };
 
 /**
  * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`
@@ -244,6 +258,8 @@ export type MenuAction =
   | 'exportarSvg'
   | 'exportarPng'
   | 'exportarPdf'
+  | 'exportarDocx'
+  | 'exportarHtml'
   | { readonly openRecent: string }
   | { readonly atajo: string };
 

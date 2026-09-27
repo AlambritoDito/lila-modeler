@@ -34,6 +34,7 @@ import type { ProjectDocument } from './projectTypes.js';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
 import { pickUpdate, RELEASES_URL, updateDialogOptions } from './updateCheck.js';
+import { clearRecoveryFile, readRecoveryFile, recoveryChoice, recoveryDialogOptions, writeRecoveryFile } from './recovery.js';
 import {
   addRecent,
   fitsAnyDisplay,
@@ -241,9 +242,9 @@ function requireExportacion(value: unknown): Exportacion {
   const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
   const { nombre, tipo, datos } = v;
   const valido = typeof nombre === 'string' && nombre.length > 0 && nombre.length <= 255
-    && (tipo === 'png' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf') && typeof datos === 'string')
+    && (tipo === 'png' || tipo === 'docx' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf' || tipo === 'html') && typeof datos === 'string')
     && (datos as { length: number }).length <= MAX_EXPORTACION;
-  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf, datos }.');
+  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf|docx|html, datos }.');
   return v as unknown as Exportacion;
 }
 
@@ -346,6 +347,30 @@ function resolveLocaleFromSettings(): DesktopLocale {
   return resolveDesktopLocale(sessionState.ajustes.idioma, app.getLocale());
 }
 const sessionStatePath = path.join(app.getPath('userData'), 'estado.json');
+
+// -- Autosave copy (#459, `recovery.ts`) --------------------------------------------------------
+const recoveryPath = path.join(app.getPath('userData'), 'recovery.lila');
+/**
+ * The copy the previous session left behind, read at launch. While it is not `null` the file is
+ * the user's and nothing touches it: the renderer's first `setDirty(false)` and any autosave
+ * arrive before the user has answered the offer (`lila:takeRecovery`).
+ */
+let recoveryAtLaunch: { bytes: Uint8Array; savedAt: Date } | null = null;
+let recoveryOffered = false;
+let recoveryQueue: Promise<void> = Promise.resolve();
+/** 256 MB: far above any real project, low enough that a bad renderer cannot fill the disk. */
+const MAX_RECOVERY = 256 * 1024 * 1024;
+
+/** Serialises the disk work on the copy, so a write in flight cannot resurrect a copy just deleted. */
+function queueRecovery(task: () => Promise<void>): Promise<void> {
+  recoveryQueue = recoveryQueue.then(task).catch(() => {}); // Autosave never interrupts the user.
+  return recoveryQueue;
+}
+
+/** Deletes the copy: the document is clean (saved, or its changes discarded). */
+function clearRecovery(): Promise<void> {
+  return recoveryAtLaunch === null ? queueRecovery(() => clearRecoveryFile(recoveryPath)) : recoveryQueue;
+}
 
 async function persistSessionState(): Promise<void> {
   await writeSessionState(sessionStatePath, sessionState);
@@ -579,6 +604,32 @@ function registerIpcHandlers(win: BrowserWindow): void {
     return result.filePath;
   });
 
+  guardedHandle(win, 'lila:writeRecovery', async (_event, bytes: unknown): Promise<void> => {
+    if (!(bytes instanceof Uint8Array) || bytes.length > MAX_RECOVERY) {
+      throw new Error('E-ARGUMENTO: "bytes" debe ser un Uint8Array de hasta 256 MB.');
+    }
+    // A timer that fired just before a save, or a write before the launch offer is answered,
+    // would bring back a copy nobody wants.
+    if (!dirty || recoveryAtLaunch !== null) return;
+    await queueRecovery(() => writeRecoveryFile(recoveryPath, bytes));
+  });
+
+  guardedHandle(win, 'lila:takeRecovery', async (): Promise<Uint8Array | null> => {
+    if (recoveryOffered || recoveryAtLaunch === null) return null;
+    recoveryOffered = true;
+    const cuando = recoveryAtLaunch.savedAt.toLocaleString(desktopLocale, { dateStyle: 'medium', timeStyle: 'short' });
+    // E2E seam (`LILA_E2E_RECOVERY`, see `e2e.ts`): no native dialog.
+    const choice = e2e.recovery
+      ?? recoveryChoice((await dialog.showMessageBox(win, recoveryDialogOptions(strings(), cuando))).response);
+    const { bytes } = recoveryAtLaunch;
+    recoveryAtLaunch = null;
+    await e2eLog('recovery', { choice });
+    // On «Restore» the copy stays on disk until the restored project is saved or discarded.
+    if (choice === 'restore') return bytes;
+    await clearRecovery();
+    return null;
+  });
+
   guardedHandle(win, 'lila:openRecent', async (_event, dirArg: unknown, fileArg: unknown) => {
     if (typeof dirArg !== 'string' || dirArg.length === 0) {
       throw new Error('E-ARGUMENTO: "dir" debe ser una ruta de texto no vacía.');
@@ -750,6 +801,7 @@ let allowQuit = false;
 
 function setDirty(value: boolean): void {
   dirty = value;
+  if (!value) void clearRecovery();
 }
 
 /** Cuánto se espera la respuesta del renderer a `lila:close-requested` antes de dar por fallido el guardado. */
@@ -804,6 +856,7 @@ async function confirmClose(win: BrowserWindow): Promise<boolean> {
   await e2eLog('closeRequested', { choice, saved, decision });
   if (decision === 'close') {
     dirty = false;
+    await clearRecovery();
     return true;
   }
   const notice = saved === null ? null : saveOutcomeDialogOptions(saved, strings());
@@ -1048,6 +1101,7 @@ app.whenReady().then(async () => {
   registerLilaProtocol();
 
   sessionState = await readSessionState(sessionStatePath);
+  recoveryAtLaunch = await readRecoveryFile(recoveryPath).catch(() => null);
   // The shell's language (LILA-213), before the menu is built: the persisted preference wins and,
   // when it says `auto` (or there is none), the system language decides. `app.getLocale()` can
   // only be read with the app ready, which is exactly where we are.

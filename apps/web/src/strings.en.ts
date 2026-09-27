@@ -96,6 +96,9 @@ export const en = {
     /** Diagram export (#451): downloads on the web; PDF is the browser's print dialog. */
     exportarSvg: 'Export diagram as SVG',
     exportarPng: 'Export diagram as PNG',
+    /** Process document (#454): Word or a single HTML page, like Bizagi's «Publish to Word». */
+    exportarDocx: 'Export process document (Word)',
+    exportarHtml: 'Export process document (HTML)',
     imprimirPdf: 'Print / Save as PDF…',
     tituloNuevo: 'New project',
     tituloAbrir: 'Open project',
@@ -122,6 +125,8 @@ export const en = {
       exportarSvg: 'Export diagram as SVG…',
       exportarPng: 'Export diagram as PNG…',
       exportarPdf: 'Export diagram as PDF…',
+      exportarDocx: 'Export process document (Word)…',
+      exportarHtml: 'Export process document (HTML)…',
       imprimir: 'Print…',
     },
 
@@ -271,6 +276,9 @@ export const en = {
     errorRecienteAusente: 'That project is no longer in its folder; it was removed from recents.',
     errorAbrirOcupado: (archivo: string): string =>
       `"${archivo}" was not opened: another operation is in progress. Open it again when it finishes.`,
+    /** The autosave copy offered at launch could not be read (#459); it is deleted. */
+    errorCopiaRecuperacion: (mensaje: string): string =>
+      `The recovery copy of the last session could not be opened and was discarded: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `unknown scenario: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
   },
@@ -289,12 +297,25 @@ export const en = {
     abrirCarpetaPista: '⌘O · a folder with model.bpmn',
     nuevo: 'New process',
     nuevoPista: '⌘N · creates an empty .bpmn',
-    ejemplo: 'Open the example',
-    ejemploPista: 'Restaurant order with AS-IS / TO-BE scenarios',
+    // #458: one row per public example (`docs/EXAMPLES_POLICY.md`), keyed by `Ejemplo['id']`
+    // (`ejemplos.ts`) so `strings.test.ts` (LILA-210) catches a catalog and a gallery that drift.
+    ejemplosTitulo: 'Examples',
+    ejemplos: {
+      pedido: { titulo: 'Restaurant order', pista: 'Counter service with AS-IS / TO-BE scenarios' },
+      // QA of #505, N5/M1: name these as reconstructions, matching `examples/bizagi-levels/
+      // README.md`, but in one short line — a longer one forced `.bienvenida-izq` to its
+      // `white-space: nowrap` min-content width and crushed the right column (QA must-fix M1).
+      'bizagi-level-1': { titulo: 'Bizagi level 1', pista: "Reconstruction of Bizagi's tutorial: routes only" },
+      'bizagi-level-2': { titulo: 'Bizagi level 2', pista: "Reconstruction of Bizagi's tutorial: adds processing times" },
+      'bizagi-level-3': { titulo: 'Bizagi level 3', pista: "Reconstruction of Bizagi's tutorial: adds three nurses" },
+      'bizagi-level-4': { titulo: 'Bizagi level 4', pista: "Reconstruction of Bizagi's tutorial: adds shifts" },
+      'mm1-rho08': { titulo: 'M/M/1 queue (ρ=0.8)', pista: 'Single-server queue validated against Erlang C' },
+      mm3: { titulo: 'M/M/3 queue (ρ=0.8)', pista: 'Three-server queue validated against Erlang C' },
+    },
     documentacion: 'Documentation',
     repositorio: 'Repository',
     recientes: 'Recent',
-    sinRecientes: 'No recent projects yet. Open one or start from the example.',
+    sinRecientes: 'No recent projects yet. Open one or start from one of the examples.',
     novedades: (version: string): string => `What's new in ${version}`,
     notasVersion: 'Release notes',
     tema: (tema: string, densidad: string): string => `${tema} theme · ${densidad}`,
@@ -1123,6 +1144,9 @@ export const en = {
     notaReplicacionesSinObservaciones:
       'Some replications did not observe the subject named in the warning; its statistics use ' +
       'only the replications that did (see n in the results file).',
+    /** #431: every arrival fell inside the warm-up (the web's notice, not an engine `W-*`). */
+    todoEnCalentamiento:
+      'Every arrival fell inside the warm-up, so nothing was measured: lengthen the run or shorten the warm-up.',
   },
 
   /* ------------------------------------------------------------------ *

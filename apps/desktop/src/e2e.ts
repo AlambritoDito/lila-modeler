@@ -15,15 +15,20 @@
  * - `LILA_E2E_CLOSE=save|discard|cancel`: el diálogo nativo Guardar/Descartar/Cancelar del cierre
  *   se resuelve con esa opción sin mostrarse. Cualquier otro valor es inválido y se ignora (se
  *   sigue mostrando el diálogo real, como si la variable no existiera).
+ * - `LILA_E2E_RECOVERY=restore|discard` (#459): the launch offer of the autosave copy
+ *   (`recovery.ts`) answers itself with that choice instead of showing the native dialog. Any other
+ *   value is ignored, like `LILA_E2E_CLOSE`.
  * - `LILA_E2E_LOG=<ruta de archivo>`: `main.ts` añade una línea JSON por evento relevante
  *   (`chooseFolder`, `writeProject` con éxito/error y código, `closeRequested` con la elección y el
- *   resultado, `openPath`) a ese archivo, para que la sesión de pruebas la lea después del
- *   recorrido.
+ *   resultado, `openPath`, `recovery` con la elección) a ese archivo, para que la sesión de
+ *   pruebas la lea después del recorrido.
  *
  * Un valor ausente, vacío, o con forma inválida para cualquiera de las variables se ignora —
  * esa clave en particular queda ausente de `E2EOverrides`, exactamente como si no se hubiera
  * puesto la variable.
  */
+
+import type { RecoveryChoice } from './recovery.js';
 
 export type E2ECloseChoice = 'save' | 'discard' | 'cancel';
 
@@ -36,6 +41,7 @@ export interface E2EOverrides {
   /** Lo mismo que `folder`, para `chooseSaveFile()` (`LILA_E2E_SAVE_FILE`). */
   readonly saveFile?: string | null;
   readonly close?: E2ECloseChoice;
+  readonly recovery?: RecoveryChoice;
   readonly logPath?: string;
 }
 
@@ -47,7 +53,7 @@ function isCloseChoice(value: string): value is E2ECloseChoice {
 
 /** Parsea las variables de entorno del seam E2E. Cualquier valor ausente o con forma inválida se ignora. */
 export function e2eOverrides(env: Readonly<Record<string, string | undefined>>): E2EOverrides {
-  const result: { folder?: string | null; saveFile?: string | null; close?: E2ECloseChoice; logPath?: string } = {};
+  const result: { folder?: string | null; saveFile?: string | null; close?: E2ECloseChoice; recovery?: RecoveryChoice; logPath?: string } = {};
 
   const folder = env.LILA_E2E_FOLDER;
   if (typeof folder === 'string' && folder.length > 0) {
@@ -63,6 +69,9 @@ export function e2eOverrides(env: Readonly<Record<string, string | undefined>>):
   if (typeof close === 'string' && isCloseChoice(close)) {
     result.close = close;
   }
+
+  const recovery = env.LILA_E2E_RECOVERY;
+  if (recovery === 'restore' || recovery === 'discard') result.recovery = recovery;
 
   const logPath = env.LILA_E2E_LOG;
   if (typeof logPath === 'string' && logPath.length > 0) {

@@ -71,7 +71,7 @@ export interface SheetSpec {
  * Greenwich and fflate would refuse it; this way the stamp is 1980-01-01 00:00 in every zone, so
  * the bytes stay identical whatever the machine's timezone.
  */
-const FIXED_MTIME = new Date(1980, 0, 1);
+export const FIXED_MTIME = new Date(1980, 0, 1);
 
 /** The five characters Excel forbids in a tab name, plus the leading/trailing apostrophe. */
 const FORBIDDEN_IN_NAME = /[[\]:*?/\\]/g;

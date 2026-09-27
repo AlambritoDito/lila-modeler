@@ -7,8 +7,12 @@
  * background, a card that stays readable on any slide (a dark theme's cream lines would vanish on a
  * white one if it were transparent); PNG, PDF and print are «paper» — a white sheet
  * with the theme's three diagram colours turned into white fill and black lines and labels, so a
- * dark theme never prints a dark page. Colours an element carries of its own stay as they are.
+ * dark theme never prints a dark page. Colours an element carries of its own stay as they are,
+ * except the light tone a coloured flow is drawn with on a dark canvas (#489), which goes back to
+ * its palette stroke.
  */
+
+import { COLORES } from './colores';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -54,16 +58,26 @@ function canonico(color: string): string | null {
  * fill/stroke/label colours replaced by white/black/black. Returns the `<svg>` element alone (no XML prolog), valid both as an `.svg`
  * file and inline in an HTML page.
  */
-export function limpiarSvg(svg: string, opciones: { papel: boolean; colores: ColoresDiagrama }): string {
+export function limpiarSvg(svg: string, opciones: OpcionesSvg): string {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const raiz = doc.documentElement;
   if (raiz.namespaceURI !== SVG_NS || doc.getElementsByTagName('parsererror').length > 0) {
     throw new Error('saveSVG did not return an SVG document');
   }
   for (const nodo of [...raiz.querySelectorAll(CROMO)]) nodo.remove();
+  // An inline `var(--token)` (the bottleneck heat of a run, `BottleneckOverlay.ts`) means nothing
+  // outside the page: the file, its PNG and the process document (#454) would paint it black.
+  const { token } = opciones;
+  if (token !== undefined) {
+    for (const el of raiz.querySelectorAll('[style*="var("]')) {
+      el.setAttribute('style', el.getAttribute('style')!.replace(/var\((--[\w-]+)\)/g, (v, nombre: string) => token(nombre) || v));
+    }
+  }
   if (opciones.papel) {
     const { fill, stroke, label } = opciones.colores;
-    const papel = new Map<string | null, string>([[canonico(stroke), '#000'], [canonico(fill), '#fff'], [canonico(label), '#000']]);
+    const papel = new Map<string | null, string>([[canonico(stroke), '#000'], [canonico(fill), '#fff'], [canonico(label), '#000'],
+      // A flow's light dark-theme tone (#489) is only for the dark canvas: on paper it is the palette's.
+      ...COLORES.map((c) => [canonico(c.strokeOscuro), c.stroke] as const)]);
     papel.delete(null);
     for (const el of [raiz, ...raiz.querySelectorAll('*')]) {
       for (const nombre of ['fill', 'stroke', 'style', 'color']) {
@@ -81,6 +95,13 @@ export function limpiarSvg(svg: string, opciones: { papel: boolean; colores: Col
   return new XMLSerializer().serializeToString(raiz);
 }
 
+export interface OpcionesSvg {
+  readonly papel: boolean;
+  readonly colores: ColoresDiagrama;
+  /** Resolves a CSS custom property of the page (`--sim-bottleneck-3` → `#e05a4f`). */
+  readonly token?: (nombre: string) => string;
+}
+
 /** The slice of a bpmn-js modeler `svgDelLienzo` needs. */
 export interface LienzoExportable {
   get(nombre: 'directEditing'): { isActive(): boolean; complete(): void };
@@ -92,7 +113,7 @@ export interface LienzoExportable {
  * show the old one (QA of #467, N1): ⌘P moves the focus to the print frame, which commits it only
  * after the sheet was drawn.
  */
-export async function svgDelLienzo(lienzo: LienzoExportable, opciones: { papel: boolean; colores: ColoresDiagrama }): Promise<string> {
+export async function svgDelLienzo(lienzo: LienzoExportable, opciones: OpcionesSvg): Promise<string> {
   const edicion = lienzo.get('directEditing');
   if (edicion.isActive()) edicion.complete();
   return limpiarSvg((await lienzo.saveSVG()).svg ?? '', opciones);

@@ -74,6 +74,20 @@ perfil. Trata un `.lila` descargado como la copia durable.
 
 ## Qué muestra la ventana al abrir
 
+El arranque en el navegador y en escritorio muestra el logo horizontal detallado de Lila y la
+versión del manifiesto hasta que el lienzo inicial está listo. El arranque ofrece recarga con
+recuperación localizada ante un fallo y respeta el movimiento reducido. Ver la [decisión de
+marca](../design/branding/DECISION.md) y el [registro de instalación local del
+2026-09-14](../design/branding/INSTALLATION-2026-09-14.md).
+
+Cuando no se hizo doble clic sobre nada, la app de escritorio muestra entonces una superposición
+de **bienvenida** (artboard 08 del diseño): abrir un archivo de proyecto `.lila`, abrir una
+carpeta de proyecto, crear un proceso nuevo, o elegir uno de los ejemplos públicos de la galería
+**Ejemplos** (`pedido`, los cuatro niveles del tutorial de Bizagi, y las dos colas M/M/c —
+`docs/EXAMPLES_POLICY.md`); la columna derecha lista los proyectos recientes (la misma lista de
+Archivo → Abrir reciente), las novedades de esta versión, y el tema y la densidad actuales. Abrir
+cualquier proyecto, o un ejemplo, la cierra. Hacer doble clic en un `.lila` o `.bpmn` la salta.
+
 La app arranca siempre con el mismo diagrama de ejemplo incluido en el propio bundle: el proceso
 `pedido` de `examples/pedido/model.bpmn` (import directo en `apps/web/src/main.tsx`, no un archivo
 externo). Hasta que elijas un tema se ve con **Lila oscuro** si el sistema está en modo oscuro y
@@ -194,6 +208,13 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   muestra el diálogo nativo del sistema con **Guardar / Descartar / Cancelar**. "Guardar" espera
   hasta 30 s la respuesta de la app antes de cerrar; si falla o no llega, se avisa y la ventana no
   se cierra. Al cerrar la última ventana termina la aplicación también en Mac; al reabrir, usa **Abrir proyecto** para recuperar la carpeta guardada.
+- **Autoguardado y recuperación** (#459): cinco segundos después de cada cambio se escribe una
+  copia del proyecto sin guardar en `recovery.lila`, dentro de la carpeta de datos de la app
+  (`~/Library/Application Support/Lila Modeler/`). Guardar, o descartar los cambios al cerrar, la
+  borra. Si la app terminó sin ninguna de las dos cosas (un cuelgue, un cierre forzado), el
+  siguiente arranque ofrece **Restaurar / Descartar**: el proyecto restaurado abre sin guardar y
+  sin archivo detrás, así que el primer guardado pregunta dónde con **Guardar como…** — tu archivo
+  original nunca se sobrescribe sin que lo elijas.
 - **Qué archivos hay en la carpeta de un proyecto**: `model.bpmn` (el diagrama), un
   `<nombre>.scenario.json` por cada escenario (por ejemplo `as-is.scenario.json`,
   `to-be.scenario.json`), `lila-project.json` (metadatos: id, nombre, revisiones) y una subcarpeta
@@ -331,7 +352,7 @@ sale con código 0 si todo carga bien; la captura queda en una carpeta temporal 
 
 ## Para agentes/QA: seam E2E
 
-`apps/desktop/src/main.ts` acepta tres variables de entorno pensadas **únicamente para pruebas
+`apps/desktop/src/main.ts` acepta estas variables de entorno pensadas **únicamente para pruebas
 automatizadas** (por ejemplo, para que un agente sin manos accione diálogos nativos que de otra
 forma no puede tocar). No son una API pública ni deben usarse en un uso normal de la app:
 
@@ -341,10 +362,14 @@ forma no puede tocar). No son una API pública ni deben usarse en un uso normal 
 - `LILA_E2E_CLOSE=save|discard|cancel`: hace que el diálogo nativo de "cerrar con cambios sin
   guardar" (Guardar/Descartar/Cancelar) resuelva automáticamente con ese valor, en vez de esperar
   un clic.
+- `LILA_E2E_SAVE_FILE=<ruta absoluta a un .lila>`: lo mismo que `LILA_E2E_FOLDER`, para el diálogo
+  nativo de «Guardar como…».
+- `LILA_E2E_RECOVERY=restore|discard`: hace que la oferta de recuperación del arranque
+  (Restaurar / Descartar) se resuelva automáticamente con ese valor.
 - `LILA_E2E_LOG=<ruta de archivo>`: si está presente, añade una línea JSON por cada evento
-  relevante (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`) a ese archivo.
+  relevante (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`) a ese archivo.
 
-Sin ninguna de las tres, el comportamiento de la app es exactamente el mismo que si no existieran.
+Sin ninguna de ellas, el comportamiento de la app es exactamente el mismo que si no existieran.
 **Advertencia**: son un atajo para pruebas, no algo que un usuario final deba fijar nunca — dejan
 la app respondiendo diálogos por sí sola sin intervención humana.
 

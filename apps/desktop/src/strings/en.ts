@@ -41,6 +41,8 @@ export const en = {
     exportarSvg: 'Export diagram as SVG…',
     exportarPng: 'Export diagram as PNG…',
     exportarPdf: 'Export diagram as PDF…',
+    exportarDocx: 'Export process document (Word)…',
+    exportarHtml: 'Export process document (HTML)…',
     imprimir: 'Print…',
     /** The View and Simulation menus (#413): same texts as `S.atajos` in the web catalog. */
     vista: 'View',
@@ -77,5 +79,12 @@ export const en = {
     despues: 'Later',
     mensaje: (version: string) => `Lila Modeler ${version} is available.`,
     detalle: (actual: string) => `You have version ${actual}. “Download” opens the release page in your browser.`,
+  },
+  /** Launch offer of the autosave copy (`recovery.ts`, #459). Buttons: `defaultId` 0, `cancelId` 1. */
+  recuperacion: {
+    restaurar: 'Restore',
+    descartar: 'Discard',
+    mensaje: 'Lila Modeler did not close properly.',
+    detalle: (cuando: string) => `There are unsaved changes from ${cuando}. Restore them? The restored project is not saved until you choose where with “Save as…”.`,
   },
 } as const;

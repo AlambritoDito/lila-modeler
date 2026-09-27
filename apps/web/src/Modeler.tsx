@@ -122,7 +122,7 @@ export interface Servicios {
     getContainer(): HTMLElement;
   };
   /** `activate` abre la edición del nombre de la figura recién creada. */
-  directEditing: { activate(figura: unknown): void };
+  directEditing: { activate(figura: unknown): void; isActive?(): boolean; complete?(): void };
   /** Para saber sobre qué elemento cae el punto donde se inserta (`Paleta.tsx`). */
   elementRegistry: { filter(prueba: (elemento: Elemento) => boolean): Elemento[] };
   /** Las reglas de bpmn-js: quién puede contener a quién. */
@@ -442,6 +442,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         return svgDelLienzo(activo as unknown as LienzoExportable, {
           papel,
           colores: { fill: c.defaultFillColor, stroke: c.defaultStrokeColor, label: c.defaultLabelColor, fondo: token('--canvas-bg') },
+          token,
         });
       },
       comprobar: async (xml) => {

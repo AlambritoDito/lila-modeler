@@ -80,6 +80,8 @@ export const es: Strings = {
     exportarBpmn: 'Exportar .bpmn',
     exportarSvg: 'Exportar diagrama como SVG',
     exportarPng: 'Exportar diagrama como PNG',
+    exportarDocx: 'Exportar documento del proceso (Word)',
+    exportarHtml: 'Exportar documento del proceso (HTML)',
     imprimirPdf: 'Imprimir / Guardar como PDF…',
     tituloNuevo: 'Nuevo proyecto',
     tituloAbrir: 'Abrir proyecto',
@@ -102,6 +104,8 @@ export const es: Strings = {
       exportarSvg: 'Exportar diagrama como SVG…',
       exportarPng: 'Exportar diagrama como PNG…',
       exportarPdf: 'Exportar diagrama como PDF…',
+      exportarDocx: 'Exportar documento del proceso (Word)…',
+      exportarHtml: 'Exportar documento del proceso (HTML)…',
       imprimir: 'Imprimir…',
     },
 
@@ -254,6 +258,8 @@ export const es: Strings = {
     errorRecienteAusente: 'Ese proyecto ya no está en su carpeta; se quitó de recientes.',
     errorAbrirOcupado: (archivo: string): string =>
       `No se abrió "${archivo}": hay otra operación en curso. Vuelve a abrirlo cuando termine.`,
+    errorCopiaRecuperacion: (mensaje: string): string =>
+      `No se pudo abrir la copia de recuperación de la última sesión y se descartó: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `escenario desconocido: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
   },
@@ -272,12 +278,22 @@ export const es: Strings = {
     abrirCarpetaPista: '⌘O · una carpeta con model.bpmn',
     nuevo: 'Nuevo proceso',
     nuevoPista: '⌘N · crea un .bpmn vacío',
-    ejemplo: 'Abrir el ejemplo',
-    ejemploPista: 'Pedido de restaurante con escenarios AS-IS / TO-BE',
+    ejemplosTitulo: 'Ejemplos',
+    ejemplos: {
+      pedido: { titulo: 'Pedido de restaurante', pista: 'Atención en mostrador con escenarios AS-IS / TO-BE' },
+      // QA of #505, N5/M1: one short line each — a longer one forced `.bienvenida-izq` to its
+      // min-content width through `white-space: nowrap` and crushed the right column.
+      'bizagi-level-1': { titulo: 'Bizagi nivel 1', pista: 'Reconstrucción del tutorial de Bizagi: solo rutas' },
+      'bizagi-level-2': { titulo: 'Bizagi nivel 2', pista: 'Reconstrucción del tutorial de Bizagi: añade tiempos de proceso' },
+      'bizagi-level-3': { titulo: 'Bizagi nivel 3', pista: 'Reconstrucción del tutorial de Bizagi: añade tres enfermeras' },
+      'bizagi-level-4': { titulo: 'Bizagi nivel 4', pista: 'Reconstrucción del tutorial de Bizagi: añade turnos' },
+      'mm1-rho08': { titulo: 'Cola M/M/1 (ρ=0,8)', pista: 'Cola de un servidor validada contra Erlang C' },
+      mm3: { titulo: 'Cola M/M/3 (ρ=0,8)', pista: 'Cola de tres servidores validada contra Erlang C' },
+    },
     documentacion: 'Documentación',
     repositorio: 'Repositorio',
     recientes: 'Recientes',
-    sinRecientes: 'Todavía no hay proyectos recientes. Abre uno o empieza por el ejemplo.',
+    sinRecientes: 'Todavía no hay proyectos recientes. Abre uno o empieza por alguno de los ejemplos.',
     novedades: (version: string): string => `Novedades de ${version}`,
     notasVersion: 'Notas de la versión',
     tema: (tema: string, densidad: string): string => `Tema ${tema} · ${densidad}`,
@@ -1084,6 +1100,9 @@ export const es: Strings = {
     notaReplicacionesSinObservaciones:
       'Algunas replicaciones no observaron el sujeto que nombra el aviso; sus estadísticas usan ' +
       'solo las replicaciones que sí lo hicieron (ver n en el archivo de resultados).',
+    /** #431: every arrival fell inside the warm-up (the web's notice, not an engine `W-*`). */
+    todoEnCalentamiento:
+      'Todas las llegadas cayeron en el calentamiento, así que no se midió nada: alarga la duración o acorta el calentamiento.',
   },
 
   /* ------------------------------------------------------------------ *

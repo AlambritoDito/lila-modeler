@@ -3,6 +3,51 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.14] - 2026-09-26
+
+Lote G: the classroom deliverable and the safety net. The process document exports to Word and
+HTML the way Bizagi's «Publish to Word» lays it out; the desktop app keeps a recovery copy and
+offers it back after a crash; the welcome screen lists every public example; and seven small bugs
+from the QA of Lote F are fixed. No installer is attached to this version.
+
+### Added
+
+- **Process document as Word (.docx) and printable HTML** (#454): File → Export process document.
+  Cover, the diagram on white paper, the process description, one section per element in flow
+  order grouped by lane (type, id, lane, sub-process, `bpmn:documentation`, RACI and `lila:`
+  references), the scenario parameters and, after a run, the same result tables as the XLSX.
+  Word's built-in heading styles drive the navigation pane; the HTML is one self-contained page
+  that prints to A4 with every column. Also in ⌘K and the native File menu.
+- **Autosave with recovery on the desktop app** (#459): a recovery copy is written five seconds
+  after the first unsaved change and at most once every five seconds after that. When the previous
+  session did not close cleanly, the next launch offers to restore it (Esc keeps it); the restored
+  project opens as unsaved and Save goes through Save as, so the original file is never
+  overwritten. The copy is deleted on save, on discard and on a clean close.
+- **Examples gallery on the welcome screen** (#458): the restaurant order, Bizagi's four
+  simulation levels and the M/M/1 and M/M/3 oracles, each with a one-line description, open as a
+  clean project ready to simulate.
+- **Warm-up notice** (#431): when every arrival falls inside the warm-up, Results says so instead of
+  showing an all-zero table.
+
+### Fixed
+
+- **Run right after drawing** (#431): Run waits for the reparse and the seeding of defaults, so a
+  task appended a moment before no longer lands on an empty Results view.
+- **Desktop top bar in Spanish** (#434): below 1230 px the bar tightens and the unsaved state
+  collapses to a dot, so the project name and «Sin guardar» no longer clip between 1024 and
+  ~1230 px.
+- **Coloured flows and pool contents in dark themes** (#489): coloured flows take a lighter stroke
+  and theme-coloured flows and labels inside a coloured pool take the pool's stroke, at render
+  time only; the XML keeps the palette colour and paper exports keep the palette stroke.
+- **Properties of a floating label** (#485): selecting a label shows the type and id of the element
+  it labels.
+- **T with modifiers** (#492): Ctrl/⌘/Alt + T no longer toggles the token simulation outside
+  «Validate paths».
+- **Bottleneck heat in exports** (#454): the bottleneck colour no longer exports as black in
+  PNG/SVG/PDF.
+- **Flaky App test** (#494): the test waits for the startup reparse instead of racing it.
+- **Distribute** (#488): documented that diagram-js leaves approximately equal gaps.
+
 ## [1.0.0-beta.13] - 2026-09-26
 
 Standard macOS keys in the desktop app. No installer is attached to this version.

@@ -61,6 +61,20 @@ describe('limpiarSvg (#451)', () => {
     expect(parsear(svg).querySelector('marker')!.id).toBe('sequenceflow-end-_1F1A36-_D9D2F0-x');
   });
 
+  it('resolves the inline var(--token) of the bottleneck heat, which is black outside the page (#454)', () => {
+    const calor = SAVE_SVG.replace('fill: #1f1a36;', 'fill: var(--sim-bottleneck-3);');
+    const token = (nombre: string): string => (nombre === '--sim-bottleneck-3' ? '#e05a4f' : '');
+    expect(limpiarSvg(calor, { papel: true, colores: DARK, token })).toContain('fill: #e05a4f;');
+    expect(limpiarSvg(calor, { papel: true, colores: DARK })).toContain('fill: var(--sim-bottleneck-3);');
+  });
+
+  it('on paper a flow drawn in its light dark-theme tone goes back to the palette stroke (#489)', () => {
+    // #64B5F6 is blue's `strokeOscuro`: pale on white, it is the XML's #0D4372 on paper.
+    const svg = limpiarSvg(SAVE_SVG.replace('stroke: rgb(217, 210, 240); marker-end', 'stroke: rgb(100, 181, 246); marker-end'), { papel: true, colores: DARK });
+    expect(parsear(svg).querySelector('[data-element-id="Flow_1"] path')!.getAttribute('style')).toContain('stroke: #0D4372');
+    expect(limpiarSvg(SAVE_SVG.replace('stroke: rgb(217, 210, 240); marker-end', 'stroke: rgb(100, 181, 246); marker-end'), { papel: false, colores: DARK })).toContain('rgb(100, 181, 246)');
+  });
+
   it('commits a label being typed before drawing the image (QA of #467, N1)', async () => {
     const orden: string[] = [];
     const edicion = { isActive: () => true, complete: vi.fn(() => orden.push('complete')) };

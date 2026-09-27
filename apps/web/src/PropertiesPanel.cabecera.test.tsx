@@ -72,6 +72,16 @@ function filaValor(raiz: HTMLElement, etiqueta: string): string {
   return fila.querySelector('output')?.textContent ?? '';
 }
 
+/** El campo «Tipo»/«Id» de la pestaña `Propiedades` (distinto de `.propiedades-fila`, que es
+ * del resumen sin selección). */
+function campoValor(raiz: HTMLElement, etiqueta: string): string {
+  const campo = [...raiz.querySelectorAll('.campo')].find(
+    (c) => c.querySelector('span')?.textContent === etiqueta,
+  );
+  if (campo === undefined) throw new Error(`no hay campo «${etiqueta}»`);
+  return campo.querySelector('output')?.textContent ?? '';
+}
+
 describe('sin selección: resumen del proceso y atajos', () => {
   // Ni una raíz `bpmn:Process` en el árbol (`Elemento` no lleva `businessObject`, así que
   // `leerSeleccion` de `PanelPropiedades` no puede elegirla sola): la única forma de que la
@@ -214,6 +224,27 @@ describe('con un elemento elegido: su icono, su nombre y su `$type · id`', () =
     expect(cabecera!.querySelector('.propiedades-cabecera-nombre')?.textContent).toBe('Revisar pedido');
     expect(cabecera!.querySelector('.propiedades-cabecera-tipo')?.textContent).toBe('bpmn:UserTask · Task_1');
     expect(cabecera!.querySelector('.bpmn-icon-user-task')).not.toBeNull();
+  });
+
+  it('un clic en la etiqueta flotante también enseña Tipo/Id de la figura de verdad en `Propiedades`, no `label` (#485)', () => {
+    // El ejemplo del issue: el temporizador de un evento intermedio de captura, con su etiqueta
+    // flotante fuera de la figura. La cabecera ya resolvía `labelTarget` (test de arriba); las
+    // filas «Tipo» e «Id» de la pestaña Propiedades no lo hacían y enseñaban `label` /
+    // `Timer_Reposo_label`.
+    const figura: ElementoLienzo = {
+      id: 'Timer_Reposo',
+      type: 'bpmn:IntermediateCatchEvent',
+      businessObject: { $type: 'bpmn:IntermediateCatchEvent', id: 'Timer_Reposo', name: 'Reposo' },
+    };
+    const etiqueta: ElementoLienzo = {
+      id: 'Timer_Reposo_label',
+      type: 'label',
+      businessObject: figura.businessObject,
+      labelTarget: figura,
+    };
+    const panel = montar(modeladorFalso({ seleccion: [etiqueta] }));
+    expect(campoValor(panel, 'Tipo')).toBe(nombreDeTipo('bpmn:IntermediateCatchEvent'));
+    expect(campoValor(panel, 'Id')).toBe('Timer_Reposo');
   });
 
   it('un evento intermedio de captura elige el icono por su `eventDefinition`, no siempre el de temporizador', () => {

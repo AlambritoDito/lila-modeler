@@ -87,4 +87,12 @@ export interface ProjectSessionStore extends ProjectStore {
   openRecent?(dir: string, file?: string): Promise<ProjectDocument | null>;
   /** Recientes de la bienvenida (`Bienvenida.tsx`), los mismos del menú nativo. Solo `DesktopStore`. */
   listRecents?(): Promise<readonly Recent[]>;
+  /**
+   * Olvida la carpeta/documento activos sin tocar disco (#458, QA de #505, hallazgo S2c). Se
+   * llama antes de activar un proyecto sin ruta (un ejemplo de la galería): sin esto, `DesktopStore`
+   * seguía comparando el siguiente guardado contra el documento anterior y `E-PROYECTO-DISTINTO`
+   * saltaba aunque el usuario nunca hubiera tocado ese proyecto viejo. Solo `DesktopStore`;
+   * `BrowserStore` no guarda identidad entre guardados.
+   */
+  forget?(): void;
 }

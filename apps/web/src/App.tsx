@@ -10,12 +10,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readProject } from './project';
+import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readLila, readProject } from './project';
+import { encodeLila } from '@lila-modeler/engine/project';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
@@ -45,6 +47,7 @@ import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
+import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
@@ -70,7 +73,7 @@ import './app.css';
 import './theme/montana.css';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -257,6 +260,8 @@ async function cargarTema(id: TemaId): Promise<Theme> {
  * `soloDesktop` entries are announced only inside Electron: the browser keeps ⌘N, ⌘, and ⌘1…⌘6.
  */
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
+/** Desktop autosave (#459): the recovery copy is written this long after the last change. */
+const AUTOGUARDADO_MS = 5000;
 function atajo(id: AtajoId): string {
   const a = atajoPorId(id);
   return a.soloDesktop && !DESKTOP ? '' : tooltip(a, MAC);
@@ -487,6 +492,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [modo, setModo] = useState<ModoId>('modelar');
   const [revision, setRevision] = useState(0);
   const revisionRef = useRef(0);
+  /**
+   * #431: an edit is not settled until its deferred reparse and the #420 seeding it triggers have
+   * landed; a Run pressed before that waits (`ejecutarPendiente`) instead of running without the
+   * seeds and being cancelled by them a moment later. The ref is what Run reads: it is set in the
+   * canvas's own event, before React renders the edit; the state is what wakes the waiting Run.
+   */
+  const [reparseando, setReparseandoEstado] = useState(false);
+  const reparseandoRef = useRef(false);
+  const setReparseando = (valor: boolean): void => { reparseandoRef.current = valor; setReparseandoEstado(valor); };
+  const [ejecutarPendiente, setEjecutarPendiente] = useState(false);
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
@@ -747,6 +762,26 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
     return true;
   }
+  // Autosave (#459): a dirty document goes to main as a `.lila` 5 s after its first unsaved
+  // change, then at most every 5 s while it stays dirty — a throttle, not a debounce, so steady
+  // editing still gets copied. Main deletes the copy by itself when the document is clean again.
+  // Only the desktop bridge has it.
+  const autoguardado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  useEffect(() => {
+    if (!dirty || modelador === null || window.lila?.writeRecovery === undefined) {
+      if (autoguardado.current !== null) clearTimeout(autoguardado.current);
+      autoguardado.current = null;
+      return;
+    }
+    if (autoguardado.current !== null) return; // The pending write will carry this change too.
+    autoguardado.current = setTimeout(() => {
+      autoguardado.current = null;
+      void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
+    }, AUTOGUARDADO_MS);
+  }, [currentToken, dirty, modelador]);
+  useEffect(() => () => { if (autoguardado.current !== null) clearTimeout(autoguardado.current); }, []);
   const sessionRestored = useRef(false);
   useEffect(() => {
     if (modelador === null || sessionRestored.current) return;
@@ -774,6 +809,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
         if (doc) await activate(doc, true, beforeToken); return;
+      }
+      if (typeof kind === 'object' && 'ejemplo' in kind) {
+        // #458, QA of #505 (S2c, N3): forget the adapter's previously active folder/document so
+        // the next «Save» treats this pathless project as a first save instead of comparing its
+        // id against whatever was active before (E-PROYECTO-DISTINTO) — but only AFTER `activate`
+        // succeeds. Forgetting first and then failing (`modelador.abrir` returning false) left the
+        // old project on screen with the adapter's folder already gone, so the next ⌘S would have
+        // asked «Save as» instead of saving it in place.
+        const activado = await activate(proyectoDeEjemplo(kind.ejemplo), true, beforeToken);
+        if (activado) adapter.forget?.();
+        return;
       }
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
@@ -955,6 +1001,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     return modelador.suscribir(['commandStack.changed'], () => {
       revisionRef.current += 1;
       setRevision(revisionRef.current);
+      setReparseando(true);
       cancelarCorrida();
       setCorrida(null);
     });
@@ -978,7 +1025,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         const ids = new Set(nosop.map((p) => p.id));
         const nombres = new Map(modelador.servicios.elementRegistry.filter((el) => el.id !== undefined && ids.has(el.id)).map((el) => [el.id, el.businessObject?.name]));
         setNoSoportados(nosop.map((p) => { const name = nombres.get(p.id); return name === undefined ? { id: p.id, message: p.message } : { id: p.id, message: p.message, name }; }));
-      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); } });
+      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); setReparseando(false); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
     // The locale reparses because the `E-NOSOP` messages are the engine's, in the active language.
@@ -997,6 +1044,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const nodosVistos = useRef<Set<string> | null>(null);
   const sembrados = useRef(new Map<string, Record<string, unknown>>());
   useEffect(() => {
+    // #431: batched with the seeding below, so a waiting Run sees the seeded scenarios.
+    setReparseando(false);
     if (ir === null) return;
     const vistos = nodosVistos.current;
     nodosVistos.current = new Set(Object.keys(ir.nodes));
@@ -1236,6 +1285,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'exportarSvg') void exportarImagen('svg');
     else if (accion === 'exportarPng') void exportarImagen('png');
     else if (accion === 'exportarPdf') void exportarImagen('pdf');
+    else if (accion === 'exportarDocx') void exportarDocumento('docx');
+    else if (accion === 'exportarHtml') void exportarDocumento('html');
     // A shortcut the native menu owns (#413): same handlers as the keyboard; unknown ids are ignored.
     else if ('atajo' in accion) { if (Object.hasOwn(atajosRef.current, accion.atajo) && !bloqueado()) atajosRef.current[accion.atajo as AtajoPropio](); }
     else void projectAction({ recent: accion.openRecent });
@@ -1361,6 +1412,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarPng, elegir: () => ejecutar('exportarPng') },
       DESKTOP && modelador !== null && { grupo: 'acciones', nombre: S.app.menuEscritorio.exportarPdf, elegir: () => ejecutar('exportarPdf') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarDocx, elegir: () => ejecutar('exportarDocx') },
+      modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarHtml, elegir: () => ejecutar('exportarHtml') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
     ];
     return [
@@ -1432,15 +1485,56 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   const abrirRutaRef = useRef(abrirRuta);
   abrirRutaRef.current = abrirRuta;
+
+  /** The autosave copy the user chose to restore (#459), waiting for the canvas like `rutaPendiente`. */
+  const copiaPendiente = useRef<Uint8Array | null>(null);
+  /**
+   * Opens the recovery copy DIRTY and with no file behind it (`saved = false`, and the store has
+   * no folder yet on this launch): the first Save goes through «Save as», so the user's own file is
+   * never overwritten without them choosing it.
+   * ponytail: the copy does not remember where the project came from, so Save cannot go back to
+   * it; upgrade path: store the source path in the copy and re-authorize it in main on restore.
+   */
+  function restaurarCopia(copia: Uint8Array): void {
+    if (modelador === null) { copiaPendiente.current = copia; return; }
+    ioLock.current = true; setIoBusy(true);
+    void (async () => activate(readLila(copia), false, tokenRef.current))()
+      .catch((error: unknown) => {
+        setIoError(S.app.errorCopiaRecuperacion(error instanceof Error ? error.message : String(error)));
+        // An unreadable copy must not come back on every launch: a clean document makes main
+        // delete it (the offer is answered by now). The welcome screen takes the startup's place.
+        adapter?.setDirty?.(false);
+        setBienvenida(true);
+      })
+      .finally(() => { ioLock.current = false; setIoBusy(false); });
+  }
+  const restaurarCopiaRef = useRef(restaurarCopia);
+  restaurarCopiaRef.current = restaurarCopia;
   useEffect(() => {
     const abrir = (ruta: OpenPathRequest): void => abrirRutaRef.current(ruta);
-    const unsubscribe = window.lila?.onOpenPath(abrir);
-    void window.lila?.pendingOpenPath().then((ruta) => { if (ruta !== null) abrir(ruta); else setBienvenida(true); });
+    const lila = window.lila;
+    const unsubscribe = lila?.onOpenPath(abrir);
+    if (lila !== undefined) void (async () => {
+      // The recovery offer comes first (#459). `pendingOpenPath` is still asked for: it is the
+      // handshake that lets main forward later double-clicks. A file double-clicked on this same
+      // launch then meets the restore in progress and says so (`errorAbrirOcupado`).
+      const copia = await lila.takeRecovery?.().catch(() => null) ?? null;
+      if (copia !== null) restaurarCopiaRef.current(copia);
+      const ruta = await lila.pendingOpenPath();
+      if (ruta !== null) abrir(ruta); else if (copia === null) setBienvenida(true);
+    })();
     return unsubscribe;
   }, []);
   useEffect(() => {
     if (bienvenida) void adapter?.listRecents?.().then(setRecientes).catch(() => setRecientes([]));
   }, [bienvenida, adapter]);
+  // Before the pending path below: the restore takes the I/O lock first.
+  useEffect(() => {
+    const copia = copiaPendiente.current;
+    if (modelador === null || copia === null) return;
+    copiaPendiente.current = null;
+    restaurarCopiaRef.current(copia);
+  }, [modelador]);
   useEffect(() => {
     const ruta = rutaPendiente.current;
     if (modelador === null || ruta === null) return;
@@ -1456,6 +1550,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function simular(): Promise<void> {
     if (modelador === null) return;
+    // A label being typed (bpmn-js opens the editor on every append) is committed first, so Run
+    // waits for that edit too instead of losing it and its own results to it (QA S1 of #507).
+    const edicion = modelador.servicios.directEditing;
+    if (edicion.isActive?.()) edicion.complete?.();
+    if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();
     enVuelo.current = control;
@@ -1502,6 +1601,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     }
   }
 
+  useEffect(() => {
+    if (reparseando || !ejecutarPendiente) return;
+    setEjecutarPendiente(false);
+    void simular();
+    // `simular` is this render's, the one with the settled scenarios.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reparseando, ejecutarPendiente]);
+
   /**
    * The diagram as an image (#451): the SVG in the theme's colours, the PNG (2×), the PDF and the
    * printout on white paper. The web downloads SVG and PNG and hands PDF to the print dialog (where
@@ -1521,6 +1628,42 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         else await lila.exportar({ nombre, tipo, datos: new Uint8Array(await png.arrayBuffer()) });
       } else if (lila === undefined) descargar(new Blob([svg], { type: 'image/svg+xml' }), `${nombre}.svg`);
       else await lila.exportar({ nombre, tipo, datos: svg });
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+  }
+
+  /**
+   * The process document (#454), Word or one HTML page: the diagram on paper (the PNG of #451),
+   * every element's documentation in flow order, and the active scenario with its last run on
+   * this revision — or, without a run, the scenario alone when it resolves.
+   */
+  async function exportarDocumento(tipo: 'docx' | 'html'): Promise<void> {
+    if (modelador === null) return;
+    const nombre = nombreArchivo(projectName);
+    const lila = DESKTOP ? window.lila : undefined;
+    try {
+      const xml = await modelador.exportar();
+      const [{ ir: modelo, subprocesses }, annotations, png] = await Promise.all([
+        parseBpmn(xml),
+        // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
+        readAnnotations(xml).catch(() => ({})),
+        modelador.exportarSvg({ papel: true }).then(aPng).then(async (blob) => new Uint8Array(await blob.arrayBuffer())),
+      ]);
+      const run = corridaActual;
+      const escenario = run !== undefined
+        ? { scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result }
+        : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
+      const hoy = new Date();
+      const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: projectName, date, locale, png, ...escenario });
+      if (tipo === 'docx') {
+        const datos = toDocx(doc);
+        if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
+        else await lila.exportar({ nombre, tipo, datos });
+      } else {
+        const datos = toHtml(doc);
+        if (lila === undefined) descargar(new Blob([datos], { type: 'text/html' }), `${nombre}.html`);
+        else await lila.exportar({ nombre, tipo, datos });
+      }
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
   }
 
@@ -1654,6 +1797,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const despachar = (e: KeyboardEvent, soloHija = false): void => {
     if (e.isComposing) return;
+    // bpmn-js-token-simulation toggles on a T with any modifier and locks the canvas (#492); only
+    // «Validate paths» turns it on and off, so a modified T never reaches the canvas, in any mode.
+    // This runs before the `ATAJOS` lookup below: Ctrl+T/⌘T/Alt+T and their ⇧ variants match no
+    // entry of Lila's own map (QA of #504, M1), so without this line they would fall straight
+    // through the `a === undefined` return just below and reach bpmn-js untouched.
+    // `e.key`, not `e.code`: the library reads the typed character, so on Dvorak the physical T
+    // types «y» and «t» sits on KeyK (QA of #504, second pass).
+    if ((e.key === 't' || e.key === 'T') && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
     if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
     // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
@@ -1664,8 +1815,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
     // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
     if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
-    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays the browser's.
-    if (a.id in ALINEACIONES && modo !== 'modelar') return;
+    // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays out of the app's own
+    // handling, but it must still be kept from bpmn-js-token-simulation's canvas listener (#492:
+    // Alt+Shift+T toggled the token simulation in Simulate/Validate paths) — same hiding as below.
+    if (a.id in ALINEACIONES && modo !== 'modelar') {
+      if (conMod || e.altKey) e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     // Only the ⌘ and ⌥ keys are hidden from the target (bpmn-js zooms on ⌘ ones, and the token
     // simulation toggles on a T with any modifier, locking the canvas: #453); Esc, F2 and F6 still
@@ -1774,7 +1930,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         recientes={recientes}
         temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
         densidadTexto={S.app.densidadEstado(S.app.densidadNombre(densidad))}
-        onAccion={(accion) => { if (accion === 'ejemplo') setBienvenida(false); else void projectAction(accion); }}
+        // #458, QA of #505 (S2): every action from the welcome screen — including an example —
+        // goes through `projectAction`, so it gets the same dirty confirmation, `ioLock` and
+        // `respuestaPerdida` guard as «New»/«Open»/a recent project.
+        onAccion={(accion) => void projectAction(accion)}
         onAjustes={() => ejecutar('ajustes')}
       />}
       <header className="barra">
@@ -1786,7 +1945,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="separador" aria-hidden="true" />
           <div>
             <div className="proyecto">{projectName}</div>
-            <div className="archivo">{archivo} · {dirty ? S.app.sinGuardar : S.app.guardado}</div>
+            <div className={dirty ? 'archivo sucio' : 'archivo'} title={`${archivo} · ${dirty ? S.app.sinGuardar : S.app.guardado}`}>
+              {archivo}<span className="archivo-estado"> · {dirty ? S.app.sinGuardar : S.app.guardado}</span>
+            </div>
           </div>
         </div>
         <nav className="modos">
@@ -1849,6 +2010,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPdf')}>{S.app.menuEscritorio.exportarPdf}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarDocx')}>{S.app.menuEscritorio.exportarDocx}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarHtml')}>{S.app.menuEscritorio.exportarHtml}</button>
               <button type="button" title={`${S.app.menuEscritorio.imprimir}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.menuEscritorio.imprimir}</button>
               <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
@@ -1863,6 +2026,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               </>}
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.exportarPng}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarDocx')}>{S.app.exportarDocx}</button>
+              <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarHtml')}>{S.app.exportarHtml}</button>
               <button type="button" title={`${S.app.imprimirPdf}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.imprimirPdf}</button>
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
             </>}

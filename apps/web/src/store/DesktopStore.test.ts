@@ -66,8 +66,12 @@ class FakeBridge implements LilaBridge {
     return this.siguienteDestino('chooseFolder');
   }
 
-  async chooseSaveFile(): Promise<string | null> {
+  /** Suggested names passed to `chooseSaveFile`, in order (QA of #505, S1: `nombreArchivo`). */
+  readonly nombresSugeridos: string[] = [];
+
+  async chooseSaveFile(suggestedName?: string): Promise<string | null> {
     this.dialogos.push('saveFile');
+    this.nombresSugeridos.push(suggestedName ?? '');
     return this.siguienteDestino('chooseSaveFile');
   }
 
@@ -651,5 +655,36 @@ describe('DesktopStore.saveProject · destino de «Guardar como»', () => {
     await store.saveProject(documentoBase({ name: 'pedido v2' }));
     expect(bridge.dialogos).toEqual([]);
     expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/pedido', options: { saveAs: false } });
+  });
+
+  it('un nombre con «/» —un título de ejemplo como «M/M/1 queue»— llega a `chooseSaveFile` saneado (QA de #505, S1/S3)', async () => {
+    // Before `nombreArchivo` (`exportarDiagrama.ts`), a project name straight from `document.name`
+    // reached the native save dialog as a path, which keeps only its last path segment as the
+    // suggested file name — «M/M/1 queue.lila» became just «1 queue.lila».
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/proyectos/mm1.lila');
+    const store = new DesktopStore(bridge);
+
+    await store.saveProject(documentoBase({ name: 'M/M/1 queue' }), { saveAs: true });
+    expect(bridge.nombresSugeridos).toEqual(['M-M-1 queue.lila']);
+  });
+
+  it('`forget()` hace que el siguiente `saveProject` de un documento distinto pida archivo en vez de lanzar E-PROYECTO-DISTINTO (QA de #505, S3)', async () => {
+    // #458: opening a gallery example calls `forget()` on the adapter first (`App.tsx`), so the
+    // pathless example document isn't compared against whatever project was active before.
+    // Without `forget()`, this exact sequence throws `E-PROYECTO-DISTINTO` (see the guardia de
+    // identidad tests above) instead of treating the example as a fresh, unsaved project.
+    const bridge = new FakeBridge();
+    bridge.queueChooseFolder('/carpeta/pedido');
+    bridge.readProjectImpl = async (dir) => ({ ...documentoBase(), problems: [], loose: false, dir } as never);
+    const store = new DesktopStore(bridge);
+    await store.openProject();
+
+    store.forget();
+    bridge.queueChooseFolder('/proyectos/otro.lila');
+    const otro = documentoBase({ id: 'otro-proyecto', name: 'Otro' });
+    await expect(store.saveProject(otro)).resolves.not.toBeNull();
+    expect(bridge.dialogos.at(-1)).toBe('saveFile');
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/proyectos/otro.lila', options: { saveAs: true } });
   });
 });

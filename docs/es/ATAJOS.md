@@ -82,7 +82,10 @@ Con el lienzo enfocado (haz clic en él primero):
 Acercar, alejar y ajustar funcionan desde cualquier parte de la ventana, no solo desde el lienzo.
 Los atajos de alinear solo funcionan en Modelar y actúan sobre las figuras seleccionadas (dos o
 más; tres o más para distribuir), igual que los botones de alinear de la esquina superior derecha
-del lienzo y la paleta de comandos. Los carriles no se alinean.
+del lienzo y la paleta de comandos. Los carriles no se alinean. Distribuir deja la primera y la
+última figura donde están y reparte el resto de forma aproximadamente uniforme: diagram-js deja el
+primer hueco unos pocos píxeles (unos 5 px) más corto que los demás. Las figuras que se solapan en
+ese eje se mueven juntas, como una sola columna o fila.
 La paleta de figuras de la izquierda filtra al teclear e inserta la figura resaltada con `Enter`.
 
 ## Paneles
@@ -108,8 +111,8 @@ los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entra
 
 ² Imprime solo el diagrama, en negro sobre blanco, en una hoja. En el navegador ese diálogo de
 imprimir es también la forma de sacar un PDF (elige «Guardar como PDF»); la app de escritorio tiene
-además «Archivo → Exportar diagrama como PDF…». Las exportaciones SVG y PNG están en el menú Archivo
-y en la paleta de comandos, sin tecla propia.
+además «Archivo → Exportar diagrama como PDF…». Las exportaciones SVG y PNG, y el documento del
+proceso (Word o HTML), están en el menú Archivo y en la paleta de comandos, sin tecla propia.
 
 En la app de escritorio `⌘W`/`Ctrl+W` cierra la ventana enfocada (Acerca de o la ventana
 desacoplada del escenario, solas; la principal pregunta antes si hay cambios sin guardar y, como su

@@ -94,6 +94,8 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
       S.exportarSvg,
       S.exportarPng,
       S.exportarPdf,
+      S.exportarDocx,
+      S.exportarHtml,
       S.imprimir,
     ]);
   });
@@ -102,8 +104,8 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
     const send = vi.fn();
     const archivo = menuTemplate([], 'win32', send, desktopStrings(locale))[0]!.submenu as MenuItemConstructorOptions[];
     const enviado = (label: string): unknown => { (archivo.find((i) => i.label === label)!.click as () => void)(); return send.mock.calls.at(-1)?.[0]; };
-    expect([S.exportarSvg, S.exportarPng, S.exportarPdf, S.imprimir].map(enviado))
-      .toEqual(['exportarSvg', 'exportarPng', 'exportarPdf', { atajo: 'imprimir' }]);
+    expect([S.exportarSvg, S.exportarPng, S.exportarPdf, S.exportarDocx, S.exportarHtml, S.imprimir].map(enviado))
+      .toEqual(['exportarSvg', 'exportarPng', 'exportarPdf', 'exportarDocx', 'exportarHtml', { atajo: 'imprimir' }]);
     expect(archivo.find((i) => i.label === S.imprimir)!.accelerator).toBe('CmdOrCtrl+P');
     // After the save entries, behind their own separator.
     const i = archivo.findIndex((x) => x.label === S.exportarSvg);

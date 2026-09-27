@@ -59,6 +59,8 @@ const lila = {
   readSettings: () => ipcRenderer.invoke('lila:readSettings') as Promise<Ajustes>,
   writeSettings: (ajustes: Ajustes) => ipcRenderer.invoke('lila:writeSettings', ajustes) as Promise<void>,
   exportar: (exportacion: Exportacion) => ipcRenderer.invoke('lila:exportar', exportacion) as Promise<string | null>,
+  writeRecovery: (bytes: Uint8Array) => ipcRenderer.invoke('lila:writeRecovery', bytes) as Promise<void>,
+  takeRecovery: () => ipcRenderer.invoke('lila:takeRecovery') as Promise<Uint8Array | null>,
   onMenu: (cb: (action: MenuAction) => void) => {
     const listener = (_event: unknown, action: MenuAction) => cb(action);
     ipcRenderer.on('lila:menu', listener);

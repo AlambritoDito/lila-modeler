@@ -2500,8 +2500,16 @@ body {
 .bienvenida small, .bienvenida time, .bienvenida-marca span, .bienvenida-tema { color: var(--fg-disabled); font-family: var(--font-mono); font-size: 11px; }
 .bienvenida a { color: var(--fg-muted); text-decoration: none; }
 .bienvenida a:hover, .bienvenida .enlace:hover { color: var(--accent-primary); }
-.bienvenida-izq { border-right: 2px solid var(--border); display: flex; flex: 0 0 min(640px, 48vw); flex-direction: column; justify-content: space-between; padding: calc(64px * var(--espacio, 1)) calc(56px * var(--espacio, 1)); }
-.bienvenida-izq > div { display: flex; flex-direction: column; gap: 12px; }
+/* `min-width: 0` (QA of #505, must-fix M1): without it a flex item defaults to `min-width: auto`,
+   its content's own min-content size — and the Bizagi hints' `white-space: nowrap` (below) made
+   that content 793px wide at every window width, crushing `.bienvenida-der` to 231px at 1024px.
+   The horizontal padding does NOT scale with `--espacio` (unlike the vertical one): at the
+   "comfortable" density (1.2x) that would have pushed the column past the owner's 760px ceiling
+   (640px flex-basis + 2 * 67px), so it stays a flat 56px and the column tops out at 752px. */
+.bienvenida-izq { border-right: 2px solid var(--border); display: flex; flex: 0 0 min(640px, 48vw); flex-direction: column; justify-content: space-between; min-width: 0; padding: calc(64px * var(--espacio, 1)) 56px; }
+/* `flex: 1; min-height: 0` (QA of #505, S3): lets `.bienvenida-ejemplos` below grow into the
+   leftover height instead of a fixed `max-height` that always cut off the same row count. */
+.bienvenida-izq > div { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
 .bienvenida-marca { align-items: center; border-bottom: 2px solid var(--border); display: flex; gap: 14px; margin-bottom: 24px; padding-bottom: 36px; }
 .bienvenida-marca img { height: 38px; width: 38px; }
 .bienvenida-marca div { display: flex; flex-direction: column; gap: 5px; }
@@ -2519,14 +2527,32 @@ body {
 .bienvenida-der h2 { align-items: center; display: flex; gap: 12px; }
 .bienvenida-der h2::after { background: var(--border); content: ''; flex: 1; height: 1px; }
 .bienvenida-vacio { color: var(--fg-muted); margin: 0; }
-.bienvenida-recientes { background: var(--border); display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0; padding: 0; }
-.bienvenida-recientes button { align-items: center; background: var(--bg-base); border: 0; border-left: 3px solid transparent; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: calc(15px * var(--espacio, 1)) 18px; text-align: left; width: 100%; }
+.bienvenida-recientes, .bienvenida-ejemplos { background: var(--border); display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0; padding: 0; }
+.bienvenida-recientes button, .bienvenida-ejemplos button { align-items: center; background: var(--bg-base); border: 0; border-left: 3px solid transparent; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: calc(15px * var(--espacio, 1)) 18px; text-align: left; width: 100%; }
+/* Tighter rows than `.bienvenida-recientes` (QA of #505, should-fix S1): with 7 examples and only
+   one recent project at a time visible, the gallery is the one that needs to fit more rows in the
+   same leftover height. Measured live (CDP) against the 1440x900/normal-density acceptance point:
+   9px still only fit 6 of 7 rows there; 6px is what gets all 7 on screen. */
+.bienvenida-ejemplos button { padding: calc(6px * var(--espacio, 1)) 18px; }
+/* Only the recent-projects list marks its first row as "most recent" (QA of #505, N1): the same
+   rule on `.bienvenida-ejemplos` made the first example read as pre-selected. */
 .bienvenida-recientes li:first-child button { background: var(--bg-elevated); border-left-color: var(--accent-primary); }
-.bienvenida-recientes button:hover { background: var(--bg-hover); }
-.bienvenida-recientes button > span { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
-.bienvenida-recientes strong { font-size: 14px; font-weight: 500; }
-.bienvenida-recientes small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bienvenida-recientes button:hover, .bienvenida-ejemplos button:hover { background: var(--bg-hover); }
+.bienvenida-recientes button > span, .bienvenida-ejemplos button > span { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
+.bienvenida-recientes strong, .bienvenida-ejemplos strong { font-size: 14px; font-weight: 500; }
+.bienvenida-recientes small, .bienvenida-ejemplos small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bienvenida-recientes time { color: var(--fg-muted); flex: none; }
+/* Grows into whatever height is left under the three actions (QA of #505, S3); scrolls only when
+   the column itself is too short to fit everything (`.bienvenida-izq > div`'s own `min-height: 0`
+   is what lets this shrink instead of overflowing the page). `min-height` is under one row, not
+   the 130px of the first fix (QA must-fix S2): at 1024x700 comfortable, that floor refused to
+   shrink below 130px while its `min-height: 0` parent shrank to fit, so the list overflowed its
+   column and sat on top of the footer — a small floor still leaves the list visible instead of
+   collapsing to nothing, and it scrolls sooner instead of ever overlapping. */
+/* `flex: 0 1 auto`, not `1 1`: the list shrinks to fit but never grows past its rows (its
+   `background: var(--border)` draws the dividers, so any spare height would show as a solid
+   block under the last example — QA of #505, third pass). */
+.bienvenida-ejemplos { flex: 0 1 auto; max-height: none; min-height: 40px; overflow-y: auto; }
 .bienvenida-novedades { border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding: 18px; }
 .bienvenida-novedades h3::before { background: var(--accent-secondary); content: ''; display: inline-block; height: 13px; margin-right: 10px; vertical-align: -2px; width: 3px; }
 .bienvenida-novedades p { color: var(--fg-muted); font-size: 13px; line-height: 1.6; margin: 0; text-wrap: pretty; }
@@ -2560,6 +2586,31 @@ body {
 @media (max-width: 1400px) {
   .modo {
     padding: calc(2px * var(--espacio, 1)) 10px;
+  }
+}
+
+/* #434: the desktop bar (File and View menus) clipped the Spanish file line up to 1164 px, and up
+   to 1216 px while a run shows its progress and Cancel, and left the project name 2 px wide at
+   1024 (dirty, 39-character name, Simulate). Below 1230 px the tabs give up 6 px a side more, the
+   bar's gaps 2 px, and the save state folds into a dot: its words keep their place in the DOM for
+   screen readers and in the line's `title`, only their glyphs go. */
+@media (max-width: 1230px) {
+  .barra {
+    gap: 8px;
+  }
+
+  .modo {
+    padding: calc(2px * var(--espacio, 1)) 4px;
+  }
+
+  .archivo-estado {
+    font-size: 0;
+  }
+
+  .archivo.sucio .archivo-estado::after {
+    /* The alternative text keeps the dot out of the accessibility tree: the words are already there. */
+    content: ' ●' / '';
+    font-size: 10px;
   }
 }
 

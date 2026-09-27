@@ -9,6 +9,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
+import { DesktopStore } from './store/DesktopStore';
 import { newModelXml, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';
@@ -52,6 +54,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   publicarEstado: (_estado: unknown) => {},
   // #410: the command palette focuses the canvas after picking an element.
   enfocar: vi.fn(),
+  // QA S1 of #507: the label editor bpmn-js opens on every append.
+  edicionActiva: vi.fn(), completarEdicion: vi.fn(),
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
   alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {} }));
 /**
@@ -106,7 +110,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       elementFactory: { createShape: mocks.fabricar, createParticipantShape: vi.fn() },
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
-      directEditing: { activate: mocks.editarNombre },
+      directEditing: { activate: mocks.editarNombre, isActive: () => mocks.edicionActiva(), complete: () => mocks.completarEdicion() },
       selection: { get: () => mocks.seleccionados },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
@@ -174,6 +178,10 @@ beforeEach(async () => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
 it('valida antes del Worker y abre Resultados con avisos preservados', async () => {
+  // The startup reparse (150 ms) settles and rewrites `ir`/`noSoportados` on its own timer; wait
+  // it out before running, same fix as «abrir un .bpmn inválido...» below (#494): under CI load
+  // it could land mid-assertion instead of before the click and fail only there.
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
@@ -217,6 +225,9 @@ it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
+    // Since #431 Run waits for the 150 ms startup reparse; under load it fires after the click,
+    // so the run would still be pending when the panel is read. Same wait as «valida antes…».
+    await act(async () => { await new Promise((listo) => setTimeout(listo, 200)); });
     await click(T.app.ejecutar);
     expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(texto);
   },
@@ -1377,6 +1388,42 @@ it('entrar en «Validar rutas» activa la animación de tokens y salir la desact
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
 });
 
+it.each([
+  ['Validar rutas', () => click(T.app.modos.rutas)],
+  ['Modelar', () => click(T.app.modos.modelar)],
+] as const)('a T with any modifier never reaches bpmn-js-token-simulation, in %s (#492, QA of #504 M1)', async (_modo, entrar) => {
+  // `alinearArriba` is Alt+Shift+T (#453) and matches Lila's own `ATAJOS` map, so its
+  // `stopPropagation` used to run late, inside the `ALINEACIONES` branch, only for modes other
+  // than Model. Ctrl+T, ⌘T, Alt+T and their ⇧ variants match no entry at all, so they used to fall
+  // straight through `despachar`'s `a === undefined` return — in every mode, Model included — and
+  // reach bpmn-js-token-simulation's any-modifier `T` binding, which locks the canvas. The listener
+  // below is the assertion that can actually fail: `mocks.simulacionTokens` is Lila's own toggle
+  // and a keypress never calls it either way (QA of #504, N2).
+  await entrar();
+  const alLienzo = vi.fn();
+  svgLienzo().addEventListener('keydown', alLienzo);
+  for (const init of [
+    { key: 'T', code: 'KeyT', altKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true },
+    { key: 't', code: 'KeyT', metaKey: true },
+    { key: 't', code: 'KeyT', altKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', metaKey: true, shiftKey: true },
+    { key: 't', code: 'KeyT', ctrlKey: true, altKey: true },
+    // Dvorak: «t» sits on the physical K key; the guard reads the typed character.
+    { key: 't', code: 'KeyK', ctrlKey: true },
+    { key: 't', code: 'KeyK', altKey: true },
+  ]) {
+    alLienzo.mockClear();
+    await pulsar(svgLienzo(), init);
+    expect(alLienzo).not.toHaveBeenCalled();
+  }
+  // Dvorak: the physical T key types «y», which must still reach the canvas (Ctrl+Y = redo).
+  alLienzo.mockClear();
+  await pulsar(svgLienzo(), { key: 'y', code: 'KeyT', ctrlKey: true });
+  expect(alLienzo).toHaveBeenCalled();
+});
+
 it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)', async () => {
   // Los colores neutros del modo se escriben en el DI y el DI gana a lo que repinte `repintar()`:
   // sin apagar y volver a encender, el diagrama se queda con el relleno del tema anterior y la
@@ -1825,6 +1872,27 @@ it('the web File menu downloads the SVG in the theme\'s colours and the PNG on p
   // «Print / Save as PDF» is the print dialog on the web.
   await act(async () => ejecutarArchivo(T.app.imprimirPdf));
   expect(mocks.imprimir).toHaveBeenCalledExactlyOnceWith('<svg id="papel"/>', T.app.proyectoDemo);
+});
+
+it('the web File menu downloads the process document as <project>.docx and <project>.html (#454)', async () => {
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  mocks.aPng.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  await act(async () => ejecutarArchivo(T.app.exportarDocx));
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  const [docx, nombreDocx] = mocks.descargar.mock.calls[0]! as [Blob, string];
+  expect([docx.type, nombreDocx]).toEqual(['application/vnd.openxmlformats-officedocument.wordprocessingml.document', `${T.app.proyectoDemo}.docx`]);
+  // A zip: the local file header signature.
+  expect((await docx.text()).slice(0, 2)).toBe('PK');
+  // The diagram is the paper PNG of #451, never the theme's colours.
+  expect(mocks.exportarSvg).toHaveBeenCalledWith({ papel: true });
+  expect(mocks.aPng).toHaveBeenCalledWith('<svg id="papel"/>');
+  await act(async () => ejecutarArchivo(T.app.exportarHtml));
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledTimes(2));
+  const [html, nombreHtml] = mocks.descargar.mock.calls[1]! as [Blob, string];
+  expect([html.type, nombreHtml]).toEqual(['text/html', `${T.app.proyectoDemo}.html`]);
+  const texto = await html.text();
+  expect(texto).toContain(`<h1>${T.app.proyectoDemo}</h1>`);
+  expect(texto).toContain('<h3>Preparar alimento</h3>');
 });
 
 it('⌘0 fits and ⌘+/⌘− zoom once: the canvas never sees the key (#413)', async () => {
@@ -2336,7 +2404,7 @@ function puenteBienvenida(pendiente: { dir: string; file: string } | null) {
     readSettings: async () => ({}), writeSettings: async () => {},
   });
 }
-it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y «Abrir el ejemplo» solo la cierra', async () => {
+it('la bienvenida sale en escritorio con los recientes y abre uno al pulsarlo', async () => {
   const doc = { version: 1, id: 'p3', name: 'Click&Go', model: { id: 'Process_3', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: { 'as-is.scenario.json': {} }, scenarioRevisions: {}, runs: [] };
   puenteBienvenida(null);
   const listRecents = vi.fn().mockResolvedValue([{ dir: '/p/clickandgo.lila', name: 'Click&Go', openedAt: new Date(Date.now() - 7_200_000).toISOString() }]);
@@ -2369,16 +2437,75 @@ it('la bienvenida sale en escritorio con los recientes, abre uno al pulsarlo y �
   expect(container.querySelector('.bienvenida')).toBeNull();
   expect(container.textContent).toContain('Click&Go');
 
-  // Sin recientes: el hueco lo dice; «Abrir el ejemplo» cierra sin tocar el store.
+  // Sin recientes: el hueco lo dice. La galería (#458) lista los ejemplos públicos junto a los
+  // botones de arriba; pulsar uno los abre sin pasar por `openProject`/`openRecent`.
   listRecents.mockResolvedValue([]);
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector('.bienvenida')!.textContent).toContain(T.bienvenida.sinRecientes);
-  await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.bienvenida-accion')].find((b) => b.querySelector('strong')!.textContent === T.bienvenida.ejemplo)!.click(); });
+  expect(container.querySelectorAll('.bienvenida-ejemplos li')).toHaveLength(7);
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
   expect(container.querySelector('.bienvenida')).toBeNull();
   expect(session.openProject).not.toHaveBeenCalled();
   expect(openRecent).toHaveBeenCalledOnce();
+});
+it('abrir un ejemplo deja el proyecto limpio (sin ruta) y con su nombre', async () => {
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]) });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  // Clean and pathless: `dirty` reads false (no «unsaved» footer) and «Save» would ask for a
+  // folder (`saveAs`), exactly like today's built-in `pedido` demo — never `session.createProject`
+  // or `session.openProject`, neither of which this path touches.
+  expect(container.textContent).not.toContain(T.app.sinGuardar);
+  expect(container.textContent).toContain(nivel1.titulo);
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(session.openProject).not.toHaveBeenCalled();
+});
+it('a dirty project plus a click on an example asks first, and only activates it after Discard (QA of #505, S3)', async () => {
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]), forget: vi.fn() });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await act(async () => mocks.changed()); // the project behind the welcome overlay is now dirty.
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  // Asks first: the example isn't opened yet, and the welcome overlay stays up behind the dialog.
+  expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+  expect(session.forget).not.toHaveBeenCalled();
+  await click(T.app.descartar);
+  expect(container.querySelector('.bienvenida')).toBeNull();
+  expect(container.textContent).toContain(nivel1.titulo);
+  expect(session.forget).toHaveBeenCalledOnce();
+});
+it("forget() runs only after the example's activation succeeds, not before (QA N3 of #505)", async () => {
+  // If `activate` fails (`modelador.abrir` returning false), the old project must stay exactly as
+  // it was — including the adapter's folder, which forgetting it early would have discarded even
+  // though nothing new was actually activated.
+  puenteBienvenida(null);
+  Object.assign(session, { listRecents: vi.fn().mockResolvedValue([]), forget: vi.fn() });
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  mocks.abrir.mockResolvedValueOnce(false);
+  const nivel1 = T.bienvenida.ejemplos['bizagi-level-1'];
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(session.forget).not.toHaveBeenCalled();
+  // The failed activation left the welcome overlay up (`setBienvenida(false)` only runs inside a
+  // successful `activate`).
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+
+  await act(async () => { [...container.querySelectorAll<HTMLElement>('.bienvenida-ejemplos strong')].find((el) => el.textContent === nivel1.titulo)!.closest('button')!.click(); });
+  expect(session.forget).toHaveBeenCalledOnce();
+  expect(container.querySelector('.bienvenida')).toBeNull();
 });
 it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble clic)', async () => {
   puenteBienvenida({ dir: '/p/suelto', file: 'ventas.bpmn' });
@@ -2387,6 +2514,96 @@ it('la bienvenida no sale cuando el arranque trae un archivo que abrir (doble cl
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
   expect(container.querySelector('.bienvenida')).toBeNull();
+});
+
+// ---------- autosave and recovery on desktop (#459) ----------
+
+/** A desktop bridge with the two autosave methods; the rest is the minimum the shell reads. */
+function puenteRecuperacion(copia: Uint8Array | null, extra: object = {}) {
+  const puente = {
+    pendingOpenPath: vi.fn().mockResolvedValue(null), onOpenPath: () => () => {},
+    onMenu: (cb: (a: unknown) => void) => { puente.menu = cb; return () => {}; },
+    readSettings: async () => ({}), writeSettings: async () => {},
+    writeRecovery: vi.fn().mockResolvedValue(undefined), takeRecovery: vi.fn().mockResolvedValue(copia),
+    menu: (_a: unknown) => {}, ...extra,
+  };
+  vi.stubGlobal('lila', puente);
+  return puente;
+}
+async function montar(store: ProjectSessionStore = session) {
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={store} />));
+  await act(async () => {});
+}
+const EDITADO = () => seedModelXml().replace(/(<bpmn:task id="[^"]+" name=")[^"]*/, '$1Tarea renombrada');
+
+it('5 s after an edit the desktop sends writeRecovery a .lila with the edit; with no changes it writes nothing (#459)', async () => {
+  const puente = puenteRecuperacion(null);
+  // Fake timers before mounting: a timer armed at mount must be one this test can run.
+  vi.useFakeTimers();
+  try {
+    await montar();
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+    expect(puente.writeRecovery).not.toHaveBeenCalled();
+    mocks.exportXml.mockResolvedValue(EDITADO());
+    await act(async () => mocks.changed());
+    await act(async () => { await vi.advanceTimersByTimeAsync(4900); });
+    expect(puente.writeRecovery).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(puente.writeRecovery).toHaveBeenCalledOnce();
+    const copia = decodeLila(puente.writeRecovery.mock.calls[0]![0] as Uint8Array);
+    expect(copia.model.xml).toContain('Tarea renombrada');
+  } finally { vi.useRealTimers(); }
+});
+
+it('steady editing every 3 s still writes a copy at most every 5 s (#459, a throttle, not a debounce)', async () => {
+  const puente = puenteRecuperacion(null);
+  vi.useFakeTimers();
+  try {
+    await montar();
+    for (let t = 0; t < 21; t += 3) {
+      mocks.exportXml.mockResolvedValue(seedModelXml().replace(/(<bpmn:task id="[^"]+" name=")[^"]*/, `$1Edit at ${t}s`));
+      await act(async () => mocks.changed());
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    }
+    // Edits at 0, 3, …, 18 s: writes at 5, 11 and 17 s.
+    expect(puente.writeRecovery.mock.calls.length).toBeGreaterThanOrEqual(3);
+  } finally { vi.useRealTimers(); }
+});
+
+it('an unreadable copy says so, shows the welcome screen and lets main delete it (#459)', async () => {
+  const puente = puenteRecuperacion(new Uint8Array([1, 2, 3]));
+  await montar();
+  expect(container.textContent).toContain(T.app.errorCopiaRecuperacion('').trim());
+  expect(container.querySelector('.bienvenida')).not.toBeNull();
+  // A clean document AFTER the offer: main ignored the one sent at mount, while it was pending.
+  const setDirty = session.setDirty as unknown as ReturnType<typeof vi.fn>;
+  expect(setDirty).toHaveBeenLastCalledWith(false);
+  expect(Math.max(...setDirty.mock.invocationCallOrder)).toBeGreaterThan(puente.takeRecovery.mock.invocationCallOrder[0]!);
+});
+
+it('takeRecovery opens the copy dirty, without the welcome screen (#459)', async () => {
+  const doc = proyecto('p9', 'Recuperado') as ProjectDocument;
+  const puente = puenteRecuperacion(encodeLila(doc));
+  await montar();
+  expect(puente.takeRecovery).toHaveBeenCalledOnce();
+  expect(mocks.abrir).toHaveBeenLastCalledWith(doc.model.xml);
+  expect(container.textContent).toContain('Recuperado');
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  expect(container.querySelector('.bienvenida')).toBeNull();
+});
+
+it('saving a restored copy goes through «Save as», never back to a file (#459)', async () => {
+  const chooseSaveFile = vi.fn().mockResolvedValue('/p/nuevo.lila');
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const puente = puenteRecuperacion(encodeLila(proyecto('p9', 'Recuperado') as ProjectDocument),
+    { chooseSaveFile, writeProject, setDirty: vi.fn(), onCloseRequested: () => () => {} });
+  await montar(new DesktopStore(puente as never));
+  await act(async () => { puente.menu('guardar'); });
+  expect(chooseSaveFile).toHaveBeenCalledWith('Recuperado.lila');
+  expect(writeProject).toHaveBeenCalledWith('/p/nuevo.lila', expect.objectContaining({ id: 'p9' }), expect.objectContaining({ saveAs: true }));
+  expect(container.textContent).toContain(T.app.guardado);
 });
 
 
@@ -2632,6 +2849,40 @@ it('a start configured with only an inter-arrival timer counts as the first star
   await act(async () => mocks.scenarioChange({ ...mocks.escenarios['as-is.scenario.json'], elements: { Start_A: soloTimer } }));
   await reparsear(modelo(['Start_A', 'Start_B'], []));
   expect(asIs()).toEqual({ Start_A: soloTimer });
+});
+
+it('Run pressed right after drawing waits for the reparse and the seeding, and keeps its results (#431)', async () => {
+  mocks.exportXml.mockResolvedValue(modelo([], []));
+  await click(T.app.nuevo);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  // The gate parses what it is given, like the real one: its IR is the canvas's, not the fixture's.
+  mocks.gate.mockImplementation(async (xml: string) => ({ ir: (await parseBpmn(xml)).ir, scenario, warnings: [] }));
+  // A start and a task drawn, and Run pressed before React has even rendered the edit (one act).
+  mocks.exportXml.mockResolvedValue(modelo(['Start_A'], ['Task_A']));
+  await act(async () => {
+    mocks.changed();
+    [...container.querySelectorAll('button')].find((b) => b.textContent === T.app.ejecutar)!.click();
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
+  const escenarios = mocks.gate.mock.calls[0]![2] as typeof mocks.escenarios;
+  expect(Object.keys(escenarios['as-is.scenario.json']!.elements ?? {}).sort()).toEqual(['Start_A', 'Task_A']);
+  expect(container.textContent).toContain('Resultado actual');
+});
+
+it('Run with a label being typed commits it first and waits for that edit too (QA S1 of #507, #431)', async () => {
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  mocks.gate.mockImplementation(async (xml: string) => ({ ir: (await parseBpmn(xml)).ir, scenario, warnings: [] }));
+  mocks.edicionActiva.mockReturnValue(true);
+  // Committing the label is a command, like bpmn-js's `element.updateLabel`.
+  mocks.completarEdicion.mockImplementation(() => { mocks.edicionActiva.mockReturnValue(false); mocks.changed(); });
+  await click(T.app.ejecutar);
+  expect(mocks.completarEdicion).toHaveBeenCalledOnce();
+  expect(mocks.gate).not.toHaveBeenCalled();
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain('Resultado actual');
 });
 
 it('a failed Run in Animate shows in the status bar (#419)', async () => {

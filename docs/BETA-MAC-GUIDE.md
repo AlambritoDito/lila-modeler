@@ -79,10 +79,12 @@ on failure and respects reduced motion. See the [branding decision](design/brand
 and the [2026-09-14 local installation record](design/branding/INSTALLATION-2026-09-14.md).
 
 When nothing was double-clicked, the desktop app then shows a **welcome** overlay (design
-artboard 08): open a `.lila` project file, open a project folder, create a new process, or open
-the bundled example; the right column lists recent projects (the same list as File → Open
-recent), what's new in this version, and the current theme and density. Opening any project,
-or the example, dismisses it. Double-clicking a `.lila` or `.bpmn` skips it.
+artboard 08): open a `.lila` project file, open a project folder, create a new process, or pick
+one of the public examples from the **Examples** gallery (`pedido`, the four Bizagi tutorial
+levels, and the two M/M/c queues — `docs/EXAMPLES_POLICY.md`); the right column lists recent
+projects (the same list as File → Open recent), what's new in this version, and the current
+theme and density. Opening any project, or an example, dismisses it. Double-clicking a `.lila`
+or `.bpmn` skips it.
 
 
 The app always starts with the same example diagram bundled with it: the `pedido` process from
@@ -215,6 +217,12 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   required to save the complete project. Closing the last window also
   quits the app on Mac; on reopening, use **Open project** to get the saved folder
   back.
+- **Autosave and recovery** (#459): five seconds after each change, a copy of the unsaved project
+  is written to `recovery.lila` in the app's data folder (`~/Library/Application Support/Lila
+  Modeler/`). Saving, or discarding the changes when closing, deletes it. If the app quit without
+  either (a crash, a forced quit), the next launch offers **Restore / Discard**: the restored
+  project opens as unsaved and with no file behind it, so its first save asks where with
+  **Save as…** — your original file is never overwritten without you choosing it.
 - **What files a project folder holds**: `model.bpmn` (the diagram), one `<name>.scenario.json`
   per scenario (for example `as-is.scenario.json`, `to-be.scenario.json`), `lila-project.json`
   (metadata: id, name, revisions), and a `runs/` subfolder with one saved run per file.
@@ -352,7 +360,7 @@ which is read-only inside the package).
 
 ## For agents/QA: the E2E seam
 
-`apps/desktop/src/main.ts` accepts three environment variables meant **only for automated
+`apps/desktop/src/main.ts` accepts these environment variables meant **only for automated
 testing** (for example, so a hands-off agent can drive native dialogs it could not otherwise
 touch). They are not a public API and must never be used in normal use of the app:
 
@@ -363,9 +371,13 @@ touch). They are not a public API and must never be used in normal use of the ap
 - `LILA_E2E_CLOSE=save|discard|cancel`: makes the native "close with unsaved changes" dialog
   (Guardar/Descartar/Cancelar — Save/Discard/Cancel) resolve automatically with that value, instead
   of waiting for a click.
+- `LILA_E2E_SAVE_FILE=<absolute path to a .lila>`: the same as `LILA_E2E_FOLDER`, for the native
+  "Save as…" dialog.
+- `LILA_E2E_RECOVERY=restore|discard`: makes the launch offer of the autosave copy (Restore /
+  Discard) resolve automatically with that value.
 - `LILA_E2E_LOG=<file path>`: if present, appends one JSON line per relevant event
-  (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`) to that file.
+  (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`) to that file.
 
-With none of the three set, the app behaves exactly as if they did not exist. **Warning**: these
+With none of them set, the app behaves exactly as if they did not exist. **Warning**: these
 are a shortcut for testing, not something an end user should ever set — they leave the app
 answering its own dialogs with no human involved.
