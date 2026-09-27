@@ -54,6 +54,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   publicarEstado: (_estado: unknown) => {},
   // #410: the command palette focuses the canvas after picking an element.
   enfocar: vi.fn(),
+  // QA S1 of #507: the label editor bpmn-js opens on every append.
+  edicionActiva: vi.fn(), completarEdicion: vi.fn(),
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
   alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {} }));
 /**
@@ -108,7 +110,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
       elementFactory: { createShape: mocks.fabricar, createParticipantShape: vi.fn() },
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
-      directEditing: { activate: mocks.editarNombre },
+      directEditing: { activate: mocks.editarNombre, isActive: () => mocks.edicionActiva(), complete: () => mocks.completarEdicion() },
       selection: { get: () => mocks.seleccionados },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
@@ -2824,6 +2826,20 @@ it('Run pressed right after drawing waits for the reparse and the seeding, and k
   expect(mocks.gate).toHaveBeenCalledOnce();
   const escenarios = mocks.gate.mock.calls[0]![2] as typeof mocks.escenarios;
   expect(Object.keys(escenarios['as-is.scenario.json']!.elements ?? {}).sort()).toEqual(['Start_A', 'Task_A']);
+  expect(container.textContent).toContain('Resultado actual');
+});
+
+it('Run with a label being typed commits it first and waits for that edit too (QA S1 of #507, #431)', async () => {
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  mocks.gate.mockImplementation(async (xml: string) => ({ ir: (await parseBpmn(xml)).ir, scenario, warnings: [] }));
+  mocks.edicionActiva.mockReturnValue(true);
+  // Committing the label is a command, like bpmn-js's `element.updateLabel`.
+  mocks.completarEdicion.mockImplementation(() => { mocks.edicionActiva.mockReturnValue(false); mocks.changed(); });
+  await click(T.app.ejecutar);
+  expect(mocks.completarEdicion).toHaveBeenCalledOnce();
+  expect(mocks.gate).not.toHaveBeenCalled();
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
   expect(container.textContent).toContain('Resultado actual');
 });
 

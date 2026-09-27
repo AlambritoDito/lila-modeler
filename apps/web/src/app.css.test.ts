@@ -214,7 +214,7 @@ it('below 1230 px the save state folds into a dot and the bar tightens, so the S
   expect(media).toMatch(/\.modo \{\s*\n\s*padding: calc\(2px \* var\(--espacio, 1\)\) 4px;/);
   // The words stay in the DOM (screen readers, `title`); only their glyphs go, a dot stays if dirty.
   expect(media).toMatch(/\.archivo-estado \{\s*\n\s*font-size: 0;/);
-  expect(media).toMatch(/\.archivo\.sucio \.archivo-estado::after \{[^}]*content: ' ●';/);
+  expect(media).toMatch(/\.archivo\.sucio \.archivo-estado::after \{[^}]*content: ' ●' \/ '';/);
 });
 
 it('the product name never wraps, or the identity floor is computed too low (QA of #417, round 2)', () => {
