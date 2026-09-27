@@ -1469,6 +1469,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function simular(): Promise<void> {
     if (modelador === null) return;
+    // A label being typed (bpmn-js opens the editor on every append) is committed first, so Run
+    // waits for that edit too instead of losing it and its own results to it (QA S1 of #507).
+    const edicion = modelador.servicios.directEditing;
+    if (edicion.isActive?.()) edicion.complete?.();
     if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();

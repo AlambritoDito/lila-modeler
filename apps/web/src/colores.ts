@@ -92,23 +92,26 @@ export interface ColoresTema { canvas: string; trazo: string; etiqueta: string }
 
 /**
  * The stroke a flow or an external label is drawn with instead of the one bpmn-js would pick, or
- * `undefined` to leave it alone (#489). Its background is the fill of the pool it lies in, if that
- * pool wears a palette colour, or else the canvas. A coloured flow takes whichever of its palette
- * stroke and `strokeOscuro` stands out more there; an uncoloured flow or label in a coloured pool
- * takes the pool's stroke when the theme's own colour falls under 3:1 on that fill.
- * ponytail: only what lies in a pool (its descendants) and palette colours. A coloured lane, a
- * foreign (Bizagi) colour, or a label that merely overlaps a pool without belonging to it (a message
- * flow's, whose parent is the collaboration) keeps bpmn-js's choice; test bounds against the
- * coloured pools and lanes here if that ever matters.
+ * `undefined` to leave it alone (#489). Its background is the fill of its direct container (a pool
+ * or an expanded sub-process) if that wears a palette colour, or else the canvas: an uncoloured
+ * sub-process paints the theme's fill, whatever the pool around it wears (QA M1 of #507). A
+ * coloured flow takes whichever of its palette stroke and `strokeOscuro` stands out more there; an
+ * uncoloured flow or label in a coloured container takes the container's stroke when the theme's
+ * own colour falls under 3:1 on that fill. A colour from outside the palette (Bizagi's, or the one
+ * token simulation writes to mark the chosen branch, QA M2 of #507) is never replaced.
+ * ponytail: only direct containers and palette colours. A coloured lane or a label that merely
+ * overlaps a pool without belonging to it (a message flow's, whose parent is the collaboration)
+ * keeps bpmn-js's choice; test bounds against the coloured pools and lanes here if that matters.
  */
 export function trazoAlPintar(el: ElementoColoreable, tema: ColoresTema): string | undefined {
   const etiqueta = el.type === 'label';
   if (!etiqueta && el.di?.$type !== 'bpmndi:BPMNEdge') return undefined;
-  let pool = el.parent;
-  while (pool !== undefined && pool.type !== 'bpmn:Participant') pool = pool.parent;
-  const contenedor = pool === undefined ? undefined : COLORES.find((c) => c.id === colorActual(pool));
+  const actual = etiqueta ? null : colorActual(el);
+  if (actual === undefined) return undefined;
+  const padre = el.parent;
+  const contenedor = padre === undefined ? undefined : COLORES.find((c) => c.id === colorActual(padre));
   const fondo = contenedor?.fill ?? tema.canvas;
-  const propio = etiqueta ? undefined : COLORES.find((c) => c.id === colorActual(el));
+  const propio = COLORES.find((c) => c.id === actual);
   if (propio !== undefined) return contraste(propio.strokeOscuro, fondo) > contraste(propio.stroke, fondo) ? propio.strokeOscuro : undefined;
   if (contenedor === undefined) return undefined;
   return contraste(etiqueta ? tema.etiqueta : tema.trazo, fondo) < 3 ? contenedor.stroke : undefined;

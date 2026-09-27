@@ -2582,7 +2582,8 @@ body {
   }
 
   .archivo.sucio .archivo-estado::after {
-    content: ' ●';
+    /* The alternative text keeps the dot out of the accessibility tree: the words are already there. */
+    content: ' ●' / '';
     font-size: 10px;
   }
 }
