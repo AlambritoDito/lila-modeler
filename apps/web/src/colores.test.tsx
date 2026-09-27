@@ -12,7 +12,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { coloresDeBizagi, escribirColor, lista, type ElementoColoreable } from './colores.js';
+import { colorActual, COLORES, coloresDeBizagi, contraste, escribirColor, lista, trazoAlPintar, TrazoDelTema, type ElementoColoreable } from './colores.js';
 import { setLocale } from './i18n';
 import type { Modelador } from './Modeler.js';
 import { PanelPropiedades, type ElementoModdle, type Escritor } from './PropertiesPanel.js';
@@ -164,6 +164,60 @@ describe('Bizagi colours on a visible task (synthetic)', () => {
     expect(s1).toContain('color:background-color="#FFCC00"');
     expect(s1).not.toContain('color:color');
     expect(diDe(xml, 'T2')).not.toMatch(/bioc:|color:/);
+  });
+});
+
+describe('dark themes, at render time only (#489)', () => {
+  const tokens = (tema: string): { canvas: string; trazo: string; etiqueta: string } => {
+    const t = (JSON.parse(leer(`apps/web/src/theme/themes/${tema}.json`)) as { tokens: Record<string, string> }).tokens;
+    return { canvas: t['canvas.bg']!, trazo: t['diagram.stroke']!, etiqueta: t['diagram.label']! };
+  };
+  const oscuro = tokens('lila-dark');
+
+  it('a coloured flow on the Lila Dark canvas is drawn in a light tone of its hue (≥ 3:1); the XML keeps the palette', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    // A message flow sits on the canvas, outside both pools.
+    const flujo = m.elemento('MessageFlow_Entregado');
+    for (const c of COLORES) {
+      escribirColor(m.escritor, flujo, c.id);
+      const trazo = trazoAlPintar(flujo, oscuro);
+      expect(trazo, c.id).toBeDefined();
+      expect(contraste(trazo!, oscuro.canvas), c.id).toBeGreaterThanOrEqual(3);
+      expect(colorActual(flujo)).toBe(c.id);
+      expect(diDe(await m.exportar(), 'MessageFlow_Entregado')).toContain(`color:border-color="${c.stroke}"`);
+    }
+    // A light theme keeps the palette's own stroke.
+    expect(trazoAlPintar(flujo, tokens('lila-light'))).toBeUndefined();
+  });
+
+  it('inside a coloured pool, uncoloured flows and labels take the pool\'s stroke instead of the theme\'s light one', async () => {
+    const m = await abrir(leer('examples/pedido/model.bpmn'));
+    const pool = m.elemento('Participant_Restaurante');
+    escribirColor(m.escritor, pool, 'amarillo');
+    const flujo = { ...m.elemento('Flow_Aprobado'), parent: pool };
+    const etiqueta: ElementoColoreable = { id: 'Flow_Aprobado_label', type: 'label', businessObject: flujo.businessObject, di: flujo.di!, labelTarget: flujo, parent: pool };
+    expect(contraste(oscuro.trazo, '#FFF59D')).toBeLessThan(3);
+    for (const el of [flujo, etiqueta]) {
+      expect(trazoAlPintar(el, oscuro), el.id).toBe('#5F4B00');
+      expect(contraste(trazoAlPintar(el, oscuro)!, '#FFF59D')).toBeGreaterThanOrEqual(3);
+    }
+    // Outside any pool, or in an uncoloured one, the theme's colours stay.
+    expect(trazoAlPintar(m.elemento('Flow_Aprobado'), oscuro)).toBeUndefined();
+    expect(trazoAlPintar({ ...m.elemento('Flow_Aprobado'), parent: m.elemento('Participant_Cliente') }, oscuro)).toBeUndefined();
+  });
+
+  it('a pool that changes redraws the flows and labels inside it, since its fill is their background', () => {
+    const oyentes = new Map<string, (e: unknown) => void>();
+    const bus = { on: (eventos: string | string[], ...resto: unknown[]) => { for (const ev of [eventos].flat()) oyentes.set(ev, resto.at(-1) as (e: unknown) => void); } };
+    new TrazoDelTema(bus as never, {} as never);
+    const flujo = { type: 'bpmn:SequenceFlow', waypoints: [] };
+    const etiqueta = { type: 'label' };
+    const tarea = { type: 'bpmn:Task', children: [] };
+    const sub = { type: 'bpmn:SubProcess', children: [{ type: 'bpmn:SequenceFlow', waypoints: [] }] };
+    const pool = { type: 'bpmn:Participant', children: [flujo, etiqueta, tarea, sub] };
+    const evento = { elements: [pool, flujo] };
+    oyentes.get('elements.changed')!(evento);
+    expect(evento.elements).toEqual([pool, flujo, etiqueta, sub.children[0]]);
   });
 });
 

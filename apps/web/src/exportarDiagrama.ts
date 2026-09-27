@@ -7,8 +7,12 @@
  * background, a card that stays readable on any slide (a dark theme's cream lines would vanish on a
  * white one if it were transparent); PNG, PDF and print are «paper» — a white sheet
  * with the theme's three diagram colours turned into white fill and black lines and labels, so a
- * dark theme never prints a dark page. Colours an element carries of its own stay as they are.
+ * dark theme never prints a dark page. Colours an element carries of its own stay as they are,
+ * except the light tone a coloured flow is drawn with on a dark canvas (#489), which goes back to
+ * its palette stroke.
  */
+
+import { COLORES } from './colores';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -63,7 +67,9 @@ export function limpiarSvg(svg: string, opciones: { papel: boolean; colores: Col
   for (const nodo of [...raiz.querySelectorAll(CROMO)]) nodo.remove();
   if (opciones.papel) {
     const { fill, stroke, label } = opciones.colores;
-    const papel = new Map<string | null, string>([[canonico(stroke), '#000'], [canonico(fill), '#fff'], [canonico(label), '#000']]);
+    const papel = new Map<string | null, string>([[canonico(stroke), '#000'], [canonico(fill), '#fff'], [canonico(label), '#000'],
+      // A flow's light dark-theme tone (#489) is only for the dark canvas: on paper it is the palette's.
+      ...COLORES.map((c) => [canonico(c.strokeOscuro), c.stroke] as const)]);
     papel.delete(null);
     for (const el of [raiz, ...raiz.querySelectorAll('*')]) {
       for (const nombre of ['fill', 'stroke', 'style', 'color']) {
