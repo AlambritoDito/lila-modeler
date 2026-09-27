@@ -225,6 +225,9 @@ it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
   'el panel nombra el cuello principal %s',
   async (elementId, texto) => {
     mocks.worker.mockResolvedValue(conCuello(elementId));
+    // Since #431 Run waits for the 150 ms startup reparse; under load it fires after the click,
+    // so the run would still be pending when the panel is read. Same wait as «valida antes…».
+    await act(async () => { await new Promise((listo) => setTimeout(listo, 200)); });
     await click(T.app.ejecutar);
     expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(texto);
   },
