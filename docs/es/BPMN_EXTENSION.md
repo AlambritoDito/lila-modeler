@@ -78,6 +78,56 @@ Todas las referencias (`roleRef`, y los `ref` de `systemRef`/`documentRef`/`risk
 
 Patrón calcado de `zeebe:versionTag` (Camunda 8), citado como precedente en ADR-012.
 
+### Atributos extendidos (#509)
+
+Propiedades definidas por el usuario para cada tipo de elemento, como las de Bizagi Modeler («SLA»,
+«Sistema dueño», «Nivel de riesgo»…): el modelador **define** un atributo una vez para un tipo de
+elemento y lo **rellena** en cada elemento de ese tipo. Las dos mitades viven en el `.bpmn`, así que
+viajan con el proceso y el contenedor del proyecto no cambia.
+
+```xml
+<bpmn:process id="credito-solicitud" isExecutable="false">
+  <bpmn:extensionElements>
+    <lila:attributeDefinition id="Attr_k2m8p1q" name="SLA (h)" type="number" appliesTo="task" default="24"/>
+    <lila:attributeDefinition id="Attr_a91nc0x" name="Nivel de riesgo" type="list" appliesTo="task">
+      <lila:option value="Bajo"/>
+      <lila:option value="Alto"/>
+    </lila:attributeDefinition>
+  </bpmn:extensionElements>
+  <bpmn:task id="Task_7f3k2q1" name="Revisar solicitud">
+    <bpmn:extensionElements>
+      <lila:attributeValue ref="Attr_a91nc0x" value="Alto"/>
+    </bpmn:extensionElements>
+  </bpmn:task>
+</bpmn:process>
+```
+
+| Elemento | Atributos | Dónde |
+|---|---|---|
+| `lila:attributeDefinition` | `id` (NCName, `Attr_<sufijo>`), `name`, `type` (`text`\|`number`\|`list`\|`date`), `appliesTo` (`task`\|`gateway`\|`event`\|`subProcess`\|`lane`\|`process`), `default` opcional; una `list` lleva sus opciones como hijos `lila:option value="…"` | `extensionElements` del `bpmn:process`. En una colaboración, del proceso de un pool (el primero que ya las tenga; si no, el del primer pool): un proceso sobrevive a añadir o quitar pools, la colaboración no. Los lectores las toman de todo elemento raíz y del proceso de cada pool. |
+| `lila:attributeValue` | `ref` (el `id` de la definición), `value` | `extensionElements` del elemento que describe. |
+
+- `appliesTo` agrupa tipos BPMN: `task` es todo `*Task`; `gateway`, todo `*Gateway`; `event`, todo
+  `*Event`, eventos de borde incluidos; `subProcess` es `subProcess`, `transaction`,
+  `adHocSubProcess` y `callActivity`; `lane` es `lane` y `participant` (el pool); `process` es
+  `bpmn:process`. Flujos, datos y anotaciones de texto no llevan.
+- Los valores son texto en el XML y se validan, nunca se coaccionan (`validateAttributeValue` en
+  `packages/engine/src/bpmn/attributes.ts`): un `number` es un decimal simple con punto (`4.5`, no
+  `4,5` ni `1e3`); una `date` es un `AAAA-MM-DD` que existe; el valor de una `list` es una de sus
+  opciones. La cadena vacía significa «sin rellenar» y no se escribe.
+- Un elemento sin valor muestra el `default` de la definición, que no se copia al elemento.
+- Los valores apuntan a la definición por `id`, nunca por nombre, así que renombrar una definición
+  los conserva. Aun así el editor pregunta antes de renombrar, cambiar de tipo o borrar una
+  definición que ya tiene valores en algunos elementos (conservarlos o vaciarlos), y un valor cuya
+  definición ya no está (editado a mano, otra herramienta) se conserva: se enseña con su `ref` en el
+  panel y en el documento del proceso, nunca se pierde.
+- El documento del proceso (Word/HTML) pone cada atributo rellenado (el valor propio o, si no, el
+  de por defecto) como una línea con etiqueta bajo su elemento: el proceso y su pool bajo la
+  descripción, cada carril bajo su encabezado, cada tarea, compuerta, evento y subproceso en su
+  sección.
+- Un modelo sin atributos extendidos se escribe byte a byte como antes; uno con ellos se abre sin
+  avisos en una herramienta que no tiene el descriptor `lila`, y vuelve intacto (sección 8).
+
 ### Qué NO es v1
 
 Los parámetros de simulación (`processingTime`, `resources`, `interTriggerTimer`, etc.) **no** son parte de esta extensión — viven en `*.scenario.json`, separados del `.bpmn` (ADR-007, ADR-013; formato completo en `SCENARIO_FORMAT.md`). `lila:` documenta el proceso (RACI, sistemas, documentos, riesgos, controles, KPIs, versión); no lo parametriza para simular.
@@ -336,8 +386,8 @@ Verificado headless contra el par sobre el que está construido Camunda Desktop 
 18.28.0**, las versiones que instala este repositorio.
 
 Lo que viaja es `examples/pedido/model.bpmn` con un elemento de cada tipo v1 (sección 2) escrito por
-el propio escritor del motor —doce elementos `lila:` repartidos en tres elementos dueños, con
-repeticiones— y el round-trip corre dos veces: **con** `lila.moddle.json`, que es lo que hacen el
+el propio escritor del motor —dieciocho elementos `lila:` (los atributos extendidos incluidos) repartidos en tres elementos
+dueños, con repeticiones— y el round-trip corre dos veces: **con** `lila.moddle.json`, que es lo que hacen el
 editor y la CLI de Lila, y **sin** él, que es lo que tiene una herramienta ajena (un namespace sin
 declarar que bpmn-moddle conserva como contenido genérico). En los dos casos, y por las dos
 librerías, el guardado devuelve:

@@ -78,6 +78,54 @@ All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/
 
 A pattern copied from `zeebe:versionTag` (Camunda 8), cited as precedent in ADR-012.
 
+### Extended attributes (#509)
+
+User-defined properties per element type, as Bizagi Modeler has them ("SLA", "Owner system",
+"Risk level"…): the modeller **defines** an attribute once for an element type and **fills it in**
+on each element of that type. Both halves live in the `.bpmn`, so they travel with the process and
+the project container does not change.
+
+```xml
+<bpmn:process id="credito-solicitud" isExecutable="false">
+  <bpmn:extensionElements>
+    <lila:attributeDefinition id="Attr_k2m8p1q" name="SLA (h)" type="number" appliesTo="task" default="24"/>
+    <lila:attributeDefinition id="Attr_a91nc0x" name="Risk level" type="list" appliesTo="task">
+      <lila:option value="Low"/>
+      <lila:option value="High"/>
+    </lila:attributeDefinition>
+  </bpmn:extensionElements>
+  <bpmn:task id="Task_7f3k2q1" name="Revisar solicitud">
+    <bpmn:extensionElements>
+      <lila:attributeValue ref="Attr_a91nc0x" value="High"/>
+    </bpmn:extensionElements>
+  </bpmn:task>
+</bpmn:process>
+```
+
+| Element | Attributes | Where |
+|---|---|---|
+| `lila:attributeDefinition` | `id` (NCName, `Attr_<suffix>`), `name`, `type` (`text`\|`number`\|`list`\|`date`), `appliesTo` (`task`\|`gateway`\|`event`\|`subProcess`\|`lane`\|`process`), optional `default`; a `list` carries its options as `lila:option value="…"` children | `extensionElements` of the `bpmn:process`. In a collaboration, of the process of a pool (the first one that has them, else the first pool's): a process outlives adding or removing pools, the collaboration does not. Readers take them from every root element and every pool's process. |
+| `lila:attributeValue` | `ref` (the definition's `id`), `value` | `extensionElements` of the element it describes. |
+
+- `appliesTo` groups BPMN types: `task` is every `*Task`; `gateway` every `*Gateway`; `event` every
+  `*Event`, boundary events included; `subProcess` is `subProcess`, `transaction`,
+  `adHocSubProcess` and `callActivity`; `lane` is `lane` and `participant` (the pool); `process` is
+  `bpmn:process`. Flows, data and text annotations carry none.
+- Values are text in the XML and are validated, never coerced (`validateAttributeValue` in
+  `packages/engine/src/bpmn/attributes.ts`): a `number` is a plain decimal with a dot
+  (`4.5`, not `4,5` nor `1e3`); a `date` is a real `YYYY-MM-DD`; a `list` value is one of its
+  options. The empty string means "not filled in" and is not written.
+- An element without a value shows the definition's `default`, which is not copied onto the element.
+- Values point to the definition by `id`, never by name, so renaming a definition keeps them. The
+  editor still asks before renaming, retyping or deleting a definition that elements have values
+  for (keep or clear them), and a value whose definition is gone (edited by hand, another tool) is
+  kept, shown under its `ref` in the panel and in the process document, never dropped.
+- The process document (Word/HTML) lists every filled-in attribute (own value, else the default) as
+  a labelled line under its element: the process and its pool under the description, each lane
+  under its heading, each task, gateway, event and sub-process in its section.
+- A model without extended attributes is written byte for byte as before; one with them opens in a
+  tool without the `lila` descriptor with no warnings, and comes back intact (section 8).
+
 ### What is NOT v1
 
 Simulation parameters (`processingTime`, `resources`, `interTriggerTimer`, etc.) are **not** part of this extension — they live in `*.scenario.json`, separate from the `.bpmn` (ADR-007, ADR-013; full format in `SCENARIO_FORMAT.md`). `lila:` documents the process (RACI, systems, documents, risks, controls, KPIs, version); it does not parameterize it for simulation.
@@ -338,7 +386,7 @@ see `investigacion-2026-09-03/03-editor-bpmn.md`): **bpmn-moddle 10.2.0** and **
 the versions this repository installs.
 
 What travels is `examples/pedido/model.bpmn` with one element of every v1 type (section 2) written
-into it by the engine's own writer — twelve `lila:` elements over three owner elements, with
+into it by the engine's own writer — eighteen `lila:` elements (the extended attributes included) over three owner elements, with
 repetitions — and the round trip runs twice: **with** `lila.moddle.json`, which is what Lila's
 editor and CLI do, and **without** it, which is what a foreign tool has (an undeclared namespace
 that bpmn-moddle keeps as generic content). In both cases, and through both libraries, the save
