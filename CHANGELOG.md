@@ -7,7 +7,6 @@ All notable changes to Lila Modeler are documented here. The format follows
 
 Lote H: several processes in one project, attributes you define once per element type, charts next
 to the results tables, calendars that finish what #82 started, and a scenario import from Excel.
-No installer is attached to this version.
 
 ### Added
 
@@ -16,8 +15,9 @@ No installer is attached to this version.
   deleted from its own tab. Double-click a call activity whose target matches another process's id
   opens that process with a «Back to …» crumb; double-click a collapsed sub-process drills down in
   place. The file format grows a `processes` list (repository v2) only once a project has a second
-  process; a one-process project still saves byte for byte in the format the installed beta.14 app
-  already reads, so nothing on disk needs migrating.
+  process; a one-process project still saves in the version 1 layout the installed beta.14 app
+  already reads, so nothing on disk needs migrating. Beta.14 cannot open a project with several
+  processes: it reports that the model is missing (LILA-NO-MODEL) rather than a version error.
 - **Extended attributes per element type (#509, #513)**: define a text, number, list or date
   attribute once for a task, gateway, event, sub-process, lane, pool or the process itself, from
   Properties → «Define attributes…», then fill it in per element. Filled-in values (or the
