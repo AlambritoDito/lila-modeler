@@ -104,7 +104,7 @@ the project container does not change.
 
 | Element | Attributes | Where |
 |---|---|---|
-| `lila:attributeDefinition` | `id` (NCName, `Attr_<suffix>`), `name`, `type` (`text`\|`number`\|`list`\|`date`), `appliesTo` (`task`\|`gateway`\|`event`\|`subProcess`\|`lane`\|`process`), optional `default`; a `list` carries its options as `lila:option value="…"` children | `extensionElements` of the `bpmn:process`. In a collaboration, of the process of a pool (the first one that has them, else the first pool's): a process outlives adding or removing pools, the collaboration does not. Readers take them from every root element and every pool's process. |
+| `lila:attributeDefinition` | `id` (NCName, `Attr_<suffix>`), `name`, `type` (`text`\|`number`\|`list`\|`date`), `appliesTo` (`task`\|`gateway`\|`event`\|`subProcess`\|`lane`\|`process`), optional `default`; a `list` carries its options as `lila:option value="…"` children | `extensionElements` of the `bpmn:collaboration` when the diagram has one, else of its only `bpmn:process` (the example above). Readers also accept them on any root element (a pool's process, as early files wrote them) and take each `id` once, the canonical place first; the editor moves them to the canonical place on the next save of its dialog. |
 | `lila:attributeValue` | `ref` (the definition's `id`), `value` | `extensionElements` of the element it describes. |
 
 - `appliesTo` groups BPMN types: `task` is every `*Task`; `gateway` every `*Gateway`; `event` every
@@ -113,16 +113,25 @@ the project container does not change.
   `bpmn:process`. Flows, data and text annotations carry none.
 - Values are text in the XML and are validated, never coerced (`validateAttributeValue` in
   `packages/engine/src/bpmn/attributes.ts`): a `number` is a plain decimal with a dot
-  (`4.5`, not `4,5` nor `1e3`); a `date` is a real `YYYY-MM-DD`; a `list` value is one of its
-  options. The empty string means "not filled in" and is not written.
+  (`4.5` or `-2`, not `4,5`, `4.`, `+5`, `.5` nor `1e3`); a `date` is a real `YYYY-MM-DD` (years
+  below 100 included); a `list` value is one of its options. The empty string means "not filled
+  in" and is not written. The editor writes numbers and dates on blur or Enter, and only when they
+  fit, so a half-typed `24,5` never leaves `24` behind.
 - An element without a value shows the definition's `default`, which is not copied onto the element.
 - Values point to the definition by `id`, never by name, so renaming a definition keeps them. The
-  editor still asks before renaming, retyping or deleting a definition that elements have values
-  for (keep or clear them), and a value whose definition is gone (edited by hand, another tool) is
-  kept, shown under its `ref` in the panel and in the process document, never dropped.
+  editor still asks before renaming, retyping, removing options from or deleting a definition that
+  elements have values for, naming the removed options and offering to clear only the values that
+  no longer fit. A value whose definition is gone (edited by hand, another tool) is kept, shown
+  under its `ref` in the panel and in the process document, never dropped; several values of one
+  attribute on one element are all shown.
+- The definitions stay put when pools come and go: adding the first pool or deleting the last one
+  carries them to the new root, deleting a pool whose process still held them moves them to the
+  collaboration first, and pasting a pool never copies them (it would repeat every `id`). A task
+  inside a collapsed sub-process sees the same definitions as the rest of the diagram.
 - The process document (Word/HTML) lists every filled-in attribute (own value, else the default) as
   a labelled line under its element: the process and its pool under the description, each lane
-  under its heading, each task, gateway, event and sub-process in its section.
+  under its heading, each task, gateway, event and sub-process (call activities included, by their
+  BPMN type) in its section.
 - A model without extended attributes is written byte for byte as before; one with them opens in a
   tool without the `lila` descriptor with no warnings, and comes back intact (section 8).
 
@@ -386,8 +395,8 @@ see `investigacion-2026-09-03/03-editor-bpmn.md`): **bpmn-moddle 10.2.0** and **
 the versions this repository installs.
 
 What travels is `examples/pedido/model.bpmn` with one element of every v1 type (section 2) written
-into it by the engine's own writer — eighteen `lila:` elements (the extended attributes included) over three owner elements, with
-repetitions — and the round trip runs twice: **with** `lila.moddle.json`, which is what Lila's
+into it by the engine's own writer — eighteen `lila:` elements (the extended attributes included) spread over several owner elements,
+with repetitions — and the round trip runs twice: **with** `lila.moddle.json`, which is what Lila's
 editor and CLI do, and **without** it, which is what a foreign tool has (an undeclared namespace
 that bpmn-moddle keeps as generic content). In both cases, and through both libraries, the save
 gives back:

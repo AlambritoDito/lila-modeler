@@ -39,9 +39,9 @@ const PEDIDO = resolve(
  */
 export async function annotatedPedido(): Promise<string> {
   let xml = readFileSync(PEDIDO, 'utf8');
-  xml = await annotateElement(xml, 'Process_Restaurante', {
-    versionTag: '1.3.0',
-    // Extended attributes (#509): the definitions hang off the process, the values off the task.
+  xml = await annotateElement(xml, 'Process_Restaurante', { versionTag: '1.3.0' });
+  xml = await annotateElement(xml, 'Collaboration_Pedido', {
+    // Extended attributes (#509): the definitions hang off the collaboration, the values off the task.
     attributeDefinitions: [
       { id: 'Attr_sla', name: 'SLA (min)', type: 'number', appliesTo: 'task', default: '10' },
       { id: 'Attr_riesgo', name: 'Risk level', type: 'list', appliesTo: 'task', options: ['Low', 'High'] },

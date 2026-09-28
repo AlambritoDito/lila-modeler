@@ -42,7 +42,8 @@ export interface Annotations {
   versionTag?: string;
   /**
    * `lila:attributeDefinition` (#509): the extended attributes declared on this element — the
-   * `bpmn:process` (or, without one, the collaboration) that hosts them.
+   * `bpmn:collaboration` that hosts them, or the only `bpmn:process` of a diagram without one
+   * (older files may carry them on a pool's process; readers take them from any root element).
    */
   attributeDefinitions?: AttributeDefinition[];
   /** `lila:attributeValue` (#509): this element's extended attribute values, in file order. */
