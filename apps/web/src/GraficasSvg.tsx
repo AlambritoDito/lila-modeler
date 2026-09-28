@@ -292,7 +292,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
   const anchoY = Math.max(24, anchoTexto(formatNumber(eje.tope), 11) + 10);
   const x0 = PAD + anchoY;
   const anchoPlot = W - x0 - PAD;
-  const arriba = PAD + 20 + (sub === undefined ? 0 : 18) + 12;
+  const arriba = PAD + 20 + (sub === undefined ? 0 : 18) + 26;
   const alto = 160;
   const base = arriba + alto;
   const H = base + 6 + 16 + PAD;
@@ -327,7 +327,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
           </text>
         </g>
       ))}
-      <text x={PAD} y={arriba - 4} fill={paleta.tenue} fontSize={11}>
+      <text x={PAD} y={arriba - 14} fill={paleta.tenue} fontSize={11}>
         {S.graficas.ejeCasos}
       </text>
       {clases.map((c, i) => {
@@ -350,7 +350,8 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
       <line x1={x0} x2={W - PAD} y1={base} y2={base} stroke={paleta.tenue} strokeWidth={1} />
       {bordes.map((b, i) =>
         i % cadaCuantas === 0 ? (
-          <text key={i} x={x0 + i * anchoClase} y={base + 16} fill={paleta.tenue} fontSize={11} textAnchor="middle">
+          // The last edge ends at the plot's right edge instead of running past it.
+          <text key={i} x={x0 + i * anchoClase} y={base + 16} fill={paleta.tenue} fontSize={11} textAnchor={i === bordes.length - 1 ? 'end' : 'middle'}>
             {formatNumber(b)}
           </text>
         ) : null,

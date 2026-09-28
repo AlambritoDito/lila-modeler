@@ -26,7 +26,7 @@ import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
-import { graficasDelDocumento } from './GraficasResultados';
+import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
@@ -36,7 +36,6 @@ import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
 import { buildReplay, LOG_SAMPLE_LIMIT } from './replay/replayModel';
 import { Replay } from './replay/Replay';
-import type { EventLogRow } from '@lila-modeler/engine';
 import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
@@ -619,7 +618,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * // which is what `S.animacion.sinLog` says. Upgrade path: an optional `log.jsonl` entry in
    * // the container, gated by a setting.
    */
-  const logs = useRef(new Map<string, { rows: readonly EventLogRow[]; truncated: boolean }>());
+  const logs = useRef(new Map<string, LogDeCorrida>());
 
   const currentToken = changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
   const dirty = currentToken !== savedToken;
@@ -1568,7 +1567,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
       const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
-      const { result: rawResult, logSample } = await runInWorker(ir, scenario, {
+      const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
         logSampleLimit: LOG_SAMPLE_LIMIT,
         signal: control.signal,
@@ -1580,7 +1579,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const result = { ...rawResult, warnings: [...new Set([...warnings, ...rawResult.warnings])] };
       setIr(ir);
       const runId = crypto.randomUUID();
-      logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT });
+      logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT, ciclos: cycleTimes });
       // Only the last ten runs keep their log: ten thousand rows each is too much to hold for a
       // whole session of runs nobody will animate again (insertion order, so the oldest go first).
       for (const viejo of [...logs.current.keys()].slice(0, -10)) logs.current.delete(viejo);

@@ -35,6 +35,8 @@ import { strings, useStrings } from './i18n';
 export interface LogDeCorrida {
   rows: readonly EventLogRow[];
   truncated: boolean;
+  /** Per-case cycle times the worker took from every row of replication 0 (`casosDelLog`). */
+  ciclos?: readonly number[] | undefined;
 }
 
 const unaSerie = (titulo: string, serie: string, puntos: readonly Punto[], texto: (v: number) => string, tope?: number): GraficaBarrasProps => ({
@@ -82,8 +84,9 @@ export function graficaPercentiles(result: RunResult, unit: BaseTimeUnit): Grafi
 }
 
 /**
- * Per-case cycle time from the event log, or why there is none. Only over a complete log: a
- * truncated sample may have cut a case short (`ciclosPorCaso`).
+ * Per-case cycle time from the event log, or why there is none: the worker's per-case times when
+ * it sent them, else the rows — only when complete, since a truncated sample may have cut a case
+ * short (`ciclosPorCaso`).
  */
 export function graficaHistograma(
   log: LogDeCorrida | undefined,
@@ -92,8 +95,8 @@ export function graficaHistograma(
 ): { props: HistogramaProps } | { aviso: string } {
   const S = strings();
   if (log === undefined) return { aviso: S.graficas.histogramaSinLog };
-  if (log.truncated) return { aviso: S.graficas.histogramaTruncado };
-  const ciclos = ciclosPorCaso(log.rows, scenario.run.warmup ?? 0);
+  if (log.ciclos === undefined && log.truncated) return { aviso: S.graficas.histogramaTruncado };
+  const ciclos = log.ciclos ?? ciclosPorCaso(log.rows, scenario.run.warmup ?? 0);
   if (ciclos.length === 0) return { aviso: S.graficas.histogramaSinCasos };
   return {
     props: {

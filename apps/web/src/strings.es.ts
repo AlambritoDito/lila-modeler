@@ -1179,7 +1179,7 @@ export const es: Strings = {
         ? `${casos} casos terminados de la réplica 1 de ${replicas}, del event log`
         : `${casos} casos terminados, del event log`,
     histogramaSinLog: 'El histograma del tiempo de ciclo necesita el event log de la corrida, que solo vive en memoria: vuelve a correr el escenario para verlo.',
-    histogramaTruncado: 'El event log de esta corrida es más grande que la muestra que se guarda en memoria, así que el histograma del tiempo de ciclo no se dibuja. Los percentiles de arriba cubren todos los casos.',
+    histogramaTruncado: 'El event log de esta corrida es más grande que la muestra que se guarda en memoria, así que el histograma del tiempo de ciclo no se dibuja. La gráfica de percentiles cubre todos los casos.',
     histogramaSinCasos: 'Ningún caso terminado en el event log: no hay tiempo de ciclo que repartir.',
     clase: (desde: string, hasta: string): string => `${desde} a ${hasta}`,
     casos: (n: number): string => (n === 1 ? '1 caso' : `${n} casos`),

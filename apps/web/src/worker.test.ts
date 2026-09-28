@@ -110,6 +110,7 @@ function smallPedidoScenario(base: ResolvedScenario, replications = 3): SimScena
 interface WorkerRun {
   result: RunResult;
   logSample: EventLogRow[];
+  cycleTimes: number[];
   progress: SimulationProgress[];
 }
 
@@ -124,7 +125,7 @@ function runWorker(
     handleMessage((message: WorkerResponse) => {
       if (message.type === 'progress') progress.push(message.progress);
       else if (message.type === 'done')
-        resolvePromise({ result: message.result, logSample: message.logSample, progress });
+        resolvePromise({ result: message.result, logSample: message.logSample, cycleTimes: message.cycleTimes, progress });
       else reject(new Error(message.message));
     }, { type: 'run', ir, scenario, ...overrides });
   });
@@ -224,6 +225,20 @@ describe('worker: muestreo del log (solo primera replicación)', () => {
     expect(capped.logSample).toHaveLength(5);
     expect(capped.logSample.every((row) => row.replication === 0)).toBe(true);
     expect(none.logSample).toHaveLength(0);
+  });
+});
+
+describe('worker: cycle time per case (#460)', () => {
+  it('covers every completed case of replication 0, even past the log sample', async () => {
+    const scenario = smallPedidoScenario(loadPedidoScenario(42), 1);
+    const ir = await loadPedidoIr();
+
+    const { result, cycleTimes } = await runWorker(ir, scenario, { logSampleLimit: 5 });
+
+    expect(cycleTimes).toHaveLength(result.process.completed);
+    expect(Math.min(...cycleTimes)).toBeCloseTo(result.process.cycleTime.min, 6);
+    expect(Math.max(...cycleTimes)).toBeCloseTo(result.process.cycleTime.max, 6);
+    expect(cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length).toBeCloseTo(result.process.cycleTime.mean, 6);
   });
 });
 

@@ -1235,7 +1235,7 @@ export const en = {
         ? `${casos} completed cases of replication 1 of ${replicas}, from the event log`
         : `${casos} completed cases, from the event log`,
     histogramaSinLog: 'The cycle time histogram needs the run’s event log, which is kept in memory only: run the scenario again to see it.',
-    histogramaTruncado: 'This run’s event log is larger than the sample kept in memory, so the cycle time histogram is not drawn. The percentiles above cover every case.',
+    histogramaTruncado: 'This run’s event log is larger than the sample kept in memory, so the cycle time histogram is not drawn. The percentile chart covers every case.',
     histogramaSinCasos: 'No completed case in the event log: there is no cycle time to distribute.',
     clase: (desde: string, hasta: string): string => `${desde} to ${hasta}`,
     casos: (n: number): string => (n === 1 ? '1 case' : `${n} cases`),

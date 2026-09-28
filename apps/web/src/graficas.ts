@@ -66,21 +66,33 @@ export function percentilesDelProceso(result: RunResult): { ciclo: number[]; esp
  * case's life). A case with an `inFlight` row had not finished at the stop, and a case born before
  * `warmup` is outside the measured cohort (R-ARR-7): neither enters, as in `process.cycleTime`.
  *
- * ponytail: only valid over a complete log — a truncated sample may cut a case's last rows and
- * make it look shorter, so the view does not draw the histogram then. Upgrade path: per-case cycle
- * times from the worker.
+ * Incremental, so the worker can feed it every row of replication 0 as it is emitted and keep one
+ * small record per case instead of the rows: the histogram does not depend on the log sample the
+ * shell keeps for the replay, which a long run truncates.
+ */
+export function casosDelLog(): { agregar: (row: EventLogRow) => void; ciclos: (warmup?: number) => number[] } {
+  const casos = new Map<string, { desde: number; hasta: number; abierto: boolean }>();
+  return {
+    agregar(row) {
+      const clave = `${row.replication}\u0000${row.caseId}`;
+      const caso = casos.get(clave) ?? { desde: Infinity, hasta: -Infinity, abierto: false };
+      caso.desde = Math.min(caso.desde, row.enabledAt);
+      caso.hasta = Math.max(caso.hasta, row.observedUntil);
+      caso.abierto ||= row.status === 'inFlight';
+      casos.set(clave, caso);
+    },
+    ciclos: (warmup = 0) => [...casos.values()].filter((c) => !c.abierto && c.desde >= warmup).map((c) => c.hasta - c.desde),
+  };
+}
+
+/**
+ * `casosDelLog` over a list of rows. Only valid over a complete log: a truncated sample may have
+ * cut a case's last rows and make it look shorter.
  */
 export function ciclosPorCaso(rows: readonly EventLogRow[], warmup = 0): number[] {
-  const casos = new Map<string, { desde: number; hasta: number; abierto: boolean }>();
-  for (const row of rows) {
-    const clave = `${row.replication}\u0000${row.caseId}`;
-    const caso = casos.get(clave) ?? { desde: Infinity, hasta: -Infinity, abierto: false };
-    caso.desde = Math.min(caso.desde, row.enabledAt);
-    caso.hasta = Math.max(caso.hasta, row.observedUntil);
-    caso.abierto ||= row.status === 'inFlight';
-    casos.set(clave, caso);
-  }
-  return [...casos.values()].filter((c) => !c.abierto && c.desde >= warmup).map((c) => c.hasta - c.desde);
+  const casos = casosDelLog();
+  for (const row of rows) casos.agregar(row);
+  return casos.ciclos(warmup);
 }
 
 /** The smallest 1, 2 or 5 × 10ⁿ that is at least `x` (> 0). */

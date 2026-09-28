@@ -24,7 +24,7 @@ import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 import { graficasDelDocumento } from './GraficasResultados';
 import { ResultsView, tabLabels } from './ResultsView';
 import { setLocale, strings } from './i18n';
-import { SERIES_CLARO } from './graficas';
+import { ciclosPorCaso, SERIES_CLARO } from './graficas';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 setLocale('en');
@@ -171,6 +171,14 @@ describe('(b) nothing to draw is said, not drawn as zero', () => {
     await montar({ log: { rows: [], truncated: false } });
     await pestana('process');
     expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.histogramaSinCasos);
+  });
+
+  test('with the worker’s per-case times, a truncated sample still gets its histogram', async () => {
+    const ciclos = ciclosPorCaso(result.log!, scenario.run.warmup ?? 0);
+    await montar({ log: { rows: result.log!.slice(0, 10), truncated: true, ciclos } });
+    await pestana('process');
+    const clases = [...container.querySelectorAll('[data-grafica="histograma"] g.marca')];
+    expect(clases.reduce((suma, c) => suma + Number(c.getAttribute('data-valor')), 0)).toBe(result.process.completed);
   });
 
   test('a task never reached is a real zero: a bar of length 0 labelled 0, not a missing one', async () => {
