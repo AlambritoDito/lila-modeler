@@ -23,6 +23,7 @@ import BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import { Ids } from 'ids';
 import ModdleCopy from 'bpmn-js/lib/features/copy-paste/ModdleCopy';
 import { GuardiaAtributos } from './atributos';
+import { confirmarEdicionEnCurso } from './edicionEnCurso';
 import { LilaLote } from './lote';
 import type { Modelador } from './Modeler';
 import { PanelPropiedades, type ElementoLienzo, type ElementoModdle, type Escritor } from './PropertiesPanel';
@@ -534,5 +535,52 @@ describe('where the definitions live (QA 1, 2 and 5 of #513)', () => {
     raices.pop();
     b.deshacer();
     expect(await b.exportar()).toBe(antes);
+  });
+});
+
+describe('a number still being typed is not lost (second QA pass of #513)', () => {
+  /** Defines a number attribute «SLA» for tasks and returns the panel. */
+  async function conSla() {
+    const b = await banco(XML);
+    const panel = montar(b.modelador);
+    b.clic('Task_1');
+    pulsar(boton(panel, T.definir));
+    const d = dialogo()!;
+    pulsar(boton(d, T.anadir));
+    escribir(d.querySelector(`[aria-label="${T.nombre(1)}"]`), 'SLA');
+    elegir(d.querySelector(`[aria-label="${T.tipo(1)}"]`), 'number');
+    pulsar(boton(d, T.guardar));
+    const campo = panel.querySelector('input[aria-label="SLA"]') as HTMLInputElement;
+    act(() => campo.focus());
+    return { b, panel, campo };
+  }
+
+  it('12 typed with no blur is in the XML that saving writes', async () => {
+    const { b, campo } = await conSla();
+    escribir(campo, '12');
+    expect(document.activeElement).toBe(campo);
+    // What ⌘S, the exports, Run and the close guard do before reading the model.
+    act(() => confirmarEdicionEnCurso());
+    expect(await b.exportar()).toContain('<lila:attributeValue ref="');
+    expect(await b.exportar()).toContain('value="12"');
+  });
+
+  it('99 pending when the selection changes by code (no blur) is written to the element it was typed on', async () => {
+    const { b, campo } = await conSla();
+    escribir(campo, '99');
+    b.clic('Task_2');
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Task_1?.attributes?.map((a) => a.value)).toEqual(['99']);
+    expect(notas.Task_2).toBeUndefined();
+  });
+
+  it('an invalid draft is dropped when the field goes away: the model keeps its last valid value', async () => {
+    const { b, campo } = await conSla();
+    escribir(campo, '7');
+    act(() => confirmarEdicionEnCurso());
+    act(() => campo.focus());
+    escribir(campo, '7,5');
+    b.clic('Task_2');
+    expect((await readAnnotations(await b.exportar())).Task_1?.attributes?.map((a) => a.value)).toEqual(['7']);
   });
 });

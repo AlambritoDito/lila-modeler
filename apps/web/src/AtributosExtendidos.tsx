@@ -136,8 +136,10 @@ function Grupo({ elemento, categoria, titulo, raiz, escritor, refrescar }: Props
 
 /**
  * One attribute's field. Text and lists write as they change; numbers and dates keep a draft and
- * write it on blur or Enter, and only if it fits — «24,5» never leaves «24» behind on the way.
- * An invalid draft stays on screen with the explanation, and the model keeps the last valid value.
+ * write it on blur, Enter or when the field goes away, and only if it fits — «24,5» never leaves
+ * «24» behind on the way. An invalid draft stays on screen with the explanation, and the model
+ * keeps the last valid value. Save, export and Run blur the focused field first
+ * (`edicionEnCurso.ts`).
  */
 function CampoAtributo({ def, elemento, escritor, refrescar }: {
   def: AttributeDefinition;
@@ -166,6 +168,17 @@ function CampoAtributo({ def, elemento, escritor, refrescar }: {
   const confirmar = (): void => {
     if (borrador !== null && validateAttributeValue(def, borrador) === null) escribir(borrador);
   };
+  // A field that goes away without a blur — the selection changed by keyboard or by code, the tab
+  // switched — still commits a draft that fits (second QA pass of #513). One that does not fit is
+  // dropped, as on blur: the model keeps its last valid value.
+  const pendiente = useRef<() => void>(() => undefined);
+  pendiente.current = () => {
+    if (borrador !== null && borrador !== guardado && validateAttributeValue(def, borrador) === null) {
+      escribirValor(escritor, elemento, def.id, borrador);
+      refrescar();
+    }
+  };
+  useEffect(() => () => pendiente.current(), []);
   const cambiar = (valor: string): void => {
     if (!alConfirmar && validateAttributeValue(def, valor) === null) escribir(valor);
     else setBorrador(valor);

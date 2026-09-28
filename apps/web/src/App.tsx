@@ -72,6 +72,7 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 import './theme/montana.css';
+import { confirmarEdicionEnCurso } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
@@ -753,6 +754,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** `asFolder` solo cuenta con `saveAs`: elige carpeta de proyecto en vez de `.lila` (ADR-027). */
   async function saveWithOutcome(saveAs = false, asFolder = false): Promise<SaveOutcome> {
     if (adapter === null || ioLock.current) return 'cancelled';
+    // A value still being typed goes into the file too, on ⌘S and on the close guard (#509).
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
     // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
@@ -1721,8 +1724,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     // A label being typed (bpmn-js opens the editor on every append) is committed first, so Run
     // waits for that edit too instead of losing it and its own results to it (QA S1 of #507).
-    const edicion = modelador.servicios.directEditing;
-    if (edicion.isActive?.()) edicion.complete?.();
+    // The same for a form field still being typed in (#509): `confirmarEdicionEnCurso`.
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();
@@ -1807,6 +1810,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function exportarDocumento(tipo: 'docx' | 'html'): Promise<void> {
     if (modelador === null) return;
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // #498: the document is of the process on the canvas, and its cover says which one.
     const titulo = procesos.length > 1 ? procesos[activo]?.name ?? projectName : projectName;
     const nombre = nombreArchivo(titulo);
@@ -1845,6 +1849,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
     if (!await aceptaPerdida('exportar')) return;
     try { await store.putProcess(procesoId, await modelador.exportar({ aceptarPerdida: true })); }
