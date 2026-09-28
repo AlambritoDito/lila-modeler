@@ -678,20 +678,25 @@ export function planScenarioImport(
   }
 
   // The rows are valid one by one; this is what they make together (nit 5 of the QA of #514).
+  // Only a new error that a row of the file caused blocks: one the scenario already had (however
+  // the file reorders a list) is not the file's doing, and when the scenario did not even pass the
+  // schema its deeper rules were never checked, so whatever they find now is shown, not blocking.
   if (changes.length > 0) {
-    for (const problem of newErrors(scenario, next, ir, locale)) {
+    const before = errorsOf(scenario, ir, locale);
+    const after = errorsOf(next, ir, locale);
+    const known = new Set(before.list.map((problem) => problem.key));
+    for (const problem of after.list) {
+      if (known.has(problem.key)) continue;
       const change = changeFor(problem.path, changes);
-      issues.push(
-        change === undefined
-          ? { kind: 'lint', sheet: '', row: 0, message: problem.message, text: problem.message }
-          : {
-              kind: 'lint',
-              sheet: change.sheet,
-              row: change.row,
-              message: problem.message,
-              text: `${M.where(change.sheet, change.row, undefined)}: ${problem.message}`,
-            },
-      );
+      const blocking = change !== undefined && !(before.schemaFailed && problem.stage === 'rules');
+      const readable = `${subjectOf(ir, problem.path)}: ${problem.message}`;
+      issues.push({
+        kind: blocking ? 'lint' : 'warning',
+        sheet: change?.sheet ?? '',
+        row: change?.row ?? 0,
+        message: readable,
+        text: change === undefined ? readable : `${M.where(change.sheet, change.row, undefined)}: ${readable}`,
+      });
     }
   }
 
@@ -702,23 +707,59 @@ export function planScenarioImport(
   };
 }
 
-/** Errors of a raw scenario, keyed so the same defect before and after compares equal. */
-function errorsOf(raw: Record<string, unknown>, ir: ProcessIR, locale: Locale): { key: string; path: string; message: string }[] {
-  const parsed = parseScenario(raw, { locale });
-  if (!parsed.success) {
-    return parsed.error.issues.map((issue) => {
-      const path = issue.path.map(String).join('.');
-      return { key: `schema|${path}|${issue.message}`, path, message: `${path}: ${issue.message}` };
-    });
-  }
-  return validateScenario(parsed.data, ir, { locale })
-    .filter((problem) => problem.severity === 'error')
-    .map((problem) => ({ key: `${problem.code}|${problem.path}`, path: problem.path, message: problem.message }));
+interface KeyedError {
+  /** Code and path without array indexes: the same defect after sorting a list is the same key. */
+  key: string;
+  path: string;
+  /** The message without the technical path in front, which the report replaces by a name. */
+  message: string;
+  stage: 'schema' | 'rules';
 }
 
-function newErrors(before: Record<string, unknown>, after: Record<string, unknown>, ir: ProcessIR, locale: Locale) {
-  const known = new Set(errorsOf(before, ir, locale).map((problem) => problem.key));
-  return errorsOf(after, ir, locale).filter((problem) => !known.has(problem.key));
+/** `elements.T.resources[1].quantity` → `elements.T.resources.quantity`. */
+function withoutIndexes(path: string): string {
+  return path.replace(/\[\d+\]/g, '').replace(/\.\d+(?=\.|$)/g, '');
+}
+
+/** `elements.T.probability: must be…` → `must be…`: the report says the element by its name. */
+function withoutPath(message: string, path: string): string {
+  for (const prefix of [path, withoutIndexes(path)]) {
+    if (message.startsWith(`${prefix}: `)) return message.slice(prefix.length + 2);
+  }
+  return message;
+}
+
+/** Errors of a raw scenario: the schema's when it does not pass, `validateScenario`'s otherwise. */
+function errorsOf(raw: Record<string, unknown>, ir: ProcessIR, locale: Locale): { schemaFailed: boolean; list: KeyedError[] } {
+  const parsed = parseScenario(raw, { locale });
+  if (!parsed.success) {
+    return {
+      schemaFailed: true,
+      list: parsed.error.issues.map((issue) => {
+        const path = issue.path.map(String).join('.');
+        return { key: `schema|${withoutIndexes(path)}|${issue.code}`, path, message: issue.message, stage: 'schema' as const };
+      }),
+    };
+  }
+  return {
+    schemaFailed: false,
+    list: validateScenario(parsed.data, ir, { locale })
+      .filter((problem) => problem.severity === 'error')
+      .map((problem) => ({
+        key: `${problem.code}|${withoutIndexes(problem.path)}`,
+        path: problem.path,
+        message: withoutPath(problem.message, problem.path),
+        stage: 'rules' as const,
+      })),
+  };
+}
+
+/** What a problem path is about, by name: `Prepare food (Task_Preparar) · probability`. */
+function subjectOf(ir: ProcessIR, path: string): string {
+  const [section, id, ...rest] = withoutIndexes(path).split('.');
+  if (id === undefined) return path;
+  const who = section === 'elements' ? elementLabel(ir, id) : id;
+  return rest.length === 0 ? who : `${who} · ${rest.join('.')}`;
 }
 
 /** The change a problem path points at: the one whose path is its longest prefix, or below it. */

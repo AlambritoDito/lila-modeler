@@ -463,7 +463,41 @@ describe('(e) the imported scenario passes validateScenario', () => {
       ['Resources', 2],
       ['Elements', 2],
     ]);
-    expect(lint[0]!.text).toMatch(/^Resources, row 2: /);
+    expect(lint[0]!.text).toMatch(/^Resources, row 2: cajero · capacity: /);
+    // Without the technical path: the element by its name, the field after it.
+    expect(lint[1]!.text).toMatch(/^Elements, row 2: Preparar \(Task_Preparar\) · probability: /);
+    expect(lint[1]!.text).not.toContain('elements.');
+  });
+
+  test('an error the scenario already had does not block, even when the file reorders the list', () => {
+    const scenario = asIs();
+    const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
+    elements['Task_Preparar']!['resources'] = [
+      { ref: 'cocinero', quantity: 9 },
+      { ref: 'horno', quantity: 1 },
+    ];
+    expect(errorsOf(scenario).length).toBeGreaterThan(0);
+    const plan = planScenarioImport(
+      [
+        ...csv('Assignments.csv', 'elementId,resourceId,quantity\nTask_Preparar,horno,1\nTask_Preparar,cocinero,9\n'),
+        ...csv('Elements.csv', 'id,fixedCost\nTask_Revisar,3\n'),
+      ],
+      scenario,
+      pedidoIr(),
+    );
+    expect(plan.changes.map((change) => change.path.join('.'))).toEqual(['elements.Task_Revisar.fixedCost', 'elements.Task_Preparar.resources']);
+    expect(plan.issues).toEqual([]);
+  });
+
+  test('when the scenario did not pass the schema, the rules found after fixing it are shown, not blocking', () => {
+    const scenario = asIs();
+    const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
+    elements['Task_Revisar']!['processingTime'] = { type: 'normal', mean: 60 }; // no sd: schema error
+    elements['Task_Preparar']!['probability'] = 0.5; // a rule error the schema error hid
+    const plan = planScenarioImport(csv('Elements.csv', 'id,distribution,unit,mean,sd\nTask_Revisar,normal,s,60,10\n'), scenario, pedidoIr());
+    expect(plan.changes).toHaveLength(1);
+    expect(plan.issues.map((issue) => issue.kind)).toEqual(['warning']);
+    expect(plan.issues[0]!.text).toMatch(/^Preparar \(Task_Preparar\) · probability: /);
   });
 
   test('a workbook that touches every table', () => {
