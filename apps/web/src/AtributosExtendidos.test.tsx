@@ -19,6 +19,10 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { readAnnotations } from '../../../packages/engine/src/bpmn/annotate.js';
 import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { type: 'json' };
+import BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
+import { Ids } from 'ids';
+import ModdleCopy from 'bpmn-js/lib/features/copy-paste/ModdleCopy';
+import { GuardiaAtributos } from './atributos';
 import { LilaLote } from './lote';
 import type { Modelador } from './Modeler';
 import { PanelPropiedades, type ElementoLienzo, type ElementoModdle, type Escritor } from './PropertiesPanel';
@@ -366,5 +370,169 @@ describe('extended attributes in the properties panel (#509)', () => {
     expect(reescrito).toContain('<lila:attributeValue ref="');
     expect((await readAnnotations(reescrito)).Task_1?.attributes?.[0]?.value).toBe('High');
     container.remove();
+  });
+});
+
+const LILA_NS = 'xmlns:lila="https://lila-modeler.org/schema/bpmn/1"';
+const DEF_SLA = '<lila:attributeDefinition id="Attr_sla" name="SLA" type="text" appliesTo="task" />';
+
+describe('where the definitions live (QA 1, 2 and 5 of #513)', () => {
+  it('inside a drilled-down sub-process a task sees and edits the top-level attributes; new ones go to the process', async () => {
+    const xml = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" ${LILA_NS} id="D" targetNamespace="urn:t">
+      <bpmn:process id="Proc_1"><bpmn:extensionElements>${DEF_SLA}</bpmn:extensionElements>
+        <bpmn:subProcess id="Sub_1"><bpmn:task id="Task_In" name="Dentro" /></bpmn:subProcess>
+      </bpmn:process></bpmn:definitions>`;
+    // The canvas root after a drill-down is the collapsed sub-process itself.
+    const b = await banco(xml, 'Sub_1');
+    const panel = montar(b.modelador);
+    b.clic('Task_In');
+    escribir(panel.querySelector('input[aria-label="SLA"]'), '4 h');
+
+    pulsar(boton(panel, T.definir));
+    const d = dialogo()!;
+    expect(d.querySelector<HTMLInputElement>(`[aria-label="${T.nombre(1)}"]`)?.value).toBe('SLA');
+    pulsar(boton(d, T.anadir));
+    escribir(d.querySelector(`[aria-label="${T.nombre(2)}"]`), 'Owner');
+    pulsar(boton(d, T.guardar));
+
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Task_In?.attributes).toEqual([{ ref: 'Attr_sla', value: '4 h' }]);
+    expect(notas.Proc_1?.attributeDefinitions?.map((a) => a.name)).toEqual(['SLA', 'Owner']);
+    expect(notas.Sub_1).toBeUndefined();
+  });
+
+  const TRES_POOLS = (enProcA: string, enProcB = '') => `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" ${LILA_NS} id="D" targetNamespace="urn:t">
+    <bpmn:collaboration id="Collab">
+      <bpmn:participant id="P_A" processRef="Proc_A" /><bpmn:participant id="P_B" processRef="Proc_B" /><bpmn:participant id="P_C" processRef="Proc_C" />
+    </bpmn:collaboration>
+    <bpmn:process id="Proc_A">${enProcA === '' ? '' : `<bpmn:extensionElements>${enProcA}</bpmn:extensionElements>`}<bpmn:task id="Task_A" /></bpmn:process>
+    <bpmn:process id="Proc_B">${enProcB === '' ? '' : `<bpmn:extensionElements>${enProcB}</bpmn:extensionElements>`}<bpmn:task id="Task_B"><bpmn:extensionElements><lila:attributeValue ref="Attr_sla" value="48" /></bpmn:extensionElements></bpmn:task></bpmn:process>
+    <bpmn:process id="Proc_C"><bpmn:task id="Task_C" /></bpmn:process>
+  </bpmn:definitions>`;
+
+  it('with three pools, new definitions go to the collaboration, and one written on a pool process moves there on save', async () => {
+    const b = await banco(TRES_POOLS(DEF_SLA), 'Collab');
+    const panel = montar(b.modelador);
+    b.clic('Task_B');
+    expect((panel.querySelector('input[aria-label="SLA"]') as HTMLInputElement).value).toBe('48');
+    // Nothing edited, but a definition is out of place: saving tidies it up.
+    pulsar(boton(panel, T.definir));
+    pulsar(boton(dialogo()!, T.guardar));
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Collab?.attributeDefinitions?.map((a) => a.id)).toEqual(['Attr_sla']);
+    expect(notas.Proc_A).toBeUndefined();
+    expect(notas.Task_B?.attributes).toEqual([{ ref: 'Attr_sla', value: '48' }]);
+  });
+
+  it('a definition repeated on two pool processes shows once, with a notice, and saving keeps one', async () => {
+    const b = await banco(TRES_POOLS(DEF_SLA, DEF_SLA.replace('name="SLA"', 'name="SLA copy"')), 'Collab');
+    const panel = montar(b.modelador);
+    b.clic('Task_B');
+    expect(panel.querySelectorAll('input[aria-label="SLA"]')).toHaveLength(1);
+    expect(panel.querySelector('input[aria-label="SLA copy"]')).toBeNull();
+    expect(panel.textContent).toContain(T.repetidas(1));
+    pulsar(boton(panel, T.definir));
+    pulsar(boton(dialogo()!, T.guardar));
+    expect((await b.exportar()).match(/<lila:attributeDefinition/g)).toHaveLength(1);
+  });
+
+  /** A `shape.delete` that does to the moddle what bpmn-js does when a pool goes (`BpmnUpdater`). */
+  function borrarPool(b: Awaited<ReturnType<typeof banco>>): (id: string) => void {
+    new GuardiaAtributos(b.eventBus as never, b.escritor.modeling, b.escritor.bpmnFactory);
+    const raices = b.definitions.rootElements!;
+    const collab = b.figura('Collab');
+    b.commandStack.register('shape.delete', {
+      execute: (ctx: { shape: ElementoLienzo; antes?: [number, number] }) => {
+        const bo = ctx.shape.businessObject as unknown as ModdleElement;
+        const participantes = (collab.businessObject as unknown as ModdleElement).participants!;
+        ctx.antes = [participantes.indexOf(bo), raices.indexOf(bo.processRef!)];
+        participantes.splice(ctx.antes[0], 1);
+        raices.splice(ctx.antes[1], 1);
+        return [];
+      },
+      revert: (ctx: { shape: ElementoLienzo; antes: [number, number] }) => {
+        const bo = ctx.shape.businessObject as unknown as ModdleElement;
+        raices.splice(ctx.antes[1], 0, bo.processRef!);
+        (collab.businessObject as unknown as ModdleElement).participants!.splice(ctx.antes[0], 0, bo);
+        return [];
+      },
+    } as never);
+    return (id) => act(() => b.commandStack.execute('shape.delete', { shape: { ...b.figura(id), parent: collab } }));
+  }
+
+  it('deleting the pool whose process held the definitions keeps them, in the collaboration, and ⌘Z undoes it whole', async () => {
+    const b = await banco(TRES_POOLS(DEF_SLA), 'Collab');
+    const antes = await b.exportar();
+    borrarPool(b)('P_A');
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Collab?.attributeDefinitions?.map((a) => a.id)).toEqual(['Attr_sla']);
+    expect(notas.Task_A).toBeUndefined();
+    const panel = montar(b.modelador);
+    b.clic('Task_B');
+    expect((panel.querySelector('input[aria-label="SLA"]') as HTMLInputElement).value).toBe('48');
+    b.deshacer();
+    expect(await b.exportar()).toBe(antes);
+  });
+
+  it('deleting any pool of three leaves the collaboration\'s definitions alone', async () => {
+    const b = await banco(TRES_POOLS(''), 'Collab');
+    const panel = montar(b.modelador);
+    b.clic('Task_C');
+    pulsar(boton(panel, T.definir));
+    pulsar(boton(dialogo()!, T.anadir));
+    escribir(dialogo()!.querySelector(`[aria-label="${T.nombre(1)}"]`), 'SLA');
+    pulsar(boton(dialogo()!, T.guardar));
+    const borrar = borrarPool(b);
+    borrar('P_A');
+    borrar('P_C');
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Collab?.attributeDefinitions?.map((a) => a.name)).toEqual(['SLA']);
+  });
+
+  it('copying a pool\'s process never copies definitions (a paste would repeat every id)', async () => {
+    const b = await banco(TRES_POOLS(`${DEF_SLA}<lila:versionTag value="2" />`), 'Collab');
+    new GuardiaAtributos(b.eventBus as never, b.escritor.modeling, b.escritor.bpmnFactory);
+    // What `BaseModeler` gives the moddle: the id registry the copy claims new ids from.
+    (b.moddle as unknown as { ids: unknown }).ids = new Ids([32, 36, 1]);
+    const factory = new BpmnFactory(b.moddle as never);
+    const copia = new ModdleCopy(b.eventBus as never, factory, b.moddle as never)
+      .copyElement(b.figura('Proc_A').businessObject as never, b.moddle.create('bpmn:Process', { id: 'Proc_Copia' }) as never) as unknown as ModdleElement;
+    expect(copia.extensionElements?.values?.map((v) => v.$type)).toEqual(['lila:VersionTag']);
+  });
+
+  it('turning a process diagram into a collaboration (first pool) takes the definitions along, in one ⌘Z', async () => {
+    const xml = `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" ${LILA_NS} id="D" targetNamespace="urn:t">
+      <bpmn:process id="Proc_1"><bpmn:extensionElements>${DEF_SLA}</bpmn:extensionElements><bpmn:task id="Task_1" /></bpmn:process></bpmn:definitions>`;
+    const b = await banco(xml);
+    new GuardiaAtributos(b.eventBus as never, b.escritor.modeling, b.escritor.bpmnFactory);
+    const antes = await b.exportar();
+    const raices = b.definitions.rootElements!;
+    let actual: ElementoLienzo = b.figura('Proc_1');
+    // What `UpdateCanvasRootHandler` does to the moddle.
+    b.commandStack.register('canvas.updateRoot', {
+      execute: (ctx: { newRoot: ElementoLienzo; oldRoot?: ElementoLienzo }) => {
+        ctx.oldRoot = actual;
+        raices.push(ctx.newRoot.businessObject as unknown as ModdleElement);
+        raices.splice(raices.indexOf(actual.businessObject as unknown as ModdleElement), 1);
+        actual = ctx.newRoot;
+        return [];
+      },
+      revert: (ctx: { newRoot: ElementoLienzo; oldRoot: ElementoLienzo }) => {
+        raices.splice(raices.indexOf(ctx.newRoot.businessObject as unknown as ModdleElement), 1, ctx.oldRoot.businessObject as unknown as ModdleElement);
+        actual = ctx.oldRoot;
+        return [];
+      },
+    } as never);
+    const collab = b.moddle.create('bpmn:Collaboration', { id: 'Collab' });
+    collab.$parent = b.definitions;
+    act(() => b.commandStack.execute('canvas.updateRoot', { newRoot: { id: 'Collab', type: 'bpmn:Collaboration', businessObject: collab } }));
+    // The process stays as the new pool's process in bpmn-js; here it is enough that it lost them.
+    raices.push(b.figura('Proc_1').businessObject as unknown as ModdleElement);
+    const notas = await readAnnotations(await b.exportar());
+    expect(notas.Collab?.attributeDefinitions?.map((a) => a.id)).toEqual(['Attr_sla']);
+    expect(notas.Proc_1).toBeUndefined();
+    raices.pop();
+    b.deshacer();
+    expect(await b.exportar()).toBe(antes);
   });
 });
