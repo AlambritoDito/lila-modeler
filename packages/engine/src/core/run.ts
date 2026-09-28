@@ -7,7 +7,7 @@
 
 import type { ProcessIR } from './ir.js';
 import { coded, coreMessages, type Locale } from './messages/index.js';
-import { aggregateReplication, saturationWarning, type PoolLoad } from './metrics.js';
+import { aggregateReplication, caseCycleTimes, saturationWarning, type PoolLoad } from './metrics.js';
 import {
   escapeId,
   excludedPaths,
@@ -55,6 +55,12 @@ export interface SimulateOptions {
    * `postMessage`; se resuelve una sola vez al entrar en cada replicación.
    */
   locale?: Locale | undefined;
+  /**
+   * Receives, once per replication (the partial one of a cancelled run included), the cycle time
+   * in seconds of each completed case of its measured cohort — the very sample `process.cycleTime`
+   * summarises, so a histogram of it agrees with the percentiles (#460). Changes no metric.
+   */
+  onCycleTimes?: ((replication: number, cycleTimes: number[]) => void) | undefined;
 }
 
 function mean(values: readonly number[]): number {
@@ -319,6 +325,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
     // Solo el modo retenido conserva las filas más allá de la iteración; en los otros dos el
     // `ReplicationRun` entero queda libre al cerrarla, así que el pico es el de una replicación.
     if (log !== undefined) for (const row of run.rows) log.push(row);
+    options.onCycleTimes?.(replication, caseCycleTimes(run));
     const load = new Map<string, PoolLoad>();
     const result = aggregateReplication(ir, run, scenario, load, locale);
 

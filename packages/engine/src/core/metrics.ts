@@ -379,6 +379,16 @@ interface WaitRecord {
  * // `aggregateReplication` a mano tiene que pasar el mapa si quiere agregar. Camino de mejora,
  * // si algún consumidor más lo necesita: publicarlo en el contrato de resultados.
  */
+/**
+ * Cycle time (s) of each completed case of the replication's measured cohort, in arrival order:
+ * the sample `process.cycleTime` summarises. `simulate` hands it to `opts.onCycleTimes`.
+ */
+export function caseCycleTimes(run: Pick<ReplicationRun, 'cases'>): number[] {
+  const times: number[] = [];
+  for (const record of run.cases) if (record.endedAt !== null) times.push(record.endedAt - record.startedAt);
+  return times;
+}
+
 export function aggregateReplication(
   ir: ProcessIR,
   run: ReplicationRun,
@@ -694,7 +704,7 @@ export function aggregateReplication(
   for (const flowId of Object.keys(ir.flows)) flows[flowId] = { count: run.flows[flowId] ?? 0 };
 
   const completedCases = run.cases.filter((record) => record.endedAt !== null);
-  const cycleTimes = completedCases.map((record) => record.endedAt! - record.startedAt);
+  const cycleTimes = caseCycleTimes(run);
   const waitTimes = completedCases.map((record) => waitByCase.get(String(record.caseId)) ?? 0);
 
   // Desglose por desenlace (#316). Todo `end`/`terminate` del IR estrena entrada, aunque ningún
