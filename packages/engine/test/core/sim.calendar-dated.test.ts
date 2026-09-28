@@ -131,3 +131,25 @@ describe('the process timezone does not matter (R-DET-5)', () => {
     }
   });
 });
+
+describe('a pool whose calendar opens at 00:00 after closed days (QA of #510)', () => {
+  const allDay = { from: '00:00', to: '24:00' } as const;
+  test.each([
+    ['annual date', { intervals: [{ dates: ['09-10'], ...allDay }] }],
+    ['weekly', { intervals: [{ days: ['THU'] as const, ...allDay }] }],
+    ['weekly with an in-window holiday (dated path)', { intervals: [{ days: ['THU'] as const, ...allDay }], holidays: ['2026-09-17'] }],
+  ])('%s: the task starts on Thursday at 00:00', (_, calendar) => {
+    const run = runReplication(ir, {
+      run: { start: '2026-09-07T08:00:00Z', seed: 1, duration: 7 * DAY },
+      calendars: { c: calendar },
+      resources: { r: { capacity: 1, calendar: 'c' } },
+      elements: {
+        Start: { interTriggerTimer: { type: 'constant', value: 1 }, triggerCount: 1 },
+        Tarea: { processingTime: { type: 'constant', value: HOUR }, resources: [{ ref: 'r' }] },
+      },
+    });
+    const row = run.rows.find((r) => r.elementId === 'Tarea')!;
+    expect(row.startedAt).toBe(2 * DAY + 16 * HOUR);
+    expect(row.endedAt).toBe(2 * DAY + 17 * HOUR);
+  });
+});

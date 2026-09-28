@@ -143,9 +143,18 @@ describe('holidays (R-CAL-14)', () => {
     ).toThrow(/E-CAL-VACIO/);
   });
 
-  test('holidays that never fall on an opening give the weekly results', () => {
+  test('one-off holidays before the start or on a closed weekday keep the weekly path (same bytes)', () => {
+    const pruned = compile({ intervals: [weekdays], holidays: ['1999-01-01', '2026-04-11'] }, monday);
+    expect(pruned.dated).toBeUndefined();
+    expect(pruned).toEqual(compile({ intervals: [weekdays] }, monday));
+    // An annual holiday, or a one-off one on an open weekday, is dated.
+    expect(compile({ intervals: [weekdays], holidays: ['12-25'] }, monday).dated).toBeDefined();
+    expect(compile({ intervals: [weekdays], holidays: ['2026-04-10'] }, monday).dated).toBeDefined();
+  });
+
+  test('a holiday past the horizon gives the weekly results', () => {
     const weekly = compile({ intervals: [weekdays] }, monday);
-    const dated = compile({ intervals: [weekdays], holidays: ['1999-01-01', '2026-04-11'] }, monday);
+    const dated = compile({ intervals: [weekdays], holidays: ['2030-01-02'] }, monday);
     expect(weekly.dated).toBeUndefined();
     expect(dated.dated).toBeDefined();
     for (const t of [0, 3 * HOUR, 10 * HOUR + 0.5, 4.3 * 86400, 12.7 * 86400]) {
@@ -217,5 +226,38 @@ describe('dated calendars combined with weekly ones (R-CAL-4, R-CAL-11)', () => 
     const closing = compile({ intervals: [{ monthDays: [-1], ...NINE_TO_FIVE }] }, start);
     const schedule = compileCapacity([{ calendar: closing, capacity: 2 }], weekOffsetSeconds(start));
     expect(schedule.constant).toBe(2);
+  });
+});
+
+describe('an opening at 00:00 after a closed day (QA of #510)', () => {
+  const start = '2026-09-07T08:00:00Z';
+  const allDay = { from: '00:00', to: '24:00' } as const;
+
+  test('nextOpen jumps to midnight, it does not answer «already open»', () => {
+    const thursday = compile({ intervals: [{ dates: ['09-10'], ...allDay }] }, start);
+    expect(nextOpen(thursday, 0)).toBe(at(start, '2026-09-10T00:00'));
+    expect(isOpen(thursday, 0)).toBe(false);
+    const firstOfMonth = compile({ intervals: [{ monthDays: [1], ...allDay }] }, start);
+    expect(nextOpen(firstOfMonth, 0)).toBe(at(start, '2026-10-01T00:00'));
+    expect(addWorkingTime(firstOfMonth, 0, 3600)).toBe(at(start, '2026-10-01T01:00'));
+    // The weekly equivalent with an in-window holiday takes the dated path and agrees.
+    const weeklyDated = compile({ intervals: [{ days: ['THU'], ...allDay }], holidays: ['2026-09-17'] }, start);
+    expect(weeklyDated.dated).toBeDefined();
+    expect(nextOpen(weeklyDated, 0)).toBe(at(start, '2026-09-10T00:00'));
+    expect(nextOpen(weeklyDated, at(start, '2026-09-11T00:00'))).toBe(at(start, '2026-09-24T00:00'));
+  });
+
+  test('capacity by slices: a closed pool takes the capacity of the next 00:00 opening (R-CAL-11)', () => {
+    const schedule = compileCapacity(
+      [
+        { calendar: compile({ intervals: [{ dates: ['09-10'], ...allDay }] }, start), capacity: 2 },
+        { calendar: compile({ intervals: [{ dates: ['09-12'], ...allDay }] }, start), capacity: 1 },
+      ],
+      weekOffsetSeconds(start),
+    );
+    expect(capacityAt(schedule, 0)).toBe(2);
+    expect(capacityAt(schedule, at(start, '2026-09-11T12:00'))).toBe(1);
+    // Closing on Sept 12 leaves the pool closed until next Sept 10 (capacity 2): that is the rise.
+    expect(nextCapacityRise(schedule, 0)).toBe(at(start, '2026-09-13T00:00'));
   });
 });

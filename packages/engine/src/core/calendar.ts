@@ -169,7 +169,8 @@ export function compileCalendar(
   locale: Locale = 'en',
   epochDay: number = MONDAY_EPOCH_DAY + Math.floor(offset / DAY),
 ): Calendar {
-  if (isDatedDef(def)) return compileDated(def, offset, epochDay, locale);
+  const effective = pruneHolidays(def, epochDay);
+  if (isDatedDef(effective)) return compileDated(effective, offset, epochDay, locale);
   const raw: Interval[] = [];
 
   for (const { days = [], from, to } of def.intervals) {
@@ -316,6 +317,43 @@ export function isDatedDef(def: CalendarDef): boolean {
   );
 }
 
+/**
+ * Drops the one-off holidays that cannot change a purely weekly calendar — before the date of
+ * `run.start`, or on a weekday the pattern never opens — so that such a calendar keeps the
+ * weekly code path and its exact bytes (R-CAL-14, QA of #510). Annual holidays are kept: they
+ * always recur on some open day of some year.
+ */
+function pruneHolidays(def: CalendarDef, epochDay: number): CalendarDef {
+  const holidays = def.holidays ?? [];
+  if (holidays.length === 0 || def.intervals.some((interval) => interval.days === undefined)) return def;
+  const open = new Set(def.intervals.flatMap((interval) => (interval.days ?? []).map((day) => WEEKDAYS.indexOf(day))));
+  const kept = holidays.filter((holiday) => {
+    if (holiday.length === 5) return true;
+    const civil = daysFromCivil(
+      Number.parseInt(holiday.slice(0, 4), 10),
+      Number.parseInt(holiday.slice(5, 7), 10),
+      Number.parseInt(holiday.slice(8, 10), 10),
+    );
+    return civil >= epochDay && open.has(((civil % 7) + 10) % 7);
+  });
+  return kept.length === holidays.length ? def : { ...def, holidays: kept };
+}
+
+/**
+ * `true` if a dated calendar never opens: every opening falls on one of its own holidays
+ * (`E-CAL-VACIO`, R-CAL-14). The lint and `core/sim.ts` ask this before compiling, so that the
+ * error names the calendar and the cause.
+ */
+export function neverOpens(def: CalendarDef): boolean {
+  if (!isDatedDef(def)) return false;
+  try {
+    compileDated(def, 0, MONDAY_EPOCH_DAY, 'en');
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 /** Does `interval` open on a day of this shape (R-CAL-12, R-CAL-13)? Selectors add up. */
 function matches(interval: CalendarIntervalDef, shape: DayShape): boolean {
   const { weekday, month, dom, length } = shape;
@@ -437,28 +475,156 @@ function midnight(cal: Calendar, k: number): number {
 
 /** Last relative day that can still hold something new: past it, one whole cycle repeats. */
 function scanLimit(dated: Dated, k: number): number {
+  return Math.max(k, periodStart(dated)) + CYCLE_DAYS;
+}
+
+/** First relative day from which the calendar is purely periodic (after its last one-off holiday). */
+function periodStart(dated: Dated): number {
   const last = dated.oneOff[dated.oneOff.length - 1];
-  return Math.max(k, last === undefined ? k : last - dated.epochDay) + CYCLE_DAYS;
+  return last === undefined ? 0 : Math.max(0, last - dated.epochDay + 1);
+}
+
+/**
+ * Per-calendar table of relative days `0, 1, 2…` (day 0 = the date of `run.start`): each day's
+ * open intervals and the running total of open seconds before it. Grown lazily and never past
+ * `periodStart + 2 cycles`, which is all a run can need; `openBefore` folds whole cycles beyond.
+ * With it `openTime` is O(1) and `nextOpen`/`addWorkingTime` a binary search instead of a walk
+ * day by day, which `core/sim.ts` pays three times per log row (QA of #510).
+ *
+ * All the totals are integers (interval edges are whole minutes), so differences of them are
+ * exact and the results equal those of the day-by-day walk.
+ */
+interface DayTable {
+  readonly lists: (readonly Interval[])[];
+  /** `cum[k]` = open seconds in relative days `[0, k)`; `cum.length === lists.length + 1`. */
+  readonly cum: number[];
+  /** Largest `k` the table may reach. */
+  readonly max: number;
+}
+
+const TABLES = new WeakMap<Dated, DayTable>();
+
+function tableOf(dated: Dated): DayTable {
+  let table = TABLES.get(dated);
+  if (table === undefined) {
+    table = { lists: [], cum: [0], max: periodStart(dated) + 2 * CYCLE_DAYS };
+    TABLES.set(dated, table);
+  }
+  return table;
+}
+
+/** Makes day `k` (and every day before it) available in the table. Requires `0 ≤ k ≤ max`. */
+function grow(dated: Dated, table: DayTable, k: number): void {
+  const { lists, cum } = table;
+  for (let i = lists.length; i <= k; i++) {
+    const list = dated.day(dated.epochDay + i);
+    let open = 0;
+    for (const [start, end] of list) open += end - start;
+    lists.push(list);
+    cum.push(cum[i]! + open);
+  }
+}
+
+/** Open intervals of relative day `k`, from the table when it is in range. */
+function dayRel(dated: Dated, k: number): readonly Interval[] {
+  const table = tableOf(dated);
+  if (k < 0 || k > table.max) return dated.day(dated.epochDay + k);
+  if (k >= table.lists.length) grow(dated, table, k);
+  return table.lists[k]!;
+}
+
+/** Open seconds in relative days `[0, k)`, for `k ≥ 0`; whole cycles past `periodStart` fold. */
+function openBefore(dated: Dated, k: number): number {
+  const table = tableOf(dated);
+  const start = periodStart(dated);
+  if (k > start + CYCLE_DAYS) {
+    grow(dated, table, start + CYCLE_DAYS);
+    const perCycle = table.cum[start + CYCLE_DAYS]! - table.cum[start]!;
+    const cycles = Math.floor((k - start) / CYCLE_DAYS);
+    return openBefore(dated, k - cycles * CYCLE_DAYS) + cycles * perCycle;
+  }
+  if (k > table.lists.length) grow(dated, table, k - 1);
+  return table.cum[k]!;
+}
+
+/**
+ * Smallest relative day `k ≥ from` whose day ends with more than `need` open seconds counted
+ * from the start of `from` (`cum[k + 1] − cum[from] > need`, or `≥` when `inclusive`), or `-1`
+ * if the table cannot reach it. A binary search over a table grown by doubling.
+ */
+function findDay(dated: Dated, from: number, need: number, inclusive: boolean): number {
+  const table = tableOf(dated);
+  if (from < 0 || from > table.max) return -1;
+  const reached = (k: number): boolean => {
+    const got = table.cum[k + 1]! - table.cum[from]!;
+    return inclusive ? got >= need : got > need;
+  };
+  let high = from;
+  for (let step = 8; ; step *= 2) {
+    if (high > table.max) return -1;
+    if (high >= table.lists.length) grow(dated, table, high);
+    if (reached(high)) break;
+    high = Math.min(high + step, table.max + 1);
+  }
+  let low = from;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (reached(mid)) high = mid;
+    else low = mid + 1;
+  }
+  return low;
 }
 
 function datedNextOpen(cal: Calendar, dated: Dated, t: number): number {
+  const { k, p } = where(cal, t);
+  for (const [start, end] of dayRel(dated, k)) {
+    if (end <= p) continue;
+    return start > p ? midnight(cal, k) + start : t;
+  }
+  // Another day: its first interval, even one that starts at 00:00 (QA of #510: `start > p`
+  // with `p = 0` answered «already open» and returned `t`).
+  const next = findDay(dated, k + 1, 0, false);
+  if (next >= 0) return midnight(cal, next) + dayRel(dated, next)[0]![0];
+  return slowNextOpen(cal, dated, t);
+}
+
+/** The day-by-day walk, for what the table does not cover (negative `t`, beyond two cycles). */
+function slowNextOpen(cal: Calendar, dated: Dated, t: number): number {
   let { k, p } = where(cal, t);
   const limit = scanLimit(dated, k);
   for (; k <= limit; k++, p = 0) {
     for (const [start, end] of dated.day(dated.epochDay + k)) {
       if (end <= p) continue;
-      return start > p ? midnight(cal, k) + start : t;
+      const at = midnight(cal, k) + start;
+      return at > t ? at : t;
     }
   }
   throw new RangeError(coded('E-CAL-VACIO', coreMessages().codes['E-CAL-VACIO/anonimo']()));
 }
 
 function datedAddWorkingTime(cal: Calendar, dated: Dated, t: number, d: number): number {
+  const { k, p } = where(cal, t);
+  let rest = d;
+  for (const [start, end] of dayRel(dated, k)) {
+    if (end <= p) continue;
+    const from = start > p ? start : p;
+    const available = end - from;
+    if (rest <= available) return midnight(cal, k) + from + rest;
+    rest -= available;
+  }
+  // The day where the remaining work ends: whole days are skipped through the running totals.
+  const day = findDay(dated, k + 1, rest, true);
+  if (day < 0) return slowAddWorkingTime(cal, dated, midnight(cal, k + 1), rest);
+  rest -= tableOf(dated).cum[day]! - tableOf(dated).cum[k + 1]!;
+  return slowAddWorkingTime(cal, dated, midnight(cal, day), rest);
+}
+
+function slowAddWorkingTime(cal: Calendar, dated: Dated, t: number, d: number): number {
   let { k, p } = where(cal, t);
   let rest = d;
   // Terminates: the calendar is not empty (checked when compiled), so every cycle has open time.
   for (; ; k++, p = 0) {
-    for (const [start, end] of dated.day(dated.epochDay + k)) {
+    for (const [start, end] of dayRel(dated, k)) {
       if (end <= p) continue;
       const from = start > p ? start : p;
       const available = end - from;
@@ -468,19 +634,29 @@ function datedAddWorkingTime(cal: Calendar, dated: Dated, t: number, d: number):
   }
 }
 
+/** Open seconds of relative day `k` inside `[a, b)`. */
+function openInDay(cal: Calendar, dated: Dated, k: number, a: number, b: number): number {
+  const base = midnight(cal, k);
+  let total = 0;
+  for (const [start, end] of dayRel(dated, k)) {
+    const low = Math.max(base + start, a);
+    const high = Math.min(base + end, b);
+    if (high > low) total += high - low;
+  }
+  return total;
+}
+
 function datedOpenTime(cal: Calendar, dated: Dated, a: number, b: number): number {
   const first = where(cal, a).k;
   const last = where(cal, b).k;
-  let total = 0;
-  for (let k = first; k <= last; k++) {
-    const base = midnight(cal, k);
-    for (const [start, end] of dated.day(dated.epochDay + k)) {
-      const low = Math.max(base + start, a);
-      const high = Math.min(base + end, b);
-      if (high > low) total += high - low;
-    }
+  if (first === last) return openInDay(cal, dated, first, a, b);
+  if (first < 0) {
+    let total = 0;
+    for (let k = first; k <= last; k++) total += openInDay(cal, dated, k, a, b);
+    return total;
   }
-  return total;
+  const whole = last - first > 1 ? openBefore(dated, last) - openBefore(dated, first + 1) : 0;
+  return openInDay(cal, dated, first, a, b) + whole + openInDay(cal, dated, last, a, b);
 }
 
 /** Civil day of `run.start`, read from its civil fields only (R-CAL-1, R-DET-5). */
@@ -514,7 +690,7 @@ function openAtPos(cal: Calendar, p: number): boolean {
 export function isOpen(cal: Calendar, t: number): boolean {
   if (cal.dated !== undefined) {
     const { k, p } = where(cal, t);
-    return cal.dated.day(cal.dated.epochDay + k).some(([start, end]) => p >= start && p < end);
+    return dayRel(cal.dated, k).some(([start, end]) => p >= start && p < end);
   }
   return openAtPos(cal, pos(cal, t));
 }
@@ -891,7 +1067,7 @@ function datedNextCapacityRise(schedule: CapacitySchedule, dated: DatedCapacity,
     const base = k * DAY - (schedule.offset % DAY);
     if (base >= until) return Infinity;
     const edges = new Set<number>([0]);
-    for (const view of dated.views) for (const [s, e] of view?.day(dated.epochDay + k) ?? []) edges.add(s).add(e);
+    for (const view of dated.views) for (const [s, e] of view === undefined ? [] : dayRel(view, k)) edges.add(s).add(e);
     for (const edge of [...edges].sort((left, right) => left - right)) {
       const at = base + edge;
       if (at <= t || edge >= DAY) continue;

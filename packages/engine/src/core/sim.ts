@@ -28,7 +28,7 @@ import {
   nextOpen,
   openTime,
   union,
-  isDatedDef,
+  neverOpens,
   startEpochDay,
   weekOffsetSeconds,
   type Calendar,
@@ -319,15 +319,11 @@ export function compileCalendars(
         coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/sin-intervalos'](name)),
       );
     }
-    try {
-      compiled.set(name, compileCalendar(def, offset, locale, epochDay));
-    } catch (error) {
-      if (!isDatedDef(def)) throw error;
-      // A dated calendar whose every opening falls on a holiday never opens (R-CAL-14).
-      throw new RangeError(
-        coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/sin-intervalos'](name)),
-      );
+    // A dated calendar whose every opening falls on a holiday never opens (R-CAL-14).
+    if (neverOpens(def)) {
+      throw new RangeError(coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/festivos'](name)));
     }
+    compiled.set(name, compileCalendar(def, offset, locale, epochDay));
   }
   return compiled;
 }
