@@ -78,6 +78,36 @@
       "properties": [
         { "name": "value", "isAttr": true, "type": "String" }
       ]
+    },
+    {
+      "name": "AttributeDefinition",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "id", "isAttr": true, "type": "String" },
+        { "name": "name", "isAttr": true, "type": "String" },
+        { "name": "type", "isAttr": true, "type": "String" },
+        { "name": "appliesTo", "isAttr": true, "type": "String" },
+        { "name": "default", "isAttr": true, "type": "String" },
+        { "name": "options", "isMany": true, "type": "Option" }
+      ]
+    },
+    {
+      "name": "Option",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["lila:AttributeDefinition"] },
+      "properties": [
+        { "name": "value", "isAttr": true, "type": "String" }
+      ]
+    },
+    {
+      "name": "AttributeValue",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ExtensionElements"] },
+      "properties": [
+        { "name": "ref", "isAttr": true, "type": "String" },
+        { "name": "value", "isAttr": true, "type": "String" }
+      ]
     }
   ]
 }
