@@ -793,11 +793,15 @@ calendar }`. On the task: `resources: [{ ref, quantity }]` and `selection: "and"
 Bizagi does not document its calendar semantics; this one is Lila's, adjustable if someone
 contributes L-Sim/Bizagi's real behavior.
 
-`scenario.calendars[name] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }] }`.
+`scenario.calendars[name] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }], holidays?: [...] }`.
+Since #82 an interval can also repeat by month or year (`monthDays`, `monthWeekdays`, `dates`,
+R-CAL-12/13), and `holidays` closes whole days (R-CAL-14).
 
 - **R-CAL-1 — Weekly pattern relative to `run.start`.** Days and hours are interpreted in the
-  same UTC offset as `run.start`. There is no DST, no holidays, no per-resource time zones in v1
-  (`timezone` and `holidays` are reserved fields, §15). The pattern repeats indefinitely.
+  same UTC offset as `run.start`. There is no DST and no per-resource time zones in v1
+  (`timezone` is a reserved field, §15, and R-CAL-15 states the limit). The pattern repeats
+  indefinitely. Monthly and annual recurrence and holidays (R-CAL-12 … R-CAL-14) are read in that
+  same offset.
   *(test: LILA-040)*
 - **R-CAL-2 — Intervals.** `from` is inclusive, `to` is exclusive. **`to > from` is required** (R13
   of `SCENARIO_FORMAT.md`): no interval crosses midnight, and a night window is declared as two
@@ -915,6 +919,36 @@ contributes L-Sim/Bizagi's real behavior.
   - **Utilization and cost.** These are reported **per role**, not per shift, and the
     denominator is R-CAL-9's: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` over `[warmup, t_stop]`.
   *(test: LILA-164)*
+- **R-CAL-12 — Monthly recurrence (#82).** Besides `days`, an interval can repeat by month:
+  `monthDays: [n…]` opens on day `n` of every month (`1…31`), or counted from the end (`-1` is the
+  last day, `-2` the one before). A day that does not exist in a month — the 31st of a 30-day
+  month, the 30th of February — is **skipped**, never moved to another day: the same rule as
+  iCalendar's `BYMONTHDAY`. `monthWeekdays: [{ nth, day }]` opens on the `nth` weekday of the
+  month (`1…5`), or counted from the end (`-1` is the last one): `{ nth: -1, day: "FRI" }` is the
+  last Friday. A month without a fifth Monday skips `{ nth: 5, day: "MON" }`. *(test: #82)*
+- **R-CAL-13 — Annual recurrence (#82).** `dates: ["MM-DD"…]` opens on that date every year.
+  `"02-29"` is valid and only opens in leap years (Gregorian rule: 2100 is not one); a date that
+  never exists, like `"02-30"`, is a schema error. Each interval carries **exactly one** day
+  selector — `days`, `monthDays`, `monthWeekdays` or `dates` —; mixing them in one calendar is
+  done with several intervals, which merge like any others (R-CAL-2). *(test: #82)*
+- **R-CAL-14 — Holidays (#82).** `holidays: ["YYYY-MM-DD" | "MM-DD"…]` closes those civil days
+  **whole** (00:00–24:00 in `run.start`'s offset), whatever the intervals say: `"YYYY-MM-DD"`
+  once, `"MM-DD"` every year. A holiday on a day that was already closed changes nothing. A task
+  that would run into a holiday pauses and resumes at the next opening (R-CAL-5), and the closed
+  time counts as `offHoursWait` (R-CAL-7) and not as available time (R-CAL-9). A holiday of one
+  capacity slice lowers only that slice (R-CAL-11). A calendar whose every opening falls on its
+  own holidays never opens: `E-CAL-VACIO`, reported by the lint at `calendars.<name>` and by
+  `core/` when compiling.
+  A calendar with only `days` and no holidays is exactly the weekly calendar of R-CAL-1 — same
+  code path, same bytes (R-DEG-2). Everything dated is civil-day arithmetic, with no `Date` and no
+  `Intl` (R-DET-5): the result does not depend on the timezone of the process that runs it.
+  *(test: #82)*
+- **R-CAL-15 — No timezone of its own, no DST (limit).** Every date and time of a calendar is read
+  in `run.start`'s fixed UTC offset, for the whole run. A run that crosses a DST change keeps that
+  offset: the civil clock of the place moves one hour and the calendar does not follow it. Its own
+  timezone with DST (`timezone` in `calendars` and `run`) is still a reserved field (§15): doing
+  it right needs the IANA timezone database inside `core/`, which today has none. Workaround:
+  split the scenario at the change, or shift the affected intervals by hand. *(test: #82)*
 
 ---
 
@@ -983,7 +1017,8 @@ The scenario schema **accepts** them (so that a file written today keeps validat
 the engine **rejects** them with a clear error while they are not implemented (ADR-015, LILA-013).
 
 - **R-RES-1 — v1 list:** `priority`, `preempt`, `batch` (section 6 of the structure document)
-  plus `holidays` and `timezone` in `calendars` (ADR-016, LILA-013). `conditions` is reserved
+  plus `timezone` in `calendars` and `run` (ADR-016, LILA-013). `holidays` was on this list until
+  #82 implemented it (R-CAL-14). `conditions` is reserved
   only on elements that are **not** a flow leaving a diverging XOR: there it is implemented
   (§6.1, ADR-028), everywhere else it still raises `E-RESERVADO`. *(test: LILA-013, E22)*
 - **R-RES-2 — Exact error text.**
@@ -998,7 +1033,7 @@ the engine **rejects** them with a clear error while they are not implemented (A
   ```
   elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.
   resources.cajero.preempt: reserved field, not supported by the simulator in v1.
-  calendars.oficina.holidays: reserved field, not supported by the simulator in v1.
+  calendars.oficina.timezone: reserved field, not supported by the simulator in v1.
   ```
 
   Code `E-RESERVADO`. *(test: LILA-013)*
@@ -1097,7 +1132,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-REF-DESCONOCIDA` | `calendar` that does not exist in `calendars` (`validateScenario`'s lint), including that of each `capacity` slice |
 | `E-CAL-DESCONOCIDO` | the same, caught by `core/sim.ts`'s guard (see R-CAL-10 and R-CAL-11) |
 | `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14) |
-| `E-CAL-VACIO` | calendar with no intervals, or empty intersection of calendars (cites the task) |
+| `E-CAL-VACIO` | calendar with no intervals, a calendar that only opens on its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
 | `E-RESERVADO` | reserved field (§15, exact text in R-RES-2) |
 
@@ -1360,6 +1395,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-CAL-9 | utilization attributable to the cohort over available hours; can exceed 1 with no preemption (`Σᵢ capacityᵢ × openTimeᵢ` over `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (per-slice denominator: LILA-164) |
 | R-CAL-10 | resource × calendar matrix and default calendar | LILA-041, LILA-042 |
 | R-CAL-11 | shift capacity within a single pool (union, sum, closure and validation) | LILA-164 |
+| R-CAL-12 … R-CAL-15 | monthly and annual recurrence, holidays, and the fixed-offset limit (no DST) | #82 (LILA-082) |
 | R-COST-1 … R-COST-4 | costs per element, resource, row and case | LILA-036 (log row: LILA-037) |
 | R-COST-5, R-COST-6 | absent costs = 0; waiting is free | LILA-013, LILA-036 |
 | R-DEG-1 | no resources ⇒ infinite capacity, bit-for-bit equal to M1 | LILA-039 |
