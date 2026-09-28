@@ -38,7 +38,6 @@ export interface SheetMessages {
   badTime: (value: string) => string;
   calendarNotWeekly: (id: string) => string;
   groupNotApplied: (key: string) => string;
-  unreadable: (detail: string) => string;
 }
 
 const en: SheetMessages = {
@@ -70,7 +69,6 @@ const en: SheetMessages = {
   calendarNotWeekly: (id) =>
     `calendar "${id}" uses monthly or yearly dates, which this sheet cannot express; it was left as it is.`,
   groupNotApplied: (key) => `because of the rows above, "${key}" keeps its current values.`,
-  unreadable: (detail) => `the file could not be read as a spreadsheet (${detail}).`,
 };
 
 const es: SheetMessages = {
@@ -102,7 +100,6 @@ const es: SheetMessages = {
   calendarNotWeekly: (id) =>
     `el calendario «${id}» usa fechas mensuales o anuales, que esta hoja no sabe expresar; se dejó como estaba.`,
   groupNotApplied: (key) => `por las filas anteriores, «${key}» conserva sus valores actuales.`,
-  unreadable: (detail) => `el archivo no se pudo leer como hoja de cálculo (${detail}).`,
 };
 
 export const SHEET_MESSAGES: Readonly<Record<Locale, SheetMessages>> = { en, es };
