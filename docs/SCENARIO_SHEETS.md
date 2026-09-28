@@ -56,8 +56,12 @@ as when you edit a field by hand ([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md) § 6)
 - **Hidden sheets are not read**, with a note: the import never applies data you cannot see in the
   file. A formula without a saved result (a file written by a script, or Excel in manual
   calculation) is read as empty, with a note: open the file in Excel and save it again.
-- A workbook larger than 50 MB of sheets once uncompressed, or with cells beyond Excel's last row
-  or column, is refused. Images and charts in it are never read.
+- A workbook larger than 50 MB of sheets once uncompressed, with more than 1,000,000 cells laid
+  out (counting the empty cells and rows before the last value of each row and sheet), or with
+  cells beyond Excel's last row or column, is refused. That is tens of thousands of rows of the
+  template, far more than any scenario. Images and charts in it are never read.
+- Data in a column with no header is ignored with a note: usually a value the separator split
+  because it was not in quotes.
 
 ## Sheets
 

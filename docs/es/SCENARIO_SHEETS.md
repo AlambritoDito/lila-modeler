@@ -60,8 +60,12 @@ escenario, igual que cuando editas un campo a mano ([SCENARIO_FORMAT.md](SCENARI
 - **Las hojas ocultas no se leen**, con una nota: la importación nunca aplica datos que no ves en
   el archivo. Una fórmula sin resultado guardado (un archivo escrito por un script, o Excel en
   cálculo manual) se lee vacía, con una nota: abre el archivo en Excel y guárdalo de nuevo.
-- Se rechaza un libro de más de 50 MB de hojas descomprimidas, o con celdas más allá de la última
-  fila o columna de Excel. Sus imágenes y gráficos nunca se leen.
+- Se rechaza un libro de más de 50 MB de hojas descomprimidas, de más de 1 000 000 de celdas
+  (contando las celdas y filas vacías antes del último valor de cada fila y hoja), o con celdas más
+  allá de la última fila o columna de Excel. Son decenas de miles de filas de la plantilla, mucho
+  más que cualquier escenario. Sus imágenes y gráficos nunca se leen.
+- Los datos en una columna sin cabecera se ignoran con una nota: suele ser un valor que el
+  separador partió porque no iba entre comillas.
 
 ## Hojas
 
