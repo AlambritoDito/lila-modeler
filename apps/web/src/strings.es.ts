@@ -206,7 +206,6 @@ export const es: Strings = {
     /** Pestañas de diagrama, abajo a la izquierda. */
     cerrarDiagrama: 'Cerrar diagrama',
     cerrarArchivo: (archivo: string): string => `Cerrar ${archivo}`,
-    nuevoDiagrama: 'Nuevo diagrama',
     /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
     redimensionarPanel: 'Redimensionar el panel derecho',
     /** Divisor entre la columna izquierda y el lienzo (#406). */
@@ -1317,6 +1316,30 @@ export const es: Strings = {
     errorManifiesto: 'El "lila-project.json" del archivo es inválido o de una versión no soportada.',
     errorSinModelo: 'Al archivo le falta "model.bpmn": no es un proyecto .lila.',
     errorEntrada: 'El archivo .lila tiene una entrada con una ruta que no es válida dentro de un proyecto.',
+  },
+
+  /** Los procesos de un repositorio (ADR-029, #498): las pestañas del lienzo y sus diálogos. */
+  procesos: {
+    nuevo: 'Nuevo proceso',
+    tituloNuevo: 'Nuevo proceso en este proyecto',
+    tituloRenombrar: 'Renombrar proceso',
+    nombre: 'Nombre del proceso',
+    /** Nombre propuesto para el proceso que crea el «+»: «Proceso 2», «Proceso 3»… */
+    nombrePorDefecto: (n: number): string => `Proceso ${n}`,
+    crear: 'Crear',
+    renombrar: 'Renombrar',
+    renombrarProceso: (nombre: string): string => `Renombrar el proceso ${nombre}`,
+    borrar: 'Borrar',
+    borrarProceso: (nombre: string): string => `Borrar el proceso ${nombre}`,
+    tituloBorrar: 'Borrar proceso',
+    confirmarBorrar: (nombre: string): string =>
+      `¿Borrar «${nombre}» con sus escenarios y corridas? Los demás procesos del proyecto se quedan.`,
+    /** Miga de pan de vuelta desde un proceso llamado (#461). */
+    volverA: (nombre: string): string => `Volver a ${nombre}`,
+    /** Doble clic en una actividad de llamada cuyo `calledElement` no es un proceso de aquí (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `La actividad de llamada llama a «${destino}», que no es un proceso de este proyecto.`,
+    llamadaSinDestino: 'Esta actividad de llamada no indica a qué proceso llama.',
   },
 
   almacen: {

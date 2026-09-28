@@ -224,7 +224,6 @@ export const en = {
     /** Diagram tabs, bottom left. */
     cerrarDiagrama: 'Close diagram',
     cerrarArchivo: (archivo: string): string => `Close ${archivo}`,
-    nuevoDiagrama: 'New diagram',
     /** Divider between the canvas and the right panel (design 2a). */
     redimensionarPanel: 'Resize the right panel',
     /** Divider between the left column and the canvas (#406). */
@@ -1335,6 +1334,30 @@ export const en = {
     errorManifiesto: 'The file\u2019s "lila-project.json" is invalid or of an unsupported version.',
     errorSinModelo: 'The file has no "model.bpmn": it is not a .lila project.',
     errorEntrada: 'The .lila file holds an entry whose path is not valid inside a project.',
+  },
+
+  /** The processes of a repository (ADR-029, #498): the canvas tabs and their dialogs. */
+  procesos: {
+    nuevo: 'New process',
+    tituloNuevo: 'New process in this project',
+    tituloRenombrar: 'Rename process',
+    nombre: 'Process name',
+    /** Suggested name of the process the «+» creates: «Process 2», «Process 3»… */
+    nombrePorDefecto: (n: number): string => `Process ${n}`,
+    crear: 'Create',
+    renombrar: 'Rename',
+    renombrarProceso: (nombre: string): string => `Rename process ${nombre}`,
+    borrar: 'Delete',
+    borrarProceso: (nombre: string): string => `Delete process ${nombre}`,
+    tituloBorrar: 'Delete process',
+    confirmarBorrar: (nombre: string): string =>
+      `Delete «${nombre}» with its scenarios and runs? The other processes of the project stay.`,
+    /** Breadcrumb back from a called process (#461). */
+    volverA: (nombre: string): string => `Back to ${nombre}`,
+    /** Double-click on a call activity whose `calledElement` is not a process here (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `The call activity calls «${destino}», which is not a process of this project.`,
+    llamadaSinDestino: 'This call activity does not name the process it calls.',
   },
 
   almacen: {

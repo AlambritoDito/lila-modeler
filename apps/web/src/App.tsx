@@ -16,10 +16,11 @@ import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/sche
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, newModelXml, nextScenarioRevisions, projectStore, readLila, readProject } from './project';
-import { encodeLila } from '@lila-modeler/engine/project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { encodeLila, processesOf, processSlug, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
-import { Lienzo, type Alineacion, type EstadoLienzo, type Modelador, type Servicios } from './Modeler';
+import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
 import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
@@ -451,6 +452,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [projectName, setProjectName] = useState<string>(S.app.proyectoDemo);
   const [savedToken, setSavedToken] = useState(changeToken('demo-pedido', 0, {}, []));
   const [projectProblems, setProjectProblems] = useState<NonNullable<ProjectDocument['problems']>>([]);
+  /**
+   * The processes of a repository (ADR-029, #498), `[]` for a one-process project. The active
+   * one's entry is only the snapshot of when it was loaded or last left: its live content is the
+   * canvas and the scenario/run state below, and `procesoActual()` is what reads it back.
+   */
+  const [procesos, setProcesos] = useState<ProcessDocument[]>([]);
+  const [activo, setActivo] = useState(0);
+  /** #461: the slug of the process a call activity was opened from, for «Back to …». */
+  const [origen, setOrigen] = useState<string | null>(null);
+  /** #461: a double-click on a call activity that calls nothing here; a notice, not an error. */
+  const [avisoLlamada, setAvisoLlamada] = useState<string | null>(null);
   /** Diagrama suelto: un `.bpmn` abierto en una carpeta que no es un proyecto (LILA-072). */
   const [suelto, setSuelto] = useState(false);
   const [ioError, setIoError] = useState<string | null>(null);
@@ -620,7 +632,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const logs = useRef(new Map<string, { rows: readonly EventLogRow[]; truncated: boolean }>());
 
-  const currentToken = changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
+  const currentToken = procesos.length > 1
+    ? repositoryToken(projectId, procesos.map((p, i) => (i === activo
+      ? { slug: p.slug, name: p.name, revision, scenarioRevisions, runIds: runs.map((r) => r.id) }
+      : tokenPart(p))))
+    : changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
   const dirty = currentToken !== savedToken;
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
@@ -690,16 +706,26 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     resolver?.(acepta);
   }
 
-  async function snapshot(): Promise<ProjectDocument> {
+  /** The process on the canvas as it is now: the exported XML plus its scenarios and runs. */
+  async function procesoActual(): Promise<ProcessDocument> {
     if (modelador === null) throw new Error(S.app.errorModeladorNoListo);
     const atRevision = revisionRef.current;
     // `guardar()` ya obtuvo el sí del usuario si había pérdida; aquí no se decide nada.
     const xml = await modelador.exportar({ aceptarPerdida: true });
     if (atRevision !== revisionRef.current) throw new Error(S.app.errorModeloCambio);
     const parsed = await parseBpmn(xml);
-    return { version: 1, id: projectId, name: projectName,
+    const yo = procesos[activo];
+    return { slug: yo?.slug ?? processSlug(projectName), name: yo?.name ?? projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
-      scenarios: escenarios, scenarioRevisions, runs, ...(projectProblems.length ? { problems: projectProblems } : {}) };
+      scenarios: escenarios, scenarioRevisions, runs };
+  }
+  async function snapshot(): Promise<ProjectDocument> {
+    const actual = await procesoActual();
+    const doc: ProjectDocument = { version: 1, id: projectId, name: projectName,
+      model: actual.model, scenarios: actual.scenarios, scenarioRevisions: actual.scenarioRevisions, runs: actual.runs,
+      ...(projectProblems.length ? { problems: projectProblems } : {}) };
+    // #498: every process of the repository, the canvas one read back live.
+    return procesos.length > 1 ? withProcesses(doc, procesos.map((p, i) => (i === activo ? actual : p))) : doc;
   }
   async function guardar(saveAs = false, asFolder = false): Promise<boolean> {
     return await saveWithOutcome(saveAs, asFolder) === 'saved';
@@ -721,15 +747,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // únicamente en la revisión del modelo y conserva los escenarios/corridas que SÍ estaban
       // guardados; con el token completo, editar un escenario y pulsar ⌘S dejaba el pie en
       // «Guardado» y la guardia de cierre dejaba salir sin escribirlo (LILA-208, hallazgo 2 del QA).
+      // A loose diagram that grew a second process (#498) is saved whole, as a new destination
+      // (`DesktopStore`): it is no longer a diagram-only save.
+      const repositorio = (doc.processes?.length ?? 0) > 0;
       const previo: readonly [string, number, Record<string, number>, string[]] | null =
-        suelto && !saveAs && savedToken !== '' ? JSON.parse(savedToken) : null;
+        suelto && !saveAs && !repositorio && savedToken !== '' ? JSON.parse(savedToken) : null;
       const token = previo === null
-        ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id))
+        ? documentToken(doc)
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
       const saved = await adapter.saveProject(doc, { saveAs, ...(asFolder ? { asFolder: true } : {}) });
       if (saved === null) return 'cancelled';
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
-      if (saveAs) setSuelto(false);
+      if (saveAs || repositorio) setSuelto(false);
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
@@ -746,6 +775,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
+    // #498: a repository opens on its first process; a version 1 project has no list at all.
+    setProcesos((doc.processes?.length ?? 0) > 0 ? processesOf(doc) : []); setActivo(0); setOrigen(null); setAvisoLlamada(null);
     setProjectProblems(doc.problems ?? []);
     setSuelto(doc.loose === true);
     if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
@@ -759,9 +790,117 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // #420: the first IR of an opened project is a baseline, not a list of new nodes to seed.
     nodosVistos.current = null; sembrados.current.clear();
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar'); setBienvenida(false);
-    setSavedToken(saved ? changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id)) : '');
+    setSavedToken(saved ? documentToken(doc) : '');
     return true;
   }
+
+  /**
+   * Puts process `indice` of `lista` on the canvas with its scenarios and runs (#498) — the part
+   * of `activate` that is per process. The mode stays; the scenario goes back to the process's
+   * first one, and the overlay and the run in flight belong to the process being left.
+   */
+  async function cargarProceso(lista: readonly ProcessDocument[], indice: number): Promise<boolean> {
+    const destino = lista[indice];
+    if (modelador === null || destino === undefined) return false;
+    const parsed = await parseBpmn(destino.model.xml);
+    cancelarCorrida();
+    if (!await modelador.abrir(destino.model.xml)) return false;
+    revisionRef.current = destino.model.revision; setRevision(destino.model.revision);
+    setProcesoId(destino.model.id); setArchivo(destino.model.name);
+    const scenarios = Object.keys(destino.scenarios).length === 0 ? defaultScenarios(parsed.ir) : destino.scenarios;
+    setEscenarios(scenarios); setScenarioRevisions({ ...destino.scenarioRevisions }); setRuns([...destino.runs]);
+    const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
+    nodosVistos.current = null; sembrados.current.clear();
+    setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir);
+    // Back to one process: the project is a version 1 project again, with no list.
+    setProcesos(lista.length > 1 ? [...lista] : []); setActivo(lista.length > 1 ? indice : 0);
+    setAvisoLlamada(null);
+    return true;
+  }
+
+  /**
+   * Runs `accion` with the canvas process read back (`procesoActual`) and the whole list, under the
+   * same lock and loss dialog as a save: leaving a process serializes it, so a diagram that would
+   * lose something on export asks first (LILA-192).
+   */
+  async function conProcesos(accion: (lista: ProcessDocument[]) => Promise<void>): Promise<void> {
+    if (modelador === null || ioLock.current || respuestaPerdida.current !== null) return;
+    if (!await aceptaPerdida('guardar')) return;
+    ioLock.current = true; setIoBusy(true); setIoError(null);
+    try {
+      const actual = await procesoActual();
+      await accion(procesos.length > 1 ? procesos.map((p, i) => (i === activo ? actual : p)) : [actual]);
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    finally { ioLock.current = false; setIoBusy(false); }
+  }
+
+  /** Another tab (#498), or the process a call activity calls (#461, `desdeLlamada`). */
+  function cambiarProceso(indice: number, desdeLlamada = false): Promise<void> {
+    return conProcesos(async (lista) => {
+      if (indice === activo || lista[indice] === undefined) return;
+      const desde = lista[activo]!.slug;
+      if (await cargarProceso(lista, indice)) setOrigen(desdeLlamada ? desde : null);
+    });
+  }
+
+  /** The canvas «+» (#498): a new empty process in this project, named by the user. */
+  function nuevoProceso(nombre: string): Promise<void> {
+    return conProcesos(async (lista) => {
+      const xml = newModelXml(nombre);
+      await modelador?.comprobar?.(xml);
+      const parsed = await parseBpmn(xml);
+      const nuevo: ProcessDocument = {
+        slug: processSlug(nombre, lista.map((p) => p.slug)), name: nombre,
+        model: { id: parsed.ir.id, name: 'model.bpmn', xml, revision: 0 },
+        scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [],
+      };
+      if (await cargarProceso([...lista, nuevo], lista.length)) setOrigen(null);
+    });
+  }
+
+  function renombrarProceso(indice: number, nombre: string): void {
+    if (procesos.length < 2 || ioLock.current) return;
+    setProcesos(procesos.map((p, i) => (i === indice ? { ...p, name: nombre } : p)));
+  }
+
+  /** Deletes a process (#498) after the tab's confirmation; the last one cannot go. */
+  async function borrarProceso(indice: number): Promise<void> {
+    if (procesos.length < 2 || ioLock.current || procesos[indice] === undefined) return;
+    const borrado = procesos[indice]!.slug;
+    if (origen === borrado) setOrigen(null);
+    if (indice !== activo) {
+      const lista = procesos.filter((_, i) => i !== indice);
+      setProcesos(lista.length > 1 ? lista : []);
+      setActivo(lista.length > 1 ? (activo > indice ? activo - 1 : activo) : 0);
+      return;
+    }
+    // The canvas process goes: nothing of it has to be read back, so no loss dialog either.
+    ioLock.current = true; setIoBusy(true); setIoError(null);
+    try {
+      const lista = procesos.filter((_, i) => i !== indice);
+      await cargarProceso(lista, Math.max(0, indice - 1));
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    finally { ioLock.current = false; setIoBusy(false); }
+  }
+
+  /**
+   * #461: a double-click on a call activity opens the process of this project whose BPMN process
+   * id is its `calledElement`. Read through a ref so the canvas subscription, made once per canvas,
+   * always sees the current list.
+   */
+  const dobleClicRef = useRef<(evento: EventoLienzo) => unknown>(() => undefined);
+  dobleClicRef.current = (evento) => {
+    const el = evento.element;
+    if (el?.type !== 'bpmn:CallActivity') return undefined;
+    const destino = el.businessObject?.calledElement?.trim() ?? '';
+    if (destino === '') { setAvisoLlamada(S.procesos.llamadaSinDestino); return undefined; }
+    const indice = procesos.findIndex((p, i) => i !== activo && processIds(p.model.xml).includes(destino));
+    // Unresolved: say so and let bpmn-js carry on with the name editing it does on a double-click.
+    if (indice < 0) { setAvisoLlamada(S.procesos.llamadaSinResolver(destino)); return undefined; }
+    void cambiarProceso(indice, true);
+    return false;
+  };
+  useEffect(() => modelador?.suscribir(['element.dblclick'], (evento) => dobleClicRef.current(evento), 1500), [modelador]);
   // Autosave (#459): a dirty document goes to main as a `.lila` 5 s after its first unsaved
   // change, then at most every 5 s while it stays dirty — a throttle, not a debounce, so steady
   // editing still gets copied. Main deletes the copy by itself when the document is clean again.
@@ -1638,7 +1777,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function exportarDocumento(tipo: 'docx' | 'html'): Promise<void> {
     if (modelador === null) return;
-    const nombre = nombreArchivo(projectName);
+    // #498: the document is of the process on the canvas, and its cover says which one.
+    const titulo = procesos.length > 1 ? procesos[activo]?.name ?? projectName : projectName;
+    const nombre = nombreArchivo(titulo);
     const lila = DESKTOP ? window.lila : undefined;
     try {
       const xml = await modelador.exportar();
@@ -1654,7 +1795,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: projectName, date, locale, png, ...escenario });
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: titulo, date, locale, png, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
@@ -2405,16 +2546,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </>}
       </aside>
 
-      <nav id={ID_REGION.diagramas} className="diagramas">
-        {/* Un proyecto = un diagrama por ahora (LILA-208): la pestaña no cambia de nada, así que
-            no es un botón; el ✕ cierra el proyecto y el «+» abre uno nuevo, los dos por
-            `projectAction('new')`, que ya trae la guardia de cambios sin guardar. */}
-        <span className="pestana activa">
-          {archivo}
-          <button type="button" className="cerrar" aria-label={S.app.cerrarArchivo(archivo)} title={S.app.cerrarDiagrama} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>✕</button>
-        </span>
-        <button type="button" className="boton icono" aria-label={S.app.nuevoDiagrama} title={S.app.nuevoDiagrama} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>+</button>
-      </nav>
+      <PestanasProcesos
+        idRegion={ID_REGION.diagramas}
+        procesos={procesos.length > 1 ? procesos : [{ slug: processSlug(projectName), name: projectName }]}
+        activo={procesos.length > 1 ? activo : 0}
+        archivo={archivo}
+        deshabilitado={ioBusy || modelador === null}
+        origen={origen === null ? null : procesos.find((p) => p.slug === origen)?.name ?? null}
+        onVolver={() => { const i = procesos.findIndex((p) => p.slug === origen); if (i >= 0) void cambiarProceso(i); }}
+        onCambiar={(i) => void cambiarProceso(i)}
+        onNuevo={(nombre) => void nuevoProceso(nombre)}
+        onRenombrar={renombrarProceso}
+        onBorrar={(i) => void borrarProceso(i)}
+        onCerrarProyecto={() => void projectAction('new')}
+      />
 
       {/* Barra de estado del artefacto: validación, escenario y semilla a la izquierda; densidad
           y zoom a la derecha. Los mensajes largos (E/S, tema, importación) van al final para no
@@ -2441,6 +2586,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {suelto && (
           <span className="aviso">{S.app.diagramaSuelto}</span>
         )}
+        {avisoLlamada !== null && <span role="status" className="aviso">{avisoLlamada}</span>}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>

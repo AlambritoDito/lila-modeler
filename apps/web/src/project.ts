@@ -1,7 +1,8 @@
 import { resolveScenarioPath } from '@lila-modeler/engine/schema';
 import { marcarExportador } from '@lila-modeler/engine/bpmn';
 import type { ProcessIR } from '@lila-modeler/engine';
-import { decodeLila, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
+import { decodeLila, processesOf, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
+import type { ProcessDocument } from '@lila-modeler/engine/project';
 import type { ProjectErrorCode } from '@lila-modeler/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
@@ -88,13 +89,15 @@ export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument
  * fin (ver `seedModelXml`); ahora arranca de verdad en blanco, como dice la pista de la bienvenida
  * («⌘N · creates an empty .bpmn»).
  */
-export function newModelXml(): string {
+export function newModelXml(nombre?: string): string {
   const S = strings();
   const suffix = crypto.randomUUID().replaceAll('-', '');
   const p = `Process_${suffix}`;
+  // #498: a process added with the canvas «+» carries the name the user typed.
+  const nombreXml = (nombre ?? S.proyecto.procesoNuevo).replace(/[&<>"]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' } as const)[c as '&']};`);
   return marcarExportador(`<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_${suffix}" targetNamespace="https://lila-modeler.org/bpmn">
-<bpmn:process id="${p}" name="${S.proyecto.procesoNuevo}" isExecutable="false"/>
+<bpmn:process id="${p}" name="${nombreXml}" isExecutable="false"/>
 <bpmndi:BPMNDiagram id="Diagram_${suffix}"><bpmndi:BPMNPlane id="Plane_${suffix}" bpmnElement="${p}"/></bpmndi:BPMNDiagram></bpmn:definitions>`);
 }
 
@@ -124,6 +127,45 @@ export function seedModelXml(): string {
 }
 export function changeToken(id: string, modelRevision: number, scenarios: Readonly<Record<string, number>>, runIds: readonly string[]): string {
   return JSON.stringify([id, modelRevision, scenarios, runIds]);
+}
+
+/** What the change token of a repository (#498) reads from each process. */
+export interface ProcessTokenPart {
+  readonly slug: string;
+  readonly name: string;
+  readonly revision: number;
+  readonly scenarioRevisions: Readonly<Record<string, number>>;
+  readonly runIds: readonly string[];
+}
+
+/**
+ * The change token of a project with more than one process: every process in order, so adding,
+ * renaming, deleting or editing any of them — not only the one on the canvas — marks it dirty, and
+ * switching tabs does not. A one-process project keeps `changeToken`, whose tuple the loose-diagram
+ * save still parses (`App.tsx`).
+ */
+export function repositoryToken(id: string, processes: readonly ProcessTokenPart[]): string {
+  return JSON.stringify([id, processes.map((p) => [p.slug, p.name, p.revision, p.scenarioRevisions, p.runIds])]);
+}
+
+export function tokenPart(process: ProcessDocument): ProcessTokenPart {
+  return { slug: process.slug, name: process.name, revision: process.model.revision, scenarioRevisions: process.scenarioRevisions, runIds: process.runs.map((r) => r.id) };
+}
+
+/** The change token of a whole document, as saved or opened. */
+export function documentToken(doc: ProjectDocument): string {
+  return (doc.processes?.length ?? 0) > 0
+    ? repositoryToken(doc.id, processesOf(doc).map(tokenPart))
+    : changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
+}
+
+/**
+ * The BPMN process ids a model declares — what a call activity's `calledElement` names (#461).
+ * A pattern over the XML and not a parse: it runs on a double-click, over every process of the
+ * project, and only has to find `<bpmn:process id="…">` (any prefix, or none).
+ */
+export function processIds(xml: string): string[] {
+  return [...xml.matchAll(/<(?:[\w.-]+:)?process\b[^>]*?\sid="([^"]+)"/g)].map((m) => m[1]!);
 }
 
 /** Editar un padre invalida sus descendientes; los escenarios independientes siguen actuales. */
