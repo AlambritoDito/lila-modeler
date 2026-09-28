@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 import {
@@ -53,6 +53,7 @@ import {
   planScenarioImport,
   readScenarioFile,
   scenarioTemplate,
+  WorkbookReadError,
   type ImportPlan,
 } from '@lila-modeler/engine/scenario-sheets';
 
@@ -1782,7 +1783,19 @@ function ImportarExcel({
   const S = useStrings();
   const locale = useLocale();
   const entrada = useRef<HTMLInputElement>(null);
-  const [informe, setInforme] = useState<{ nombre: string; plan: ImportPlan } | null>(null);
+  const botonImportar = useRef<HTMLButtonElement>(null);
+  const seccion = useRef<HTMLElement>(null);
+  /**
+   * The plan and what it was made against: if the delta or the diagram changed since, its
+   * «before» values are stale and applying it would revert those edits, so Apply waits for a
+   * new import.
+   */
+  const [informe, setInforme] = useState<{
+    nombre: string;
+    plan: ImportPlan;
+    delta: Record<string, unknown>;
+    ir: ProcessIR;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hecho, setHecho] = useState<{ antes: Record<string, unknown>; despues: Record<string, unknown>; cambios: number } | null>(null);
   const nombre = typeof resuelto['name'] === 'string' && resuelto['name'].trim() !== '' ? resuelto['name'] : archivo.replace(/\.scenario\.json$/, '');
@@ -1793,12 +1806,31 @@ function ImportarExcel({
     setHecho(null);
     try {
       const hojas = readScenarioFile(elegido.name, await leerArchivo(elegido));
-      setInforme({ nombre: elegido.name, plan: planScenarioImport(hojas, resuelto, ir, { locale }) });
+      setInforme({ nombre: elegido.name, plan: planScenarioImport(hojas, resuelto, ir, { locale }), delta, ir });
     } catch (e) {
       setInforme(null);
-      setError(S.escenario.importarIlegible(e instanceof Error ? e.message : String(e)));
+      const razon = e instanceof WorkbookReadError ? e.reason : 'not-a-workbook';
+      setError(
+        razon === 'too-large'
+          ? S.escenario.importarDemasiadoGrande
+          : razon === 'out-of-bounds'
+            ? S.escenario.importarFueraDeLimites
+            : S.escenario.importarIlegible,
+      );
     }
   }
+
+  /** Closing the report gives the focus back to the button that opened it. */
+  function cerrar(): void {
+    setInforme(null);
+    botonImportar.current?.focus();
+  }
+
+  // The report takes the focus when it appears, so a screen reader reads it and Escape reaches it.
+  const abierto = informe !== null;
+  useEffect(() => {
+    if (abierto) seccion.current?.focus();
+  }, [abierto]);
 
   function aplicar(plan: ImportPlan): void {
     let siguiente = delta;
@@ -1807,10 +1839,12 @@ function ImportarExcel({
     }
     onCambio(archivo, siguiente);
     setHecho({ antes: delta, despues: siguiente, cambios: plan.changes.length });
-    setInforme(null);
+    cerrar();
   }
 
   const plan = informe?.plan;
+  const lint = plan?.issues.filter((i) => i.kind === 'lint') ?? [];
+  const caducado = informe !== null && (informe.delta !== delta || informe.ir !== ir);
   const noEmparejadas = plan?.issues.filter((i) => i.kind === 'unmatched' || i.kind === 'ambiguous') ?? [];
   const errores = plan?.issues.filter((i) => i.kind === 'error') ?? [];
   const avisos = plan?.issues.filter((i) => i.kind === 'warning') ?? [];
@@ -1834,6 +1868,7 @@ function ImportarExcel({
           className="boton"
           disabled={ir === null}
           title={ir === null ? S.escenario.importarSinModelo : S.escenario.importarAyuda}
+          ref={botonImportar}
           onClick={() => entrada.current?.click()}
         >
           {S.escenario.importar}
@@ -1875,8 +1910,20 @@ function ImportarExcel({
       )}
 
       {informe !== null && plan !== undefined && (
-        <section className="informe-importar" aria-label={S.escenario.importarTitulo(informe.nombre)}>
-          <strong>{S.escenario.importarTitulo(informe.nombre)}</strong>
+        <section
+          ref={seccion}
+          className="informe-importar"
+          role="region"
+          aria-labelledby="informe-importar-titulo"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              cerrar();
+            }
+          }}
+        >
+          <strong id="informe-importar-titulo">{S.escenario.importarTitulo(informe.nombre)}</strong>
           <p>{plan.changes.length === 0 ? S.escenario.importarSinCambios : S.escenario.importarCambios(plan.changes.length)}</p>
           {plan.changes.length > 0 && (
             <ul className="ids cambios">
@@ -1886,12 +1933,15 @@ function ImportarExcel({
                   {' · '}
                   <span className="mono">{cambio.field === '' ? S.escenario.importarNuevo : cambio.field}</span>
                   {': '}
-                  {describeImportValue(cambio.before)} → {describeImportValue(cambio.after)}
+                  {describeImportValue(cambio.before, { unit: cambio.unit, locale })} →{' '}
+                  {describeImportValue(cambio.after, { unit: cambio.unit, locale })}{' '}
+                  <span className="origen">({S.escenario.importarDesde(cambio.sheet, cambio.row)})</span>
                 </li>
               ))}
             </ul>
           )}
           {[
+            { titulo: S.escenario.importarLint(lint.length), lista: lint, clase: 'error' },
             { titulo: S.escenario.importarNoEmparejadas(noEmparejadas.length), lista: noEmparejadas, clase: 'aviso' },
             { titulo: S.escenario.importarErrores(errores.length), lista: errores, clase: 'error' },
             { titulo: S.escenario.importarAvisos(avisos.length), lista: avisos, clase: 'aviso' },
@@ -1909,11 +1959,21 @@ function ImportarExcel({
                 </ul>
               </div>
             ))}
+          {caducado && (
+            <p role="alert" className="error">
+              {S.escenario.importarCaducado}
+            </p>
+          )}
           <div className="acciones">
-            <button type="button" className="boton primario" disabled={plan.changes.length === 0} onClick={() => aplicar(plan)}>
+            <button
+              type="button"
+              className="boton primario"
+              disabled={plan.changes.length === 0 || lint.length > 0 || caducado}
+              onClick={() => aplicar(plan)}
+            >
               {S.escenario.importarAplicar}
             </button>
-            <button type="button" className="boton" onClick={() => setInforme(null)}>
+            <button type="button" className="boton" onClick={cerrar}>
               {S.escenario.importarCancelar}
             </button>
           </div>

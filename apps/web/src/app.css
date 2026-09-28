@@ -2249,6 +2249,10 @@ body {
   font-weight: 600;
 }
 
+.escenario-importar .cambios .origen {
+  color: var(--fg-muted);
+}
+
 /* ---------- validar rutas (LILA-065) ---------- */
 
 /* Botón propio de bpmn-js-token-simulation: el modo ya se enciende y se apaga desde la pestaña

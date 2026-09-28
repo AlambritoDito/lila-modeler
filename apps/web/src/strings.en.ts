@@ -1022,7 +1022,12 @@ export const en = {
     importarCancelar: 'Cancel',
     importarAplicado: (n: number): string => (n === 1 ? 'Imported 1 change.' : `Imported ${n} changes.`),
     importarDeshacer: 'Undo import',
-    importarIlegible: (detalle: string): string => `The file could not be read as a spreadsheet (${detalle}).`,
+    importarIlegible: 'The file could not be read as a spreadsheet: pick an .xlsx workbook or a CSV file.',
+    importarDemasiadoGrande: 'The workbook is too large to import (more than 50 MB of sheets once uncompressed).',
+    importarFueraDeLimites: 'The workbook has cells beyond the last row or column Excel allows; it looks damaged.',
+    importarLint: (n: number): string => `Errors the scenario would have after applying (${n}): fix the file and import it again`,
+    importarDesde: (hoja: string, fila: number): string => `${hoja}, row ${fila}`,
+    importarCaducado: 'The scenario changed after the file was read: import it again to apply it.',
 
     /** `resources[pool].capacity` (LILA-164): fixed or per shift. */
     capacidadFija: 'Fixed',

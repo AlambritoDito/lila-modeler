@@ -995,7 +995,12 @@ export const es: Strings = {
     importarCancelar: 'Cancelar',
     importarAplicado: (n: number): string => (n === 1 ? 'Se importó 1 cambio.' : `Se importaron ${n} cambios.`),
     importarDeshacer: 'Deshacer importación',
-    importarIlegible: (detalle: string): string => `El archivo no se pudo leer como hoja de cálculo (${detalle}).`,
+    importarIlegible: 'El archivo no se pudo leer como hoja de cálculo: elige un libro .xlsx o un archivo CSV.',
+    importarDemasiadoGrande: 'El libro es demasiado grande para importarlo (más de 50 MB de hojas descomprimidas).',
+    importarFueraDeLimites: 'El libro tiene celdas más allá de la última fila o columna que admite Excel; parece dañado.',
+    importarLint: (n: number): string => `Errores que tendría el escenario al aplicar (${n}): corrige el archivo e impórtalo de nuevo`,
+    importarDesde: (hoja: string, fila: number): string => `${hoja}, fila ${fila}`,
+    importarCaducado: 'El escenario cambió después de leer el archivo: impórtalo de nuevo para aplicarlo.',
 
     /** `resources[pool].capacity` (LILA-164): fija o por turnos. */
     capacidadFija: 'Fija',
