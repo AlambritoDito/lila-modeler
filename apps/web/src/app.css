@@ -2226,6 +2226,29 @@ body {
   margin: 0;
 }
 
+/* #449: «Download template» / «Import Excel/CSV…» and the report shown before applying. */
+.escenario-importar .acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.escenario-importar .informe-importar {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 8px;
+  overflow-wrap: anywhere;
+}
+
+.escenario-importar .informe-importar p {
+  margin: 4px 0;
+}
+
+.escenario-importar .cambios .objetivo {
+  font-weight: 600;
+}
+
 /* ---------- validar rutas (LILA-065) ---------- */
 
 /* Botón propio de bpmn-js-token-simulation: el modo ya se enciende y se apaga desde la pestaña

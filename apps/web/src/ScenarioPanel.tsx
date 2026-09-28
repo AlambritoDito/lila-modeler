@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 import {
@@ -48,9 +48,17 @@ import {
   validateScenario,
   type ScenarioReader,
 } from '@lila-modeler/engine/schema';
+import {
+  describeImportValue,
+  planScenarioImport,
+  readScenarioFile,
+  scenarioTemplate,
+  type ImportPlan,
+} from '@lila-modeler/engine/scenario-sheets';
 
 import { CalendarEditor, Festivos, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { PASO_IDS, type PasoId } from './ids.js';
+import { downloadXlsx } from './ResultsView.js';
 import { LaneAssign } from './LaneAssign.js';
 import { esEscenarioBase } from './RailEscenarios.js';
 import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
@@ -1735,6 +1743,187 @@ function VistaJson({
 }
 
 /* ------------------------------------------------------------------ *
+ * #449: parameters from Excel/CSV, reviewed before they are applied
+ * ------------------------------------------------------------------ */
+
+/** The bytes of a picked file. `FileReader` covers the environments without `Blob.arrayBuffer`. */
+function leerArchivo(archivo: File): Promise<Uint8Array> {
+  if (typeof archivo.arrayBuffer === 'function') return archivo.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+  return new Promise((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onload = () => resolver(new Uint8Array(lector.result as ArrayBuffer));
+    lector.onerror = () => rechazar(lector.error ?? new Error(archivo.name));
+    lector.readAsArrayBuffer(archivo);
+  });
+}
+
+/**
+ * «Download template» and «Import Excel/CSV…» (#449). The engine plans the import against the
+ * **resolved** scenario (`@lila-modeler/engine/scenario-sheets`); this component only shows the
+ * plan and, on «Apply», writes its changes into the **delta** the way the form does (`conBorrados`
+ * against the parent, § 6). Undo puts the delta back as it was, and is offered only while nothing
+ * else has changed it since: undoing over later edits would silently drop them.
+ */
+function ImportarExcel({
+  archivo,
+  resuelto,
+  delta,
+  padre,
+  ir,
+  onCambio,
+}: {
+  archivo: string;
+  resuelto: Record<string, unknown>;
+  delta: Record<string, unknown>;
+  padre: Record<string, unknown> | null;
+  ir: ProcessIR | null;
+  onCambio: (archivo: string, escenario: Record<string, unknown>) => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const locale = useLocale();
+  const entrada = useRef<HTMLInputElement>(null);
+  const [informe, setInforme] = useState<{ nombre: string; plan: ImportPlan } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hecho, setHecho] = useState<{ antes: Record<string, unknown>; despues: Record<string, unknown>; cambios: number } | null>(null);
+  const nombre = typeof resuelto['name'] === 'string' && resuelto['name'].trim() !== '' ? resuelto['name'] : archivo.replace(/\.scenario\.json$/, '');
+
+  async function importar(elegido: File): Promise<void> {
+    if (ir === null) return;
+    setError(null);
+    setHecho(null);
+    try {
+      const hojas = readScenarioFile(elegido.name, await leerArchivo(elegido));
+      setInforme({ nombre: elegido.name, plan: planScenarioImport(hojas, resuelto, ir, { locale }) });
+    } catch (e) {
+      setInforme(null);
+      setError(S.escenario.importarIlegible(e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  function aplicar(plan: ImportPlan): void {
+    let siguiente = delta;
+    for (const cambio of plan.changes) {
+      siguiente = escribir(siguiente, cambio.path, conBorrados(cambio.after, leer(padre, cambio.path)));
+    }
+    onCambio(archivo, siguiente);
+    setHecho({ antes: delta, despues: siguiente, cambios: plan.changes.length });
+    setInforme(null);
+  }
+
+  const plan = informe?.plan;
+  const noEmparejadas = plan?.issues.filter((i) => i.kind === 'unmatched' || i.kind === 'ambiguous') ?? [];
+  const errores = plan?.issues.filter((i) => i.kind === 'error') ?? [];
+  const avisos = plan?.issues.filter((i) => i.kind === 'warning') ?? [];
+
+  return (
+    <div className="escenario-importar">
+      <div className="acciones">
+        <button
+          type="button"
+          className="boton"
+          disabled={ir === null}
+          title={ir === null ? S.escenario.importarSinModelo : S.escenario.importarAyuda}
+          onClick={() => {
+            if (ir !== null) downloadXlsx(`${nombre}.template.xlsx`, scenarioTemplate(resuelto, ir));
+          }}
+        >
+          {S.escenario.plantilla}
+        </button>
+        <button
+          type="button"
+          className="boton"
+          disabled={ir === null}
+          title={ir === null ? S.escenario.importarSinModelo : S.escenario.importarAyuda}
+          onClick={() => entrada.current?.click()}
+        >
+          {S.escenario.importar}
+        </button>
+        <input
+          ref={entrada}
+          type="file"
+          hidden
+          aria-label={S.escenario.importar}
+          accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          onChange={(e) => {
+            const elegido = e.target.files?.[0];
+            e.target.value = '';
+            if (elegido !== undefined) void importar(elegido);
+          }}
+        />
+      </div>
+
+      {error !== null && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+
+      {hecho !== null && delta === hecho.despues && (
+        <p role="status" className="importado">
+          {S.escenario.importarAplicado(hecho.cambios)}{' '}
+          <button
+            type="button"
+            className="boton"
+            onClick={() => {
+              onCambio(archivo, hecho.antes);
+              setHecho(null);
+            }}
+          >
+            {S.escenario.importarDeshacer}
+          </button>
+        </p>
+      )}
+
+      {informe !== null && plan !== undefined && (
+        <section className="informe-importar" aria-label={S.escenario.importarTitulo(informe.nombre)}>
+          <strong>{S.escenario.importarTitulo(informe.nombre)}</strong>
+          <p>{plan.changes.length === 0 ? S.escenario.importarSinCambios : S.escenario.importarCambios(plan.changes.length)}</p>
+          {plan.changes.length > 0 && (
+            <ul className="ids cambios">
+              {plan.changes.map((cambio, i) => (
+                <li key={i}>
+                  <span className="objetivo">{cambio.target}</span>
+                  {' · '}
+                  <span className="mono">{cambio.field === '' ? S.escenario.importarNuevo : cambio.field}</span>
+                  {': '}
+                  {describeImportValue(cambio.before)} → {describeImportValue(cambio.after)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {[
+            { titulo: S.escenario.importarNoEmparejadas(noEmparejadas.length), lista: noEmparejadas, clase: 'aviso' },
+            { titulo: S.escenario.importarErrores(errores.length), lista: errores, clase: 'error' },
+            { titulo: S.escenario.importarAvisos(avisos.length), lista: avisos, clase: 'aviso' },
+          ]
+            .filter((grupo) => grupo.lista.length > 0)
+            .map((grupo) => (
+              <div key={grupo.titulo}>
+                <p className="etiqueta">{grupo.titulo}</p>
+                <ul className="ids">
+                  {grupo.lista.map((problema, i) => (
+                    <li key={i} className={grupo.clase}>
+                      {problema.text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          <div className="acciones">
+            <button type="button" className="boton primario" disabled={plan.changes.length === 0} onClick={() => aplicar(plan)}>
+              {S.escenario.importarAplicar}
+            </button>
+            <button type="button" className="boton" onClick={() => setInforme(null)}>
+              {S.escenario.importarCancelar}
+            </button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * El panel
  * ------------------------------------------------------------------ */
 
@@ -1984,6 +2173,8 @@ export function ScenarioPanel({
 
       <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
       <Problemas ruta={['extends']} ctx={ctx} />
+
+      <ImportarExcel archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
 
       {huerfanas.length > 0 && ir !== null && (
         <div className="lista-paso huerfanas">

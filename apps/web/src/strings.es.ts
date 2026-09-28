@@ -979,6 +979,24 @@ export const es: Strings = {
     jsonInvalido: (mensaje: string): string => `No es JSON válido: ${mensaje}`,
     jsonNoEsObjeto: 'El escenario tiene que ser un objeto JSON.',
 
+    /** #449: parámetros del escenario desde Excel/CSV, revisados antes de aplicarse. */
+    importar: 'Importar Excel/CSV…',
+    plantilla: 'Descargar plantilla',
+    importarAyuda: 'Descarga la plantilla, rellénala en Excel e impórtala. Las celdas vacías no cambian nada y no se aplica nada hasta que confirmes.',
+    importarSinModelo: 'Abre primero un diagrama: las filas se emparejan con sus elementos.',
+    importarTitulo: (archivo: string): string => `Importar desde ${archivo}`,
+    importarCambios: (n: number): string => (n === 1 ? '1 cambio por aplicar:' : `${n} cambios por aplicar:`),
+    importarSinCambios: 'Nada que cambiar: el archivo dice lo que el escenario ya tiene.',
+    importarNuevo: 'nuevo',
+    importarNoEmparejadas: (n: number): string => `Filas sin aplicar: no coinciden con nada o son ambiguas (${n})`,
+    importarErrores: (n: number): string => `Filas sin aplicar: valores inválidos (${n})`,
+    importarAvisos: (n: number): string => `Notas (${n})`,
+    importarAplicar: 'Aplicar',
+    importarCancelar: 'Cancelar',
+    importarAplicado: (n: number): string => (n === 1 ? 'Se importó 1 cambio.' : `Se importaron ${n} cambios.`),
+    importarDeshacer: 'Deshacer importación',
+    importarIlegible: (detalle: string): string => `El archivo no se pudo leer como hoja de cálculo (${detalle}).`,
+
     /** `resources[pool].capacity` (LILA-164): fija o por turnos. */
     capacidadFija: 'Fija',
     capacidadPorTurno: 'Por turno',
