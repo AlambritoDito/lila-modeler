@@ -5,8 +5,9 @@
  * byte a byte igual a `lila run --csv` (reutiliza `elementsCsv`/`flowsCsv`/`resourcesCsv`/
  * `processCsv` de `@lila-modeler/engine/csv`, nunca reimplementadas aquí).
  *
- * Tablas HTML planas, sin librería de grid ni gráficas (BACKLOG.md LILA-062): ordenar por
- * columna y encabezado fijo se resuelven con `useState` + `position: sticky`.
+ * Tablas HTML planas, sin librería de grid (BACKLOG.md LILA-062): ordenar por columna y
+ * encabezado fijo se resuelven con `useState` + `position: sticky`. Junto a cada tabla, sus
+ * gráficas en SVG propio (#460, `GraficasResultados.tsx`); la tabla sigue siendo la fuente.
  *
  * Cableado al shell de LILA-057 (pendiente de mezclar): el orquestador monta
  * `<ResultsView ir={ir} scenario={scenarioResuelto} result={runResult} />` donde hoy exista la
@@ -39,6 +40,7 @@ import type {
   RunResult,
 } from '@lila-modeler/engine';
 import { hasLegacyReplications } from './compareWarnings.js';
+import { GraficaDeInstancias, GraficaDeUtilizacion, GraficasDelProceso, type LogDeCorrida } from './GraficasResultados';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -55,6 +57,11 @@ export interface ResultsViewProps {
    * is painted but disabled, because the replay mode would only say «run it again» (#331).
    */
   sinLog?: boolean | undefined;
+  /**
+   * The event log sample of the run (#460): with it, the Process tab adds the per-case cycle time
+   * histogram. Absent (a run reopened from a `.lila`, the demo) the tab says why there is none.
+   */
+  log?: LogDeCorrida | undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -629,7 +636,7 @@ export function buildResultCsvExports(
   };
 }
 
-export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: ResultsViewProps): ReactNode {
+export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false, log }: ResultsViewProps): ReactNode {
   const S = useStrings();
   const [tab, setTab] = useState<Tab>('elements');
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
@@ -692,6 +699,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
           xlsxContents={xlsx}
         />
       )}
+      {tab === 'elements' && <GraficaDeInstancias ir={ir} result={result} />}
       {tab === 'flows' && (
         <DataTable
           title={tabLabels().flows}
@@ -717,6 +725,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
       {tab === 'resources' && <p style={notaStyle}>{S.resultados.notaCostoRecursos}</p>}
+      {tab === 'resources' && <GraficaDeUtilizacion result={result} nombres={names} />}
       {tab === 'process' && (
         <DataTable
           title={tabLabels().process}
@@ -730,6 +739,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false }: 
         />
       )}
       {tab === 'process' && <p style={notaStyle}>{S.resultados.notaCostoPorCaso}</p>}
+      {tab === 'process' && <GraficasDelProceso result={result} scenario={scenario} unit={unit} log={log} />}
       {tab === 'process' && outcomes.length > 0 && (
         <DataTable
           title={S.resultados.desenlaces}

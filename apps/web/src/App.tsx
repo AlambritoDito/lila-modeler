@@ -26,6 +26,7 @@ import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
+import { graficasDelDocumento } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
@@ -1654,7 +1655,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: projectName, date, locale, png, ...escenario });
+      // #460: the run's charts, rasterised like the diagram; no run, no charts.
+      const charts = run === undefined ? [] : await Promise.all(
+        graficasDelDocumento({ ir: modelo, scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result, log: logs.current.get(run.id) })
+          .map(async ({ svg, alt }) => ({ alt, png: new Uint8Array(await (await aPng(svg)).arrayBuffer()) })),
+      );
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: projectName, date, locale, png, charts, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
@@ -2300,7 +2306,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'resultados' && (
         <section className="zona-resultados">
           {corrida !== null && ir !== null
-            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null} />
+            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null}
+                log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)} />
             : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}
