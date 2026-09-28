@@ -10,10 +10,13 @@ Está pensado para los parámetros que ya tienes en Excel, así no hay que copia
    tabla, ya rellena con el escenario que editas y con una fila por elemento del diagrama.
 2. Edítala en Excel, LibreOffice, Numbers o Google Sheets. Cambia lo que necesites y deja el resto.
 3. Pulsa **Importar Excel/CSV…** y elige el archivo. Todavía no cambia nada: el panel enseña lo que
-   cambiaría, las filas que no coinciden con nada y los valores inválidos, cada uno con su hoja,
-   fila y columna.
+   cambiaría (con la hoja y la fila de cada cambio), las filas que no coinciden con nada y los
+   valores inválidos, cada uno con su hoja, fila y columna, y los errores que tendría el escenario
+   al aplicar.
 4. **Aplicar** escribe los cambios en el escenario que editas, y **Deshacer importación** los
-   revierte mientras no hayas editado nada más. **Cancelar** deja el escenario como estaba.
+   revierte mientras no hayas editado nada más. **Cancelar** (o Escape) deja el escenario como
+   estaba. Aplicar queda desactivado mientras el escenario fuera a quedar con errores, y cuando el
+   escenario o el diagrama cambiaron después de leer el archivo: entonces impórtalo de nuevo.
 
 El resultado es una edición normal del escenario, así que la lista de validación del panel lo
 revisa como siempre. Si el escenario hereda de otro (`extends`), los cambios van al archivo de este
@@ -37,8 +40,23 @@ escenario, igual que cuando editas un campo a mano ([SCENARIO_FORMAT.md](SCENARI
   espacios y una unidad entre paréntesis no importan: `Fixed cost (MXN)` es `fixedCost`. Las hojas
   también pueden llamarse `Elementos`, `Llegadas`, `Recursos`, `Asignaciones` y `Calendarios`. Las
   columnas desconocidas se ignoran con una nota.
-- Los números pueden llevar coma decimal (`7,5`), separador de miles (`1.234,5` o `1,234.5`) y
-  porcentaje (`78%` es `0.78`).
+- **Las asignaciones y los intervalos de calendario reemplazan una lista entera.** Las filas de
+  una tarea en Assignments son todos sus grupos, y las filas de un calendario son todos sus
+  intervalos: borrar una de las dos filas de una tarea le quita ese grupo. Una tarea o un
+  calendario que la hoja no menciona conserva lo que tiene.
+- **Los números siguen al archivo.** Un CSV separado por `;` (lo que escribe un Excel en español)
+  usa `,` para decimales y `.` para miles: `7,5`, `1.500` (mil quinientos), `1.234.567,5`. Un CSV
+  separado por `,` o tabulador usa `.` para decimales y `,` para miles, que entonces va entre
+  comillas: `7.5`, `"1,500"`. Un separador que no es el decimal tiene que agrupar las cifras de
+  tres en tres; si no, el valor es un error que dice la convención (`1.5` en un archivo con `;`).
+  En un libro, las celdas numéricas son números y no necesitan nada de esto; un número escrito como
+  texto sigue el idioma de la app, y uno que se puede leer de las dos formas (`1.500`) lleva una
+  nota. Vale el porcentaje (`78%` es `0.78`); los valores no finitos (`1e999`) son un error.
+- **Las hojas ocultas no se leen**, con una nota: la importación nunca aplica datos que no ves en
+  el archivo. Una fórmula sin resultado guardado (un archivo escrito por un script, o Excel en
+  cálculo manual) se lee vacía, con una nota: abre el archivo en Excel y guárdalo de nuevo.
+- Se rechaza un libro de más de 50 MB de hojas descomprimidas, o con celdas más allá de la última
+  fila o columna de Excel. Sus imágenes y gráficos nunca se leen.
 
 ## Hojas
 
@@ -91,10 +109,12 @@ tarea sin grupos.
 Una fila por intervalo semanal: `id`, `days`, `from` y `to`. Las filas de un calendario reemplazan
 sus intervalos, y un `id` que el escenario no tiene crea el calendario.
 
-- `days`: `MON,TUE,WED`, un rango como `MON-FRI`, o las abreviaturas en español `LUN`, `MAR`,
-  `MIE`, `JUE`, `VIE`, `SAB`, `DOM`.
+- `days`: `MON,TUE,WED`, un rango como `MON-FRI`, nombres completos (`Monday`), o las abreviaturas
+  y nombres en español `LUN`, `MAR`, `MIE`, `JUE`, `VIE`, `SAB`, `DOM`, `lunes`… Solo palabras
+  completas: `Marzo` no es martes.
 - `from` y `to`: `HH:MM`, con `24:00` permitido como fin del día. También vale una hora que Excel
-  guarda como hora del día.
+  guarda como hora del día. Los calendarios guardan horas y minutos, así que los segundos se
+  descartan con una nota.
 - Un calendario con fechas mensuales o anuales (`monthDays`, `monthWeekdays`, `dates`) o con
   festivos (`holidays`) no se edita en esta hoja. La plantilla lo omite y la importación lo conserva
   intacto, entero, con una nota en el informe. Se edita en el panel.
@@ -104,8 +124,9 @@ sus intervalos, y un `id` que el escenario no tiene crea el calendario.
 Un archivo CSV contiene una tabla. La hoja se deduce del nombre del archivo (`recursos.csv`,
 `Assignments.csv`…) o, si el nombre no lo dice, de sus columnas. El separador se detecta: `,`, `;`
 (lo que escribe un Excel en español, con la coma decimal) o tabulador, y se entiende la primera
-línea `sep=;` de Excel. El archivo puede estar en UTF-8 o en la codificación de Windows que usa
-Excel para «CSV (delimitado por comas)».
+línea `sep=;` de Excel. El separador decide también cómo se escriben los números (ver Reglas). El
+archivo puede estar en UTF-8, en la codificación de Windows que usa Excel para «CSV (delimitado por
+comas)» o en UTF-16 («Texto Unicode»).
 
 ## Límites
 

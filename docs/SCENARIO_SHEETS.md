@@ -10,10 +10,13 @@ already have in Excel, so you do not have to copy them field by field.
    already filled with the scenario you are editing and with one row per element of the diagram.
 2. Edit it in Excel, LibreOffice, Numbers or Google Sheets. Change what you need and leave the rest.
 3. Press **Import Excel/CSV…** and pick the file. Nothing changes yet: the panel shows what would
-   change, the rows that matched nothing and the invalid values, each one with its sheet, row and
-   column.
+   change (with the sheet and row of each change), the rows that matched nothing and the invalid
+   values, each one with its sheet, row and column, and the errors the scenario would have after
+   applying.
 4. **Apply** writes the changes into the scenario you are editing, and **Undo import** reverts them
-   while you have not edited anything else. **Cancel** leaves the scenario as it was.
+   while you have not edited anything else. **Cancel** (or Escape) leaves the scenario as it was.
+   Apply stays disabled while the scenario would end up with errors, and when the scenario or the
+   diagram changed after reading the file: import it again then.
 
 The result is an ordinary scenario edit, so the validation list of the panel lints it as usual.
 If the scenario inherits from another one (`extends`), the changes go into this scenario's own file,
@@ -36,8 +39,22 @@ as when you edit a field by hand ([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md) § 6)
   unit between parentheses do not matter: `Fixed cost (MXN)` is `fixedCost`. The sheets can also
   be called `Elementos`, `Llegadas`, `Recursos`, `Asignaciones` and `Calendarios`. Unknown columns
   are ignored with a note.
-- Numbers can use a decimal comma (`7,5`), thousands separators (`1.234,5` or `1,234.5`) and a
-  percentage (`78%` is `0.78`).
+- **Assignments and calendar intervals replace a whole list.** The rows of a task in Assignments
+  are all its pools, and the rows of a calendar are all its intervals: deleting one of a task's two
+  rows removes that pool. A task or calendar the sheet does not mention keeps what it has.
+- **Numbers follow the file.** A CSV separated by `;` (what a Spanish Excel writes) uses `,` for
+  decimals and `.` for thousands: `7,5`, `1.500` (fifteen hundred), `1.234.567,5`. A CSV separated
+  by `,` or tab uses `.` for decimals and `,` for thousands, which then has to be quoted: `7.5`,
+  `"1,500"`. A separator that is not the decimal one must group digits by three, otherwise the
+  value is an error that says the convention (`1.5` in a `;` file). In a workbook, numeric cells
+  are numbers and need none of this; a number typed as text follows the language of the app, and
+  one that could be read both ways (`1.500`) gets a note. A percentage works (`78%` is `0.78`);
+  values that are not finite (`1e999`) are errors.
+- **Hidden sheets are not read**, with a note: the import never applies data you cannot see in the
+  file. A formula without a saved result (a file written by a script, or Excel in manual
+  calculation) is read as empty, with a note: open the file in Excel and save it again.
+- A workbook larger than 50 MB of sheets once uncompressed, or with cells beyond Excel's last row
+  or column, is refused. Images and charts in it are never read.
 
 ## Sheets
 
@@ -89,10 +106,11 @@ not in the sheet keeps its pools. A row with the task and no pool leaves the tas
 One row per weekly interval: `id`, `days`, `from` and `to`. The rows of a calendar replace its
 intervals, and an `id` the scenario does not have creates the calendar.
 
-- `days`: `MON,TUE,WED`, a range such as `MON-FRI`, or the Spanish abbreviations `LUN`, `MAR`,
-  `MIE`, `JUE`, `VIE`, `SAB`, `DOM`.
+- `days`: `MON,TUE,WED`, a range such as `MON-FRI`, full names (`Monday`), or the Spanish
+  abbreviations and names `LUN`, `MAR`, `MIE`, `JUE`, `VIE`, `SAB`, `DOM`, `lunes`… Whole words
+  only: `Monkey` is not Monday.
 - `from` and `to`: `HH:MM`, with `24:00` allowed as the end of the day. A time Excel stores as a time
-  of day also works.
+  of day also works. Calendars keep hours and minutes, so seconds are dropped with a note.
 - A calendar with monthly or yearly dates (`monthDays`, `monthWeekdays`, `dates`) or with
   `holidays` is not edited in this sheet. The template leaves it out and the import keeps it
   untouched, whole, with a note in the report. Edit it in the panel.
@@ -102,7 +120,8 @@ intervals, and an `id` the scenario does not have creates the calendar.
 A CSV file holds one table. The sheet is taken from the file name (`recursos.csv`,
 `Assignments.csv`…) or, if the name does not say, from its columns. The separator is detected: `,`,
 `;` (what a Spanish Excel writes, with the decimal comma) or tab, and Excel's `sep=;` first line is
-understood. The file can be UTF-8 or the Windows encoding Excel uses for «CSV (delimited)».
+understood. The separator also decides how numbers are written (see Rules). The file can be
+UTF-8, the Windows encoding Excel uses for «CSV (delimited)», or UTF-16 («Unicode Text»).
 
 ## Limits
 
