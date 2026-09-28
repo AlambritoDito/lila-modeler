@@ -627,6 +627,12 @@ export interface ParseResult {
    */
   lanes?: Record<string, string>;
   pool?: string;
+  /**
+   * The BPMN `$type` of every IR node and flattened sub-process, by IR id (#509): the IR flattens
+   * every task variant, call activities included, to `task`, and the process document needs the
+   * original type to pick the element's extended attributes. Optional for hand-built results.
+   */
+  types?: Record<string, string>;
 }
 
 /** `original id -> label` of every lane of `laneSets`, nested ones included. */
@@ -977,6 +983,9 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
       .map((flow) => flow.id),
     subprocesses: c.subprocesses,
     lanes: laneLabels(main.laneSets ?? [], (id) => sanitizedToOriginal.get(id) ?? id),
+    types: Object.fromEntries(
+      [...c.idOf].filter(([, id]) => c.nodes[id] !== undefined || c.subprocesses[id] !== undefined).map(([el, id]) => [id, el.$type]),
+    ),
     ...poolOf(definitions, main, sanitizedToOriginal),
   };
 }

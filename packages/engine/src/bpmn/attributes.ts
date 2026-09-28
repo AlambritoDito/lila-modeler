@@ -47,8 +47,8 @@ export function categoryOf(type: string): ElementCategory | undefined {
   return undefined;
 }
 
-/** A plain decimal: optional sign, digits, an optional `.` fraction. No thousands separators, no exponent. */
-const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
+/** A plain decimal: an optional `-`, digits, an optional `.` and more digits. `4.`, `+5`, `.5`, `1e3` and `4,5` are not. */
+const NUMBER = /^-?\d+(\.\d+)?$/;
 /** A calendar date, `YYYY-MM-DD`, the value an `<input type="date">` gives. */
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -68,7 +68,9 @@ export function validateAttributeValue(
       const match = DATE.exec(value);
       if (match === null) return 'date';
       const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-      const date = new Date(Date.UTC(year, month - 1, day));
+      // `setUTCFullYear`, not `Date.UTC`: the latter maps years 0–99 to 1900–1999.
+      const date = new Date(0);
+      date.setUTCFullYear(year, month - 1, day);
       return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
         ? null
         : 'date';
@@ -92,17 +94,30 @@ export function effectiveAttributes(
   values: readonly AttributeValue[],
 ): { name: string; value: string }[] {
   const out: { name: string; value: string }[] = [];
-  const known = new Set(definitions.map((d) => d.id));
+  const unique = uniqueDefinitions(definitions);
+  const known = new Set(unique.map((d) => d.id));
+  const own = (ref: string): string[] => values.filter((v) => v.ref === ref && v.value !== '').map((v) => v.value);
   if (category !== undefined) {
-    for (const definition of definitions) {
+    for (const definition of unique) {
       if (definition.appliesTo !== category) continue;
-      const own = values.find((v) => v.ref === definition.id)?.value;
-      const value = own ?? definition.default ?? '';
+      // Several values for one attribute (a hand-edited file) are all shown, never just the first.
+      const mine = own(definition.id);
+      const value = mine.length > 0 ? mine.join(', ') : (definition.default ?? '');
       if (value !== '') out.push({ name: definition.name || definition.id, value });
     }
   }
-  for (const orphan of values) {
-    if (!known.has(orphan.ref) && orphan.value !== '') out.push({ name: orphan.ref, value: orphan.value });
+  for (const ref of new Set(values.map((v) => v.ref))) {
+    const orphan = own(ref);
+    if (!known.has(ref) && orphan.length > 0) out.push({ name: ref, value: orphan.join(', ') });
   }
   return out;
+}
+
+/**
+ * The definitions with each `id` once, the first one winning: a pasted pool or a file edited by
+ * hand can repeat a definition, and a repeat must not show an attribute twice.
+ */
+export function uniqueDefinitions<T extends Pick<AttributeDefinition, 'id'>>(definitions: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return definitions.filter((d) => !seen.has(d.id) && seen.add(d.id) !== undefined);
 }

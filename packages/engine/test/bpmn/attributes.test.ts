@@ -29,13 +29,19 @@ describe('validateAttributeValue', () => {
   it.each([
     ['number', '12', null],
     ['number', '-1.5', null],
-    ['number', '.5', null],
+    ['number', '.5', 'number'],
+    ['number', '4.', 'number'],
+    ['number', '+5', 'number'],
+    ['number', '-0.25', null],
     ['number', '1,5', 'number'],
     ['number', '1e3', 'number'],
     ['number', ' 4', 'number'],
     ['number', 'doce', 'number'],
     ['date', '2026-09-28', null],
     ['date', '2026-02-30', 'date'],
+    ['date', '0099-12-31', null],
+    ['date', '0001-01-01', null],
+    ['date', '2024-02-29', null],
     ['date', '28/09/2026', 'date'],
     ['text', 'lo que sea', null],
     ['unknown-type', 'lo que sea', null],
@@ -71,6 +77,15 @@ it('effectiveAttributes: own value, else default; orphans are kept under their r
     { name: 'Attr_borrado', value: 'x' },
   ]);
   expect(effectiveAttributes(DEFINITIONS, 'event', [])).toEqual([]);
+  // A repeated definition (a pasted pool) counts once; several values of one attribute all show.
+  expect(effectiveAttributes([...DEFINITIONS, { ...DEFINITIONS[0]!, name: 'copy' }], 'task', [
+    { ref: 'Attr_sla', value: '1' },
+    { ref: 'Attr_sla', value: '2' },
+    { ref: '', value: 'noref' },
+  ])).toEqual([
+    { name: 'SLA', value: '1, 2' },
+    { name: '', value: 'noref' },
+  ]);
 });
 
 describe('lila:attributeDefinition and lila:attributeValue', () => {

@@ -32,7 +32,7 @@
 import { strFromU8, strToU8, zipSync } from 'fflate';
 
 import type { Annotations } from './bpmn/annotate.js';
-import { effectiveAttributes, type ElementCategory } from './bpmn/attributes.js';
+import { categoryOf, effectiveAttributes, type ElementCategory } from './bpmn/attributes.js';
 import type { SubprocessInfo } from './bpmn/parse.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
@@ -81,6 +81,8 @@ export interface ProcessDocumentInput {
   /** `parseBpmn(xml).lanes` and `.pool`: where the lanes' and the pool's extended attributes are (#509). */
   readonly lanes?: Readonly<Record<string, string>> | undefined;
   readonly pool?: string | undefined;
+  /** `parseBpmn(xml).types`: the BPMN type of each node, which the IR flattens (#509). */
+  readonly types?: Readonly<Record<string, string>> | undefined;
   readonly scenario?: ResolvedScenario;
   /** A run of `scenario`; ignored without it. */
   readonly result?: RunResult;
@@ -119,7 +121,7 @@ export function flowOrder(ir: ProcessIR): string[] {
   return [...seen, ...ids.filter((id) => !seen.has(id))];
 }
 
-/** The extended-attribute element type of each IR node type (#509). */
+/** The extended-attribute element type of each IR node type, when the BPMN type is not known (#509). */
 const NODE_CATEGORY: Record<ProcessIR['nodes'][string]['type'], ElementCategory> = {
   start: 'event', end: 'event', terminate: 'event', timer: 'event',
   task: 'task',
@@ -179,9 +181,9 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
 
   // Extended attributes (#509): one labelled line per filled-in attribute, under the element.
   const definitions = Object.values(annotations).flatMap((a) => a.attributeDefinitions ?? []);
-  const attributeLines = (id: string, category: ElementCategory): void => {
+  const attributeLines = (id: string, category: ElementCategory | undefined): void => {
     for (const { name, value } of effectiveAttributes(definitions, category, annotations[id]?.attributes ?? [])) {
-      blocks.push({ kind: 'paragraph', label: name, text: value });
+      blocks.push({ kind: 'paragraph', label: name === '' ? C.docAttributeNoRef() : name, text: value });
     }
   };
   attributeLines(original(ir.id), 'process');
@@ -210,7 +212,9 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     line(C.docDocumentation(), notes.documentation);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
     for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
-    attributeLines(original(id), ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type]);
+    const bpmnType = input.types?.[id];
+    const fallback = ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type];
+    attributeLines(original(id), bpmnType === undefined ? fallback : categoryOf(bpmnType));
   };
   const opened = new Set<string>();
   const openSub = (sub: string | undefined): void => {
