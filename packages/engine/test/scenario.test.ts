@@ -169,16 +169,15 @@ describe('validateScenario contra el IR', () => {
     const raw = clone(AS_IS) as Record<string, never>;
     (raw['elements'] as Record<string, Record<string, unknown>>)['Task_TomarPedido']!['priority'] = 1;
     (raw['resources'] as Record<string, Record<string, unknown>>)['cajero']!['preempt'] = true;
-    (raw['calendars'] as Record<string, Record<string, unknown>>)['oficina']!['holidays'] = [
-      '2026-12-25',
-    ];
+    // #82: `holidays` is implemented now (R-CAL-14); `timezone` is still reserved.
+    (raw['calendars'] as Record<string, Record<string, unknown>>)['oficina']!['timezone'] = 'Europe/Madrid';
 
     const parsed = ScenarioSchema.safeParse(raw);
     expect(parsed.success).toBe(true);
 
     const errors = scenarioErrors(validateScenario(parsed.data!, pedidoIr()));
     expect(errors.map((e) => e.message)).toEqual([
-      'calendars.oficina.holidays: reserved field, not supported by the simulator in v1.',
+      'calendars.oficina.timezone: reserved field, not supported by the simulator in v1.',
       'resources.cajero.preempt: reserved field, not supported by the simulator in v1.',
       'elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.',
     ]);

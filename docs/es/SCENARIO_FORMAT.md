@@ -71,12 +71,33 @@ Mapa `clave → { intervals: [...] }`. La clave es el identificador que citan `r
 
 | Campo | Tipo | Oblig. | Descripción |
 |---|---|---|---|
-| `intervals` | array (≥ 1) | **sí** | Ventanas abiertas del patrón semanal. |
-| `intervals[].days` | array de `"MON"`\|`"TUE"`\|`"WED"`\|`"THU"`\|`"FRI"`\|`"SAT"`\|`"SUN"` | **sí** | Días a los que aplica la ventana. |
+| `intervals` | array (≥ 1) | **sí** | Ventanas abiertas del patrón. |
+| `intervals[].days` | array de `"MON"`\|`"TUE"`\|`"WED"`\|`"THU"`\|`"FRI"`\|`"SAT"`\|`"SUN"` | un selector | Semanal: días a los que aplica la ventana. |
+| `intervals[].monthDays` | array (≥ 1) de enteros `1…31` o `-1…-31` | un selector | Mensual (#82, R-CAL-12): día de cada mes; negativo cuenta desde el final (`-1` = último día). Un día que el mes no tiene se salta. |
+| `intervals[].monthWeekdays` | array (≥ 1) de `{ nth, day }`, `nth` en `1…5` o `-1…-5`, `day` como en `days` | un selector | Mensual (#82, R-CAL-12): el `nth` día de la semana del mes; `{ "nth": -1, "day": "FRI" }` es el último viernes. |
+| `intervals[].dates` | array (≥ 1) de `"MM-DD"` | un selector | Anual (#82, R-CAL-13): esa fecha cada año. `"02-29"` solo abre en años bisiestos; `"02-30"` es error. |
 | `intervals[].from` | string `"HH:MM"` (24 h) | **sí** | Apertura, hora local del offset de `run.start`. |
 | `intervals[].to` | string `"HH:MM"` (24 h) o `"24:00"` | **sí** | Cierre, **exclusivo**. Debe ser `> from`; una ventana nocturna se parte en dos intervalos. `"24:00"` es la medianoche del día siguiente y solo se admite aquí, nunca en `from`: sin ella el formato no sabe decir "hasta el final del día" y un 24×7 escrito a mano perdería 60 s cada noche. |
 
-Semántica (ADR-016): patrón **semanal relativo a `run.start`**; una tarea solo arranca dentro de su calendario efectivo —la intersección de los de sus pools con el suyo propio, R-CAL-4— y su `processingTime` consume solo tiempo de calendario (se pausa al cerrar el turno, reanuda al abrir); el tiempo cerrado se reporta como `offHoursWait`, separado de `resourceWait`; la utilización se calcula sobre el tiempo **disponible** según calendario. Intervalos solapados dentro del mismo calendario se unen (unión, no suma). Sin DST, sin festivos, sin zona horaria propia en v1 (§ 4).
+Cada intervalo lleva **exactamente un** selector de días: `days`, `monthDays`, `monthWeekdays` o `dates` (R18). Un calendario los mezcla con varios intervalos.
+
+| Campo | Tipo | Oblig. | Descripción |
+|---|---|---|---|
+| `holidays` | array de `"YYYY-MM-DD"` o `"MM-DD"` | no | Días cerrados (#82, R-CAL-14): el día entero, digan lo que digan los `intervals`. `"YYYY-MM-DD"` una vez; `"MM-DD"` cada año. Cada uno tiene que ser una fecha real (`"2026-02-29"` es error, `"02-29"` no). |
+
+```json
+"calendars": {
+  "oficina": {
+    "intervals": [
+      { "days": ["MON", "TUE", "WED", "THU", "FRI"], "from": "09:00", "to": "18:00" },
+      { "monthWeekdays": [{ "nth": -1, "day": "SAT" }], "from": "09:00", "to": "13:00" }
+    ],
+    "holidays": ["01-01", "12-25", "2026-11-02"]
+  }
+}
+```
+
+Semántica (ADR-016): patrón **semanal relativo a `run.start`**; una tarea solo arranca dentro de su calendario efectivo —la intersección de los de sus pools con el suyo propio, R-CAL-4— y su `processingTime` consume solo tiempo de calendario (se pausa al cerrar el turno, reanuda al abrir); el tiempo cerrado se reporta como `offHoursWait`, separado de `resourceWait`; la utilización se calcula sobre el tiempo **disponible** según calendario. Intervalos solapados dentro del mismo calendario se unen (unión, no suma). La recurrencia mensual y anual y los festivos también se leen en el offset de `run.start` (R-CAL-12 … R-CAL-14). Sin DST ni zona horaria propia en v1 (§ 4, R-CAL-15).
 
 ### 2.4 `resources`
 
@@ -184,8 +205,9 @@ Estos campos **están en el esquema** (se aceptan sintácticamente, se documenta
 | `preempt` | `elements[task]` | Si una tarea de mayor prioridad puede desalojar a una en curso. |
 | `batch` | `elements[task]` | Agrupación de tokens para procesarlos juntos. |
 | `conditions` | `elements[task]` y cualquier elemento que no sea un flujo que sale de un XOR divergente | Ramificación por expresión sobre datos del caso. En un flujo que sale de un XOR divergente está **implementado** desde ADR-028 (§ 2.5): rutea por los flujos que el caso ya recorrió, no por sus datos. |
-| `holidays` | `calendars[*]` | Fechas concretas cerradas, además del patrón semanal (ADR-016). |
-| `timezone` | `calendars[*]`, `run` | Zona horaria propia con DST, en vez del offset fijo de `run.start` (ADR-016). |
+| `timezone` | `calendars[*]`, `run` | Zona horaria propia con DST, en vez del offset fijo de `run.start` (ADR-016). Mientras tanto todo calendario conserva el offset de `run.start` durante toda la corrida, también al cruzar un cambio de horario (R-CAL-15). |
+
+`holidays` estuvo en esta lista hasta que #82 lo implementó (§ 2.3, R-CAL-14).
 
 Texto del error: el mismo patrón que el resto de "no soportado", citando el campo y el `id` del elemento.
 
@@ -214,6 +236,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | R14 | `selection` solo tiene sentido con `resources`; declararlo sin recursos es error. |
 | R15 | `extends`: la ruta debe resolver a un archivo existente y la cadena no puede tener ciclos (§ 6). |
 | R16 | `resources[*].capacity` por intervalos y `resources[*].calendar` son **excluyentes**: el calendario ya va en cada tramo y declarar los dos deja sin definir cuál manda. Error `E-CAPACIDAD-Y-CALENDARIO` citando el pool. Cada `capacity[i].capacity` es entero ≥ 1 y la lista no puede estar vacía (`E-REC-CAPACIDAD`). **El JSON Schema no puede expresar esta regla**: `docs/scenario.schema.json` se genera desde zod y el `anyOf` de `capacity` no ve al hermano `calendar`, así que un pool con los dos pasa el schema y solo lo rechaza `validateScenario` (o el guardia de `core/sim.ts`). Quien valide únicamente con el schema —un editor, un CI ajeno— tiene que correr además el lint. Fijado en test desde LILA-164 (`packages/engine/test/scenario.capacity-slices.qa.test.ts`, § 8). |
+| R18 | Cada entrada de `intervals[]` declara **exactamente uno** de `days`, `monthDays`, `monthWeekdays` o `dates`. `monthDays` son `1…31` o `-1…-31`, `nth` es `1…5` o `-1…-5`, `dates` son `"MM-DD"` que existen en algún año, y `holidays` son fechas reales `"YYYY-MM-DD"` o `"MM-DD"`. Errores de esquema. Un calendario cuyas aperturas caen todas en sus propios festivos es `E-CAL-VACIO` (R-CAL-14). **El JSON Schema solo lleva parte de esta regla**: tiene el `pattern` de `dates` y `holidays` y los rangos `1…31`/`1…5`, pero no «exactamente un selector», el `≠ 0` ni la validez civil (`02-30`); eso vive en los refinamientos de zod, así que una herramienta que solo use el schema tiene que correr además el validador. |
 
 Errores vs. warnings: un **error** impide simular; un **warning** viaja en `warnings[]` del `RunResult` y se imprime en la CLI. Un campo aplicado a un tipo de elemento que no lo admite (R4, R5, R14) es error, no warning: es casi siempre un `id` equivocado.
 
@@ -361,7 +384,8 @@ Para qué sirve: los adaptadores viven **en los bordes** y solo se escriben cuan
 | `priority` (reservado) | `bpsim:PriorityParameters/bpsim:Priority` † | — | — |
 | `preempt` (reservado) | `bpsim:PriorityParameters/bpsim:Interruptible` † | — | — |
 | `elements[flow].conditions` | `bpsim:ControlParameters/bpsim:Condition` † | — | — (sin equivalente en Bizagi; ADR-028) |
-| `batch`, `holidays`, `timezone` (reservados) | — | — | Festivos (calendario) |
+| `calendars[k].holidays` | fechas de excepción de las reglas iCal † | — | Festivos (calendario) |
+| `batch`, `timezone` (reservados) | — | — | — |
 
 En negrita, los cuatro mapeos ya fijados en el documento de estructura.
 

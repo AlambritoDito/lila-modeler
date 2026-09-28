@@ -200,8 +200,9 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
   las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
 - **Todavía no está en npm**: no hay `npm install @lila-modeler/engine`; clona y compila como arriba.
-- **Los calendarios son semanales**; la recurrencia mensual/anual y los festivos son campos
-  reservados.
+- **Los calendarios conservan el offset UTC de `run.start`**: hay recurrencia semanal, mensual y
+  anual y festivos, pero no zona horaria por calendario ni horario de verano (`timezone` es un
+  campo reservado).
 
 ## Estructura del proyecto
 

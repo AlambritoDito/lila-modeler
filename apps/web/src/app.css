@@ -1572,6 +1572,7 @@ body {
   margin: 4px 0;
 }
 
+.franjas-repeticion,
 .franjas-presets,
 .franjas-dias,
 .franjas-horas {
@@ -1605,6 +1606,7 @@ body {
   color: var(--fg-primary);
 }
 
+.franjas-repeticion label,
 .franjas-dias label,
 .franjas-horas label {
   align-items: center;
@@ -1620,6 +1622,14 @@ body {
 
 .franjas-horas input[type='text']:invalid {
   border-color: var(--status-error);
+}
+
+/* Holidays (#82): the same row as «From/To» and the same list, under the ranges. */
+.festivos {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  margin: 4px 0;
 }
 
 .franjas-lista {

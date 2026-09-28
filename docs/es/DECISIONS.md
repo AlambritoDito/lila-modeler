@@ -205,6 +205,8 @@ Patrón semanal relativo a `run.start`; sin DST ni festivos en v1 (campos reserv
 
 **LILA-164 (R-CAL-11):** un mismo pool puede tener capacidad distinta por calendario — `capacity: [{ calendar, capacity }]`, el «Resources → Calendars → quantity» de Bizagi — en vez de partirse en un pool por turno. El pool está abierto por **unión** de sus calendarios (tres turnos que cubren las 24 h son un 24×7, sin `offHoursWait`), su capacidad en `t` es la **suma** de los tramos abiertos (dos calendarios que se solapan suman), cerrar un tramo **no** interrumpe lo que está en curso, y durante el cierre del pool entero vale la capacidad del primer instante abierto posterior, que es lo que conserva R-CAL-6 y deja la forma numérica bit a bit igual a M3 (R-DEG-2). Sin esto el nivel 4 de Bizagi no se puede replicar.
 
+**#82 (R-CAL-12 … R-CAL-15):** `holidays` deja de ser reservado, y un intervalo puede repetirse cada mes (`monthDays`, `monthWeekdays`) o cada año (`dates`) además de cada semana. Todo se sigue leyendo en el offset fijo de `run.start`, como aritmética de días civiles en `core/` sin `Date`, `Intl` ni datos de zonas horarias; un calendario solo con `days` y sin festivos conserva el camino de código semanal bit a bit (R-DEG-2). `timezone` (zona propia con DST) sigue reservado: hacerlo bien exige la base IANA dentro de `core/`, y el límite queda escrito como R-CAL-15 en vez de aproximarse.
+
 > Fórmulas y definiciones operativas completas en `docs/RESULTS_FORMAT.md`.
 
 ---
