@@ -32,6 +32,7 @@
 import { strFromU8, strToU8, zipSync } from 'fflate';
 
 import type { Annotations } from './bpmn/annotate.js';
+import { effectiveAttributes, type ElementCategory } from './bpmn/attributes.js';
 import type { SubprocessInfo } from './bpmn/parse.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
@@ -77,6 +78,9 @@ export interface ProcessDocumentInput {
   readonly png?: Uint8Array;
   /** `parseBpmn(xml).subprocesses`: names and lanes of the flattened sub-processes. */
   readonly subprocesses?: Readonly<Record<string, SubprocessInfo>> | undefined;
+  /** `parseBpmn(xml).lanes` and `.pool`: where the lanes' and the pool's extended attributes are (#509). */
+  readonly lanes?: Readonly<Record<string, string>> | undefined;
+  readonly pool?: string | undefined;
   readonly scenario?: ResolvedScenario;
   /** A run of `scenario`; ignored without it. */
   readonly result?: RunResult;
@@ -114,6 +118,13 @@ export function flowOrder(ir: ProcessIR): string[] {
   }
   return [...seen, ...ids.filter((id) => !seen.has(id))];
 }
+
+/** The extended-attribute element type of each IR node type (#509). */
+const NODE_CATEGORY: Record<ProcessIR['nodes'][string]['type'], ElementCategory> = {
+  start: 'event', end: 'event', terminate: 'event', timer: 'event',
+  task: 'task',
+  xor: 'gateway', or: 'gateway', and: 'gateway', eventGateway: 'gateway',
+};
 
 /** A cell as the reader sees it in the spreadsheet: `0.###` numbers and `0.00%` fractions. */
 function cellText(value: CellValue, format?: CellFormat): string {
@@ -166,6 +177,16 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   blocks.push({ kind: 'heading', level: 1, text: C.docDescription() });
   blocks.push({ kind: 'paragraph', text: process.documentation ?? C.docNoDescription() });
 
+  // Extended attributes (#509): one labelled line per filled-in attribute, under the element.
+  const definitions = Object.values(annotations).flatMap((a) => a.attributeDefinitions ?? []);
+  const attributeLines = (id: string, category: ElementCategory): void => {
+    for (const { name, value } of effectiveAttributes(definitions, category, annotations[id]?.attributes ?? [])) {
+      blocks.push({ kind: 'paragraph', label: name, text: value });
+    }
+  };
+  attributeLines(original(ir.id), 'process');
+  if (input.pool !== undefined) attributeLines(input.pool, 'lane');
+
   // Flattened sub-processes (R-PLAN-1): their children inherit the lane of the sub-process, which
   // is the only shape the lane lists, and the sub-process gets its own section before them.
   const subs = input.subprocesses ?? {};
@@ -189,6 +210,7 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     line(C.docDocumentation(), notes.documentation);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
     for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
+    attributeLines(original(id), ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type]);
   };
   const opened = new Set<string>();
   const openSub = (sub: string | undefined): void => {
@@ -208,6 +230,7 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   const withLanes = order.some((id) => laneOf(id) !== undefined);
   for (const [lane, ids] of withLanes ? lanes : new Map([[null, order]])) {
     blocks.push({ kind: 'heading', level: 1, text: !withLanes ? C.docElements() : lane ?? C.docNoLane() });
+    for (const [laneId, label] of Object.entries(input.lanes ?? {})) if (withLanes && label === lane) attributeLines(laneId, 'lane');
     for (const id of ids) {
       const node = ir.nodes[id]!;
       openSub(node.subprocessId);
