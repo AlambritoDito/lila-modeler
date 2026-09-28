@@ -535,6 +535,36 @@ describe('reader', () => {
     expect(reason(strToU8('id,name\n'))).toBe('not-a-workbook');
   });
 
+  test('forty thousand rows with one value at XFD are refused fast, not laid out densely', () => {
+    const rows = Array.from({ length: 40_000 }, (_, i) => `<row r="${i + 1}"><c r="XFD${i + 1}"><v>1</v></c></row>`).join('');
+    const bytes = zipSync({
+      'xl/workbook.xml': strToU8('<workbook xmlns:r="r"><sheets><sheet name="Elements" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+      'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+      'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>${rows}</sheetData></worksheet>`),
+    });
+    const started = performance.now();
+    let reason: unknown;
+    try {
+      readWorkbook(bytes);
+    } catch (error) {
+      reason = error instanceof WorkbookReadError ? error.reason : error;
+    }
+    expect(reason).toBe('too-large');
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('style-only cells far to the right take no room', () => {
+    const cells = Array.from({ length: 2_000 }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}"><v>${i}</v></c><c r="XFD${i + 1}" s="3"/></row>`).join('');
+    const sheets = readWorkbook(
+      zipSync({
+        'xl/workbook.xml': strToU8('<workbook xmlns:r="r"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+        'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+        'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>${cells}</sheetData></worksheet>`),
+      }),
+    );
+    expect(sheets[0]!.rows.every((row) => row.length === 1)).toBe(true);
+  });
+
   test('hidden sheets are flagged and not read; formulas without a saved value are listed', () => {
     const sheets = readWorkbook(
       zipSync({

@@ -35,6 +35,12 @@ export const MAX_ROWS = 1_048_576;
 export const MAX_COLUMNS = 16_384;
 /** Uncompressed bytes the reader accepts for the parts it reads. */
 export const MAX_UNCOMPRESSED = 50 * 1024 * 1024;
+/**
+ * Cells the reader will lay out, counting the empty ones a row needs up to its last value. Rows are
+ * dense arrays, so one value at XFD costs 16 384 slots: forty thousand such rows in a 200 KB file
+ * would take gigabytes. A million slots is far beyond any scenario sheet.
+ */
+export const MAX_CELLS = 1_000_000;
 
 /* ------------------------------------------------------------------ *
  * XML helpers
@@ -138,6 +144,7 @@ export function worksheetRows(
   xml: string,
   shared: readonly string[] = [],
   uncached: { row: number; column: number }[] = [],
+  budget: { cells: number } = { cells: 0 },
 ): ReadCell[][] {
   const rows: ReadCell[][] = [];
   let nextRow = 0;
@@ -157,7 +164,13 @@ export function worksheetRows(
       nextColumn = column + 1;
       const inner = cellMatch[2] ?? '';
       const value = cellValue(cellAttrs, inner, shared);
-      if (value === null && /<f\b/.test(inner)) uncached.push({ row: rowIndex + 1, column });
+      if (value === null) {
+        // An empty cell (only a style, say) takes no room: nothing reads it.
+        if (/<f\b/.test(inner)) uncached.push({ row: rowIndex + 1, column });
+        continue;
+      }
+      budget.cells += Math.max(0, column + 1 - cells.length);
+      if (budget.cells > MAX_CELLS) throw new WorkbookReadError('too-large', `more than ${MAX_CELLS} cells`);
       while (cells.length < column) cells.push(null);
       cells[column] = value;
     }
@@ -256,6 +269,8 @@ export function readWorkbook(bytes: Uint8Array): ReadSheet[] {
 
   const shared = sharedStrings(text('xl/sharedStrings.xml'));
   const sheets: ReadSheet[] = [];
+  /** One budget for the whole workbook, not per sheet. */
+  const budget = { cells: 0 };
   for (const [index, match] of [...book.matchAll(/<sheet\b([^>]*?)\/?>/g)].entries()) {
     const attrs = attributes(match[1]!);
     const relation = Object.entries(attrs).find(([key]) => key === 'id' || key.endsWith(':id'))?.[1];
@@ -267,7 +282,7 @@ export function readWorkbook(bytes: Uint8Array): ReadSheet[] {
     }
     const xml = text(path);
     const uncached: { row: number; column: number }[] = [];
-    const rows = xml === undefined ? [] : worksheetRows(xml, shared, uncached);
+    const rows = xml === undefined ? [] : worksheetRows(xml, shared, uncached, budget);
     sheets.push({ name, rows, ...(uncached.length > 0 ? { uncached } : {}) });
   }
   return sheets;
