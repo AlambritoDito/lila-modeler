@@ -398,6 +398,31 @@ describe('calendar times', () => {
   });
 });
 
+describe('days and assignments', () => {
+  test('days are whole names or abbreviations, never a prefix', () => {
+    const plan = planScenarioImport(
+      csv('Calendars.csv', 'id;days;from;to\na;Lunes-Viernes;09:00;10:00\nb;sáb. domingo;09:00;10:00\nc;Monkey;09:00;10:00\nd;Marzo;09:00;10:00\n'),
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.changes.map((change) => (change.after as { intervals: { days: string[] }[] }).intervals[0]!.days)).toEqual([
+      ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+      ['SAT', 'SUN'],
+    ]);
+    expect(plan.issues.filter((issue) => issue.kind === 'error').map((issue) => issue.row)).toEqual([4, 5]);
+  });
+
+  test('quantity 1 written or implied is the same assignment: no change', () => {
+    const plan = planScenarioImport(
+      csv('Assignments.csv', 'elementId;resourceId;quantity\nTask_Preparar;cocinero;1\nTask_Preparar;horno;\n'),
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.changes).toEqual([]);
+    expect(plan.issues).toEqual([]);
+  });
+});
+
 describe('(e) the imported scenario passes validateScenario', () => {
   test('a workbook that touches every table', () => {
     const plan = planScenarioImport(

@@ -133,8 +133,15 @@ const UNIT_ALIASES: Readonly<Record<string, string>> = {
   d: 'day', day: 'day', days: 'day', dia: 'day', dias: 'day',
 };
 
-const SPANISH_DAYS: Readonly<Record<string, string>> = {
+/**
+ * Day names the Calendars sheet accepts, exactly (accents and case aside): the abbreviations and
+ * the full names in English and Spanish. Never a prefix, so «Monkey» or «Marzo» are not days.
+ */
+const DAY_NAMES: Readonly<Record<string, string>> = {
+  MON: 'MON', TUE: 'TUE', WED: 'WED', THU: 'THU', FRI: 'FRI', SAT: 'SAT', SUN: 'SUN',
+  MONDAY: 'MON', TUESDAY: 'TUE', WEDNESDAY: 'WED', THURSDAY: 'THU', FRIDAY: 'FRI', SATURDAY: 'SAT', SUNDAY: 'SUN',
   LUN: 'MON', MAR: 'TUE', MIE: 'WED', JUE: 'THU', VIE: 'FRI', SAB: 'SAT', DOM: 'SUN',
+  LUNES: 'MON', MARTES: 'TUE', MIERCOLES: 'WED', JUEVES: 'THU', VIERNES: 'FRI', SABADO: 'SAT', DOMINGO: 'SUN',
 };
 
 /* ------------------------------------------------------------------ *
@@ -146,7 +153,7 @@ function normalized(text: string): string {
   return text
     .replace(/\([^)]*\)/g, '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 }
@@ -1137,7 +1144,10 @@ function planAssignments(context: Context, t: Table): void {
       continue;
     }
     const before = own(section(context.next, 'elements'), id)?.['resources'];
-    if (sameValue(before, group.entries)) continue;
+    // `quantity` defaults to 1 (§ 2.5): `{ ref }` and `{ ref, quantity: 1 }` are the same assignment.
+    const withQuantity = (list: unknown): unknown =>
+      Array.isArray(list) ? list.map((entry) => (isObject(entry) ? { quantity: 1, ...entry } : entry)) : list;
+    if (sameValue(withQuantity(before), withQuantity(group.entries))) continue;
     commit(context, [
       {
         table: 'assignments',
@@ -1156,9 +1166,7 @@ function planAssignments(context: Context, t: Table): void {
 /** `MON,TUE`, `MON-FRI`, `lun, mar`, `Monday` → `['MON', 'TUE', …]`; `null` if a token is not a day. */
 function readDays(value: string): string[] | null {
   const day = (token: string): string | undefined => {
-    const three = token.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().slice(0, 3);
-    const english = own(SPANISH_DAYS, three) ?? three;
-    return (WEEKDAYS as readonly string[]).includes(english) ? english : undefined;
+    return own(DAY_NAMES, token.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\.$/, '').toUpperCase());
   };
   const days: string[] = [];
   for (const token of value.split(/[,;\s]+/)) {
