@@ -52,10 +52,11 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
 
 function* recorrer(el: ModdleElement): Generator<ModdleElement> {
   if (typeof el.id === 'string') yield el;
-  for (const hijo of [...(el.rootElements ?? []), ...(el.flowElements ?? [])]) yield* recorrer(hijo);
+  for (const hijo of [...(el.rootElements ?? []), ...(el.flowElements ?? []), ...(el.participants ?? [])]) yield* recorrer(hijo);
 }
 
-async function banco(xml: string) {
+/** `raizId`: the canvas root — a collapsed sub-process after a drill-down, a collaboration… */
+async function banco(xml: string, raizId = 'Proc_1') {
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions } = await moddle.fromXML(xml);
   const eventBus = new EventBus();
@@ -67,7 +68,11 @@ async function banco(xml: string) {
   for (const el of recorrer(definitions)) {
     figuras.set(el.id, { id: el.id, type: el.$type, businessObject: el as unknown as ElementoModdle });
   }
-  const raiz = figuras.get('Proc_1')!;
+  const raiz = figuras.get(raizId)!;
+  let cambios = 0;
+  eventBus.on('commandStack.changed', () => {
+    cambios++;
+  });
   const selection = new Selection(eventBus, { getRootElement: () => raiz, findRoot: () => raiz } as never);
 
   const escritor: Escritor = {
@@ -97,6 +102,13 @@ async function banco(xml: string) {
   return {
     modelador,
     exportar,
+    moddle,
+    definitions,
+    eventBus,
+    commandStack,
+    escritor,
+    figura: (id: string) => figuras.get(id)!,
+    cambios: () => cambios,
     clic: (id: string) => act(() => selection.select(figuras.get(id) as never)),
     deshacer: () => accion(() => commandStack.undo()),
     rehacer: () => accion(() => commandStack.redo()),
@@ -204,13 +216,15 @@ describe('extended attributes in the properties panel (#509)', () => {
     expect(panel.querySelector('select[aria-label="Risk"]')).not.toBeNull();
   });
 
-  it('an invalid number is explained and not written; a valid one is', async () => {
+  it('a number is written on blur or Enter, and only if it fits: «24,5» never leaves «24» behind (QA 4 of #513)', async () => {
     const b = await banco(XML);
     const panel = montar(b.modelador);
     b.clic('Task_1');
     pulsar(boton(panel, T.definir));
     const d = dialogo()!;
     pulsar(boton(d, T.anadir));
+    // «Add attribute» puts the focus on the new name.
+    expect(document.activeElement).toBe(d.querySelector(`[aria-label="${T.nombre(1)}"]`));
     escribir(d.querySelector(`[aria-label="${T.nombre(1)}"]`), 'SLA');
     elegir(d.querySelector(`[aria-label="${T.tipo(1)}"]`), 'number');
     escribir(d.querySelector(`[aria-label="${T.valorPorDefecto(1)}"]`), 'ten');
@@ -221,20 +235,30 @@ describe('extended attributes in the properties panel (#509)', () => {
     pulsar(boton(d, T.guardar));
     expect(dialogo()).toBeNull();
 
-    const sla = panel.querySelector('input[aria-label="SLA"]') as HTMLInputElement;
-    expect(sla.placeholder).toBe(T.porDefecto('10'));
-    escribir(sla, '4,5');
-    expect(sla.value).toBe('4,5');
-    expect(sla.getAttribute('aria-invalid')).toBe('true');
-    expect(panel.querySelector('[role="alert"]')?.textContent).toBe(T.problemas.number);
+    const sla = (): HTMLInputElement => panel.querySelector('input[aria-label="SLA"]') as HTMLInputElement;
+    expect(sla().placeholder).toBe(T.porDefecto('10'));
+    // Typed key by key, as a Spanish keyboard does it: no keystroke writes anything.
+    for (const texto of ['2', '24', '24,', '24,5']) escribir(sla(), texto);
     expect(await b.exportar()).not.toContain('lila:attributeValue');
+    expect(sla().getAttribute('aria-invalid')).toBe('true');
+    expect(panel.querySelector('[role="alert"]')?.textContent).toBe(T.problemas.number);
+    act(() => sla().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    // Still not written, still explained.
+    expect(await b.exportar()).not.toContain('lila:attributeValue');
+    expect(sla().value).toBe('24,5');
+    expect(panel.querySelector('[role="alert"]')?.textContent).toBe(T.problemas.number);
 
-    escribir(sla, '4.5');
+    escribir(sla(), '24.5');
+    expect(await b.exportar()).not.toContain('lila:attributeValue');
+    act(() => sla().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(panel.querySelector('[role="alert"]')).toBeNull();
-    expect(await b.exportar()).toContain('value="4.5"');
+    expect(await b.exportar()).toContain('value="24.5"');
+    // One step for the value: ⌘Z takes it back whole.
+    b.deshacer();
+    expect(await b.exportar()).not.toContain('lila:attributeValue');
   });
 
-  it('renaming an attribute with values asks; «keep» keeps them and «clear» clears them, in one ⌘Z', async () => {
+  it('renaming asks; removing an option names it, and «clear» clears only the values that no longer fit, in one ⌘Z', async () => {
     const b = await banco(XML);
     const panel = montar(b.modelador);
     b.clic('Task_1');
@@ -243,29 +267,50 @@ describe('extended attributes in the properties panel (#509)', () => {
     b.clic('Task_2');
     elegir(panel.querySelector('select[aria-label="Risk"]'), 'High');
 
-    // Rename, keep.
+    // Rename only: it asks, every value still fits, so there is nothing to choose.
     pulsar(boton(panel, T.definir));
     let d = dialogo()!;
     escribir(d.querySelector(`[aria-label="${T.nombre(1)}"]`), 'Risk level');
     pulsar(boton(d, T.guardar));
-    expect(d.textContent).toContain(T.cambio('Risk', 'Risk level', 2));
+    expect(d.textContent).toContain(T.renombrado('Risk', 'Risk level'));
+    expect(d.textContent).toContain(T.conValores(2, 0));
+    expect(d.querySelector('input[type="radio"]')).toBeNull();
     pulsar(boton(d, T.aplicar));
     expect((panel.querySelector('select[aria-label="Risk level"]') as HTMLSelectElement).value).toBe('High');
 
-    // Rename again, clear: every value goes, and one undo brings name and values back.
+    // Drop «High» and rename again: the option is named, and clearing takes only the misfit.
     pulsar(boton(panel, T.definir));
     d = dialogo()!;
     escribir(d.querySelector(`[aria-label="${T.nombre(1)}"]`), 'Risk 2');
+    escribir(d.querySelector(`[aria-label="${T.opciones(1)}"]`), 'Low\nMedium');
     pulsar(boton(d, T.guardar));
-    const vaciar = [...d.querySelectorAll('label')].find((l) => l.textContent === T.vaciar)!.querySelector('input')!;
-    act(() => vaciar.click());
+    expect(d.textContent).toContain(T.opcionesQuitadas('High'));
+    expect(d.textContent).toContain(T.conValores(2, 1));
+    const limpiar = [...d.querySelectorAll('label')].find((l) => l.textContent === T.limpiar(1))!.querySelector('input')!;
+    act(() => limpiar.click());
     pulsar(boton(d, T.aplicar));
     expect((panel.querySelector('select[aria-label="Risk 2"]') as HTMLSelectElement).value).toBe('');
-    expect(await b.exportar()).not.toContain('lila:attributeValue');
+    b.clic('Task_1');
+    expect((panel.querySelector('select[aria-label="Risk 2"]') as HTMLSelectElement).value).toBe('Low');
+    expect((await b.exportar()).match(/<lila:attributeValue/g)).toHaveLength(1);
 
     b.deshacer();
-    expect((panel.querySelector('select[aria-label="Risk level"]') as HTMLSelectElement).value).toBe('High');
-    expect((await b.exportar()).match(/lila:attributeValue/g)).toHaveLength(2);
+    expect((panel.querySelector('select[aria-label="Risk level"]') as HTMLSelectElement).value).toBe('Low');
+    expect((await b.exportar()).match(/<lila:attributeValue/g)).toHaveLength(2);
+  });
+
+  it('saving the dialog with no change creates no undo step and changes nothing (QA 7 of #513)', async () => {
+    const b = await banco(XML);
+    const panel = montar(b.modelador);
+    b.clic('Task_1');
+    definirRiesgo(panel);
+    const antes = await b.exportar();
+    const cambios = b.cambios();
+    pulsar(boton(panel, T.definir));
+    pulsar(boton(dialogo()!, T.guardar));
+    expect(dialogo()).toBeNull();
+    expect(b.cambios()).toBe(cambios);
+    expect(await b.exportar()).toBe(antes);
   });
 
   it('deleting an attribute with values asks first, and «Back» loses nothing', async () => {

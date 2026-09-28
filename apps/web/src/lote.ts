@@ -4,6 +4,8 @@
  * trick as `lila.color` in `colores.ts`: `modeling` calls made in `postExecute` are recorded as
  * part of the command, and redo replays them without running `postExecute` again.
  */
+import { GuardiaAtributos } from './atributos';
+
 interface Contexto { hacer: () => void }
 
 interface CommandStack {
@@ -21,8 +23,12 @@ export class LilaLote {
   }
 }
 
-/** didi module for `additionalModules` in `Modeler.tsx`. */
+/**
+ * didi module for `additionalModules` in `Modeler.tsx`: the batch, and the guard that keeps the
+ * extended attribute definitions alive when pools come and go (`atributos.ts`).
+ */
 export const moduloLote = {
-  __init__: ['lilaLote'],
+  __init__: ['lilaLote', 'lilaGuardiaAtributos'],
   lilaLote: ['type', LilaLote],
+  lilaGuardiaAtributos: ['type', GuardiaAtributos],
 };

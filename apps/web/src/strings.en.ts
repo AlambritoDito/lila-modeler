@@ -1552,7 +1552,6 @@ export const en = {
     nombre: (n: number): string => `Name ${n}`,
     tipo: (n: number): string => `Type ${n}`,
     opciones: (n: number): string => `Options ${n}`,
-    opcionesPista: 'One option per line',
     valorPorDefecto: (n: number): string => `Default ${n}`,
     quitar: (n: number): string => `Remove attribute ${n}`,
     anadir: 'Add attribute',
@@ -1568,12 +1567,20 @@ export const en = {
     },
     confirmarTitulo: 'Existing values',
     confirmarTexto: 'These changes touch attributes that elements already have values for. Choose what to do with them.',
-    cambio: (antes: string, ahora: string, n: number): string =>
-      antes === ahora
-        ? `${antes}: its type or options change, and ${n} ${n === 1 ? 'element has' : 'elements have'} a value.`
-        : `${antes} is renamed to ${ahora}, and ${n} ${n === 1 ? 'element has' : 'elements have'} a value.`,
+    renombrado: (antes: string, ahora: string): string => `${antes} is renamed to ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Its type changes from ${antes} to ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Options removed: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'element has' : 'elements have'} a value` +
+      (invalidos === 0 ? ', and every one still fits.' : `; ${invalidos} no longer ${invalidos === 1 ? 'fits' : 'fit'}.`),
+    limpiar: (n: number): string => `Clear the ${n} ${n === 1 ? 'value that no longer fits' : 'values that no longer fit'}`,
+    repetidas: (n: number): string =>
+      `${n} repeated ${n === 1 ? 'definition is' : 'definitions are'} ignored (the same attribute twice, for example after pasting a pool). Saving the definitions keeps one of each.`,
+    varios: (n: number, valores: string): string => `This element has ${n} values for this attribute (${valores}); the field edits the first.`,
+    sinReferencia: 'Attribute without a reference',
+    atributoN: (n: number): string => `Attribute ${n}`,
+    etiquetas: { nombre: 'Name', tipo: 'Type', opciones: 'Options, one per line', porDefecto: 'Default value' },
     conservar: 'Keep the values',
-    vaciar: 'Clear the values',
     borrado: (nombre: string, n: number): string =>
       `${nombre} is deleted together with its ${n} ${n === 1 ? 'value' : 'values'}.`,
   },

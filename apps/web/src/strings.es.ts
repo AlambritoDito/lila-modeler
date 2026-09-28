@@ -1525,7 +1525,6 @@ export const es: Strings = {
     nombre: (n: number): string => `Nombre ${n}`,
     tipo: (n: number): string => `Tipo ${n}`,
     opciones: (n: number): string => `Opciones ${n}`,
-    opcionesPista: 'Una opción por línea',
     valorPorDefecto: (n: number): string => `Por defecto ${n}`,
     quitar: (n: number): string => `Quitar el atributo ${n}`,
     anadir: 'Añadir atributo',
@@ -1541,12 +1540,20 @@ export const es: Strings = {
     },
     confirmarTitulo: 'Valores existentes',
     confirmarTexto: 'Estos cambios afectan a atributos que ya tienen valores en algunos elementos. Elige qué hacer con ellos.',
-    cambio: (antes: string, ahora: string, n: number): string =>
-      antes === ahora
-        ? `${antes}: cambian su tipo u opciones, y ${n} ${n === 1 ? 'elemento tiene' : 'elementos tienen'} valor.`
-        : `${antes} pasa a llamarse ${ahora}, y ${n} ${n === 1 ? 'elemento tiene' : 'elementos tienen'} valor.`,
+    renombrado: (antes: string, ahora: string): string => `${antes} pasa a llamarse ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Su tipo cambia de ${antes} a ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Opciones quitadas: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'elemento tiene' : 'elementos tienen'} valor` +
+      (invalidos === 0 ? ', y todos siguen encajando.' : `; ${invalidos} ya no ${invalidos === 1 ? 'encaja' : 'encajan'}.`),
+    limpiar: (n: number): string => `Vaciar ${n === 1 ? 'el valor que ya no encaja' : `los ${n} valores que ya no encajan`}`,
+    repetidas: (n: number): string =>
+      `Se ignora${n === 1 ? ' 1 definición repetida' : `n ${n} definiciones repetidas`} (el mismo atributo dos veces, por ejemplo tras pegar un pool). Guardar las definiciones deja una de cada.`,
+    varios: (n: number, valores: string): string => `Este elemento tiene ${n} valores para este atributo (${valores}); el campo edita el primero.`,
+    sinReferencia: 'Atributo sin referencia',
+    atributoN: (n: number): string => `Atributo ${n}`,
+    etiquetas: { nombre: 'Nombre', tipo: 'Tipo', opciones: 'Opciones, una por línea', porDefecto: 'Valor por defecto' },
     conservar: 'Conservar los valores',
-    vaciar: 'Vaciar los valores',
     borrado: (nombre: string, n: number): string =>
       `${nombre} se borra junto con ${n === 1 ? 'su valor' : `sus ${n} valores`}.`,
   },
