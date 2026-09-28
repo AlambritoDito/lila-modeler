@@ -402,6 +402,11 @@ describe('hidden sheets, copies and formulas', () => {
     ]);
   });
 
+  test('data in a column with no header is a note (an unquoted value split by the separator)', () => {
+    const plan = planScenarioImport(csv('Elements.csv', 'id;distribution;unit;points\nTask_Preparar;user;min;1,5:0,25; 2:0,75\n'), asIs(), pedidoIr());
+    expect(plan.issues.map((issue) => [issue.kind, issue.row, issue.column])).toContainEqual(['warning', 2, 'E']);
+  });
+
   test('a formula with no saved result is a note, not a silent empty cell', () => {
     const plan = planScenarioImport(
       [{ name: 'Resources', rows: [['id', 'capacity'], ['horno', null]], uncached: [{ row: 2, column: 1 }] }],

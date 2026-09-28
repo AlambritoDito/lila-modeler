@@ -23,6 +23,7 @@ export interface SheetMessages {
   duplicateRow: (key: string, firstSheet: string, firstRow: number) => string;
   hiddenSheet: (name: string) => string;
   uncachedFormula: () => string;
+  dataWithoutHeader: () => string;
   unknownDistribution: (value: string, accepted: string) => string;
   missingDistribution: () => string;
   parameterNotApplicable: (parameter: string, type: string) => string;
@@ -61,6 +62,8 @@ const en: SheetMessages = {
   hiddenSheet: (name) => `sheet "${name}" is hidden in the file; it was not read. Unhide it to import it.`,
   uncachedFormula: () =>
     'the cell has a formula with no saved result, so it was read as empty. Open the file in Excel and save it again.',
+  dataWithoutHeader: () =>
+    'there is data in a column with no header, so it was ignored. If a value was split by the separator, put it in quotes.',
   unknownDistribution: (value, accepted) => `unknown distribution "${value}"; use one of ${accepted}.`,
   missingDistribution: () => 'there are distribution parameters but no distribution type.',
   parameterNotApplicable: (parameter, type) => `"${parameter}" is not a parameter of the ${type} distribution; leave it empty.`,
@@ -102,6 +105,8 @@ const es: SheetMessages = {
   hiddenSheet: (name) => `la hoja «${name}» está oculta en el archivo; no se leyó. Muéstrala para importarla.`,
   uncachedFormula: () =>
     'la celda tiene una fórmula sin resultado guardado, así que se leyó vacía. Abre el archivo en Excel y guárdalo de nuevo.',
+  dataWithoutHeader: () =>
+    'hay datos en una columna sin cabecera, así que se ignoraron. Si el separador partió un valor, ponlo entre comillas.',
   unknownDistribution: (value, accepted) => `distribución desconocida «${value}»; usa una de ${accepted}.`,
   missingDistribution: () => 'hay parámetros de distribución pero falta el tipo de distribución.',
   parameterNotApplicable: (parameter, type) => `«${parameter}» no es un parámetro de la distribución ${type}; déjalo vacío.`,

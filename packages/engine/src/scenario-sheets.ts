@@ -34,7 +34,7 @@ import type { Locale } from './messages/index.js';
 import { sheetMessages, type SheetMessages } from './messages/sheets.js';
 import { parseScenario, validateScenario, WEEKDAYS } from './scenario.js';
 import { describeDistribution } from './xlsx-report.js';
-import { workbook, type CellValue, type SheetSpec } from './xlsx.js';
+import { columnName, workbook, type CellValue, type SheetSpec } from './xlsx.js';
 import { decodeCsvBytes, readCsv, readWorkbook, type ReadCell, type ReadSheet } from './xlsx-read.js';
 
 export { XLSX_MIME_TYPE } from './xlsx.js';
@@ -644,6 +644,12 @@ export function planScenarioImport(
       .map((cells, index) => ({ row: index + 1, cells }))
       .slice(headerIndex + 1)
       .filter(({ cells }) => [...columns.values()].some((index) => cellText(cells[index]) !== ''));
+    // Data under no header at all is lost silently otherwise: an unquoted `1,5:0,25; 2:0,75` in a
+    // `;` CSV spills its second half into a column nobody named.
+    for (const { row, cells } of rows) {
+      const stray = cells.findIndex((value, index) => cellText(value) !== '' && cellText(header[index]) === '');
+      if (stray !== -1) issue('warning', sheet.name, row, columnName(stray), M.dataWithoutHeader());
+    }
     for (const formula of sheet.uncached ?? []) {
       const column = [...columns].find(([, index]) => index === formula.column)?.[0];
       if (column !== undefined && formula.row > headerIndex + 1) {
