@@ -6,7 +6,7 @@
  * The drawing lives in `GraficasSvg.tsx`; the colors, in `graficas.css` (screen) and `SERIES_CLARO`
  * below (paper).
  */
-import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
+import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 
 /**
  * Categorical slots, fixed order, never cycled: the validated default palette of the dataviz
@@ -60,45 +60,18 @@ export function percentilesDelProceso(result: RunResult): { ciclo: number[]; esp
   };
 }
 
-/**
- * Cycle time of each completed case of the event log, in seconds: from the first activity it
- * enabled to the last one it closed (gateways and plain events take no time, so that is the
- * case's life). A case with an `inFlight` row had not finished at the stop, and a case born before
- * `warmup` is outside the measured cohort (R-ARR-7): neither enters, as in `process.cycleTime`.
- *
- * Incremental, so the worker can feed it every row of replication 0 as it is emitted and keep one
- * small record per case instead of the rows: the histogram does not depend on the log sample the
- * shell keeps for the replay, which a long run truncates.
- */
-export function casosDelLog(): { agregar: (row: EventLogRow) => void; ciclos: (warmup?: number) => number[] } {
-  const casos = new Map<string, { desde: number; hasta: number; abierto: boolean }>();
-  return {
-    agregar(row) {
-      const clave = `${row.replication}\u0000${row.caseId}`;
-      const caso = casos.get(clave) ?? { desde: Infinity, hasta: -Infinity, abierto: false };
-      caso.desde = Math.min(caso.desde, row.enabledAt);
-      caso.hasta = Math.max(caso.hasta, row.observedUntil);
-      caso.abierto ||= row.status === 'inFlight';
-      casos.set(clave, caso);
-    },
-    ciclos: (warmup = 0) => [...casos.values()].filter((c) => !c.abierto && c.desde >= warmup).map((c) => c.hasta - c.desde),
-  };
-}
-
-/**
- * `casosDelLog` over a list of rows. Only valid over a complete log: a truncated sample may have
- * cut a case's last rows and make it look shorter.
- */
-export function ciclosPorCaso(rows: readonly EventLogRow[], warmup = 0): number[] {
-  const casos = casosDelLog();
-  for (const row of rows) casos.agregar(row);
-  return casos.ciclos(warmup);
-}
-
 /** The smallest 1, 2 or 5 × 10ⁿ that is at least `x` (> 0). */
 export function pasoRedondo(x: number): number {
   const base = 10 ** Math.floor(Math.log10(x));
   return [1, 2, 5, 10].map((m) => m * base).find((paso) => paso >= x * (1 - 1e-9)) ?? 10 * base;
+}
+
+/**
+ * The run measured nothing: every arrival fell inside the warm-up (or the warm-up outlasts the
+ * run), so its zeros are not measurements and no chart draws them.
+ */
+export function sinVentana(result: RunResult, warmup: number | undefined): boolean {
+  return result.process.started === 0 && (warmup ?? 0) > 0;
 }
 
 /** Axis from 0 to a round top with about five ticks; an all-zero chart still gets an axis 0–1. */
@@ -124,8 +97,14 @@ export interface Clase {
  */
 export function histograma(valores: readonly number[]): Clase[] {
   if (valores.length === 0) return [];
-  const min = Math.min(...valores);
-  const max = Math.max(...valores);
+  // A loop, not `Math.min(...valores)`: a year of arrivals is half a million cases, past what a
+  // spread fits on the call stack (QA of #512).
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of valores) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
   if (max === min) return [{ desde: min, hasta: max, casos: valores.length }];
   const clases = Math.min(20, Math.max(5, Math.ceil(Math.log2(valores.length)) + 1));
   const paso = pasoRedondo((max - min) / clases);

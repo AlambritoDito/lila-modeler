@@ -1,8 +1,7 @@
 /**
  * Chart data of #460: the pure part. The rows each chart draws are compared with the rows of its
- * table in `ResultsView.graficas.test.tsx`; here, the histogram's source (per-case cycle times
- * from the event log) is checked against the engine's own `process.cycleTime` on a real run, and
- * the axis and class helpers on edge cases.
+ * table in `ResultsView.graficas.test.tsx`; here, the histogram classes over a real run and over a
+ * very large sample, and the axis and class helpers on edge cases.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -13,39 +12,37 @@ import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { resolveExtends } from '@lila-modeler/engine/schema';
 import { simulate, type RunResult, type SimScenario } from '@lila-modeler/engine';
 
-import { ciclosPorCaso, escala, histograma, pasoRedondo, percentilesDelProceso, SERIES_CLARO, SERIES_OSCURO } from './graficas';
+import { escala, histograma, pasoRedondo, percentilesDelProceso, SERIES_CLARO, SERIES_OSCURO, sinVentana } from './graficas';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PEDIDO = resolve(HERE, '../../../examples/pedido');
 const leer = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'));
 
 let result: RunResult;
-let warmup: number;
+let ciclos: number[] = [];
 
 beforeAll(async () => {
   const { ir } = await parseBpmn(readFileSync(resolve(PEDIDO, 'model.bpmn'), 'utf8'));
   const scenario = resolveExtends(resolve(PEDIDO, 'as-is.scenario.json'), leer) as unknown as SimScenario;
-  // Three days, one replication, fixed seed: every row stays in `result.log` (retained mode).
+  // Three days, one replication, fixed seed; the per-case sample comes from the engine itself.
   const corto = { ...scenario, run: { ...scenario.run, duration: 3 * 86_400, replications: 1, seed: 42 } };
-  warmup = corto.run.warmup ?? 0;
-  result = simulate(ir, corto);
+  result = simulate(ir, corto, { log: false, onCycleTimes: (_, times) => (ciclos = times) });
 }, 60_000);
 
-describe('ciclosPorCaso (#460)', () => {
-  test('rebuilds process.cycleTime from the event log: same count, min, max and mean', () => {
-    const ciclos = ciclosPorCaso(result.log!, warmup);
-    expect(result.process.completed).toBeGreaterThan(50);
-    expect(ciclos).toHaveLength(result.process.completed);
-    expect(Math.min(...ciclos)).toBeCloseTo(result.process.cycleTime.min, 6);
-    expect(Math.max(...ciclos)).toBeCloseTo(result.process.cycleTime.max, 6);
-    expect(ciclos.reduce((a, b) => a + b, 0) / ciclos.length).toBeCloseTo(result.process.cycleTime.mean, 6);
-  });
-
-  test('the histogram of those cases adds up to the completed cases', () => {
-    const clases = histograma(ciclosPorCaso(result.log!, warmup));
+describe('histograma (#460)', () => {
+  test('the engine’s per-case sample: the classes add up to the completed cases', () => {
+    const clases = histograma(ciclos);
     expect(clases.length).toBeGreaterThanOrEqual(5);
     expect(clases.reduce((a, c) => a + c.casos, 0)).toBe(result.process.completed);
     for (const [i, c] of clases.entries()) if (i > 0) expect(c.desde).toBeCloseTo(clases[i - 1]!.hasta, 9);
+  });
+
+  test('200 000 values (a year of one arrival a minute) do not overflow the stack', () => {
+    const valores = Array.from({ length: 200_000 }, (_, i) => (i * 7919) % 10_007);
+    const clases = histograma(valores);
+    expect(clases.reduce((a, c) => a + c.casos, 0)).toBe(200_000);
+    expect(clases[0]!.desde).toBeLessThanOrEqual(0);
+    expect(clases.at(-1)!.hasta).toBeGreaterThan(10_006);
   });
 });
 
@@ -60,10 +57,18 @@ describe('missing is not zero (#460)', () => {
     ]);
   });
 
-  test('an empty log gives no cases and no classes; one distinct value, one class', () => {
-    expect(ciclosPorCaso([])).toEqual([]);
+  test('no values, no classes; one distinct value, one class', () => {
     expect(histograma([])).toEqual([]);
     expect(histograma([4, 4, 4])).toEqual([{ desde: 4, hasta: 4, casos: 3 }]);
+  });
+});
+
+describe('the warm-up swallowed the run', () => {
+  test('nothing started and a warm-up: nothing measured; no warm-up, a real zero', () => {
+    const nada = { ...result, process: { ...result.process, started: 0 } } as RunResult;
+    expect(sinVentana(nada, 3600)).toBe(true);
+    expect(sinVentana(nada, 0)).toBe(false);
+    expect(sinVentana(result, 3600)).toBe(false);
   });
 });
 

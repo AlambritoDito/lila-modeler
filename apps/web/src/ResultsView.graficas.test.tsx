@@ -5,7 +5,7 @@
  *
  * (a) every chart shows the same values as its table — read from the rendered DOM, the table's
  *     cells against the text at each bar's tip and its `data-valor`;
- * (b) with nothing to draw (no pools, no completed case, no event log, a truncated log) the chart
+ * (b) with nothing to draw (no pools, no completed case, no per-case times, all in the warm-up) the chart
  *     says so instead of drawing zeros, and nothing throws;
  * (c) the process document gets the charts of the run as standalone SVG in paper colors.
  */
@@ -21,10 +21,10 @@ import { columnLabel, formatNumber } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
-import { graficasDelDocumento } from './GraficasResultados';
+import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { ResultsView, tabLabels } from './ResultsView';
 import { setLocale, strings } from './i18n';
-import { ciclosPorCaso, SERIES_CLARO } from './graficas';
+import { SERIES_CLARO } from './graficas';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 setLocale('en');
@@ -36,12 +36,15 @@ const leer = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'));
 let ir: ProcessIR;
 let scenario: ResolvedScenario;
 let result: RunResult;
+let ciclos: number[] = [];
+let log: LogDeCorrida;
 
 beforeAll(async () => {
   ir = (await parseBpmn(readFileSync(resolve(PEDIDO, 'model.bpmn'), 'utf8'))).ir;
   const base = resolveExtends(resolve(PEDIDO, 'as-is.scenario.json'), leer) as unknown as ResolvedScenario;
   scenario = { ...base, run: { ...base.run, duration: 3 * 86_400, replications: 1, seed: 42 } };
-  result = simulate(ir, scenario as never);
+  result = simulate(ir, scenario as never, { onCycleTimes: (_, times) => (ciclos = times) });
+  log = { rows: result.log!, truncated: false, ciclos };
 }, 60_000);
 
 let root: Root | null = null;
@@ -58,7 +61,7 @@ async function montar(props: Partial<Parameters<typeof ResultsView>[0]> = {}): P
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
-    root!.render(<ResultsView ir={ir} scenario={scenario} result={result} log={{ rows: result.log!, truncated: false }} {...props} />),
+    root!.render(<ResultsView ir={ir} scenario={scenario} result={result} log={log} {...props} />),
   );
 }
 
@@ -143,7 +146,9 @@ describe('(a) each chart shows the values of its table', () => {
     await pestana('resources');
     const svg = container.querySelector('[data-grafica="utilizacion"] svg')!;
     expect(svg.getAttribute('role')).toBe('img');
-    const [titulo, desc] = svg.getAttribute('aria-labelledby')!.split(' ').map((id) => svg.querySelector(`[id="${id}"]`)!.textContent!);
+    const texto = (atributo: string): string => svg.querySelector(`[id="${svg.getAttribute(atributo)}"]`)!.textContent!;
+    // The name is the title; the values are the description, not part of the name.
+    const [titulo, desc] = [texto('aria-labelledby'), texto('aria-describedby')];
     expect(titulo).toBe(strings().graficas.utilizacion);
     for (const b of barras('utilizacion')) expect(desc).toContain(b.texto);
   });
@@ -162,23 +167,52 @@ describe('(b) nothing to draw is said, not drawn as zero', () => {
     expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.histogramaSinLog);
   });
 
-  test('a truncated log or one without completed cases gets its note', async () => {
-    await montar({ log: { rows: result.log!.slice(0, 10), truncated: true } });
+  test('a log without the per-case times, or with none completed, gets its note', async () => {
+    await montar({ log: { rows: result.log!, truncated: false } });
     await pestana('process');
-    expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.histogramaTruncado);
+    expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.histogramaSinLog);
     act(() => root!.unmount());
     container.remove();
-    await montar({ log: { rows: [], truncated: false } });
+    await montar({ log: { rows: [], truncated: false, ciclos: [] } });
     await pestana('process');
     expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.histogramaSinCasos);
   });
 
-  test('with the worker’s per-case times, a truncated sample still gets its histogram', async () => {
-    const ciclos = ciclosPorCaso(result.log!, scenario.run.warmup ?? 0);
+  test('the per-case times do not depend on the log sample: a truncated one still gets its histogram', async () => {
     await montar({ log: { rows: result.log!.slice(0, 10), truncated: true, ciclos } });
     await pestana('process');
     const clases = [...container.querySelectorAll('[data-grafica="histograma"] g.marca')];
     expect(clases.reduce((suma, c) => suma + Number(c.getAttribute('data-valor')), 0)).toBe(result.process.completed);
+  });
+
+  test('200 000 cases draw a histogram, not a blank screen', async () => {
+    const muchos = Array.from({ length: 200_000 }, (_, i) => 60 + ((i * 7919) % 10_007));
+    await montar({ log: { rows: [], truncated: true, ciclos: muchos } });
+    await pestana('process');
+    const clases = [...container.querySelectorAll('[data-grafica="histograma"] g.marca')];
+    expect(clases.reduce((suma, c) => suma + Number(c.getAttribute('data-valor')), 0)).toBe(200_000);
+  });
+
+  test('a chart that throws becomes a note; the tables and the other charts stay', async () => {
+    const roto = new Proxy([1, 2, 3], {
+      get(target, key) {
+        if (key === 'map') throw new Error('boom');
+        return Reflect.get(target, key);
+      },
+    });
+    await montar({ log: { rows: [], truncated: false, ciclos: roto } });
+    await pestana('process');
+    expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.error);
+    expect(container.querySelector('[data-grafica="percentiles"] svg')).not.toBeNull();
+    expect(container.querySelector('table')).not.toBeNull();
+  });
+
+  test('everything inside the warm-up: a note, not charts of measured zeros', async () => {
+    const nada: RunResult = { ...result, process: { ...result.process, started: 0, completed: 0 } };
+    await montar({ result: nada, scenario: { ...scenario, run: { ...scenario.run, warmup: 3600 } } });
+    expect(container.querySelector('[data-grafica="instancias"]')!.textContent).toBe(strings().graficas.sinVentana);
+    await pestana('resources');
+    expect(container.querySelector('[data-grafica="utilizacion"]')!.textContent).toBe(strings().graficas.sinVentana);
   });
 
   test('a task never reached is a real zero: a bar of length 0 labelled 0, not a missing one', async () => {
@@ -194,7 +228,7 @@ describe('(c) the process document gets the charts of the run', () => {
   test('four charts as standalone SVG in paper colors, each with an alt text that carries its values', () => {
     let graficas: ReturnType<typeof graficasDelDocumento> = [];
     act(() => {
-      graficas = graficasDelDocumento({ ir, scenario, result, log: { rows: result.log!, truncated: false } });
+      graficas = graficasDelDocumento({ ir, scenario, result, log });
     });
     expect(graficas).toHaveLength(4);
     for (const { svg, alt } of graficas) {
@@ -207,6 +241,24 @@ describe('(c) the process document gets the charts of the run', () => {
     expect(graficas[0]!.alt).toContain(strings().graficas.utilizacion);
     const doc = new DOMParser().parseFromString(graficas[0]!.svg, 'image/svg+xml');
     expect(doc.querySelector('parsererror')).toBeNull();
+  });
+
+  test('a chart that fails is left out and the document keeps the others', () => {
+    const roto = new Proxy([1, 2, 3], {
+      get(target, key) {
+        if (key === 'map') throw new Error('boom');
+        return Reflect.get(target, key);
+      },
+    });
+    let graficas: ReturnType<typeof graficasDelDocumento> = [];
+    act(() => {
+      graficas = graficasDelDocumento({ ir, scenario, result, log: { rows: [], truncated: false, ciclos: roto } });
+    });
+    expect(graficas.map((g) => g.alt.split('. ')[0])).toEqual([
+      strings().graficas.utilizacion,
+      strings().graficas.percentiles('min'),
+      strings().graficas.instancias,
+    ]);
   });
 
   test('without pools, completed cases or log, only the charts that have something to draw', () => {

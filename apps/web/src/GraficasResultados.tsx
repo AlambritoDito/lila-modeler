@@ -6,16 +6,16 @@
  */
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import type { ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { columnLabel, formatDuration, formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
 import {
-  ciclosPorCaso,
   histograma,
   instanciasPorTarea,
   PERCENTILES,
   percentilesDelProceso,
+  sinVentana,
   utilizacionPorRecurso,
   type Punto,
 } from './graficas';
@@ -35,7 +35,7 @@ import { strings, useStrings } from './i18n';
 export interface LogDeCorrida {
   rows: readonly EventLogRow[];
   truncated: boolean;
-  /** Per-case cycle times the worker took from every row of replication 0 (`casosDelLog`). */
+  /** Cycle time (s) of each completed case of replication 0, from the engine (`onCycleTimes`). */
   ciclos?: readonly number[] | undefined;
 }
 
@@ -84,9 +84,10 @@ export function graficaPercentiles(result: RunResult, unit: BaseTimeUnit): Grafi
 }
 
 /**
- * Per-case cycle time from the event log, or why there is none: the worker's per-case times when
- * it sent them, else the rows — only when complete, since a truncated sample may have cut a case
- * short (`ciclosPorCaso`).
+ * Per-case cycle time of replication 0, or why there is none. The times are the engine's own
+ * sample behind `process.cycleTime` (`opts.onCycleTimes`, through the worker), never rebuilt from
+ * the event log: a case stuck at a blocked join leaves no `inFlight` row, and a start → end case
+ * leaves no row at all (QA of #512).
  */
 export function graficaHistograma(
   log: LogDeCorrida | undefined,
@@ -94,9 +95,8 @@ export function graficaHistograma(
   unit: BaseTimeUnit,
 ): { props: HistogramaProps } | { aviso: string } {
   const S = strings();
-  if (log === undefined) return { aviso: S.graficas.histogramaSinLog };
-  if (log.ciclos === undefined && log.truncated) return { aviso: S.graficas.histogramaTruncado };
-  const ciclos = log.ciclos ?? ciclosPorCaso(log.rows, scenario.run.warmup ?? 0);
+  const ciclos = log?.ciclos;
+  if (ciclos === undefined) return { aviso: S.graficas.histogramaSinLog };
   if (ciclos.length === 0) return { aviso: S.graficas.histogramaSinCasos };
   return {
     props: {
@@ -122,29 +122,93 @@ function Nota({ children }: { children: ReactNode }): ReactNode {
   return <p className="grafica-nota">{children}</p>;
 }
 
-/** A chart, or the note that says there is nothing to draw (never an empty or all-zero frame). */
-function Barras({ props }: { props: GraficaBarrasProps | null }): ReactNode {
-  const S = useStrings();
-  return props === null ? <Nota>{S.graficas.sinDatos}</Nota> : <GraficaBarras {...props} />;
+/**
+ * A chart that fails to build or draw becomes a note: a chart is never worth the whole view
+ * (QA of #512, where one blank screen came from a single chart).
+ */
+class SinCaida extends Component<{ children: ReactNode }, { fallo: boolean }> {
+  override state = { fallo: false };
+  static getDerivedStateFromError(): { fallo: boolean } {
+    return { fallo: true };
+  }
+  override render(): ReactNode {
+    return this.state.fallo ? <Nota>{strings().graficas.error}</Nota> : this.props.children;
+  }
 }
 
-export function GraficaDeUtilizacion({ result, nombres }: { result: RunResult; nombres: Readonly<Record<string, string>> }): ReactNode {
+/** A chart, or the note that says there is nothing to draw (never an empty or all-zero frame). */
+function Barras({ props }: { props: () => GraficaBarrasProps | null }): ReactNode {
+  const S = useStrings();
+  const p = props();
+  return p === null ? <Nota>{S.graficas.sinDatos}</Nota> : <GraficaBarras {...p} />;
+}
+
+/** The run measured nothing (all in the warm-up): say so instead of drawing its zeros. */
+function SinVentana(): ReactNode {
+  return <Nota>{useStrings().graficas.sinVentana}</Nota>;
+}
+
+export function GraficaDeUtilizacion({ result, scenario, nombres }: {
+  result: RunResult;
+  scenario: ResolvedScenario;
+  nombres: Readonly<Record<string, string>>;
+}): ReactNode {
   return (
     <section style={seccionStyle} data-grafica="utilizacion">
-      <Barras props={graficaUtilizacion(result, nombres)} />
+      <SinCaida>
+        {sinVentana(result, scenario.run.warmup) ? <SinVentana /> : <Barras props={() => graficaUtilizacion(result, nombres)} />}
+      </SinCaida>
     </section>
   );
 }
 
-export function GraficaDeInstancias({ ir, result }: { ir: ProcessIR; result: RunResult }): ReactNode {
+export function GraficaDeInstancias({ ir, result, scenario }: { ir: ProcessIR; result: RunResult; scenario: ResolvedScenario }): ReactNode {
   return (
     <section style={seccionStyle} data-grafica="instancias">
-      <Barras props={graficaInstancias(ir, result)} />
+      <SinCaida>
+        {sinVentana(result, scenario.run.warmup) ? <SinVentana /> : <Barras props={() => graficaInstancias(ir, result)} />}
+      </SinCaida>
     </section>
   );
 }
 
-/** Percentiles and, with the event log, the histogram, side by side when there is room. */
+function Percentiles({ result, unit }: { result: RunResult; unit: BaseTimeUnit }): ReactNode {
+  const S = useStrings();
+  const percentiles = graficaPercentiles(result, unit);
+  return percentiles === null ? <Nota>{S.graficas.sinCompletados}</Nota> : <GraficaBarras {...percentiles} />;
+}
+
+function HistogramaDeCasos({ scenario, unit, log }: { scenario: ResolvedScenario; unit: BaseTimeUnit; log: LogDeCorrida | undefined }): ReactNode {
+  const S = useStrings();
+  const histo = graficaHistograma(log, scenario, unit);
+  if ('aviso' in histo) return <Nota>{histo.aviso}</Nota>;
+  return (
+    <>
+      <Histograma {...histo.props} />
+      <details className="grafica-datos">
+        <summary>{S.graficas.verDatos}</summary>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ padding: '2px 8px', textAlign: 'left' }}>{S.graficas.columnaClase(unit)}</th>
+              <th scope="col" style={{ padding: '2px 8px', textAlign: 'right' }}>{S.graficas.columnaCasos}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {histograma(histo.props.valores).map((c) => (
+              <tr key={c.desde}>
+                <td style={{ padding: '2px 8px' }}>{textoClase(c)}</td>
+                <td style={{ padding: '2px 8px', textAlign: 'right' }}>{formatNumber(c.casos)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </>
+  );
+}
+
+/** Percentiles and, with the run's per-case times, the histogram, side by side when there is room. */
 export function GraficasDelProceso({
   result,
   scenario,
@@ -156,41 +220,17 @@ export function GraficasDelProceso({
   unit: BaseTimeUnit;
   log: LogDeCorrida | undefined;
 }): ReactNode {
-  const S = useStrings();
-  const percentiles = graficaPercentiles(result, unit);
-  const histo = graficaHistograma(log, scenario, unit);
   return (
     <section style={seccionStyle} className="graficas-fila">
       <div data-grafica="percentiles">
-        {percentiles === null ? <Nota>{S.graficas.sinCompletados}</Nota> : <GraficaBarras {...percentiles} />}
+        <SinCaida>
+          <Percentiles result={result} unit={unit} />
+        </SinCaida>
       </div>
       <div data-grafica="histograma">
-        {'aviso' in histo ? (
-          <Nota>{histo.aviso}</Nota>
-        ) : (
-          <>
-            <Histograma {...histo.props} />
-            <details className="grafica-datos">
-              <summary>{S.graficas.verDatos}</summary>
-              <table style={{ borderCollapse: 'collapse', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                <thead>
-                  <tr>
-                    <th scope="col" style={{ padding: '2px 8px', textAlign: 'left' }}>{S.graficas.columnaClase(unit)}</th>
-                    <th scope="col" style={{ padding: '2px 8px', textAlign: 'right' }}>{S.graficas.columnaCasos}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {histograma(histo.props.valores).map((c) => (
-                    <tr key={c.desde}>
-                      <td style={{ padding: '2px 8px' }}>{textoClase(c)}</td>
-                      <td style={{ padding: '2px 8px', textAlign: 'right' }}>{formatNumber(c.casos)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          </>
-        )}
+        <SinCaida>
+          <HistogramaDeCasos scenario={scenario} unit={unit} log={log} />
+        </SinCaida>
       </div>
     </section>
   );
@@ -209,7 +249,8 @@ function aSvg(grafica: ReactNode): { svg: string; alt: string } {
   const raiz = createRoot(contenedor);
   try {
     flushSync(() => raiz.render(grafica));
-    const svg = contenedor.querySelector('svg')!;
+    const svg = contenedor.querySelector('svg');
+    if (svg === null) throw new Error('chart did not render');
     const alt = [svg.querySelector('title')?.textContent, svg.querySelector('desc')?.textContent].filter(Boolean).join('. ');
     // The serializer declares the SVG namespace itself; React's `xmlns` attribute would repeat it.
     svg.removeAttribute('xmlns');
@@ -234,12 +275,27 @@ export function graficasDelDocumento(entrada: {
   const unit = (scenario.run.baseTimeUnit ?? 's') as BaseTimeUnit;
   const nombres = Object.fromEntries(Object.entries(scenario.resources ?? {}).map(([id, r]) => [id, r.name ?? id]));
   const papel = { paleta: PALETA_PAPEL, ancho: ANCHO_PAPEL };
-  const barras = [graficaUtilizacion(result, nombres), graficaPercentiles(result, unit)];
-  const histo = graficaHistograma(entrada.log, scenario, unit);
-  const graficas: ReactNode[] = [
-    ...barras.flatMap((p) => (p === null ? [] : [<SvgBarras key={p.titulo} {...p} {...papel} />])),
-    ...('props' in histo ? [<SvgHistograma key="histograma" {...histo.props} {...papel} />] : []),
-    ...[graficaInstancias(ir, result)].flatMap((p) => (p === null ? [] : [<SvgBarras key={p.titulo} {...p} {...papel} />])),
+  const medido = !sinVentana(result, scenario.run.warmup);
+  // Each chart on its own: one that fails is left out, and the document still exports.
+  const barras = (hacer: () => GraficaBarrasProps | null) => (): ReactNode => {
+    const p = hacer();
+    return p === null ? null : <SvgBarras {...p} {...papel} />;
+  };
+  const pasos: (() => ReactNode)[] = [
+    ...(medido ? [barras(() => graficaUtilizacion(result, nombres))] : []),
+    barras(() => graficaPercentiles(result, unit)),
+    () => {
+      const histo = graficaHistograma(entrada.log, scenario, unit);
+      return 'props' in histo ? <SvgHistograma {...histo.props} {...papel} /> : null;
+    },
+    ...(medido ? [barras(() => graficaInstancias(ir, result))] : []),
   ];
-  return graficas.map(aSvg);
+  return pasos.flatMap((paso) => {
+    try {
+      const grafica = paso();
+      return grafica === null ? [] : [aSvg(grafica)];
+    } catch {
+      return [];
+    }
+  });
 }

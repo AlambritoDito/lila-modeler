@@ -699,7 +699,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false, lo
           xlsxContents={xlsx}
         />
       )}
-      {tab === 'elements' && <GraficaDeInstancias ir={ir} result={result} />}
+      {tab === 'elements' && <GraficaDeInstancias ir={ir} result={result} scenario={scenario} />}
       {tab === 'flows' && (
         <DataTable
           title={tabLabels().flows}
@@ -725,7 +725,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false, lo
         />
       )}
       {tab === 'resources' && <p style={notaStyle}>{S.resultados.notaCostoRecursos}</p>}
-      {tab === 'resources' && <GraficaDeUtilizacion result={result} nombres={names} />}
+      {tab === 'resources' && <GraficaDeUtilizacion result={result} scenario={scenario} nombres={names} />}
       {tab === 'process' && (
         <DataTable
           title={tabLabels().process}

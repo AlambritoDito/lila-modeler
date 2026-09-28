@@ -229,16 +229,42 @@ describe('worker: muestreo del log (solo primera replicación)', () => {
 });
 
 describe('worker: cycle time per case (#460)', () => {
-  it('covers every completed case of replication 0, even past the log sample', async () => {
+  it('is the engine’s own sample: every completed case of replication 0, past the log sample', async () => {
     const scenario = smallPedidoScenario(loadPedidoScenario(42), 1);
     const ir = await loadPedidoIr();
 
     const { result, cycleTimes } = await runWorker(ir, scenario, { logSampleLimit: 5 });
 
     expect(cycleTimes).toHaveLength(result.process.completed);
-    expect(Math.min(...cycleTimes)).toBeCloseTo(result.process.cycleTime.min, 6);
-    expect(Math.max(...cycleTimes)).toBeCloseTo(result.process.cycleTime.max, 6);
-    expect(cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length).toBeCloseTo(result.process.cycleTime.mean, 6);
+    expect(Math.min(...cycleTimes)).toBe(result.process.cycleTime.min);
+    expect(Math.max(...cycleTimes)).toBe(result.process.cycleTime.max);
+  });
+
+  // QA of #512: a case stuck at a blocked AND join leaves no `inFlight` row, and a start → end case
+  // leaves no row at all, so rebuilding cycle times from the log disagreed with the engine.
+  it('agrees with process.cycleTime with blocked joins and activity-free cases (n and p50)', async () => {
+    const xml = readFileSync(resolve(REPOSITORY_ROOT, 'packages/engine/test/fixtures/join-bloqueado-mixto.bpmn'), 'utf8');
+    const { ir } = await parseBpmn(xml);
+    const constante = (value: number) => ({ type: 'constant', value });
+    const scenario = {
+      run: { start: '2026-09-07T00:00:00Z', duration: 86_400, replications: 2, seed: 1, baseTimeUnit: 'min' },
+      elements: {
+        S: { interTriggerTimer: constante(600) },
+        A: { processingTime: constante(60) },
+        B: { processingTime: constante(120) },
+        C: { processingTime: constante(1800) },
+        fa: { probability: 0.25 }, fb: { probability: 0.25 }, fc: { probability: 0.25 }, fd: { probability: 0.25 },
+      },
+    } as unknown as SimScenario;
+
+    const { cycleTimes } = await runWorker(ir, scenario);
+    const primera = simulate(ir, { ...scenario, run: { ...scenario.run, replications: 1 } } as SimScenario, { log: false });
+
+    expect(primera.process.inFlight).toBeGreaterThan(0);
+    expect(cycleTimes).toHaveLength(primera.process.completed);
+    const orden = [...cycleTimes].sort((a, b) => a - b);
+    const mitad = (orden.length - 1) / 2;
+    expect((orden[Math.floor(mitad)]! + orden[Math.ceil(mitad)]!) / 2).toBe(primera.process.cycleTime.p50);
   });
 });
 

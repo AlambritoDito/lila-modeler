@@ -1232,11 +1232,12 @@ export const en = {
     histograma: (unidad: string): string => `Cycle time per case (${unidad})`,
     histogramaSub: (casos: number, replicas: number): string =>
       replicas > 1
-        ? `${casos} completed cases of replication 1 of ${replicas}, from the event log`
-        : `${casos} completed cases, from the event log`,
-    histogramaSinLog: 'The cycle time histogram needs the run’s event log, which is kept in memory only: run the scenario again to see it.',
-    histogramaTruncado: 'This run’s event log is larger than the sample kept in memory, so the cycle time histogram is not drawn. The percentile chart covers every case.',
-    histogramaSinCasos: 'No completed case in the event log: there is no cycle time to distribute.',
+        ? `${casos} completed cases of replication 1 of ${replicas}`
+        : `${casos} completed cases`,
+    histogramaSinLog: 'The cycle time histogram needs this run’s per-case times, which are kept in memory only: run the scenario again to see it.',
+    sinVentana: 'Every arrival fell inside the warm-up, so nothing was measured to chart.',
+    error: 'This chart could not be drawn. The table has the values.',
+    histogramaSinCasos: 'No case of replication 1 completed: there is no cycle time to distribute.',
     clase: (desde: string, hasta: string): string => `${desde} to ${hasta}`,
     casos: (n: number): string => (n === 1 ? '1 case' : `${n} cases`),
     ejeCasos: 'Cases',
@@ -1248,7 +1249,7 @@ export const en = {
     compararCosto: 'Cost per case by scenario',
     compararUtilizacion: 'Utilization by resource and scenario (%)',
     compararCostoNoComparable: 'Cost per case is not charted: the scenarios use different currencies.',
-    compararDemasiados: (n: number): string => `Only the first 8 scenarios are charted; the tables show all ${n}.`,
+    compararDemasiados: (n: number): string => `Only the first 8 of the ${n} visible scenarios are charted; the tables show them all.`,
   },
 
   /* ------------------------------------------------------------------ *
