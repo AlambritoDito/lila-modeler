@@ -7,9 +7,9 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { processesOf, withProcesses } from '@lila-modeler/engine/project';
+import { processesOf, processSlug, withProcesses } from '@lila-modeler/engine/project';
 import type { ProcessDocument } from '@lila-modeler/engine/project';
-import { hasProjectModel, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
+import { hasProjectModel, occupiedSlugs, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
 import type { ProjectDocument, StoredRun } from './projectTypes.js';
 
 let dir: string;
@@ -153,31 +153,49 @@ describe('a second process', () => {
     }
   });
 
-  it('a deleted process does not come back inside a new process with the same slug (QA of #511, must-fix 2)', async () => {
+  it('a deleted process never comes back: the new one takes a free slug and nothing is deleted (QA of #511)', async () => {
     const conExtra: ProcessDocument = { ...facturacion, scenarios: { ...facturacion.scenarios, 'x.scenario.json': { version: 1 } } };
     await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), conExtra]));
-    // Delete it and save (back to version 1), then add a new, empty process that gets the same slug.
+    // Delete it and save (back to version 1): its folder stays on disk and is reported as occupied.
     await readProjectFolder(dir);
     await writeProjectFolder(dir, v1);
     const { document: reabierto } = await readProjectFolder(dir);
-    const nuevo: ProcessDocument = { slug: 'facturacion', name: 'Facturación', model: { id: 'Process_Nuevo', name: 'model.bpmn', xml: XML('Process_Nuevo'), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
-    await writeProjectFolder(dir, withProcesses(reabierto, [...processesOf(reabierto), nuevo]));
+    const ocupados = await occupiedSlugs(dir);
+    expect(ocupados).toEqual(['facturacion', 'pedido']);
+    const nuevo: ProcessDocument = { slug: processSlug('Facturación', ocupados), name: 'Facturación', model: { id: 'Process_Nuevo', name: 'model.bpmn', xml: XML('Process_Nuevo'), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+    expect(nuevo.slug).toBe('facturacion-2');
+    const primero = { ...processesOf(reabierto)[0]!, slug: processSlug('Pedido', ocupados) };
+    await writeProjectFolder(dir, withProcesses(reabierto, [primero, nuevo]));
     const { document } = await readProjectFolder(dir);
     expect(processesOf(document)[1]).toEqual(nuevo);
-    expect(Object.keys(await files(dir)).filter((k) => k.startsWith('processes/facturacion/')).sort()).toEqual(['processes/facturacion/model.bpmn']);
+    const arbol = Object.keys(await files(dir));
+    expect(arbol.filter((k) => k.startsWith('processes/facturacion-2/'))).toEqual(['processes/facturacion-2/model.bpmn']);
+    // The orphan folder of the deleted process is left exactly as it was.
+    expect(arbol).toContain('processes/facturacion/x.scenario.json');
+    expect(arbol).toContain('processes/facturacion/runs/run-b.result.json');
   });
 
-  it('same thing within one session: a slug that held another process on disk is cleaned', async () => {
+  it('the writer refuses a new process on a folder that holds another one\'s files, deleting nothing', async () => {
+    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), facturacion]));
+    await readProjectFolder(dir);
+    await writeProjectFolder(dir, v1);
+    await readProjectFolder(dir);
+    const antes = await files(dir);
+    const nuevo: ProcessDocument = { ...facturacion, model: { ...facturacion.model, id: 'Process_Nuevo' }, scenarios: {}, runs: [] };
+    await expect(writeProjectFolder(dir, withProcesses(v1, [{ ...processesOf(v1)[0]!, slug: 'pedido-2' }, nuevo])))
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    expect(await files(dir)).toEqual(antes);
+  });
+
+  it('a listed process whose BPMN id changed keeps all its files (QA of #511, folder2 case B)', async () => {
     await writeProjectFolder(dir, repo());
     await readProjectFolder(dir);
-    const nuevo: ProcessDocument = { ...facturacion, model: { ...facturacion.model, id: 'Process_Otro', xml: XML('Process_Otro') }, scenarios: {}, runs: [] };
-    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), nuevo]));
-    expect(processesOf((await readProjectFolder(dir)).document)[1]).toMatchObject({ scenarios: {}, runs: [] });
-    // The same process (same BPMN id) keeps what it had on disk, broken files included.
-    await writeFile(join(dir, 'processes/pedido/roto.scenario.json'), '{');
-    await readProjectFolder(dir);
-    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), nuevo]));
-    expect(await readFile(join(dir, 'processes/pedido/roto.scenario.json'), 'utf8')).toBe('{');
+    const cambiado: ProcessDocument = { ...facturacion, model: { ...facturacion.model, id: 'Process_FacturacionV2', xml: XML('Process_FacturacionV2') } };
+    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), cambiado]));
+    const arbol = Object.keys(await files(dir));
+    expect(arbol).toContain(`processes/facturacion/${AS_IS}`);
+    expect(arbol).toContain('processes/facturacion/runs/run-b.result.json');
+    expect(processesOf((await readProjectFolder(dir)).document)[1]).toEqual(cambiado);
   });
 
   it('the first version 2 save writes the manifest after the process files (QA of #511, nit 4)', async () => {

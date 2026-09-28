@@ -78,9 +78,9 @@ describe('slugs', () => {
     expect(processSlug('¿?')).toBe('process');
     expect(processSlug('Pedido', ['pedido', 'pedido-2'])).toBe('pedido-3');
     expect(processSlug('CON')).toBe('con-process');
-    expect(isProcessSlug('con')).toBe(false);
-    expect(isProcessSlug('com1')).toBe(false);
-    expect(isProcessSlug(processSlug('nul'))).toBe(true);
+    // Never created, but accepted when a repository written elsewhere uses one.
+    expect(processSlug('nul')).toBe('nul-process');
+    expect(isProcessSlug('con')).toBe(true);
   });
 });
 
@@ -177,6 +177,11 @@ describe('a second process turns it into version 2', () => {
     const opened = decodeLila(zipSync(again));
     expect(opened.problems?.map((p) => p.file)).toEqual(['model.bpmn', 'processes/borrado/model.bpmn']);
     expect(processesOf(opened).map((p) => p.slug)).toEqual(['pedido', 'facturacion']);
+  });
+
+  test('a Windows-reserved slug from a foreign manifest does not stop the repository opening', () => {
+    const renamed = withProcesses(repo, [processesOf(repo)[0]!, { ...second, slug: 'con' }]);
+    expect(processesOf(decodeLila(encodeLila(renamed)))[1]!.slug).toBe('con');
   });
 
   test('a manifest with a bad or repeated slug is refused', () => {

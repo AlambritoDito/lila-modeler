@@ -410,6 +410,22 @@ async function readRepositoryManifestOf(dir: string): Promise<Record<string, unk
   return parsed;
 }
 
+/**
+ * The folder names under `processes/` of `dir`, listed or not (QA of #511): a new process must not
+ * take one of them, since a deleted process's folder stays and its files would be read into it.
+ */
+export async function occupiedSlugs(dir: string): Promise<string[]> {
+  try {
+    return (await readdir(join(dir, PROCESSES_DIR), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+      .map((entry) => entry.name)
+      .sort();
+  } catch (error) {
+    if (isNotFound(error) || isNotDirectory(error)) return [];
+    throw error;
+  }
+}
+
 /** `true` si `dir` es `processes/<slug>/` de un repositorio que lista ese slug. */
 async function isRepositoryProcessFolder(dir: string): Promise<boolean> {
   if (basename(dirname(dir)) !== PROCESSES_DIR) return false;
@@ -1087,14 +1103,14 @@ async function writeRepositoryFolder(
   const processes = processesOf(document);
   const creatable = new Set<string>([processesDir]);
   await assertDirUsable(processesDir);
-  // What the folder already says about each slug: the BPMN process id it held. A slug that is not
-  // there, or held another process, is a NEW process for this save (QA of #511, must-fix 2).
+  // The slugs the folder already lists. A process whose slug is not among them is NEW for this
+  // save, and its folder must not already hold another process's scenarios or runs (QA of #511).
   const enDisco = await readRepositoryManifestOf(dir).catch(() => null);
-  let previos = new Map<string, string>();
+  let listados = new Set<string>();
   try {
-    if (enDisco !== null) previos = new Map(readRepositoryManifest(enDisco).map((m) => [m.slug, m.model.id]));
+    if (enDisco !== null) listados = new Set(readRepositoryManifest(enDisco).map((m) => m.slug));
   } catch {
-    // A manifest that does not read: nothing on disk counts as the same process.
+    // A manifest that does not read: no slug on disk counts as listed.
   }
   const manifestWrite: PendingWrite = {
     dest: join(dir, MANIFEST_FILE),
@@ -1134,11 +1150,18 @@ async function writeRepositoryFolder(
         );
       }
     }
-    // A new process whose folder is already there — the folder of a process deleted earlier (the
-    // writer leaves folders), or of one this repository had before — must not inherit its
-    // scenarios and runs: the files the document does not hold are retired in the same commit.
-    if (previos.get(process.slug) !== process.model.id) {
-      removals.push(...await staleFiles(processDir, process));
+  }
+  // A new process that landed on the folder of a process deleted earlier (the writer never deletes
+  // folders) would inherit its scenarios and runs on the next read. The app avoids those slugs
+  // (`occupiedSlugs`, `processSlug`); this is the disk layer's own refusal, and it deletes nothing.
+  for (const process of processes) {
+    if (listados.has(process.slug)) continue;
+    const ajenos = await leftoverFiles(join(processesDir, process.slug), process);
+    if (ajenos.length > 0) {
+      throw new ProjectIOError(
+        'E-CARPETA-OCUPADA',
+        `"${PROCESSES_DIR}/${process.slug}/" ya tiene escenarios o corridas de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
+      );
     }
   }
 
@@ -1185,8 +1208,8 @@ async function writeRepositoryFolder(
 }
 
 /** The `*.scenario.json` and `runs/*.result.json` in `processDir` that `process` does not hold. */
-async function staleFiles(processDir: string, process: ProcessDocument): Promise<PendingWrite[]> {
-  const stale: PendingWrite[] = [];
+async function leftoverFiles(processDir: string, process: ProcessDocument): Promise<string[]> {
+  const stale: string[] = [];
   const listar = async (folder: string, suffix: string): Promise<string[]> => {
     try {
       return (await readdir(folder, { withFileTypes: true }))
@@ -1198,13 +1221,13 @@ async function staleFiles(processDir: string, process: ProcessDocument): Promise
     }
   };
   for (const name of await listar(processDir, SCENARIO_SUFFIX)) {
-    if (!(name in process.scenarios)) stale.push({ dest: join(processDir, name), content: null });
+    if (!(name in process.scenarios)) stale.push(name);
   }
   const runIds = new Set(process.runs.map((run) => `${run.id}${RUN_SUFFIX}`));
   const runsDir = join(processDir, RUNS_DIR);
   if (!(await isSymlink(runsDir))) {
     for (const name of await listar(runsDir, RUN_SUFFIX)) {
-      if (!runIds.has(name)) stale.push({ dest: join(runsDir, name), content: null });
+      if (!runIds.has(name)) stale.push(`${RUNS_DIR}/${name}`);
     }
   }
   return stale;

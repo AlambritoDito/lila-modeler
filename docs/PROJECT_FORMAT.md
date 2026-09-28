@@ -90,8 +90,10 @@ processes/<slug>/runs/<id>.result.json
   the first process's `model.bpmn`, scenarios and runs from the root into `processes/<slug>/`, in
   the same all-or-nothing commit as the rest of the save. Going back to one process writes the root
   files again and leaves `processes/` on disk for you to remove. A deleted process's folder stays
-  too, but it never comes back: a new process that gets the same slug starts from an empty folder —
-  the save retires the scenarios and runs the document does not hold, in the same commit. The
+  too, orphaned, and it never comes back: a new process never takes a slug that is listed on disk,
+  that has a folder under `processes/`, or that was deleted in the session — «Cobro» becomes
+  `cobro-2` — and the writer refuses (`E-CARPETA-OCUPADA`, deleting nothing) a new process whose
+  folder already holds another one's scenarios or runs. The
   manifest is written after the process files, so a crash in the middle of that first save leaves
   the version 1 project intact.
 - **Scenarios and runs are per process.** The simulation runs one process at a time — the one on

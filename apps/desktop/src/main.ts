@@ -29,7 +29,7 @@ import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
-import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import { isRecordableProject, occupiedSlugs, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
 import { isProcessSlug, processesOf } from '@lila-modeler/engine/project';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
@@ -563,7 +563,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
         ? await readLilaFile(dir)
         : await readProjectFolder(dir);
       await recordRecent(dir, document.name);
-      return { ...document, problems, loose };
+      return { ...document, problems, loose, ...(isLilaPath(dir) ? {} : { occupiedSlugs: await occupiedSlugs(dir) }) };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;
@@ -699,7 +699,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
       await recordRecentIfProject(real, document.name);
-      return { ...document, problems, loose };
+      return { ...document, problems, loose, occupiedSlugs: await occupiedSlugs(real) };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
       throw error;

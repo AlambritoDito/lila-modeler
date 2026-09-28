@@ -20,6 +20,7 @@ import type {
   ScenarioDocument,
   StoredRun,
 } from './ProjectStore';
+import { processesOf } from '@lila-modeler/engine/project';
 import { strings } from '../i18n';
 import { nombreArchivo } from '../exportarDiagrama';
 
@@ -48,7 +49,8 @@ function requireWindowLila(): LilaBridge {
 function toProjectDocument(
   raw: LilaProjectDocument,
 ): { document: ProjectDocument; problems: readonly ProjectProblem[] } {
-  const { problems, ...rest } = raw;
+  // `occupiedSlugs` describes the folder, not the project: it stays in this store (#498).
+  const { problems, occupiedSlugs: _occupied, ...rest } = raw;
   const runs: StoredRun[] = rest.runs.map((run) => ({ ...run, result: run.result as RunResult }));
   return { document: { ...rest, runs, problems }, problems };
 }
@@ -69,6 +71,8 @@ export class DesktopStore implements ProjectSessionStore {
   /** `true` si el proyecto activo es un diagrama suelto: un `.bpmn` que no es el `model.bpmn` de
    *  su carpeta, sea esa carpeta un proyecto Lila o no (LILA-206). */
   private activeLoose = false;
+  /** Folders under `processes/` of the active folder, plus every slug saved there since (#498). */
+  private occupied = new Set<string>();
 
   constructor(bridge: LilaBridge = requireWindowLila()) {
     this.bridge = bridge;
@@ -90,6 +94,7 @@ export class DesktopStore implements ProjectSessionStore {
     const dir = await this.bridge.chooseFolder();
     if (dir === null) return null;
     await this.bridge.writeProject(dir, document, { saveAs: true });
+    this.occupied = new Set();
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = [];
@@ -103,6 +108,7 @@ export class DesktopStore implements ProjectSessionStore {
     if (dir === null) return null;
     const raw = await this.bridge.readProject(dir);
     const { document, problems } = toProjectDocument(raw);
+    this.occupied = new Set(raw.occupiedSlugs ?? []);
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = problems;
@@ -201,7 +207,10 @@ export class DesktopStore implements ProjectSessionStore {
     if (isNewDestination) {
       this.activeModelFile = undefined;
       this.activeLoose = false;
+      this.occupied = new Set();
     }
+    // What was just written is on disk now: those folders stay even if the process is deleted.
+    if ((document.processes?.length ?? 0) > 0) for (const p of processesOf(document)) this.occupied.add(p.slug);
     return document;
   }
 
@@ -216,7 +225,12 @@ export class DesktopStore implements ProjectSessionStore {
    * documento que estaba abierto antes y rechazarlo con `E-PROYECTO-DISTINTO`. No toca disco ni
    * el bridge: solo el estado en memoria de esta clase.
    */
+  occupiedSlugs(): readonly string[] {
+    return [...this.occupied];
+  }
+
   forget(): void {
+    this.occupied = new Set();
     this.activeDir = null;
     this.activeDocument = null;
     this.problems = [];
@@ -254,6 +268,7 @@ export class DesktopStore implements ProjectSessionStore {
     const raw = await this.bridge.openRecent(dir, file);
     if (raw === null) return null;
     const { document, problems } = toProjectDocument(raw);
+    this.occupied = new Set(raw.occupiedSlugs ?? []);
     this.activeDir = dir;
     this.activeDocument = document;
     this.problems = problems;

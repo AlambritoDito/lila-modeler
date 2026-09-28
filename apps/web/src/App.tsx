@@ -459,6 +459,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const [procesos, setProcesos] = useState<ProcessDocument[]>([]);
   const [activo, setActivo] = useState(0);
+  /**
+   * Slugs a new process must not take (QA of #511): the ones deleted in this session and the
+   * folders under `processes/` the store knows are on disk. A deleted process's folder stays, and a
+   * new process in it would read the old scenarios and runs back.
+   */
+  const slugsBorrados = useRef(new Set<string>());
+  const slugsOcupados = (): string[] => [...(adapter?.occupiedSlugs?.() ?? []), ...slugsBorrados.current];
   /** #461: the slug of the process a call activity was opened from, for «Back to …». */
   const [origen, setOrigen] = useState<string | null>(null);
   /** #461: a double-click on a call activity that calls nothing here; a notice, not an error. */
@@ -715,7 +722,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (atRevision !== revisionRef.current) throw new Error(S.app.errorModeloCambio);
     const parsed = await parseBpmn(xml);
     const yo = procesos[activo];
-    return { slug: yo?.slug ?? processSlug(projectName), name: yo?.name ?? projectName,
+    // A one-process project has no slug on disk yet: the day it grows it takes a free one, never
+    // the folder of a process deleted before (QA of #511).
+    return { slug: procesos.length > 1 && yo !== undefined ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs };
   }
@@ -787,6 +796,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
     // #498: a repository opens on its first process; a version 1 project has no list at all.
     setProcesos((doc.processes?.length ?? 0) > 0 ? processesOf(doc) : []); setActivo(0); setOrigen(null); setAvisoLlamada(null);
+    slugsBorrados.current.clear();
     setProjectProblems(doc.problems ?? []);
     setSuelto(doc.loose === true);
     if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
@@ -861,7 +871,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       await modelador?.comprobar?.(xml);
       const parsed = await parseBpmn(xml);
       const nuevo: ProcessDocument = {
-        slug: processSlug(nombre, lista.map((p) => p.slug)), name: nombre,
+        slug: processSlug(nombre, [...lista.map((p) => p.slug), ...slugsOcupados()]), name: nombre,
         model: { id: parsed.ir.id, name: 'model.bpmn', xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [],
       };
@@ -878,6 +888,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function borrarProceso(indice: number): Promise<void> {
     if (procesos.length < 2 || ioLock.current || procesos[indice] === undefined) return;
     const borrado = procesos[indice]!.slug;
+    slugsBorrados.current.add(borrado);
     if (origen === borrado) setOrigen(null);
     if (indice !== activo) {
       const lista = procesos.filter((_, i) => i !== indice);

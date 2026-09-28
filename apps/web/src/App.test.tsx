@@ -1436,6 +1436,28 @@ it('guardar desde la segunda pestaña guarda de verdad: «Guardar y continuar» 
   expect(session.createProject).toHaveBeenCalledOnce();
 });
 
+it('borrar y volver a añadir un proceso en la misma sesión no reutiliza su slug (QA de #511)', async () => {
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => porEtiqueta(T.procesos.borrarProceso('Cobro')).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Cobro');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  await click(T.app.guardar);
+  expect(vi.mocked(session.saveProject).mock.calls.at(-1)![0].processes?.map((p) => p.slug)).toEqual(['cobro-2']);
+});
+
+it('las carpetas ocupadas que conoce el almacén tampoco se reutilizan (QA de #511)', async () => {
+  (session as { occupiedSlugs?: () => readonly string[] }).occupiedSlugs = () => ['cobro', 'sample-order'];
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process?.slug).toBe('sample-order-2');
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['cobro-2']);
+});
+
 it('borrar el primer proceso deja al otro con su nombre (QA de #511, nit 9)', async () => {
   lienzoQueRecuerda();
   await nuevoProcesoConNombre('Cobro');
