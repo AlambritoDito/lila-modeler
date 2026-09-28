@@ -11,6 +11,7 @@
  */
 import { ScenarioSchema } from '../scenario.js';
 import { runResultSchema } from '../result.schema.js';
+import { isProcessSlug, processesOf } from './repository.js';
 import type { ProjectDocument } from './types.js';
 
 /**
@@ -76,6 +77,38 @@ export function runProblem(run: unknown): ProjectFormatError | null {
   return null;
 }
 
+/** The four fields a process carries, whether top-level or in `processes` (ADR-029). */
+function isProcessContent(value: Record<string, unknown>): boolean {
+  return (
+    isPlainObject(value.model) &&
+    typeof value.model.id === 'string' &&
+    typeof value.model.name === 'string' &&
+    typeof value.model.xml === 'string' &&
+    isRevision(value.model.revision) &&
+    isPlainObject(value.scenarios) &&
+    Object.values(value.scenarios).every(isPlainObject) &&
+    isPlainObject(value.scenarioRevisions) &&
+    Object.values(value.scenarioRevisions).every(isRevision) &&
+    Array.isArray(value.runs)
+  );
+}
+
+/** `process` and `processes` of a repository document (ADR-029): shapes and unique slugs. */
+function hasValidProcesses(value: Record<string, unknown>): boolean {
+  if (value.process !== undefined) {
+    if (!isPlainObject(value.process) || !isProcessSlug(value.process.slug) || typeof value.process.name !== 'string') {
+      return false;
+    }
+  }
+  if (value.processes === undefined) return true;
+  if (!Array.isArray(value.processes)) return false;
+  if (!value.processes.every((p) => isPlainObject(p) && isProcessSlug(p.slug) && typeof p.name === 'string' && isProcessContent(p))) {
+    return false;
+  }
+  const slugs = processesOf(value as unknown as ProjectDocument).map((p) => p.slug);
+  return new Set(slugs).size === slugs.length;
+}
+
 /** Structural validation; scenarios may hold drafts that do not validate yet. */
 export function readProjectDocument(value: unknown): ProjectDocument {
   if (
@@ -83,16 +116,8 @@ export function readProjectDocument(value: unknown): ProjectDocument {
     value.version !== 1 ||
     typeof value.id !== 'string' ||
     typeof value.name !== 'string' ||
-    !isPlainObject(value.model) ||
-    typeof value.model.id !== 'string' ||
-    typeof value.model.name !== 'string' ||
-    typeof value.model.xml !== 'string' ||
-    !isRevision(value.model.revision) ||
-    !isPlainObject(value.scenarios) ||
-    !Object.values(value.scenarios).every(isPlainObject) ||
-    !isPlainObject(value.scenarioRevisions) ||
-    !Object.values(value.scenarioRevisions).every(isRevision) ||
-    !Array.isArray(value.runs)
+    !isProcessContent(value) ||
+    !hasValidProcesses(value)
   ) {
     throw new ProjectFormatError('LILA-DOCUMENT', 'the value is not a Lila project document.');
   }
@@ -103,9 +128,11 @@ export function readProjectDocument(value: unknown): ProjectDocument {
   ) {
     throw new ProjectFormatError('LILA-PROBLEMS', 'the project diagnostics have an invalid shape.');
   }
-  for (const run of value.runs) {
-    const problem = runProblem(run);
-    if (problem !== null) throw problem;
+  for (const process of processesOf(value as unknown as ProjectDocument)) {
+    for (const run of process.runs) {
+      const problem = runProblem(run);
+      if (problem !== null) throw problem;
+    }
   }
   return value as unknown as ProjectDocument;
 }

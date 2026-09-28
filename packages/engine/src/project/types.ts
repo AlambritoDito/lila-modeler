@@ -33,19 +33,49 @@ export interface ProjectProblem {
   readonly message: string;
 }
 
+/** The BPMN model of one process: its XML plus what the manifest says about it. */
+export interface ProjectModel {
+  readonly id: string;
+  readonly name: string;
+  readonly xml: string;
+  readonly revision: number;
+}
+
+/**
+ * One process of a repository (ADR-029, #498): exactly what a version 1 project holds — a model,
+ * its scenarios and its runs — plus the `slug` of its `processes/<slug>/` folder and the name the
+ * canvas tab shows. The slug is the folder's identity and never changes on rename.
+ */
+export interface ProcessDocument {
+  readonly slug: string;
+  readonly name: string;
+  readonly model: ProjectModel;
+  readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
+  readonly scenarioRevisions: Readonly<Record<string, number>>;
+  readonly runs: readonly StoredRun[];
+}
+
+/**
+ * A Lila project. The top-level `model`/`scenarios`/`scenarioRevisions`/`runs` are its FIRST
+ * process, so everything written against the one-process shape keeps working unchanged.
+ *
+ * A repository with more than one process (ADR-029, #498) adds `process` — the slug and name of
+ * that first process — and `processes`, the others in order. Use `processesOf` and
+ * `withProcesses` (`repository.ts`) instead of assembling these by hand. Without `processes` the
+ * document is a version 1 project and is written as one, byte for byte.
+ */
 export interface ProjectDocument {
   readonly version: 1;
   readonly id: string;
   readonly name: string;
-  readonly model: {
-    readonly id: string;
-    readonly name: string;
-    readonly xml: string;
-    readonly revision: number;
-  };
+  readonly model: ProjectModel;
   readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
   readonly scenarioRevisions: Readonly<Record<string, number>>;
   readonly runs: readonly StoredRun[];
+  /** Slug and name of the first process; only with `processes`. */
+  readonly process?: { readonly slug: string; readonly name: string };
+  /** The repository's other processes, in order (ADR-029). Absent: a one-process project. */
+  readonly processes?: readonly ProcessDocument[];
   /** Invalid files preserved by the adapter; visible when opening. */
   readonly problems?: readonly ProjectProblem[];
   /**
