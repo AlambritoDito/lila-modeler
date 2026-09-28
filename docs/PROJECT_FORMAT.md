@@ -1,5 +1,7 @@
 # The Lila project format: the folder and the `.lila` file
 
+> Read this in: [Español](es/PROJECT_FORMAT.md)
+
 A Lila project is a **folder** (ADR-018). A `.lila` file is that same folder **zipped**, with the
 same layout and the same file names (ADR-027). The two are the same project in two containers:
 
@@ -12,9 +14,9 @@ Nothing converts, migrates or rewrites in between. The folder is what you keep i
 and merges, which is the whole reason it is the primary form. The `.lila` is what you hand to
 somebody: one file to attach, download or double-click.
 
-> **Planned (ADR-029, not implemented):** version 2 turns the project into a *repository* that can
-> hold many processes, maps, a catalog and analyses; each process keeps exactly the layout below
-> under `processes/<slug>/`, so every version 1 project stays valid.
+A project can hold **several processes** (ADR-029, #498). With one, it is the version 1 layout
+below, unchanged; with two or more, it is a version 2 *repository* where each process keeps that
+same layout under `processes/<slug>/` (see [Version 2](#version-2-the-repository)).
 
 ## Layout
 
@@ -46,12 +48,66 @@ wrote the runs in this archive. It is informational — readers record it and mo
 deliberately not part of the in-memory document, so an open/save round-trip re-stamps it rather
 than carrying somebody else's version forward.
 
+## Version 2: the repository
+
+A project with more than one process is written as version 2 (ADR-029). The manifest keeps its
+name, `lila-project.json`, and lists the processes; each process is exactly the version 1 layout,
+without a manifest of its own, in its folder:
+
+```
+lila-project.json              manifest, "version": 2
+processes/<slug>/model.bpmn
+processes/<slug>/<name>.scenario.json
+processes/<slug>/runs/<id>.result.json
+```
+
+```json
+{
+  "version": 2,
+  "id": "e2a1…",
+  "name": "pedido",
+  "processes": [
+    { "slug": "pedido", "name": "Pedido",
+      "model": { "id": "Process_Pedido", "name": "model.bpmn", "revision": 3 },
+      "scenarioRevisions": { "as-is.scenario.json": 2 } },
+    { "slug": "facturacion", "name": "Facturación",
+      "model": { "id": "Process_Facturacion", "name": "model.bpmn", "revision": 1 },
+      "scenarioRevisions": {} }
+  ],
+  "engine": "1.0.0"
+}
+```
+
+- **The slug is the folder**: lowercase `a-z`, digits and hyphens, unique in the project, derived
+  from the name when the process is created and never changed by a rename. `name` is what the
+  canvas tab shows. The order of `processes` is the order of the tabs.
+- **Version 2 is written only when it is needed.** While a project has one process it is saved as
+  version 1, byte for byte, so the builds that only read version 1 keep opening it. Adding a second
+  process writes version 2; deleting back to one writes version 1 again.
+- **A version 1 project reads as a one-process repository**, folder and `.lila` alike. Nothing
+  migrates: opening and saving it without changes gives back the same bytes.
+- **The folder moves, it does not copy.** The first version 2 save of a version 1 *folder* moves
+  the first process's `model.bpmn`, scenarios and runs from the root into `processes/<slug>/`, in
+  the same all-or-nothing commit as the rest of the save. Going back to one process writes the root
+  files again and leaves `processes/` on disk for you to remove.
+- **Scenarios and runs are per process.** The simulation runs one process at a time — the one on
+  the canvas — and a call activity is still a task with a time of its own; double-clicking one opens
+  the process whose BPMN process id is its `calledElement`.
+- **In the `.lila`**, anything outside the listed `processes/<slug>/` folders is reported and
+  dropped, exactly like a stray file in a version 1 archive; a listed process without its
+  `model.bpmn` is fatal (`LILA-NO-MODEL`).
+
 ## Versioning
 
-`version` is `1`. Changes to this format may only **add optional fields**; anything that would
-make a reader of version 1 misread a file takes a new `version`, and the reader of version 1
-refuses it instead of guessing. There is no migration step and none is planned: the files are on
-the user's disk, not in a database anybody controls.
+`version` is `1` or `2`. Changes to this format may only **add optional fields**; anything that
+would make a reader misread a file takes a new `version`, and the reader refuses it instead of
+guessing — the current reader refuses a version 3 with `LILA-MANIFEST` (in the folder, `E-MANIFEST`).
+There is no migration step and none is planned: the files are on the user's disk, not in a database
+anybody controls.
+
+A build that only reads version 1 (up to 1.0.0-beta.14) refuses a version 2 repository cleanly: it
+looks for the root `model.bpmn` before it reads the manifest's version, so the refusal it gives is
+«no model.bpmn» (`E-NO-MODEL` for a `.lila`, `E-SIN-MODELO` for a folder) — never a half-read project.
 
 ## What is tolerated, and what is not
 
@@ -87,7 +143,10 @@ mistake one for the other, since a Lila project starts with the ZIP magic `PK`.
 ## Where the code is
 
 `packages/engine/src/project/` — `types.ts` (the document contract), `document.ts` (structural
-validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`).
+validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`, and the
+version 2 manifest), `repository.ts` (`processesOf`/`withProcesses`, which fold the list of processes
+into the document: its top-level fields are the first process, and `process`/`processes` carry the
+rest).
 Published as `@lila-modeler/engine/project`. The folder reader/writer is
 `apps/desktop/src/projectIO.ts`; the `.lila` half of the desktop is `apps/desktop/src/lilaFile.ts`.
 
