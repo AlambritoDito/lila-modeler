@@ -18,6 +18,7 @@ import { SHEET_MESSAGES } from '../src/messages/sheets.js';
 import { parseScenario, validateScenario } from '../src/scenario.js';
 import {
   applyImportChanges,
+  describeImportValue,
   parseNumber,
   planScenarioImport,
   readScenarioFile,
@@ -424,11 +425,30 @@ describe('days and assignments', () => {
 });
 
 describe('(e) the imported scenario passes validateScenario', () => {
+  test('what the rows make together is linted before applying, and pinned to the row', () => {
+    const plan = planScenarioImport(
+      [
+        // The pool keeps its own calendar, and slices and a calendar exclude each other (R16).
+        ...csv('Resources.csv', 'id;capacity\ncajero;oficina:2\n'),
+        ...csv('Elements.csv', 'id;probability\nTask_Preparar;0,5\n'),
+      ],
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.changes).toHaveLength(2);
+    const lint = plan.issues.filter((issue) => issue.kind === 'lint');
+    expect(lint.map((issue) => [issue.sheet, issue.row])).toEqual([
+      ['Resources', 2],
+      ['Elements', 2],
+    ]);
+    expect(lint[0]!.text).toMatch(/^Resources, row 2: /);
+  });
+
   test('a workbook that touches every table', () => {
     const plan = planScenarioImport(
       [
         ...csv('Calendars.csv', 'id,days,from,to\nturno,LUN-VIE,0.25,0.5\n'),
-        ...csv('Resources.csv', 'id,name,type,capacity,costPerHour,calendar\nrepartidor,Driver,equipo,1,40,turno\ncajero,,,oficina:2; turno:1,,\n'),
+        ...csv('Resources.csv', 'id,name,type,capacity,costPerHour,calendar\nrepartidor,Driver,equipo,1,40,turno\nhorno,,,oficina:2; turno:1,,\n'),
         ...csv('Elements.csv', 'name,distribution,unit,min,mode,max,selection\nTake order,triangular,h,0.5,1,2,\nRevisar,,,,,,and\n'),
         ...csv('Arrivals.csv', 'id,distribution,unit,mean,triggerCount\nStartEvent_Pedido,exponential,min,3,500\n'),
         ...csv('Assignments.csv', 'elementId,resourceName,quantity\nTask_Revisar,Driver,\nTask_Revisar,Cashier,1\n'),
@@ -438,10 +458,6 @@ describe('(e) the imported scenario passes validateScenario', () => {
     );
     expect(plan.issues).toEqual([]);
     const result = applyImportChanges(asIs(), plan.changes);
-    // The pool's own calendar and its slices exclude each other (R16): the lint says so, which is
-    // the point of running it; everything else must be clean.
-    const resources = result['resources'] as Record<string, Record<string, unknown>>;
-    delete resources['cajero']!['calendar'];
     expect(errorsOf(result)).toEqual([]);
     expect(result['calendars']).toMatchObject({ turno: { intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '06:00', to: '12:00' }] } });
     const elements = result['elements'] as Record<string, Record<string, unknown>>;
@@ -561,6 +577,18 @@ describe('reader', () => {
 
   test('a file that is not a workbook throws a readable error', () => {
     expect(() => readWorkbook(strToU8('id,name\n'))).toThrow();
+  });
+});
+
+describe('the report', () => {
+  test('distributions in the unit of their row, empty lists said explicitly', () => {
+    const plan = planScenarioImport(csv('Elements.csv', 'id;distribution;unit;min;mode;max\nTask_TomarPedido;triangular;;1;3;5\n'), asIs(), pedidoIr());
+    const [change] = plan.changes;
+    expect(change!.unit).toBe('min');
+    expect(describeImportValue(change!.before, { unit: change!.unit })).toBe('triangular(min=1, mode=2, max=5) min');
+    expect(describeImportValue(change!.after, { unit: change!.unit })).toBe('triangular(min=1, mode=3, max=5) min');
+    expect(describeImportValue([], { locale: 'es' })).toBe('ninguno');
+    expect(describeImportValue(undefined)).toBe('—');
   });
 });
 

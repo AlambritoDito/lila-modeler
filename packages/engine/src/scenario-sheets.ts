@@ -32,7 +32,7 @@
 import type { ProcessIR } from './core/ir.js';
 import type { Locale } from './messages/index.js';
 import { sheetMessages, type SheetMessages } from './messages/sheets.js';
-import { parseScenario, WEEKDAYS } from './scenario.js';
+import { parseScenario, validateScenario, WEEKDAYS } from './scenario.js';
 import { describeDistribution } from './xlsx-report.js';
 import { workbook, type CellValue, type SheetSpec } from './xlsx.js';
 import { decodeCsvBytes, readCsv, readWorkbook, type ReadCell, type ReadSheet } from './xlsx-read.js';
@@ -274,12 +274,36 @@ function section(scenario: Record<string, unknown>, key: string): Record<string,
  * ------------------------------------------------------------------ */
 
 /** A value of the scenario the way the import report shows it. `—` for nothing. */
-export function describeImportValue(value: unknown): string {
+export interface DescribeOptions {
+  /** Time unit to show a distribution in, the one its row was written in (`ImportChange.unit`). */
+  unit?: string | undefined;
+  locale?: Locale | undefined;
+}
+
+/**
+ * A value of the scenario the way the import report shows it: `—` for nothing, `none` for an
+ * empty list (a task left without pools), and a distribution in the unit of its row, so the
+ * person reads `mean=3 min` where they typed 3 rather than the 180 seconds it is stored as.
+ */
+export function describeImportValue(value: unknown, options: DescribeOptions = {}): string {
   if (value === undefined || value === null) return '—';
   if (isObject(value) && typeof value['type'] === 'string') {
-    return describeDistribution(value as Parameters<typeof describeDistribution>[0]);
+    const unit = options.unit !== undefined && Object.hasOwn(UNITS, options.unit) ? options.unit : undefined;
+    if (unit === undefined) return describeDistribution(value as Parameters<typeof describeDistribution>[0]);
+    const factor = UNITS[unit]!;
+    const scaled: Record<string, unknown> = { ...value };
+    for (const parameter of TIME_PARAMETERS) {
+      if (typeof scaled[parameter] === 'number') scaled[parameter] = fromSeconds(scaled[parameter], factor);
+    }
+    if (Array.isArray(scaled['points'])) {
+      scaled['points'] = (scaled['points'] as Record<string, unknown>[]).map((point) =>
+        typeof point['value'] === 'number' ? { ...point, value: fromSeconds(point['value'], factor) } : point,
+      );
+    }
+    return `${describeDistribution(scaled as Parameters<typeof describeDistribution>[0])} ${unit}`;
   }
   if (Array.isArray(value)) {
+    if (value.length === 0) return sheetMessages(options.locale ?? 'en').none();
     return value
       .map((item) => {
         if (!isObject(item)) return String(item);
@@ -488,9 +512,16 @@ export interface ImportChange {
   field: string;
   before: unknown;
   after: unknown;
+  /** For a distribution: the time unit its row was written in, to show it that way. */
+  unit?: string;
 }
 
-export type ImportIssueKind = 'error' | 'unmatched' | 'ambiguous' | 'warning';
+/**
+ * `lint`: an error of the scenario the import would produce that the current one does not have
+ * (`validateScenario`, or the schema): a probability on a task, a pool with slices and a calendar…
+ * The caller must not apply a plan that has any.
+ */
+export type ImportIssueKind = 'error' | 'unmatched' | 'ambiguous' | 'warning' | 'lint';
 
 export interface ImportIssue {
   kind: ImportIssueKind;
@@ -645,11 +676,59 @@ export function planScenarioImport(
     }
   }
 
+  // The rows are valid one by one; this is what they make together (nit 5 of the QA of #514).
+  if (changes.length > 0) {
+    for (const problem of newErrors(scenario, next, ir, locale)) {
+      const change = changeFor(problem.path, changes);
+      issues.push(
+        change === undefined
+          ? { kind: 'lint', sheet: '', row: 0, message: problem.message, text: problem.message }
+          : {
+              kind: 'lint',
+              sheet: change.sheet,
+              row: change.row,
+              message: problem.message,
+              text: `${M.where(change.sheet, change.row, undefined)}: ${problem.message}`,
+            },
+      );
+    }
+  }
+
   return {
     changes,
     issues,
     tables: tables.map((t) => ({ table: t.table, sheet: t.sheet, rows: t.rows.length })),
   };
+}
+
+/** Errors of a raw scenario, keyed so the same defect before and after compares equal. */
+function errorsOf(raw: Record<string, unknown>, ir: ProcessIR, locale: Locale): { key: string; path: string; message: string }[] {
+  const parsed = parseScenario(raw, { locale });
+  if (!parsed.success) {
+    return parsed.error.issues.map((issue) => {
+      const path = issue.path.map(String).join('.');
+      return { key: `schema|${path}|${issue.message}`, path, message: `${path}: ${issue.message}` };
+    });
+  }
+  return validateScenario(parsed.data, ir, { locale })
+    .filter((problem) => problem.severity === 'error')
+    .map((problem) => ({ key: `${problem.code}|${problem.path}`, path: problem.path, message: problem.message }));
+}
+
+function newErrors(before: Record<string, unknown>, after: Record<string, unknown>, ir: ProcessIR, locale: Locale) {
+  const known = new Set(errorsOf(before, ir, locale).map((problem) => problem.key));
+  return errorsOf(after, ir, locale).filter((problem) => !known.has(problem.key));
+}
+
+/** The change a problem path points at: the one whose path is its longest prefix, or below it. */
+function changeFor(path: string, changes: readonly ImportChange[]): ImportChange | undefined {
+  let best: ImportChange | undefined;
+  for (const change of changes) {
+    const own = change.path.join('.');
+    const covers = path === own || path.startsWith(`${own}.`) || path.startsWith(`${own}[`);
+    if (covers && (best === undefined || own.length > best.path.join('.').length)) best = change;
+  }
+  return best ?? changes.find((change) => change.path.join('.').startsWith(`${path}.`));
 }
 
 /** The changes applied to a copy of `scenario`: the scenario the import produces. */
@@ -940,6 +1019,8 @@ function planElements(context: Context, t: Table, seen: Seen): void {
     const fields: Record<string, unknown> = {};
     const distribution = readDistribution(context, t, cells, errors);
     if (distribution !== undefined) fields[distributionField] = distribution;
+    // The unit the row's times were written in, so the report shows them the same way.
+    const unit = own(UNIT_ALIASES, normalized(text(t, cells, 'unit'))) ?? baseFactor(context.next).unit;
     const fixedCost = numberField(t, cells, 'fixedCost', errors, M, 'nonNegative');
     if (fixedCost !== undefined) fields['fixedCost'] = fixedCost;
     const calendar = text(t, cells, 'calendar');
@@ -975,6 +1056,7 @@ function planElements(context: Context, t: Table, seen: Seen): void {
         field,
         before: current[field],
         after,
+        ...(field === distributionField ? { unit } : {}),
       });
     }
     commit(context, planned);
