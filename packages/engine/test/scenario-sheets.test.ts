@@ -167,15 +167,46 @@ describe('(b) CSV from a Spanish Excel', () => {
     expect(plan.changes).toMatchObject([{ path: ['elements', 'Task_TomarPedido', 'resources'], after: [{ ref: 'cajero', quantity: 2 }] }]);
   });
 
-  test('parseNumber reads the separators Excel writes', () => {
-    expect(parseNumber('1,5')).toBe(1.5);
-    expect(parseNumber('1.234,5')).toBe(1234.5);
-    expect(parseNumber('1,234.5')).toBe(1234.5);
-    expect(parseNumber('1 234')).toBe(1234);
-    expect(parseNumber('78%')).toBeCloseTo(0.78);
-    expect(parseNumber('')).toBeNull();
-    expect(parseNumber('abc')).toBeNaN();
-    expect(parseNumber('1,2,3')).toBeNaN();
+  test('parseNumber follows the style of the file: `;` means decimal comma, `,` means decimal dot', () => {
+    const comma = (text: string): number | null => parseNumber(text, 'comma');
+    const dot = (text: string): number | null => parseNumber(text, 'dot');
+    expect([comma('1,5'), comma('1.500'), comma('12.500'), comma('1.234.567'), comma('1.234,5'), comma('1 234,5'), comma('0,375'), comma('78%'), comma('1,5%'), comma(',5')]).toEqual([
+      1.5, 1500, 12500, 1234567, 1234.5, 1234.5, 0.375, 0.78, 0.015, 0.5,
+    ]);
+    expect([dot('1.5'), dot('1,500'), dot('1,234'), dot('1,234,567'), dot('1,234.5'), dot('1 234'), dot('.5'), dot('1e3'), dot('-5')]).toEqual([
+      1.5, 1500, 1234, 1234567, 1234.5, 1234, 0.5, 1000, -5,
+    ]);
+    // A separator that is not the decimal one has to group by three: no guessing.
+    for (const text of ['1.5', '1,234.5', '1,2,3', '12.34.5']) expect(comma(text), text).toBeNaN();
+    for (const text of ['1,5', '1.234,5', '1,2,3']) expect(dot(text), text).toBeNaN();
+    // Not finite, not a number.
+    for (const text of ['1e999', '1E+309', 'Infinity', 'abc', '0x10', '(5)', '$1,200']) expect(dot(text), text).toBeNaN();
+    expect(parseNumber(Number.POSITIVE_INFINITY)).toBeNaN();
+    expect(dot('')).toBeNull();
+  });
+
+  test('the delimiter decides: 1.500 is 1500 in a `;` file and 1,234 is 1234 in a quoted `,` file', () => {
+    const es = planScenarioImport(csv('Recursos.csv', '\uFEFFid;costPerHour\ncajero;1.500\ncocinero;12,5\n'), asIs(), pedidoIr());
+    expect(es.changes.map((change) => change.after)).toEqual([1500, 12.5]);
+    const en = planScenarioImport(csv('Resources-en.csv', 'id,costPerHour\ncajero,"1,234"\ncocinero,12.5\n'), asIs(), pedidoIr());
+    expect(en.changes.map((change) => change.after)).toEqual([1234, 12.5]);
+    const wrong = planScenarioImport(csv('Resources.csv', 'id;costPerHour;fixedCost\ncajero;1.5;1e999\n'), asIs(), pedidoIr());
+    expect(wrong.changes).toEqual([]);
+    expect(wrong.issues.map((issue) => issue.text)).toEqual([
+      'Resources, row 2, column costPerHour: "1.5" is not a number in this file, which writes decimals with "," and thousands with ".".',
+      'Resources, row 2, column fixedCost: "1e999" is not a number in this file, which writes decimals with "," and thousands with ".".',
+    ]);
+  });
+
+  test('a text cell of a workbook uses the language of the app, and an ambiguous one gets a note', () => {
+    const sheet = (value: string): ReadSheet[] => [{ name: 'Resources', rows: [['id', 'costPerHour'], ['cajero', value]] }];
+    const es = planScenarioImport(sheet('1.500'), asIs(), pedidoIr(), { locale: 'es' });
+    expect(es.changes[0]!.after).toBe(1500);
+    expect(es.issues.map((issue) => [issue.kind, issue.column])).toEqual([['warning', 'costPerHour']]);
+    const en = planScenarioImport(sheet('1.500'), asIs(), pedidoIr());
+    expect(en.changes[0]!.after).toBe(1.5);
+    expect(en.issues[0]!.message).toBe('"1.500" is text that could be thousands or decimals; it was read as 1.5. Type it as a number in the cell to avoid doubt.');
+    expect(planScenarioImport(sheet('12,5'), asIs(), pedidoIr(), { locale: 'es' }).issues).toEqual([]);
   });
 
   test('readCsv keeps quoted separators, quotes and line breaks', () => {
@@ -319,6 +350,21 @@ describe('(d) invalid values name the sheet, the row and the column', () => {
       'Calendars, row 3, column days: "FUNDAY" is not a list of days (MON,TUE… or MON-FRI).',
       'Calendars, row 2: because of the rows above, "oficina" keeps its current values.',
       'Elements, row 2, column mode: "mode" is not a parameter of the exponential distribution; leave it empty.',
+    ]);
+  });
+});
+
+describe('calendar times', () => {
+  test('seconds are dropped with a note, from text or from an Excel clock time', () => {
+    const plan = planScenarioImport(
+      [{ name: 'Calendars', rows: [['id', 'days', 'from', 'to'], ['turno', 'MON', '08:00:30', 17 / 24 + 59 / 1440 + 59 / 86400]] }],
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.changes[0]!.after).toEqual({ intervals: [{ days: ['MON'], from: '08:00', to: '17:59' }] });
+    expect(plan.issues.map((issue) => [issue.kind, issue.column])).toEqual([
+      ['warning', 'from'],
+      ['warning', 'to'],
     ]);
   });
 });

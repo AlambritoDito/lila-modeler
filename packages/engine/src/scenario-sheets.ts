@@ -174,32 +174,42 @@ function fromSeconds(seconds: number, factor: number): number {
 }
 
 /**
- * A number out of a cell: a numeric cell as it is; text with a decimal comma (`1,5`), thousands
- * separators (`1.234,5`, `1,234.5`, `1 234`) or a percentage (`78%` → `0.78`). `NaN` when the text
- * is not a number, `null` when the cell is empty.
+ * How a file writes numbers as text. `comma`: `,` decimals and `.` thousands, what a Spanish Excel
+ * writes (and why its CSV uses `;`). `dot`: `.` decimals and `,` thousands. It comes from the CSV's
+ * delimiter, or from the language of the app for text cells of a workbook (numeric cells are
+ * numbers and need none).
  */
-export function parseNumber(cell: ReadCell | undefined): number | null {
+export type NumberStyle = 'comma' | 'dot';
+
+/**
+ * A number out of a cell: a numeric cell as it is; text in `style`, with thousands separators
+ * (`1.234.567` / `1,234,567`) and a percentage (`78%` → `0.78`). A separator that is not the
+ * decimal one must group digits by three, so `1.5` in a `comma` file is not a number rather than
+ * a guess. `NaN` when the text is not a finite number, `null` when the cell is empty.
+ */
+export function parseNumber(cell: ReadCell | undefined, style: NumberStyle = 'dot'): number | null {
   if (cell === null || cell === undefined) return null;
-  if (typeof cell === 'number') return cell;
+  if (typeof cell === 'number') return Number.isFinite(cell) ? cell : Number.NaN;
   if (typeof cell === 'boolean') return Number.NaN;
-  let text = cell.replace(/[\s  ']/g, '');
+  let text = cell.replace(/[\s\u00A0\u202F]/g, '').replace(/^'/, '');
   if (text === '') return null;
   const percent = text.endsWith('%');
   if (percent) text = text.slice(0, -1);
-  const comma = text.lastIndexOf(',');
-  const dot = text.lastIndexOf('.');
-  if (comma !== -1 && dot !== -1) {
-    text = comma > dot ? text.replace(/\./g, '').replace(',', '.') : text.replace(/,/g, '');
-  } else if (comma !== -1) {
-    if (text.indexOf(',') !== comma) return Number.NaN;
-    text = text.replace(',', '.');
-  } else if (/^[-+]?\d{1,3}(\.\d{3}){2,}$/.test(text)) {
-    text = text.replace(/\./g, '');
+  const [decimal, group] = style === 'comma' ? [',', '.'] : ['.', ','];
+  if (text.includes(group)) {
+    const grouped = new RegExp(`^[-+]?\\d{1,3}(\\${group}\\d{3})+(\\${decimal}\\d*)?$`);
+    if (!grouped.test(text)) return Number.NaN;
+    text = text.split(group).join('');
   }
+  if (text.indexOf(decimal) !== text.lastIndexOf(decimal)) return Number.NaN;
+  text = text.replace(decimal, '.');
   if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(text)) return Number.NaN;
-  const value = Number(text);
-  return percent ? value / 100 : value;
+  const value = Number(text) / (percent ? 100 : 1);
+  return Number.isFinite(value) ? value : Number.NaN;
 }
+
+/** `1.500` or `1,500` in a text cell of a workbook: thousands or decimals, depending on who wrote it. */
+const AMBIGUOUS_NUMBER = /^[-+]?\d{1,3}[.,]\d{3}$/;
 
 /**
  * Keys the file may not name: on a plain object they reach `Object.prototype` instead of an own
@@ -506,6 +516,10 @@ interface Table {
   headers: Map<string, string>;
   /** Data rows with their spreadsheet row number. */
   rows: { row: number; cells: ReadCell[] }[];
+  /** How text numbers are written in this sheet. */
+  style: NumberStyle;
+  /** A CSV decides its style by its delimiter; a workbook's text cells are a guess worth a note. */
+  csv: boolean;
 }
 
 /** Which table a sheet is: by its name, then by the columns it has. */
@@ -586,7 +600,9 @@ export function planScenarioImport(
       .map((cells, index) => ({ row: index + 1, cells }))
       .slice(headerIndex + 1)
       .filter(({ cells }) => [...columns.values()].some((index) => cellText(cells[index]) !== ''));
-    tables.push({ table, sheet: sheet.name, columns, headers, rows });
+    const csv = sheet.delimiter !== undefined;
+    const style: NumberStyle = csv ? (sheet.delimiter === ';' ? 'comma' : 'dot') : locale === 'es' ? 'comma' : 'dot';
+    tables.push({ table, sheet: sheet.name, columns, headers, rows, style, csv });
   }
 
   const context: Context = { M, ir, next, changes, issue, locale };
@@ -642,15 +658,44 @@ interface Context {
   locale: Locale;
 }
 
-/** Errors of one row, collected so the row applies whole or not at all (rule 3). */
+/**
+ * Errors of one row, collected so the row applies whole or not at all (rule 3), plus notes that do
+ * not stop it (an ambiguous number, seconds dropped from a time).
+ */
 interface RowErrors {
   list: { column: string; message: string }[];
+  notes: { column: string; message: string }[];
   add(column: string, message: string): void;
+  note(column: string, message: string): void;
 }
 
 function rowErrors(): RowErrors {
   const list: { column: string; message: string }[] = [];
-  return { list, add: (column, message) => list.push({ column, message }) };
+  const notes: { column: string; message: string }[] = [];
+  return {
+    list,
+    notes,
+    add: (column, message) => list.push({ column, message }),
+    note: (column, message) => notes.push({ column, message }),
+  };
+}
+
+/**
+ * The number in `raw` read with the sheet's style: `null` when empty, `undefined` when it is not a
+ * number (the error is already in `errors`). An ambiguous text number in a workbook gets a note.
+ */
+function readNumber(t: Table, raw: ReadCell, column: string, errors: RowErrors, M: SheetMessages): number | null | undefined {
+  const value = parseNumber(raw, t.style);
+  if (value === null) return null;
+  const written = cellText(raw);
+  if (Number.isNaN(value)) {
+    errors.add(column, typeof raw === 'string' ? M.notANumberIn(written, t.style === 'comma' ? ',' : '.', t.style === 'comma' ? '.' : ',') : M.notANumber(written));
+    return undefined;
+  }
+  if (!t.csv && typeof raw === 'string' && AMBIGUOUS_NUMBER.test(written.replace(/\s/g, ''))) {
+    errors.note(column, M.ambiguousNumber(written, value));
+  }
+  return value;
 }
 
 function cell(t: Table, cells: readonly ReadCell[], column: string): ReadCell {
@@ -667,6 +712,8 @@ function header(t: Table, column: string): string {
 }
 
 function flush(context: Context, t: Table, row: number, errors: RowErrors): boolean {
+  for (const note of errors.notes) context.issue('warning', t.sheet, row, header(t, note.column), note.message);
+  errors.notes.length = 0;
   for (const error of errors.list) context.issue('error', t.sheet, row, header(t, error.column), error.message);
   return errors.list.length === 0;
 }
@@ -736,12 +783,8 @@ function numberField(
   kind: 'nonNegative' | 'integer' | 'probability',
 ): number | undefined {
   const raw = cell(t, cells, column);
-  const value = parseNumber(raw);
-  if (value === null) return undefined;
-  if (Number.isNaN(value)) {
-    errors.add(column, M.notANumber(cellText(raw)));
-    return undefined;
-  }
+  const value = readNumber(t, raw, column, errors, M);
+  if (value === null || value === undefined) return undefined;
   if (kind === 'integer' && !Number.isInteger(value)) {
     errors.add(column, M.notAWholeNumber(cellText(raw)));
     return undefined;
@@ -819,18 +862,13 @@ function readDistribution(
       continue;
     }
     if (parameter === 'points') {
-      const points = readPoints(text(t, cells, 'points'), factor);
+      const points = readPoints(text(t, cells, 'points'), factor, t.style);
       if (points === null) errors.add('points', M.badPoints(text(t, cells, 'points')));
       else distribution['points'] = points;
       continue;
     }
-    const raw = cell(t, cells, parameter);
-    const value = parseNumber(raw);
-    if (value === null) continue;
-    if (Number.isNaN(value)) {
-      errors.add(parameter, M.notANumber(cellText(raw)));
-      continue;
-    }
+    const value = readNumber(t, cell(t, cells, parameter), parameter, errors, M);
+    if (value === null || value === undefined) continue;
     distribution[parameter] = TIME_PARAMETERS.has(parameter) ? toSeconds(value, factor) : value;
   }
   if (errors.list.length > before) return undefined;
@@ -843,13 +881,13 @@ function readDistribution(
 }
 
 /** `30:0.2; 60:0.8` (values in the row's unit) → the `points` of a `user` distribution. */
-function readPoints(value: string, factor: number): { value: number; probability: number }[] | null {
+function readPoints(value: string, factor: number, style: NumberStyle): { value: number; probability: number }[] | null {
   const points: { value: number; probability: number }[] = [];
   for (const pair of value.split(/[;|\n]/)) {
     if (pair.trim() === '') continue;
     const parts = pair.split(':');
     if (parts.length !== 2) return null;
-    const [v, p] = parts.map((part) => parseNumber(part));
+    const [v, p] = parts.map((part) => parseNumber(part, style));
     if (v === null || p === null || v === undefined || p === undefined || Number.isNaN(v) || Number.isNaN(p)) return null;
     points.push({ value: toSeconds(v, factor), probability: p });
   }
@@ -923,8 +961,8 @@ function planElements(context: Context, t: Table, seen: Map<string, number>): vo
 }
 
 /** `3`, or `day:3; night:1` for the capacity by calendar slices (LILA-164). */
-function readCapacity(raw: ReadCell, errors: RowErrors, M: SheetMessages): unknown {
-  const value = parseNumber(raw);
+function readCapacity(t: Table, raw: ReadCell, errors: RowErrors, M: SheetMessages): unknown {
+  const value = parseNumber(raw, t.style);
   if (value !== null && !Number.isNaN(value)) {
     if (!Number.isInteger(value) || value < 1) {
       errors.add('capacity', M.atLeastOne());
@@ -936,7 +974,7 @@ function readCapacity(raw: ReadCell, errors: RowErrors, M: SheetMessages): unkno
   for (const pair of cellText(raw).split(/[;|\n]/)) {
     if (pair.trim() === '') continue;
     const at = pair.lastIndexOf(':');
-    const capacity = at === -1 ? Number.NaN : parseNumber(pair.slice(at + 1));
+    const capacity = at === -1 ? Number.NaN : parseNumber(pair.slice(at + 1), t.style);
     if (at <= 0 || capacity === null || Number.isNaN(capacity)) {
       errors.add('capacity', M.badSlices(cellText(raw)));
       return undefined;
@@ -985,7 +1023,7 @@ function planResources(context: Context, t: Table, seen: Map<string, number>): v
       else fields['type'] = value;
     }
     if (text(t, cells, 'capacity') !== '') {
-      const capacity = readCapacity(cell(t, cells, 'capacity'), errors, M);
+      const capacity = readCapacity(t, cell(t, cells, 'capacity'), errors, M);
       if (capacity !== undefined) {
         fields['capacity'] = capacity;
         if (Array.isArray(capacity)) {
@@ -1136,15 +1174,20 @@ function readDays(value: string): string[] | null {
  * `09:00`, `9:00`, `09:00:00`, or the fraction of a day Excel stores when a time is typed into a
  * cell (`0.375` = 09:00, `1` = 24:00). `null` when it is none of them.
  */
-function readTime(raw: ReadCell): string | null {
-  const fraction = typeof raw === 'string' && raw.includes(':') ? null : parseNumber(raw);
+function readTime(raw: ReadCell, style: NumberStyle): { time: string; seconds: boolean } | null {
+  const fraction = typeof raw === 'string' && raw.includes(':') ? null : parseNumber(raw, style);
   if (fraction !== null) {
     if (Number.isNaN(fraction) || fraction < 0 || fraction > 1) return null;
-    const minutes = Math.round(fraction * 1440);
-    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    // Seconds are dropped, as for `17:59:59` typed as text; the epsilon absorbs the binary fraction.
+    const minutes = Math.floor(fraction * 1440 + 1e-6);
+    return {
+      time: `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`,
+      seconds: Math.abs(fraction * 1440 - minutes) > 1e-6,
+    };
   }
-  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(cellText(raw));
-  return match === null ? null : `${match[1]!.padStart(2, '0')}:${match[2]}`;
+  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(cellText(raw));
+  if (match === null) return null;
+  return { time: `${match[1]!.padStart(2, '0')}:${match[2]}`, seconds: match[3] !== undefined && match[3] !== '00' };
 }
 
 function planCalendars(context: Context, t: Table): void {
@@ -1166,10 +1209,17 @@ function planCalendars(context: Context, t: Table): void {
     const errors = rowErrors();
     const days = readDays(text(t, cells, 'days'));
     if (days === null) errors.add('days', M.badDays(text(t, cells, 'days')));
-    const from = readTime(cell(t, cells, 'from'));
-    if (from === null) errors.add('from', M.badTime(text(t, cells, 'from')));
-    const to = readTime(cell(t, cells, 'to'));
-    if (to === null) errors.add('to', M.badTime(text(t, cells, 'to')));
+    const times: Record<'from' | 'to', string | null> = { from: null, to: null };
+    for (const column of ['from', 'to'] as const) {
+      const read = readTime(cell(t, cells, column), t.style);
+      if (read === null) errors.add(column, M.badTime(text(t, cells, column)));
+      else {
+        times[column] = read.time;
+        // The scenario keeps minutes (HH:MM); say so instead of dropping the seconds in silence.
+        if (read.seconds) errors.note(column, M.secondsDropped(text(t, cells, column), read.time));
+      }
+    }
+    const { from, to } = times;
     if (!flush(context, t, row, errors)) {
       group.failed = true;
       continue;

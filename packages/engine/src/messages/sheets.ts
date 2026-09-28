@@ -24,6 +24,8 @@ export interface SheetMessages {
   missingDistribution: () => string;
   parameterNotApplicable: (parameter: string, type: string) => string;
   notANumber: (value: string) => string;
+  notANumberIn: (value: string, decimal: string, group: string) => string;
+  ambiguousNumber: (value: string, read: number) => string;
   notAWholeNumber: (value: string) => string;
   nonNegative: () => string;
   atLeastOne: () => string;
@@ -37,6 +39,7 @@ export interface SheetMessages {
   duplicateResource: (key: string) => string;
   badDays: (value: string) => string;
   badTime: (value: string) => string;
+  secondsDropped: (value: string, time: string) => string;
   calendarNotWeekly: (id: string) => string;
   groupNotApplied: (key: string) => string;
 }
@@ -55,6 +58,10 @@ const en: SheetMessages = {
   missingDistribution: () => 'there are distribution parameters but no distribution type.',
   parameterNotApplicable: (parameter, type) => `"${parameter}" is not a parameter of the ${type} distribution; leave it empty.`,
   notANumber: (value) => `"${value}" is not a number.`,
+  notANumberIn: (value, decimal, group) =>
+    `"${value}" is not a number in this file, which writes decimals with "${decimal}" and thousands with "${group}".`,
+  ambiguousNumber: (value, read) =>
+    `"${value}" is text that could be thousands or decimals; it was read as ${read}. Type it as a number in the cell to avoid doubt.`,
   notAWholeNumber: (value) => `"${value}" is not a whole number.`,
   nonNegative: () => 'must be a number ≥ 0.',
   atLeastOne: () => 'must be a whole number ≥ 1.',
@@ -68,6 +75,7 @@ const en: SheetMessages = {
   duplicateResource: (key) => `resource "${key}" is assigned twice to the same element.`,
   badDays: (value) => `"${value}" is not a list of days (MON,TUE… or MON-FRI).`,
   badTime: (value) => `"${value}" is not a time of day (HH:MM, 24:00 allowed as the end).`,
+  secondsDropped: (value, time) => `calendars keep hours and minutes: "${value}" was read as ${time}.`,
   calendarNotWeekly: (id) =>
     `calendar "${id}" uses monthDays, monthWeekdays, dates or holidays, which this sheet does not edit; it was kept untouched.`,
   groupNotApplied: (key) => `because of the rows above, "${key}" keeps its current values.`,
@@ -87,6 +95,10 @@ const es: SheetMessages = {
   missingDistribution: () => 'hay parámetros de distribución pero falta el tipo de distribución.',
   parameterNotApplicable: (parameter, type) => `«${parameter}» no es un parámetro de la distribución ${type}; déjalo vacío.`,
   notANumber: (value) => `«${value}» no es un número.`,
+  notANumberIn: (value, decimal, group) =>
+    `«${value}» no es un número en este archivo, que escribe los decimales con «${decimal}» y los miles con «${group}».`,
+  ambiguousNumber: (value, read) =>
+    `«${value}» es texto que puede ser miles o decimales; se leyó como ${read}. Escríbelo como número en la celda para evitar dudas.`,
   notAWholeNumber: (value) => `«${value}» no es un número entero.`,
   nonNegative: () => 'debe ser un número ≥ 0.',
   atLeastOne: () => 'debe ser un número entero ≥ 1.',
@@ -100,6 +112,7 @@ const es: SheetMessages = {
   duplicateResource: (key) => `el recurso «${key}» está asignado dos veces al mismo elemento.`,
   badDays: (value) => `«${value}» no es una lista de días (MON,TUE… o MON-FRI; también LUN,MAR…).`,
   badTime: (value) => `«${value}» no es una hora del día (HH:MM; 24:00 vale como fin).`,
+  secondsDropped: (value, time) => `los calendarios guardan horas y minutos: «${value}» se leyó como ${time}.`,
   calendarNotWeekly: (id) =>
     `el calendario «${id}» usa monthDays, monthWeekdays, dates o festivos (holidays), que esta hoja no edita; se conservó intacto.`,
   groupNotApplied: (key) => `por las filas anteriores, «${key}» conserva sus valores actuales.`,
