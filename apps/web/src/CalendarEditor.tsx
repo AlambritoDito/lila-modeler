@@ -231,10 +231,14 @@ export function franjaRepetida(
 
 type CatalogoCalendario = ReturnType<typeof useStrings>['calendario'];
 
-/** `-1` → «last», `-3` → «3 from the end», `15` → «15». */
+/** `15` → «day 15», `-1` → «last day», `-2` → «second-to-last day». */
 function diaDelMesTexto(n: number, S: CatalogoCalendario): string {
-  if (n === -1) return S.ultimo;
-  return n < 0 ? S.desdeElFinal(-n) : String(n);
+  return n < 0 ? S.desdeElFinal(-n, S.diaCosa) : S.diaN(n);
+}
+
+/** First letter up: the pieces are written lower case so they can go anywhere in a list. */
+function capital(texto: string): string {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 /**
@@ -243,13 +247,14 @@ function diaDelMesTexto(n: number, S: CatalogoCalendario): string {
  */
 export function resumenSelector(intervalo: Intervalo, S: CatalogoCalendario): string {
   if (Array.isArray(intervalo.monthDays)) {
-    return S.cadaMesDias(intervalo.monthDays.map((n) => diaDelMesTexto(n, S)).join(', '));
+    return capital(S.cadaMesDias(intervalo.monthDays.map((n) => diaDelMesTexto(n, S)).join(', ')));
   }
   if (Array.isArray(intervalo.monthWeekdays)) {
     return intervalo.monthWeekdays
-      .map(({ nth, day }) =>
-        S.cadaMesSemana(S.ordinales[String(nth)] ?? S.desdeElFinal(-nth), S.dias[day] ?? String(day)),
-      )
+      .map(({ nth, day }) => {
+        const dia = S.dias[day] ?? String(day);
+        return capital(S.cadaMesSemana(nth > 0 ? `${S.ordinales[String(nth)] ?? nth} ${dia}` : S.desdeElFinal(-nth, dia)));
+      })
       .join(', ');
   }
   if (Array.isArray(intervalo.dates)) {

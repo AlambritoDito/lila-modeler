@@ -1044,10 +1044,13 @@ export const es: Strings = {
     dia: 'Día',
     meses: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
     /** Fila de la lista de una franja mensual o anual. */
-    ultimo: 'último',
-    desdeElFinal: (n: number): string => `${n} desde el final`,
-    cadaMesDias: (dias: string): string => `Día ${dias} de cada mes`,
-    cadaMesSemana: (ordinal: string, dia: string): string => `${ordinal} ${dia} de cada mes`,
+    diaN: (n: number): string => `día ${n}`,
+    /** `n` contando desde el final del mes: 1 es el último, 2 el penúltimo… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `último ${cosa}` : n === 2 ? `penúltimo ${cosa}` : n === 3 ? `antepenúltimo ${cosa}` : `${n}.º ${cosa} desde el final`,
+    diaCosa: 'día',
+    cadaMesDias: (dias: string): string => `${dias} de cada mes`,
+    cadaMesSemana: (quien: string): string => `${quien} de cada mes`,
     cadaAno: (fechas: string): string => `Cada año el ${fechas}`,
     fecha: (dia: number, mes: string): string => `${dia} ${mes}`,
     /** #82: festivos, cerrado todo el día digan lo que digan las franjas (R-CAL-14). */

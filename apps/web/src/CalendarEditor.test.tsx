@@ -20,6 +20,7 @@ import {
 } from './CalendarEditor';
 import { setLocale } from './i18n';
 import { en as T } from './strings.en';
+import { es } from './strings.es';
 
 setLocale('en');
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -247,7 +248,19 @@ it('does not add the same monthly range twice', () => {
 
 it('describes monthly and yearly ranges in the list', () => {
   const C = T.calendario;
-  expect(resumenSelector({ monthDays: [1, -1], from: '09:00', to: '12:00' }, C)).toBe('Day 1, last of each month');
+  expect(resumenSelector({ monthDays: [1, -1], from: '09:00', to: '12:00' }, C)).toBe('Day 1, last day of each month');
+  expect(resumenSelector({ monthDays: [-1], from: '09:00', to: '12:00' }, C)).toBe('Last day of each month');
+  expect(resumenSelector({ monthWeekdays: [{ nth: -2, day: 'FRI' }], from: '09:00', to: '12:00' }, C)).toBe(
+    'Second-to-last Fri of each month',
+  );
+  const E = es.calendario;
+  expect(resumenSelector({ monthDays: [-1], from: '09:00', to: '12:00' }, E)).toBe('Último día de cada mes');
+  expect(resumenSelector({ monthWeekdays: [{ nth: -2, day: 'FRI' }], from: '09:00', to: '12:00' }, E)).toBe(
+    'Penúltimo Vie de cada mes',
+  );
+  expect(resumenSelector({ monthWeekdays: [{ nth: 2, day: 'SAT' }], from: '09:00', to: '12:00' }, E)).toBe(
+    '2.º Sáb de cada mes',
+  );
   expect(resumenSelector({ monthWeekdays: [{ nth: -1, day: 'FRI' }], from: '09:00', to: '12:00' }, C)).toBe(
     'Last Fri of each month',
   );

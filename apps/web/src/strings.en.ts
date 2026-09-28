@@ -1070,10 +1070,13 @@ export const en = {
     dia: 'Day',
     meses: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     /** The list row of a monthly or yearly range. */
-    ultimo: 'last',
-    desdeElFinal: (n: number): string => `${n} from the end`,
-    cadaMesDias: (dias: string): string => `Day ${dias} of each month`,
-    cadaMesSemana: (ordinal: string, dia: string): string => `${ordinal} ${dia} of each month`,
+    diaN: (n: number): string => `day ${n}`,
+    /** `n` counted from the end of the month: 1 is the last, 2 the second to last… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `last ${cosa}` : n === 2 ? `second-to-last ${cosa}` : n === 3 ? `third-to-last ${cosa}` : `${n}th-to-last ${cosa}`,
+    diaCosa: 'day',
+    cadaMesDias: (dias: string): string => `${dias} of each month`,
+    cadaMesSemana: (quien: string): string => `${quien} of each month`,
     cadaAno: (fechas: string): string => `Every year on ${fechas}`,
     fecha: (dia: number, mes: string): string => `${mes} ${dia}`,
     /** #82: holidays, closed all day whatever the ranges say (R-CAL-14). */
