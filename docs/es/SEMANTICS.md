@@ -931,7 +931,13 @@ Desde #82 un intervalo también puede repetirse por mes o por año (`monthDays`,
   cuyas aperturas caen todas en sus propios festivos nunca abre: `E-CAL-VACIO`, que el lint
   reporta en `calendars.<nombre>` y `core/` al compilar.
   Un calendario solo con `days` y sin festivos es exactamente el calendario semanal de R-CAL-1:
-  mismo camino de código, mismos bytes (R-DEG-2). Todo lo fechado es aritmética de días civiles,
+  mismo camino de código, mismos bytes (R-DEG-2). También lo es uno cuyos únicos festivos son
+  fechas puntuales anteriores a `run.start` o en días de la semana en que su patrón nunca abre: se
+  descartan al compilar. Cualquier otro festivo toma el camino fechado, cuyos resultados pueden
+  diferir de los semanales en el último ULP (unos 10⁻¹⁵ relativos) aunque el festivo caiga después
+  del final de la corrida, porque el motor no conoce ese final al compilar un calendario. El texto
+  del error de un calendario que solo abre en sus festivos es `calendars.<nombre>: todas las
+  aperturas del calendario caen en uno de sus festivos.` Todo lo fechado es aritmética de días civiles,
   sin `Date` ni `Intl` (R-DET-5): el resultado no depende de la zona horaria del proceso que lo
   corre. *(prueba: #82)*
 - **R-CAL-15 — Sin zona horaria propia ni DST (límite).** Toda fecha y hora de un calendario se lee
@@ -1120,7 +1126,7 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
 | `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
 | `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
-| `E-CAL-VACIO` | calendario sin intervalos, calendario que solo abre en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
+| `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 

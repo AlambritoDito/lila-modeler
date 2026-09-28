@@ -940,7 +940,13 @@ R-CAL-12/13), and `holidays` closes whole days (R-CAL-14).
   own holidays never opens: `E-CAL-VACIO`, reported by the lint at `calendars.<name>` and by
   `core/` when compiling.
   A calendar with only `days` and no holidays is exactly the weekly calendar of R-CAL-1 — same
-  code path, same bytes (R-DEG-2). Everything dated is civil-day arithmetic, with no `Date` and no
+  code path, same bytes (R-DEG-2). So is one whose only holidays are one-off dates before
+  `run.start` or on weekdays its pattern never opens: they are dropped when compiling. Any other
+  holiday takes the dated path, whose results can differ from the weekly ones in the last ULP
+  (about 10⁻¹⁵ relative) even when the holiday falls after the end of the run, because the
+  engine does not know the run's end when it compiles a calendar. The error text for a calendar
+  that only opens on its holidays is `calendars.<name>: every opening of the calendar falls on
+  one of its holidays.` Everything dated is civil-day arithmetic, with no `Date` and no
   `Intl` (R-DET-5): the result does not depend on the timezone of the process that runs it.
   *(test: #82)*
 - **R-CAL-15 — No timezone of its own, no DST (limit).** Every date and time of a calendar is read
@@ -1132,7 +1138,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-REF-DESCONOCIDA` | `calendar` that does not exist in `calendars` (`validateScenario`'s lint), including that of each `capacity` slice |
 | `E-CAL-DESCONOCIDO` | the same, caught by `core/sim.ts`'s guard (see R-CAL-10 and R-CAL-11) |
 | `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14) |
-| `E-CAL-VACIO` | calendar with no intervals, a calendar that only opens on its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
+| `E-CAL-VACIO` | calendar with no intervals, a calendar whose every opening falls on one of its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
 | `E-RESERVADO` | reserved field (§15, exact text in R-RES-2) |
 
