@@ -50,6 +50,8 @@ let contenedor: HTMLDivElement | null = null;
 let actual: Json | null = null;
 /** Edits the scenario from outside the import, as the form would. */
 let editarFuera: ((escenario: Json) => void) | null = null;
+/** Replaces the diagram, as moving a shape on the canvas does. */
+let cambiarIr: ((ir: ProcessIR) => void) | null = null;
 
 afterEach(() => {
   if (raiz !== null) act(() => raiz!.unmount());
@@ -59,6 +61,8 @@ afterEach(() => {
 });
 
 function Arnes(): React.JSX.Element {
+  const [ir, setIr] = useState<ProcessIR>(IR);
+  cambiarIr = setIr;
   const [escenarios, setEscenarios] = useState<Record<string, Json>>({ 'base.scenario.json': ORIGINAL });
   actual = escenarios['base.scenario.json']!;
   editarFuera = (escenario) => setEscenarios((previos) => ({ ...previos, 'base.scenario.json': escenario }));
@@ -69,7 +73,7 @@ function Arnes(): React.JSX.Element {
       onCambio={(archivo, escenario) => setEscenarios((previos) => ({ ...previos, [archivo]: escenario }))}
       onGuardar={() => {}}
       onDuplicar={() => {}}
-      ir={IR}
+      ir={ir}
       seleccion={null}
       onSeleccionar={() => {}}
     />
@@ -187,5 +191,15 @@ test('errors the result would have block Apply, and so does an edit made after r
   expect(boton(es.escenario.importarAplicar).disabled).toBe(false);
   act(() => editarFuera!({ ...ORIGINAL, name: 'Editado' }));
   expect(contenedor!.querySelector('.informe-importar')?.textContent).toContain(es.escenario.importarCaducado);
+  expect(boton(es.escenario.importarAplicar).disabled).toBe(true);
+});
+
+test('a stale report says whether the diagram or the scenario changed', async () => {
+  montar();
+  await elegirArchivo('elementos.csv', CSV);
+  act(() => cambiarIr!({ ...IR, nodes: { ...IR.nodes } }));
+  const informe = contenedor!.querySelector('.informe-importar')?.textContent ?? '';
+  expect(informe).toContain(es.escenario.importarCaducadoDiagrama);
+  expect(informe).not.toContain(es.escenario.importarCaducado);
   expect(boton(es.escenario.importarAplicar).disabled).toBe(true);
 });

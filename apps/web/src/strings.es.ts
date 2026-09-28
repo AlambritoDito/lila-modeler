@@ -1001,6 +1001,7 @@ export const es: Strings = {
     importarLint: (n: number): string => `Errores que tendría el escenario al aplicar (${n}): corrige el archivo e impórtalo de nuevo`,
     importarDesde: (hoja: string, fila: number): string => `${hoja}, fila ${fila}`,
     importarCaducado: 'El escenario cambió después de leer el archivo: impórtalo de nuevo para aplicarlo.',
+    importarCaducadoDiagrama: 'El diagrama cambió después de leer el archivo: impórtalo de nuevo para aplicarlo.',
 
     /** `resources[pool].capacity` (LILA-164): fija o por turnos. */
     capacidadFija: 'Fija',

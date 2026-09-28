@@ -1844,7 +1844,9 @@ function ImportarExcel({
 
   const plan = informe?.plan;
   const lint = plan?.issues.filter((i) => i.kind === 'lint') ?? [];
-  const caducado = informe !== null && (informe.delta !== delta || informe.ir !== ir);
+  /** What made the plan stale, if anything: the scenario is said first when both changed. */
+  const caducado =
+    informe === null ? null : informe.delta !== delta ? 'escenario' : informe.ir !== ir ? 'diagrama' : null;
   const noEmparejadas = plan?.issues.filter((i) => i.kind === 'unmatched' || i.kind === 'ambiguous') ?? [];
   const errores = plan?.issues.filter((i) => i.kind === 'error') ?? [];
   const avisos = plan?.issues.filter((i) => i.kind === 'warning') ?? [];
@@ -1959,16 +1961,16 @@ function ImportarExcel({
                 </ul>
               </div>
             ))}
-          {caducado && (
+          {caducado !== null && (
             <p role="alert" className="error">
-              {S.escenario.importarCaducado}
+              {caducado === 'diagrama' ? S.escenario.importarCaducadoDiagrama : S.escenario.importarCaducado}
             </p>
           )}
           <div className="acciones">
             <button
               type="button"
               className="boton primario"
-              disabled={plan.changes.length === 0 || lint.length > 0 || caducado}
+              disabled={plan.changes.length === 0 || lint.length > 0 || caducado !== null}
               onClick={() => aplicar(plan)}
             >
               {S.escenario.importarAplicar}

@@ -1028,6 +1028,7 @@ export const en = {
     importarLint: (n: number): string => `Errors the scenario would have after applying (${n}): fix the file and import it again`,
     importarDesde: (hoja: string, fila: number): string => `${hoja}, row ${fila}`,
     importarCaducado: 'The scenario changed after the file was read: import it again to apply it.',
+    importarCaducadoDiagrama: 'The diagram changed after the file was read: import it again to apply it.',
 
     /** `resources[pool].capacity` (LILA-164): fixed or per shift. */
     capacidadFija: 'Fixed',
