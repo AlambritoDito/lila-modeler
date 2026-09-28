@@ -60,15 +60,19 @@ interface Manifest {
 }
 
 /** One entry of a version 2 manifest's `processes`: the version 1 manifest minus the project. */
-interface ProcessManifest {
+export interface ProcessManifest {
   readonly slug: string;
   readonly name: string;
   readonly model: { readonly id: string; readonly name: string; readonly revision: number };
   readonly scenarioRevisions: Readonly<Record<string, number>>;
 }
 
-/** What `lila-project.json` holds in a repository (ADR-029). */
-interface ManifestV2 {
+/**
+ * What `lila-project.json` holds in a repository (ADR-029). Exported, with `repositoryManifestOf`
+ * and `readRepositoryManifest`, so the desktop folder writes and reads the same manifest the
+ * archive does — it just leaves `engine` out, like its version 1 manifest.
+ */
+export interface RepositoryManifest {
   readonly version: 2;
   readonly id: string;
   readonly name: string;
@@ -107,18 +111,18 @@ function isRunEntry(name: string): boolean {
   return !rest.includes('/') && rest.length > RUN_SUFFIX.length;
 }
 
-function manifestV2Of(document: ProjectDocument, processes: readonly ProcessDocument[]): ManifestV2 {
+/** The version 2 manifest of `document`, without the `engine` stamp. */
+export function repositoryManifestOf(document: ProjectDocument): RepositoryManifest {
   return {
     version: 2,
     id: document.id,
     name: document.name,
-    processes: processes.map((p) => ({
+    processes: processesOf(document).map((p) => ({
       slug: p.slug,
       name: p.name,
       model: { id: p.model.id, name: p.model.name, revision: p.model.revision },
       scenarioRevisions: p.scenarioRevisions,
     })),
-    engine: engineVersion,
   };
 }
 
@@ -174,9 +178,8 @@ export function encodeLila(document: ProjectDocument): Uint8Array<ArrayBuffer> {
     put(MANIFEST_FILE, json(manifestOf(valid)));
     putProcess('', valid);
   } else {
-    const processes = processesOf(valid);
-    put(MANIFEST_FILE, json(manifestV2Of(valid, processes)));
-    for (const process of processes) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
+    put(MANIFEST_FILE, json({ ...repositoryManifestOf(valid), engine: engineVersion }));
+    for (const process of processesOf(valid)) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
   }
   // `zipSync` allocates a plain `ArrayBuffer`; the cast only narrows `ArrayBufferLike`, which the
   // DOM's `BlobPart` refuses because a `SharedArrayBuffer` would also satisfy it.
@@ -322,8 +325,11 @@ function peekManifest(raw: Uint8Array): unknown {
   }
 }
 
-/** The `processes` of a version 2 manifest, or a `LILA-MANIFEST` saying why not. */
-function readProcessManifests(parsed: Record<string, unknown>): ProcessManifest[] {
+/**
+ * The `processes` of a parsed version 2 manifest, or a `LILA-MANIFEST` saying why not: at least
+ * one, each with a valid slug (`isProcessSlug`), a name and a model, and no slug twice.
+ */
+export function readRepositoryManifest(parsed: Record<string, unknown>): ProcessManifest[] {
   const bad = (why: string): never => {
     throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila repository: ${why}`);
   };
@@ -361,7 +367,7 @@ function readProcessManifests(parsed: Record<string, unknown>): ProcessManifest[
  * and dropped.
  */
 function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): ProjectDocument {
-  const manifests = readProcessManifests(parsed);
+  const manifests = readRepositoryManifest(parsed);
   const problems: ProjectProblem[] = [];
   const byPrefix = new Map(manifests.map((m) => [`${PROCESSES_DIR}/${m.slug}/`, {
     manifest: m,

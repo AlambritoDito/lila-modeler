@@ -31,6 +31,7 @@ import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension
 import { readLilaFile, writeLilaFile } from './lilaFile.js';
 import { isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
 import type { ProjectDocument } from './projectTypes.js';
+import { isProcessSlug, processesOf } from '@lila-modeler/engine/project';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
 import { pickUpdate, RELEASES_URL, updateDialogOptions } from './updateCheck.js';
@@ -195,14 +196,42 @@ function requireProjectDocument(value: unknown): ProjectDocument {
   return doc as unknown as ProjectDocument;
 }
 
-/** Valida los nombres de archivo que `document` va a producir antes de tocar el disco. */
+/**
+ * Valida los nombres de archivo que `document` va a producir antes de tocar el disco: los de cada
+ * proceso de un repositorio (#498) también, y sus slugs, que serán carpetas de `processes/`.
+ */
 function requireSafeFileNames(dir: string, document: ProjectDocument): void {
-  for (const name of Object.keys(document.scenarios)) {
-    requireFlatName(dir, name, '.scenario.json', `document.scenarios["${name}"]`);
+  if (document.processes !== undefined && (!Array.isArray(document.processes) || !document.processes.every(isPlainRecord))) {
+    throw new Error('E-ARGUMENTO: "document.processes" debe ser un array de objetos.');
   }
-  for (const run of document.runs) {
-    requireFlatName(dir, `${run.id}.result.json`, '.result.json', `document.runs[].id (${run.id})`);
+  const slugs = new Set<string>();
+  for (const process of document.processes === undefined || document.processes.length === 0 ? [document] : processesOf(document)) {
+    if ('slug' in process) {
+      if (!isProcessSlug(process.slug) || slugs.has(process.slug)) {
+        throw new Error(`E-ARGUMENTO: slug de proceso inválido o repetido: ${JSON.stringify(process.slug)}.`);
+      }
+      slugs.add(process.slug);
+    }
+    if (
+      !isPlainRecord(process.model) ||
+      typeof process.model.xml !== 'string' ||
+      !isPlainRecord(process.scenarios) ||
+      !Array.isArray(process.runs) ||
+      !process.runs.every((run) => isPlainRecord(run) && typeof run.id === 'string')
+    ) {
+      throw new Error('E-ARGUMENTO: cada proceso necesita "model.xml" (texto), "scenarios" (objeto) y "runs" (array).');
+    }
+    for (const name of Object.keys(process.scenarios)) {
+      requireFlatName(dir, name, '.scenario.json', `document.scenarios["${name}"]`);
+    }
+    for (const run of process.runs) {
+      requireFlatName(dir, `${run.id}.result.json`, '.result.json', `document.runs[].id (${run.id})`);
+    }
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** `{}` si `value` es `undefined`; valida forma mínima en cualquier otro caso. */

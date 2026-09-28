@@ -6,4 +6,5 @@ export type { ProcessDocument, ProjectDocument, ProjectModel, ProjectProblem, Sc
 export { isProcessSlug, processesOf, processSlug, withProcesses } from './repository.js';
 export { ProjectFormatError, readProjectDocument, runProblem } from './document.js';
 export type { ProjectErrorCode } from './document.js';
-export { decodeLila, encodeLila, lilaEntryNames } from './lila.js';
+export { decodeLila, encodeLila, lilaEntryNames, readRepositoryManifest, repositoryManifestOf } from './lila.js';
+export type { ProcessManifest, RepositoryManifest } from './lila.js';
