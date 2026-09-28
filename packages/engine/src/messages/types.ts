@@ -105,6 +105,12 @@ export interface ZodMessages {
   intervalFrom: () => string;
   intervalTo: () => string;
   intervalOrder: () => string;
+  /** #82: the day selectors of a calendar interval and its holidays. */
+  intervalSelector: () => string;
+  monthDay: () => string;
+  monthWeekdayNth: () => string;
+  annualDate: () => string;
+  holidayDate: () => string;
 }
 
 /**

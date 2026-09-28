@@ -14,6 +14,7 @@ import { z } from 'zod';
 
 import { checkDistribution } from './core/distributions.js';
 import { poolCapacityBound } from './core/sim.js';
+import { compileCalendar, isDatedDef } from './core/calendar.js';
 import type { ProcessIR } from './core/ir.js';
 import { coded, messages, type Catalog, type Locale, type ZodMessages } from './messages/index.js';
 
@@ -162,6 +163,21 @@ const HHMM_TO = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 
 export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 
+/** `"MM-DD"` (annual) or `"YYYY-MM-DD"` (once). Civil validity is checked by `isCalendarDate`. */
+const MONTH_DAY = /^(\d{2})-(\d{2})$/;
+const FULL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** `"MM-DD"` that exists in some year (`02-29` does, `02-30` does not), or a real `"YYYY-MM-DD"`. */
+function isCalendarDate(value: string, allowYear: boolean): boolean {
+  const full = allowYear ? FULL_DATE.exec(value) : null;
+  if (full !== null) return isValidCivilDate(Number(full[1]), Number(full[2]), Number(full[3]));
+  const short = MONTH_DAY.exec(value);
+  return short !== null && isValidCivilDate(2000, Number(short[1]), Number(short[2]));
+}
+
+/** Day selectors of a calendar interval (§ 2.3): exactly one per interval. */
+const DAY_SELECTORS = ['days', 'monthDays', 'monthWeekdays', 'dates'] as const;
+
 /* ------------------------------------------------------------------ *
  * El esquema, por idioma (LILA-211)
  * ------------------------------------------------------------------ */
@@ -280,18 +296,53 @@ function buildSchemas(locale: Locale) {
       .array(
         z
           .strictObject({
-            days: z.array(z.enum(WEEKDAYS)).min(1),
+            // Exactly one day selector (#82): weekly `days`, or the monthly/annual ones of
+            // R-CAL-12/13. `days` stays first so a weekly file reads as it always did.
+            days: z.array(z.enum(WEEKDAYS)).min(1).optional(),
+            monthDays: z
+              .array(
+                z
+                  .int()
+                  .min(-31)
+                  .max(31)
+                  .refine((n) => n !== 0, { message: zod.monthDay() }),
+              )
+              .min(1)
+              .optional(),
+            monthWeekdays: z
+              .array(
+                z.strictObject({
+                  nth: z
+                    .int()
+                    .min(-5)
+                    .max(5)
+                    .refine((n) => n !== 0, { message: zod.monthWeekdayNth() }),
+                  day: z.enum(WEEKDAYS),
+                }),
+              )
+              .min(1)
+              .optional(),
+            dates: z
+              .array(z.string().refine((value) => isCalendarDate(value, false), { message: zod.annualDate() }))
+              .min(1)
+              .optional(),
             from: z.string().regex(HHMM, zod.intervalFrom()),
             to: z.string().regex(HHMM_TO, zod.intervalTo()),
           })
           .refine((i) => i.to > i.from, {
             message: zod.intervalOrder(),
+          })
+          .refine((i) => DAY_SELECTORS.filter((key) => i[key] !== undefined).length === 1, {
+            message: zod.intervalSelector(),
           }),
       )
       // R-CAL-2: sin intervalos el calendario nunca abriría (E-CAL-VACIO, § 17 de SEMANTICS.md).
       .min(1, coded('E-CAL-VACIO', messages(locale).codes['E-CAL-VACIO/anonimo']())),
-    // § 4 — reservados.
-    holidays: z.unknown().optional(),
+    // R-CAL-14 (#82): closed dates, `"YYYY-MM-DD"` once or `"MM-DD"` every year.
+    holidays: z
+      .array(z.string().refine((value) => isCalendarDate(value, true), { message: zod.holidayDate() }))
+      .optional(),
+    // § 4 — reservado.
     timezone: z.unknown().optional(),
   });
 
@@ -450,6 +501,7 @@ export type ResolvedScenario = Scenario & {
 
 export type ScenarioProblemCode =
   | 'E-RESERVADO'
+  | 'E-CAL-VACIO'
   | 'E-ELEMENTO-DESCONOCIDO'
   | 'E-REF-DESCONOCIDA'
   | 'E-REC-DESCONOCIDO'
@@ -483,7 +535,7 @@ export interface ScenarioProblem {
 /** § 4 — campos reservados por sección del escenario. */
 const RESERVED = {
   run: ['timezone'],
-  calendars: ['holidays', 'timezone'],
+  calendars: ['timezone'],
   resources: ['priority', 'preempt'],
   // `conditions` no está aquí: es reservado solo fuera de un flujo de XOR divergente, y esa
   // rama la resuelve el bucle de elementos (ADR-028).
@@ -682,6 +734,20 @@ export function validateScenario(
   if (scenario.run) reserved(problems, 'run', scenario.run, RESERVED.run, M);
   for (const [key, calendar] of Object.entries(calendars)) {
     reserved(problems, `calendars.${key}`, calendar, RESERVED.calendars, M);
+    // R-CAL-14 (#82): a dated calendar whose every opening is a holiday never opens. The schema
+    // cannot see it; the engine would stop at `simulate` with the same code.
+    if (isDatedDef(calendar)) {
+      try {
+        compileCalendar(calendar, 0, locale);
+      } catch {
+        problems.push({
+          code: 'E-CAL-VACIO',
+          path: `calendars.${key}`,
+          severity: 'error',
+          message: M['E-CAL-VACIO/sin-intervalos'](`calendars.${key}`),
+        });
+      }
+    }
   }
   for (const [key, resource] of Object.entries(resources)) {
     reserved(problems, `resources.${key}`, resource, RESERVED.resources, M);
