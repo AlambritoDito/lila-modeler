@@ -93,9 +93,9 @@ intervals, and an `id` the scenario does not have creates the calendar.
   `MIE`, `JUE`, `VIE`, `SAB`, `DOM`.
 - `from` and `to`: `HH:MM`, with `24:00` allowed as the end of the day. A time Excel stores as a time
   of day also works.
-- A calendar with monthly or yearly dates cannot be written in this sheet. The template leaves it
-  out and the import leaves it unchanged, with a note. Holidays are not in this sheet either: the
-  import keeps them as they are.
+- A calendar with monthly or yearly dates (`monthDays`, `monthWeekdays`, `dates`) or with
+  `holidays` is not edited in this sheet. The template leaves it out and the import keeps it
+  untouched, whole, with a note in the report. Edit it in the panel.
 
 ## CSV
 

@@ -69,6 +69,41 @@ describe('(a) template → import without edits', () => {
     expect(plan.changes).toEqual([]);
   });
 
+  test('calendars with dated selectors or holidays (#82) are left out and kept whole, with a note', () => {
+    const scenario = asIs();
+    const calendars = scenario['calendars'] as Record<string, unknown>;
+    calendars['cierre'] = { intervals: [{ monthDays: [-1], from: '09:00', to: '13:00' }] };
+    calendars['feriados'] = {
+      intervals: [{ days: ['MON'], from: '09:00', to: '10:00' }],
+      holidays: ['12-25', '2026-09-16'],
+    };
+    const sheets = readWorkbook(scenarioTemplate(scenario, pedidoIr()));
+    const ids = sheets.find((sheet) => sheet.name === 'Calendars')!.rows.map((row) => row[0]);
+    expect(ids).not.toContain('cierre');
+    expect(ids).not.toContain('feriados');
+
+    const plan = planScenarioImport(sheets, scenario, pedidoIr());
+    expect(plan.changes).toEqual([]);
+    expect(plan.issues.map((issue) => [issue.kind, issue.message])).toEqual([
+      ['warning', 'calendar "cierre" uses monthDays, monthWeekdays, dates or holidays, which this sheet does not edit; it was kept untouched.'],
+      ['warning', 'calendar "feriados" uses monthDays, monthWeekdays, dates or holidays, which this sheet does not edit; it was kept untouched.'],
+    ]);
+
+    // Rows that name them are not applied either, in either language.
+    const edit = planScenarioImport(
+      csv('calendarios.csv', 'id;days;from;to\ncierre;MON;08:00;09:00\nferiados;TUE;08:00;09:00\n'),
+      scenario,
+      pedidoIr(),
+      { locale: 'es' },
+    );
+    expect(edit.changes).toEqual([]);
+    expect(edit.issues.map((issue) => issue.text)).toEqual([
+      'calendarios, fila 2: el calendario «cierre» usa monthDays, monthWeekdays, dates o festivos (holidays), que esta hoja no edita; se conservó intacto.',
+      'calendarios, fila 3: el calendario «feriados» usa monthDays, monthWeekdays, dates o festivos (holidays), que esta hoja no edita; se conservó intacto.',
+    ]);
+    expect(applyImportChanges(scenario, edit.changes)).toEqual(scenario);
+  });
+
   test('slices, user points and times that do not divide the base unit survive too', () => {
     const scenario = asIs();
     const calendars = scenario['calendars'] as Record<string, unknown>;

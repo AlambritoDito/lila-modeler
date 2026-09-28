@@ -67,7 +67,7 @@ const en: SheetMessages = {
   badDays: (value) => `"${value}" is not a list of days (MON,TUE… or MON-FRI).`,
   badTime: (value) => `"${value}" is not a time of day (HH:MM, 24:00 allowed as the end).`,
   calendarNotWeekly: (id) =>
-    `calendar "${id}" uses monthly or yearly dates, which this sheet cannot express; it was left as it is.`,
+    `calendar "${id}" uses monthDays, monthWeekdays, dates or holidays, which this sheet does not edit; it was kept untouched.`,
   groupNotApplied: (key) => `because of the rows above, "${key}" keeps its current values.`,
 };
 
@@ -98,7 +98,7 @@ const es: SheetMessages = {
   badDays: (value) => `«${value}» no es una lista de días (MON,TUE… o MON-FRI; también LUN,MAR…).`,
   badTime: (value) => `«${value}» no es una hora del día (HH:MM; 24:00 vale como fin).`,
   calendarNotWeekly: (id) =>
-    `el calendario «${id}» usa fechas mensuales o anuales, que esta hoja no sabe expresar; se dejó como estaba.`,
+    `el calendario «${id}» usa monthDays, monthWeekdays, dates o festivos (holidays), que esta hoja no edita; se conservó intacto.`,
   groupNotApplied: (key) => `por las filas anteriores, «${key}» conserva sus valores actuales.`,
 };
 

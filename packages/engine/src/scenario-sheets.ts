@@ -311,12 +311,24 @@ function optional(value: unknown): CellValue {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? value : null;
 }
 
-/** Whether every interval of a calendar is weekly (`days`, `from`, `to` and nothing else). */
+/**
+ * Whether the Calendars sheet can express a calendar: weekly intervals only (`days`, `from`, `to`
+ * and nothing else) and no `holidays`. The dated selectors of #82 (`monthDays`, `monthWeekdays`,
+ * `dates`) and the holidays are not in the sheet, so such a calendar is left out of the template
+ * and left untouched by the import, whole, with a note.
+ */
 function isWeekly(calendar: Record<string, unknown>): boolean {
   const intervals = calendar['intervals'];
+  const holidays = calendar['holidays'];
+  if (Array.isArray(holidays) ? holidays.length > 0 : holidays !== undefined && holidays !== null) return false;
   return (
     !Array.isArray(intervals) ||
-    intervals.every((interval) => isObject(interval) && Object.keys(interval).every((key) => key === 'days' || key === 'from' || key === 'to'))
+    intervals.every(
+      (interval) =>
+        isObject(interval) &&
+        Array.isArray(interval['days']) &&
+        Object.keys(interval).every((key) => key === 'days' || key === 'from' || key === 'to'),
+    )
   );
 }
 
@@ -1141,6 +1153,12 @@ function planCalendars(context: Context, t: Table): void {
     }
     group.rows.push(row);
     group.intervals.push({ days, from, to });
+  }
+
+  // The calendars the sheet cannot express and does not mention are kept as well; say so, since
+  // the template left them out and the person may wonder where they went.
+  for (const [id, calendar] of Object.entries(section(context.next, 'calendars'))) {
+    if (!groups.has(id) && !isWeekly(calendar)) context.issue('warning', t.sheet, 1, undefined, M.calendarNotWeekly(id));
   }
 
   for (const [id, group] of groups) {

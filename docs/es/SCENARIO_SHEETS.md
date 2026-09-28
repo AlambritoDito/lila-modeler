@@ -95,9 +95,9 @@ sus intervalos, y un `id` que el escenario no tiene crea el calendario.
   `MIE`, `JUE`, `VIE`, `SAB`, `DOM`.
 - `from` y `to`: `HH:MM`, con `24:00` permitido como fin del día. También vale una hora que Excel
   guarda como hora del día.
-- Un calendario con fechas mensuales o anuales no se puede escribir en esta hoja. La plantilla lo
-  omite y la importación lo deja sin cambios, con una nota. Los festivos tampoco están en esta
-  hoja: la importación los conserva como están.
+- Un calendario con fechas mensuales o anuales (`monthDays`, `monthWeekdays`, `dates`) o con
+  festivos (`holidays`) no se edita en esta hoja. La plantilla lo omite y la importación lo conserva
+  intacto, entero, con una nota en el informe. Se edita en el panel.
 
 ## CSV
 
