@@ -150,7 +150,8 @@
                   "minItems": 1,
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "pattern": "^(\\d{2})-(\\d{2})$"
                   }
                 },
                 "from": {
@@ -172,7 +173,8 @@
           "holidays": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^(\\d{4}-)?\\d{2}-\\d{2}$"
             }
           },
           "timezone": {}

@@ -14,7 +14,7 @@ import { z } from 'zod';
 
 import { checkDistribution } from './core/distributions.js';
 import { poolCapacityBound } from './core/sim.js';
-import { compileCalendar, isDatedDef } from './core/calendar.js';
+import { neverOpens } from './core/calendar.js';
 import type { ProcessIR } from './core/ir.js';
 import { coded, messages, type Catalog, type Locale, type ZodMessages } from './messages/index.js';
 
@@ -166,6 +166,8 @@ export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as con
 /** `"MM-DD"` (annual) or `"YYYY-MM-DD"` (once). Civil validity is checked by `isCalendarDate`. */
 const MONTH_DAY = /^(\d{2})-(\d{2})$/;
 const FULL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** The shape of a holiday, for the JSON Schema `pattern`; civil validity is the refine. */
+const HOLIDAY = /^(\d{4}-)?\d{2}-\d{2}$/;
 
 /** `"MM-DD"` that exists in some year (`02-29` does, `02-30` does not), or a real `"YYYY-MM-DD"`. */
 function isCalendarDate(value: string, allowYear: boolean): boolean {
@@ -323,7 +325,12 @@ function buildSchemas(locale: Locale) {
               .min(1)
               .optional(),
             dates: z
-              .array(z.string().refine((value) => isCalendarDate(value, false), { message: zod.annualDate() }))
+              .array(
+                z
+                  .string()
+                  .regex(MONTH_DAY, zod.annualDate())
+                  .refine((value) => !MONTH_DAY.test(value) || isCalendarDate(value, false), { message: zod.annualDate() }),
+              )
               .min(1)
               .optional(),
             from: z.string().regex(HHMM, zod.intervalFrom()),
@@ -340,7 +347,12 @@ function buildSchemas(locale: Locale) {
       .min(1, coded('E-CAL-VACIO', messages(locale).codes['E-CAL-VACIO/anonimo']())),
     // R-CAL-14 (#82): closed dates, `"YYYY-MM-DD"` once or `"MM-DD"` every year.
     holidays: z
-      .array(z.string().refine((value) => isCalendarDate(value, true), { message: zod.holidayDate() }))
+      .array(
+        z
+          .string()
+          .regex(HOLIDAY, zod.holidayDate())
+          .refine((value) => !HOLIDAY.test(value) || isCalendarDate(value, true), { message: zod.holidayDate() }),
+      )
       .optional(),
     // § 4 — reservado.
     timezone: z.unknown().optional(),
@@ -736,17 +748,13 @@ export function validateScenario(
     reserved(problems, `calendars.${key}`, calendar, RESERVED.calendars, M);
     // R-CAL-14 (#82): a dated calendar whose every opening is a holiday never opens. The schema
     // cannot see it; the engine would stop at `simulate` with the same code.
-    if (isDatedDef(calendar)) {
-      try {
-        compileCalendar(calendar, 0, locale);
-      } catch {
-        problems.push({
-          code: 'E-CAL-VACIO',
-          path: `calendars.${key}`,
-          severity: 'error',
-          message: M['E-CAL-VACIO/sin-intervalos'](`calendars.${key}`),
-        });
-      }
+    if (neverOpens(calendar)) {
+      problems.push({
+        code: 'E-CAL-VACIO',
+        path: `calendars.${key}`,
+        severity: 'error',
+        message: M['E-CAL-VACIO/festivos'](`calendars.${key}`),
+      });
     }
   }
   for (const [key, resource] of Object.entries(resources)) {
