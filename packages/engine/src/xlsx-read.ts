@@ -22,7 +22,19 @@ export interface ReadSheet {
   name: string;
   /** Dense rows: `rows[i][j]` is row `i + 1`, column `j` (A = 0) of the sheet. */
   rows: ReadCell[][];
+  /** A tab marked `hidden` or `veryHidden`: its rows are not read, and the importer skips it. */
+  hidden?: boolean;
+  /** Cells with a formula but no saved value (`row` 1-based, `column` 0-based): read as empty. */
+  uncached?: { row: number; column: number }[];
+  /** Set for a CSV: its delimiter, which also says how its numbers are written. */
+  delimiter?: CsvDelimiter;
 }
+
+/** Excel's own limits: a reference beyond them is a hostile or broken file, not a spreadsheet. */
+export const MAX_ROWS = 1_048_576;
+export const MAX_COLUMNS = 16_384;
+/** Uncompressed bytes the reader accepts for the parts it reads. */
+export const MAX_UNCOMPRESSED = 50 * 1024 * 1024;
 
 /* ------------------------------------------------------------------ *
  * XML helpers
@@ -117,21 +129,35 @@ function cellValue(attrs: Record<string, string>, inner: string, shared: readonl
   }
 }
 
-/** The cells of one worksheet part, dense, with missing cells as `null`. */
-export function worksheetRows(xml: string, shared: readonly string[] = []): ReadCell[][] {
+/**
+ * The cells of one worksheet part, dense, with missing cells as `null`. A row or column reference
+ * beyond Excel's limits throws `WorkbookReadError` **before** anything is allocated for it: a 1 KB
+ * file with `<row r="50000000">` would otherwise reserve fifty million rows.
+ */
+export function worksheetRows(
+  xml: string,
+  shared: readonly string[] = [],
+  uncached: { row: number; column: number }[] = [],
+): ReadCell[][] {
   const rows: ReadCell[][] = [];
   let nextRow = 0;
   for (const rowMatch of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
     const rowAttrs = attributes(rowMatch[1]!);
     const rowIndex = rowAttrs['r'] !== undefined ? Number(rowAttrs['r']) - 1 : nextRow;
+    if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= MAX_ROWS) {
+      throw new WorkbookReadError('out-of-bounds', `row ${rowAttrs['r'] ?? rowIndex + 1}`);
+    }
     nextRow = rowIndex + 1;
     const cells: ReadCell[] = [];
     let nextColumn = 0;
     for (const cellMatch of (rowMatch[2] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const cellAttrs = attributes(cellMatch[1]!);
       const column = cellAttrs['r'] !== undefined ? columnIndex(cellAttrs['r']) : nextColumn;
+      if (column < 0 || column >= MAX_COLUMNS) throw new WorkbookReadError('out-of-bounds', `cell ${cellAttrs['r'] ?? column}`);
       nextColumn = column + 1;
-      const value = cellValue(cellAttrs, cellMatch[2] ?? '', shared);
+      const inner = cellMatch[2] ?? '';
+      const value = cellValue(cellAttrs, inner, shared);
+      if (value === null && /<f\b/.test(inner)) uncached.push({ row: rowIndex + 1, column });
       while (cells.length < column) cells.push(null);
       cells[column] = value;
     }
@@ -141,9 +167,33 @@ export function worksheetRows(xml: string, shared: readonly string[] = []): Read
   return rows;
 }
 
-/** Thrown when the bytes are not a workbook this reader understands. */
+/**
+ * Why a workbook could not be read. The caller translates `reason`; `message` is a detail in
+ * English for logs.
+ * - `not-a-workbook`: not a zip, or a zip without `xl/workbook.xml` (an old `.xls`, a renamed CSV);
+ * - `too-large`: the parts to read expand beyond `MAX_UNCOMPRESSED`;
+ * - `out-of-bounds`: a row or column reference beyond Excel's limits.
+ */
+export type WorkbookReadReason = 'not-a-workbook' | 'too-large' | 'out-of-bounds';
+
 export class WorkbookReadError extends Error {
   override name = 'WorkbookReadError';
+  constructor(
+    readonly reason: WorkbookReadReason,
+    detail: string,
+  ) {
+    super(`${reason}: ${detail}`);
+  }
+}
+
+/** The only parts the reader opens; images, drawings and the rest are never decompressed. */
+function isReadPart(name: string): boolean {
+  return (
+    name === 'xl/workbook.xml' ||
+    name === 'xl/_rels/workbook.xml.rels' ||
+    name === 'xl/sharedStrings.xml' ||
+    /^xl\/worksheets\/[^/]+\.xml$/.test(name)
+  );
 }
 
 /** `worksheets/sheet1.xml` or `/xl/worksheets/sheet1.xml` → `xl/worksheets/sheet1.xml`. */
@@ -164,20 +214,39 @@ function partPath(target: string): string {
  */
 export function readWorkbook(bytes: Uint8Array): ReadSheet[] {
   let files: Record<string, Uint8Array>;
+  let total = 0;
   try {
-    files = unzipSync(bytes, { filter: (file) => file.name.startsWith('xl/') });
+    files = unzipSync(bytes, {
+      filter: (file) => {
+        if (!isReadPart(file.name)) return false;
+        total += file.originalSize;
+        if (total > MAX_UNCOMPRESSED) throw new WorkbookReadError('too-large', `${total} bytes`);
+        return true;
+      },
+    });
   } catch (error) {
-    throw new WorkbookReadError(error instanceof Error ? error.message : String(error));
+    if (error instanceof WorkbookReadError) throw error;
+    throw new WorkbookReadError('not-a-workbook', error instanceof Error ? error.message : String(error));
+  }
+  // The size a zip header declares can lie; what came out is what counts.
+  if (Object.values(files).reduce((sum, part) => sum + part.length, 0) > MAX_UNCOMPRESSED) {
+    throw new WorkbookReadError('too-large', 'uncompressed parts');
   }
   // Tag prefixes dropped (`<x:row>` → `<row>`): the OpenXML SDK and some exporters qualify every
   // element with a namespace prefix, which the patterns below do not expect. Attributes such as
   // `r:id` keep theirs.
   const text = (path: string): string | undefined => {
     const content = files[path];
-    return content === undefined ? undefined : strFromU8(content).replace(/<(\/?)[A-Za-z_][\w.-]*:/g, '<$1');
+    // A DOCTYPE is dropped too: nothing is expanded, but an ENTITY holding `<si>` would otherwise be
+    // read as one more shared string and shift every index after it.
+    return content === undefined
+      ? undefined
+      : strFromU8(content)
+          .replace(/<!DOCTYPE[^[>]*(\[[\s\S]*?\])?\s*>/g, '')
+          .replace(/<(\/?)[A-Za-z_][\w.-]*:/g, '<$1');
   };
   const book = text('xl/workbook.xml');
-  if (book === undefined) throw new WorkbookReadError('xl/workbook.xml');
+  if (book === undefined) throw new WorkbookReadError('not-a-workbook', 'xl/workbook.xml');
 
   const targets = new Map<string, string>();
   for (const match of (text('xl/_rels/workbook.xml.rels') ?? '').matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
@@ -191,8 +260,15 @@ export function readWorkbook(bytes: Uint8Array): ReadSheet[] {
     const attrs = attributes(match[1]!);
     const relation = Object.entries(attrs).find(([key]) => key === 'id' || key.endsWith(':id'))?.[1];
     const path = (relation !== undefined ? targets.get(relation) : undefined) ?? `xl/worksheets/sheet${index + 1}.xml`;
+    const name = attrs['name'] ?? `Sheet${index + 1}`;
+    if (attrs['state'] === 'hidden' || attrs['state'] === 'veryHidden') {
+      sheets.push({ name, rows: [], hidden: true });
+      continue;
+    }
     const xml = text(path);
-    sheets.push({ name: attrs['name'] ?? `Sheet${index + 1}`, rows: xml === undefined ? [] : worksheetRows(xml, shared) });
+    const uncached: { row: number; column: number }[] = [];
+    const rows = xml === undefined ? [] : worksheetRows(xml, shared, uncached);
+    sheets.push({ name, rows, ...(uncached.length > 0 ? { uncached } : {}) });
   }
   return sheets;
 }
@@ -290,6 +366,9 @@ export function readCsv(text: string, name = 'CSV'): ReadSheet & { delimiter: Cs
  * as UTF-8, its `ó` would be a replacement character and every accented name would stop matching.
  */
 export function decodeCsvBytes(bytes: Uint8Array): string {
+  // Excel's «Unicode Text» is UTF-16 with a BOM.
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {

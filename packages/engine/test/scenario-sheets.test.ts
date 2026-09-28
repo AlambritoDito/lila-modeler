@@ -25,7 +25,7 @@ import {
   type ImportPlan,
   type ReadSheet,
 } from '../src/scenario-sheets.js';
-import { readCsv, readWorkbook } from '../src/xlsx-read.js';
+import { WorkbookReadError, readCsv, readWorkbook } from '../src/xlsx-read.js';
 import { AS_IS, clone, pedidoIr } from './pedido.fixtures.js';
 
 const csv = (name: string, text: string): ReadSheet[] => readScenarioFile(name, strToU8(text));
@@ -355,6 +355,73 @@ describe('reader', () => {
       }),
     );
     expect(sheets).toEqual([{ name: 'Calendars', rows: [['id', 0.375]] }]);
+  });
+
+  test('hostile references and oversized parts fail fast with a reason, before allocating', () => {
+    const book = (sheet: string, extra: Record<string, Uint8Array> = {}): Uint8Array =>
+      zipSync({
+        'xl/workbook.xml': strToU8('<workbook xmlns:r="r"><sheets><sheet name="Resources" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+        'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+        'xl/worksheets/sheet1.xml': strToU8(`<worksheet><sheetData>${sheet}</sheetData></worksheet>`),
+        ...extra,
+      });
+    const reason = (bytes: Uint8Array): unknown => {
+      try {
+        readWorkbook(bytes);
+        return 'read';
+      } catch (error) {
+        return error instanceof WorkbookReadError ? error.reason : error;
+      }
+    };
+    expect(reason(book('<row r="50000000"><c r="A50000000"><v>1</v></c></row>'))).toBe('out-of-bounds');
+    expect(reason(book('<row r="1"><c r="ZZZZZZ1"><v>1</v></c></row>'))).toBe('out-of-bounds');
+    // Excel's real last row and column are fine.
+    expect(reason(book('<row r="1048576"><c r="XFD1048576"><v>1</v></c></row>'))).toBe('read');
+    // An image is never decompressed, however large; a sheet part that expands too much is refused.
+    expect(reason(book('<row r="1"/>', { 'xl/media/image1.png': new Uint8Array(60 * 1024 * 1024) }))).toBe('read');
+    expect(reason(book('<row r="1"/>', { 'xl/worksheets/sheet2.xml': new Uint8Array(60 * 1024 * 1024) }))).toBe('too-large');
+    expect(reason(strToU8('id,name\n'))).toBe('not-a-workbook');
+  });
+
+  test('hidden sheets are flagged and not read; formulas without a saved value are listed', () => {
+    const sheets = readWorkbook(
+      zipSync({
+        'xl/workbook.xml': strToU8(
+          '<workbook xmlns:r="r"><sheets><sheet name="Elements_old" sheetId="1" state="hidden" r:id="rId1"/><sheet name="Elements" sheetId="2" r:id="rId2"/></sheets></workbook>',
+        ),
+        'xl/_rels/workbook.xml.rels': strToU8(
+          '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>',
+        ),
+        'xl/worksheets/sheet1.xml': strToU8('<worksheet><sheetData><row r="1"><c r="A1"><v>9</v></c></row></sheetData></worksheet>'),
+        'xl/worksheets/sheet2.xml': strToU8('<worksheet><sheetData><row r="2"><c r="B2"><f>1+1</f></c><c r="C2"><f>2+2</f><v>4</v></c></row></sheetData></worksheet>'),
+      }),
+    );
+    expect(sheets).toEqual([
+      { name: 'Elements_old', rows: [], hidden: true },
+      { name: 'Elements', rows: [[], [null, null, 4]], uncached: [{ row: 2, column: 1 }] },
+    ]);
+  });
+
+  test('a DOCTYPE in shared strings does not shift their indexes', () => {
+    const sheets = readWorkbook(
+      zipSync({
+        'xl/workbook.xml': strToU8('<workbook xmlns:r="r"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+        'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+        'xl/sharedStrings.xml': strToU8('<!DOCTYPE x [<!ENTITY fake "<si><t>injected</t></si>">]><sst><si><t>id</t></si></sst>'),
+        'xl/worksheets/sheet1.xml': strToU8('<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>'),
+      }),
+    );
+    expect(sheets[0]!.rows).toEqual([['id']]);
+  });
+
+  test('UTF-16 text with a BOM (Excel «Unicode Text») is decoded', () => {
+    const text = 'id\tname\nx\tÑandú\n';
+    const le = new Uint8Array(2 + text.length * 2);
+    le.set([0xff, 0xfe]);
+    for (let i = 0; i < text.length; i++) le[2 + i * 2] = text.charCodeAt(i) & 0xff, (le[3 + i * 2] = text.charCodeAt(i) >> 8);
+    const [sheet] = readScenarioFile('recursos.txt', le);
+    expect(sheet!.delimiter).toBe('\t');
+    expect(sheet!.rows[1]).toEqual(['x', 'Ñandú']);
   });
 
   test('a file that is not a workbook throws a readable error', () => {
