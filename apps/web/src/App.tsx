@@ -2536,7 +2536,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </div>
         ) : (
           <PanelPropiedades
-            key={projectId}
+            key={`${projectId}:${procesos[activo]?.slug ?? ''}`}
             modelador={modelador}
             pestana={pestana}
             avisos={validacion.avisos}
