@@ -146,11 +146,16 @@ Extras sin columna en Bizagi: p50/p90/p95 del tiempo de ciclo y de la espera, la
 de cola por actividad, throughput por hora, costo por caso, ranking de cuellos de botella, registro
 de eventos por caso y la espera fuera de horario separada de la espera por recurso.
 
+Junto a las tablas, Results dibuja unas pocas gráficas: utilización por recurso, instancias
+iniciadas por tarea, p50/p90/p95 del tiempo de ciclo y de espera, y un histograma del tiempo de
+ciclo por caso de la primera réplica. Cada gráfica sale de los mismos números que su tabla y los
+imprime en sus barras; la tabla sigue siendo la referencia.
+
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas |
+| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas, y gráficas de barras del tiempo de ciclo medio, el costo por caso y la utilización con el delta de cada escenario contra la base |
 | Exportar resultados a Excel *(el nombre en Bizagi puede variar según la versión)* | un CSV por tabla y un `.xlsx` único (`--csv`, `--xlsx`, o los botones de exportar en Results) |
-| Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
+| Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados, con las gráficas de la corrida. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
 | Ver moverse los tokens | **Animate**: Play desde Results reproduce la réplica 1 de la corrida guardada sobre el diagrama, con contadores por elemento que salen del registro de eventos del propio motor, no de un caminante de juguete. El modo **Validate paths**, aparte, es la animación didáctica de bpmn-js y no lee ningún escenario |
 
 ## Tres diferencias que vas a notar

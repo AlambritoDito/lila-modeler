@@ -19,6 +19,7 @@ import { compare, type CompareResult, type ProcessIR, type RunResult, type Simul
 import { runInWorker } from './simulationClient.js';
 import { CompareView } from './CompareView.js';
 import { strings } from './i18n';
+import { temaDeLaDemo } from './temaDemo.js';
 import './theme/tokens.css';
 
 // ponytail: mismos JSON directos del repo que results-demo.tsx (LILA-142 no dejó ejemplos
@@ -71,6 +72,8 @@ type Status =
       resourceNames: Record<string, string>;
     }
   | { kind: 'error'; message: string };
+
+const ESQUEMA = temaDeLaDemo();
 
 function CompareDemo() {
   const S = strings();
@@ -126,6 +129,7 @@ function CompareDemo() {
 
   return (
     <main
+      data-esquema={ESQUEMA}
       style={{
         background: 'var(--bg-base)',
         color: 'var(--fg-primary)',

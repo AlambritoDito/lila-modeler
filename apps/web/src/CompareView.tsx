@@ -23,6 +23,7 @@ import {
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
+  SECONDS_PER_UNIT,
   splitOutcomeMetric,
   type BaseTimeUnit,
 } from '@lila-modeler/engine/format';
@@ -39,6 +40,8 @@ import {
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
+import { MAX_SERIES } from './graficas';
+import { GraficaBarras, geometriaBarras, PLOT_MINIMO, useAncho, type GraficaBarrasProps } from './GraficasSvg';
 import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
@@ -68,6 +71,12 @@ export interface CompareViewProps {
    * completos —no solo el `CompareResult`— para escribir la hoja Resumen de cada escenario.
    */
   entries?: readonly CompareEntry[];
+  /**
+   * Palette slot of each scenario, in the order of `scenarioNames` (#460): the shell passes each
+   * scenario's position in the project, so its chart color does not move when the base changes.
+   * Without it, the index in `scenarioNames`.
+   */
+  seriesSlots?: readonly number[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -348,6 +357,120 @@ export function compareColumns(
 }
 
 /* ------------------------------------------------------------------ *
+ * Charts (#460): the key KPIs of the tables, one bar per visible scenario, each bar labelled with
+ * its own cell text — value and delta against the base — so the chart cannot disagree with the
+ * table. Colors follow the scenario (its index), never its position among the visible ones.
+ * ------------------------------------------------------------------ */
+
+export interface CompareChartsInput {
+  rows: readonly CompareRow[];
+  ir: ProcessIR;
+  resourceNames: Readonly<Record<string, string>>;
+  scenarioNames: readonly string[];
+  isVisible: (index: number) => boolean;
+  baseTimeUnit: BaseTimeUnit;
+  runs?: readonly CompareRunMeta[] | undefined;
+  costsComparable: boolean;
+  /** See `CompareViewProps.seriesSlots`. */
+  seriesSlots?: readonly number[] | undefined;
+}
+
+/**
+ * The compare charts as props of `GraficaBarras`, plus the notes for what is not charted.
+ * Exported for the test, which checks each bar against its table cell.
+ */
+export function compareCharts(input: CompareChartsInput): { graficas: GraficaBarrasProps[]; notas: string[] } {
+  const S = strings();
+  const { rows, scenarioNames, isVisible, baseTimeUnit, runs, costsComparable } = input;
+  const visibles = scenarioNames.map((_, i) => i).filter(isVisible);
+  const indices = visibles.slice(0, MAX_SERIES);
+  const notas = visibles.length > indices.length ? [S.graficas.compararDemasiados(visibles.length)] : [];
+  // The palette slot each scenario owns, when the caller says (stable across base changes and
+  // hidden columns); if those slots do not fit the palette or repeat, the position among the
+  // charted ones.
+  const propios = indices.map((i) => input.seriesSlots?.[i] ?? i);
+  const colores = propios.every((slot, k) => slot >= 0 && slot < MAX_SERIES && propios.indexOf(slot) === k)
+    ? propios
+    : indices.map((_, k) => k);
+  const ctx = (i: number): ColumnContext => ({ currency: runs?.[i]?.currency, unit: runs?.[i]?.baseTimeUnit ?? baseTimeUnit });
+  const series = indices.map((i) => (i === 0 ? S.comparar.base(scenarioNames[i]!) : scenarioNames[i]!));
+  const grupo = (row: CompareRow, etiqueta: string, valor: (v: number) => number) => ({
+    id: row.kpi,
+    etiqueta,
+    valores: indices.map((i) => {
+      const v = row.values[i] ?? null;
+      return v === null ? null : valor(v);
+    }),
+    textos: indices.map((i) => cellText(row, i, ctx(i), costsComparable)),
+  });
+  const proceso = (metric: string): CompareRow | undefined => rows.find((r) => r.scope === 'process' && r.metric === metric);
+
+  const graficas: GraficaBarrasProps[] = [];
+  const ciclo = proceso('cycleTime.mean');
+  // One axis: every bar in the base's unit, whatever unit its own column is printed in.
+  if (ciclo !== undefined) {
+    graficas.push({
+      titulo: S.graficas.compararCiclo(baseTimeUnit),
+      series,
+      colores,
+      grupos: [grupo(ciclo, compareMetricLabel('process', 'cycleTime.mean'), (v) => v / SECONDS_PER_UNIT[baseTimeUnit])],
+    });
+  }
+  const costo = proceso('costPerCase');
+  if (costo !== undefined && !costsComparable) notas.push(S.graficas.compararCostoNoComparable);
+  else if (costo !== undefined) {
+    graficas.push({
+      titulo: S.graficas.compararCosto,
+      series,
+      colores,
+      grupos: [grupo(costo, compareMetricLabel('process', 'costPerCase'), (v) => v)],
+    });
+  }
+  const utilizacion = rows.filter((r) => r.scope === 'resources' && r.metric === 'utilization');
+  if (utilizacion.length > 0) {
+    graficas.push({
+      titulo: S.graficas.compararUtilizacion,
+      series,
+      colores,
+      grupos: utilizacion.map((r) => grupo(r, rowName(input.ir, input.resourceNames, 'resources', r.id) || (r.id ?? ''), (v) => v * 100)),
+      tope: 100,
+    });
+  }
+  return { graficas, notas };
+}
+
+function CompareCharts(props: CompareChartsInput): ReactNode {
+  const S = useStrings();
+  const [ref, ancho] = useAncho();
+  const { graficas, notas } = compareCharts(props);
+  if (graficas.length === 0 && notas.length === 0) return null;
+  // The one-group charts (cycle time, cost) sit side by side while each keeps a readable plot;
+  // otherwise they go full width, like utilization (QA of #512: at 800 px the plot fell to 72 px).
+  const pequenas = graficas.filter((g) => g.grupos.length === 1);
+  const grandes = graficas.filter((g) => g.grupos.length !== 1);
+  const mitad = (ancho - 12) / 2;
+  const juntas = pequenas.every((g) => geometriaBarras(g.grupos, mitad).anchoPlot >= PLOT_MINIMO);
+  return (
+    <section style={sectionStyle} data-grafica="comparar">
+      <h2 style={{ ...h2Style, marginBottom: 8 }}>{S.graficas.comparar}</h2>
+      <div ref={ref} className={juntas ? 'graficas-fila' : undefined} data-juntas={juntas}>
+        {pequenas.map((g) => (
+          <GraficaBarras key={g.titulo} {...g} />
+        ))}
+      </div>
+      {grandes.map((g) => (
+        <GraficaBarras key={g.titulo} {...g} />
+      ))}
+      {notas.map((nota) => (
+        <p key={nota} className="grafica-nota">
+          {nota}
+        </p>
+      ))}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Selector de escenarios (checkboxes; la base siempre visible y va primero).
  * ------------------------------------------------------------------ */
 
@@ -389,6 +512,7 @@ export function CompareView({
   resourceNames = {},
   runs,
   entries,
+  seriesSlots,
 }: CompareViewProps): ReactNode {
   const S = useStrings();
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
@@ -504,6 +628,18 @@ export function CompareView({
           })}
         </section>
       )}
+
+      <CompareCharts
+        rows={comparison.rows}
+        ir={ir}
+        resourceNames={resourceNames}
+        scenarioNames={scenarioNames}
+        isVisible={isVisible}
+        baseTimeUnit={baseTimeUnit}
+        runs={runs}
+        costsComparable={costsComparable}
+        seriesSlots={seriesSlots}
+      />
 
       {SCOPES.filter((scope) => scope !== 'flows' || showAll).map((scope) => {
         const rows = visibleCompareRows(comparison.rows, scope, showAll);

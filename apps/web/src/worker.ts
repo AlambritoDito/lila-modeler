@@ -63,6 +63,11 @@ export interface DoneResponse {
   result: RunResult;
   /** Filas de la replicación 0, hasta `logSampleLimit`; el resto del log se descarta en el worker. */
   logSample: EventLogRow[];
+  /**
+   * Cycle time (s) of every completed case of replication 0's measured cohort, straight from the
+   * engine (`opts.onCycleTimes`), whatever the log sample kept (#460): the Results histogram.
+   */
+  cycleTimes: number[];
 }
 
 export interface ErrorResponse {
@@ -86,6 +91,7 @@ function withSeed(scenario: SimScenario, seed: number | undefined): SimScenario 
 export function handleMessage(post: Post, message: WorkerRequest): void {
   const limit = message.logSampleLimit ?? DEFAULT_LOG_SAMPLE_LIMIT;
   const logSample: EventLogRow[] = [];
+  let cycleTimes: number[] = [];
   let lastProgressAt = -Infinity;
   let lastCompletedReplications = -1;
 
@@ -95,6 +101,10 @@ export function handleMessage(post: Post, message: WorkerRequest): void {
       onEvent: (row) => {
         // Solo la primera replicación se retiene en memoria (docs/RESULTS_FORMAT.md §7).
         if (row.replication === 0 && logSample.length < limit) logSample.push(row);
+      },
+      // The engine's own per-case sample of replication 0, the one `process.cycleTime` summarises.
+      onCycleTimes: (replication, times) => {
+        if (replication === 0) cycleTimes = times;
       },
       onProgress: (progress) => {
         const now = Date.now();
@@ -106,7 +116,7 @@ export function handleMessage(post: Post, message: WorkerRequest): void {
         post({ type: 'progress', progress });
       },
     });
-    post({ type: 'done', result, logSample });
+    post({ type: 'done', result, logSample, cycleTimes });
   } catch (error) {
     post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
   }

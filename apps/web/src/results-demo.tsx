@@ -13,6 +13,8 @@ import type { ProcessIR, RunResult, SimulationProgress } from '@lila-modeler/eng
 import { runInWorker } from './simulationClient.js';
 import { ResultsView } from './ResultsView.js';
 import { strings } from './i18n';
+import { temaDeLaDemo } from './temaDemo.js';
+import type { LogDeCorrida } from './GraficasResultados.js';
 import './theme/tokens.css';
 
 // ponytail: `?raw`/JSON directo del repo en vez de copiarlos a `public/` (LILA-142/#59 no dejó
@@ -24,7 +26,7 @@ import scenarioJson from '../../../examples/pedido/as-is.scenario.json';
 type Status =
   | { kind: 'loading' }
   | { kind: 'running'; progress: SimulationProgress | null }
-  | { kind: 'done'; ir: ProcessIR; scenario: ResolvedScenario; result: RunResult }
+  | { kind: 'done'; ir: ProcessIR; scenario: ResolvedScenario; result: RunResult; log: LogDeCorrida }
   | { kind: 'error'; message: string };
 
 function loadScenario(): ResolvedScenario {
@@ -34,6 +36,10 @@ function loadScenario(): ResolvedScenario {
   }
   return parsed as ResolvedScenario;
 }
+
+/** The worker's default sample of replication 0 (`worker.ts`): a full sample may be cut short. */
+const LIMITE_LOG = 10_000;
+const ESQUEMA = temaDeLaDemo();
 
 function ResultsDemo() {
   const S = strings();
@@ -51,10 +57,10 @@ function ResultsDemo() {
           onProgress: (progress) => {
             if (vivo) setStatus({ kind: 'running', progress });
           },
-        }).then((run) => ({ ir, result: run.result }));
+        }).then((run) => ({ ir, result: run.result, log: { rows: run.logSample, truncated: run.logSample.length >= LIMITE_LOG, ciclos: run.cycleTimes } }));
       })
       .then((done) => {
-        if (vivo && done !== undefined) setStatus({ ir: done.ir, kind: 'done', result: done.result, scenario });
+        if (vivo && done !== undefined) setStatus({ ir: done.ir, kind: 'done', result: done.result, scenario, log: done.log });
       })
       .catch((error: unknown) => {
         if (vivo) setStatus({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
@@ -67,6 +73,7 @@ function ResultsDemo() {
 
   return (
     <main
+      data-esquema={ESQUEMA}
       style={{
         background: 'var(--bg-base)',
         color: 'var(--fg-primary)',
@@ -90,7 +97,7 @@ function ResultsDemo() {
         </p>
       )}
       {status.kind === 'done' && (
-        <ResultsView ir={status.ir} scenario={status.scenario} result={status.result} />
+        <ResultsView ir={status.ir} scenario={status.scenario} result={status.result} log={status.log} />
       )}
     </main>
   );

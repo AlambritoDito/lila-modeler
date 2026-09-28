@@ -146,11 +146,16 @@ Extras with no Bizagi column: p50/p90/p95 of cycle time and wait, mean and maxim
 activity, throughput per hour, cost per case, a bottleneck ranking, a per-case event log, and
 off-hours wait split out from resource wait.
 
+Next to the tables, Results draws a few charts: utilization per resource, instances started per
+task, cycle and wait time p50/p90/p95, and a histogram of cycle time per case of the first
+replication. Each chart is drawn from the same numbers as its table and prints them on its bars;
+the table stays the reference.
+
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2 |
+| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
 | Export results to Excel *(Bizagi's name may differ by version)* | CSV per table and a single `.xlsx` (`--csv`, `--xlsx`, or the export buttons in Results) |
-| Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables. No templates or table of contents field; Word's navigation pane lists the headings |
+| Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables, with the charts of the run. No templates or table of contents field; Word's navigation pane lists the headings |
 | Watch the tokens move | **Animate**: Play from Results replays replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. The separate **Validate paths** mode is the didactic bpmn-js animation and reads no scenario at all |
 
 ## Three differences you will feel

@@ -1201,6 +1201,41 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Gráficas de Resultados y Comparar (#460, `GraficasSvg.tsx`)
+   * ------------------------------------------------------------------ */
+  graficas: {
+    valor: (etiqueta: string, texto: string): string => `${etiqueta}: ${texto}`,
+    sinDatos: 'No hay datos que graficar.',
+    utilizacion: 'Utilización por recurso (%)',
+    instancias: 'Instancias iniciadas por tarea',
+    percentiles: (unidad: string): string => `Percentiles de tiempo de ciclo y de espera (${unidad})`,
+    ciclo: 'Tiempo de ciclo',
+    espera: 'Tiempo de espera',
+    sinCompletados: 'Ningún caso terminó, así que el tiempo de ciclo y el de espera no tienen valor que graficar.',
+    histograma: (unidad: string): string => `Tiempo de ciclo por caso (${unidad})`,
+    histogramaSub: (casos: number, replicas: number): string =>
+      replicas > 1
+        ? `${casos} casos terminados de la réplica 1 de ${replicas}`
+        : `${casos} casos terminados`,
+    histogramaSinLog: 'El histograma del tiempo de ciclo necesita los tiempos por caso de esta corrida, que solo viven en memoria: vuelve a correr el escenario para verlos.',
+    sinVentana: 'Todas las llegadas cayeron dentro del calentamiento, así que no se midió nada que graficar.',
+    error: 'Esta gráfica no se pudo dibujar. La tabla tiene los valores.',
+    histogramaSinCasos: 'Ningún caso de la réplica 1 terminó: no hay tiempo de ciclo que repartir.',
+    clase: (desde: string, hasta: string): string => `${desde} a ${hasta}`,
+    casos: (n: number): string => (n === 1 ? '1 caso' : `${n} casos`),
+    ejeCasos: 'Casos',
+    verDatos: 'Datos del histograma',
+    columnaClase: (unidad: string): string => `Tiempo de ciclo (${unidad})`,
+    columnaCasos: 'Casos',
+    comparar: 'Gráficas',
+    compararCiclo: (unidad: string): string => `Tiempo de ciclo promedio por escenario (${unidad})`,
+    compararCosto: 'Costo por caso por escenario',
+    compararUtilizacion: 'Utilización por recurso y escenario (%)',
+    compararCostoNoComparable: 'El costo por caso no se grafica: los escenarios usan monedas distintas.',
+    compararDemasiados: (n: number): string => `Solo se grafican los primeros 8 de los ${n} escenarios visibles; las tablas los muestran todos.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Lienzo: bpmn-js, overlay de cuellos y marcadores de validación
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */

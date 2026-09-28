@@ -105,6 +105,45 @@ describe('process document (#454)', () => {
     expect(toHtml(notPng)).not.toContain('<img');
   });
 
+  test('the charts of the run go at the top of the results, in Word and in HTML (#460)', async () => {
+    const { ir, scenario, result } = await pedido(true);
+    const charts = [
+      { png: PNG, alt: 'Utilization by resource' },
+      { png: new Uint8Array([1, 2, 3]), alt: 'not a png' },
+      { png: PNG, alt: 'Cycle & wait time' },
+    ];
+    const base = { ir, annotations: {}, title: 't', date: 'd', png: PNG, scenario, charts };
+    const doc = buildProcessDocument({ ...base, result });
+    // The bytes that are not a PNG are left out; the others keep their order.
+    expect(doc.charts).toEqual([PNG, PNG]);
+    const blocks = doc.blocks.map((b) => (b.kind === 'image' ? `image:${b.chart ?? 'diagram'}` : b.kind));
+    const results = doc.blocks.findIndex((b) => b.kind === 'heading' && b.text === 'Results');
+    expect(blocks.slice(results + 1, results + 3)).toEqual(['image:0', 'image:1']);
+
+    const files = parts(toDocx(doc));
+    expect(files['word/media/chart-1.png']).toEqual(PNG);
+    expect(files['word/media/chart-2.png']).toEqual(PNG);
+    const rels = strFromU8(files['word/_rels/document.xml.rels']!);
+    expect(rels).toContain('Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/chart-1.png"');
+    expect(rels).toContain('Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/chart-2.png"');
+    const document = strFromU8(files['word/document.xml']!);
+    expect(document).toContain('<a:blip r:embed="rId3"/>');
+    expect(document).toContain('<a:blip r:embed="rId4"/>');
+    // Every drawing has its own id, and the alt text is the chart's.
+    expect([...document.matchAll(/<wp:docPr id="(\d+)"/g)].map((m) => m[1])).toEqual(['1', '2', '3']);
+    expect(document).toContain('descr="Cycle &amp; wait time"');
+
+    const html = toHtml(doc);
+    expect(html.match(/<img /g)).toHaveLength(3);
+    expect(html).toContain('alt="Utilization by resource"');
+
+    // No run, no charts: the same input without `result` has neither the images nor the parts.
+    const sinCorrida = buildProcessDocument(base);
+    expect(sinCorrida.charts).toBeUndefined();
+    expect(Object.keys(parts(toDocx(sinCorrida)))).not.toContain('word/media/chart-1.png');
+    expect(toHtml(sinCorrida).match(/<img /g)).toHaveLength(1);
+  });
+
   test('the HTML is self-contained on white paper, in the chosen language', async () => {
     const html = toHtml((await pedido(true, 'es')).doc);
     expect(html).toContain('color-scheme:light');

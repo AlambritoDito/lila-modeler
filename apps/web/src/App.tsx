@@ -27,6 +27,7 @@ import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
 import { ResultsView } from './ResultsView';
+import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
 import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
@@ -36,7 +37,6 @@ import { problemasPorElemento } from './ValidationMarkers';
 import { runInWorker } from './simulationClient';
 import { buildReplay, LOG_SAMPLE_LIMIT } from './replay/replayModel';
 import { Replay } from './replay/Replay';
-import type { EventLogRow } from '@lila-modeler/engine';
 import { applyTheme, tokenToCssVar, type Theme } from './theme/applyTheme';
 import { TOKEN_NAMES } from './theme/tokens';
 import { esDelUsuario, saneaTemas, temaDe, type TemaGuardado } from './theme/temas';
@@ -637,7 +637,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * // which is what `S.animacion.sinLog` says. Upgrade path: an optional `log.jsonl` entry in
    * // the container, gated by a setting.
    */
-  const logs = useRef(new Map<string, { rows: readonly EventLogRow[]; truncated: boolean }>());
+  const logs = useRef(new Map<string, LogDeCorrida>());
 
   const currentToken = procesos.length > 1
     ? repositoryToken(projectId, procesos.map((p, i) => (i === activo
@@ -1736,7 +1736,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
       const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
-      const { result: rawResult, logSample } = await runInWorker(ir, scenario, {
+      const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
         logSampleLimit: LOG_SAMPLE_LIMIT,
         signal: control.signal,
@@ -1748,7 +1748,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const result = { ...rawResult, warnings: [...new Set([...warnings, ...rawResult.warnings])] };
       setIr(ir);
       const runId = crypto.randomUUID();
-      logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT });
+      logs.current.set(runId, { rows: logSample, truncated: logSample.length >= LOG_SAMPLE_LIMIT, ciclos: cycleTimes });
       // Only the last ten runs keep their log: ten thousand rows each is too much to hold for a
       // whole session of runs nobody will animate again (insertion order, so the oldest go first).
       for (const viejo of [...logs.current.keys()].slice(0, -10)) logs.current.delete(viejo);
@@ -1825,7 +1825,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: titulo, date, locale, png, ...escenario });
+      // #460: the run's charts, rasterised like the diagram; no run, no charts.
+      const charts = run === undefined ? [] : await Promise.all(
+        graficasDelDocumento({ ir: modelo, scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result, log: logs.current.get(run.id) })
+          .map(async ({ svg, alt }) => ({ alt, png: new Uint8Array(await (await aPng(svg)).arrayBuffer()) })),
+      );
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: titulo, date, locale, png, charts, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
@@ -2471,7 +2476,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {modo === 'resultados' && (
         <section className="zona-resultados">
           {corrida !== null && ir !== null
-            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null} />
+            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null}
+                log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)} />
             : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
         </section>
       )}
@@ -2484,6 +2490,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               entries={ordered.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
+              seriesSlots={ordered.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
           : <p>{S.app.sinComparacion}</p>}
         {ordered.map((run) => <p key={run.id}>{S.app.corridaResumen(

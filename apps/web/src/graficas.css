@@ -1,0 +1,36 @@
+/*
+ * Charts of Results and Compare (#460). The series colors are the validated categorical slots of
+ * `graficas.ts` (`SERIES_OSCURO` / `SERIES_CLARO`, kept equal by `graficas.test.ts`): no theme
+ * token is a validated series palette, so the theme picks the mode — `App.tsx` writes
+ * `data-esquema` from the theme's `bg.base` — and the chrome (ink, grid, surface) is the theme's.
+ * Dark is the default, like `tokens.css` (Eva-01).
+ */
+.grafica {
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --serie-3: #199e70;
+  --serie-4: #c98500;
+  --serie-5: #d55181;
+  --serie-6: #008300;
+  --serie-7: #9085e9;
+  --serie-8: #e66767;
+}
+
+[data-esquema='claro'] .grafica {
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-5: #e87ba4;
+  --serie-6: #008300;
+  --serie-7: #4a3aa7;
+  --serie-8: #e34948;
+}
+
+.grafica { max-width: 100%; min-width: 0; }
+.grafica svg { display: block; max-width: 100%; overflow: visible; }
+/* The hovered mark lifts; its `<title>` is the tooltip. */
+.grafica .marca:hover .barra { opacity: 0.75; }
+.graficas-fila { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grafica-datos summary { color: var(--fg-muted); cursor: pointer; font-size: 12px; }
+.grafica-nota { color: var(--fg-muted); font-size: 12px; margin: 4px 0 0; }

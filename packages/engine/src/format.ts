@@ -2,7 +2,8 @@
 
 export type BaseTimeUnit = 's' | 'min' | 'h' | 'day';
 
-const SECONDS_PER_UNIT: Readonly<Record<BaseTimeUnit, number>> = {
+/** Seconds in one `baseTimeUnit`; exported so the web's charts put durations on a scale in that unit. */
+export const SECONDS_PER_UNIT: Readonly<Record<BaseTimeUnit, number>> = {
   s: 1,
   min: 60,
   h: 3_600,

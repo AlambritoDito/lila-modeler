@@ -1256,6 +1256,42 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Charts of Results and Compare (#460, `GraficasSvg.tsx`)
+   * ------------------------------------------------------------------ */
+  graficas: {
+    /** The chart's `<desc>` and alt text: every value, since the table is the source. */
+    valor: (etiqueta: string, texto: string): string => `${etiqueta}: ${texto}`,
+    sinDatos: 'No data to chart.',
+    utilizacion: 'Utilization by resource (%)',
+    instancias: 'Instances started by task',
+    percentiles: (unidad: string): string => `Cycle and wait time percentiles (${unidad})`,
+    ciclo: 'Cycle time',
+    espera: 'Wait time',
+    sinCompletados: 'No case completed, so cycle and wait time have no value to chart.',
+    histograma: (unidad: string): string => `Cycle time per case (${unidad})`,
+    histogramaSub: (casos: number, replicas: number): string =>
+      replicas > 1
+        ? `${casos} completed cases of replication 1 of ${replicas}`
+        : `${casos} completed cases`,
+    histogramaSinLog: 'The cycle time histogram needs this run’s per-case times, which are kept in memory only: run the scenario again to see it.',
+    sinVentana: 'Every arrival fell inside the warm-up, so nothing was measured to chart.',
+    error: 'This chart could not be drawn. The table has the values.',
+    histogramaSinCasos: 'No case of replication 1 completed: there is no cycle time to distribute.',
+    clase: (desde: string, hasta: string): string => `${desde} to ${hasta}`,
+    casos: (n: number): string => (n === 1 ? '1 case' : `${n} cases`),
+    ejeCasos: 'Cases',
+    verDatos: 'Histogram data',
+    columnaClase: (unidad: string): string => `Cycle time (${unidad})`,
+    columnaCasos: 'Cases',
+    comparar: 'Charts',
+    compararCiclo: (unidad: string): string => `Cycle time average by scenario (${unidad})`,
+    compararCosto: 'Cost per case by scenario',
+    compararUtilizacion: 'Utilization by resource and scenario (%)',
+    compararCostoNoComparable: 'Cost per case is not charted: the scenarios use different currencies.',
+    compararDemasiados: (n: number): string => `Only the first 8 of the ${n} visible scenarios are charted; the tables show them all.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Canvas: bpmn-js, bottleneck overlay and validation markers
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
