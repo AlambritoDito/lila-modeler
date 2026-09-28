@@ -1340,6 +1340,7 @@ export const es: Strings = {
     llamadaSinResolver: (destino: string): string =>
       `La actividad de llamada llama a «${destino}», que no es un proceso de este proyecto.`,
     llamadaSinDestino: 'Esta actividad de llamada no indica a qué proceso llama.',
+    llamadaMismoProceso: 'Esta actividad de llamada llama al mismo proceso en el que está.',
   },
 
   almacen: {

@@ -720,12 +720,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       scenarios: escenarios, scenarioRevisions, runs };
   }
   async function snapshot(): Promise<ProjectDocument> {
+    return (await snapshotConRevision()).doc;
+  }
+  /**
+   * The document plus the revision of the CANVAS process it read (QA of #511, must-fix 1): the save
+   * compares that one with `revisionRef`, not `doc.model.revision`, which is the first process's.
+   */
+  async function snapshotConRevision(): Promise<{ doc: ProjectDocument; revision: number }> {
     const actual = await procesoActual();
     const doc: ProjectDocument = { version: 1, id: projectId, name: projectName,
       model: actual.model, scenarios: actual.scenarios, scenarioRevisions: actual.scenarioRevisions, runs: actual.runs,
       ...(projectProblems.length ? { problems: projectProblems } : {}) };
     // #498: every process of the repository, the canvas one read back live.
-    return procesos.length > 1 ? withProcesses(doc, procesos.map((p, i) => (i === activo ? actual : p))) : doc;
+    return {
+      doc: procesos.length > 1 ? withProcesses(doc, procesos.map((p, i) => (i === activo ? actual : p))) : doc,
+      revision: actual.model.revision,
+    };
   }
   async function guardar(saveAs = false, asFolder = false): Promise<boolean> {
     return await saveWithOutcome(saveAs, asFolder) === 'saved';
@@ -741,7 +751,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (!await aceptaPerdida('guardar')) return 'cancelled';
     ioLock.current = true; setIoBusy(true); setIoError(null);
     try {
-      const doc = await snapshot();
+      const { doc, revision: revisionGuardada } = await snapshotConRevision();
       // Un guardado normal en modo suelto escribe SOLO el `.bpmn` (`diagramOnly`, LILA-206): los
       // escenarios y las corridas siguen sin estar en disco. El token guardado avanza entonces
       // únicamente en la revisión del modelo y conserva los escenarios/corridas que SÍ estaban
@@ -761,7 +771,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (saveAs || repositorio) setSuelto(false);
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
-      const unchanged = token === tokenRef.current && doc.model.revision === revisionRef.current;
+      const unchanged = token === tokenRef.current && revisionGuardada === revisionRef.current;
       adapter.setDirty?.(!unchanged);
       return unchanged ? 'saved' : previo !== null ? 'diagram-only' : 'cancelled';
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return 'failed'; }
@@ -812,8 +822,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
     nodosVistos.current = null; sembrados.current.clear();
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir);
-    // Back to one process: the project is a version 1 project again, with no list.
-    setProcesos(lista.length > 1 ? [...lista] : []); setActivo(lista.length > 1 ? indice : 0);
+    // Back to one process the project is version 1 again (`snapshot` writes no list), but the
+    // entry is kept so the process keeps its name if a second one comes back (QA of #511, nit 9).
+    setProcesos([...lista]); setActivo(indice);
     setAvisoLlamada(null);
     return true;
   }
@@ -870,8 +881,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (origen === borrado) setOrigen(null);
     if (indice !== activo) {
       const lista = procesos.filter((_, i) => i !== indice);
-      setProcesos(lista.length > 1 ? lista : []);
-      setActivo(lista.length > 1 ? (activo > indice ? activo - 1 : activo) : 0);
+      setProcesos(lista);
+      setActivo(activo > indice ? activo - 1 : activo);
       return;
     }
     // The canvas process goes: nothing of it has to be read back, so no loss dialog either.
@@ -894,7 +905,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (el?.type !== 'bpmn:CallActivity') return undefined;
     const destino = el.businessObject?.calledElement?.trim() ?? '';
     if (destino === '') { setAvisoLlamada(S.procesos.llamadaSinDestino); return undefined; }
-    const indice = procesos.findIndex((p, i) => i !== activo && processIds(p.model.xml).includes(destino));
+    // `tns:Process_B` names the same process as `Process_B` (a QName with its prefix).
+    const local = destino.slice(destino.lastIndexOf(':') + 1);
+    const nombra = (ids: readonly string[]): boolean => ids.includes(destino) || ids.includes(local);
+    if (nombra([procesoId, ...(ir === null ? [] : [ir.id])])) { setAvisoLlamada(S.procesos.llamadaMismoProceso); return undefined; }
+    const indice = procesos.findIndex((p, i) => i !== activo && nombra(processIds(p.model.xml)));
     // Unresolved: say so and let bpmn-js carry on with the name editing it does on a double-click.
     if (indice < 0) { setAvisoLlamada(S.procesos.llamadaSinResolver(destino)); return undefined; }
     void cambiarProceso(indice, true);
@@ -915,10 +930,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       return;
     }
     if (autoguardado.current !== null) return; // The pending write will carry this change too.
-    autoguardado.current = setTimeout(() => {
+    const copiar = (): void => {
+      // A tab switch, save or open in progress has the canvas and `procesos` out of step (QA of
+      // #511, nit 8): wait for it instead of copying process B's diagram into process A's slot.
+      if (ioLock.current) { autoguardado.current = setTimeout(copiar, 500); return; }
       autoguardado.current = null;
       void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
-    }, AUTOGUARDADO_MS);
+    };
+    autoguardado.current = setTimeout(copiar, AUTOGUARDADO_MS);
   }, [currentToken, dirty, modelador]);
   useEffect(() => () => { if (autoguardado.current !== null) clearTimeout(autoguardado.current); }, []);
   const sessionRestored = useRef(false);

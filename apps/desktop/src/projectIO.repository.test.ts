@@ -153,6 +153,55 @@ describe('a second process', () => {
     }
   });
 
+  it('a deleted process does not come back inside a new process with the same slug (QA of #511, must-fix 2)', async () => {
+    const conExtra: ProcessDocument = { ...facturacion, scenarios: { ...facturacion.scenarios, 'x.scenario.json': { version: 1 } } };
+    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), conExtra]));
+    // Delete it and save (back to version 1), then add a new, empty process that gets the same slug.
+    await readProjectFolder(dir);
+    await writeProjectFolder(dir, v1);
+    const { document: reabierto } = await readProjectFolder(dir);
+    const nuevo: ProcessDocument = { slug: 'facturacion', name: 'Facturación', model: { id: 'Process_Nuevo', name: 'model.bpmn', xml: XML('Process_Nuevo'), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+    await writeProjectFolder(dir, withProcesses(reabierto, [...processesOf(reabierto), nuevo]));
+    const { document } = await readProjectFolder(dir);
+    expect(processesOf(document)[1]).toEqual(nuevo);
+    expect(Object.keys(await files(dir)).filter((k) => k.startsWith('processes/facturacion/')).sort()).toEqual(['processes/facturacion/model.bpmn']);
+  });
+
+  it('same thing within one session: a slug that held another process on disk is cleaned', async () => {
+    await writeProjectFolder(dir, repo());
+    await readProjectFolder(dir);
+    const nuevo: ProcessDocument = { ...facturacion, model: { ...facturacion.model, id: 'Process_Otro', xml: XML('Process_Otro') }, scenarios: {}, runs: [] };
+    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), nuevo]));
+    expect(processesOf((await readProjectFolder(dir)).document)[1]).toMatchObject({ scenarios: {}, runs: [] });
+    // The same process (same BPMN id) keeps what it had on disk, broken files included.
+    await writeFile(join(dir, 'processes/pedido/roto.scenario.json'), '{');
+    await readProjectFolder(dir);
+    await writeProjectFolder(dir, withProcesses(v1, [...processesOf(v1), nuevo]));
+    expect(await readFile(join(dir, 'processes/pedido/roto.scenario.json'), 'utf8')).toBe('{');
+  });
+
+  it('the first version 2 save writes the manifest after the process files (QA of #511, nit 4)', async () => {
+    await writeProjectFolder(dir, v1);
+    await readProjectFolder(dir);
+    const orden: string[] = [];
+    const fsImpl: WriteProjectFsImpl = { rename: async (from, to) => { if (!to.includes('.prev-')) orden.push(relative(dir, to)); await rename(from, to); } };
+    await writeProjectFolder(dir, repo(), {}, fsImpl);
+    const manifiesto = orden.indexOf('lila-project.json');
+    expect(manifiesto).toBe(orden.length - 1);
+    expect(orden.slice(0, manifiesto).every((p) => p.startsWith('processes/'))).toBe(true);
+  });
+
+  it('a process model opened straight from its folder is a loose diagram, not a nested project (QA of #511, nit 5)', async () => {
+    await writeProjectFolder(dir, repo());
+    const carpeta = join(dir, 'processes/facturacion');
+    const { loose } = await readProjectFolder(carpeta);
+    expect(loose).toBe(true);
+    expect(await hasProjectModel(carpeta)).toBe(false);
+    const antes = await files(dir);
+    await writeProjectFolder(carpeta, facturacion as unknown as ProjectDocument, { diagramOnly: true });
+    expect(Object.keys(await files(dir)).sort()).toEqual(Object.keys(antes).sort());
+  });
+
   it('a repository is saved whole: no diagram-only save', async () => {
     await expect(writeProjectFolder(dir, repo(), { diagramOnly: true })).rejects.toMatchObject({ code: 'E-DESTINO-INVALIDO' });
     expect(await files(dir)).toEqual({});

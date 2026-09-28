@@ -1418,6 +1418,38 @@ it('un proceso se renombra y se borra con confirmación; el último no se puede 
   porEtiqueta(T.app.cerrarArchivo('model.bpmn'));
 });
 
+it('guardar desde la segunda pestaña guarda de verdad: «Guardar y continuar» continúa (QA de #511, must-fix 1)', async () => {
+  lienzoQueRecuerda();
+  // The first process ends at revision 1, the second at 0: they must not be compared.
+  await act(async () => mocks.changed());
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => porEtiqueta(T.procesos.renombrarProceso('Cobro')).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Cobranza');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+
+  await click(T.app.nuevo);
+  expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+  await click(T.app.guardarYContinuar);
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(vi.mocked(session.saveProject).mock.calls[0]![0].processes?.[0]?.name).toBe('Cobranza');
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([false]);
+  expect(session.createProject).toHaveBeenCalledOnce();
+});
+
+it('borrar el primer proceso deja al otro con su nombre (QA de #511, nit 9)', async () => {
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => pestanasProceso()[0]!.click());
+  await act(async () => porEtiqueta(T.procesos.borrarProceso(T.app.proyectoDemo)).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  expect(pestanasProceso()).toEqual([]);
+  // Growing again: the remaining process is still «Cobro».
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Envío');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Cobro', 'Envío']);
+});
+
 it('doble clic en una actividad de llamada abre el proceso llamado y «Volver a» regresa (#461)', async () => {
   const lienzo = lienzoQueRecuerda();
   const primero = lienzo.xml();
@@ -1442,6 +1474,13 @@ it('doble clic en una actividad de llamada abre el proceso llamado y «Volver a�
   expect(respuesta).toBeUndefined();
   expect(mocks.abrir.mock.calls.length).toBe(abiertos);
   expect(container.querySelector('.estado [role="status"]')?.textContent).toBe(T.procesos.llamadaSinResolver('Process_Otro'));
+  // Its own process: said as such (QA of #511, nit 3).
+  await act(async () => { mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: /<bpmn:process id="([^"]+)"/.exec(primero)![1]! } } }); });
+  expect(container.querySelector('.estado [role="status"]')?.textContent).toBe(T.procesos.llamadaMismoProceso);
+  // A QName with its prefix names the same process.
+  await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: `tns:${llamado}` } } }); });
+  expect(respuesta).toBe(false);
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(segundo);
   // Any other element is none of this listener's business.
   await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:Task', businessObject: {} } }); });
   expect(respuesta).toBeUndefined();

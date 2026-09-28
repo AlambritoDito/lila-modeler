@@ -355,7 +355,10 @@ export async function readProjectFolder(
   // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
   // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
   // archivo se abrió) y lo obedece `writeProjectFolder`.
-  const loose = modelFile !== MODEL_FILE;
+  // The `model.bpmn` of a process INSIDE a repository (`processes/<slug>/`, opened straight from
+  // Finder) is not a project of its own: it opens loose, so a save writes only that `.bpmn` and not
+  // a nested `lila-project.json` (QA of #511, nit 5).
+  const loose = modelFile !== MODEL_FILE || (await isRepositoryProcessFolder(dir));
 
   const document: ProjectDocument = {
     version: 1,
@@ -405,6 +408,17 @@ async function readRepositoryManifestOf(dir: string): Promise<Record<string, unk
     );
   }
   return parsed;
+}
+
+/** `true` si `dir` es `processes/<slug>/` de un repositorio que lista ese slug. */
+async function isRepositoryProcessFolder(dir: string): Promise<boolean> {
+  if (basename(dirname(dir)) !== PROCESSES_DIR) return false;
+  try {
+    const parsed = await readRepositoryManifestOf(dirname(dirname(dir)));
+    return parsed !== null && readRepositoryManifest(parsed).some((m) => m.slug === basename(dir));
+  } catch {
+    return false;
+  }
 }
 
 /** `E-SYMLINK` si `path` es un enlace: una carpeta del repositorio no se sigue fuera de la autorizada. */
@@ -490,6 +504,7 @@ async function readRepositoryFolder(
  * la carpeta de un `.bpmn` suelto, que prometería un proyecto que no existe (hallazgo 9 del QA).
  */
 export async function hasProjectModel(dir: string): Promise<boolean> {
+  if (await isRepositoryProcessFolder(dir)) return false;
   try {
     if ((await stat(join(dir, MODEL_FILE))).isFile()) return true;
   } catch (error) {
@@ -1072,10 +1087,22 @@ async function writeRepositoryFolder(
   const processes = processesOf(document);
   const creatable = new Set<string>([processesDir]);
   await assertDirUsable(processesDir);
-  const trackedWrites: PendingWrite[] = [
-    { dest: join(dir, MANIFEST_FILE), content: `${JSON.stringify(repositoryManifestOf(document), null, 2)}\n` },
-  ];
+  // What the folder already says about each slug: the BPMN process id it held. A slug that is not
+  // there, or held another process, is a NEW process for this save (QA of #511, must-fix 2).
+  const enDisco = await readRepositoryManifestOf(dir).catch(() => null);
+  let previos = new Map<string, string>();
+  try {
+    if (enDisco !== null) previos = new Map(readRepositoryManifest(enDisco).map((m) => [m.slug, m.model.id]));
+  } catch {
+    // A manifest that does not read: nothing on disk counts as the same process.
+  }
+  const manifestWrite: PendingWrite = {
+    dest: join(dir, MANIFEST_FILE),
+    content: `${JSON.stringify(repositoryManifestOf(document), null, 2)}\n`,
+  };
+  const trackedWrites: PendingWrite[] = [];
   const runWrites: PendingWrite[] = [];
+  const removals: PendingWrite[] = [];
   for (const process of processes) {
     const processDir = join(processesDir, process.slug);
     await assertDirUsable(processDir);
@@ -1107,12 +1134,17 @@ async function writeRepositoryFolder(
         );
       }
     }
+    // A new process whose folder is already there — the folder of a process deleted earlier (the
+    // writer leaves folders), or of one this repository had before — must not inherit its
+    // scenarios and runs: the files the document does not hold are retired in the same commit.
+    if (previos.get(process.slug) !== process.model.id) {
+      removals.push(...await staleFiles(processDir, process));
+    }
   }
 
   // Versión 1 → repositorio: los archivos del primer proceso salen de la raíz (ver arriba). Solo si
   // la carpeta no era ya un repositorio, y solo los que son de ese proceso.
-  const removals: PendingWrite[] = [];
-  if ((await readRepositoryManifestOf(dir).catch(() => null)) === null) {
+  if (enDisco === null) {
     const first = processes[0]!;
     const candidates = [
       join(dir, MODEL_FILE),
@@ -1124,8 +1156,11 @@ async function writeRepositoryFolder(
     }
   }
 
-  await assertNoExternalChanges([...trackedWrites, ...removals], options.overwrite === true);
-  const writes: PendingWrite[] = [...trackedWrites, ...runWrites, ...removals];
+  await assertNoExternalChanges([...trackedWrites, manifestWrite, ...removals], options.overwrite === true);
+  // The manifest goes after every process file and before the retirements (QA of #511, nit 4): a
+  // crash half-way through the first version 2 save leaves the version 1 manifest pointing at the
+  // root files, still there, instead of a version 2 one pointing at folders not written yet.
+  const writes: PendingWrite[] = [...trackedWrites, ...runWrites, manifestWrite, ...removals];
   for (const { dest, content } of writes) {
     if (content !== null) await assertValidDestination(dest, creatable);
   }
@@ -1144,7 +1179,33 @@ async function writeRepositoryFolder(
     throw error;
   }
   await commitWithRollback(dir, writes, tmpPaths, fsImpl);
-  for (const { dest } of [...trackedWrites, ...removals]) {
+  for (const { dest } of [...trackedWrites, manifestWrite, ...removals]) {
     await rememberSnapshot(dest);
   }
+}
+
+/** The `*.scenario.json` and `runs/*.result.json` in `processDir` that `process` does not hold. */
+async function staleFiles(processDir: string, process: ProcessDocument): Promise<PendingWrite[]> {
+  const stale: PendingWrite[] = [];
+  const listar = async (folder: string, suffix: string): Promise<string[]> => {
+    try {
+      return (await readdir(folder, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
+        .map((entry) => entry.name);
+    } catch (error) {
+      if (isNotFound(error) || isNotDirectory(error)) return [];
+      throw error;
+    }
+  };
+  for (const name of await listar(processDir, SCENARIO_SUFFIX)) {
+    if (!(name in process.scenarios)) stale.push({ dest: join(processDir, name), content: null });
+  }
+  const runIds = new Set(process.runs.map((run) => `${run.id}${RUN_SUFFIX}`));
+  const runsDir = join(processDir, RUNS_DIR);
+  if (!(await isSymlink(runsDir))) {
+    for (const name of await listar(runsDir, RUN_SUFFIX)) {
+      if (!runIds.has(name)) stale.push({ dest: join(runsDir, name), content: null });
+    }
+  }
+  return stale;
 }

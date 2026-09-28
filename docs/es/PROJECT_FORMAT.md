@@ -91,6 +91,11 @@ processes/<slug>/runs/<id>.result.json
   mueve el `model.bpmn`, los escenarios y las corridas del primer proceso de la raíz a
   `processes/<slug>/`, en el mismo commit de todo o nada que el resto del guardado. Volver a un
   proceso escribe otra vez los archivos de la raíz y deja `processes/` en disco para que lo quites tú.
+  La carpeta de un proceso borrado también se queda, pero no vuelve: un proceso nuevo que reciba el
+  mismo slug empieza con la carpeta vacía, porque el guardado retira, en el mismo commit, los
+  escenarios y las corridas que el documento no tiene. El manifiesto se escribe después de los
+  archivos de los procesos, así que un cierre brusco a mitad de ese primer guardado deja intacto el
+  proyecto versión 1.
 - **Los escenarios y las corridas son de cada proceso.** La simulación corre un proceso a la vez —el
   del lienzo— y una actividad de llamada sigue siendo una tarea con su propio tiempo; hacer doble
   clic en una abre el proceso cuyo id de proceso BPMN es su `calledElement`.

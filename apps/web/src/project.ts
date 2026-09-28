@@ -165,7 +165,7 @@ export function documentToken(doc: ProjectDocument): string {
  * project, and only has to find `<bpmn:process id="…">` (any prefix, or none).
  */
 export function processIds(xml: string): string[] {
-  return [...xml.matchAll(/<(?:[\w.-]+:)?process\b[^>]*?\sid="([^"]+)"/g)].map((m) => m[1]!);
+  return [...xml.matchAll(/<(?:[\w.-]+:)?process\b[^>]*?\sid=(["'])(.+?)\1/g)].map((m) => m[2]!);
 }
 
 /** Editar un padre invalida sus descendientes; los escenarios independientes siguen actuales. */

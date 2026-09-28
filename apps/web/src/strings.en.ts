@@ -1358,6 +1358,7 @@ export const en = {
     llamadaSinResolver: (destino: string): string =>
       `The call activity calls «${destino}», which is not a process of this project.`,
     llamadaSinDestino: 'This call activity does not name the process it calls.',
+    llamadaMismoProceso: 'This call activity calls the process it is in.',
   },
 
   almacen: {
