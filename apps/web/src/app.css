@@ -2842,3 +2842,13 @@ body {
 .djs-popup .lila-color-actual {
   font-weight: 700;
 }
+
+/* Extended attributes (#509): the definitions dialog, styled like the other confirmation dialogs,
+   and one definition per bordered block. */
+.atributos-dialogo { max-width: 36rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
+.atributos-dialogo::backdrop { background: rgb(0 0 0 / 50%); }
+.atributos-dialogo .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.atributos-dialogo .atributo-definicion { display: grid; gap: 6px; margin: 8px 0; padding: 8px; border: 1px solid var(--border); }
+.atributos-dialogo .atributos-impactos { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
+.atributos-dialogo .atributos-impactos fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
+.atributos .campo [aria-invalid='true'] { border-color: var(--status-error); }
