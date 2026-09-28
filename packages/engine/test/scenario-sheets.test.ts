@@ -105,6 +105,27 @@ describe('(a) template → import without edits', () => {
     expect(applyImportChanges(scenario, edit.changes)).toEqual(scenario);
   });
 
+  test('a user distribution comes back identical with the app in Spanish or English', () => {
+    const scenario = asIs();
+    const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
+    elements['Task_Preparar']!['processingTime'] = {
+      type: 'user',
+      points: [
+        { value: 90, probability: 0.25 },
+        { value: 120, probability: 0.75 },
+      ],
+    };
+    for (const locale of ['en', 'es'] as const) {
+      const plan = planScenarioImport(readWorkbook(scenarioTemplate(scenario, pedidoIr())), scenario, pedidoIr(), { locale });
+      expect(plan.issues, locale).toEqual([]);
+      expect(plan.changes, locale).toEqual([]);
+    }
+    // And a person typing decimal commas in `points` is understood in any file.
+    const typed = planScenarioImport(csv('Elements.csv', 'id,distribution,unit,points\nTask_Preparar,user,min,"1,5:0,25; 2:0,75"\n'), scenario, pedidoIr());
+    expect(typed.issues).toEqual([]);
+    expect(typed.changes).toEqual([]);
+  });
+
   test('slices, user points and times that do not divide the base unit survive too', () => {
     const scenario = asIs();
     const calendars = scenario['calendars'] as Record<string, unknown>;

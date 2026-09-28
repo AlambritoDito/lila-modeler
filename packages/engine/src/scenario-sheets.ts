@@ -963,7 +963,7 @@ function readDistribution(
       continue;
     }
     if (parameter === 'points') {
-      const points = readPoints(text(t, cells, 'points'), factor, t.style);
+      const points = readPoints(text(t, cells, 'points'), factor);
       if (points === null) errors.add('points', M.badPoints(text(t, cells, 'points')));
       else distribution['points'] = points;
       continue;
@@ -981,14 +981,25 @@ function readDistribution(
   return errors.list.length > before ? undefined : distribution;
 }
 
+/**
+ * A number inside `points`. It is a structured field with its own separators (`;` between pairs,
+ * `:` inside one) and no thousands, so its decimal can be `.` or `,` whatever the file or the
+ * language: the template writes `.`, a person in Spanish types `,`, and both come back.
+ */
+function pointNumber(part: string): number | null {
+  const text = part.replace(/\s/g, '');
+  if (text.includes(',') && text.includes('.')) return Number.NaN;
+  return parseNumber(text.replace(',', '.'), 'dot');
+}
+
 /** `30:0.2; 60:0.8` (values in the row's unit) → the `points` of a `user` distribution. */
-function readPoints(value: string, factor: number, style: NumberStyle): { value: number; probability: number }[] | null {
+function readPoints(value: string, factor: number): { value: number; probability: number }[] | null {
   const points: { value: number; probability: number }[] = [];
   for (const pair of value.split(/[;|\n]/)) {
     if (pair.trim() === '') continue;
     const parts = pair.split(':');
     if (parts.length !== 2) return null;
-    const [v, p] = parts.map((part) => parseNumber(part, style));
+    const [v, p] = parts.map(pointNumber);
     if (v === null || p === null || v === undefined || p === undefined || Number.isNaN(v) || Number.isNaN(p)) return null;
     points.push({ value: toSeconds(v, factor), probability: p });
   }
