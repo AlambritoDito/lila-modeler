@@ -458,7 +458,8 @@ describe('CompareView QA: significancia por columna', () => {
     expect(celdas[3]).not.toContain(SIGNIFICANT);
     expect(celdas[4]).toContain(SIGNIFICANT);
     expect(celdas[5]).not.toContain(SIGNIFICANT);
-    expect((tresHtml.match(/role="img"/g) ?? []).length).toBe(1);
+    // Only the marks: the charts of #460 are `role="img"` too, and are not significance marks.
+    expect((tresHtml.match(/aria-label="Diferencia significativa[^"]*" role="img"/g) ?? []).length).toBe(1);
     expect(textOf(celdas[4]!)).toBe('30 (+200%) *');
   });
 

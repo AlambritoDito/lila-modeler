@@ -23,6 +23,7 @@ import {
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
+  SECONDS_PER_UNIT,
   splitOutcomeMetric,
   type BaseTimeUnit,
 } from '@lila-modeler/engine/format';
@@ -39,6 +40,8 @@ import {
   type ColumnDef,
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
+import { MAX_SERIES } from './graficas';
+import { GraficaBarras, type GraficaBarrasProps } from './GraficasSvg';
 import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
@@ -348,6 +351,107 @@ export function compareColumns(
 }
 
 /* ------------------------------------------------------------------ *
+ * Charts (#460): the key KPIs of the tables, one bar per visible scenario, each bar labelled with
+ * its own cell text — value and delta against the base — so the chart cannot disagree with the
+ * table. Colors follow the scenario (its index), never its position among the visible ones.
+ * ------------------------------------------------------------------ */
+
+export interface CompareChartsInput {
+  rows: readonly CompareRow[];
+  ir: ProcessIR;
+  resourceNames: Readonly<Record<string, string>>;
+  scenarioNames: readonly string[];
+  isVisible: (index: number) => boolean;
+  baseTimeUnit: BaseTimeUnit;
+  runs?: readonly CompareRunMeta[] | undefined;
+  costsComparable: boolean;
+}
+
+/**
+ * The compare charts as props of `GraficaBarras`, plus the notes for what is not charted.
+ * Exported for the test, which checks each bar against its table cell.
+ */
+export function compareCharts(input: CompareChartsInput): { graficas: GraficaBarrasProps[]; notas: string[] } {
+  const S = strings();
+  const { rows, scenarioNames, isVisible, baseTimeUnit, runs, costsComparable } = input;
+  const visibles = scenarioNames.map((_, i) => i).filter(isVisible);
+  const indices = visibles.filter((i) => i < MAX_SERIES);
+  const notas = visibles.length > indices.length ? [S.graficas.compararDemasiados(visibles.length)] : [];
+  const ctx = (i: number): ColumnContext => ({ currency: runs?.[i]?.currency, unit: runs?.[i]?.baseTimeUnit ?? baseTimeUnit });
+  const series = indices.map((i) => (i === 0 ? S.comparar.base(scenarioNames[i]!) : scenarioNames[i]!));
+  const grupo = (row: CompareRow, etiqueta: string, valor: (v: number) => number) => ({
+    id: row.kpi,
+    etiqueta,
+    valores: indices.map((i) => {
+      const v = row.values[i] ?? null;
+      return v === null ? null : valor(v);
+    }),
+    textos: indices.map((i) => cellText(row, i, ctx(i), costsComparable)),
+  });
+  const proceso = (metric: string): CompareRow | undefined => rows.find((r) => r.scope === 'process' && r.metric === metric);
+
+  const graficas: GraficaBarrasProps[] = [];
+  const ciclo = proceso('cycleTime.mean');
+  // One axis: every bar in the base's unit, whatever unit its own column is printed in.
+  if (ciclo !== undefined) {
+    graficas.push({
+      titulo: S.graficas.compararCiclo(baseTimeUnit),
+      series,
+      colores: indices,
+      grupos: [grupo(ciclo, compareMetricLabel('process', 'cycleTime.mean'), (v) => v / SECONDS_PER_UNIT[baseTimeUnit])],
+    });
+  }
+  const costo = proceso('costPerCase');
+  if (costo !== undefined && !costsComparable) notas.push(S.graficas.compararCostoNoComparable);
+  else if (costo !== undefined) {
+    graficas.push({
+      titulo: S.graficas.compararCosto,
+      series,
+      colores: indices,
+      grupos: [grupo(costo, compareMetricLabel('process', 'costPerCase'), (v) => v)],
+    });
+  }
+  const utilizacion = rows.filter((r) => r.scope === 'resources' && r.metric === 'utilization');
+  if (utilizacion.length > 0) {
+    graficas.push({
+      titulo: S.graficas.compararUtilizacion,
+      series,
+      colores: indices,
+      grupos: utilizacion.map((r) => grupo(r, rowName(input.ir, input.resourceNames, 'resources', r.id) || (r.id ?? ''), (v) => v * 100)),
+      tope: 100,
+    });
+  }
+  return { graficas, notas };
+}
+
+function CompareCharts(props: CompareChartsInput): ReactNode {
+  const S = useStrings();
+  const { graficas, notas } = compareCharts(props);
+  if (graficas.length === 0 && notas.length === 0) return null;
+  // The one-group charts (cycle time, cost) sit side by side; utilization takes the full width.
+  const pequenas = graficas.filter((g) => g.grupos.length === 1);
+  const grandes = graficas.filter((g) => g.grupos.length !== 1);
+  return (
+    <section style={sectionStyle} data-grafica="comparar">
+      <h2 style={{ ...h2Style, marginBottom: 8 }}>{S.graficas.comparar}</h2>
+      <div className="graficas-fila">
+        {pequenas.map((g) => (
+          <GraficaBarras key={g.titulo} {...g} />
+        ))}
+      </div>
+      {grandes.map((g) => (
+        <GraficaBarras key={g.titulo} {...g} />
+      ))}
+      {notas.map((nota) => (
+        <p key={nota} className="grafica-nota">
+          {nota}
+        </p>
+      ))}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Selector de escenarios (checkboxes; la base siempre visible y va primero).
  * ------------------------------------------------------------------ */
 
@@ -504,6 +608,17 @@ export function CompareView({
           })}
         </section>
       )}
+
+      <CompareCharts
+        rows={comparison.rows}
+        ir={ir}
+        resourceNames={resourceNames}
+        scenarioNames={scenarioNames}
+        isVisible={isVisible}
+        baseTimeUnit={baseTimeUnit}
+        runs={runs}
+        costsComparable={costsComparable}
+      />
 
       {SCOPES.filter((scope) => scope !== 'flows' || showAll).map((scope) => {
         const rows = visibleCompareRows(comparison.rows, scope, showAll);
