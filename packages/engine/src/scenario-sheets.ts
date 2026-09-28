@@ -562,6 +562,11 @@ export function planScenarioImport(
   };
 
   for (const sheet of sheets) {
+    // A hidden tab is data the person cannot see in the file: never applied, always said.
+    if (sheet.hidden === true) {
+      issue('warning', sheet.name, 1, undefined, M.hiddenSheet(sheet.name));
+      continue;
+    }
     const headerIndex = sheet.rows.findIndex((row) => row.some((cell) => cellText(cell) !== ''));
     if (headerIndex === -1) continue;
     const header = sheet.rows[headerIndex]!;
@@ -600,6 +605,12 @@ export function planScenarioImport(
       .map((cells, index) => ({ row: index + 1, cells }))
       .slice(headerIndex + 1)
       .filter(({ cells }) => [...columns.values()].some((index) => cellText(cells[index]) !== ''));
+    for (const formula of sheet.uncached ?? []) {
+      const column = [...columns].find(([, index]) => index === formula.column)?.[0];
+      if (column !== undefined && formula.row > headerIndex + 1) {
+        issue('warning', sheet.name, formula.row, headers.get(column), M.uncachedFormula());
+      }
+    }
     const csv = sheet.delimiter !== undefined;
     const style: NumberStyle = csv ? (sheet.delimiter === ';' ? 'comma' : 'dot') : locale === 'es' ? 'comma' : 'dot';
     tables.push({ table, sheet: sheet.name, columns, headers, rows, style, csv });
@@ -607,7 +618,7 @@ export function planScenarioImport(
 
   const context: Context = { M, ir, next, changes, issue, locale };
   for (const table of APPLY_ORDER) {
-    const seen = new Map<string, number>();
+    const seen: Seen = new Map();
     for (const t of tables.filter((candidate) => candidate.table === table)) {
       switch (table) {
         case 'calendars':
@@ -731,6 +742,9 @@ function rejectReserved(context: Context, t: Table, row: number, column: string,
   context.issue('error', t.sheet, row, header(t, column), context.M.reservedId(id));
   return true;
 }
+
+/** Where each key of a table was first set, across the sheets of that table. */
+type Seen = Map<string, { sheet: string; row: number }>;
 
 /** Matching result: an id, or the reason there is none (already reported). */
 type Match = { id: string } | null;
@@ -894,7 +908,7 @@ function readPoints(value: string, factor: number, style: NumberStyle): { value:
   return points.length === 0 ? null : points;
 }
 
-function planElements(context: Context, t: Table, seen: Map<string, number>): void {
+function planElements(context: Context, t: Table, seen: Seen): void {
   const { M, ir } = context;
   const arrivals = t.table === 'arrivals';
   const distributionField = arrivals ? 'interTriggerTimer' : 'processingTime';
@@ -910,10 +924,10 @@ function planElements(context: Context, t: Table, seen: Map<string, number>): vo
     if (match === null) continue;
     const first = seen.get(match.id);
     if (first !== undefined) {
-      context.issue('error', t.sheet, row, undefined, M.duplicateRow(id || name, first));
+      context.issue('error', t.sheet, row, undefined, M.duplicateRow(id || name, first.sheet, first.row));
       continue;
     }
-    seen.set(match.id, row);
+    seen.set(match.id, { sheet: t.sheet, row });
 
     const errors = rowErrors();
     const fields: Record<string, unknown> = {};
@@ -988,7 +1002,7 @@ function readCapacity(t: Table, raw: ReadCell, errors: RowErrors, M: SheetMessag
   return slices;
 }
 
-function planResources(context: Context, t: Table, seen: Map<string, number>): void {
+function planResources(context: Context, t: Table, seen: Seen): void {
   const { M } = context;
   for (const { row, cells } of t.rows) {
     const idText = text(t, cells, 'id');
@@ -1006,10 +1020,10 @@ function planResources(context: Context, t: Table, seen: Map<string, number>): v
     }
     const first = seen.get(id);
     if (first !== undefined) {
-      context.issue('error', t.sheet, row, undefined, M.duplicateRow(id, first));
+      context.issue('error', t.sheet, row, undefined, M.duplicateRow(id, first.sheet, first.row));
       continue;
     }
-    seen.set(id, row);
+    seen.set(id, { sheet: t.sheet, row });
 
     const current = own(section(context.next, 'resources'), id);
     const errors = rowErrors();

@@ -19,7 +19,9 @@ export interface SheetMessages {
   reservedId: (id: string) => string;
   notFound: (key: string) => string;
   ambiguous: (name: string, ids: string) => string;
-  duplicateRow: (key: string, firstRow: number) => string;
+  duplicateRow: (key: string, firstSheet: string, firstRow: number) => string;
+  hiddenSheet: (name: string) => string;
+  uncachedFormula: () => string;
   unknownDistribution: (value: string, accepted: string) => string;
   missingDistribution: () => string;
   parameterNotApplicable: (parameter: string, type: string) => string;
@@ -53,7 +55,10 @@ const en: SheetMessages = {
   reservedId: (id) => `"${id}" cannot be used as an id; the row was not applied.`,
   notFound: (key) => `"${key}" does not match anything in the model or the scenario; the row was not applied.`,
   ambiguous: (name, ids) => `the name "${name}" is shared by ${ids}; write the id to choose one. The row was not applied.`,
-  duplicateRow: (key, firstRow) => `"${key}" was already set in row ${firstRow}; this row was not applied.`,
+  duplicateRow: (key, firstSheet, firstRow) => `"${key}" was already set in ${firstSheet}, row ${firstRow}; this row was not applied.`,
+  hiddenSheet: (name) => `sheet "${name}" is hidden in the file; it was not read. Unhide it to import it.`,
+  uncachedFormula: () =>
+    'the cell has a formula with no saved result, so it was read as empty. Open the file in Excel and save it again.',
   unknownDistribution: (value, accepted) => `unknown distribution "${value}"; use one of ${accepted}.`,
   missingDistribution: () => 'there are distribution parameters but no distribution type.',
   parameterNotApplicable: (parameter, type) => `"${parameter}" is not a parameter of the ${type} distribution; leave it empty.`,
@@ -90,7 +95,10 @@ const es: SheetMessages = {
   reservedId: (id) => `«${id}» no se puede usar como id; la fila no se aplicó.`,
   notFound: (key) => `«${key}» no coincide con nada del modelo ni del escenario; la fila no se aplicó.`,
   ambiguous: (name, ids) => `el nombre «${name}» lo comparten ${ids}; escribe el id para elegir uno. La fila no se aplicó.`,
-  duplicateRow: (key, firstRow) => `«${key}» ya se definió en la fila ${firstRow}; esta fila no se aplicó.`,
+  duplicateRow: (key, firstSheet, firstRow) => `«${key}» ya se definió en ${firstSheet}, fila ${firstRow}; esta fila no se aplicó.`,
+  hiddenSheet: (name) => `la hoja «${name}» está oculta en el archivo; no se leyó. Muéstrala para importarla.`,
+  uncachedFormula: () =>
+    'la celda tiene una fórmula sin resultado guardado, así que se leyó vacía. Abre el archivo en Excel y guárdalo de nuevo.',
   unknownDistribution: (value, accepted) => `distribución desconocida «${value}»; usa una de ${accepted}.`,
   missingDistribution: () => 'hay parámetros de distribución pero falta el tipo de distribución.',
   parameterNotApplicable: (parameter, type) => `«${parameter}» no es un parámetro de la distribución ${type}; déjalo vacío.`,

@@ -354,6 +354,35 @@ describe('(d) invalid values name the sheet, the row and the column', () => {
   });
 });
 
+describe('hidden sheets, copies and formulas', () => {
+  test('a hidden sheet is skipped with a note; a duplicate names the sheet of the first row', () => {
+    const rows = (mean: number): ReadSheet['rows'] => [['id', 'distribution', 'mean'], ['Task_Preparar', 'exponential', mean]];
+    const plan = planScenarioImport(
+      [
+        { name: 'Elements_old', rows: [], hidden: true },
+        { name: 'Elements', rows: rows(7) },
+        { name: 'Elements (2)', rows: rows(8) },
+      ],
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.changes.map((change) => [change.sheet, change.after])).toEqual([['Elements', { type: 'exponential', mean: 420 }]]);
+    expect(plan.issues.map((issue) => issue.text)).toEqual([
+      'Elements_old, row 1: sheet "Elements_old" is hidden in the file; it was not read. Unhide it to import it.',
+      'Elements (2), row 2: "Task_Preparar" was already set in Elements, row 2; this row was not applied.',
+    ]);
+  });
+
+  test('a formula with no saved result is a note, not a silent empty cell', () => {
+    const plan = planScenarioImport(
+      [{ name: 'Resources', rows: [['id', 'capacity'], ['horno', null]], uncached: [{ row: 2, column: 1 }] }],
+      asIs(),
+      pedidoIr(),
+    );
+    expect(plan.issues.map((issue) => [issue.kind, issue.row, issue.column])).toEqual([['warning', 2, 'capacity']]);
+  });
+});
+
 describe('calendar times', () => {
   test('seconds are dropped with a note, from text or from an Excel clock time', () => {
     const plan = planScenarioImport(
