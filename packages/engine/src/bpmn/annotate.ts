@@ -60,13 +60,15 @@ const DEFINITION_TYPE = moddleType('attributeDefinition');
 const VALUE_TYPE = moddleType('attributeValue');
 
 function readDefinition(value: ModdleElement): AttributeDefinition {
-  const options = (value.options ?? []).map((option: ModdleElement) => option.value ?? '');
+  const options = (value.options ?? []).map((option) => option.value ?? '');
+  // `default` is typed as the gateway's default flow; on a `lila:attributeDefinition` it is text.
+  const fallback: unknown = value.default;
   return {
     id: value.id ?? '',
     name: value.name ?? '',
     type: value.type ?? '',
     appliesTo: value.appliesTo ?? '',
-    ...(value.default === undefined ? {} : { default: value.default }),
+    ...(typeof fallback === 'string' ? { default: fallback } : {}),
     ...(options.length === 0 ? {} : { options }),
   };
 }
@@ -244,6 +246,7 @@ export async function annotateElement(
       added.push(moddle.create(VERSION_TAG_TYPE, { value: annotations.versionTag }));
     }
     for (const { options, ...definition } of annotations.attributeDefinitions ?? []) {
+      // `default` goes in as text: see `readDefinition`.
       added.push(
         moddle.create(DEFINITION_TYPE, {
           ...definition,
