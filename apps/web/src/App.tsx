@@ -72,7 +72,7 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 import './theme/montana.css';
-import { confirmarEdicionEnCurso } from './edicionEnCurso';
+import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
@@ -645,7 +645,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ? { slug: p.slug, name: p.name, revision, scenarioRevisions, runIds: runs.map((r) => r.id) }
       : tokenPart(p))))
     : changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
-  const dirty = currentToken !== savedToken;
+  // A value still being typed in an extended attribute also counts as unsaved (#509).
+  const borradorPendiente = useBorradorPendiente();
+  const dirty = currentToken !== savedToken || borradorPendiente;
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
   const latest = Object.keys(escenarios).flatMap((name) => {

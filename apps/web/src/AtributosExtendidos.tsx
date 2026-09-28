@@ -28,6 +28,7 @@ import {
   valoresDe,
   type Moddle,
 } from './atributos';
+import { marcarBorrador } from './edicionEnCurso';
 import { useStrings } from './i18n';
 import { leerExtensiones, type ElementoLienzo, type Escritor } from './PropertiesPanel';
 
@@ -179,6 +180,11 @@ function CampoAtributo({ def, elemento, escritor, refrescar }: {
     }
   };
   useEffect(() => () => pendiente.current(), []);
+  // A valid draft not yet in the model makes the project unsaved, so ⌘Q asks (edicionEnCurso.ts).
+  const [campo] = useState(() => ({}));
+  const sinGuardar = borrador !== null && borrador !== guardado && validateAttributeValue(def, borrador) === null;
+  useEffect(() => marcarBorrador(campo, sinGuardar), [campo, sinGuardar]);
+  useEffect(() => () => marcarBorrador(campo, false), [campo]);
   const cambiar = (valor: string): void => {
     if (!alConfirmar && validateAttributeValue(def, valor) === null) escribir(valor);
     else setBorrador(valor);
@@ -213,6 +219,7 @@ function CampoAtributo({ def, elemento, escritor, refrescar }: {
         onBlur={confirmar}
         onKeyDown={(e) => {
           if (e.key === 'Enter') confirmar();
+          if (e.key === 'Escape') setBorrador(null);
         }}
       />
     );

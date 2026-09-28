@@ -23,7 +23,7 @@ import BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import { Ids } from 'ids';
 import ModdleCopy from 'bpmn-js/lib/features/copy-paste/ModdleCopy';
 import { GuardiaAtributos } from './atributos';
-import { confirmarEdicionEnCurso } from './edicionEnCurso';
+import { confirmarEdicionEnCurso, hayBorradorPendiente } from './edicionEnCurso';
 import { LilaLote } from './lote';
 import type { Modelador } from './Modeler';
 import { PanelPropiedades, type ElementoLienzo, type ElementoModdle, type Escritor } from './PropertiesPanel';
@@ -572,6 +572,36 @@ describe('a number still being typed is not lost (second QA pass of #513)', () =
     const notas = await readAnnotations(await b.exportar());
     expect(notas.Task_1?.attributes?.map((a) => a.value)).toEqual(['99']);
     expect(notas.Task_2).toBeUndefined();
+  });
+
+  it('a valid draft not yet in the model makes the project unsaved; Esc or an invalid draft does not', async () => {
+    const { b, campo } = await conSla();
+    expect(hayBorradorPendiente()).toBe(false);
+    escribir(campo, '12');
+    // What App reads into `dirty`, so ⌘Q asks «save/discard» and saving commits it.
+    expect(hayBorradorPendiente()).toBe(true);
+    act(() => campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(campo.value).toBe('');
+    expect(hayBorradorPendiente()).toBe(false);
+    escribir(campo, '12,');
+    expect(hayBorradorPendiente()).toBe(false);
+    escribir(campo, '12');
+    expect(hayBorradorPendiente()).toBe(true);
+    act(() => confirmarEdicionEnCurso());
+    expect(hayBorradorPendiente()).toBe(false);
+    expect(await b.exportar()).toContain('value="12"');
+    // Back to the stored value by hand: nothing pending, nothing forced dirty.
+    act(() => campo.focus());
+    escribir(campo, '13');
+    escribir(campo, '12');
+    expect(hayBorradorPendiente()).toBe(false);
+  });
+
+  it('a field unmounted with a pending draft leaves nothing pending behind', async () => {
+    const { b, campo } = await conSla();
+    escribir(campo, '5');
+    b.clic('Task_2');
+    expect(hayBorradorPendiente()).toBe(false);
   });
 
   it('an invalid draft is dropped when the field goes away: the model keeps its last valid value', async () => {
