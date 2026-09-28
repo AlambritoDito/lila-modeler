@@ -52,6 +52,10 @@
       "types": "./dist/xlsx-report.d.ts",
       "default": "./dist/xlsx-report.js"
     },
+    "./scenario-sheets": {
+      "types": "./dist/scenario-sheets.d.ts",
+      "default": "./dist/scenario-sheets.js"
+    },
     "./process-document": {
       "types": "./dist/process-document.d.ts",
       "default": "./dist/process-document.js"
