@@ -2174,7 +2174,7 @@ export function ScenarioPanel({
       <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
       <Problemas ruta={['extends']} ctx={ctx} />
 
-      <ImportarExcel archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
+      <ImportarExcel key={archivo} archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
 
       {huerfanas.length > 0 && ir !== null && (
         <div className="lista-paso huerfanas">

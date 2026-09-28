@@ -169,9 +169,12 @@ export function readWorkbook(bytes: Uint8Array): ReadSheet[] {
   } catch (error) {
     throw new WorkbookReadError(error instanceof Error ? error.message : String(error));
   }
+  // Tag prefixes dropped (`<x:row>` → `<row>`): the OpenXML SDK and some exporters qualify every
+  // element with a namespace prefix, which the patterns below do not expect. Attributes such as
+  // `r:id` keep theirs.
   const text = (path: string): string | undefined => {
     const content = files[path];
-    return content === undefined ? undefined : strFromU8(content);
+    return content === undefined ? undefined : strFromU8(content).replace(/<(\/?)[A-Za-z_][\w.-]*:/g, '<$1');
   };
   const book = text('xl/workbook.xml');
   if (book === undefined) throw new WorkbookReadError('xl/workbook.xml');

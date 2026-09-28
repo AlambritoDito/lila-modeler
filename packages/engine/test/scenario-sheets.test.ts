@@ -309,6 +309,19 @@ describe('reader', () => {
     ]);
   });
 
+  test('reads parts whose elements carry a namespace prefix (OpenXML SDK)', () => {
+    const sheets = readWorkbook(
+      zipSync({
+        'xl/workbook.xml': strToU8('<x:workbook xmlns:x="m" xmlns:r="r"><x:sheets><x:sheet name="Calendars" sheetId="1" r:id="rId1"/></x:sheets></x:workbook>'),
+        'xl/_rels/workbook.xml.rels': strToU8('<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>'),
+        'xl/worksheets/sheet1.xml': strToU8(
+          '<x:worksheet><x:sheetData><x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>id</x:t></x:is></x:c><x:c r="B1"><x:v>0.375</x:v></x:c></x:row></x:sheetData></x:worksheet>',
+        ),
+      }),
+    );
+    expect(sheets).toEqual([{ name: 'Calendars', rows: [['id', 0.375]] }]);
+  });
+
   test('a file that is not a workbook throws a readable error', () => {
     expect(() => readWorkbook(strToU8('id,name\n'))).toThrow();
   });
