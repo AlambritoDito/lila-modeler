@@ -15,8 +15,10 @@ Está pensado para los parámetros que ya tienes en Excel, así no hay que copia
    al aplicar.
 4. **Aplicar** escribe los cambios en el escenario que editas, y **Deshacer importación** los
    revierte mientras no hayas editado nada más. **Cancelar** (o Escape) deja el escenario como
-   estaba. Aplicar queda desactivado mientras el escenario fuera a quedar con errores, y cuando el
-   escenario o el diagrama cambiaron después de leer el archivo: entonces impórtalo de nuevo.
+   estaba. Aplicar queda desactivado mientras una fila del archivo fuera a dar al escenario un error
+   nuevo, y cuando el escenario o el diagrama cambiaron después de leer el archivo: entonces
+   impórtalo de nuevo. Los errores que el escenario ya tenía no bloquean, aunque el archivo reordene
+   una lista.
 
 El resultado es una edición normal del escenario, así que la lista de validación del panel lo
 revisa como siempre. Si el escenario hereda de otro (`extends`), los cambios van al archivo de este
@@ -46,12 +48,15 @@ escenario, igual que cuando editas un campo a mano ([SCENARIO_FORMAT.md](SCENARI
   calendario que la hoja no menciona conserva lo que tiene.
 - **Los números siguen al archivo.** Un CSV separado por `;` (lo que escribe un Excel en español)
   usa `,` para decimales y `.` para miles: `7,5`, `1.500` (mil quinientos), `1.234.567,5`. Un CSV
-  separado por `,` o tabulador usa `.` para decimales y `,` para miles, que entonces va entre
+  separado por `,` usa `.` para decimales y `,` para miles, que entonces va entre
   comillas: `7.5`, `"1,500"`. Un separador que no es el decimal tiene que agrupar las cifras de
   tres en tres; si no, el valor es un error que dice la convención (`1.5` en un archivo con `;`).
   En un libro, las celdas numéricas son números y no necesitan nada de esto; un número escrito como
   texto sigue el idioma de la app, y uno que se puede leer de las dos formas (`1.500`) lleva una
-  nota. Vale el porcentaje (`78%` es `0.78`); los valores no finitos (`1e999`) son un error.
+  nota. Vale el porcentaje (`78%` es `0.78`); los valores no finitos (`1e999`) son un error. Un
+  archivo separado por tabuladores («Texto Unicode» de Excel) sigue el idioma de la app, como el
+  texto de un libro. La columna `points` es la excepción: no tiene miles, así que su decimal puede
+  ser `.` o `,` en cualquier archivo.
 - **Las hojas ocultas no se leen**, con una nota: la importación nunca aplica datos que no ves en
   el archivo. Una fórmula sin resultado guardado (un archivo escrito por un script, o Excel en
   cálculo manual) se lee vacía, con una nota: abre el archivo en Excel y guárdalo de nuevo.
@@ -71,7 +76,7 @@ Una fila por tarea, temporizador, evento de fin y flujo de salida de una compuer
 | `distribution` | Distribución del tiempo de procesamiento (`processingTime`): `constant`, `uniform`, `triangular`, `exponential`, `normal`, `truncatedNormal`, `lognormal`, `gamma`, `erlang`, `weibull`, `beta`, `poisson`, `binomial` o `user`. También valen en español: `constante`, `uniforme`, `exponencial`, `normal truncada`, `usuario`. |
 | `unit` | Unidad de los tiempos de la fila: `s`, `min`, `h` o `day`. Vacía es `run.baseTimeUnit`, la unidad que muestra el panel. |
 | `value` … `p` | Una columna por parámetro de distribución: `value`, `min`, `mode`, `max`, `mean`, `sd`, `shape`, `scale`, `k`, `alpha`, `beta`, `n`, `p`. Rellena los de la distribución elegida y deja vacíos los demás. `value`, `min`, `mode`, `max`, `mean` y `sd` son tiempos en `unit`. |
-| `points` | Solo para `user`: pares `valor:probabilidad` separados por `;`, por ejemplo `5:0,2; 10:0,8`. Los valores van en `unit`. |
+| `points` | Solo para `user`: pares `valor:probabilidad` separados por `;`, por ejemplo `5:0,2; 10:0,8` (o `5:0.2; 10:0.8`). Los valores van en `unit`. |
 | `fixedCost` | Costo fijo por ejecución. |
 | `calendar` | Clave del calendario; tiene que existir en el escenario o en la hoja `Calendars`. |
 | `probability` | Para un flujo que sale de una compuerta: entre 0 y 1, o un porcentaje. |
@@ -109,7 +114,7 @@ tarea sin grupos.
 Una fila por intervalo semanal: `id`, `days`, `from` y `to`. Las filas de un calendario reemplazan
 sus intervalos, y un `id` que el escenario no tiene crea el calendario.
 
-- `days`: `MON,TUE,WED`, un rango como `MON-FRI`, nombres completos (`Monday`), o las abreviaturas
+- `days`: `MON,TUE,WED`, un rango como `MON-FRI` (también `MON - FRI` o con raya), nombres completos (`Monday`), o las abreviaturas
   y nombres en español `LUN`, `MAR`, `MIE`, `JUE`, `VIE`, `SAB`, `DOM`, `lunes`… Solo palabras
   completas: `Marzo` no es martes.
 - `from` y `to`: `HH:MM`, con `24:00` permitido como fin del día. También vale una hora que Excel

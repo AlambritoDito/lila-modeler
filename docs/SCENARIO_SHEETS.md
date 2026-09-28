@@ -15,8 +15,9 @@ already have in Excel, so you do not have to copy them field by field.
    applying.
 4. **Apply** writes the changes into the scenario you are editing, and **Undo import** reverts them
    while you have not edited anything else. **Cancel** (or Escape) leaves the scenario as it was.
-   Apply stays disabled while the scenario would end up with errors, and when the scenario or the
-   diagram changed after reading the file: import it again then.
+   Apply stays disabled while a row of the file would give the scenario a new error, and when the
+   scenario or the diagram changed after reading the file: import it again then. Errors the
+   scenario already had do not block, even if the file reorders a list.
 
 The result is an ordinary scenario edit, so the validation list of the panel lints it as usual.
 If the scenario inherits from another one (`extends`), the changes go into this scenario's own file,
@@ -44,12 +45,14 @@ as when you edit a field by hand ([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md) § 6)
   rows removes that pool. A task or calendar the sheet does not mention keeps what it has.
 - **Numbers follow the file.** A CSV separated by `;` (what a Spanish Excel writes) uses `,` for
   decimals and `.` for thousands: `7,5`, `1.500` (fifteen hundred), `1.234.567,5`. A CSV separated
-  by `,` or tab uses `.` for decimals and `,` for thousands, which then has to be quoted: `7.5`,
+  by `,` uses `.` for decimals and `,` for thousands, which then has to be quoted: `7.5`,
   `"1,500"`. A separator that is not the decimal one must group digits by three, otherwise the
   value is an error that says the convention (`1.5` in a `;` file). In a workbook, numeric cells
   are numbers and need none of this; a number typed as text follows the language of the app, and
   one that could be read both ways (`1.500`) gets a note. A percentage works (`78%` is `0.78`);
-  values that are not finite (`1e999`) are errors.
+  values that are not finite (`1e999`) are errors. A tab-separated file (Excel's «Unicode Text»)
+  follows the language of the app, like text in a workbook. The `points` column is the exception:
+  it has no thousands, so its decimal can be `.` or `,` in any file.
 - **Hidden sheets are not read**, with a note: the import never applies data you cannot see in the
   file. A formula without a saved result (a file written by a script, or Excel in manual
   calculation) is read as empty, with a note: open the file in Excel and save it again.
@@ -69,7 +72,7 @@ One row per task, timer, end event and outgoing flow of a gateway.
 | `distribution` | Processing time distribution (`processingTime`): `constant`, `uniform`, `triangular`, `exponential`, `normal`, `truncatedNormal`, `lognormal`, `gamma`, `erlang`, `weibull`, `beta`, `poisson`, `binomial` or `user`. Spanish names also work: `constante`, `uniforme`, `exponencial`, `normal truncada`, `usuario`. |
 | `unit` | Unit of the times in this row: `s`, `min`, `h` or `day`. Empty means `run.baseTimeUnit`, the unit the panel shows. |
 | `value` … `p` | One column per distribution parameter: `value`, `min`, `mode`, `max`, `mean`, `sd`, `shape`, `scale`, `k`, `alpha`, `beta`, `n`, `p`. Fill in the ones of the chosen distribution and leave the rest empty. `value`, `min`, `mode`, `max`, `mean` and `sd` are times in `unit`. |
-| `points` | Only for `user`: `value:probability` pairs separated by `;`, for example `5:0,2; 10:0,8`. The values are in `unit`. |
+| `points` | Only for `user`: `value:probability` pairs separated by `;`, for example `5:0.2; 10:0.8` (or `5:0,2; 10:0,8`). The values are in `unit`. |
 | `fixedCost` | Fixed cost per execution. |
 | `calendar` | Calendar key; it must exist in the scenario or in the `Calendars` sheet. |
 | `probability` | For a flow that leaves a gateway: between 0 and 1, or a percentage. |
@@ -106,7 +109,7 @@ not in the sheet keeps its pools. A row with the task and no pool leaves the tas
 One row per weekly interval: `id`, `days`, `from` and `to`. The rows of a calendar replace its
 intervals, and an `id` the scenario does not have creates the calendar.
 
-- `days`: `MON,TUE,WED`, a range such as `MON-FRI`, full names (`Monday`), or the Spanish
+- `days`: `MON,TUE,WED`, a range such as `MON-FRI` (also `MON - FRI` or with a dash), full names (`Monday`), or the Spanish
   abbreviations and names `LUN`, `MAR`, `MIE`, `JUE`, `VIE`, `SAB`, `DOM`, `lunes`… Whole words
   only: `Monkey` is not Monday.
 - `from` and `to`: `HH:MM`, with `24:00` allowed as the end of the day. A time Excel stores as a time
