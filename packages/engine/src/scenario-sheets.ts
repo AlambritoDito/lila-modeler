@@ -680,18 +680,19 @@ export function planScenarioImport(
     }
   }
 
-  // The rows are valid one by one; this is what they make together (nit 5 of the QA of #514).
-  // Only a new error that a row of the file caused blocks: one the scenario already had (however
-  // the file reorders a list) is not the file's doing, and when the scenario did not even pass the
-  // schema its deeper rules were never checked, so whatever they find now is shown, not blocking.
+  // The rows are valid one by one; this is what they make together (QA of #514). The result is the
+  // scenario plus these changes, so every error it has and the scenario did not is the file's doing
+  // and blocks — pinned to the row that most likely caused it, or to none. One exception: when the
+  // scenario did not pass the schema, its rules were never checked, so what they find now is shown
+  // as a note. An error the scenario already had is not new however the file reorders a list.
   if (changes.length > 0) {
     const before = errorsOf(scenario, ir, locale);
     const after = errorsOf(next, ir, locale);
     const known = new Set(before.list.map((problem) => problem.key));
     for (const problem of after.list) {
       if (known.has(problem.key)) continue;
-      const change = changeFor(problem.path, changes);
-      const blocking = change !== undefined && !(before.schemaFailed && problem.stage === 'rules');
+      const change = changeFor(problem.path, changes) ?? changeNamedIn(problem.message, changes);
+      const blocking = !(before.schemaFailed && problem.stage === 'rules');
       const readable = `${subjectOf(ir, problem.path)}: ${problem.message}`;
       issues.push({
         kind: blocking ? 'lint' : 'warning',
@@ -749,12 +750,25 @@ function errorsOf(raw: Record<string, unknown>, ir: ProcessIR, locale: Locale): 
     list: validateScenario(parsed.data, ir, { locale })
       .filter((problem) => problem.severity === 'error')
       .map((problem) => ({
-        key: `${problem.code}|${withoutIndexes(problem.path)}`,
+        // The message too, without indexes: it names the pool and the quantities, so a second,
+        // different error on the same list is new while sorting the list changes nothing.
+        key: `${problem.code}|${withoutIndexes(problem.path)}|${problem.message.replace(/\[\d+\]/g, '')}`,
         path: problem.path,
         message: withoutPath(problem.message, problem.path),
         stage: 'rules' as const,
       })),
   };
+}
+
+/**
+ * The change whose subject a message names: lowering a pool's capacity breaks a task that uses it,
+ * and the error lives under the task while the change is under `resources.<pool>`.
+ */
+function changeNamedIn(message: string, changes: readonly ImportChange[]): ImportChange | undefined {
+  return changes.find((change) => {
+    const id = change.path[1];
+    return id !== undefined && new RegExp(`(^|[^\\w-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w-])`).test(message);
+  });
 }
 
 /** What a problem path is about, by name: `Prepare food (Task_Preparar) · probability`. */

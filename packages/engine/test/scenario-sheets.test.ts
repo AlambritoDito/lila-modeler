@@ -497,6 +497,31 @@ describe('(e) the imported scenario passes validateScenario', () => {
     expect(plan.issues).toEqual([]);
   });
 
+  test('a new error under another subject still blocks, pinned to the row that named it', () => {
+    const scenario = asIs();
+    const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
+    elements['Task_TomarPedido']!['resources'] = [{ ref: 'cajero', quantity: 2 }];
+    // Lowering the pool breaks the task that uses two of it: the error lives under the task.
+    const plan = planScenarioImport(csv('Resources.csv', 'id,capacity\ncajero,1\n'), scenario, pedidoIr());
+    const lint = plan.issues.filter((issue) => issue.kind === 'lint');
+    expect(lint.map((issue) => [issue.sheet, issue.row])).toEqual([['Resources', 2]]);
+    expect(lint[0]!.text).toContain('Take order (Task_TomarPedido)');
+  });
+
+  test('a second, different error on a list that already had one is new', () => {
+    const scenario = asIs();
+    const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
+    elements['Task_Preparar']!['resources'] = [{ ref: 'cocinero', quantity: 9 }];
+    const plan = planScenarioImport(
+      csv('Assignments.csv', 'elementId,resourceId,quantity\nTask_Preparar,cocinero,9\nTask_Preparar,horno,7\n'),
+      scenario,
+      pedidoIr(),
+    );
+    const lint = plan.issues.filter((issue) => issue.kind === 'lint');
+    expect(lint).toHaveLength(1);
+    expect(lint[0]!.text).toMatch(/horno/);
+  });
+
   test('when the scenario did not pass the schema, the rules found after fixing it are shown, not blocking', () => {
     const scenario = asIs();
     const elements = scenario['elements'] as Record<string, Record<string, unknown>>;
