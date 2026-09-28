@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
-import { parseScenario, scenarioErrors, validateScenario } from '../src/scenario.js';
+import { parseScenario, scenarioErrors, validateScenario, type ResolvedScenario } from '../src/scenario.js';
+import { parametersSheet } from '../src/xlsx-report.js';
 import { AS_IS, clone, pedidoIr } from './pedido.fixtures.js';
 
 /**
@@ -84,5 +85,17 @@ describe('dated calendars in the scenario (#82)', () => {
   test('the Spanish catalog has the same messages', () => {
     const parsed = parseScenario(withCalendar({ intervals: [{ from: '09:00', to: '12:00' }] }), { locale: 'es' });
     expect(parsed.error!.issues.map((issue) => issue.message).join('\n')).toMatch(/exactamente uno de days/);
+  });
+
+  test('the XLSX parameters sheet describes every selector and the holidays', () => {
+    const parsed = parseScenario(withCalendar(DATED));
+    const rows = parametersSheet(pedidoIr(), parsed.data as ResolvedScenario).rows.filter((row) => row[1] === 'oficina');
+    expect(rows.map((row) => [row[3], row[4]])).toEqual([
+      [
+        'intervals',
+        'MON,TUE,WED,THU,FRI 09:00-18:00; monthDays=1,-1 08:00-12:00; monthWeekdays=-1FRI,2SAT 10:00-14:00; dates=02-29,12-24 09:00-13:00',
+      ],
+      ['holidays', '2026-12-25, 01-01'],
+    ]);
   });
 });

@@ -7,6 +7,10 @@
  * instante de simulación a su posición dentro de la semana y todas las primitivas son
  * aritmética entera sin calendario real: sin DST, sin festivos, sin zonas horarias (R-CAL-1).
  *
+ * #82 adds dated calendars (monthly/annual recurrence and holidays, R-CAL-12 … R-CAL-14): they
+ * carry a `dated` layer and walk civil days instead of weeks, still with no `Date` and still in
+ * `run.start`'s fixed offset (no DST, R-CAL-15). A calendar without it is untouched.
+ *
  * Este archivo es `core/`: no importa nada fuera de `core/` (ni zod, ni `node:*`, ni React) y
  * nunca usa `Date` ni `Intl` (R-DET-5). El offset UTC de `run.start` se ignora **a propósito**:
  * R-CAL-1 dice que los días y horas del calendario se leen en ese mismo offset, así que basta
