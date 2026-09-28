@@ -1011,6 +1011,41 @@ describe('editor semanal de calendarios (LILA-203)', () => {
     expect(document.body.textContent).toContain('R13');
   });
 
+  it('#82: un festivo añadido en el panel se guarda en el delta y lila run lo acepta', () => {
+    const guardados: Guardado[] = [];
+    montar(
+      <Anfitrion
+        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        archivoInicial="as-is.scenario.json"
+        guardados={guardados}
+        irActual={ir}
+      />,
+    );
+    irAPaso('calendars');
+    const campo = document.querySelector<HTMLInputElement>('.festivos input[type="date"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => {
+      setter.call(campo, '2026-09-16');
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    pulsar(es.calendario.anadirFestivo);
+    pulsar('Guardar');
+
+    const delta = guardados.at(-1)!.escenario;
+    expect(((delta['calendars'] as Json)['oficina'] as Json)['holidays']).toEqual(['2026-09-16']);
+    const resuelto = comoLilaRun('as-is.scenario.json', { 'as-is.scenario.json': delta });
+    expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
+
+    // Quitar el último festivo quita la clave: el archivo vuelve a leerse como antes.
+    act(() => {
+      document.querySelector<HTMLButtonElement>('.festivos li button')!.click();
+    });
+    pulsar('Guardar');
+    const oficina = (guardados.at(-1)!.escenario['calendars'] as Json)['oficina'] as Json;
+    expect(oficina).not.toHaveProperty('holidays');
+    expect(oficina['intervals']).toHaveLength(1);
+  });
+
   it('pintar un calendario heredado escribe el array entero en el hijo y no toca al padre', () => {
     const guardados: Guardado[] = [];
     const padre = asIsCorto();

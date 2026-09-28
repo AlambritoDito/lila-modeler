@@ -106,6 +106,54 @@
                     ]
                   }
                 },
+                "monthDays": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -31,
+                    "maximum": 31
+                  }
+                },
+                "monthWeekdays": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "nth": {
+                        "type": "integer",
+                        "minimum": -5,
+                        "maximum": 5
+                      },
+                      "day": {
+                        "type": "string",
+                        "enum": [
+                          "MON",
+                          "TUE",
+                          "WED",
+                          "THU",
+                          "FRI",
+                          "SAT",
+                          "SUN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "nth",
+                      "day"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "dates": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(\\d{2})-(\\d{2})$"
+                  }
+                },
                 "from": {
                   "type": "string",
                   "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
@@ -116,14 +164,19 @@
                 }
               },
               "required": [
-                "days",
                 "from",
                 "to"
               ],
               "additionalProperties": false
             }
           },
-          "holidays": {},
+          "holidays": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(\\d{4}-)?\\d{2}-\\d{2}$"
+            }
+          },
           "timezone": {}
         },
         "required": [

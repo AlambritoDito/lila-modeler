@@ -1,3 +1,8 @@
+// The version 1 `.lila` reader exactly as it shipped in 1.0.0-beta.14 (commit 682a61e), with only
+// its imports repointed. `repository.test.ts` feeds it a version 2 archive to prove that the builds
+// already on users' machines refuse a repository cleanly instead of misreading it. Do not update it
+// to follow `src/project/lila.ts`: its whole value is that it does not change.
+
 /**
  * The `.lila` project container (ADR-027): the ADR-018 project FOLDER, zipped, with the same
  * layout and the same file names. `zip -r project.lila project-folder/*` produces a valid `.lila`
@@ -19,21 +24,13 @@
  *
  * Output is deterministic — fixed mtime, canonical entry order — so two saves of the same
  * document are byte-identical and a round-trip test can compare archives, not just documents.
- *
- * Version 2 (ADR-029, #498) is the repository: the same manifest file with `"version": 2` and a
- * `processes` list, and each process's version 1 layout (model, scenarios, runs — no manifest of
- * its own) under `processes/<slug>/`. It is written ONLY when the document has more than one
- * process: a project that never grew a second one keeps producing the version 1 archive, byte for
- * byte, so the builds that only read version 1 go on opening it.
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { version as engineVersion } from '../version.js';
-import { ProjectFormatError, isPlainObject, isRevision, readProjectDocument, runProblem } from './document.js';
-import { isProcessSlug, processesOf, withProcesses } from './repository.js';
-import type { ProcessDocument, ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './types.js';
+import { version as engineVersion } from '../../../src/version.js';
+import { ProjectFormatError, isPlainObject, isRevision, readProjectDocument, runProblem } from '../../../src/project/document.js';
+import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '../../../src/project/types.js';
 
 const MANIFEST_FILE = 'lila-project.json';
-const PROCESSES_DIR = 'processes';
 const MODEL_FILE = 'model.bpmn';
 const RUNS_DIR = 'runs';
 const SCENARIO_SUFFIX = '.scenario.json';
@@ -56,27 +53,6 @@ interface Manifest {
   readonly model: { readonly id: string; readonly name: string; readonly revision: number };
   readonly scenarioRevisions: Readonly<Record<string, number>>;
   /** Engine version that wrote the runs in this archive. Informational; readers ignore it. */
-  readonly engine?: string;
-}
-
-/** One entry of a version 2 manifest's `processes`: the version 1 manifest minus the project. */
-export interface ProcessManifest {
-  readonly slug: string;
-  readonly name: string;
-  readonly model: { readonly id: string; readonly name: string; readonly revision: number };
-  readonly scenarioRevisions: Readonly<Record<string, number>>;
-}
-
-/**
- * What `lila-project.json` holds in a repository (ADR-029). Exported, with `repositoryManifestOf`
- * and `readRepositoryManifest`, so the desktop folder writes and reads the same manifest the
- * archive does — it just leaves `engine` out, like its version 1 manifest.
- */
-export interface RepositoryManifest {
-  readonly version: 2;
-  readonly id: string;
-  readonly name: string;
-  readonly processes: readonly ProcessManifest[];
   readonly engine?: string;
 }
 
@@ -111,21 +87,6 @@ function isRunEntry(name: string): boolean {
   return !rest.includes('/') && rest.length > RUN_SUFFIX.length;
 }
 
-/** The version 2 manifest of `document`, without the `engine` stamp. */
-export function repositoryManifestOf(document: ProjectDocument): RepositoryManifest {
-  return {
-    version: 2,
-    id: document.id,
-    name: document.name,
-    processes: processesOf(document).map((p) => ({
-      slug: p.slug,
-      name: p.name,
-      model: { id: p.model.id, name: p.model.name, revision: p.model.revision },
-      scenarioRevisions: p.scenarioRevisions,
-    })),
-  };
-}
-
 function manifestOf(document: ProjectDocument): Manifest {
   return {
     version: 1,
@@ -153,33 +114,24 @@ export function encodeLila(document: ProjectDocument): Uint8Array<ArrayBuffer> {
     assertSafeEntryName(name);
     files[name] = [bytes, { mtime: FIXED_MTIME, level: 6 }];
   };
-  /** One process's version 1 layout under `prefix` (`''` for a version 1 archive). */
-  const putProcess = (prefix: string, process: Pick<ProcessDocument, 'model' | 'scenarios' | 'runs'>): void => {
-    put(`${prefix}${MODEL_FILE}`, strToU8(process.model.xml));
-    for (const name of Object.keys(process.scenarios).sort()) {
-      if (!isScenarioEntry(name)) {
-        throw new ProjectFormatError(
-          'LILA-ENTRY-PATH',
-          `scenario names must be a flat "<name>${SCENARIO_SUFFIX}"; got ${JSON.stringify(name)}.`,
-        );
-      }
-      put(`${prefix}${name}`, json(process.scenarios[name]));
-    }
-    for (const run of [...process.runs].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
-      const name = `${RUNS_DIR}/${run.id}${RUN_SUFFIX}`;
-      if (!isRunEntry(name)) {
-        throw new ProjectFormatError('LILA-ENTRY-PATH', `run ids must be flat names; got ${JSON.stringify(run.id)}.`);
-      }
-      put(`${prefix}${name}`, json(run));
-    }
-  };
 
-  if (valid.processes === undefined || valid.processes.length === 0) {
-    put(MANIFEST_FILE, json(manifestOf(valid)));
-    putProcess('', valid);
-  } else {
-    put(MANIFEST_FILE, json({ ...repositoryManifestOf(valid), engine: engineVersion }));
-    for (const process of processesOf(valid)) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
+  put(MANIFEST_FILE, json(manifestOf(valid)));
+  put(MODEL_FILE, strToU8(valid.model.xml));
+  for (const name of Object.keys(valid.scenarios).sort()) {
+    if (!isScenarioEntry(name)) {
+      throw new ProjectFormatError(
+        'LILA-ENTRY-PATH',
+        `scenario names must be a flat "<name>${SCENARIO_SUFFIX}"; got ${JSON.stringify(name)}.`,
+      );
+    }
+    put(name, json(valid.scenarios[name]));
+  }
+  for (const run of [...valid.runs].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const name = `${RUNS_DIR}/${run.id}${RUN_SUFFIX}`;
+    if (!isRunEntry(name)) {
+      throw new ProjectFormatError('LILA-ENTRY-PATH', `run ids must be flat names; got ${JSON.stringify(run.id)}.`);
+    }
+    put(name, json(run));
   }
   // `zipSync` allocates a plain `ArrayBuffer`; the cast only narrows `ArrayBufferLike`, which the
   // DOM's `BlobPart` refuses because a `SharedArrayBuffer` would also satisfy it.
@@ -221,7 +173,7 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
   if (parsed.version !== 1) {
     throw new ProjectFormatError(
       'LILA-MANIFEST',
-      `"${MANIFEST_FILE}" declares version ${JSON.stringify(parsed.version)}; this reader understands versions 1 and 2.`,
+      `"${MANIFEST_FILE}" declares version ${JSON.stringify(parsed.version)}; this reader only understands version 1.`,
     );
   }
   const revisions = isPlainObject(parsed.scenarioRevisions) ? parsed.scenarioRevisions : {};
@@ -246,19 +198,6 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
   const manifestRaw = entries[MANIFEST_FILE];
   if (manifestRaw === undefined) {
     throw new ProjectFormatError('LILA-NO-MANIFEST', `the archive has no "${MANIFEST_FILE}": it is not a .lila project.`);
-  }
-  // A repository has no `model.bpmn` at the root, so the version has to be known before the
-  // version 1 checks below run. Anything that is not a version 2 manifest takes the version 1
-  // path untouched, errors included.
-  const peeked = peekManifest(manifestRaw);
-  if (isPlainObject(peeked) && peeked.version === 2) return decodeRepository(peeked, entries);
-  // A newer version says so, instead of being blamed for a missing root `model.bpmn` its layout
-  // never promised.
-  if (isPlainObject(peeked) && typeof peeked.version === 'number' && peeked.version > 2) {
-    throw new ProjectFormatError(
-      'LILA-MANIFEST',
-      `"${MANIFEST_FILE}" declares version ${peeked.version}; this reader understands versions 1 and 2.`,
-    );
   }
   const modelRaw = entries[MODEL_FILE];
   if (modelRaw === undefined) {
@@ -315,120 +254,4 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
     ...(problems.length > 0 ? { problems } : {}),
   };
   return readProjectDocument(document);
-}
-
-function peekManifest(raw: Uint8Array): unknown {
-  try {
-    return JSON.parse(strFromU8(raw));
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The `processes` of a parsed version 2 manifest, or a `LILA-MANIFEST` saying why not: at least
- * one, each with a valid slug (`isProcessSlug`), a name and a model, and no slug twice.
- */
-export function readRepositoryManifest(parsed: Record<string, unknown>): ProcessManifest[] {
-  const bad = (why: string): never => {
-    throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila repository: ${why}`);
-  };
-  if (typeof parsed.id !== 'string' || typeof parsed.name !== 'string') bad('"id" and "name" must be text.');
-  if (!Array.isArray(parsed.processes) || parsed.processes.length === 0) bad('"processes" must list at least one process.');
-  const seen = new Set<string>();
-  return (parsed.processes as unknown[]).map((entry) => {
-    if (
-      !isPlainObject(entry) ||
-      !isProcessSlug(entry.slug) ||
-      typeof entry.name !== 'string' ||
-      !isPlainObject(entry.model) ||
-      typeof entry.model.id !== 'string' ||
-      typeof entry.model.name !== 'string' ||
-      !isRevision(entry.model.revision)
-    ) {
-      return bad('a process needs a slug (a-z, 0-9, -), a name and a model.');
-    }
-    if (seen.has(entry.slug)) bad(`the slug ${JSON.stringify(entry.slug)} is repeated.`);
-    seen.add(entry.slug);
-    const revisions = isPlainObject(entry.scenarioRevisions) ? entry.scenarioRevisions : {};
-    return {
-      slug: entry.slug,
-      name: entry.name,
-      model: { id: entry.model.id, name: entry.model.name, revision: entry.model.revision },
-      scenarioRevisions: Object.fromEntries(Object.entries(revisions).filter(([, v]) => isRevision(v))) as Record<string, number>,
-    };
-  });
-}
-
-/**
- * Reads a version 2 archive (ADR-029): each listed process from its `processes/<slug>/` folder,
- * with exactly the tolerance of the version 1 reader — a missing `model.bpmn` is fatal, a broken
- * scenario or run is excluded and explained, and anything outside the listed folders is reported
- * and dropped.
- */
-function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): ProjectDocument {
-  const manifests = readRepositoryManifest(parsed);
-  const problems: ProjectProblem[] = [];
-  const byPrefix = new Map(manifests.map((m) => [`${PROCESSES_DIR}/${m.slug}/`, {
-    manifest: m,
-    scenarios: {} as Record<string, ScenarioDocument>,
-    runs: [] as StoredRun[],
-  }]));
-  for (const [prefix] of byPrefix) {
-    if (entries[`${prefix}${MODEL_FILE}`] === undefined) {
-      throw new ProjectFormatError('LILA-NO-MODEL', `the archive has no "${prefix}${MODEL_FILE}".`);
-    }
-  }
-
-  for (const name of Object.keys(entries).sort()) {
-    if (name === MANIFEST_FILE || name.endsWith('/')) continue;
-    const raw = entries[name] as Uint8Array;
-    const slash = name.indexOf('/', PROCESSES_DIR.length + 1);
-    const target = name.startsWith(`${PROCESSES_DIR}/`) && slash > 0 ? byPrefix.get(name.slice(0, slash + 1)) : undefined;
-    const rest = target === undefined ? '' : name.slice(slash + 1);
-    if (target !== undefined && rest === MODEL_FILE) continue;
-    if (target !== undefined && isScenarioEntry(rest)) {
-      try {
-        const scenario: unknown = JSON.parse(strFromU8(raw));
-        if (!isPlainObject(scenario)) throw new Error('the content is not a JSON object.');
-        target.scenarios[rest] = scenario;
-      } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
-      }
-      continue;
-    }
-    if (target !== undefined && isRunEntry(rest)) {
-      try {
-        const run: unknown = JSON.parse(strFromU8(raw));
-        const problem = runProblem(run);
-        if (problem !== null) throw problem;
-        target.runs.push(run as unknown as StoredRun);
-      } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
-      }
-      continue;
-    }
-    problems.push({ file: name, message: 'not part of the Lila repository layout; ignored and not written back.' });
-  }
-
-  const processes: ProcessDocument[] = [...byPrefix].map(([prefix, { manifest, scenarios, runs }]) => ({
-    slug: manifest.slug,
-    name: manifest.name,
-    model: { ...manifest.model, xml: strFromU8(entries[`${prefix}${MODEL_FILE}`] as Uint8Array) },
-    scenarios,
-    scenarioRevisions: manifest.scenarioRevisions,
-    runs,
-  }));
-  const first = processes[0] as ProcessDocument;
-  const base: ProjectDocument = {
-    version: 1,
-    id: parsed.id as string,
-    name: parsed.name as string,
-    model: first.model,
-    scenarios: first.scenarios,
-    scenarioRevisions: first.scenarioRevisions,
-    runs: first.runs,
-    ...(problems.length > 0 ? { problems } : {}),
-  };
-  return readProjectDocument(withProcesses(base, processes));
 }

@@ -206,7 +206,6 @@ export const es: Strings = {
     /** Pestañas de diagrama, abajo a la izquierda. */
     cerrarDiagrama: 'Cerrar diagrama',
     cerrarArchivo: (archivo: string): string => `Cerrar ${archivo}`,
-    nuevoDiagrama: 'Nuevo diagrama',
     /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
     redimensionarPanel: 'Redimensionar el panel derecho',
     /** Divisor entre la columna izquierda y el lienzo (#406). */
@@ -791,7 +790,7 @@ export const es: Strings = {
         'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
       times: 'Cuánto tarda cada llegada y cada trabajo.',
       resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
-      calendars: 'Cuándo se puede trabajar: calendarios semanales y la capacidad de cada turno.',
+      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y la capacidad de cada turno.',
     } as Record<string, string>,
 
     /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
@@ -869,6 +868,11 @@ export const es: Strings = {
       days: 'Días',
       from: 'Desde',
       to: 'Hasta',
+      monthDays: 'Días del mes',
+      monthWeekdays: 'Días de la semana del mes',
+      dates: 'Fechas anuales',
+      nth: 'Semana del mes',
+      day: 'Día de la semana',
       // resources (§ 2.4)
       name: 'Nombre',
       type: 'Tipo',
@@ -1022,6 +1026,41 @@ export const es: Strings = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Quitar',
     quitarFranja: (franja: string): string => `Quitar ${franja}`,
+    /** #82: cómo se repite la franja nueva: cada semana, cada mes o cada año (R-CAL-12, R-CAL-13). */
+    repeticion: 'Se repite',
+    repeticiones: {
+      semanal: 'Cada semana',
+      diaDelMes: 'Cada mes, un día',
+      diaSemanaDelMes: 'Cada mes, un día de la semana',
+      anual: 'Cada año, una fecha',
+    },
+    diaDelMes: 'Día del mes',
+    ultimoDia: 'Último día',
+    semanaDelMes: 'Semana del mes',
+    ordinales: { '1': '1.º', '2': '2.º', '3': '3.º', '4': '4.º', '5': '5.º', '-1': 'Último' } as Record<string, string>,
+    diaSemana: 'Día de la semana',
+    mes: 'Mes',
+    dia: 'Día',
+    meses: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
+    /** Fila de la lista de una franja mensual o anual. */
+    diaN: (n: number): string => `día ${n}`,
+    /** `n` contando desde el final del mes: 1 es el último, 2 el penúltimo… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `último ${cosa}` : n === 2 ? `penúltimo ${cosa}` : n === 3 ? `antepenúltimo ${cosa}` : `${n}.º ${cosa} desde el final`,
+    diaCosa: 'día',
+    cadaMesDias: (dias: string): string => `${dias} de cada mes`,
+    cadaMesSemana: (quien: string): string => `${quien} de cada mes`,
+    cadaAno: (fechas: string): string => `Cada año el ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${dia} ${mes}`,
+    /** #82: festivos, cerrado todo el día digan lo que digan las franjas (R-CAL-14). */
+    festivos: 'Festivos',
+    nuevoFestivo: 'Fecha del festivo',
+    festivoCadaAno: 'Cada año',
+    anadirFestivo: 'Añadir festivo',
+    listaFestivos: 'Festivos actuales',
+    festivoAnual: (mmdd: string): string => `${mmdd} (cada año)`,
+    quitarFestivo: (festivo: string): string => `Quitar ${festivo}`,
+    ayudaFestivos: 'Cerrado todo el día, digan lo que digan las franjas de arriba.',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1312,6 +1351,31 @@ export const es: Strings = {
     errorManifiesto: 'El "lila-project.json" del archivo es inválido o de una versión no soportada.',
     errorSinModelo: 'Al archivo le falta "model.bpmn": no es un proyecto .lila.',
     errorEntrada: 'El archivo .lila tiene una entrada con una ruta que no es válida dentro de un proyecto.',
+  },
+
+  /** Los procesos de un repositorio (ADR-029, #498): las pestañas del lienzo y sus diálogos. */
+  procesos: {
+    nuevo: 'Nuevo proceso',
+    tituloNuevo: 'Nuevo proceso en este proyecto',
+    tituloRenombrar: 'Renombrar proceso',
+    nombre: 'Nombre del proceso',
+    /** Nombre propuesto para el proceso que crea el «+»: «Proceso 2», «Proceso 3»… */
+    nombrePorDefecto: (n: number): string => `Proceso ${n}`,
+    crear: 'Crear',
+    renombrar: 'Renombrar',
+    renombrarProceso: (nombre: string): string => `Renombrar el proceso ${nombre}`,
+    borrar: 'Borrar',
+    borrarProceso: (nombre: string): string => `Borrar el proceso ${nombre}`,
+    tituloBorrar: 'Borrar proceso',
+    confirmarBorrar: (nombre: string): string =>
+      `¿Borrar «${nombre}» con sus escenarios y corridas? Los demás procesos del proyecto se quedan.`,
+    /** Miga de pan de vuelta desde un proceso llamado (#461). */
+    volverA: (nombre: string): string => `Volver a ${nombre}`,
+    /** Doble clic en una actividad de llamada cuyo `calledElement` no es un proceso de aquí (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `La actividad de llamada llama a «${destino}», que no es un proceso de este proyecto.`,
+    llamadaSinDestino: 'Esta actividad de llamada no indica a qué proceso llama.',
+    llamadaMismoProceso: 'Esta actividad de llamada llama al mismo proceso en el que está.',
   },
 
   almacen: {

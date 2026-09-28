@@ -1572,6 +1572,7 @@ body {
   margin: 4px 0;
 }
 
+.franjas-repeticion,
 .franjas-presets,
 .franjas-dias,
 .franjas-horas {
@@ -1605,6 +1606,7 @@ body {
   color: var(--fg-primary);
 }
 
+.franjas-repeticion label,
 .franjas-dias label,
 .franjas-horas label {
   align-items: center;
@@ -1620,6 +1622,14 @@ body {
 
 .franjas-horas input[type='text']:invalid {
   border-color: var(--status-error);
+}
+
+/* Holidays (#82): the same row as «From/To» and the same list, under the ranges. */
+.festivos {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  margin: 4px 0;
 }
 
 .franjas-lista {
@@ -1803,6 +1813,29 @@ body {
 .diagramas .cerrar:hover:not(:disabled) {
   color: var(--fg-primary);
 }
+
+/* Con varios procesos (#498) cada pestaña sí cambia de lienzo: su nombre es el botón. */
+.diagramas .pestana-proceso {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.diagramas .pestana-proceso[aria-current='true'] {
+  cursor: default;
+}
+
+/* Miga de vuelta desde un proceso llamado (#461). */
+.diagramas .volver-origen {
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.dialogo-proceso .campo-proceso { display: grid; gap: 6px; margin: 12px 0 16px; }
+.dialogo-proceso input { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--fg-primary); font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; }
 /* ---------- paleta de figuras (LILA-207) ---------- */
 
 /* Medidas del artboard 01 (`docs/design/Lila Modeler.dc.html`): raíl de 236 px, filtro y botón

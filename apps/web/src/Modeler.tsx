@@ -151,6 +151,11 @@ export interface Elemento {
 /** bpmn-js's `alignElements` types plus `distributeElements`' two axes (#453). */
 export type Alineacion = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'horizontal' | 'vertical';
 
+/** Lo que un evento de diagram-js trae y el shell lee: el elemento, cuando lo hay. */
+export interface EventoLienzo {
+  element?: { id?: string; type?: string; businessObject?: { calledElement?: string; name?: string } };
+}
+
 /** La superficie que el shell usa para mandar sobre el lienzo. */
 export interface Modelador {
   /** `true` si el XML se importó; `false` si falló (el motivo va por `onEstado`). */
@@ -171,8 +176,13 @@ export interface Modelador {
    */
   zoom(factor: number | 'ajustar'): void;
   servicios: Servicios;
-  /** Escucha eventos del `eventBus`; devuelve la función que se desuscribe. */
-  suscribir(eventos: string[], escuchar: () => void): () => void;
+  /**
+   * Escucha eventos del `eventBus`; devuelve la función que se desuscribe. `escuchar` recibe el
+   * evento y, como en diagram-js, devolver `false` corta la propagación: con una `prioridad` por
+   * encima de 1000 (la de bpmn-js) eso es lo que deja al doble clic de una actividad de llamada
+   * abrir su proceso en vez de editar el nombre (#461).
+   */
+  suscribir(eventos: string[], escuchar: (evento: EventoLienzo) => unknown, prioridad?: number): () => void;
   /**
    * Overlay de cuellos de botella (LILA-064). `corrida = null` o `visible = false` lo quitan; una
    * corrida nueva reemplaza a la anterior sin acumular nada. Idempotente: el shell puede llamarlo
@@ -309,7 +319,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     let perdidas: string[] = [];
     let refsRotas: string[] = [];
     let ultimaApertura = 0;
-    const suscripciones = new Set<{ eventos: string[]; escuchar: () => void }>();
+    const suscripciones = new Set<{ eventos: string[]; escuchar: (evento: EventoLienzo) => unknown; prioridad: number }>();
 
     /** Un contenedor sin tamaño (pestaña en segundo plano) hace que el viewbox sea NaN. */
     const conTamano = (): boolean => container.clientWidth > 0 && container.clientHeight > 0;
@@ -357,8 +367,20 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         rotularMinimapa(suyo.querySelector('.djs-minimap .toggle'), open);
       };
       modeler.on('minimap.toggle', alPlegar);
+      // #461: doble clic en un subproceso plegado entra en él con el drill-down de bpmn-js, lo
+      // mismo que su flecha de abajo a la derecha (`DrilldownOverlayBehavior`); sin plano propio
+      // (un subproceso importado sin DI de su interior) sigue la edición del nombre de siempre.
+      modeler.on('element.dblclick', 1500, (evento: EventoLienzo & { element?: { collapsed?: boolean } }) => {
+        const el = evento.element;
+        if (el?.type !== 'bpmn:SubProcess' || el.collapsed !== true || el.id === undefined) return undefined;
+        const canvas = modeler.get<Canvas>('canvas');
+        const plano = canvas.findRoot(`${el.id}_plane`);
+        if (plano === undefined) return undefined;
+        canvas.setRootElement(plano);
+        return false;
+      });
       for (const suscripcion of suscripciones) {
-        modeler.on(suscripcion.eventos, suscripcion.escuchar);
+        modeler.on(suscripcion.eventos, suscripcion.prioridad, suscripcion.escuchar);
       }
       alPlegar({ open: suyo.querySelector('.djs-minimap')?.classList.contains('open') === true });
     };
@@ -479,10 +501,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           colores: activo.get<LilaColores>('lilaColores'),
         };
       },
-      suscribir: (eventos, escuchar) => {
-        const suscripcion = { eventos, escuchar };
+      suscribir: (eventos, escuchar, prioridad = 1000) => {
+        const suscripcion = { eventos, escuchar, prioridad };
         suscripciones.add(suscripcion);
-        activo?.on(eventos, escuchar);
+        activo?.on(eventos, prioridad, escuchar);
         return () => {
           suscripciones.delete(suscripcion);
           activo?.off(eventos, escuchar);

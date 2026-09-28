@@ -36,6 +36,7 @@ export const coreEn: CoreCatalog = {
     'E-CAL-VACIO/interseccion': (elementId) =>
       `${elementId}: the intersection of the task's calendars is empty.`,
     'E-CAL-VACIO/pool-sin-tramos': () => 'the pool has no open capacity slice.',
+    'E-CAL-VACIO/festivos': (name) => `${name}: every opening of the calendar falls on one of its holidays.`,
     'E-CAL-DESCONOCIDO': (subject, calendar) => `${subject}: the calendar ${calendar} does not exist.`,
 
     'E-REC-LIBERACION': (requestId) => `${requestId} has no active allocation.`,

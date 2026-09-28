@@ -205,6 +205,8 @@ A weekly pattern relative to `run.start`; no DST or holidays in v1 (reserved fie
 
 **LILA-164 (R-CAL-11):** a single pool can have different capacity per calendar — `capacity: [{ calendar, capacity }]`, Bizagi's «Resources → Calendars → quantity» — instead of splitting into one pool per shift. The pool is open by the **union** of its calendars (three shifts covering 24 h are a 24×7, with no `offHoursWait`), its capacity at `t` is the **sum** of the open segments (two overlapping calendars add up), closing a segment does **not** interrupt what is already in progress, and while the whole pool is closed the capacity of the next open instant applies, which is what preserves R-CAL-6 and keeps the numeric shape bit-for-bit identical to M3 (R-DEG-2). Without this, Bizagi's level 4 cannot be reproduced.
 
+**#82 (R-CAL-12 … R-CAL-15):** `holidays` stops being reserved, and an interval can repeat monthly (`monthDays`, `monthWeekdays`) or yearly (`dates`) as well as weekly. Everything is still read in `run.start`'s fixed offset, as civil-day arithmetic in `core/` with no `Date`, `Intl` or timezone data; a calendar with only `days` and no holidays keeps the weekly code path byte for byte (R-DEG-2). `timezone` (own zone with DST) stays reserved: doing it right needs the IANA database inside `core/`, and the limit is stated as R-CAL-15 instead of approximated.
+
 > Full operational formulas and definitions in `docs/RESULTS_FORMAT.md`.
 
 ---
@@ -465,7 +467,15 @@ Ceilings, all deliberate:
 
 ## ADR-029 — The repository: one `.lila` can hold a whole organization
 
-**Status:** Accepted (direction, decided by Brito on 2026-09-26). The exact layout below is settled by the first implementation ticket; nothing in it is implemented yet.
+**Status:** Accepted (direction, decided by Brito on 2026-09-26). **Minimum implemented** (#498, #461):
+a project with more than one process is a version 2 repository with each process under
+`processes/<slug>/`, the canvas tabs are its processes, and a call activity opens the process it
+calls. The first ticket settled two points of the layout below: the manifest keeps its name,
+`lila-project.json`, with `"version": 2` (a separate `lila-repository.json` would read as «no
+manifest» to a version 1 build instead of as a newer version), and version 2 is written only once a
+project has a second process — a one-process project stays version 1, byte for byte. `process.json`,
+maps, analyses, the catalog, dashboards, records and the per-object `ProjectStore` are not built yet.
+The operative description is `docs/PROJECT_FORMAT.md` § Version 2.
 
 Lila Modeler grows past a Bizagi alternative into a modelling, analysis, design, simulation and
 quality platform in the spirit of ADONIS: process maps down from macroprocesses, RACI, risks and

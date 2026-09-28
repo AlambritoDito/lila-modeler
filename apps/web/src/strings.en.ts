@@ -224,7 +224,6 @@ export const en = {
     /** Diagram tabs, bottom left. */
     cerrarDiagrama: 'Close diagram',
     cerrarArchivo: (archivo: string): string => `Close ${archivo}`,
-    nuevoDiagrama: 'New diagram',
     /** Divider between the canvas and the right panel (design 2a). */
     redimensionarPanel: 'Resize the right panel',
     /** Divider between the left column and the canvas (#406). */
@@ -817,7 +816,7 @@ export const en = {
         'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
       times: 'How long each arrival and each piece of work takes.',
       resources: 'Who does the work: pools, how many units, and which task takes which pool.',
-      calendars: 'When the work is possible: weekly calendars, and the capacity of each shift.',
+      calendars: 'When the work is possible: calendars and holidays, and the capacity of each shift.',
     } as Record<string, string>,
 
     /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
@@ -896,6 +895,11 @@ export const en = {
       days: 'Days',
       from: 'From',
       to: 'To',
+      monthDays: 'Days of the month',
+      monthWeekdays: 'Weekdays of the month',
+      dates: 'Yearly dates',
+      nth: 'Week of the month',
+      day: 'Weekday',
       // resources (§ 2.4)
       name: 'Name',
       type: 'Type',
@@ -1048,6 +1052,41 @@ export const en = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Remove',
     quitarFranja: (franja: string): string => `Remove ${franja}`,
+    /** #82: how the new range repeats — weekly, monthly or yearly (R-CAL-12, R-CAL-13). */
+    repeticion: 'Repeats',
+    repeticiones: {
+      semanal: 'Weekly',
+      diaDelMes: 'Monthly, on a day',
+      diaSemanaDelMes: 'Monthly, on a weekday',
+      anual: 'Yearly, on a date',
+    },
+    diaDelMes: 'Day of the month',
+    ultimoDia: 'Last day',
+    semanaDelMes: 'Week of the month',
+    ordinales: { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '5': '5th', '-1': 'Last' } as Record<string, string>,
+    diaSemana: 'Weekday',
+    mes: 'Month',
+    dia: 'Day',
+    meses: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** The list row of a monthly or yearly range. */
+    diaN: (n: number): string => `day ${n}`,
+    /** `n` counted from the end of the month: 1 is the last, 2 the second to last… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `last ${cosa}` : n === 2 ? `second-to-last ${cosa}` : n === 3 ? `third-to-last ${cosa}` : `${n}th-to-last ${cosa}`,
+    diaCosa: 'day',
+    cadaMesDias: (dias: string): string => `${dias} of each month`,
+    cadaMesSemana: (quien: string): string => `${quien} of each month`,
+    cadaAno: (fechas: string): string => `Every year on ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${mes} ${dia}`,
+    /** #82: holidays, closed all day whatever the ranges say (R-CAL-14). */
+    festivos: 'Holidays',
+    nuevoFestivo: 'Holiday date',
+    festivoCadaAno: 'Every year',
+    anadirFestivo: 'Add holiday',
+    listaFestivos: 'Current holidays',
+    festivoAnual: (mmdd: string): string => `${mmdd} (every year)`,
+    quitarFestivo: (festivo: string): string => `Remove ${festivo}`,
+    ayudaFestivos: 'Closed all day, whatever the ranges above say.',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1331,6 +1370,31 @@ export const en = {
     errorManifiesto: 'The file\u2019s "lila-project.json" is invalid or of an unsupported version.',
     errorSinModelo: 'The file has no "model.bpmn": it is not a .lila project.',
     errorEntrada: 'The .lila file holds an entry whose path is not valid inside a project.',
+  },
+
+  /** The processes of a repository (ADR-029, #498): the canvas tabs and their dialogs. */
+  procesos: {
+    nuevo: 'New process',
+    tituloNuevo: 'New process in this project',
+    tituloRenombrar: 'Rename process',
+    nombre: 'Process name',
+    /** Suggested name of the process the «+» creates: «Process 2», «Process 3»… */
+    nombrePorDefecto: (n: number): string => `Process ${n}`,
+    crear: 'Create',
+    renombrar: 'Rename',
+    renombrarProceso: (nombre: string): string => `Rename process ${nombre}`,
+    borrar: 'Delete',
+    borrarProceso: (nombre: string): string => `Delete process ${nombre}`,
+    tituloBorrar: 'Delete process',
+    confirmarBorrar: (nombre: string): string =>
+      `Delete «${nombre}» with its scenarios and runs? The other processes of the project stay.`,
+    /** Breadcrumb back from a called process (#461). */
+    volverA: (nombre: string): string => `Back to ${nombre}`,
+    /** Double-click on a call activity whose `calledElement` is not a process here (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `The call activity calls «${destino}», which is not a process of this project.`,
+    llamadaSinDestino: 'This call activity does not name the process it calls.',
+    llamadaMismoProceso: 'This call activity calls the process it is in.',
   },
 
   almacen: {

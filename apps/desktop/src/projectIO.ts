@@ -11,9 +11,21 @@
  *   (nunca se resuelve ni se reescribe aquí — se pasa a través sin tocarlo).
  * - `lila-project.json`: `{ version: 1, id, name, model: { id, name, revision }, scenarioRevisions }`.
  * - `runs/<runId>.result.json`: el `StoredRun` completo.
+ *
+ * Repositorio (ADR-029, #498): con más de un proceso, `lila-project.json` pasa a `version: 2` con
+ * la lista de procesos y cada proceso guarda exactamente la disposición de arriba (sin manifiesto
+ * propio) en `processes/<slug>/`. Con un solo proceso se sigue escribiendo la versión 1 tal cual.
  */
 import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import {
+  processesOf,
+  ProjectFormatError,
+  readRepositoryManifest,
+  repositoryManifestOf,
+  withProcesses,
+} from '@lila-modeler/engine/project';
+import type { ProcessDocument, ProcessManifest } from '@lila-modeler/engine/project';
 import { isLilaPath, isMiscasedModelFile } from './openPath.js';
 import { isSymlink } from './safePaths.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
@@ -21,6 +33,7 @@ import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } fro
 const MODEL_FILE = 'model.bpmn';
 const MANIFEST_FILE = 'lila-project.json';
 const RUNS_DIR = 'runs';
+const PROCESSES_DIR = 'processes';
 const SCENARIO_SUFFIX = '.scenario.json';
 const RUN_SUFFIX = '.result.json';
 /** Dejado en la carpeta del proyecto solo cuando el rollback de un guardado fallido también falla
@@ -300,6 +313,10 @@ export async function readProjectFolder(
   modelFile: string = MODEL_FILE,
 ): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[]; loose: boolean }> {
   await assertNotMiscasedInProject(dir, modelFile);
+  if (modelFile === MODEL_FILE) {
+    const repository = await readRepositoryManifestOf(dir);
+    if (repository !== null) return readRepositoryFolder(dir, repository);
+  }
   const modelPath = join(dir, modelFile);
   // `lstat` antes de leer (OP-14, revisión de A, issue #71: "lectura de model.bpmn sigue
   // symlinks"): a diferencia de un `*.scenario.json` (que se puede excluir y seguir abriendo el
@@ -338,7 +355,10 @@ export async function readProjectFolder(
   // que no pintaba el aviso «Diagrama suelto…», daba el documento por «Guardado» y dejaba cerrar la
   // ventana con los escenarios y las corridas editados sin escribir. Lo decide la LECTURA (con qué
   // archivo se abrió) y lo obedece `writeProjectFolder`.
-  const loose = modelFile !== MODEL_FILE;
+  // The `model.bpmn` of a process INSIDE a repository (`processes/<slug>/`, opened straight from
+  // Finder) is not a project of its own: it opens loose, so a save writes only that `.bpmn` and not
+  // a nested `lila-project.json` (QA of #511, nit 5).
+  const loose = modelFile !== MODEL_FILE || (await isRepositoryProcessFolder(dir));
 
   const document: ProjectDocument = {
     version: 1,
@@ -366,19 +386,164 @@ export async function readProjectFolder(
 }
 
 /**
- * `true` si `dir` tiene un `model.bpmn` legible como archivo — o sea, si reabrir esa carpeta como
+ * El manifiesto de `dir` si es un repositorio (`version: 2`, ADR-029), `null` si no lo es (versión
+ * 1, sin versión, ausente, ilegible o symlink: todo eso lo sigue tratando la lectura de la versión
+ * 1, con sus `problems` de siempre). Una versión posterior a la 2 se rechaza (`E-MANIFEST`) en vez
+ * de leerse como si fuera la 1: es lo que exige `docs/PROJECT_FORMAT.md` § Versioning.
+ */
+async function readRepositoryManifestOf(dir: string): Promise<Record<string, unknown> | null> {
+  const target = join(dir, MANIFEST_FILE);
+  if (await isSymlink(target)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(target, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (!isPlainObject(parsed) || typeof parsed.version !== 'number' || parsed.version === 1) return null;
+  if (parsed.version !== 2) {
+    throw new ProjectIOError(
+      'E-MANIFEST',
+      `"${MANIFEST_FILE}" declara la versión ${parsed.version}; esta versión de Lila Modeler entiende la 1 y la 2.`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * The folder names under `processes/` of `dir`, listed or not (QA of #511): a new process must not
+ * take one of them, since a deleted process's folder stays and its files would be read into it.
+ */
+export async function occupiedSlugs(dir: string): Promise<string[]> {
+  try {
+    return (await readdir(join(dir, PROCESSES_DIR), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+      .map((entry) => entry.name)
+      .sort();
+  } catch (error) {
+    if (isNotFound(error) || isNotDirectory(error)) return [];
+    throw error;
+  }
+}
+
+/** `true` si `dir` es `processes/<slug>/` de un repositorio que lista ese slug. */
+async function isRepositoryProcessFolder(dir: string): Promise<boolean> {
+  if (basename(dirname(dir)) !== PROCESSES_DIR) return false;
+  try {
+    const parsed = await readRepositoryManifestOf(dirname(dirname(dir)));
+    return parsed !== null && readRepositoryManifest(parsed).some((m) => m.slug === basename(dir));
+  } catch {
+    return false;
+  }
+}
+
+/** `E-SYMLINK` si `path` es un enlace: una carpeta del repositorio no se sigue fuera de la autorizada. */
+async function assertNotSymlink(path: string): Promise<void> {
+  if (await isSymlink(path)) {
+    throw new ProjectIOError(
+      'E-SYMLINK',
+      `"${path}" es un symlink; no se sigue para no salir de la carpeta autorizada.`,
+    );
+  }
+}
+
+/**
+ * Lee un repositorio (ADR-029): cada proceso del manifiesto desde `processes/<slug>/`, con la misma
+ * tolerancia que la versión 1 — `model.bpmn` ausente o symlink es fatal; un escenario o una corrida
+ * rotos se excluyen y quedan en `problems` con su ruta completa. Lo que haya en la carpeta fuera de
+ * los procesos listados se deja en paz, como cualquier otro archivo ajeno de una carpeta.
+ */
+async function readRepositoryFolder(
+  dir: string,
+  parsed: Record<string, unknown>,
+): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[]; loose: boolean }> {
+  let manifests: ProcessManifest[];
+  try {
+    manifests = readRepositoryManifest(parsed);
+  } catch (error) {
+    if (error instanceof ProjectFormatError) {
+      throw new ProjectIOError('E-MANIFEST', `"${MANIFEST_FILE}" no describe un repositorio de Lila: ${error.message}`);
+    }
+    throw error;
+  }
+  await rememberSnapshot(join(dir, MANIFEST_FILE));
+  const processesDir = join(dir, PROCESSES_DIR);
+  await assertNotSymlink(processesDir);
+  const problems: ProjectProblem[] = [];
+  const processes: ProcessDocument[] = [];
+  for (const manifest of manifests) {
+    const prefix = `${PROCESSES_DIR}/${manifest.slug}/`;
+    const processDir = join(processesDir, manifest.slug);
+    await assertNotSymlink(processDir);
+    const modelPath = join(processDir, MODEL_FILE);
+    await assertNotSymlink(modelPath);
+    let xml: string;
+    try {
+      xml = await readFile(modelPath, 'utf8');
+      await rememberSnapshot(modelPath);
+    } catch (error) {
+      if (isNotFound(error) || isNotDirectory(error)) {
+        throw new ProjectIOError('E-SIN-MODELO', `Falta "${prefix}${MODEL_FILE}" en el repositorio: ${dir}`);
+      }
+      throw error;
+    }
+    const own: ProjectProblem[] = [];
+    const scenarios = await readScenarios(processDir, own);
+    const runs = await readRuns(processDir, own);
+    problems.push(...own.map((p) => ({ file: `${prefix}${p.file}`, message: p.message })));
+    processes.push({
+      slug: manifest.slug,
+      name: manifest.name,
+      model: { ...manifest.model, xml },
+      scenarios,
+      scenarioRevisions: manifest.scenarioRevisions,
+      runs,
+    });
+  }
+  const first = processes[0]!;
+  const base: ProjectDocument = {
+    version: 1,
+    id: parsed.id as string,
+    name: parsed.name as string,
+    model: first.model,
+    scenarios: first.scenarios,
+    scenarioRevisions: first.scenarioRevisions,
+    runs: first.runs,
+  };
+  return { document: withProcesses(base, processes), problems, loose: false };
+}
+
+/**
+ * `true` si `dir` tiene un `model.bpmn` legible como archivo, o es un repositorio (ADR-029, sin
+ * `model.bpmn` en la raíz) — o sea, si reabrir esa carpeta como
  * proyecto (recientes, menú Archivo) va a funcionar. `main.ts` lo usa para no anotar en recientes
  * la carpeta de un `.bpmn` suelto, que prometería un proyecto que no existe (hallazgo 9 del QA).
  */
 export async function hasProjectModel(dir: string): Promise<boolean> {
+  if (await isRepositoryProcessFolder(dir)) return false;
   try {
-    return (await stat(join(dir, MODEL_FILE))).isFile();
+    if ((await stat(join(dir, MODEL_FILE))).isFile()) return true;
   } catch (error) {
     // `ENOTDIR` además de `ENOENT` (hallazgo 2 del segundo QA a #323): si `dir` es un ARCHIVO
     // —un `.lila`, o cualquier ruta que el usuario haya elegido—, `stat` de algo "dentro" de él
     // no falla con "no existe" sino con "no es una carpeta". Las dos respuestas significan lo
     // mismo aquí: ahí no hay un `model.bpmn` que reabrir. Sin esto, el error se propagaba crudo
     // hasta el renderer DESPUÉS de una escritura correcta.
+    if (!isNotFound(error) && !isNotDirectory(error)) throw error;
+  }
+  // Un repositorio (ADR-029) no tiene `model.bpmn` en la raíz: sus modelos están en `processes/`.
+  try {
+    return (await readRepositoryManifestOf(dir)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** `true` si `path` es un archivo regular (no un symlink, no una carpeta). */
+async function isRegularFile(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isFile();
+  } catch (error) {
     if (isNotFound(error) || isNotDirectory(error)) return false;
     throw error;
   }
@@ -395,7 +560,12 @@ export async function isRecordableProject(p: string): Promise<boolean> {
 
 interface PendingWrite {
   readonly dest: string;
-  readonly content: string;
+  /**
+   * `null` retira `dest` en vez de escribirlo (#498): al pasar de la versión 1 al repositorio, los
+   * archivos del primer proceso se MUEVEN de la raíz a `processes/<slug>/`. Va por el mismo commit
+   * con rollback que las escrituras, así que un fallo a mitad de camino los devuelve a su sitio.
+   */
+  readonly content: string | null;
 }
 
 function randomSuffix(): string {
@@ -534,9 +704,12 @@ async function assertRunsDirUsable(runsDir: string): Promise<void> {
  * carpeta padre no existe o no admite escritura — salvo que el padre sea `runsDir` y aún no exista
  * (`writeProjectFolder` la crea sola). Ausente y con padre válido: destino aceptado.
  */
-async function assertValidDestination(dest: string, runsDir: string): Promise<void> {
+async function assertValidDestination(dest: string, runsDir: string | ReadonlySet<string>): Promise<void> {
   const parent = dirname(dest);
-  const parentEsRunsDirAusente = parent === runsDir && !(await pathExists(parent));
+  // Un repositorio (#498) crea además `processes/<slug>/` y su `runs/`: cualquiera de esas carpetas
+  // ausentes vale igual que `runsDir` ausente.
+  const creables = typeof runsDir === 'string' ? new Set([runsDir]) : runsDir;
+  const parentEsRunsDirAusente = creables.has(parent) && !(await pathExists(parent));
   if (!parentEsRunsDirAusente) {
     try {
       await access(parent, constants.W_OK);
@@ -696,6 +869,8 @@ async function commitWithRollback(
         await doRename(dest, prevPath);
         step.movedToPrev = true;
       }
+      // Retirada (#498): apartarlo a `.prev-*` ya es quitarlo, y el éxito borra el `.prev-*`.
+      if (writes[i]!.content === null) continue;
       await doRename(tmp, dest);
       step.tmpMoved = true;
     }
@@ -703,7 +878,7 @@ async function commitWithRollback(
     const pending = await rollbackCommit(steps, doRename);
     // Limpia cualquier `.tmp-*` que no llegó a moverse (los ya movidos ya no existen en su ruta
     // temporal: `unlink` sobre ellos es un ENOENT silencioso).
-    await Promise.all(tmpPaths.map((tmp) => unlink(tmp).catch(() => {})));
+    await Promise.all(tmpPaths.filter((tmp) => tmp !== '').map((tmp) => unlink(tmp).catch(() => {})));
     if (pending.length > 0) {
       await writeRecoveryFile(dir, pending).catch(() => {});
       throw new ProjectIOError(
@@ -749,6 +924,10 @@ export async function writeProjectFolder(
 ): Promise<void> {
   const modelFile = options.modelFile ?? MODEL_FILE;
   await assertNotMiscasedInProject(dir, modelFile);
+  if ((document.processes?.length ?? 0) > 0) {
+    await writeRepositoryFolder(dir, document, options, fsImpl);
+    return;
+  }
   if (options.saveAs === true) {
     // «Guardar como» crea un proyecto COMPLETO en la carpeta elegida, y un proyecto solo se reabre
     // por su `model.bpmn` + manifiesto. Con otro `modelFile` el `diagramOnly` implícito de abajo
@@ -854,12 +1033,14 @@ export async function writeProjectFolder(
   const tmpPaths: string[] = [];
   try {
     for (const { dest, content } of writes) {
+      // Una retirada no tiene temporal; el hueco mantiene alineados `writes` y `tmpPaths`.
+      if (content === null) { tmpPaths.push(''); continue; }
       const tmp = `${dest}.tmp-${randomSuffix()}`;
       await writeFile(tmp, content, 'utf8');
       tmpPaths.push(tmp);
     }
   } catch (error) {
-    await Promise.all(tmpPaths.map((tmp) => unlink(tmp).catch(() => {})));
+    await Promise.all(tmpPaths.filter((tmp) => tmp !== '').map((tmp) => unlink(tmp).catch(() => {})));
     throw error;
   }
 
@@ -874,4 +1055,180 @@ export async function writeProjectFolder(
   for (const { dest } of trackedWrites) {
     await rememberSnapshot(dest);
   }
+}
+
+/**
+ * `E-SYMLINK` si `path` es un enlace y `E-DESTINO-INVALIDO` si existe y no es una carpeta: las
+ * carpetas que el repositorio crea (`processes/`, `processes/<slug>/`, su `runs/`), con el mismo
+ * criterio que `assertRunsDirUsable`.
+ */
+async function assertDirUsable(path: string): Promise<void> {
+  await assertNotSymlink(path);
+  let info;
+  try {
+    info = await stat(path);
+  } catch (error) {
+    if (isNotFound(error)) return;
+    throw error;
+  }
+  if (!info.isDirectory()) {
+    throw new ProjectIOError('E-DESTINO-INVALIDO', `"${path}" existe y no es una carpeta; no se puede guardar el repositorio ahí.`);
+  }
+}
+
+/**
+ * Escribe un repositorio (ADR-029, #498): el manifiesto `version: 2` y, por proceso, su modelo, sus
+ * escenarios y sus corridas en `processes/<slug>/`, con las mismas guardias que la versión 1
+ * (`E-CARPETA-OCUPADA` en «Guardar como», `E-CAMBIO-EXTERNO`, `E-RUN-DUPLICADO`, symlinks y
+ * destinos inválidos) y el mismo commit con rollback. Si la carpeta todavía era un proyecto versión
+ * 1, los archivos del primer proceso se retiran de la raíz en el mismo commit: se MUEVEN, y así una
+ * versión anterior de la app no abre ese `model.bpmn` viejo ni reescribe el manifiesto encima del
+ * repositorio. Un repositorio se guarda entero: ni `modelFile` ni `diagramOnly` tienen sentido aquí.
+ */
+async function writeRepositoryFolder(
+  dir: string,
+  document: ProjectDocument,
+  options: WriteProjectOptions,
+  fsImpl: WriteProjectFsImpl,
+): Promise<void> {
+  if ((options.modelFile ?? MODEL_FILE) !== MODEL_FILE || options.diagramOnly === true) {
+    throw new ProjectIOError(
+      'E-DESTINO-INVALIDO',
+      'Un proyecto con varios procesos se guarda entero; no puede escribirse solo un diagrama.',
+    );
+  }
+  if (options.saveAs === true) await assertFolderNotOccupied(dir, document.id);
+
+  const processesDir = join(dir, PROCESSES_DIR);
+  const processes = processesOf(document);
+  const creatable = new Set<string>([processesDir]);
+  await assertDirUsable(processesDir);
+  // The slugs the folder already lists. A process whose slug is not among them is NEW for this
+  // save, and its folder must not already hold another process's scenarios or runs (QA of #511).
+  const enDisco = await readRepositoryManifestOf(dir).catch(() => null);
+  let listados = new Set<string>();
+  try {
+    if (enDisco !== null) listados = new Set(readRepositoryManifest(enDisco).map((m) => m.slug));
+  } catch {
+    // A manifest that does not read: no slug on disk counts as listed.
+  }
+  const manifestWrite: PendingWrite = {
+    dest: join(dir, MANIFEST_FILE),
+    content: `${JSON.stringify(repositoryManifestOf(document), null, 2)}\n`,
+  };
+  const trackedWrites: PendingWrite[] = [];
+  const runWrites: PendingWrite[] = [];
+  const removals: PendingWrite[] = [];
+  for (const process of processes) {
+    const processDir = join(processesDir, process.slug);
+    await assertDirUsable(processDir);
+    creatable.add(processDir);
+    trackedWrites.push({ dest: join(processDir, MODEL_FILE), content: process.model.xml });
+    for (const [name, scenario] of Object.entries(process.scenarios)) {
+      trackedWrites.push({ dest: join(processDir, name), content: `${JSON.stringify(scenario, null, 2)}\n` });
+    }
+    const runsDir = join(processDir, RUNS_DIR);
+    if (process.runs.length > 0) {
+      await assertDirUsable(runsDir);
+      creatable.add(runsDir);
+    }
+    for (const run of process.runs) {
+      const dest = join(runsDir, `${run.id}${RUN_SUFFIX}`);
+      await assertValidDestination(dest, creatable);
+      const content = `${JSON.stringify(run, null, 2)}\n`;
+      let existing: string | null = null;
+      try {
+        existing = await readFile(dest, 'utf8');
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+      if (existing === null) runWrites.push({ dest, content });
+      else if (existing !== content) {
+        throw new ProjectIOError(
+          'E-RUN-DUPLICADO',
+          `La corrida "${run.id}" ya existe en "${dest}" con contenido distinto; no se sobrescribe.`,
+        );
+      }
+    }
+  }
+  // A new process that landed on the folder of a process deleted earlier (the writer never deletes
+  // folders) would inherit its scenarios and runs on the next read. The app avoids those slugs
+  // (`occupiedSlugs`, `processSlug`); this is the disk layer's own refusal, and it deletes nothing.
+  for (const process of processes) {
+    if (listados.has(process.slug)) continue;
+    const ajenos = await leftoverFiles(join(processesDir, process.slug), process);
+    if (ajenos.length > 0) {
+      throw new ProjectIOError(
+        'E-CARPETA-OCUPADA',
+        `"${PROCESSES_DIR}/${process.slug}/" ya tiene escenarios o corridas de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
+      );
+    }
+  }
+
+  // Versión 1 → repositorio: los archivos del primer proceso salen de la raíz (ver arriba). Solo si
+  // la carpeta no era ya un repositorio, y solo los que son de ese proceso.
+  if (enDisco === null) {
+    const first = processes[0]!;
+    const candidates = [
+      join(dir, MODEL_FILE),
+      ...Object.keys(first.scenarios).map((name) => join(dir, name)),
+      ...first.runs.map((run) => join(dir, RUNS_DIR, `${run.id}${RUN_SUFFIX}`)),
+    ];
+    for (const path of candidates) {
+      if (await isRegularFile(path)) removals.push({ dest: path, content: null });
+    }
+  }
+
+  await assertNoExternalChanges([...trackedWrites, manifestWrite, ...removals], options.overwrite === true);
+  // The manifest goes after every process file and before the retirements (QA of #511, nit 4): a
+  // crash half-way through the first version 2 save leaves the version 1 manifest pointing at the
+  // root files, still there, instead of a version 2 one pointing at folders not written yet.
+  const writes: PendingWrite[] = [...trackedWrites, ...runWrites, manifestWrite, ...removals];
+  for (const { dest, content } of writes) {
+    if (content !== null) await assertValidDestination(dest, creatable);
+  }
+  for (const folder of creatable) await mkdir(folder, { recursive: true });
+
+  const tmpPaths: string[] = [];
+  try {
+    for (const { dest, content } of writes) {
+      if (content === null) { tmpPaths.push(''); continue; }
+      const tmp = `${dest}.tmp-${randomSuffix()}`;
+      await writeFile(tmp, content, 'utf8');
+      tmpPaths.push(tmp);
+    }
+  } catch (error) {
+    await Promise.all(tmpPaths.filter((tmp) => tmp !== '').map((tmp) => unlink(tmp).catch(() => {})));
+    throw error;
+  }
+  await commitWithRollback(dir, writes, tmpPaths, fsImpl);
+  for (const { dest } of [...trackedWrites, manifestWrite, ...removals]) {
+    await rememberSnapshot(dest);
+  }
+}
+
+/** The `*.scenario.json` and `runs/*.result.json` in `processDir` that `process` does not hold. */
+async function leftoverFiles(processDir: string, process: ProcessDocument): Promise<string[]> {
+  const stale: string[] = [];
+  const listar = async (folder: string, suffix: string): Promise<string[]> => {
+    try {
+      return (await readdir(folder, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
+        .map((entry) => entry.name);
+    } catch (error) {
+      if (isNotFound(error) || isNotDirectory(error)) return [];
+      throw error;
+    }
+  };
+  for (const name of await listar(processDir, SCENARIO_SUFFIX)) {
+    if (!(name in process.scenarios)) stale.push(name);
+  }
+  const runIds = new Set(process.runs.map((run) => `${run.id}${RUN_SUFFIX}`));
+  const runsDir = join(processDir, RUNS_DIR);
+  if (!(await isSymlink(runsDir))) {
+    for (const name of await listar(runsDir, RUN_SUFFIX)) {
+      if (!runIds.has(name)) stale.push(`${RUNS_DIR}/${name}`);
+    }
+  }
+  return stale;
 }

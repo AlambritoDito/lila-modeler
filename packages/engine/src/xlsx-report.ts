@@ -14,7 +14,14 @@
  * them into a `Blob`.
  */
 
-import { alwaysOpen, compileCalendar, openTime, weekOffsetSeconds } from './core/calendar.js';
+import {
+  alwaysOpen,
+  compileCalendar,
+  openTime,
+  startEpochDay,
+  weekOffsetSeconds,
+  type CalendarIntervalDef,
+} from './core/calendar.js';
 import type { CompareResult } from './core/compare.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
@@ -53,7 +60,10 @@ function workingSeconds(scenario: ResolvedScenario, calendarId: string | undefin
   const definition = calendarId === undefined ? undefined : scenario.calendars?.[calendarId];
   // An unknown id cannot happen in a validated scenario; degrading to 24×7 keeps the export from
   // being the only surface in the project that refuses to produce output.
-  const calendar = definition === undefined ? alwaysOpen(offset) : compileCalendar(definition, offset);
+  const calendar =
+    definition === undefined
+      ? alwaysOpen(offset)
+      : compileCalendar(definition, offset, 'en', startEpochDay(scenario.run.start));
   return openTime(calendar, 0, duration);
 }
 
@@ -242,9 +252,23 @@ export function describeDistribution(distribution: Distribution): string {
   return `${type}(${parts.join(', ')})`;
 }
 
-/** `MON,TUE 09:00-18:00`, one entry per interval of the calendar. */
-function describeCalendar(intervals: readonly { days: readonly string[]; from: string; to: string }[]): string {
-  return intervals.map((interval) => `${interval.days.join(',')} ${interval.from}-${interval.to}`).join('; ');
+/**
+ * `MON,TUE 09:00-18:00`, one entry per interval of the calendar. Monthly and annual selectors
+ * (#82) are prefixed with their field: `monthDays=1,-1`, `monthWeekdays=-1FRI`, `dates=12-24`.
+ */
+function describeCalendar(intervals: readonly CalendarIntervalDef[]): string {
+  return intervals
+    .map((interval) => {
+      const days =
+        interval.days?.join(',') ??
+        (interval.monthDays !== undefined ? `monthDays=${interval.monthDays.join(',')}` : undefined) ??
+        (interval.monthWeekdays !== undefined
+          ? `monthWeekdays=${interval.monthWeekdays.map(({ nth, day }) => `${nth}${day}`).join(',')}`
+          : undefined) ??
+        `dates=${(interval.dates ?? []).join(',')}`;
+      return `${days} ${interval.from}-${interval.to}`;
+    })
+    .join('; ');
 }
 
 /**
@@ -280,6 +304,7 @@ export function parametersSheet(
 
   for (const [id, calendar] of Object.entries(scenario.calendars ?? {})) {
     run(C.xlsxSectionCalendars(), id, '', 'intervals', describeCalendar(calendar.intervals));
+    run(C.xlsxSectionCalendars(), id, '', 'holidays', calendar.holidays?.join(', ') ?? null);
   }
 
   for (const [id, resource] of Object.entries(scenario.resources ?? {})) {

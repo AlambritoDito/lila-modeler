@@ -122,7 +122,9 @@ etiquetas; la acción solo escribe por ti la asignación tarea por tarea.
 | Recurrence + start time + duration | «Lun–Vie / Todos / Fin de semana» o cualquier día + desde–hasta, una entrada de `intervals[]` por franja, y una rejilla semanal para pintar (24 h, `to` exclusivo, se admite `"24:00"`) |
 | Calendario del recurso | `calendar` en el pool |
 | Tabla «Resource \| Morning \| Day \| Night» | `capacity` como lista de `{ calendar, capacity }`: un solo pool con capacidad por turno |
-| Holidays | reservado, no está en v1; tampoco las recurrencias mensual/anual, el horario de verano ni la zona horaria por calendario |
+| Recurrence: monthly, yearly | «Se repite»: el día N (o el último) del mes, del primer al quinto o el último día de la semana del mes, o una fecha cada año (`monthDays`, `monthWeekdays`, `dates`) |
+| Holidays | «Festivos» bajo las franjas: una fecha una vez, o «Cada año» (`holidays`); cerrado el día entero |
+| Recurrencia cada N semanas/meses, horario de verano, zona horaria por calendario | no está en v1: los calendarios conservan el offset de `run.start` durante toda la corrida |
 
 Sin ningún calendario, todo es 24×7. El tiempo de proceso de una tarea se pausa cuando cierra su
 turno y sigue cuando abre; ese tiempo cerrado se reporta aparte como `offHoursWait`.

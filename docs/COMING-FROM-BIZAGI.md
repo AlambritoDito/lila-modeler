@@ -123,7 +123,9 @@ per-task assignment for you.
 | Recurrence + start time + duration | «Mon–Fri / Every day / Weekend» or any days + from–to, one `intervals[]` entry per range, and a weekly grid to paint (24 h, `to` exclusive, `"24:00"` allowed) |
 | Resource calendar | `calendar` on the pool |
 | «Resource \| Morning \| Day \| Night» quantities | `capacity` as a list of `{ calendar, capacity }`: one pool, capacity per shift |
-| Holidays | reserved, not in v1; so are monthly/annual recurrences, DST and per-calendar time zones |
+| Recurrence: monthly, yearly | «Repeats»: day N (or the last day) of the month, the first…fifth or last weekday of the month, or a date every year (`monthDays`, `monthWeekdays`, `dates`) |
+| Holidays | «Holidays» under the ranges: a date once, or «Every year» (`holidays`); closed the whole day |
+| Recurrence every N weeks/months, DST, per-calendar time zone | not in v1: calendars keep `run.start`'s offset for the whole run |
 
 No calendar anywhere means 24×7. A task's processing time pauses when its shift closes and resumes
 when it opens; that closed time is reported separately as `offHoursWait`.

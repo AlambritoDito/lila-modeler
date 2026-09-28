@@ -196,7 +196,8 @@ not a claim of parity: the full checklist, with every documented difference and 
   variants), call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
   ([`docs/SEMANTICS.md`](docs/SEMANTICS.md) §§ 2–3).
 - **Not on npm yet**: no `npm install @lila-modeler/engine`; clone and build as above.
-- **Calendars are weekly**; monthly/annual recurrence and holidays are reserved fields.
+- **Calendars keep `run.start`'s UTC offset**: weekly, monthly and annual recurrence and holidays
+  are supported, but there is no per-calendar timezone and no DST (`timezone` is a reserved field).
 
 ## Project layout
 
