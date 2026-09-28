@@ -590,8 +590,9 @@ describe('reader', () => {
     };
     expect(reason(book('<row r="50000000"><c r="A50000000"><v>1</v></c></row>'))).toBe('out-of-bounds');
     expect(reason(book('<row r="1"><c r="ZZZZZZ1"><v>1</v></c></row>'))).toBe('out-of-bounds');
-    // Excel's real last row and column are fine.
-    expect(reason(book('<row r="1048576"><c r="XFD1048576"><v>1</v></c></row>'))).toBe('read');
+    // Excel's real last row is within bounds, but reaching it lays out a million rows: too large.
+    expect(reason(book('<row r="1048576"><c r="A1048576"><v>1</v></c></row>'))).toBe('too-large');
+    expect(reason(book('<row r="1"><c r="XFD1"><v>1</v></c></row>'))).toBe('read');
     // An image is never decompressed, however large; a sheet part that expands too much is refused.
     expect(reason(book('<row r="1"/>', { 'xl/media/image1.png': new Uint8Array(60 * 1024 * 1024) }))).toBe('read');
     expect(reason(book('<row r="1"/>', { 'xl/worksheets/sheet2.xml': new Uint8Array(60 * 1024 * 1024) }))).toBe('too-large');
@@ -614,6 +615,30 @@ describe('reader', () => {
     }
     expect(reason).toBe('too-large');
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('a hundred sheets each with one value at the last row are refused fast (the budget is per workbook)', () => {
+    const files: Record<string, Uint8Array> = {};
+    let sheets = '';
+    let rels = '';
+    for (let i = 1; i <= 100; i++) {
+      sheets += `<sheet name="S${i}" sheetId="${i}" r:id="rId${i}"/>`;
+      rels += `<Relationship Id="rId${i}" Target="worksheets/sheet${i}.xml"/>`;
+      files[`xl/worksheets/sheet${i}.xml`] = strToU8('<worksheet><sheetData><row r="600000"><c r="A600000"><v>1</v></c></row></sheetData></worksheet>');
+    }
+    files['xl/workbook.xml'] = strToU8(`<workbook xmlns:r="r"><sheets>${sheets}</sheets></workbook>`);
+    files['xl/_rels/workbook.xml.rels'] = strToU8(`<Relationships>${rels}</Relationships>`);
+    const started = performance.now();
+    const heap = process.memoryUsage().heapUsed;
+    let reason: unknown;
+    try {
+      readWorkbook(zipSync(files));
+    } catch (error) {
+      reason = error instanceof WorkbookReadError ? error.reason : error;
+    }
+    expect(reason).toBe('too-large');
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(process.memoryUsage().heapUsed - heap).toBeLessThan(100 * 1024 * 1024);
   });
 
   test('style-only cells far to the right take no room', () => {

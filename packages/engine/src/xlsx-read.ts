@@ -36,7 +36,8 @@ export const MAX_COLUMNS = 16_384;
 /** Uncompressed bytes the reader accepts for the parts it reads. */
 export const MAX_UNCOMPRESSED = 50 * 1024 * 1024;
 /**
- * Cells the reader will lay out, counting the empty ones a row needs up to its last value. Rows are
+ * Cells the reader will lay out in the whole workbook, counting the empty ones a row needs up to its
+ * last value and the empty rows a sheet needs up to its last row. Rows are
  * dense arrays, so one value at XFD costs 16 384 slots: forty thousand such rows in a 200 KB file
  * would take gigabytes. A million slots is far beyond any scenario sheet.
  */
@@ -174,6 +175,10 @@ export function worksheetRows(
       while (cells.length < column) cells.push(null);
       cells[column] = value;
     }
+    // The empty rows laid out to reach this one cost a slot each, checked before allocating them:
+    // one value at row 1 048 576 would otherwise take a million arrays per sheet.
+    budget.cells += Math.max(0, rowIndex - rows.length);
+    if (budget.cells > MAX_CELLS) throw new WorkbookReadError('too-large', `more than ${MAX_CELLS} cells`);
     while (rows.length < rowIndex) rows.push([]);
     rows[rowIndex] = cells;
   }
