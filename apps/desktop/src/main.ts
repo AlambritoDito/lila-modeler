@@ -215,6 +215,11 @@ function requireSafeFileNames(dir: string, document: ProjectDocument): void {
     if (
       !isPlainRecord(process.model) ||
       typeof process.model.xml !== 'string' ||
+      typeof process.model.id !== 'string' ||
+      typeof process.model.name !== 'string' ||
+      typeof process.model.revision !== 'number' ||
+      ('slug' in process && typeof process.name !== 'string') ||
+      !isPlainRecord(process.scenarioRevisions) ||
       !isPlainRecord(process.scenarios) ||
       !Array.isArray(process.runs) ||
       !process.runs.every((run) => isPlainRecord(run) && typeof run.id === 'string')

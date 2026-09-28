@@ -11,6 +11,7 @@ import { ScenarioSchema } from '../../src/scenario.js';
 import {
   decodeLila,
   encodeLila,
+  isProcessSlug,
   lilaEntryNames,
   processesOf,
   processSlug,
@@ -77,6 +78,9 @@ describe('slugs', () => {
     expect(processSlug('¿?')).toBe('process');
     expect(processSlug('Pedido', ['pedido', 'pedido-2'])).toBe('pedido-3');
     expect(processSlug('CON')).toBe('con-process');
+    expect(isProcessSlug('con')).toBe(false);
+    expect(isProcessSlug('com1')).toBe(false);
+    expect(isProcessSlug(processSlug('nul'))).toBe(true);
   });
 });
 

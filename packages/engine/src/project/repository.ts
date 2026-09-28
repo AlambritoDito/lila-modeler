@@ -17,7 +17,8 @@ const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
 
 export function isProcessSlug(value: unknown): value is string {
-  return typeof value === 'string' && SLUG.test(value);
+  // A reserved Windows name could never be saved as a folder there (QA of #511, nit 6).
+  return typeof value === 'string' && SLUG.test(value) && !RESERVED.test(value);
 }
 
 /**
