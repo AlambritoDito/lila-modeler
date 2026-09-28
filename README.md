@@ -267,6 +267,22 @@ See the [branding guide](docs/design/branding/README.md) for approved usage and
 reproducible exports. The site and editor builds include the web asset at
 `branding/lila-transparent.png`.
 
+## Code signing policy
+
+Windows installers are signed for free: code signing provided by [SignPath.io](https://about.signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [the contributors of this repository](https://github.com/AlambritoDito/lila-modeler/graphs/contributors);
+  outside contributions are reviewed by the maintainer before they are merged.
+- Approvers: [@AlambritoDito](https://github.com/AlambritoDito), who approves every signing request by hand.
+- Only installers built by this repository's GitHub Actions workflow (`.github/workflows/desktop.yml`)
+  from its own source are submitted for signing.
+
+Privacy: this program will not transfer any information to other networked systems unless
+specifically requested by the user or the person installing or operating it. The one exception is
+the update notice: on launch, the desktop app asks GitHub's public releases API (`api.github.com`)
+for the newest version. That request sends no diagram, scenario or personal data.
+
 ## License and NOTICE
 
 Apache-2.0, see [`LICENSE`](LICENSE). Copyright 2026 Perfer Process; the Lila name and logos are

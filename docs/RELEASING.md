@@ -86,3 +86,30 @@ npm view @lila-modeler/engine dist-tags --prefer-online
 cd "$(mktemp -d)" && npm init -y >/dev/null && npm i @lila-modeler/engine@beta \
   && ./node_modules/.bin/lila --version && npm audit signatures
 ```
+
+## Signing the Windows installer (SignPath)
+
+The `sign-windows` job in `desktop.yml` sends the NSIS installer to
+[SignPath Foundation](https://signpath.org) (free code signing for open source) on tags and manual
+runs, waits up to an hour for the approval, checks the Authenticode signature and uploads
+`lila-desktop-windows-signed-<sha>`. The installer is signed as "SignPath Foundation", not as the
+maintainer. Signing removes "Unknown publisher"; SmartScreen still warns until the installer builds
+download reputation.
+
+One-time setup, in this order:
+
+1. Apply at <https://signpath.org/apply> with this repository. The project page must keep the
+   "Code signing policy" section of the README (their terms require it).
+2. Once accepted, in SignPath: paste `.signpath/artifact-configuration.xml` as the project's default
+   artifact configuration, link the GitHub repository as a trusted build system, and create an API
+   token for a CI user with submitter rights on the release signing policy.
+3. In GitHub ▸ Settings ▸ Actions ▸ General, add `signpath/github-action-submit-signing-request@v3`
+   to the allowed actions (the allowlist rejects anything else; a SHA pin fails with startup_failure).
+4. In GitHub ▸ Settings ▸ Secrets and variables ▸ Actions: secret `SIGNPATH_API_TOKEN`; variables
+   `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG`. The job is
+   skipped while `SIGNPATH_ORGANIZATION_ID` is empty.
+5. Try it with a manual run (Actions ▸ Desktop ▸ Run workflow), approve the request in SignPath and
+   download the signed artifact.
+
+The signed `.exe` is still not attached to releases: add it to the `release` job once the Windows
+build is tested.
