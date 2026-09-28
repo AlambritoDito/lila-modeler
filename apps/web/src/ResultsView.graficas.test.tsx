@@ -207,6 +207,20 @@ describe('(b) nothing to draw is said, not drawn as zero', () => {
     expect(container.querySelector('table')).not.toBeNull();
   });
 
+  test('the failed chart gets a fresh try when its data changes', async () => {
+    const roto = new Proxy([1, 2, 3], {
+      get(target, key) {
+        if (key === 'map') throw new Error('boom');
+        return Reflect.get(target, key);
+      },
+    });
+    await montar({ log: { rows: [], truncated: false, ciclos: roto } });
+    await pestana('process');
+    expect(container.querySelector('[data-grafica="histograma"]')!.textContent).toBe(strings().graficas.error);
+    await act(async () => root!.render(<ResultsView ir={ir} scenario={scenario} result={result} log={log} />));
+    expect(container.querySelector('[data-grafica="histograma"] svg')).not.toBeNull();
+  });
+
   test('everything inside the warm-up: a note, not charts of measured zeros', async () => {
     const nada: RunResult = { ...result, process: { ...result.process, started: 0, completed: 0 } };
     await montar({ result: nada, scenario: { ...scenario, run: { ...scenario.run, warmup: 3600 } } });

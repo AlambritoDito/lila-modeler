@@ -22,7 +22,8 @@ import { resolveExtends } from '@lila-modeler/engine/schema';
 import { compare, simulate, type CompareResult, type ProcessIR, type SimScenario } from '@lila-modeler/engine';
 
 import { CompareView, compareCharts, compareMetricLabel, type CompareChartsInput } from './CompareView';
-import { filasLeyenda } from './GraficasSvg';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { filasLeyenda, geometriaBarras, marcasQueCaben, PLOT_MINIMO, SvgBarras } from './GraficasSvg';
 import { tabLabels } from './ResultsView';
 import { setLocale, strings } from './i18n';
 
@@ -209,5 +210,47 @@ describe('legend and colors (QA of #512)', () => {
     expect(compareCharts({ ...tres, seriesSlots: [1, 0, 2] }).graficas[0]!.colores).toEqual([1, 0, 2]);
     // Slots that do not fit the palette fall back to the position among the charted ones.
     expect(compareCharts({ ...tres, seriesSlots: [0, 9, 2] }).graficas[0]!.colores).toEqual([0, 1, 2]);
+  });
+});
+
+describe('x axis ticks never collide (second QA pass of #512)', () => {
+  const textos = (n: number): string[] => Array.from({ length: n }, (_, i) => (i === 0 ? '1174.463784' : `${930.847019 + i} (-20.741678%)`));
+
+  test.each([3, 10])('%i scenarios at 357 px: tick labels keep 8 px apart', (n) => {
+    const nombres = Array.from({ length: n }, (_, i) => `Scenario ${i}`);
+    const html = renderToStaticMarkup(
+      <SvgBarras
+        titulo="t"
+        series={nombres.slice(0, 8)}
+        grupos={[{ id: 'g', etiqueta: 'Cycle time average', valores: textos(Math.min(n, 8)).map((t) => Number.parseFloat(t)), textos: textos(Math.min(n, 8)) }]}
+        ancho={357}
+      />,
+    );
+    const marcas = [...html.matchAll(/<text class="marca-eje" x="([\d.]+)"[^>]*>([^<]+)</g)].map((m) => ({ x: Number(m[1]), texto: m[2]! }));
+    expect(marcas.length).toBeGreaterThanOrEqual(2);
+    // 7 px per 12 px character, scaled to the 11 px of the axis: above the real advance.
+    const ancho = (t: string): number => (t.length * 7 * 11) / 12;
+    for (let i = 1; i < marcas.length; i++) {
+      const [a, b] = [marcas[i - 1]!, marcas[i]!];
+      expect(b.x - a.x - (ancho(a.texto) + ancho(b.texto)) / 2).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  test('marcasQueCaben keeps every tick when there is room, and thins them from 0 when not', () => {
+    expect(marcasQueCaben([0, 500, 1000, 1500], 1)).toEqual([0, 500, 1000, 1500]);
+    expect(marcasQueCaben([0, 500, 1000, 1500], 24 / 500)).toEqual([0, 1000]);
+  });
+
+  test('the two small charts go full width when half the section leaves the plot under the minimum', async () => {
+    await montar();
+    const fila = container!.querySelector('[data-grafica="comparar"] [data-juntas]')!;
+    const [ciclo] = compareCharts({
+      rows: comparison.rows, ir, resourceNames: RECURSOS, scenarioNames: NOMBRES, isVisible: () => true, baseTimeUnit: 'min', costsComparable: true,
+    }).graficas;
+    // jsdom measures nothing, so the section is the default 640 px: half of it is too narrow here.
+    expect(geometriaBarras(ciclo!.grupos, (640 - 12) / 2).anchoPlot).toBeLessThan(PLOT_MINIMO);
+    expect(fila.getAttribute('data-juntas')).toBe('false');
+    expect(fila.classList.contains('graficas-fila')).toBe(false);
+    expect(geometriaBarras(ciclo!.grupos, 900).anchoPlot).toBeGreaterThanOrEqual(PLOT_MINIMO);
   });
 });

@@ -353,6 +353,16 @@ interface WaitRecord {
 }
 
 /**
+ * Cycle time (s) of each completed case of the replication's measured cohort, in arrival order:
+ * the sample `process.cycleTime` summarises. `simulate` hands it to `opts.onCycleTimes`.
+ */
+export function caseCycleTimes(run: Pick<ReplicationRun, 'cases'>): number[] {
+  const times: number[] = [];
+  for (const record of run.cases) if (record.endedAt !== null) times.push(record.endedAt - record.startedAt);
+  return times;
+}
+
+/**
  * Convierte una replicación del kernel DES en un `RunResult` completo.
  *
  * LILA-028 posee las métricas de elemento, flujo y proceso; LILA-036 añade las de nivel 3
@@ -379,16 +389,6 @@ interface WaitRecord {
  * // `aggregateReplication` a mano tiene que pasar el mapa si quiere agregar. Camino de mejora,
  * // si algún consumidor más lo necesita: publicarlo en el contrato de resultados.
  */
-/**
- * Cycle time (s) of each completed case of the replication's measured cohort, in arrival order:
- * the sample `process.cycleTime` summarises. `simulate` hands it to `opts.onCycleTimes`.
- */
-export function caseCycleTimes(run: Pick<ReplicationRun, 'cases'>): number[] {
-  const times: number[] = [];
-  for (const record of run.cases) if (record.endedAt !== null) times.push(record.endedAt - record.startedAt);
-  return times;
-}
-
 export function aggregateReplication(
   ir: ProcessIR,
   run: ReplicationRun,

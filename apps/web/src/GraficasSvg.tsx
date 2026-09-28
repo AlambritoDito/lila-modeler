@@ -177,6 +177,34 @@ export function GraficaBarras(props: GraficaBarrasProps): ReactNode {
   );
 }
 
+/** Below this plot width the two half-width compare charts go full width (QA of #512). */
+export const PLOT_MINIMO = 150;
+
+/**
+ * Horizontal layout of a bar chart `W` wide. The value at the tip is the table's text and is never
+ * cut: it takes the room it needs, the group labels give way first (cut with «…», whole in the
+ * tooltip), and the plot keeps at least 40 px.
+ */
+export function geometriaBarras(grupos: readonly Grupo[], W: number): { x0: number; anchoEtiqueta: number; anchoPlot: number } {
+  const valorNecesario = mayor(grupos, (g) => mayor(g.textos, (t) => anchoTexto(t, 11) + 8, 0), 24);
+  const anchoEtiqueta = Math.min(W * 0.3, mayor(grupos, (g) => anchoTexto(g.etiqueta) + 8, 40), Math.max(40, W - 2 * PAD - 40 - valorNecesario));
+  const anchoValor = Math.min(valorNecesario, W - 2 * PAD - anchoEtiqueta - 40);
+  const x0 = PAD + anchoEtiqueta;
+  return { x0, anchoEtiqueta, anchoPlot: Math.max(40, W - x0 - anchoValor - PAD) };
+}
+
+/**
+ * The axis ticks whose labels fit side by side at `pxPorUnidad`: every k-th one, from 0, with at
+ * least 8 px between labels (the histogram does the same for its edges).
+ */
+export function marcasQueCaben(marcas: readonly number[], pxPorUnidad: number): number[] {
+  if (marcas.length < 2) return [...marcas];
+  const paso = (marcas[1]! - marcas[0]!) * pxPorUnidad;
+  const etiqueta = mayor(marcas, (m) => anchoTexto(formatNumber(m), 11), 0) + 8;
+  const cada = Math.max(1, Math.ceil(etiqueta / paso));
+  return marcas.filter((_, i) => i % cada === 0);
+}
+
 export function SvgBarras({
   titulo,
   sub,
@@ -193,16 +221,11 @@ export function SvgBarras({
   const leyenda = series.length >= 2;
 
   const W = Math.max(280, ancho);
-  // The value at the tip is the table's text and is never cut: it takes the room it needs, the
-  // group labels give way first (they are cut with «…», whole in the tooltip), the plot keeps 40 px.
-  const valorNecesario = mayor(grupos, (g) => mayor(g.textos, (t) => anchoTexto(t, 11) + 8, 0), 24);
-  const anchoEtiqueta = Math.min(W * 0.3, mayor(grupos, (g) => anchoTexto(g.etiqueta) + 8, 40), Math.max(40, W - 2 * PAD - 40 - valorNecesario));
-  const anchoValor = Math.min(valorNecesario, W - 2 * PAD - anchoEtiqueta - 40);
-  const x0 = PAD + anchoEtiqueta;
-  const anchoPlot = Math.max(40, W - x0 - anchoValor - PAD);
+  const { x0, anchoEtiqueta, anchoPlot } = geometriaBarras(grupos, W);
   const maximo = mayor(grupos, (g) => mayor(g.valores, (v) => v ?? 0, 0), 0);
   const eje = escala(maximo, tope !== undefined && maximo <= tope ? tope : undefined);
   const x = (v: number): number => x0 + (v / eje.tope) * anchoPlot;
+  const marcas = marcasQueCaben(eje.marcas, anchoPlot / eje.tope);
 
   const altoGrupo = series.length * BARRA + (series.length - 1) * ENTRE_BARRAS;
   const entradas = leyenda ? filasLeyenda(series, W) : [];
@@ -247,10 +270,10 @@ export function SvgBarras({
           ))}
         </g>
       )}
-      {eje.marcas.map((m) => (
+      {marcas.map((m) => (
         <g key={m}>
           <line x1={x(m)} x2={x(m)} y1={arriba - 4} y2={abajo + 4} stroke={paleta.reja} strokeWidth={1} />
-          <text x={x(m)} y={abajo + 18} fill={paleta.tenue} fontSize={11} textAnchor="middle">
+          <text className="marca-eje" x={x(m)} y={abajo + 18} fill={paleta.tenue} fontSize={11} textAnchor="middle">
             {formatNumber(m)}
           </text>
         </g>

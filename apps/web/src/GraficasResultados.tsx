@@ -126,10 +126,14 @@ function Nota({ children }: { children: ReactNode }): ReactNode {
  * A chart that fails to build or draw becomes a note: a chart is never worth the whole view
  * (QA of #512, where one blank screen came from a single chart).
  */
-class SinCaida extends Component<{ children: ReactNode }, { fallo: boolean }> {
-  override state = { fallo: false };
-  static getDerivedStateFromError(): { fallo: boolean } {
+class SinCaida extends Component<{ children: ReactNode; datos: unknown }, { fallo: boolean; datos: unknown }> {
+  override state = { fallo: false, datos: this.props.datos };
+  static getDerivedStateFromError(): Partial<{ fallo: boolean }> {
     return { fallo: true };
+  }
+  /** New data (another run, another log) gets a fresh try instead of the old failure's note. */
+  static getDerivedStateFromProps(props: { datos: unknown }, state: { datos: unknown }): { fallo: boolean; datos: unknown } | null {
+    return props.datos === state.datos ? null : { fallo: false, datos: props.datos };
   }
   override render(): ReactNode {
     return this.state.fallo ? <Nota>{strings().graficas.error}</Nota> : this.props.children;
@@ -155,7 +159,7 @@ export function GraficaDeUtilizacion({ result, scenario, nombres }: {
 }): ReactNode {
   return (
     <section style={seccionStyle} data-grafica="utilizacion">
-      <SinCaida>
+      <SinCaida datos={result}>
         {sinVentana(result, scenario.run.warmup) ? <SinVentana /> : <Barras props={() => graficaUtilizacion(result, nombres)} />}
       </SinCaida>
     </section>
@@ -165,7 +169,7 @@ export function GraficaDeUtilizacion({ result, scenario, nombres }: {
 export function GraficaDeInstancias({ ir, result, scenario }: { ir: ProcessIR; result: RunResult; scenario: ResolvedScenario }): ReactNode {
   return (
     <section style={seccionStyle} data-grafica="instancias">
-      <SinCaida>
+      <SinCaida datos={result}>
         {sinVentana(result, scenario.run.warmup) ? <SinVentana /> : <Barras props={() => graficaInstancias(ir, result)} />}
       </SinCaida>
     </section>
@@ -223,12 +227,12 @@ export function GraficasDelProceso({
   return (
     <section style={seccionStyle} className="graficas-fila">
       <div data-grafica="percentiles">
-        <SinCaida>
+        <SinCaida datos={result}>
           <Percentiles result={result} unit={unit} />
         </SinCaida>
       </div>
       <div data-grafica="histograma">
-        <SinCaida>
+        <SinCaida datos={log}>
           <HistogramaDeCasos scenario={scenario} unit={unit} log={log} />
         </SinCaida>
       </div>

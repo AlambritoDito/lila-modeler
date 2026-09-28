@@ -41,7 +41,7 @@ import {
 } from './ResultsView.js';
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
 import { MAX_SERIES } from './graficas';
-import { GraficaBarras, type GraficaBarrasProps } from './GraficasSvg';
+import { GraficaBarras, geometriaBarras, PLOT_MINIMO, useAncho, type GraficaBarrasProps } from './GraficasSvg';
 import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
@@ -441,15 +441,19 @@ export function compareCharts(input: CompareChartsInput): { graficas: GraficaBar
 
 function CompareCharts(props: CompareChartsInput): ReactNode {
   const S = useStrings();
+  const [ref, ancho] = useAncho();
   const { graficas, notas } = compareCharts(props);
   if (graficas.length === 0 && notas.length === 0) return null;
-  // The one-group charts (cycle time, cost) sit side by side; utilization takes the full width.
+  // The one-group charts (cycle time, cost) sit side by side while each keeps a readable plot;
+  // otherwise they go full width, like utilization (QA of #512: at 800 px the plot fell to 72 px).
   const pequenas = graficas.filter((g) => g.grupos.length === 1);
   const grandes = graficas.filter((g) => g.grupos.length !== 1);
+  const mitad = (ancho - 12) / 2;
+  const juntas = pequenas.every((g) => geometriaBarras(g.grupos, mitad).anchoPlot >= PLOT_MINIMO);
   return (
     <section style={sectionStyle} data-grafica="comparar">
       <h2 style={{ ...h2Style, marginBottom: 8 }}>{S.graficas.comparar}</h2>
-      <div className="graficas-fila">
+      <div ref={ref} className={juntas ? 'graficas-fila' : undefined} data-juntas={juntas}>
         {pequenas.map((g) => (
           <GraficaBarras key={g.titulo} {...g} />
         ))}
