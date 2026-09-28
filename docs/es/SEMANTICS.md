@@ -784,11 +784,14 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
 Bizagi no documenta su semántica de calendarios; esta es la de Lila, ajustable si alguien aporta el
 comportamiento real de L-Sim/Bizagi.
 
-`scenario.calendars[nombre] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }] }`.
+`scenario.calendars[nombre] = { intervals: [{ days: ["MON"…"SUN"], from: "HH:MM", to: "HH:MM" }], holidays?: [...] }`.
+Desde #82 un intervalo también puede repetirse por mes o por año (`monthDays`, `monthWeekdays`,
+`dates`, R-CAL-12/13), y `holidays` cierra días enteros (R-CAL-14).
 
 - **R-CAL-1 — Patrón semanal relativo a `run.start`.** Los días y horas se interpretan en el mismo
-  offset UTC que `run.start`. No hay DST, no hay festivos, no hay zonas horarias por recurso en v1
-  (`timezone` y `holidays` son campos reservados, §15). El patrón se repite indefinidamente.
+  offset UTC que `run.start`. No hay DST ni zonas horarias por recurso en v1 (`timezone` es un
+  campo reservado, §15, y R-CAL-15 fija el límite). El patrón se repite indefinidamente. La
+  recurrencia mensual y anual y los festivos (R-CAL-12 … R-CAL-14) se leen en ese mismo offset.
   *(prueba: LILA-040)*
 - **R-CAL-2 — Intervalos.** `from` inclusivo, `to` exclusivo. **`to > from` es obligatorio** (R13 de
   `SCENARIO_FORMAT.md`): ningún intervalo cruza la medianoche, y una ventana nocturna se declara
@@ -907,6 +910,43 @@ comportamiento real de L-Sim/Bizagi.
   - **Utilización y costo.** Se reportan **por rol**, no por turno, y el denominador es el de
     R-CAL-9: `busyTime / Σᵢ (capacityᵢ × openTimeᵢ)` sobre `[warmup, t_stop]`.
   *(prueba: LILA-164)*
+- **R-CAL-12 — Recurrencia mensual (#82).** Además de `days`, un intervalo puede repetirse por mes:
+  `monthDays: [n…]` abre el día `n` de cada mes (`1…31`), o contando desde el final (`-1` es el
+  último día, `-2` el anterior). Un día que no existe en un mes —el 31 de un mes de 30 días, el 30
+  de febrero— se **salta**, nunca se mueve a otro día: la misma regla que `BYMONTHDAY` de
+  iCalendar. `monthWeekdays: [{ nth, day }]` abre el `nth` día de la semana del mes (`1…5`), o
+  contando desde el final (`-1` es el último): `{ nth: -1, day: "FRI" }` es el último viernes. Un
+  mes sin quinto lunes se salta `{ nth: 5, day: "MON" }`. *(prueba: #82)*
+- **R-CAL-13 — Recurrencia anual (#82).** `dates: ["MM-DD"…]` abre esa fecha cada año. `"02-29"` es
+  válida y solo abre en años bisiestos (regla gregoriana: 2100 no lo es); una fecha que no existe
+  nunca, como `"02-30"`, es error de esquema. Cada intervalo lleva **exactamente un** selector de
+  días —`days`, `monthDays`, `monthWeekdays` o `dates`—; mezclarlos en un calendario se hace con
+  varios intervalos, que se unen como cualquier otro (R-CAL-2). *(prueba: #82)*
+- **R-CAL-14 — Festivos (#82).** `holidays: ["YYYY-MM-DD" | "MM-DD"…]` cierra esos días civiles
+  **enteros** (00:00–24:00 en el offset de `run.start`), digan lo que digan los intervalos:
+  `"YYYY-MM-DD"` una vez, `"MM-DD"` cada año. Un festivo en un día que ya estaba cerrado no cambia
+  nada. Una tarea que llegaría a un festivo se pausa y se reanuda en la apertura siguiente
+  (R-CAL-5), y el tiempo cerrado cuenta como `offHoursWait` (R-CAL-7) y no como tiempo disponible
+  (R-CAL-9). El festivo de un tramo de capacidad baja solo ese tramo (R-CAL-11). Un calendario
+  cuyas aperturas caen todas en sus propios festivos nunca abre: `E-CAL-VACIO`, que el lint
+  reporta en `calendars.<nombre>` y `core/` al compilar.
+  Un calendario solo con `days` y sin festivos es exactamente el calendario semanal de R-CAL-1:
+  mismo camino de código, mismos bytes (R-DEG-2). También lo es uno cuyos únicos festivos son
+  fechas puntuales anteriores a `run.start` o en días de la semana en que su patrón nunca abre: se
+  descartan al compilar. Cualquier otro festivo toma el camino fechado, cuyos resultados pueden
+  diferir de los semanales en el último ULP (unos 10⁻¹⁵ relativos) aunque el festivo caiga después
+  del final de la corrida, porque el motor no conoce ese final al compilar un calendario. El texto
+  del error de un calendario que solo abre en sus festivos es `calendars.<nombre>: todas las
+  aperturas del calendario caen en uno de sus festivos.` Todo lo fechado es aritmética de días civiles,
+  sin `Date` ni `Intl` (R-DET-5): el resultado no depende de la zona horaria del proceso que lo
+  corre. *(prueba: #82)*
+- **R-CAL-15 — Sin zona horaria propia ni DST (límite).** Toda fecha y hora de un calendario se lee
+  en el offset UTC fijo de `run.start`, durante toda la corrida. Una corrida que cruza un cambio
+  de horario conserva ese offset: el reloj civil del lugar se mueve una hora y el calendario no lo
+  sigue. La zona horaria propia con DST (`timezone` en `calendars` y `run`) sigue siendo un campo
+  reservado (§15): hacerlo bien exige la base de datos de zonas IANA dentro de `core/`, que hoy no
+  tiene ninguna. Alternativa: partir el escenario en el cambio, o correr a mano los intervalos
+  afectados. *(prueba: #82)*
 
 ---
 
@@ -973,7 +1013,8 @@ El esquema del escenario los **acepta** (para que un archivo escrito hoy siga va
 el motor los **rechaza** con error claro mientras no estén implementados (ADR-015, LILA-013).
 
 - **R-RES-1 — Lista v1:** `priority`, `preempt`, `batch` (sección 6 del documento de estructura)
-  más `holidays` y `timezone` en `calendars` (ADR-016, LILA-013). `conditions` es reservado solo en
+  más `timezone` en `calendars` y `run` (ADR-016, LILA-013). `holidays` estuvo en esta lista hasta
+  que #82 lo implementó (R-CAL-14). `conditions` es reservado solo en
   elementos que **no** son un flujo que sale de un XOR divergente: ahí está implementado (§6.1,
   ADR-028) y en el resto sigue dando `E-RESERVADO`. *(prueba: LILA-013, E22)*
 - **R-RES-2 — Texto exacto del error.**
@@ -988,7 +1029,7 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
   ```
   elements.Task_TomarPedido.priority: campo reservado, no soportado por el simulador en v1.
   resources.cajero.preempt: campo reservado, no soportado por el simulador en v1.
-  calendars.oficina.holidays: campo reservado, no soportado por el simulador en v1.
+  calendars.oficina.timezone: campo reservado, no soportado por el simulador en v1.
   ```
 
   Código `E-RESERVADO`. *(prueba: LILA-013)*
@@ -1085,7 +1126,7 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
 | `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
 | `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
-| `E-CAL-VACIO` | calendario sin intervalos, o intersección de calendarios vacía (cita la tarea) |
+| `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
@@ -1345,6 +1386,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-CAL-9 | utilización atribuible a la cohorte sobre horas disponibles; puede superar 1 sin apropiación (`Σᵢ capacityᵢ × openTimeᵢ` en `[warmup, t_stop]`) | LILA-041, LILA-036, LILA-204 (denominador por tramos: LILA-164) |
 | R-CAL-10 | matriz recurso × calendario y calendario por defecto | LILA-041, LILA-042 |
 | R-CAL-11 | capacidad por turno dentro de un mismo pool (unión, suma, cierre y validación) | LILA-164 |
+| R-CAL-12 … R-CAL-15 | recurrencia mensual y anual, festivos y el límite del offset fijo (sin DST) | #82 (LILA-082) |
 | R-COST-1 … R-COST-4 | costos por elemento, recurso, fila y caso | LILA-036 (fila del log: LILA-037) |
 | R-COST-5, R-COST-6 | costos ausentes = 0; esperar no cuesta | LILA-013, LILA-036 |
 | R-DEG-1 | sin recursos ⇒ capacidad infinita, bit a bit igual a M1 | LILA-039 |

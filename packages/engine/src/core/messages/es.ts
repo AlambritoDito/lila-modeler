@@ -42,6 +42,7 @@ export const coreEs: CoreCatalog = {
     'E-CAL-VACIO/interseccion': (elementId) =>
       `${elementId}: la intersección de los calendarios de la tarea es vacía.`,
     'E-CAL-VACIO/pool-sin-tramos': () => 'el pool no tiene ningún tramo de capacidad abierto.',
+    'E-CAL-VACIO/festivos': (name) => `${name}: todas las aperturas del calendario caen en uno de sus festivos.`,
     'E-CAL-DESCONOCIDO': (subject, calendar) =>
       `${subject}: el calendario ${calendar} no existe.`,
 

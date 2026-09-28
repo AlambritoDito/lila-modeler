@@ -198,6 +198,16 @@ export const es: Catalog = {
     intervalTo: () => 'to debe ser "HH:MM" (se admite "24:00")',
     intervalOrder: () =>
       'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',
+    monthDay: () =>
+      'monthDays: 0 no es un día; usa 1…31, o -1…-31 contando desde el final del mes',
+    monthWeekdayNth: () =>
+      'nth: 0 no es una semana; usa 1…5, o -1…-5 contando desde el final del mes',
+    annualDate: () =>
+      'dates: una fecha anual es "MM-DD" y tiene que existir en algún año (se admite "02-29")',
+    holidayDate: () =>
+      'holidays: un festivo es "YYYY-MM-DD" (una vez) o "MM-DD" (cada año) y tiene que ser una fecha real',
+    intervalSelector: () =>
+      'cada intervalo declara exactamente uno de days, monthDays, monthWeekdays o dates',
   },
   cli: {
     usage: () => ES_USAGE,
@@ -277,6 +287,7 @@ export const es: Catalog = {
     docGeneratedBy: (version) => `Generado por Lila Modeler ${version}`,
     docDescription: () => 'Descripción del proceso',
     docNoDescription: () => 'El proceso no tiene descripción.',
+    docAttributeNoRef: () => 'Atributo sin referencia',
     docElements: () => 'Elementos',
     docNoLane: () => 'Sin carril',
     docType: () => 'Tipo',

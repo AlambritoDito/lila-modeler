@@ -8,8 +8,9 @@ reaprender el flujo antes de sacar tu primer número. Lila es un **simulador** d
 para BPMN: un motor, una CLI, un servidor MCP y un editor alrededor. No es una suite de
 documentación ni de publicación de procesos: Archivo → Exportar documento del proceso escribe un
 Word (.docx) o un HTML de una página con el diagrama, la documentación de cada elemento y las
-tablas del escenario y de resultados, pero no hay plantillas de documento ni repositorio compartido
-de procesos. Bizagi Modeler se cita como la referencia y la
+tablas del escenario y de resultados, pero no hay plantillas de documento. Un proyecto puede
+contener varios procesos, pero no hay un repositorio compartido entre usuarios. Bizagi Modeler se
+cita como la referencia y la
 inspiración de la que este proyecto aprendió el flujo, y como origen de los ejemplos públicos
 contra los que se valida el motor.
 
@@ -122,7 +123,9 @@ etiquetas; la acción solo escribe por ti la asignación tarea por tarea.
 | Recurrence + start time + duration | «Lun–Vie / Todos / Fin de semana» o cualquier día + desde–hasta, una entrada de `intervals[]` por franja, y una rejilla semanal para pintar (24 h, `to` exclusivo, se admite `"24:00"`) |
 | Calendario del recurso | `calendar` en el pool |
 | Tabla «Resource \| Morning \| Day \| Night» | `capacity` como lista de `{ calendar, capacity }`: un solo pool con capacidad por turno |
-| Holidays | reservado, no está en v1; tampoco las recurrencias mensual/anual, el horario de verano ni la zona horaria por calendario |
+| Recurrence: monthly, yearly | «Se repite»: el día N (o el último) del mes, del primer al quinto o el último día de la semana del mes, o una fecha cada año (`monthDays`, `monthWeekdays`, `dates`) |
+| Holidays | «Festivos» bajo las franjas: una fecha una vez, o «Cada año» (`holidays`); cerrado el día entero |
+| Recurrencia cada N semanas/meses, horario de verano, zona horaria por calendario | no está en v1: los calendarios conservan el offset de `run.start` durante toda la corrida |
 
 Sin ningún calendario, todo es 24×7. El tiempo de proceso de una tarea se pausa cuando cierra su
 turno y sigue cuando abre; ese tiempo cerrado se reporta aparte como `offHoursWait`.
@@ -144,11 +147,16 @@ Extras sin columna en Bizagi: p50/p90/p95 del tiempo de ciclo y de la espera, la
 de cola por actividad, throughput por hora, costo por caso, ranking de cuellos de botella, registro
 de eventos por caso y la espera fuera de horario separada de la espera por recurso.
 
+Junto a las tablas, Results dibuja unas pocas gráficas: utilización por recurso, instancias
+iniciadas por tarea, p50/p90/p95 del tiempo de ciclo y de espera, y un histograma del tiempo de
+ciclo por caso de la primera réplica. Cada gráfica sale de los mismos números que su tabla y los
+imprime en sus barras; la tabla sigue siendo la referencia.
+
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas |
+| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas, y gráficas de barras del tiempo de ciclo medio, el costo por caso y la utilización con el delta de cada escenario contra la base |
 | Exportar resultados a Excel *(el nombre en Bizagi puede variar según la versión)* | un CSV por tabla y un `.xlsx` único (`--csv`, `--xlsx`, o los botones de exportar en Results) |
-| Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
+| Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados, con las gráficas de la corrida. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
 | Ver moverse los tokens | **Animate**: Play desde Results reproduce la réplica 1 de la corrida guardada sobre el diagrama, con contadores por elemento que salen del registro de eventos del propio motor, no de un caminante de juguete. El modo **Validate paths**, aparte, es la animación didáctica de bpmn-js y no lee ningún escenario |
 
 ## Tres diferencias que vas a notar

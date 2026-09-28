@@ -224,7 +224,6 @@ export const en = {
     /** Diagram tabs, bottom left. */
     cerrarDiagrama: 'Close diagram',
     cerrarArchivo: (archivo: string): string => `Close ${archivo}`,
-    nuevoDiagrama: 'New diagram',
     /** Divider between the canvas and the right panel (design 2a). */
     redimensionarPanel: 'Resize the right panel',
     /** Divider between the left column and the canvas (#406). */
@@ -817,7 +816,7 @@ export const en = {
         'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
       times: 'How long each arrival and each piece of work takes.',
       resources: 'Who does the work: pools, how many units, and which task takes which pool.',
-      calendars: 'When the work is possible: weekly calendars, and the capacity of each shift.',
+      calendars: 'When the work is possible: calendars and holidays, and the capacity of each shift.',
     } as Record<string, string>,
 
     /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
@@ -896,6 +895,11 @@ export const en = {
       days: 'Days',
       from: 'From',
       to: 'To',
+      monthDays: 'Days of the month',
+      monthWeekdays: 'Weekdays of the month',
+      dates: 'Yearly dates',
+      nth: 'Week of the month',
+      day: 'Weekday',
       // resources (§ 2.4)
       name: 'Name',
       type: 'Type',
@@ -1002,6 +1006,30 @@ export const en = {
     jsonInvalido: (mensaje: string): string => `Not valid JSON: ${mensaje}`,
     jsonNoEsObjeto: 'The scenario has to be a JSON object.',
 
+    /** #449: scenario parameters from Excel/CSV, reviewed before they are applied. */
+    importar: 'Import Excel/CSV…',
+    plantilla: 'Download template',
+    importarAyuda: 'Download the template, fill it in Excel and import it back. Empty cells change nothing and nothing is applied until you confirm.',
+    importarSinModelo: 'Open a diagram first: the rows are matched against its elements.',
+    importarTitulo: (archivo: string): string => `Import from ${archivo}`,
+    importarCambios: (n: number): string => (n === 1 ? '1 change to apply:' : `${n} changes to apply:`),
+    importarSinCambios: 'Nothing to change: the file says what the scenario already has.',
+    importarNuevo: 'new',
+    importarNoEmparejadas: (n: number): string => `Rows not applied: they match nothing or are ambiguous (${n})`,
+    importarErrores: (n: number): string => `Rows not applied: invalid values (${n})`,
+    importarAvisos: (n: number): string => `Notes (${n})`,
+    importarAplicar: 'Apply',
+    importarCancelar: 'Cancel',
+    importarAplicado: (n: number): string => (n === 1 ? 'Imported 1 change.' : `Imported ${n} changes.`),
+    importarDeshacer: 'Undo import',
+    importarIlegible: 'The file could not be read as a spreadsheet: pick an .xlsx workbook or a CSV file.',
+    importarDemasiadoGrande: 'The workbook is too large to import (more than 50 MB of sheets once uncompressed).',
+    importarFueraDeLimites: 'The workbook has cells beyond the last row or column Excel allows; it looks damaged.',
+    importarLint: (n: number): string => `Errors the scenario would have after applying (${n}): fix the file and import it again`,
+    importarDesde: (hoja: string, fila: number): string => `${hoja}, row ${fila}`,
+    importarCaducado: 'The scenario changed after the file was read: import it again to apply it.',
+    importarCaducadoDiagrama: 'The diagram changed after the file was read: import it again to apply it.',
+
     /** `resources[pool].capacity` (LILA-164): fixed or per shift. */
     capacidadFija: 'Fixed',
     capacidadPorTurno: 'Per shift',
@@ -1048,6 +1076,41 @@ export const en = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Remove',
     quitarFranja: (franja: string): string => `Remove ${franja}`,
+    /** #82: how the new range repeats — weekly, monthly or yearly (R-CAL-12, R-CAL-13). */
+    repeticion: 'Repeats',
+    repeticiones: {
+      semanal: 'Weekly',
+      diaDelMes: 'Monthly, on a day',
+      diaSemanaDelMes: 'Monthly, on a weekday',
+      anual: 'Yearly, on a date',
+    },
+    diaDelMes: 'Day of the month',
+    ultimoDia: 'Last day',
+    semanaDelMes: 'Week of the month',
+    ordinales: { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '5': '5th', '-1': 'Last' } as Record<string, string>,
+    diaSemana: 'Weekday',
+    mes: 'Month',
+    dia: 'Day',
+    meses: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** The list row of a monthly or yearly range. */
+    diaN: (n: number): string => `day ${n}`,
+    /** `n` counted from the end of the month: 1 is the last, 2 the second to last… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `last ${cosa}` : n === 2 ? `second-to-last ${cosa}` : n === 3 ? `third-to-last ${cosa}` : `${n}th-to-last ${cosa}`,
+    diaCosa: 'day',
+    cadaMesDias: (dias: string): string => `${dias} of each month`,
+    cadaMesSemana: (quien: string): string => `${quien} of each month`,
+    cadaAno: (fechas: string): string => `Every year on ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${mes} ${dia}`,
+    /** #82: holidays, closed all day whatever the ranges say (R-CAL-14). */
+    festivos: 'Holidays',
+    nuevoFestivo: 'Holiday date',
+    festivoCadaAno: 'Every year',
+    anadirFestivo: 'Add holiday',
+    listaFestivos: 'Current holidays',
+    festivoAnual: (mmdd: string): string => `${mmdd} (every year)`,
+    quitarFestivo: (festivo: string): string => `Remove ${festivo}`,
+    ayudaFestivos: 'Closed all day, whatever the ranges above say.',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1217,6 +1280,42 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Charts of Results and Compare (#460, `GraficasSvg.tsx`)
+   * ------------------------------------------------------------------ */
+  graficas: {
+    /** The chart's `<desc>` and alt text: every value, since the table is the source. */
+    valor: (etiqueta: string, texto: string): string => `${etiqueta}: ${texto}`,
+    sinDatos: 'No data to chart.',
+    utilizacion: 'Utilization by resource (%)',
+    instancias: 'Instances started by task',
+    percentiles: (unidad: string): string => `Cycle and wait time percentiles (${unidad})`,
+    ciclo: 'Cycle time',
+    espera: 'Wait time',
+    sinCompletados: 'No case completed, so cycle and wait time have no value to chart.',
+    histograma: (unidad: string): string => `Cycle time per case (${unidad})`,
+    histogramaSub: (casos: number, replicas: number): string =>
+      replicas > 1
+        ? `${casos} completed cases of replication 1 of ${replicas}`
+        : `${casos} completed cases`,
+    histogramaSinLog: 'The cycle time histogram needs this run’s per-case times, which are kept in memory only: run the scenario again to see it.',
+    sinVentana: 'Every arrival fell inside the warm-up, so nothing was measured to chart.',
+    error: 'This chart could not be drawn. The table has the values.',
+    histogramaSinCasos: 'No case of replication 1 completed: there is no cycle time to distribute.',
+    clase: (desde: string, hasta: string): string => `${desde} to ${hasta}`,
+    casos: (n: number): string => (n === 1 ? '1 case' : `${n} cases`),
+    ejeCasos: 'Cases',
+    verDatos: 'Histogram data',
+    columnaClase: (unidad: string): string => `Cycle time (${unidad})`,
+    columnaCasos: 'Cases',
+    comparar: 'Charts',
+    compararCiclo: (unidad: string): string => `Cycle time average by scenario (${unidad})`,
+    compararCosto: 'Cost per case by scenario',
+    compararUtilizacion: 'Utilization by resource and scenario (%)',
+    compararCostoNoComparable: 'Cost per case is not charted: the scenarios use different currencies.',
+    compararDemasiados: (n: number): string => `Only the first 8 of the ${n} visible scenarios are charted; the tables show them all.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Canvas: bpmn-js, bottleneck overlay and validation markers
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
@@ -1295,6 +1394,31 @@ export const en = {
     errorManifiesto: 'The file\u2019s "lila-project.json" is invalid or of an unsupported version.',
     errorSinModelo: 'The file has no "model.bpmn": it is not a .lila project.',
     errorEntrada: 'The .lila file holds an entry whose path is not valid inside a project.',
+  },
+
+  /** The processes of a repository (ADR-029, #498): the canvas tabs and their dialogs. */
+  procesos: {
+    nuevo: 'New process',
+    tituloNuevo: 'New process in this project',
+    tituloRenombrar: 'Rename process',
+    nombre: 'Process name',
+    /** Suggested name of the process the «+» creates: «Process 2», «Process 3»… */
+    nombrePorDefecto: (n: number): string => `Process ${n}`,
+    crear: 'Create',
+    renombrar: 'Rename',
+    renombrarProceso: (nombre: string): string => `Rename process ${nombre}`,
+    borrar: 'Delete',
+    borrarProceso: (nombre: string): string => `Delete process ${nombre}`,
+    tituloBorrar: 'Delete process',
+    confirmarBorrar: (nombre: string): string =>
+      `Delete «${nombre}» with its scenarios and runs? The other processes of the project stay.`,
+    /** Breadcrumb back from a called process (#461). */
+    volverA: (nombre: string): string => `Back to ${nombre}`,
+    /** Double-click on a call activity whose `calledElement` is not a process here (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `The call activity calls «${destino}», which is not a process of this project.`,
+    llamadaSinDestino: 'This call activity does not name the process it calls.',
+    llamadaMismoProceso: 'This call activity calls the process it is in.',
   },
 
   almacen: {
@@ -1418,6 +1542,71 @@ export const en = {
     estado: 'Show or hide the status bar',
     irModos: 'Move the focus to the modes',
     irPanel: 'Move the focus to the right panel',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Extended attributes (#509)
+   * ------------------------------------------------------------------ */
+  atributos: {
+    titulo: 'Extended attributes',
+    deProceso: 'Process attributes',
+    definir: 'Define attributes…',
+    ninguno: (tipo: string): string => `No attributes are defined for ${tipo} yet.`,
+    categorias: {
+      task: 'tasks',
+      gateway: 'gateways',
+      event: 'events',
+      subProcess: 'sub-processes',
+      lane: 'pools and lanes',
+      process: 'the process',
+    },
+    tipos: { text: 'Text', number: 'Number', list: 'List', date: 'Date' },
+    sinValor: '—',
+    porDefecto: (valor: string): string => `Default: ${valor}`,
+    noEsOpcion: (valor: string): string => `${valor} (not an option)`,
+    problemas: {
+      number: 'Not a number. Use digits, with a dot for decimals (for example 4.5).',
+      date: 'Not a date. Use year-month-day (for example 2026-09-28).',
+      option: 'Not one of the list\'s options.',
+    },
+    huerfano: (ref: string): string => `${ref} (no definition)`,
+    quitarHuerfano: (ref: string): string => `Remove the value of ${ref}`,
+    dialogo: 'Define extended attributes',
+    paraTipo: 'Element type',
+    nombre: (n: number): string => `Name ${n}`,
+    tipo: (n: number): string => `Type ${n}`,
+    opciones: (n: number): string => `Options ${n}`,
+    valorPorDefecto: (n: number): string => `Default ${n}`,
+    quitar: (n: number): string => `Remove attribute ${n}`,
+    anadir: 'Add attribute',
+    guardar: 'Save',
+    cancelar: 'Cancel',
+    volver: 'Back',
+    aplicar: 'Apply',
+    errores: {
+      nombre: 'Every attribute needs a name.',
+      repetido: (nombre: string): string => `Two attributes are called ${nombre}.`,
+      opciones: (nombre: string): string => `The list ${nombre} needs at least one option.`,
+      porDefecto: (nombre: string): string => `The default of ${nombre} does not fit its type.`,
+    },
+    confirmarTitulo: 'Existing values',
+    confirmarTexto: 'These changes touch attributes that elements already have values for. Choose what to do with them.',
+    renombrado: (antes: string, ahora: string): string => `${antes} is renamed to ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Its type changes from ${antes} to ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Options removed: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'element has' : 'elements have'} a value` +
+      (invalidos === 0 ? ', and every one still fits.' : `; ${invalidos} no longer ${invalidos === 1 ? 'fits' : 'fit'}.`),
+    limpiar: (n: number): string => `Clear the ${n} ${n === 1 ? 'value that no longer fits' : 'values that no longer fit'}`,
+    repetidas: (n: number): string =>
+      `${n} repeated ${n === 1 ? 'definition is' : 'definitions are'} ignored (the same attribute twice, for example after pasting a pool). Saving the definitions keeps one of each.`,
+    varios: (n: number, valores: string): string => `This element has ${n} values for this attribute (${valores}); the field edits the first.`,
+    sinReferencia: 'Attribute without a reference',
+    atributoN: (n: number): string => `Attribute ${n}`,
+    etiquetas: { nombre: 'Name', tipo: 'Type', opciones: 'Options, one per line', porDefecto: 'Default value' },
+    conservar: 'Keep the values',
+    borrado: (nombre: string, n: number): string =>
+      `${nombre} is deleted together with its ${n} ${n === 1 ? 'value' : 'values'}.`,
   },
 
   /* ------------------------------------------------------------------ *

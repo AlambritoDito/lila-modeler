@@ -8,8 +8,8 @@ vocabulary, so you do not have to relearn the workflow to get your first number 
 discrete-event **simulator** for BPMN: an engine, a CLI, an MCP server and an editor around them.
 It is not a process documentation or publishing suite: File → Export process document writes a
 Word (.docx) file or a single-page HTML with the diagram, each element's documentation and the
-scenario and results tables, but there are no document templates and no shared repository of
-processes. Bizagi Modeler is cited here as the
+scenario and results tables, but there are no document templates. One project can hold several
+processes, but there is no shared multi-user repository. Bizagi Modeler is cited here as the
 reference and inspiration this project learned the workflow from, and as the source of the public
 examples the engine is validated against.
 
@@ -123,7 +123,9 @@ per-task assignment for you.
 | Recurrence + start time + duration | «Mon–Fri / Every day / Weekend» or any days + from–to, one `intervals[]` entry per range, and a weekly grid to paint (24 h, `to` exclusive, `"24:00"` allowed) |
 | Resource calendar | `calendar` on the pool |
 | «Resource \| Morning \| Day \| Night» quantities | `capacity` as a list of `{ calendar, capacity }`: one pool, capacity per shift |
-| Holidays | reserved, not in v1; so are monthly/annual recurrences, DST and per-calendar time zones |
+| Recurrence: monthly, yearly | «Repeats»: day N (or the last day) of the month, the first…fifth or last weekday of the month, or a date every year (`monthDays`, `monthWeekdays`, `dates`) |
+| Holidays | «Holidays» under the ranges: a date once, or «Every year» (`holidays`); closed the whole day |
+| Recurrence every N weeks/months, DST, per-calendar time zone | not in v1: calendars keep `run.start`'s offset for the whole run |
 
 No calendar anywhere means 24×7. A task's processing time pauses when its shift closes and resumes
 when it opens; that closed time is reported separately as `offHoursWait`.
@@ -144,11 +146,16 @@ Extras with no Bizagi column: p50/p90/p95 of cycle time and wait, mean and maxim
 activity, throughput per hour, cost per case, a bottleneck ranking, a per-case event log, and
 off-hours wait split out from resource wait.
 
+Next to the tables, Results draws a few charts: utilization per resource, instances started per
+task, cycle and wait time p50/p90/p95, and a histogram of cycle time per case of the first
+replication. Each chart is drawn from the same numbers as its table and prints them on its bars;
+the table stays the reference.
+
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2 |
+| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
 | Export results to Excel *(Bizagi's name may differ by version)* | CSV per table and a single `.xlsx` (`--csv`, `--xlsx`, or the export buttons in Results) |
-| Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables. No templates or table of contents field; Word's navigation pane lists the headings |
+| Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables, with the charts of the run. No templates or table of contents field; Word's navigation pane lists the headings |
 | Watch the tokens move | **Animate**: Play from Results replays replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. The separate **Validate paths** mode is the didactic bpmn-js animation and reads no scenario at all |
 
 ## Three differences you will feel

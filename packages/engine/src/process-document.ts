@@ -14,10 +14,12 @@
  * ```
  * [Content_Types].xml           rels, xml and png defaults; document and styles overrides
  * _rels/.rels                   package -> word/document.xml
- * word/_rels/document.xml.rels  rId1 -> styles.xml, rId2 -> media/diagram.png (only with a diagram)
+ * word/_rels/document.xml.rels  rId1 -> styles.xml, rId2 -> media/diagram.png (only with a diagram),
+ *                               rId3… -> media/chart-1.png… (only with a run and its charts, #460)
  * word/styles.xml               Normal, Title, heading 1/2 (outline levels 0/1), the two tables
  * word/document.xml             the blocks, A4 with 1-inch margins
  * word/media/diagram.png        the diagram, when there is one
+ * word/media/chart-N.png        the charts of the run, rasterised by the host like the diagram
  * ```
  *
  * ponytail: no table-of-contents field. A TOC field is empty until Word updates it, and
@@ -30,6 +32,7 @@
 import { strFromU8, strToU8, zipSync } from 'fflate';
 
 import type { Annotations } from './bpmn/annotate.js';
+import { categoryOf, effectiveAttributes, type ElementCategory } from './bpmn/attributes.js';
 import type { SubprocessInfo } from './bpmn/parse.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
@@ -44,7 +47,8 @@ export type DocBlock =
   | { readonly kind: 'title'; readonly text: string }
   | { readonly kind: 'heading'; readonly level: 1 | 2; readonly text: string }
   | { readonly kind: 'paragraph'; readonly text: string; readonly label?: string }
-  | { readonly kind: 'image'; readonly alt: string }
+  /** The diagram, or with `chart` the chart at that index of `ProcessDocument.charts`. */
+  | { readonly kind: 'image'; readonly alt: string; readonly chart?: number }
   | { readonly kind: 'table'; readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] };
 
 export interface ProcessDocument {
@@ -52,7 +56,15 @@ export interface ProcessDocument {
   readonly title: string;
   /** The diagram; only present when the bytes are a PNG (its size is read from the header). */
   readonly png?: Uint8Array;
+  /** The charts of the run (#460), PNG only; `image` blocks point into it with `chart`. */
+  readonly charts?: readonly Uint8Array[];
   readonly blocks: readonly DocBlock[];
+}
+
+/** A chart of the run the host already rasterised (#460), with the text a reader gets instead. */
+export interface DocumentChart {
+  readonly png: Uint8Array;
+  readonly alt: string;
 }
 
 export interface ProcessDocumentInput {
@@ -66,9 +78,19 @@ export interface ProcessDocumentInput {
   readonly png?: Uint8Array;
   /** `parseBpmn(xml).subprocesses`: names and lanes of the flattened sub-processes. */
   readonly subprocesses?: Readonly<Record<string, SubprocessInfo>> | undefined;
+  /** `parseBpmn(xml).lanes` and `.pool`: where the lanes' and the pool's extended attributes are (#509). */
+  readonly lanes?: Readonly<Record<string, string>> | undefined;
+  readonly pool?: string | undefined;
+  /** `parseBpmn(xml).types`: the BPMN type of each node, which the IR flattens (#509). */
+  readonly types?: Readonly<Record<string, string>> | undefined;
   readonly scenario?: ResolvedScenario;
   /** A run of `scenario`; ignored without it. */
   readonly result?: RunResult;
+  /**
+   * Charts of that run (#460), placed at the top of the results section in this order. Ignored
+   * without a `result`: no run, no charts. Bytes that are not a PNG are left out.
+   */
+  readonly charts?: readonly DocumentChart[];
 }
 
 /**
@@ -98,6 +120,13 @@ export function flowOrder(ir: ProcessIR): string[] {
   }
   return [...seen, ...ids.filter((id) => !seen.has(id))];
 }
+
+/** The extended-attribute element type of each IR node type, when the BPMN type is not known (#509). */
+const NODE_CATEGORY: Record<ProcessIR['nodes'][string]['type'], ElementCategory> = {
+  start: 'event', end: 'event', terminate: 'event', timer: 'event',
+  task: 'task',
+  xor: 'gateway', or: 'gateway', and: 'gateway', eventGateway: 'gateway',
+};
 
 /** A cell as the reader sees it in the spreadsheet: `0.###` numbers and `0.00%` fractions. */
 function cellText(value: CellValue, format?: CellFormat): string {
@@ -150,6 +179,16 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   blocks.push({ kind: 'heading', level: 1, text: C.docDescription() });
   blocks.push({ kind: 'paragraph', text: process.documentation ?? C.docNoDescription() });
 
+  // Extended attributes (#509): one labelled line per filled-in attribute, under the element.
+  const definitions = Object.values(annotations).flatMap((a) => a.attributeDefinitions ?? []);
+  const attributeLines = (id: string, category: ElementCategory | undefined): void => {
+    for (const { name, value } of effectiveAttributes(definitions, category, annotations[id]?.attributes ?? [])) {
+      blocks.push({ kind: 'paragraph', label: name === '' ? C.docAttributeNoRef() : name, text: value });
+    }
+  };
+  attributeLines(original(ir.id), 'process');
+  if (input.pool !== undefined) attributeLines(input.pool, 'lane');
+
   // Flattened sub-processes (R-PLAN-1): their children inherit the lane of the sub-process, which
   // is the only shape the lane lists, and the sub-process gets its own section before them.
   const subs = input.subprocesses ?? {};
@@ -173,6 +212,9 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     line(C.docDocumentation(), notes.documentation);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
     for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
+    const bpmnType = input.types?.[id];
+    const fallback = ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type];
+    attributeLines(original(id), bpmnType === undefined ? fallback : categoryOf(bpmnType));
   };
   const opened = new Set<string>();
   const openSub = (sub: string | undefined): void => {
@@ -192,6 +234,7 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   const withLanes = order.some((id) => laneOf(id) !== undefined);
   for (const [lane, ids] of withLanes ? lanes : new Map([[null, order]])) {
     blocks.push({ kind: 'heading', level: 1, text: !withLanes ? C.docElements() : lane ?? C.docNoLane() });
+    for (const [laneId, label] of Object.entries(input.lanes ?? {})) if (withLanes && label === lane) attributeLines(laneId, 'lane');
     for (const id of ids) {
       const node = ir.nodes[id]!;
       openSub(node.subprocessId);
@@ -200,11 +243,17 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   }
 
   const { scenario, result } = input;
+  const charts: Uint8Array[] = [];
   if (scenario !== undefined) {
     blocks.push({ kind: 'heading', level: 1, text: C.docScenario(scenario.name) });
     blocks.push(tableOf(parametersSheet(ir, scenario, locale)));
     if (result !== undefined) {
       blocks.push({ kind: 'heading', level: 1, text: C.docResults() });
+      for (const chart of input.charts ?? []) {
+        if (pngSize(chart.png) === null) continue;
+        blocks.push({ kind: 'image', alt: chart.alt, chart: charts.length });
+        charts.push(chart.png);
+      }
       // Summary, Elements, Flows and Resources: the XLSX's own sheets (Parameters is above).
       for (const sheet of scenarioSheets(ir, scenario, result, resourceNamesOf(scenario), locale).slice(0, 4)) {
         blocks.push({ kind: 'heading', level: 2, text: sheet.name }, tableOf(sheet));
@@ -212,7 +261,13 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     }
   }
 
-  return { locale, title: input.title, blocks, ...(png === undefined ? {} : { png }) };
+  return {
+    locale,
+    title: input.title,
+    blocks,
+    ...(png === undefined ? {} : { png }),
+    ...(charts.length === 0 ? {} : { charts }),
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -250,17 +305,24 @@ function paragraph(content: string, style?: string): string {
   return `<w:p>${style === undefined ? '' : `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>`}${content}</w:p>`;
 }
 
-function imageXml(alt: string, [width, height]: readonly [number, number]): string {
+/** The relationship id of chart `index`: rId1 is the styles and rId2 the diagram. */
+const chartRid = (index: number): string => `rId${index + 3}`;
+
+function imageXml(
+  alt: string,
+  [width, height]: readonly [number, number],
+  { id, rid, file }: { readonly id: number; readonly rid: string; readonly file: string } = { id: 1, rid: 'rId2', file: 'diagram.png' },
+): string {
   const scale = Math.min(1, TEXT_WIDTH_EMU / (width * EMU_PER_PX), TEXT_HEIGHT_EMU / (height * EMU_PER_PX));
   const cx = Math.round(width * EMU_PER_PX * scale);
   const cy = Math.round(height * EMU_PER_PX * scale);
   return paragraph(
     '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
       `<wp:extent cx="${cx}" cy="${cy}"/>` +
-      `<wp:docPr id="1" name="Diagram" descr="${escapeXml(alt)}"/>` +
+      `<wp:docPr id="${id}" name="${id === 1 ? 'Diagram' : `Chart ${id - 1}`}" descr="${escapeXml(alt)}"/>` +
       '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
-      '<pic:nvPicPr><pic:cNvPr id="1" name="diagram.png"/><pic:cNvPicPr/></pic:nvPicPr>' +
-      '<pic:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      `<pic:nvPicPr><pic:cNvPr id="${id}" name="${file}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+      `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
       `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
       '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>',
   );
@@ -301,8 +363,13 @@ function documentXml(doc: ProcessDocument): string {
           return paragraph(run(block.text), `Heading${block.level}`);
         case 'paragraph':
           return paragraph(`${block.label === undefined ? '' : run(`${block.label}: `, true)}${run(block.text)}`);
-        case 'image':
-          return size === null ? '' : imageXml(block.alt, size);
+        case 'image': {
+          if (block.chart === undefined) return size === null ? '' : imageXml(block.alt, size);
+          const chart = pngSize(doc.charts?.[block.chart]);
+          return chart === null
+            ? ''
+            : imageXml(block.alt, chart, { id: block.chart + 2, rid: chartRid(block.chart), file: `chart-${block.chart + 1}.png` });
+        }
         case 'table':
           return tableXml(block.headers, block.rows);
       }
@@ -376,12 +443,18 @@ export function toDocx(doc: ProcessDocument): Uint8Array {
       `${XML_HEADER}<Relationships xmlns="${PKG_REL_NS}">` +
         `<Relationship Id="rId1" Type="${R_NS}/styles" Target="styles.xml"/>` +
         (png === undefined ? '' : `<Relationship Id="rId2" Type="${R_NS}/image" Target="media/diagram.png"/>`) +
+        (doc.charts ?? [])
+          .map((_, index) => `<Relationship Id="${chartRid(index)}" Type="${R_NS}/image" Target="media/chart-${index + 1}.png"/>`)
+          .join('') +
         '</Relationships>',
     ),
     'word/styles.xml': strToU8(stylesXml(doc.locale)),
     'word/document.xml': strToU8(documentXml(doc)),
   };
   if (png !== undefined) files['word/media/diagram.png'] = png;
+  (doc.charts ?? []).forEach((chart, index) => {
+    files[`word/media/chart-${index + 1}.png`] = chart;
+  });
   return zipSync(files, { mtime: FIXED_MTIME });
 }
 
@@ -431,10 +504,12 @@ export function toHtml(doc: ProcessDocument): string {
           return `<h${block.level + 1}>${htmlText(block.text)}</h${block.level + 1}>`;
         case 'paragraph':
           return `<p>${block.label === undefined ? '' : `<strong>${htmlText(block.label)}:</strong> `}${htmlText(block.text)}</p>`;
-        case 'image':
-          return png === undefined
+        case 'image': {
+          const bytes = block.chart === undefined ? png : doc.charts?.[block.chart];
+          return bytes === undefined
             ? ''
-            : `<img src="data:image/png;base64,${btoa(strFromU8(png, true))}" alt="${escapeHtml(block.alt)}">`;
+            : `<img src="data:image/png;base64,${btoa(strFromU8(bytes, true))}" alt="${escapeHtml(block.alt)}">`;
+        }
         case 'table': {
           const cells = (row: readonly string[], tag: 'th' | 'td'): string =>
             `<tr>${row.map((text) => `<${tag}>${htmlText(text)}</${tag}>`).join('')}</tr>`;

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="http://x">
+  <bpmn:process id="P" isExecutable="false">
+    <bpmn:startEvent id="S"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:exclusiveGateway id="X"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>fa</bpmn:outgoing><bpmn:outgoing>fb</bpmn:outgoing></bpmn:exclusiveGateway>
+    <bpmn:task id="A" name="A"><bpmn:incoming>fa</bpmn:incoming><bpmn:outgoing>fa2</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="B" name="B"><bpmn:incoming>fb</bpmn:incoming><bpmn:outgoing>fb2</bpmn:outgoing></bpmn:task>
+    <bpmn:parallelGateway id="J"><bpmn:incoming>fa2</bpmn:incoming><bpmn:incoming>fb2</bpmn:incoming><bpmn:outgoing>f9</bpmn:outgoing></bpmn:parallelGateway>
+    <bpmn:endEvent id="E"><bpmn:incoming>f9</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="S" targetRef="X"/>
+    <bpmn:sequenceFlow id="fa" sourceRef="X" targetRef="A"/>
+    <bpmn:sequenceFlow id="fb" sourceRef="X" targetRef="B"/>
+    <bpmn:sequenceFlow id="fa2" sourceRef="A" targetRef="J"/>
+    <bpmn:sequenceFlow id="fb2" sourceRef="B" targetRef="J"/>
+    <bpmn:sequenceFlow id="f9" sourceRef="J" targetRef="E"/>
+  </bpmn:process>
+</bpmn:definitions>

@@ -206,7 +206,6 @@ export const es: Strings = {
     /** Pestañas de diagrama, abajo a la izquierda. */
     cerrarDiagrama: 'Cerrar diagrama',
     cerrarArchivo: (archivo: string): string => `Cerrar ${archivo}`,
-    nuevoDiagrama: 'Nuevo diagrama',
     /** Divisor entre el lienzo y el panel derecho (diseño 2a). */
     redimensionarPanel: 'Redimensionar el panel derecho',
     /** Divisor entre la columna izquierda y el lienzo (#406). */
@@ -791,7 +790,7 @@ export const es: Strings = {
         'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
       times: 'Cuánto tarda cada llegada y cada trabajo.',
       resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
-      calendars: 'Cuándo se puede trabajar: calendarios semanales y la capacidad de cada turno.',
+      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y la capacidad de cada turno.',
     } as Record<string, string>,
 
     /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
@@ -869,6 +868,11 @@ export const es: Strings = {
       days: 'Días',
       from: 'Desde',
       to: 'Hasta',
+      monthDays: 'Días del mes',
+      monthWeekdays: 'Días de la semana del mes',
+      dates: 'Fechas anuales',
+      nth: 'Semana del mes',
+      day: 'Día de la semana',
       // resources (§ 2.4)
       name: 'Nombre',
       type: 'Tipo',
@@ -975,6 +979,30 @@ export const es: Strings = {
     jsonInvalido: (mensaje: string): string => `No es JSON válido: ${mensaje}`,
     jsonNoEsObjeto: 'El escenario tiene que ser un objeto JSON.',
 
+    /** #449: parámetros del escenario desde Excel/CSV, revisados antes de aplicarse. */
+    importar: 'Importar Excel/CSV…',
+    plantilla: 'Descargar plantilla',
+    importarAyuda: 'Descarga la plantilla, rellénala en Excel e impórtala. Las celdas vacías no cambian nada y no se aplica nada hasta que confirmes.',
+    importarSinModelo: 'Abre primero un diagrama: las filas se emparejan con sus elementos.',
+    importarTitulo: (archivo: string): string => `Importar desde ${archivo}`,
+    importarCambios: (n: number): string => (n === 1 ? '1 cambio por aplicar:' : `${n} cambios por aplicar:`),
+    importarSinCambios: 'Nada que cambiar: el archivo dice lo que el escenario ya tiene.',
+    importarNuevo: 'nuevo',
+    importarNoEmparejadas: (n: number): string => `Filas sin aplicar: no coinciden con nada o son ambiguas (${n})`,
+    importarErrores: (n: number): string => `Filas sin aplicar: valores inválidos (${n})`,
+    importarAvisos: (n: number): string => `Notas (${n})`,
+    importarAplicar: 'Aplicar',
+    importarCancelar: 'Cancelar',
+    importarAplicado: (n: number): string => (n === 1 ? 'Se importó 1 cambio.' : `Se importaron ${n} cambios.`),
+    importarDeshacer: 'Deshacer importación',
+    importarIlegible: 'El archivo no se pudo leer como hoja de cálculo: elige un libro .xlsx o un archivo CSV.',
+    importarDemasiadoGrande: 'El libro es demasiado grande para importarlo (más de 50 MB de hojas descomprimidas).',
+    importarFueraDeLimites: 'El libro tiene celdas más allá de la última fila o columna que admite Excel; parece dañado.',
+    importarLint: (n: number): string => `Errores que tendría el escenario al aplicar (${n}): corrige el archivo e impórtalo de nuevo`,
+    importarDesde: (hoja: string, fila: number): string => `${hoja}, fila ${fila}`,
+    importarCaducado: 'El escenario cambió después de leer el archivo: impórtalo de nuevo para aplicarlo.',
+    importarCaducadoDiagrama: 'El diagrama cambió después de leer el archivo: impórtalo de nuevo para aplicarlo.',
+
     /** `resources[pool].capacity` (LILA-164): fija o por turnos. */
     capacidadFija: 'Fija',
     capacidadPorTurno: 'Por turno',
@@ -1022,6 +1050,41 @@ export const es: Strings = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Quitar',
     quitarFranja: (franja: string): string => `Quitar ${franja}`,
+    /** #82: cómo se repite la franja nueva: cada semana, cada mes o cada año (R-CAL-12, R-CAL-13). */
+    repeticion: 'Se repite',
+    repeticiones: {
+      semanal: 'Cada semana',
+      diaDelMes: 'Cada mes, un día',
+      diaSemanaDelMes: 'Cada mes, un día de la semana',
+      anual: 'Cada año, una fecha',
+    },
+    diaDelMes: 'Día del mes',
+    ultimoDia: 'Último día',
+    semanaDelMes: 'Semana del mes',
+    ordinales: { '1': '1.º', '2': '2.º', '3': '3.º', '4': '4.º', '5': '5.º', '-1': 'Último' } as Record<string, string>,
+    diaSemana: 'Día de la semana',
+    mes: 'Mes',
+    dia: 'Día',
+    meses: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
+    /** Fila de la lista de una franja mensual o anual. */
+    diaN: (n: number): string => `día ${n}`,
+    /** `n` contando desde el final del mes: 1 es el último, 2 el penúltimo… */
+    desdeElFinal: (n: number, cosa: string): string =>
+      n === 1 ? `último ${cosa}` : n === 2 ? `penúltimo ${cosa}` : n === 3 ? `antepenúltimo ${cosa}` : `${n}.º ${cosa} desde el final`,
+    diaCosa: 'día',
+    cadaMesDias: (dias: string): string => `${dias} de cada mes`,
+    cadaMesSemana: (quien: string): string => `${quien} de cada mes`,
+    cadaAno: (fechas: string): string => `Cada año el ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${dia} ${mes}`,
+    /** #82: festivos, cerrado todo el día digan lo que digan las franjas (R-CAL-14). */
+    festivos: 'Festivos',
+    nuevoFestivo: 'Fecha del festivo',
+    festivoCadaAno: 'Cada año',
+    anadirFestivo: 'Añadir festivo',
+    listaFestivos: 'Festivos actuales',
+    festivoAnual: (mmdd: string): string => `${mmdd} (cada año)`,
+    quitarFestivo: (festivo: string): string => `Quitar ${festivo}`,
+    ayudaFestivos: 'Cerrado todo el día, digan lo que digan las franjas de arriba.',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1162,6 +1225,41 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Gráficas de Resultados y Comparar (#460, `GraficasSvg.tsx`)
+   * ------------------------------------------------------------------ */
+  graficas: {
+    valor: (etiqueta: string, texto: string): string => `${etiqueta}: ${texto}`,
+    sinDatos: 'No hay datos que graficar.',
+    utilizacion: 'Utilización por recurso (%)',
+    instancias: 'Instancias iniciadas por tarea',
+    percentiles: (unidad: string): string => `Percentiles de tiempo de ciclo y de espera (${unidad})`,
+    ciclo: 'Tiempo de ciclo',
+    espera: 'Tiempo de espera',
+    sinCompletados: 'Ningún caso terminó, así que el tiempo de ciclo y el de espera no tienen valor que graficar.',
+    histograma: (unidad: string): string => `Tiempo de ciclo por caso (${unidad})`,
+    histogramaSub: (casos: number, replicas: number): string =>
+      replicas > 1
+        ? `${casos} casos terminados de la réplica 1 de ${replicas}`
+        : `${casos} casos terminados`,
+    histogramaSinLog: 'El histograma del tiempo de ciclo necesita los tiempos por caso de esta corrida, que solo viven en memoria: vuelve a correr el escenario para verlos.',
+    sinVentana: 'Todas las llegadas cayeron dentro del calentamiento, así que no se midió nada que graficar.',
+    error: 'Esta gráfica no se pudo dibujar. La tabla tiene los valores.',
+    histogramaSinCasos: 'Ningún caso de la réplica 1 terminó: no hay tiempo de ciclo que repartir.',
+    clase: (desde: string, hasta: string): string => `${desde} a ${hasta}`,
+    casos: (n: number): string => (n === 1 ? '1 caso' : `${n} casos`),
+    ejeCasos: 'Casos',
+    verDatos: 'Datos del histograma',
+    columnaClase: (unidad: string): string => `Tiempo de ciclo (${unidad})`,
+    columnaCasos: 'Casos',
+    comparar: 'Gráficas',
+    compararCiclo: (unidad: string): string => `Tiempo de ciclo promedio por escenario (${unidad})`,
+    compararCosto: 'Costo por caso por escenario',
+    compararUtilizacion: 'Utilización por recurso y escenario (%)',
+    compararCostoNoComparable: 'El costo por caso no se grafica: los escenarios usan monedas distintas.',
+    compararDemasiados: (n: number): string => `Solo se grafican los primeros 8 de los ${n} escenarios visibles; las tablas los muestran todos.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Lienzo: bpmn-js, overlay de cuellos y marcadores de validación
    * (`Modeler.tsx`, `BottleneckOverlay.ts`, `ValidationMarkers.ts`)
    * ------------------------------------------------------------------ */
@@ -1279,6 +1377,31 @@ export const es: Strings = {
     errorEntrada: 'El archivo .lila tiene una entrada con una ruta que no es válida dentro de un proyecto.',
   },
 
+  /** Los procesos de un repositorio (ADR-029, #498): las pestañas del lienzo y sus diálogos. */
+  procesos: {
+    nuevo: 'Nuevo proceso',
+    tituloNuevo: 'Nuevo proceso en este proyecto',
+    tituloRenombrar: 'Renombrar proceso',
+    nombre: 'Nombre del proceso',
+    /** Nombre propuesto para el proceso que crea el «+»: «Proceso 2», «Proceso 3»… */
+    nombrePorDefecto: (n: number): string => `Proceso ${n}`,
+    crear: 'Crear',
+    renombrar: 'Renombrar',
+    renombrarProceso: (nombre: string): string => `Renombrar el proceso ${nombre}`,
+    borrar: 'Borrar',
+    borrarProceso: (nombre: string): string => `Borrar el proceso ${nombre}`,
+    tituloBorrar: 'Borrar proceso',
+    confirmarBorrar: (nombre: string): string =>
+      `¿Borrar «${nombre}» con sus escenarios y corridas? Los demás procesos del proyecto se quedan.`,
+    /** Miga de pan de vuelta desde un proceso llamado (#461). */
+    volverA: (nombre: string): string => `Volver a ${nombre}`,
+    /** Doble clic en una actividad de llamada cuyo `calledElement` no es un proceso de aquí (#461). */
+    llamadaSinResolver: (destino: string): string =>
+      `La actividad de llamada llama a «${destino}», que no es un proceso de este proyecto.`,
+    llamadaSinDestino: 'Esta actividad de llamada no indica a qué proceso llama.',
+    llamadaMismoProceso: 'Esta actividad de llamada llama al mismo proceso en el que está.',
+  },
+
   almacen: {
     errorSinBridge: 'DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?',
     errorProyectoDistinto:
@@ -1392,6 +1515,71 @@ export const es: Strings = {
     estado: 'Mostrar u ocultar la barra de estado',
     irModos: 'Llevar el foco a los modos',
     irPanel: 'Llevar el foco al panel derecho',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Atributos extendidos (#509)
+   * ------------------------------------------------------------------ */
+  atributos: {
+    titulo: 'Atributos extendidos',
+    deProceso: 'Atributos del proceso',
+    definir: 'Definir atributos…',
+    ninguno: (tipo: string): string => `Todavía no hay atributos definidos para ${tipo}.`,
+    categorias: {
+      task: 'tareas',
+      gateway: 'compuertas',
+      event: 'eventos',
+      subProcess: 'subprocesos',
+      lane: 'pools y carriles',
+      process: 'el proceso',
+    },
+    tipos: { text: 'Texto', number: 'Número', list: 'Lista', date: 'Fecha' },
+    sinValor: '—',
+    porDefecto: (valor: string): string => `Por defecto: ${valor}`,
+    noEsOpcion: (valor: string): string => `${valor} (no es una opción)`,
+    problemas: {
+      number: 'No es un número. Usa cifras, con punto para los decimales (por ejemplo 4.5).',
+      date: 'No es una fecha. Usa año-mes-día (por ejemplo 2026-09-28).',
+      option: 'No es una de las opciones de la lista.',
+    },
+    huerfano: (ref: string): string => `${ref} (sin definición)`,
+    quitarHuerfano: (ref: string): string => `Quitar el valor de ${ref}`,
+    dialogo: 'Definir atributos extendidos',
+    paraTipo: 'Tipo de elemento',
+    nombre: (n: number): string => `Nombre ${n}`,
+    tipo: (n: number): string => `Tipo ${n}`,
+    opciones: (n: number): string => `Opciones ${n}`,
+    valorPorDefecto: (n: number): string => `Por defecto ${n}`,
+    quitar: (n: number): string => `Quitar el atributo ${n}`,
+    anadir: 'Añadir atributo',
+    guardar: 'Guardar',
+    cancelar: 'Cancelar',
+    volver: 'Volver',
+    aplicar: 'Aplicar',
+    errores: {
+      nombre: 'Cada atributo necesita un nombre.',
+      repetido: (nombre: string): string => `Hay dos atributos que se llaman ${nombre}.`,
+      opciones: (nombre: string): string => `La lista ${nombre} necesita al menos una opción.`,
+      porDefecto: (nombre: string): string => `El valor por defecto de ${nombre} no encaja con su tipo.`,
+    },
+    confirmarTitulo: 'Valores existentes',
+    confirmarTexto: 'Estos cambios afectan a atributos que ya tienen valores en algunos elementos. Elige qué hacer con ellos.',
+    renombrado: (antes: string, ahora: string): string => `${antes} pasa a llamarse ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Su tipo cambia de ${antes} a ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Opciones quitadas: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'elemento tiene' : 'elementos tienen'} valor` +
+      (invalidos === 0 ? ', y todos siguen encajando.' : `; ${invalidos} ya no ${invalidos === 1 ? 'encaja' : 'encajan'}.`),
+    limpiar: (n: number): string => `Vaciar ${n === 1 ? 'el valor que ya no encaja' : `los ${n} valores que ya no encajan`}`,
+    repetidas: (n: number): string =>
+      `Se ignora${n === 1 ? ' 1 definición repetida' : `n ${n} definiciones repetidas`} (el mismo atributo dos veces, por ejemplo tras pegar un pool). Guardar las definiciones deja una de cada.`,
+    varios: (n: number, valores: string): string => `Este elemento tiene ${n} valores para este atributo (${valores}); el campo edita el primero.`,
+    sinReferencia: 'Atributo sin referencia',
+    atributoN: (n: number): string => `Atributo ${n}`,
+    etiquetas: { nombre: 'Nombre', tipo: 'Tipo', opciones: 'Opciones, una por línea', porDefecto: 'Valor por defecto' },
+    conservar: 'Conservar los valores',
+    borrado: (nombre: string, n: number): string =>
+      `${nombre} se borra junto con ${n === 1 ? 'su valor' : `sus ${n} valores`}.`,
   },
 
   /* ------------------------------------------------------------------ *

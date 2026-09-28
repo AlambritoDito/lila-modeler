@@ -3,6 +3,40 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.15] - 2026-09-28
+
+Lote H: several processes in one project, attributes you define once per element type, charts next
+to the results tables, calendars that finish what #82 started, and a scenario import from Excel.
+
+### Added
+
+- **Several processes in one project, with call activity navigation (#511)**: a project can now
+  hold more than one process, each a tab on the canvas, added with the `+` button and renamed or
+  deleted from its own tab. Double-click a call activity whose target matches another process's id
+  opens that process with a «Back to …» crumb; double-click a collapsed sub-process drills down in
+  place. The file format grows a `processes` list (repository v2) only once a project has a second
+  process; a one-process project still saves in the version 1 layout the installed beta.14 app
+  already reads, so nothing on disk needs migrating. Beta.14 cannot open a project with several
+  processes: it reports that the model is missing (LILA-NO-MODEL) rather than a version error.
+- **Extended attributes per element type (#509, #513)**: define a text, number, list or date
+  attribute once for a task, gateway, event, sub-process, lane, pool or the process itself, from
+  Properties → «Define attributes…», then fill it in per element. Filled-in values (or the
+  definition's default) show in Properties and appear under each element in the process document.
+  Renaming, retyping or deleting a definition that elements already use asks first.
+- **Charts in Results, Compare and the process document (#460, #512)**: bar charts sit under the
+  tables for process elements, resources and the process itself in Results, and under Compare's
+  scenario tables; the process document rasterises the same charts. Every bar repeats its table
+  cell's own text, and missing data gets a note instead of an all-zero chart.
+- **Monthly and annual calendar recurrence, and holidays (#82, #510)**: besides the weekly grid, a
+  calendar interval can now repeat on a day of the month (including the last day), a weekday of the
+  month (e.g. the last Friday) or a fixed yearly date, and a calendar can list one-off or yearly
+  holidays that close the whole civil day. A calendar's own timezone with DST stays out of scope
+  and reserved (R-CAL-15).
+- **Import scenario parameters from Excel/CSV (#449, #514)**: the scenario panel can download a
+  filled-in template and import a matching Excel or CSV file; a report lists every change plus any
+  unmatched, ambiguous or invalid row before anything is applied, and the import can be undone
+  while nothing else has changed the scenario.
+
 ## [1.0.0-beta.14] - 2026-09-26
 
 Lote G: the classroom deliverable and the safety net. The process document exports to Word and

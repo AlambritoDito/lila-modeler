@@ -10,6 +10,7 @@
  */
 import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
+import type { AttributeDefinition, AttributeValue } from './attributes.js';
 
 /** Una responsabilidad RACI: `lila:responsibility type="R" roleRef="rol-1"`. */
 export interface Responsibility {
@@ -39,6 +40,14 @@ export interface Annotations {
   refs?: Refs;
   /** `lila:versionTag`, que cuelga del `bpmn:process`. */
   versionTag?: string;
+  /**
+   * `lila:attributeDefinition` (#509): the extended attributes declared on this element — the
+   * `bpmn:collaboration` that hosts them, or the only `bpmn:process` of a diagram without one
+   * (older files may carry them on a pool's process; readers take them from any root element).
+   */
+  attributeDefinitions?: AttributeDefinition[];
+  /** `lila:attributeValue` (#509): this element's extended attribute values, in file order. */
+  attributes?: AttributeValue[];
 }
 
 /** `lila:responsibility` -> `lila:Responsibility`, `lila:systemRef` -> `lila:SystemRef`. */
@@ -48,6 +57,22 @@ function moddleType(tag: string): string {
 
 const RESPONSIBILITY_TYPE = moddleType('responsibility');
 const VERSION_TAG_TYPE = moddleType('versionTag');
+const DEFINITION_TYPE = moddleType('attributeDefinition');
+const VALUE_TYPE = moddleType('attributeValue');
+
+function readDefinition(value: ModdleElement): AttributeDefinition {
+  const options = (value.options ?? []).map((option) => option.value ?? '');
+  // `default` is typed as the gateway's default flow; on a `lila:attributeDefinition` it is text.
+  const fallback: unknown = value.default;
+  return {
+    id: value.id ?? '',
+    name: value.name ?? '',
+    type: value.type ?? '',
+    appliesTo: value.appliesTo ?? '',
+    ...(typeof fallback === 'string' ? { default: fallback } : {}),
+    ...(options.length === 0 ? {} : { options }),
+  };
+}
 const REF_TYPE_TO_KIND = new Map<string, RefKind>(REF_KINDS.map((k) => [moddleType(k), k]));
 
 /**
@@ -102,7 +127,17 @@ function readOne(el: ModdleElement): Annotations {
 
   const responsibilities: Responsibility[] = [];
   const refs: Refs = {};
+  const definitions: AttributeDefinition[] = [];
+  const attributes: AttributeValue[] = [];
   for (const value of el.extensionElements?.values ?? []) {
+    if (value.$type === DEFINITION_TYPE) {
+      definitions.push(readDefinition(value));
+      continue;
+    }
+    if (value.$type === VALUE_TYPE) {
+      attributes.push({ ref: value.ref ?? '', value: value.value ?? '' });
+      continue;
+    }
     if (value.$type === RESPONSIBILITY_TYPE) {
       responsibilities.push({ type: value.type ?? '', roleRef: value.roleRef ?? '' });
       continue;
@@ -116,6 +151,8 @@ function readOne(el: ModdleElement): Annotations {
   }
   if (responsibilities.length > 0) annotations.responsibilities = responsibilities;
   if (Object.keys(refs).length > 0) annotations.refs = refs;
+  if (definitions.length > 0) annotations.attributeDefinitions = definitions;
+  if (attributes.length > 0) annotations.attributes = attributes;
 
   return annotations;
 }
@@ -182,12 +219,16 @@ export async function annotateElement(
   if (
     annotations.responsibilities !== undefined ||
     annotations.refs !== undefined ||
-    annotations.versionTag !== undefined
+    annotations.versionTag !== undefined ||
+    annotations.attributeDefinitions !== undefined ||
+    annotations.attributes !== undefined
   ) {
     const existing = target.extensionElements?.values ?? [];
     const kept = existing.filter((value) => {
       if (value.$type === RESPONSIBILITY_TYPE) return annotations.responsibilities === undefined;
       if (value.$type === VERSION_TAG_TYPE) return annotations.versionTag === undefined;
+      if (value.$type === DEFINITION_TYPE) return annotations.attributeDefinitions === undefined;
+      if (value.$type === VALUE_TYPE) return annotations.attributes === undefined;
       const kind = REF_TYPE_TO_KIND.get(value.$type);
       if (kind === undefined) return true; // extensión ajena: intacta
       return annotations.refs?.[kind] === undefined;
@@ -204,6 +245,20 @@ export async function annotateElement(
     }
     if (annotations.versionTag !== undefined && annotations.versionTag !== '') {
       added.push(moddle.create(VERSION_TAG_TYPE, { value: annotations.versionTag }));
+    }
+    for (const { options, ...definition } of annotations.attributeDefinitions ?? []) {
+      // `default` goes in as text: see `readDefinition`.
+      added.push(
+        moddle.create(DEFINITION_TYPE, {
+          ...definition,
+          ...(options === undefined
+            ? {}
+            : { options: options.map((value) => moddle.create(moddleType('option'), { value })) }),
+        }),
+      );
+    }
+    for (const attribute of annotations.attributes ?? []) {
+      added.push(moddle.create(VALUE_TYPE, { ...attribute }));
     }
 
     target.extensionElements = moddle.create('bpmn:ExtensionElements', {

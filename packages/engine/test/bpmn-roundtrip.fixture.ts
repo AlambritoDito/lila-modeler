@@ -40,6 +40,13 @@ const PEDIDO = resolve(
 export async function annotatedPedido(): Promise<string> {
   let xml = readFileSync(PEDIDO, 'utf8');
   xml = await annotateElement(xml, 'Process_Restaurante', { versionTag: '1.3.0' });
+  xml = await annotateElement(xml, 'Collaboration_Pedido', {
+    // Extended attributes (#509): the definitions hang off the collaboration, the values off the task.
+    attributeDefinitions: [
+      { id: 'Attr_sla', name: 'SLA (min)', type: 'number', appliesTo: 'task', default: '10' },
+      { id: 'Attr_riesgo', name: 'Risk level', type: 'list', appliesTo: 'task', options: ['Low', 'High'] },
+    ],
+  });
   xml = await annotateElement(xml, 'Task_TomarPedido', {
     documentation: 'The cashier takes the order at the counter.',
     responsibilities: [
@@ -53,6 +60,10 @@ export async function annotatedPedido(): Promise<string> {
       output: ['doc-comanda'],
       kpiRef: ['kpi-tiempo-atencion'],
     },
+    attributes: [
+      { ref: 'Attr_sla', value: '5' },
+      { ref: 'Attr_riesgo', value: 'High' },
+    ],
   });
   xml = await annotateElement(xml, 'Task_Preparar', {
     responsibilities: [{ type: 'C', roleRef: 'rol-cocinero' }],
@@ -72,6 +83,9 @@ export const V1_TAGS = [
   'input',
   'output',
   'versionTag',
+  'attributeDefinition',
+  'option',
+  'attributeValue',
 ] as const;
 
 /** The prefix bound to {@link LILA_URI} in this document, or `undefined` if it is not declared. */
@@ -107,8 +121,10 @@ export function lilaInventory(xml: string): string[] {
   const prefix = lilaPrefix(xml);
   if (prefix === undefined) throw new Error(`the document does not declare ${LILA_URI}`);
 
-  // Attribute values may contain `>`, so quoted runs are consumed before the closing bracket.
-  const tags = /<(\/?)([A-Za-z_][\w.:-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)(\/?)>/g;
+  // Attribute values may contain `>`, so quoted runs are consumed before the closing bracket. A
+  // bare `/` is only taken when it does not close the tag, or `<x a="1" />` would never count as
+  // self-closing and its id would stay on the owner stack (#509: a definition with options).
+  const tags = /<(\/?)([A-Za-z_][\w.:-]*)((?:"[^"]*"|'[^']*'|[^>"'/]|\/(?!>))*)(\/?)>/g;
   const attributes = /([A-Za-z_][\w.:-]*)\s*=\s*"([^"]*)"/g;
   const found: string[] = [];
   // The id in scope for the element being read, one entry per open tag.

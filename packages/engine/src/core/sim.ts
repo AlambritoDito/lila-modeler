@@ -28,6 +28,8 @@ import {
   nextOpen,
   openTime,
   union,
+  neverOpens,
+  startEpochDay,
   weekOffsetSeconds,
   type Calendar,
   type CalendarDef,
@@ -309,13 +311,19 @@ export function compileCalendars(
   // R-CAL-1: el patrón semanal se ancla en `run.start`. Sin `start` (solo ocurre en pruebas de
   // `core/`, el esquema lo exige) el instante 0 es lunes 00:00, el offset neutro.
   const offset = scenario.run.start === undefined ? 0 : weekOffsetSeconds(scenario.run.start);
+  // #82: the civil date of `t = 0`, which only dated calendars (monthly, annual, holidays) read.
+  const epochDay = scenario.run.start === undefined ? undefined : startEpochDay(scenario.run.start);
   for (const [name, def] of defs) {
     if (def.intervals.length === 0) {
       throw new RangeError(
         coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/sin-intervalos'](name)),
       );
     }
-    compiled.set(name, compileCalendar(def, offset, locale));
+    // A dated calendar whose every opening falls on a holiday never opens (R-CAL-14).
+    if (neverOpens(def)) {
+      throw new RangeError(coded('E-CAL-VACIO', coreMessages(locale).codes['E-CAL-VACIO/festivos'](name)));
+    }
+    compiled.set(name, compileCalendar(def, offset, locale, epochDay));
   }
   return compiled;
 }
@@ -678,7 +686,7 @@ export function runReplication(
   const scheduleCapacityRise = (poolId: string, from: number): void => {
     const schedule = capacitySchedules.get(poolId);
     if (schedule === undefined || pendingCapacity.has(poolId)) return;
-    const at = nextCapacityRise(schedule, from);
+    const at = nextCapacityRise(schedule, from, tStop);
     if (at >= tStop) return;
     pendingCapacity.add(poolId);
     heap.push({ t: at, kind: 'capacity', poolId });

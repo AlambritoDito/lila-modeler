@@ -22,6 +22,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
+import { AtributosDelElemento } from './AtributosExtendidos';
 import { COLORES, colorComun, pintable, type ColorId, type ElementoColoreable } from './colores';
 import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
@@ -89,6 +90,8 @@ export interface Escritor {
   bpmnFactory: {
     create(tipo: string, atributos?: Record<string, unknown>): ElementoModdle;
   };
+  /** Several `modeling` calls as one undoable command (`lote.ts`, #509); absent in bare benches. */
+  lote?: ((hacer: () => void) => void) | undefined;
 }
 
 /* ------------------------------------------------------------------ *
@@ -359,7 +362,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
     <>
       <CabeceraElemento elemento={elemento} avanzado={avanzado} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -479,9 +482,12 @@ function Propiedades({
   refrescar,
   avanzado = false,
   pintar,
+  raiz,
 }: PropsPestana & {
   avanzado?: boolean;
   pintar?: ((elementos: ElementoColoreable[], color: ColorId | null) => void) | undefined;
+  /** The canvas root, where the extended attribute definitions are found (#509). */
+  raiz?: ElementoLienzo | undefined;
 }): React.JSX.Element {
   const S = useStrings();
   const [copiado, setCopiado] = useState(false);
@@ -581,6 +587,8 @@ function Propiedades({
       )}
 
       {pintar !== undefined && <Colores elementos={[elemento]} pintar={pintar} refrescar={refrescar} />}
+
+      {raiz !== undefined && <AtributosDelElemento elemento={real} raiz={raiz} escritor={escritor} refrescar={refrescar} />}
     </div>
   );
 }

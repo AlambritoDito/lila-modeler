@@ -50,6 +50,8 @@ export interface CoreCodeMessages {
   'E-CAL-VACIO/anonimo': () => string;
   'E-CAL-VACIO/interseccion': (elementId: string) => string;
   'E-CAL-VACIO/pool-sin-tramos': () => string;
+  /** #82: a dated calendar whose every opening falls on one of its own holidays (R-CAL-14). */
+  'E-CAL-VACIO/festivos': (name: string) => string;
   'E-CAL-DESCONOCIDO': (subject: string, calendar: string) => string;
 
   /* --- core/resources.ts (internal guards) -------------------------- */

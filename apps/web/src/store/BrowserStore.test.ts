@@ -16,7 +16,7 @@ import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 import { es } from '../strings.es';
 import { getPreferencia, setLocale } from '../i18n';
 import { BrowserStore } from './BrowserStore';
-import type { ProcessData } from './ProjectStore';
+import type { ProcessData, ProjectDocument } from './ProjectStore';
 
 /** Simula la elección del usuario: encuentra el `<input>` que crea `getProcess` y lo dispara. */
 function elegirArchivo(file: File): void {
@@ -209,6 +209,19 @@ describe('BrowserStore', () => {
       // Lo descargado es exactamente lo que `decodeLila` vuelve a leer: la ida y la vuelta del
       // formato ya la cubre el motor, aquí importa que sea ESTO lo que se escribe.
       expect(decodeLila(new Uint8Array(await blob.arrayBuffer()))).toEqual(DOC);
+    });
+
+    it('saveProject descarga un repositorio con todos sus procesos (#498) y restoreSession los trae', async () => {
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const store = new BrowserStore();
+      const segundo = { slug: 'facturacion', name: 'Facturación', model: { id: 'P2', name: 'model.bpmn', xml: '<definitions/>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+      const repo: ProjectDocument = { ...DOC, process: { slug: 'pedido', name: 'Pedido' }, processes: [segundo] };
+
+      await store.saveProject(repo);
+
+      const blob = (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Blob;
+      expect(decodeLila(new Uint8Array(await blob.arrayBuffer()))).toEqual(repo);
+      expect(store.restoreSession()).toEqual(repo);
     });
 
     it('openProject abre el .lila que acaba de descargarse', async () => {

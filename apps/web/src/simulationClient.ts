@@ -28,7 +28,7 @@ export interface RunInWorkerOptions {
   locale?: Locale | undefined;
 }
 
-export type RunInWorkerResult = Pick<DoneResponse, 'result' | 'logSample'>;
+export type RunInWorkerResult = Pick<DoneResponse, 'result' | 'logSample' | 'cycleTimes'>;
 
 function abortError(): DOMException {
   const S = strings();
@@ -68,7 +68,7 @@ export function runInWorker(
         return;
       }
       cleanup();
-      if (message.type === 'done') resolve({ result: message.result, logSample: message.logSample });
+      if (message.type === 'done') resolve({ result: message.result, logSample: message.logSample, cycleTimes: message.cycleTimes });
       else reject(new Error(message.message));
     };
     worker.onerror = (event: ErrorEvent) => {
