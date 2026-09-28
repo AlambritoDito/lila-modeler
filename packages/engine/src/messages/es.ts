@@ -287,6 +287,7 @@ export const es: Catalog = {
     docGeneratedBy: (version) => `Generado por Lila Modeler ${version}`,
     docDescription: () => 'Descripción del proceso',
     docNoDescription: () => 'El proceso no tiene descripción.',
+    docAttributeNoRef: () => 'Atributo sin referencia',
     docElements: () => 'Elementos',
     docNoLane: () => 'Sin carril',
     docType: () => 'Tipo',

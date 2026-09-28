@@ -620,6 +620,30 @@ export interface ParseResult {
   conditionFlowIds: string[];
   /** The flattened embedded sub-processes, by IR id (#454). Optional for hand-built results. */
   subprocesses?: Record<string, SubprocessInfo>;
+  /**
+   * The lanes of the simulated process, `original id -> label` (the label `Node.lane` carries),
+   * and the pool (participant) that draws it, if any: the process document (#509) needs their ids
+   * to find their extended attributes. Optional for hand-built results.
+   */
+  lanes?: Record<string, string>;
+  pool?: string;
+  /**
+   * The BPMN `$type` of every IR node and flattened sub-process, by IR id (#509): the IR flattens
+   * every task variant, call activities included, to `task`, and the process document needs the
+   * original type to pick the element's extended attributes. Optional for hand-built results.
+   */
+  types?: Record<string, string>;
+}
+
+/** `original id -> label` of every lane of `laneSets`, nested ones included. */
+function laneLabels(laneSets: readonly ModdleElement[], original: (id: string) => string, into: Record<string, string> = {}): Record<string, string> {
+  for (const laneSet of laneSets) {
+    for (const lane of laneSet.lanes ?? []) {
+      into[original(lane.id)] = lane.name ?? lane.id;
+      if (lane.childLaneSet) laneLabels([lane.childLaneSet], original, into);
+    }
+  }
+  return into;
 }
 
 /** Construcciones de coreografía/conversación que no viven dentro de `process.flowElements`. */
@@ -958,7 +982,21 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
       .filter((flow) => flow.conditionExpression !== undefined)
       .map((flow) => flow.id),
     subprocesses: c.subprocesses,
+    lanes: laneLabels(main.laneSets ?? [], (id) => sanitizedToOriginal.get(id) ?? id),
+    types: Object.fromEntries(
+      [...c.idOf].filter(([, id]) => c.nodes[id] !== undefined || c.subprocesses[id] !== undefined).map(([el, id]) => [id, el.$type]),
+    ),
+    ...poolOf(definitions, main, sanitizedToOriginal),
   };
+}
+
+/** The participant whose `processRef` is `main`, as `{ pool: original id }`, or nothing. */
+function poolOf(definitions: ModdleElement, main: ModdleElement, sanitizedToOriginal: ReadonlyMap<string, string>): { pool?: string } {
+  for (const root of definitions.rootElements ?? []) {
+    const participant = (root.participants ?? []).find((p: ModdleElement) => p.processRef === main);
+    if (participant !== undefined) return { pool: sanitizedToOriginal.get(participant.id) ?? participant.id };
+  }
+  return {};
 }
 
 /**

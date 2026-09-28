@@ -58,6 +58,7 @@ import { moduloColoresDelTema } from './TokenSim';
 import { moduloTraduccion } from './bpmnTranslate';
 // Colours per element (#452): the command, the context pad entry and the Bizagi import hook.
 import { moduloColores, type LilaColores } from './colores';
+import { moduloLote, type LilaLote } from './lote';
 import { centrar, type CanvasCentrable } from './centrar';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -129,6 +130,8 @@ export interface Servicios {
   rules: { allowed(accion: string, contexto: object): unknown };
   /** Paints an element with a palette colour as one undoable command (#452). */
   colores?: Pick<LilaColores, 'pintar'>;
+  /** Runs several `modeling` calls as one undoable command (#509). */
+  lote?: (hacer: () => void) => void;
 }
 
 interface Punto { x: number; y: number }
@@ -297,7 +300,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores, moduloLote],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -499,6 +502,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           elementRegistry: activo.get<Servicios['elementRegistry']>('elementRegistry'),
           rules: activo.get<Servicios['rules']>('rules'),
           colores: activo.get<LilaColores>('lilaColores'),
+          lote: activo.get<LilaLote>('lilaLote').ejecutar,
         };
       },
       suscribir: (eventos, escuchar, prioridad = 1000) => {

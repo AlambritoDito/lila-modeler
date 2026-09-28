@@ -220,6 +220,8 @@ export interface CliMessages {
   docGeneratedBy: (version: string) => string;
   docDescription: () => string;
   docNoDescription: () => string;
+  /** Label of an extended attribute value that names no attribute (#509). */
+  docAttributeNoRef: () => string;
   /** The single Heading 1 when the process has no lanes. */
   docElements: () => string;
   /** Heading 1 of the elements outside every lane, when the process has lanes. */

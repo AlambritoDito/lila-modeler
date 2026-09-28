@@ -1494,6 +1494,71 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Atributos extendidos (#509)
+   * ------------------------------------------------------------------ */
+  atributos: {
+    titulo: 'Atributos extendidos',
+    deProceso: 'Atributos del proceso',
+    definir: 'Definir atributos…',
+    ninguno: (tipo: string): string => `Todavía no hay atributos definidos para ${tipo}.`,
+    categorias: {
+      task: 'tareas',
+      gateway: 'compuertas',
+      event: 'eventos',
+      subProcess: 'subprocesos',
+      lane: 'pools y carriles',
+      process: 'el proceso',
+    },
+    tipos: { text: 'Texto', number: 'Número', list: 'Lista', date: 'Fecha' },
+    sinValor: '—',
+    porDefecto: (valor: string): string => `Por defecto: ${valor}`,
+    noEsOpcion: (valor: string): string => `${valor} (no es una opción)`,
+    problemas: {
+      number: 'No es un número. Usa cifras, con punto para los decimales (por ejemplo 4.5).',
+      date: 'No es una fecha. Usa año-mes-día (por ejemplo 2026-09-28).',
+      option: 'No es una de las opciones de la lista.',
+    },
+    huerfano: (ref: string): string => `${ref} (sin definición)`,
+    quitarHuerfano: (ref: string): string => `Quitar el valor de ${ref}`,
+    dialogo: 'Definir atributos extendidos',
+    paraTipo: 'Tipo de elemento',
+    nombre: (n: number): string => `Nombre ${n}`,
+    tipo: (n: number): string => `Tipo ${n}`,
+    opciones: (n: number): string => `Opciones ${n}`,
+    valorPorDefecto: (n: number): string => `Por defecto ${n}`,
+    quitar: (n: number): string => `Quitar el atributo ${n}`,
+    anadir: 'Añadir atributo',
+    guardar: 'Guardar',
+    cancelar: 'Cancelar',
+    volver: 'Volver',
+    aplicar: 'Aplicar',
+    errores: {
+      nombre: 'Cada atributo necesita un nombre.',
+      repetido: (nombre: string): string => `Hay dos atributos que se llaman ${nombre}.`,
+      opciones: (nombre: string): string => `La lista ${nombre} necesita al menos una opción.`,
+      porDefecto: (nombre: string): string => `El valor por defecto de ${nombre} no encaja con su tipo.`,
+    },
+    confirmarTitulo: 'Valores existentes',
+    confirmarTexto: 'Estos cambios afectan a atributos que ya tienen valores en algunos elementos. Elige qué hacer con ellos.',
+    renombrado: (antes: string, ahora: string): string => `${antes} pasa a llamarse ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Su tipo cambia de ${antes} a ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Opciones quitadas: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'elemento tiene' : 'elementos tienen'} valor` +
+      (invalidos === 0 ? ', y todos siguen encajando.' : `; ${invalidos} ya no ${invalidos === 1 ? 'encaja' : 'encajan'}.`),
+    limpiar: (n: number): string => `Vaciar ${n === 1 ? 'el valor que ya no encaja' : `los ${n} valores que ya no encajan`}`,
+    repetidas: (n: number): string =>
+      `Se ignora${n === 1 ? ' 1 definición repetida' : `n ${n} definiciones repetidas`} (el mismo atributo dos veces, por ejemplo tras pegar un pool). Guardar las definiciones deja una de cada.`,
+    varios: (n: number, valores: string): string => `Este elemento tiene ${n} valores para este atributo (${valores}); el campo edita el primero.`,
+    sinReferencia: 'Atributo sin referencia',
+    atributoN: (n: number): string => `Atributo ${n}`,
+    etiquetas: { nombre: 'Nombre', tipo: 'Tipo', opciones: 'Opciones, una por línea', porDefecto: 'Valor por defecto' },
+    conservar: 'Conservar los valores',
+    borrado: (nombre: string, n: number): string =>
+      `${nombre} se borra junto con ${n === 1 ? 'su valor' : `sus ${n} valores`}.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Páginas de demostración de desarrollo (`*-demo.tsx`, fuera del bundle)
    * ------------------------------------------------------------------ */
   demos: {

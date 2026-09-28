@@ -58,6 +58,8 @@ declare module 'bpmn-moddle' {
     values?: ModdleElement[];
     /** `bpmn:Collaboration` */
     participants?: ModdleElement[];
+    /** `bpmn:Participant` */
+    processRef?: ModdleElement;
     messageFlows?: ModdleElement[];
     conversations?: ModdleElement[];
     conversationNodes?: ModdleElement[];
@@ -67,6 +69,9 @@ declare module 'bpmn-moddle' {
     roleRef?: string;
     ref?: string;
     value?: string;
+    /** `lila:attributeDefinition` (#509); its `default` is a string, not the gateway's flow above. */
+    appliesTo?: string;
+    options?: ModdleElement[];
   }
 
   /**

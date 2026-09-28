@@ -56,7 +56,8 @@ describe('the fixture', () => {
 
   it('spreads them over several elements, with repetitions', () => {
     const owners = new Set(expected.map((entry) => entry.split(' ')[0]));
-    expect(owners).toEqual(new Set(['Process_Restaurante', 'Task_TomarPedido', 'Task_Preparar']));
+    // `Attr_riesgo` is the list definition that owns its `lila:option` children.
+    expect(owners).toEqual(new Set(['Collaboration_Pedido', 'Process_Restaurante', 'Attr_riesgo', 'Task_TomarPedido', 'Task_Preparar']));
     expect(expected.length).toBeGreaterThan(owners.size);
     // Two `lila:responsibility` on the same task: a tool that keeps only the first one fails.
     expect(expected.filter((e) => e.includes('<lila:responsibility'))).toHaveLength(3);

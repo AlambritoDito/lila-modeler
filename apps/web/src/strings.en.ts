@@ -1521,6 +1521,71 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Extended attributes (#509)
+   * ------------------------------------------------------------------ */
+  atributos: {
+    titulo: 'Extended attributes',
+    deProceso: 'Process attributes',
+    definir: 'Define attributes…',
+    ninguno: (tipo: string): string => `No attributes are defined for ${tipo} yet.`,
+    categorias: {
+      task: 'tasks',
+      gateway: 'gateways',
+      event: 'events',
+      subProcess: 'sub-processes',
+      lane: 'pools and lanes',
+      process: 'the process',
+    },
+    tipos: { text: 'Text', number: 'Number', list: 'List', date: 'Date' },
+    sinValor: '—',
+    porDefecto: (valor: string): string => `Default: ${valor}`,
+    noEsOpcion: (valor: string): string => `${valor} (not an option)`,
+    problemas: {
+      number: 'Not a number. Use digits, with a dot for decimals (for example 4.5).',
+      date: 'Not a date. Use year-month-day (for example 2026-09-28).',
+      option: 'Not one of the list\'s options.',
+    },
+    huerfano: (ref: string): string => `${ref} (no definition)`,
+    quitarHuerfano: (ref: string): string => `Remove the value of ${ref}`,
+    dialogo: 'Define extended attributes',
+    paraTipo: 'Element type',
+    nombre: (n: number): string => `Name ${n}`,
+    tipo: (n: number): string => `Type ${n}`,
+    opciones: (n: number): string => `Options ${n}`,
+    valorPorDefecto: (n: number): string => `Default ${n}`,
+    quitar: (n: number): string => `Remove attribute ${n}`,
+    anadir: 'Add attribute',
+    guardar: 'Save',
+    cancelar: 'Cancel',
+    volver: 'Back',
+    aplicar: 'Apply',
+    errores: {
+      nombre: 'Every attribute needs a name.',
+      repetido: (nombre: string): string => `Two attributes are called ${nombre}.`,
+      opciones: (nombre: string): string => `The list ${nombre} needs at least one option.`,
+      porDefecto: (nombre: string): string => `The default of ${nombre} does not fit its type.`,
+    },
+    confirmarTitulo: 'Existing values',
+    confirmarTexto: 'These changes touch attributes that elements already have values for. Choose what to do with them.',
+    renombrado: (antes: string, ahora: string): string => `${antes} is renamed to ${ahora}.`,
+    cambiaTipo: (antes: string, ahora: string): string => `Its type changes from ${antes} to ${ahora}.`,
+    opcionesQuitadas: (opciones: string): string => `Options removed: ${opciones}.`,
+    conValores: (n: number, invalidos: number): string =>
+      `${n} ${n === 1 ? 'element has' : 'elements have'} a value` +
+      (invalidos === 0 ? ', and every one still fits.' : `; ${invalidos} no longer ${invalidos === 1 ? 'fits' : 'fit'}.`),
+    limpiar: (n: number): string => `Clear the ${n} ${n === 1 ? 'value that no longer fits' : 'values that no longer fit'}`,
+    repetidas: (n: number): string =>
+      `${n} repeated ${n === 1 ? 'definition is' : 'definitions are'} ignored (the same attribute twice, for example after pasting a pool). Saving the definitions keeps one of each.`,
+    varios: (n: number, valores: string): string => `This element has ${n} values for this attribute (${valores}); the field edits the first.`,
+    sinReferencia: 'Attribute without a reference',
+    atributoN: (n: number): string => `Attribute ${n}`,
+    etiquetas: { nombre: 'Name', tipo: 'Type', opciones: 'Options, one per line', porDefecto: 'Default value' },
+    conservar: 'Keep the values',
+    borrado: (nombre: string, n: number): string =>
+      `${nombre} is deleted together with its ${n} ${n === 1 ? 'value' : 'values'}.`,
+  },
+
+  /* ------------------------------------------------------------------ *
    * Development demo pages (`*-demo.tsx`, outside the bundle)
    * ------------------------------------------------------------------ */
   demos: {

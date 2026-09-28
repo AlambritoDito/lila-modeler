@@ -72,6 +72,7 @@ import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import './theme/tokens.css';
 import './app.css';
 import './theme/montana.css';
+import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
@@ -644,7 +645,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ? { slug: p.slug, name: p.name, revision, scenarioRevisions, runIds: runs.map((r) => r.id) }
       : tokenPart(p))))
     : changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
-  const dirty = currentToken !== savedToken;
+  // A value still being typed in an extended attribute also counts as unsaved (#509).
+  const borradorPendiente = useBorradorPendiente();
+  const dirty = currentToken !== savedToken || borradorPendiente;
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
   const latest = Object.keys(escenarios).flatMap((name) => {
@@ -753,6 +756,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** `asFolder` solo cuenta con `saveAs`: elige carpeta de proyecto en vez de `.lila` (ADR-027). */
   async function saveWithOutcome(saveAs = false, asFolder = false): Promise<SaveOutcome> {
     if (adapter === null || ioLock.current) return 'cancelled';
+    // A value still being typed goes into the file too, on ⌘S and on the close guard (#509).
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
     // exportar y no toca el archivo hasta que el usuario lo acepta (LILA-192). Cancelar
     // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
@@ -1721,8 +1726,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     // A label being typed (bpmn-js opens the editor on every append) is committed first, so Run
     // waits for that edit too instead of losing it and its own results to it (QA S1 of #507).
-    const edicion = modelador.servicios.directEditing;
-    if (edicion.isActive?.()) edicion.complete?.();
+    // The same for a form field still being typed in (#509): `confirmarEdicionEnCurso`.
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();
@@ -1807,13 +1812,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   async function exportarDocumento(tipo: 'docx' | 'html'): Promise<void> {
     if (modelador === null) return;
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // #498: the document is of the process on the canvas, and its cover says which one.
     const titulo = procesos.length > 1 ? procesos[activo]?.name ?? projectName : projectName;
     const nombre = nombreArchivo(titulo);
     const lila = DESKTOP ? window.lila : undefined;
     try {
       const xml = await modelador.exportar();
-      const [{ ir: modelo, subprocesses }, annotations, png] = await Promise.all([
+      const [{ ir: modelo, subprocesses, lanes, pool, types }, annotations, png] = await Promise.all([
         parseBpmn(xml),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
@@ -1830,7 +1836,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         graficasDelDocumento({ ir: modelo, scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result, log: logs.current.get(run.id) })
           .map(async ({ svg, alt }) => ({ alt, png: new Uint8Array(await (await aPng(svg)).arrayBuffer()) })),
       );
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, title: titulo, date, locale, png, charts, ...escenario });
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, lanes, pool, types, title: titulo, date, locale, png, charts, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
@@ -1845,6 +1851,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   async function exportar(): Promise<void> {
     if (modelador === null) return;
+    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // Nada se descarga mientras el usuario no vea qué se pierde (LILA-192).
     if (!await aceptaPerdida('exportar')) return;
     try { await store.putProcess(procesoId, await modelador.exportar({ aceptarPerdida: true })); }
