@@ -71,6 +71,12 @@ export interface CompareViewProps {
    * completos —no solo el `CompareResult`— para escribir la hoja Resumen de cada escenario.
    */
   entries?: readonly CompareEntry[];
+  /**
+   * Palette slot of each scenario, in the order of `scenarioNames` (#460): the shell passes each
+   * scenario's position in the project, so its chart color does not move when the base changes.
+   * Without it, the index in `scenarioNames`.
+   */
+  seriesSlots?: readonly number[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -365,6 +371,8 @@ export interface CompareChartsInput {
   baseTimeUnit: BaseTimeUnit;
   runs?: readonly CompareRunMeta[] | undefined;
   costsComparable: boolean;
+  /** See `CompareViewProps.seriesSlots`. */
+  seriesSlots?: readonly number[] | undefined;
 }
 
 /**
@@ -375,8 +383,15 @@ export function compareCharts(input: CompareChartsInput): { graficas: GraficaBar
   const S = strings();
   const { rows, scenarioNames, isVisible, baseTimeUnit, runs, costsComparable } = input;
   const visibles = scenarioNames.map((_, i) => i).filter(isVisible);
-  const indices = visibles.filter((i) => i < MAX_SERIES);
+  const indices = visibles.slice(0, MAX_SERIES);
   const notas = visibles.length > indices.length ? [S.graficas.compararDemasiados(visibles.length)] : [];
+  // The palette slot each scenario owns, when the caller says (stable across base changes and
+  // hidden columns); if those slots do not fit the palette or repeat, the position among the
+  // charted ones.
+  const propios = indices.map((i) => input.seriesSlots?.[i] ?? i);
+  const colores = propios.every((slot, k) => slot >= 0 && slot < MAX_SERIES && propios.indexOf(slot) === k)
+    ? propios
+    : indices.map((_, k) => k);
   const ctx = (i: number): ColumnContext => ({ currency: runs?.[i]?.currency, unit: runs?.[i]?.baseTimeUnit ?? baseTimeUnit });
   const series = indices.map((i) => (i === 0 ? S.comparar.base(scenarioNames[i]!) : scenarioNames[i]!));
   const grupo = (row: CompareRow, etiqueta: string, valor: (v: number) => number) => ({
@@ -397,7 +412,7 @@ export function compareCharts(input: CompareChartsInput): { graficas: GraficaBar
     graficas.push({
       titulo: S.graficas.compararCiclo(baseTimeUnit),
       series,
-      colores: indices,
+      colores,
       grupos: [grupo(ciclo, compareMetricLabel('process', 'cycleTime.mean'), (v) => v / SECONDS_PER_UNIT[baseTimeUnit])],
     });
   }
@@ -407,7 +422,7 @@ export function compareCharts(input: CompareChartsInput): { graficas: GraficaBar
     graficas.push({
       titulo: S.graficas.compararCosto,
       series,
-      colores: indices,
+      colores,
       grupos: [grupo(costo, compareMetricLabel('process', 'costPerCase'), (v) => v)],
     });
   }
@@ -416,7 +431,7 @@ export function compareCharts(input: CompareChartsInput): { graficas: GraficaBar
     graficas.push({
       titulo: S.graficas.compararUtilizacion,
       series,
-      colores: indices,
+      colores,
       grupos: utilizacion.map((r) => grupo(r, rowName(input.ir, input.resourceNames, 'resources', r.id) || (r.id ?? ''), (v) => v * 100)),
       tope: 100,
     });
@@ -493,6 +508,7 @@ export function CompareView({
   resourceNames = {},
   runs,
   entries,
+  seriesSlots,
 }: CompareViewProps): ReactNode {
   const S = useStrings();
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
@@ -618,6 +634,7 @@ export function CompareView({
         baseTimeUnit={baseTimeUnit}
         runs={runs}
         costsComparable={costsComparable}
+        seriesSlots={seriesSlots}
       />
 
       {SCOPES.filter((scope) => scope !== 'flows' || showAll).map((scope) => {

@@ -71,7 +71,9 @@ export function useAncho(): [RefObject<HTMLDivElement | null>, number] {
  * ------------------------------------------------------------------ */
 
 const PAD = 8;
-const CAR = 6.6; // average advance of a 12 px sans character, for fitting labels
+// Advance of a 12 px character of the UI font, for fitting labels: measured in Chrome at 6.3–6.4 on
+// average and 7.1 for the widest real labels, so 7 errs on the side of room.
+const CAR = 7;
 const BARRA = 14;
 const ENTRE_BARRAS = 2;
 const ENTRE_GRUPOS = 10;
@@ -82,6 +84,33 @@ const anchoTexto = (texto: string, tam = 12): number => (texto.length * CAR * ta
 function recortar(texto: string, ancho: number): string {
   const cabe = Math.floor(ancho / CAR);
   return texto.length <= cabe ? texto : `${texto.slice(0, Math.max(1, cabe - 1))}…`;
+}
+
+const ALTO_FILA_LEYENDA = 18;
+
+/** Where each legend entry goes: entries flow left to right and wrap, none past `ancho`. */
+export function filasLeyenda(nombres: readonly string[], ancho: number): { texto: string; x: number; fila: number }[] {
+  const disponible = ancho - 2 * PAD - 14;
+  let x = PAD;
+  let fila = 0;
+  return nombres.map((nombre) => {
+    const texto = recortar(nombre, Math.min(180, disponible));
+    const w = 14 + anchoTexto(texto);
+    if (x > PAD && x + w > ancho - PAD) {
+      x = PAD;
+      fila += 1;
+    }
+    const entrada = { texto, x, fila };
+    x += w + 16;
+    return entrada;
+  });
+}
+
+/** Largest of `f` over `items`, at least `desde`; a loop, so no list is too long for it. */
+function mayor<T>(items: readonly T[], f: (item: T) => number, desde: number): number {
+  let m = desde;
+  for (const item of items) m = Math.max(m, f(item));
+  return m;
 }
 
 /** A bar grown from `x0` to the right: rounded data end, square at the baseline. */
@@ -164,16 +193,21 @@ export function SvgBarras({
   const leyenda = series.length >= 2;
 
   const W = Math.max(280, ancho);
-  const anchoEtiqueta = Math.min(W * 0.3, Math.max(40, ...grupos.map((g) => anchoTexto(g.etiqueta) + 8)));
-  const anchoValor = Math.min(W * 0.35, Math.max(24, ...grupos.flatMap((g) => g.textos.map((t) => anchoTexto(t, 11) + 8))));
+  // The value at the tip is the table's text and is never cut: it takes the room it needs, the
+  // group labels give way first (they are cut with «…», whole in the tooltip), the plot keeps 40 px.
+  const valorNecesario = mayor(grupos, (g) => mayor(g.textos, (t) => anchoTexto(t, 11) + 8, 0), 24);
+  const anchoEtiqueta = Math.min(W * 0.3, mayor(grupos, (g) => anchoTexto(g.etiqueta) + 8, 40), Math.max(40, W - 2 * PAD - 40 - valorNecesario));
+  const anchoValor = Math.min(valorNecesario, W - 2 * PAD - anchoEtiqueta - 40);
   const x0 = PAD + anchoEtiqueta;
   const anchoPlot = Math.max(40, W - x0 - anchoValor - PAD);
-  const maximo = Math.max(0, ...grupos.flatMap((g) => g.valores.map((v) => v ?? 0)));
+  const maximo = mayor(grupos, (g) => mayor(g.valores, (v) => v ?? 0, 0), 0);
   const eje = escala(maximo, tope !== undefined && maximo <= tope ? tope : undefined);
   const x = (v: number): number => x0 + (v / eje.tope) * anchoPlot;
 
   const altoGrupo = series.length * BARRA + (series.length - 1) * ENTRE_BARRAS;
-  const arriba = PAD + 20 + (sub === undefined ? 0 : 18) + (leyenda ? 22 : 0) + 6;
+  const entradas = leyenda ? filasLeyenda(series, W) : [];
+  const filas = entradas.length === 0 ? 0 : entradas.at(-1)!.fila + 1;
+  const arriba = PAD + 20 + (sub === undefined ? 0 : 18) + filas * ALTO_FILA_LEYENDA + (leyenda ? 4 : 0) + 6;
   const abajo = arriba + grupos.length * altoGrupo + Math.max(0, grupos.length - 1) * ENTRE_GRUPOS;
   const H = abajo + 6 + 16 + PAD;
 
@@ -185,12 +219,12 @@ export function SvgBarras({
     )
     .join('; ');
 
-  let cursor = PAD;
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-labelledby={`${id}-t ${id}-d`}
+      aria-labelledby={`${id}-t`}
+      aria-describedby={`${id}-d`}
       width={W}
       height={H}
       viewBox={`0 0 ${W} ${H}`}
@@ -202,19 +236,15 @@ export function SvgBarras({
       <Cabecera titulo={titulo} sub={sub} paleta={paleta} idTitulo={`${id}-t`} />
       {leyenda && (
         <g className="leyenda" transform={`translate(0 ${PAD + 20 + (sub === undefined ? 0 : 18) + 4})`}>
-          {series.map((nombre, i) => {
-            const texto = recortar(nombre, 180);
-            const x1 = cursor;
-            cursor += 14 + anchoTexto(texto) + 16;
-            return (
-              <g key={i}>
-                <rect x={x1} y={2} width={10} height={10} rx={2} fill={color(i)} />
-                <text x={x1 + 14} y={11} fill={paleta.tinta} fontSize={12}>
-                  {texto}
-                </text>
-              </g>
-            );
-          })}
+          {entradas.map(({ texto, x: x1, fila }, i) => (
+            <g key={i}>
+              <title>{series[i]}</title>
+              <rect x={x1} y={2 + fila * ALTO_FILA_LEYENDA} width={10} height={10} rx={2} fill={color(i)} />
+              <text x={x1 + 14} y={11 + fila * ALTO_FILA_LEYENDA} fill={paleta.tinta} fontSize={12}>
+                {texto}
+              </text>
+            </g>
+          ))}
         </g>
       )}
       {eje.marcas.map((m) => (
@@ -288,7 +318,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
   const id = useId();
   const clases = histograma(valores);
   const W = Math.max(280, ancho);
-  const eje = escala(Math.max(0, ...clases.map((c) => c.casos)));
+  const eje = escala(mayor(clases, (c) => c.casos, 0));
   const anchoY = Math.max(24, anchoTexto(formatNumber(eje.tope), 11) + 10);
   const x0 = PAD + anchoY;
   const anchoPlot = W - x0 - PAD;
@@ -309,7 +339,8 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
     <svg
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-labelledby={`${id}-t ${id}-d`}
+      aria-labelledby={`${id}-t`}
+      aria-describedby={`${id}-d`}
       width={W}
       height={H}
       viewBox={`0 0 ${W} ${H}`}

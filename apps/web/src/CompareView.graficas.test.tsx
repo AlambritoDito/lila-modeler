@@ -21,7 +21,8 @@ import { SECONDS_PER_UNIT, formatNumber } from '@lila-modeler/engine/format';
 import { resolveExtends } from '@lila-modeler/engine/schema';
 import { compare, simulate, type CompareResult, type ProcessIR, type SimScenario } from '@lila-modeler/engine';
 
-import { CompareView, compareCharts, compareMetricLabel } from './CompareView';
+import { CompareView, compareCharts, compareMetricLabel, type CompareChartsInput } from './CompareView';
+import { filasLeyenda } from './GraficasSvg';
 import { tabLabels } from './ResultsView';
 import { setLocale, strings } from './i18n';
 
@@ -166,5 +167,47 @@ describe('(b) absent is not zero', () => {
     });
     expect(graficas).toEqual([]);
     expect(notas).toEqual([]);
+  });
+});
+
+describe('legend and colors (QA of #512)', () => {
+  const base: CompareChartsInput = {
+    rows: [],
+    ir: {} as ProcessIR,
+    resourceNames: {},
+    scenarioNames: [],
+    isVisible: () => true,
+    baseTimeUnit: 'min',
+    costsComparable: true,
+  };
+
+  test.each([
+    [Array.from({ length: 10 }, (_, i) => `Esc ${i}`), 469],
+    [['Base: AS-IS actual (base)', 'TO-BE con 3 cajeros', 'TO-BE horno doble'], 357],
+    [['A scenario name far longer than any chart could ever hold on one line'], 280],
+  ])('the legend wraps into rows and never passes the chart width (%#)', (nombres, ancho) => {
+    const entradas = filasLeyenda(nombres, ancho);
+    // 7 px per character is above the real average advance of the UI font at 12 px.
+    for (const e of entradas) expect(e.x + 14 + e.texto.length * 7).toBeLessThanOrEqual(ancho);
+    expect(entradas.map((e) => e.fila).every((f, i, all) => i === 0 || f >= all[i - 1]!)).toBe(true);
+  });
+
+  test('the first 8 visible scenarios are charted, and the note counts the visible ones', () => {
+    const nombres = Array.from({ length: 10 }, (_, i) => `Esc ${i}`);
+    const ocultos = new Set([2, 3, 4, 5]);
+    const seis = compareCharts({ ...base, rows: comparison.rows, scenarioNames: nombres, isVisible: (i) => !ocultos.has(i) });
+    expect(seis.notas).toEqual([]);
+    const nueve = compareCharts({ ...base, rows: comparison.rows, scenarioNames: nombres, isVisible: (i) => i !== 4 });
+    expect(nueve.graficas[0]!.series).toEqual(['Esc 0 (base)', 'Esc 1', 'Esc 2', 'Esc 3', 'Esc 5', 'Esc 6', 'Esc 7', 'Esc 8']);
+    expect(nueve.notas).toEqual([strings().graficas.compararDemasiados(9)]);
+  });
+
+  test('colors follow the scenario’s own slot, so changing the base does not repaint', () => {
+    const tres = { ...base, rows: comparison.rows, scenarioNames: NOMBRES };
+    expect(compareCharts({ ...tres, seriesSlots: [0, 1, 2] }).graficas[0]!.colores).toEqual([0, 1, 2]);
+    // TO-BE becomes the base: it moves to index 0 but keeps its slot 1.
+    expect(compareCharts({ ...tres, seriesSlots: [1, 0, 2] }).graficas[0]!.colores).toEqual([1, 0, 2]);
+    // Slots that do not fit the palette fall back to the position among the charted ones.
+    expect(compareCharts({ ...tres, seriesSlots: [0, 9, 2] }).graficas[0]!.colores).toEqual([0, 1, 2]);
   });
 });

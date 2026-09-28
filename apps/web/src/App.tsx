@@ -2319,6 +2319,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               entries={ordered.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
               runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
               scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
+              seriesSlots={ordered.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
               baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
           : <p>{S.app.sinComparacion}</p>}
         {ordered.map((run) => <p key={run.id}>{S.app.corridaResumen(
