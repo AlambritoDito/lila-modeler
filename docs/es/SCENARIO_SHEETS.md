@@ -15,10 +15,11 @@ Está pensado para los parámetros que ya tienes en Excel, así no hay que copia
    al aplicar.
 4. **Aplicar** escribe los cambios en el escenario que editas, y **Deshacer importación** los
    revierte mientras no hayas editado nada más. **Cancelar** (o Escape) deja el escenario como
-   estaba. Aplicar queda desactivado mientras una fila del archivo fuera a dar al escenario un error
-   nuevo, y cuando el escenario o el diagrama cambiaron después de leer el archivo: entonces
-   impórtalo de nuevo. Los errores que el escenario ya tenía no bloquean, aunque el archivo reordene
-   una lista.
+   estaba. Aplicar queda desactivado mientras el archivo fuera a dar al escenario un error nuevo
+   (se muestra en la fila que más probablemente lo causó), y cuando el escenario o el diagrama
+   cambiaron después de leer el archivo: entonces impórtalo de nuevo. Los errores que el escenario
+   ya tenía no bloquean, aunque el archivo reordene una lista; si el escenario no pasaba el esquema,
+   los errores de reglas que aparecen después son notas.
 
 El resultado es una edición normal del escenario, así que la lista de validación del panel lo
 revisa como siempre. Si el escenario hereda de otro (`extends`), los cambios van al archivo de este

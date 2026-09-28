@@ -15,9 +15,10 @@ already have in Excel, so you do not have to copy them field by field.
    applying.
 4. **Apply** writes the changes into the scenario you are editing, and **Undo import** reverts them
    while you have not edited anything else. **Cancel** (or Escape) leaves the scenario as it was.
-   Apply stays disabled while a row of the file would give the scenario a new error, and when the
-   scenario or the diagram changed after reading the file: import it again then. Errors the
-   scenario already had do not block, even if the file reorders a list.
+   Apply stays disabled while the file would give the scenario a new error (shown at the row that
+   most likely caused it), and when the scenario or the diagram changed after reading the file:
+   import it again then. Errors the scenario already had do not block, even if the file reorders a
+   list; if the scenario did not pass the schema before, the rule errors found afterwards are notes.
 
 The result is an ordinary scenario edit, so the validation list of the panel lints it as usual.
 If the scenario inherits from another one (`extends`), the changes go into this scenario's own file,
