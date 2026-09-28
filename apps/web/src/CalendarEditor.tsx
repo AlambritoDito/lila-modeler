@@ -22,8 +22,16 @@ import { useStrings } from './i18n';
 export const DIAS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 export type Dia = (typeof DIAS)[number];
 
+/**
+ * One entry of `intervals` (§ 2.3). Exactly one day selector: weekly `days`, or since #82 the
+ * monthly `monthDays` / `monthWeekdays` and the yearly `dates` (R-CAL-12, R-CAL-13). The grid only
+ * draws `days`; the other selectors live in the range picker and the list.
+ */
 export interface Intervalo {
-  days: Dia[];
+  days?: Dia[];
+  monthDays?: number[];
+  monthWeekdays?: { nth: number; day: Dia }[];
+  dates?: string[];
   from: string;
   to: string;
 }
@@ -67,7 +75,7 @@ export function tieneMinutos(intervals: readonly Intervalo[]): boolean {
  * cinco intervalos.
  */
 export function aIntervals(celdas: ReadonlySet<number>): Intervalo[] {
-  const porFranja = new Map<string, Intervalo>();
+  const porFranja = new Map<string, Intervalo & { days: Dia[] }>();
   for (const [dia, nombre] of DIAS.entries()) {
     let hora = 0;
     while (hora < 24) {
@@ -151,21 +159,110 @@ export function franjaNueva(
   to: string,
   intervals: readonly Intervalo[] = [],
 ): Intervalo | null {
+  return franjaRepetida({ tipo: 'semanal', dias }, from, to, intervals);
+}
+
+/** How the new range repeats (#82): the four day selectors of § 2.3. */
+export type Repeticion =
+  | { tipo: 'semanal'; dias: ReadonlySet<Dia> }
+  /** `1…31`, or `-1` for the last day of the month (R-CAL-12). */
+  | { tipo: 'diaDelMes'; dia: number }
+  /** `nth` is `1…5` or `-1` (the last one of the month). */
+  | { tipo: 'diaSemanaDelMes'; nth: number; dia: Dia }
+  | { tipo: 'anual'; mes: number; dia: number };
+
+export const TIPOS_REPETICION = ['semanal', 'diaDelMes', 'diaSemanaDelMes', 'anual'] as const;
+
+/** Days of each month in a leap year: the yearly date `02-29` exists, `02-30` does not (§ 2.3). */
+const DIAS_POR_MES = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
+const dos = (n: number): string => String(n).padStart(2, '0');
+
+/** The day selector of the file for a repetition, or `null` if it does not describe a real day. */
+function selector(rep: Repeticion): Omit<Intervalo, 'from' | 'to'> | null {
+  switch (rep.tipo) {
+    case 'semanal':
+      return rep.dias.size > 0 ? { days: DIAS.filter((d) => rep.dias.has(d)) } : null;
+    case 'diaDelMes':
+      return { monthDays: [rep.dia] };
+    case 'diaSemanaDelMes':
+      return { monthWeekdays: [{ nth: rep.nth, day: rep.dia }] };
+    case 'anual':
+      return rep.dia >= 1 && rep.dia <= (DIAS_POR_MES[rep.mes - 1] ?? 0) ? { dates: [`${dos(rep.mes)}-${dos(rep.dia)}`] } : null;
+  }
+}
+
+/** Same selector and same hours: weekly days compare as a set, the rest as written. */
+function misma(a: Intervalo, b: Intervalo): boolean {
+  if (a.from !== b.from || a.to !== b.to) return false;
+  if (Array.isArray(a.days) || Array.isArray(b.days)) {
+    return (
+      Array.isArray(a.days) &&
+      Array.isArray(b.days) &&
+      a.days.length === b.days.length &&
+      a.days.every((d) => b.days!.includes(d))
+    );
+  }
+  const resto = (iv: Intervalo): string => JSON.stringify([iv.monthDays, iv.monthWeekdays, iv.dates]);
+  return resto(a) === resto(b);
+}
+
+/**
+ * The range to add for any repetition (#82), or `null` while the form does not describe a valid
+ * interval or it would duplicate one already in the file. Same rules as `franjaNueva`.
+ */
+export function franjaRepetida(
+  rep: Repeticion,
+  from: string,
+  to: string,
+  intervals: readonly Intervalo[] = [],
+): Intervalo | null {
+  const dias = selector(rep);
   const valida =
-    dias.size > 0 &&
+    dias !== null &&
     new RegExp(`^(${HHMM_FROM})$`).test(from) &&
     new RegExp(`^(${HHMM_TO})$`).test(to) &&
     to > from;
+  if (!valida) return null;
+  const nueva: Intervalo = { ...dias, from, to };
   // An identical entry already in the file would only be a duplicate row (union, § 2.3).
-  const repetida = intervals.some(
-    (iv) =>
-      iv.from === from &&
-      iv.to === to &&
-      Array.isArray(iv.days) &&
-      iv.days.length === dias.size &&
-      iv.days.every((d) => dias.has(d)),
-  );
-  return valida && !repetida ? { days: DIAS.filter((d) => dias.has(d)), from, to } : null;
+  return intervals.some((iv) => misma(iv, nueva)) ? null : nueva;
+}
+
+type CatalogoCalendario = ReturnType<typeof useStrings>['calendario'];
+
+/** `-1` → «last», `-3` → «3 from the end», `15` → «15». */
+function diaDelMesTexto(n: number, S: CatalogoCalendario): string {
+  if (n === -1) return S.ultimo;
+  return n < 0 ? S.desdeElFinal(-n) : String(n);
+}
+
+/**
+ * The days part of a list row, for any selector (#82): `Mon–Fri`, «Day 1, last of each month»,
+ * «Last Fri of each month», «Every year on Dec 24». Anything malformed is shown as written.
+ */
+export function resumenSelector(intervalo: Intervalo, S: CatalogoCalendario): string {
+  if (Array.isArray(intervalo.monthDays)) {
+    return S.cadaMesDias(intervalo.monthDays.map((n) => diaDelMesTexto(n, S)).join(', '));
+  }
+  if (Array.isArray(intervalo.monthWeekdays)) {
+    return intervalo.monthWeekdays
+      .map(({ nth, day }) =>
+        S.cadaMesSemana(S.ordinales[String(nth)] ?? S.desdeElFinal(-nth), S.dias[day] ?? String(day)),
+      )
+      .join(', ');
+  }
+  if (Array.isArray(intervalo.dates)) {
+    return S.cadaAno(
+      intervalo.dates
+        .map((fecha) => {
+          const mes = S.meses[Number(fecha.slice(0, 2)) - 1];
+          return mes === undefined ? fecha : S.fecha(Number(fecha.slice(3, 5)), mes);
+        })
+        .join(', '),
+    );
+  }
+  return resumenDias(Array.isArray(intervalo.days) ? intervalo.days : [], S.dias);
 }
 
 /**
@@ -202,47 +299,144 @@ function Franjas({
   onCambio: (intervals: Intervalo[]) => void;
 }): React.JSX.Element {
   const S = useStrings();
+  const [tipo, setTipo] = useState<(typeof TIPOS_REPETICION)[number]>('semanal');
   const [dias, setDias] = useState<ReadonlySet<Dia>>(new Set(PRESETS.laborables));
+  const [diaDelMes, setDiaDelMes] = useState(1);
+  const [nth, setNth] = useState(1);
+  const [diaSemana, setDiaSemana] = useState<Dia>('MON');
+  const [mes, setMes] = useState(1);
+  const [diaAnual, setDiaAnual] = useState(1);
   const [from, setFrom] = useState('09:00');
   const [to, setTo] = useState('18:00');
-  const nueva = franjaNueva(dias, from, to, intervals);
+  const repeticion: Repeticion =
+    tipo === 'semanal'
+      ? { tipo, dias }
+      : tipo === 'diaDelMes'
+        ? { tipo, dia: diaDelMes }
+        : tipo === 'diaSemanaDelMes'
+          ? { tipo, nth, dia: diaSemana }
+          : { tipo, mes, dia: diaAnual };
+  const nueva = franjaRepetida(repeticion, from, to, intervals);
   const iguales = (preset: readonly Dia[]): boolean =>
     preset.length === dias.size && preset.every((d) => dias.has(d));
+  /** A `<select>` of numbers with its label; the value is always one of `opciones`. */
+  const numeros = (
+    etiqueta: string,
+    valor: number,
+    opciones: readonly (readonly [number, string])[],
+    cambiar: (n: number) => void,
+  ): React.JSX.Element => (
+    <label>
+      {etiqueta}
+      <select
+        value={valor}
+        onChange={(e) => {
+          cambiar(Number(e.target.value));
+        }}
+      >
+        {opciones.map(([n, texto]) => (
+          <option key={n} value={n}>
+            {texto}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const unoA = (n: number): [number, string][] => Array.from({ length: n }, (_, i) => [i + 1, String(i + 1)]);
 
   return (
     <div className="franjas" role="group" aria-label={S.calendario.nuevaFranja}>
-      <div className="franjas-presets">
-        {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((clave) => (
-          <button
-            key={clave}
-            type="button"
-            className="chip"
-            aria-pressed={iguales(PRESETS[clave])}
-            onClick={() => {
-              setDias(new Set(PRESETS[clave]));
+      <div className="franjas-repeticion">
+        <label>
+          {S.calendario.repeticion}
+          <select
+            value={tipo}
+            onChange={(e) => {
+              setTipo(e.target.value as (typeof TIPOS_REPETICION)[number]);
             }}
           >
-            {S.calendario.presets[clave]}
-          </button>
-        ))}
+            {TIPOS_REPETICION.map((t) => (
+              <option key={t} value={t}>
+                {S.calendario.repeticiones[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {tipo === 'diaDelMes' &&
+          numeros(S.calendario.diaDelMes, diaDelMes, [...unoA(31), [-1, S.calendario.ultimoDia]], setDiaDelMes)}
+        {tipo === 'diaSemanaDelMes' && (
+          <>
+            {numeros(
+              S.calendario.semanaDelMes,
+              nth,
+              [1, 2, 3, 4, 5, -1].map((n) => [n, S.calendario.ordinales[String(n)] ?? String(n)] as const),
+              setNth,
+            )}
+            <label>
+              {S.calendario.diaSemana}
+              <select
+                value={diaSemana}
+                onChange={(e) => {
+                  setDiaSemana(e.target.value as Dia);
+                }}
+              >
+                {DIAS.map((d) => (
+                  <option key={d} value={d}>
+                    {S.calendario.dias[d]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+        {tipo === 'anual' && (
+          <>
+            {numeros(
+              S.calendario.mes,
+              mes,
+              S.calendario.meses.map((nombre, i) => [i + 1, nombre] as const),
+              setMes,
+            )}
+            {numeros(S.calendario.dia, diaAnual, unoA(31), setDiaAnual)}
+          </>
+        )}
       </div>
-      <div className="franjas-dias">
-        {DIAS.map((dia) => (
-          <label key={dia}>
-            <input
-              type="checkbox"
-              checked={dias.has(dia)}
-              onChange={() => {
-                const otros = new Set(dias);
-                if (otros.has(dia)) otros.delete(dia);
-                else otros.add(dia);
-                setDias(otros);
-              }}
-            />
-            {S.calendario.dias[dia]}
-          </label>
-        ))}
-      </div>
+      {tipo === 'semanal' && (
+        <>
+          <div className="franjas-presets">
+            {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((clave) => (
+              <button
+                key={clave}
+                type="button"
+                className="chip"
+                aria-pressed={iguales(PRESETS[clave])}
+                onClick={() => {
+                  setDias(new Set(PRESETS[clave]));
+                }}
+              >
+                {S.calendario.presets[clave]}
+              </button>
+            ))}
+          </div>
+          <div className="franjas-dias">
+            {DIAS.map((dia) => (
+              <label key={dia}>
+                <input
+                  type="checkbox"
+                  checked={dias.has(dia)}
+                  onChange={() => {
+                    const otros = new Set(dias);
+                    if (otros.has(dia)) otros.delete(dia);
+                    else otros.add(dia);
+                    setDias(otros);
+                  }}
+                />
+                {S.calendario.dias[dia]}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
       <div className="franjas-horas">
         {/* Text, not `type="time"`: a time input cannot hold `"24:00"`. */}
         <label>
@@ -300,11 +494,7 @@ function ListaFranjas({
   const S = useStrings();
   if (intervals.length === 0) return null;
   const rotulo = (intervalo: Intervalo): string =>
-    S.calendario.franja(
-      resumenDias(Array.isArray(intervalo.days) ? intervalo.days : [], S.calendario.dias),
-      String(intervalo.from),
-      String(intervalo.to),
-    );
+    S.calendario.franja(resumenSelector(intervalo, S.calendario), String(intervalo.from), String(intervalo.to));
   return (
     <ul className="franjas-lista" aria-label={S.calendario.lista}>
       {intervals.map((intervalo, k) => (
@@ -437,6 +627,88 @@ export function CalendarEditor({
         </div>
       )}
       <ListaFranjas intervals={intervals} onCambio={onCambio} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * `calendars[clave].holidays` (#82, R-CAL-14)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Holidays: whole days the calendar is closed whatever its ranges say. A date picker plus «Every
+ * year», which writes `"MM-DD"` instead of `"YYYY-MM-DD"`. The list is the file as written, with
+ * remove; nothing is sorted or merged behind the user's back.
+ */
+export function Festivos({
+  holidays,
+  onCambio,
+}: {
+  holidays: readonly string[];
+  onCambio: (holidays: string[]) => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const [fecha, setFecha] = useState('');
+  const [cadaAno, setCadaAno] = useState(false);
+  const valor = cadaAno ? fecha.slice(5) : fecha;
+  const valida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && !holidays.includes(valor);
+  const rotulo = (festivo: string): string =>
+    /^\d{2}-\d{2}$/.test(festivo) ? S.calendario.festivoAnual(festivo) : festivo;
+  return (
+    <div className="festivos" role="group" aria-label={S.calendario.festivos}>
+      <div className="franjas-horas">
+        <label>
+          {S.calendario.nuevoFestivo}
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => {
+              setFecha(e.target.value);
+            }}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={cadaAno}
+            onChange={() => {
+              setCadaAno(!cadaAno);
+            }}
+          />
+          {S.calendario.festivoCadaAno}
+        </label>
+        <button
+          type="button"
+          className="boton"
+          disabled={!valida}
+          onClick={() => {
+            onCambio([...holidays, valor]);
+          }}
+        >
+          {S.calendario.anadirFestivo}
+        </button>
+      </div>
+      <p className="ayuda">{S.calendario.ayudaFestivos}</p>
+      {holidays.length > 0 && (
+        <ul className="franjas-lista" aria-label={S.calendario.listaFestivos}>
+          {holidays.map((festivo, k) => (
+            // ponytail: index keys, as in `ListaFranjas`: the list is re-derived from the file.
+            <li key={k}>
+              <span className="mono">{rotulo(festivo)}</span>
+              <button
+                type="button"
+                className="enlace"
+                aria-label={S.calendario.quitarFestivo(rotulo(festivo))}
+                onClick={() => {
+                  onCambio(holidays.filter((_, i) => i !== k));
+                }}
+              >
+                {S.calendario.quitar}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

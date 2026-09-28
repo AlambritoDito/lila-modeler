@@ -791,7 +791,7 @@ export const es: Strings = {
         'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
       times: 'Cuánto tarda cada llegada y cada trabajo.',
       resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
-      calendars: 'Cuándo se puede trabajar: calendarios semanales y la capacidad de cada turno.',
+      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y la capacidad de cada turno.',
     } as Record<string, string>,
 
     /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
@@ -869,6 +869,11 @@ export const es: Strings = {
       days: 'Días',
       from: 'Desde',
       to: 'Hasta',
+      monthDays: 'Días del mes',
+      monthWeekdays: 'Días de la semana del mes',
+      dates: 'Fechas anuales',
+      nth: 'Semana del mes',
+      day: 'Día de la semana',
       // resources (§ 2.4)
       name: 'Nombre',
       type: 'Tipo',
@@ -1022,6 +1027,38 @@ export const es: Strings = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Quitar',
     quitarFranja: (franja: string): string => `Quitar ${franja}`,
+    /** #82: cómo se repite la franja nueva: cada semana, cada mes o cada año (R-CAL-12, R-CAL-13). */
+    repeticion: 'Se repite',
+    repeticiones: {
+      semanal: 'Cada semana',
+      diaDelMes: 'Cada mes, un día',
+      diaSemanaDelMes: 'Cada mes, un día de la semana',
+      anual: 'Cada año, una fecha',
+    },
+    diaDelMes: 'Día del mes',
+    ultimoDia: 'Último día',
+    semanaDelMes: 'Semana del mes',
+    ordinales: { '1': '1.º', '2': '2.º', '3': '3.º', '4': '4.º', '5': '5.º', '-1': 'Último' } as Record<string, string>,
+    diaSemana: 'Día de la semana',
+    mes: 'Mes',
+    dia: 'Día',
+    meses: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
+    /** Fila de la lista de una franja mensual o anual. */
+    ultimo: 'último',
+    desdeElFinal: (n: number): string => `${n} desde el final`,
+    cadaMesDias: (dias: string): string => `Día ${dias} de cada mes`,
+    cadaMesSemana: (ordinal: string, dia: string): string => `${ordinal} ${dia} de cada mes`,
+    cadaAno: (fechas: string): string => `Cada año el ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${dia} ${mes}`,
+    /** #82: festivos, cerrado todo el día digan lo que digan las franjas (R-CAL-14). */
+    festivos: 'Festivos',
+    nuevoFestivo: 'Fecha del festivo',
+    festivoCadaAno: 'Cada año',
+    anadirFestivo: 'Añadir festivo',
+    listaFestivos: 'Festivos actuales',
+    festivoAnual: (mmdd: string): string => `${mmdd} (cada año)`,
+    quitarFestivo: (festivo: string): string => `Quitar ${festivo}`,
+    ayudaFestivos: 'Cerrado todo el día, digan lo que digan las franjas de arriba.',
   },
 
   /* ------------------------------------------------------------------ *

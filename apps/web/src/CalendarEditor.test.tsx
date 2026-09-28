@@ -8,7 +8,16 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { CalendarEditor, DIAS, franjaNueva, resumenDias, type Intervalo } from './CalendarEditor';
+import {
+  CalendarEditor,
+  DIAS,
+  Festivos,
+  franjaNueva,
+  franjaRepetida,
+  resumenDias,
+  resumenSelector,
+  type Intervalo,
+} from './CalendarEditor';
 import { setLocale } from './i18n';
 import { en as T } from './strings.en';
 
@@ -172,4 +181,132 @@ it('puts the list below the grid, so painting never shifts the cells under the p
     Node.DOCUMENT_POSITION_FOLLOWING,
   );
   expect(rejilla.compareDocumentPosition(lista)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+});
+
+/* ------------------------------------------------------------------ *
+ * #82: monthly/yearly repetition and holidays
+ * ------------------------------------------------------------------ */
+
+/** Picks `valor` in the `<select>` whose label starts with `rotulo`. */
+function elegir(rotulo: string, valor: string): void {
+  const select = [...document.querySelectorAll('.franjas-repeticion label')]
+    .find((l) => l.textContent!.startsWith(rotulo))!
+    .querySelector('select')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+  act(() => {
+    setter.call(select, valor);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+it('adds a monthly range on the last day of the month', () => {
+  const onCambio = montar([{ days: ['MON'], from: '09:00', to: '18:00' }]);
+  elegir(T.calendario.repeticion, 'diaDelMes');
+  // The weekly day pickers only belong to the weekly repetition.
+  expect(document.querySelector('.franjas-dias')).toBeNull();
+  elegir(T.calendario.diaDelMes, '-1');
+  pulsar(T.calendario.anadir);
+  expect(onCambio).toHaveBeenLastCalledWith([
+    { days: ['MON'], from: '09:00', to: '18:00' },
+    { monthDays: [-1], from: '09:00', to: '18:00' },
+  ]);
+});
+
+it('adds a monthly range on the last Friday', () => {
+  const onCambio = montar([]);
+  elegir(T.calendario.repeticion, 'diaSemanaDelMes');
+  elegir(T.calendario.semanaDelMes, '-1');
+  elegir(T.calendario.diaSemana, 'FRI');
+  escribir(T.calendario.desde, '14:00');
+  pulsar(T.calendario.anadir);
+  expect(onCambio).toHaveBeenLastCalledWith([{ monthWeekdays: [{ nth: -1, day: 'FRI' }], from: '14:00', to: '18:00' }]);
+});
+
+it('adds a yearly date; February 30 does not exist and keeps the button disabled', () => {
+  const onCambio = montar([]);
+  elegir(T.calendario.repeticion, 'anual');
+  elegir(T.calendario.mes, '2');
+  elegir(T.calendario.dia, '30');
+  expect(boton(T.calendario.anadir).disabled).toBe(true);
+  elegir(T.calendario.dia, '29');
+  pulsar(T.calendario.anadir);
+  expect(onCambio).toHaveBeenLastCalledWith([{ dates: ['02-29'], from: '09:00', to: '18:00' }]);
+});
+
+it('does not add the same monthly range twice', () => {
+  const ya: Intervalo = { monthDays: [1], from: '09:00', to: '18:00' };
+  expect(franjaRepetida({ tipo: 'diaDelMes', dia: 1 }, '09:00', '18:00', [ya])).toBeNull();
+  expect(franjaRepetida({ tipo: 'diaDelMes', dia: 2 }, '09:00', '18:00', [ya])).toEqual({
+    monthDays: [2],
+    from: '09:00',
+    to: '18:00',
+  });
+  // A weekly range with the same hours is a different entry.
+  expect(franjaRepetida({ tipo: 'semanal', dias: new Set(['MON'] as const) }, '09:00', '18:00', [ya])).not.toBeNull();
+});
+
+it('describes monthly and yearly ranges in the list', () => {
+  const C = T.calendario;
+  expect(resumenSelector({ monthDays: [1, -1], from: '09:00', to: '12:00' }, C)).toBe('Day 1, last of each month');
+  expect(resumenSelector({ monthWeekdays: [{ nth: -1, day: 'FRI' }], from: '09:00', to: '12:00' }, C)).toBe(
+    'Last Fri of each month',
+  );
+  expect(resumenSelector({ dates: ['12-24'], from: '09:00', to: '12:00' }, C)).toBe('Every year on Dec 24');
+  montar([{ monthWeekdays: [{ nth: 2, day: 'SAT' }], from: '10:00', to: '14:00' }]);
+  expect(document.querySelector('.franjas-lista')!.textContent).toContain(
+    C.franja('2nd Sat of each month', '10:00', '14:00'),
+  );
+});
+
+it('painting the grid keeps monthly and yearly ranges as written', () => {
+  const mensual: Intervalo = { monthDays: [15], from: '09:00', to: '12:00' };
+  const onCambio = montar([mensual]);
+  const celda = document.querySelector<HTMLButtonElement>(`[aria-label="${T.calendario.celda('MON', '09:00')}"]`)!;
+  act(() => celda.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+  expect(onCambio).toHaveBeenLastCalledWith([mensual, { days: ['MON'], from: '09:00', to: '10:00' }]);
+});
+
+function montarFestivos(holidays: string[]) {
+  const onCambio = vi.fn<(nuevos: string[]) => void>();
+  contenedor = document.createElement('div');
+  document.body.appendChild(contenedor);
+  raiz = createRoot(contenedor);
+  act(() => raiz!.render(<Festivos holidays={holidays} onCambio={onCambio} />));
+  return onCambio;
+}
+
+function fecha(valor: string): void {
+  const campo = document.querySelector<HTMLInputElement>('.festivos input[type="date"]')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  act(() => {
+    setter.call(campo, valor);
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+it('adds a one-off holiday and an annual one', () => {
+  const onCambio = montarFestivos(['2026-01-01']);
+  expect(boton(T.calendario.anadirFestivo).disabled).toBe(true);
+  fecha('2026-12-25');
+  pulsar(T.calendario.anadirFestivo);
+  expect(onCambio).toHaveBeenLastCalledWith(['2026-01-01', '2026-12-25']);
+
+  const casilla = [...document.querySelectorAll('.festivos label')]
+    .find((l) => l.textContent === T.calendario.festivoCadaAno)!
+    .querySelector('input')!;
+  act(() => casilla.click());
+  pulsar(T.calendario.anadirFestivo);
+  expect(onCambio).toHaveBeenLastCalledWith(['2026-01-01', '12-25']);
+});
+
+it('does not add a holiday twice, and removes one from the list', () => {
+  const onCambio = montarFestivos(['2026-12-25', '01-01']);
+  fecha('2026-12-25');
+  expect(boton(T.calendario.anadirFestivo).disabled).toBe(true);
+  expect(document.querySelector('.festivos .franjas-lista')!.textContent).toContain(T.calendario.festivoAnual('01-01'));
+  const quitar = [...document.querySelectorAll<HTMLButtonElement>('.festivos li button')].find(
+    (b) => b.getAttribute('aria-label') === T.calendario.quitarFestivo('2026-12-25'),
+  )!;
+  act(() => quitar.click());
+  expect(onCambio).toHaveBeenLastCalledWith(['01-01']);
 });

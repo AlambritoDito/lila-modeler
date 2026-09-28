@@ -817,7 +817,7 @@ export const en = {
         'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
       times: 'How long each arrival and each piece of work takes.',
       resources: 'Who does the work: pools, how many units, and which task takes which pool.',
-      calendars: 'When the work is possible: weekly calendars, and the capacity of each shift.',
+      calendars: 'When the work is possible: calendars and holidays, and the capacity of each shift.',
     } as Record<string, string>,
 
     /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
@@ -896,6 +896,11 @@ export const en = {
       days: 'Days',
       from: 'From',
       to: 'To',
+      monthDays: 'Days of the month',
+      monthWeekdays: 'Weekdays of the month',
+      dates: 'Yearly dates',
+      nth: 'Week of the month',
+      day: 'Weekday',
       // resources (§ 2.4)
       name: 'Name',
       type: 'Type',
@@ -1048,6 +1053,38 @@ export const en = {
     franja: (dias: string, from: string, to: string): string => `${dias} ${from}–${to}`,
     quitar: 'Remove',
     quitarFranja: (franja: string): string => `Remove ${franja}`,
+    /** #82: how the new range repeats — weekly, monthly or yearly (R-CAL-12, R-CAL-13). */
+    repeticion: 'Repeats',
+    repeticiones: {
+      semanal: 'Weekly',
+      diaDelMes: 'Monthly, on a day',
+      diaSemanaDelMes: 'Monthly, on a weekday',
+      anual: 'Yearly, on a date',
+    },
+    diaDelMes: 'Day of the month',
+    ultimoDia: 'Last day',
+    semanaDelMes: 'Week of the month',
+    ordinales: { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '5': '5th', '-1': 'Last' } as Record<string, string>,
+    diaSemana: 'Weekday',
+    mes: 'Month',
+    dia: 'Day',
+    meses: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** The list row of a monthly or yearly range. */
+    ultimo: 'last',
+    desdeElFinal: (n: number): string => `${n} from the end`,
+    cadaMesDias: (dias: string): string => `Day ${dias} of each month`,
+    cadaMesSemana: (ordinal: string, dia: string): string => `${ordinal} ${dia} of each month`,
+    cadaAno: (fechas: string): string => `Every year on ${fechas}`,
+    fecha: (dia: number, mes: string): string => `${mes} ${dia}`,
+    /** #82: holidays, closed all day whatever the ranges say (R-CAL-14). */
+    festivos: 'Holidays',
+    nuevoFestivo: 'Holiday date',
+    festivoCadaAno: 'Every year',
+    anadirFestivo: 'Add holiday',
+    listaFestivos: 'Current holidays',
+    festivoAnual: (mmdd: string): string => `${mmdd} (every year)`,
+    quitarFestivo: (festivo: string): string => `Remove ${festivo}`,
+    ayudaFestivos: 'Closed all day, whatever the ranges above say.',
   },
 
   /* ------------------------------------------------------------------ *

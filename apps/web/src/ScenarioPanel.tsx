@@ -49,7 +49,7 @@ import {
   type ScenarioReader,
 } from '@lila-modeler/engine/schema';
 
-import { CalendarEditor, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+import { CalendarEditor, Festivos, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { LaneAssign } from './LaneAssign.js';
 import { esEscenarioBase } from './RailEscenarios.js';
@@ -510,7 +510,8 @@ function unidadBase(ctx: Contexto): UnidadTiempo {
 }
 
 /* ------------------------------------------------------------------ *
- * Campos reservados (§ 4): priority, preempt, batch, holidays, timezone. `conditions` dejó de
+ * Campos reservados (§ 4): priority, preempt, batch, timezone (`holidays` is implemented since
+ * #82). `conditions` dejó de
  * serlo en un flujo que sale de una XOR divergente (ADR-028); en cualquier otro elemento sigue
  * cayendo aquí, y lo hace por `esCondicionesReservadas`, no por tener esquema vacío.
  * ------------------------------------------------------------------ */
@@ -778,6 +779,40 @@ function CampoIntervalos({
       ) : (
         <Campo esquema={esquema} ruta={ruta} etiqueta="intervals" requerido ctx={ctx} sufijo="-lista" />
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * `calendars[clave].holidays` (#82, R-CAL-14): date picker and list
+ * ------------------------------------------------------------------ */
+
+/** `['calendars', <clave>, 'holidays']`. */
+function esFestivosCalendario(ruta: Ruta): boolean {
+  return ruta.length === 3 && ruta[0] === 'calendars' && ruta[2] === 'holidays';
+}
+
+/**
+ * The holidays of a calendar with a date picker instead of the schema's generic list of strings.
+ * Removing the last one removes the key, so a calendar edited back to no holidays reads as it did
+ * before (the file does not grow an empty `holidays: []`).
+ */
+function CampoFestivos({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Element {
+  const S = useStrings();
+  const valor = leer(ctx.resuelto, ruta);
+  const holidays = Array.isArray(valor) ? valor.filter((f): f is string => typeof f === 'string') : [];
+  return (
+    <div className="campo-schema">
+      <span className="etiqueta">{S.escenario.campos['holidays'] ?? 'holidays'}</span>
+      <Festivos
+        holidays={holidays}
+        onCambio={(nuevos) => {
+          // § 6: the whole array in the delta, as with `intervals`.
+          if (nuevos.length === 0) ctx.quitar(ruta);
+          else ctx.editar(ruta, nuevos);
+        }}
+      />
+      <Problemas ruta={ruta} ctx={ctx} />
     </div>
   );
 }
@@ -1111,6 +1146,9 @@ export function Campo({
   if (sufijo === '' && esIntervalosCalendario(ruta)) {
     return <CampoIntervalos esquema={esquema} ruta={ruta} ctx={ctx} />;
   }
+  if (esFestivosCalendario(ruta)) {
+    return <CampoFestivos ruta={ruta} ctx={ctx} />;
+  }
 
   // #332: las dos referencias del formato (R9) como selector de lo ya declarado, y `run.start`
   // (R8) como fecha + desfase. Un `start` que no encaje en el molde ISO cae a la entrada de texto
@@ -1337,7 +1375,7 @@ export function Campo({
   }
 
   // Esquema vacío (`{}`): los campos reservados de § 4 (`priority`, `preempt`, `batch`,
-  // `holidays`, `timezone`). `conditions` ya tiene esquema propio (ADR-028) y no llega hasta
+  // `timezone`). `conditions` ya tiene esquema propio (ADR-028) y no llega hasta
   // aquí: cuando no aplica la desvía arriba `esCondicionesReservadas`. El motor los rechaza con
   // error, así que el panel no ofrece forma de crearlos, pero si llegan heredados o propios hace
   // falta poder borrarlos (OP-11): `CampoReservado` enseña el estado y el botón; el problema
