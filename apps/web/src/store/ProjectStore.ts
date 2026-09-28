@@ -95,4 +95,10 @@ export interface ProjectSessionStore extends ProjectStore {
    * `BrowserStore` no guarda identidad entre guardados.
    */
   forget?(): void;
+  /**
+   * Process slugs already taken on disk by the active project FOLDER (#498, QA of #511): a deleted
+   * process's `processes/<slug>/` stays, so a new process must pick another slug or it would read
+   * the old one's scenarios and runs. Only `DesktopStore`; a `.lila` is rewritten whole.
+   */
+  occupiedSlugs?(): readonly string[];
 }

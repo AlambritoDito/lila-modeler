@@ -537,6 +537,39 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     });
   });
 
+  it('occupiedSlugs: las carpetas de processes/ de la lectura, más lo guardado; no entran en el documento (QA de #511)', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [], loose: false, occupiedSlugs: ['cobro'] });
+    bridge.queueChooseFolder('/carpeta/proyecto');
+
+    const abierto = await store.openProject();
+    expect(abierto).not.toHaveProperty('occupiedSlugs');
+    expect(store.occupiedSlugs()).toEqual(['cobro']);
+
+    const segundo = { slug: 'envio', name: 'Envío', model: { id: 'P2', name: 'model.bpmn', xml: XML_MINIMO, revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+    await store.saveProject(documentoBase({ process: { slug: 'pedido', name: 'Pedido' }, processes: [segundo] }));
+    expect([...store.occupiedSlugs()].sort()).toEqual(['cobro', 'envio', 'pedido']);
+    store.forget();
+    expect(store.occupiedSlugs()).toEqual([]);
+  });
+
+  it('un diagrama suelto con un segundo proceso (#498) pide destino y se guarda entero', async () => {
+    const bridge = new FakeBridge();
+    const store = new DesktopStore(bridge);
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    bridge.queueChooseFolder('/carpeta/nuevo.lila');
+
+    await store.openRecent('/carpeta/descargas', 'ventas.bpmn');
+    const segundo = { slug: 'facturacion', name: 'Facturación', model: { id: 'P2', name: 'model.bpmn', xml: XML_MINIMO, revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+    await store.saveProject(documentoBase({ process: { slug: 'pedido', name: 'Pedido' }, processes: [segundo] }));
+
+    expect(bridge.dialogos).toEqual(['saveFile']);
+    expect(bridge.writes.at(-1)).toMatchObject({ dir: '/carpeta/nuevo.lila', options: { saveAs: true, overwrite: false } });
+    expect(bridge.writes.at(-1)!.options).not.toHaveProperty('diagramOnly');
+    expect(bridge.writes.at(-1)!.document.processes).toEqual([segundo]);
+  });
+
   it('«Guardar como» de un diagrama suelto crea el proyecto completo y olvida el archivo suelto', async () => {
     const bridge = new FakeBridge();
     const store = new DesktopStore(bridge);

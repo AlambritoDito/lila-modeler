@@ -46,6 +46,12 @@ export interface LilaProjectDocument extends ProjectDocument {
    * la carpeta del usuario con un proyecto entero.
    */
   readonly loose?: boolean;
+  /**
+   * Folders under `processes/` of a project FOLDER (#498, QA of #511): the slugs a new process
+   * must not take, because a deleted process's folder stays on disk. Absent for a `.lila`, which
+   * is rewritten whole. Never part of the saved document.
+   */
+  readonly occupiedSlugs?: readonly string[];
 }
 
 /** Result of a close-time save. Only `saved` permits closing the window. */

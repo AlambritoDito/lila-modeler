@@ -119,8 +119,8 @@ describe('the .lila container', () => {
   test('a manifest of a newer version is refused instead of being read as version 1', () => {
     expect(() => decodeLila(rebuilt((entries) => {
       const manifest = JSON.parse(strFromU8(entries['lila-project.json']!));
-      entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 2 }));
-    }))).toThrow(/version 2/);
+      entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 3 }));
+    }))).toThrow(/version 3/);
   });
 
   test('an archive without model.bpmn is not a project', () => {

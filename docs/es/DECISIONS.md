@@ -468,7 +468,16 @@ Techos, todos deliberados:
 
 ## ADR-029 — El repositorio: un `.lila` puede contener una organización entera
 
-**Estado:** Aceptada (dirección, decidida por Brito el 2026-09-26). El layout exacto de abajo lo fija el primer ticket de implementación; nada de esto está implementado todavía.
+**Estado:** Aceptada (dirección, decidida por Brito el 2026-09-26). **Mínimo implementado** (#498, #461):
+un proyecto con más de un proceso es un repositorio versión 2 con cada proceso en
+`processes/<slug>/`, las pestañas del lienzo son sus procesos y una actividad de llamada abre el
+proceso al que llama. El primer ticket fijó dos puntos del layout de abajo: el manifiesto conserva su
+nombre, `lila-project.json`, con `"version": 2` (un `lila-repository.json` aparte lo leería una
+versión 1 como «sin manifiesto» en vez de como una versión más nueva), y la versión 2 solo se escribe
+cuando el proyecto tiene un segundo proceso: un proyecto de un proceso sigue en la versión 1, byte a
+byte. `process.json`, los mapas, los análisis, el catálogo, los tableros, los registros y el
+`ProjectStore` por objeto todavía no existen. La descripción operativa está en
+`docs/es/PROJECT_FORMAT.md` § Versión 2.
 
 Lila Modeler crece de alternativa a Bizagi a plataforma de modelado, análisis, diseño, simulación
 y calidad al estilo de ADONIS: mapas de procesos desde los macroprocesos, RACI, riesgos y

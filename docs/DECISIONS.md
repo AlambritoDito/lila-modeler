@@ -467,7 +467,15 @@ Ceilings, all deliberate:
 
 ## ADR-029 — The repository: one `.lila` can hold a whole organization
 
-**Status:** Accepted (direction, decided by Brito on 2026-09-26). The exact layout below is settled by the first implementation ticket; nothing in it is implemented yet.
+**Status:** Accepted (direction, decided by Brito on 2026-09-26). **Minimum implemented** (#498, #461):
+a project with more than one process is a version 2 repository with each process under
+`processes/<slug>/`, the canvas tabs are its processes, and a call activity opens the process it
+calls. The first ticket settled two points of the layout below: the manifest keeps its name,
+`lila-project.json`, with `"version": 2` (a separate `lila-repository.json` would read as «no
+manifest» to a version 1 build instead of as a newer version), and version 2 is written only once a
+project has a second process — a one-process project stays version 1, byte for byte. `process.json`,
+maps, analyses, the catalog, dashboards, records and the per-object `ProjectStore` are not built yet.
+The operative description is `docs/PROJECT_FORMAT.md` § Version 2.
 
 Lila Modeler grows past a Bizagi alternative into a modelling, analysis, design, simulation and
 quality platform in the spirit of ADONIS: process maps down from macroprocesses, RACI, risks and

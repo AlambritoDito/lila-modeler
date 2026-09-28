@@ -57,7 +57,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // QA S1 of #507: the label editor bpmn-js opens on every append.
   edicionActiva: vi.fn(), completarEdicion: vi.fn(),
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
-  alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {} }));
+  alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {},
+  // #461: the canvas double-click listener, to play a double-click on a call activity.
+  dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -100,7 +102,9 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model:
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (events: string[], callback: () => void) => {
-      if (events.includes('selection.changed')) mocks.seleccionCambio = callback; else mocks.changed = callback;
+      if (events.includes('selection.changed')) mocks.seleccionCambio = callback;
+      else if (events.includes('element.dblclick')) mocks.dobleClic = callback as (evento: unknown) => unknown;
+      else mocks.changed = callback;
       return () => {};
     },
     alineable: () => mocks.alineable(), alinear: mocks.alinear,
@@ -1335,11 +1339,173 @@ it('los botones del lienzo acercan, alejan y ajustan el zoom', async () => {
   await act(async () => porEtiqueta(T.app.ajustarPantalla).click());
   expect(mocks.ajustar).toHaveBeenCalledOnce();
 });
-it('cerrar la pestaña del diagrama y «+» abren un proyecto nuevo', async () => {
+it('cerrar la pestaña del diagrama abre un proyecto nuevo; «+» ya no (#498)', async () => {
   await act(async () => porEtiqueta(T.app.cerrarArchivo('model.bpmn')).click());
   expect(session.createProject).toHaveBeenCalledOnce();
-  await act(async () => porEtiqueta(T.app.nuevoDiagrama).click());
-  expect(session.createProject).toHaveBeenCalledTimes(2);
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  expect(session.createProject).toHaveBeenCalledOnce();
+  expect(container.querySelector<HTMLDialogElement>('dialog.dialogo-proceso')?.open).toBe(true);
+});
+
+// ---------- repository: several processes in one project (#498) and call activities (#461) ----------
+
+/** The canvas follows what was last opened, so exporting gives back the diagram on screen. */
+function lienzoQueRecuerda(): { xml: () => string } {
+  let enLienzo = seedModelXml().replaceAll(/Task_[0-9a-f]{32}/g, 'Task_Preparar');
+  mocks.abrir.mockImplementation(async (xml: string) => { enLienzo = xml; return true; });
+  mocks.exportXml.mockImplementation(async () => enLienzo);
+  return { xml: () => enLienzo };
+}
+async function nuevoProcesoConNombre(nombre: string): Promise<void> {
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  const campo = container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!;
+  expect(campo.value).toBe(T.procesos.nombrePorDefecto(2));
+  teclear(campo, nombre);
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+}
+const pestanasProceso = () => [...container.querySelectorAll<HTMLButtonElement>('.diagramas .pestana-proceso')];
+
+it('«+» crea un segundo proceso en el mismo proyecto y cada pestaña trae su diagrama y sus escenarios', async () => {
+  const lienzo = lienzoQueRecuerda();
+  const primero = lienzo.xml();
+  expect(Object.keys(mocks.escenarios)).toContain('to-be-3-cajeros.scenario.json');
+
+  await nuevoProcesoConNombre('Facturación');
+
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual([T.app.proyectoDemo, 'Facturación']);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  const segundo = mocks.abrir.mock.calls.at(-1)![0] as string;
+  expect(segundo).toContain('name="Facturación"');
+  expect(Object.keys(mocks.escenarios)).toEqual(['as-is.scenario.json', 'to-be.scenario.json']);
+
+  // Back to the first tab: its own diagram and its own scenarios.
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(primero);
+  expect(Object.keys(mocks.escenarios)).toContain('to-be-3-cajeros.scenario.json');
+  // And forth again.
+  await act(async () => pestanasProceso()[1]!.click());
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(segundo);
+
+  // The project is dirty and saves both processes, in tab order.
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.model.xml).toBe(primero);
+  expect(guardado.process).toMatchObject({ name: T.app.proyectoDemo });
+  expect(guardado.processes?.map((p) => [p.slug, p.name, p.model.xml])).toEqual([['facturacion', 'Facturación', segundo]]);
+  expect(decodeLila(encodeLila(guardado))).toEqual(guardado);
+});
+
+it('un proceso se renombra y se borra con confirmación; el último no se puede borrar', async () => {
+  const lienzo = lienzoQueRecuerda();
+  const primero = lienzo.xml();
+  await nuevoProcesoConNombre('Facturación');
+
+  await act(async () => porEtiqueta(T.procesos.renombrarProceso('Facturación')).click());
+  const campo = container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!;
+  expect(campo.value).toBe('Facturación');
+  teclear(campo, 'Cobro');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual([T.app.proyectoDemo, 'Cobro']);
+
+  await act(async () => porEtiqueta(T.procesos.borrarProceso('Cobro')).click());
+  expect(container.querySelector('dialog.dialogo-proceso')?.textContent).toContain(T.procesos.confirmarBorrar('Cobro'));
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  // One process again: the plain tab with its file name, and no delete button anywhere.
+  expect(pestanasProceso()).toEqual([]);
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(primero);
+  expect(container.querySelector(`button[aria-label^="${T.procesos.borrarProceso('')}"]`)).toBeNull();
+  porEtiqueta(T.app.cerrarArchivo('model.bpmn'));
+});
+
+it('guardar desde la segunda pestaña guarda de verdad: «Guardar y continuar» continúa (QA de #511, must-fix 1)', async () => {
+  lienzoQueRecuerda();
+  // The first process ends at revision 1, the second at 0: they must not be compared.
+  await act(async () => mocks.changed());
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => porEtiqueta(T.procesos.renombrarProceso('Cobro')).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Cobranza');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+
+  await click(T.app.nuevo);
+  expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+  await click(T.app.guardarYContinuar);
+  expect(session.saveProject).toHaveBeenCalledOnce();
+  expect(vi.mocked(session.saveProject).mock.calls[0]![0].processes?.[0]?.name).toBe('Cobranza');
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([false]);
+  expect(session.createProject).toHaveBeenCalledOnce();
+});
+
+it('borrar y volver a añadir un proceso en la misma sesión no reutiliza su slug (QA de #511)', async () => {
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => porEtiqueta(T.procesos.borrarProceso('Cobro')).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Cobro');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  await click(T.app.guardar);
+  expect(vi.mocked(session.saveProject).mock.calls.at(-1)![0].processes?.map((p) => p.slug)).toEqual(['cobro-2']);
+});
+
+it('las carpetas ocupadas que conoce el almacén tampoco se reutilizan (QA de #511)', async () => {
+  (session as { occupiedSlugs?: () => readonly string[] }).occupiedSlugs = () => ['cobro', 'sample-order'];
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process?.slug).toBe('sample-order-2');
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['cobro-2']);
+});
+
+it('borrar el primer proceso deja al otro con su nombre (QA de #511, nit 9)', async () => {
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await act(async () => pestanasProceso()[0]!.click());
+  await act(async () => porEtiqueta(T.procesos.borrarProceso(T.app.proyectoDemo)).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  expect(pestanasProceso()).toEqual([]);
+  // Growing again: the remaining process is still «Cobro».
+  await act(async () => porEtiqueta(T.procesos.nuevo).click());
+  teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Envío');
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Cobro', 'Envío']);
+});
+
+it('doble clic en una actividad de llamada abre el proceso llamado y «Volver a» regresa (#461)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  const primero = lienzo.xml();
+  await nuevoProcesoConNombre('Facturación');
+  const segundo = lienzo.xml();
+  const llamado = /<bpmn:process id="([^"]+)"/.exec(segundo)![1]!;
+  await act(async () => pestanasProceso()[0]!.click());
+
+  let respuesta: unknown;
+  await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: llamado } } }); });
+  expect(respuesta).toBe(false);
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(segundo);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+
+  await click(T.procesos.volverA(T.app.proyectoDemo));
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(primero);
+  expect(container.textContent).not.toContain(T.procesos.volverA(T.app.proyectoDemo));
+
+  // A calledElement that is not a process here: a notice, and the name editing goes on.
+  const abiertos = mocks.abrir.mock.calls.length;
+  await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: 'Process_Otro' } } }); });
+  expect(respuesta).toBeUndefined();
+  expect(mocks.abrir.mock.calls.length).toBe(abiertos);
+  expect(container.querySelector('.estado [role="status"]')?.textContent).toBe(T.procesos.llamadaSinResolver('Process_Otro'));
+  // Its own process: said as such (QA of #511, nit 3).
+  await act(async () => { mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: /<bpmn:process id="([^"]+)"/.exec(primero)![1]! } } }); });
+  expect(container.querySelector('.estado [role="status"]')?.textContent).toBe(T.procesos.llamadaMismoProceso);
+  // A QName with its prefix names the same process.
+  await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:CallActivity', businessObject: { calledElement: `tns:${llamado}` } } }); });
+  expect(respuesta).toBe(false);
+  expect(mocks.abrir.mock.calls.at(-1)![0]).toBe(segundo);
+  // Any other element is none of this listener's business.
+  await act(async () => { respuesta = mocks.dobleClic({ element: { type: 'bpmn:Task', businessObject: {} } }); });
+  expect(respuesta).toBeUndefined();
 });
 it('cerrar la pestaña con cambios sin guardar pasa por la guardia', async () => {
   await act(async () => mocks.changed());
