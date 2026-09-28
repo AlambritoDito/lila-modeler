@@ -142,7 +142,11 @@ export class DesktopStore implements ProjectSessionStore {
     // (La condición se repite tal cual en el `if`, en vez de leerse de una variable ya calculada,
     // para que TypeScript siga pudiendo angostar `dir` a `string` después de este bloque.)
     let isNewDestination: boolean;
-    if (dir === null || explicitSaveAs) {
+    // Un diagrama suelto al que se le añadió un segundo proceso (#498) ya no cabe en «solo ese
+    // `.bpmn`»: un repositorio se guarda entero, así que su guardado normal pide destino como un
+    // «Guardar como» en vez de mandar `diagramOnly`, que la capa de disco rechazaría.
+    const repositorioSuelto = this.activeLoose && (document.processes?.length ?? 0) > 0;
+    if (dir === null || explicitSaveAs || repositorioSuelto) {
       isNewDestination = true;
       // Destino por defecto de «Guardar como»: un `.lila` NUEVO (ADR-027, hallazgo 4 del QA a
       // #323). `chooseFolder` solo sabe elegir algo que ya existe, así que antes de `chooseSaveFile`
