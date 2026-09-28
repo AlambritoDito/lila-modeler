@@ -92,13 +92,14 @@ const canonical = (doc) => { const base = path.posix.basename(doc); return ES_AL
 
 const GROUPS = [
   { en: 'Getting started', es: 'Primeros pasos', docs: ['BETA-MAC-GUIDE.md', 'COMING-FROM-BIZAGI.md'] },
-  { en: 'Guides', es: 'Guías', docs: ['THEMES.md', 'SHORTCUTS.md', 'BIZAGI_PARITY.md'] },
+  { en: 'Guides', es: 'Guías', docs: ['SCENARIO_SHEETS.md', 'THEMES.md', 'SHORTCUTS.md', 'BIZAGI_PARITY.md'] },
   { en: 'Reference', es: 'Referencia', docs: ['SCENARIO_FORMAT.md', 'RESULTS_FORMAT.md', 'PROJECT_FORMAT.md', 'SEMANTICS.md', 'BPMN_EXTENSION.md'] },
   { en: 'Integrations', es: 'Integraciones', docs: ['MCP.md', 'ORACLES.md'] },
   { en: 'Project', es: 'Proyecto', docs: ['DECISIONS.md', 'EXAMPLES_POLICY.md', 'BRANDING.md'] },
 ];
 const LABELS = {
   'BETA-MAC-GUIDE.md': ['Desktop beta (macOS)', 'Beta de escritorio (macOS)'], 'COMING-FROM-BIZAGI.md': ['Coming from Bizagi', 'Si vienes de Bizagi'],
+  'SCENARIO_SHEETS.md': ['Parameters from Excel/CSV', 'Parámetros desde Excel/CSV'],
   'THEMES.md': ['Themes', 'Temas'], 'SHORTCUTS.md': ['Keyboard shortcuts', 'Atajos de teclado'], 'BIZAGI_PARITY.md': ['Bizagi parity', 'Paridad con Bizagi'],
   'SCENARIO_FORMAT.md': ['Scenario format', 'Formato de escenario'], 'RESULTS_FORMAT.md': ['Results format', 'Formato de resultados'],
   'PROJECT_FORMAT.md': ['Project format', 'Formato de proyecto'], 'SEMANTICS.md': ['Engine semantics', 'Semántica del motor'],
