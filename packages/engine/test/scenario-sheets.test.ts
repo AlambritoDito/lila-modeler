@@ -221,6 +221,12 @@ describe('(b) CSV from a Spanish Excel', () => {
     ]);
   });
 
+  test('a tab-separated file follows the language of the app', () => {
+    const tab = 'id\tcostPerHour\ncajero\t12,5\n';
+    expect(planScenarioImport(csv('Resources.txt', tab), asIs(), pedidoIr(), { locale: 'es' }).changes[0]!.after).toBe(12.5);
+    expect(planScenarioImport(csv('Resources.txt', tab), asIs(), pedidoIr()).changes).toEqual([]);
+  });
+
   test('a text cell of a workbook uses the language of the app, and an ambiguous one gets a note', () => {
     const sheet = (value: string): ReadSheet[] => [{ name: 'Resources', rows: [['id', 'costPerHour'], ['cajero', value]] }];
     const es = planScenarioImport(sheet('1.500'), asIs(), pedidoIr(), { locale: 'es' });
@@ -424,13 +430,15 @@ describe('calendar times', () => {
 describe('days and assignments', () => {
   test('days are whole names or abbreviations, never a prefix', () => {
     const plan = planScenarioImport(
-      csv('Calendars.csv', 'id;days;from;to\na;Lunes-Viernes;09:00;10:00\nb;sáb. domingo;09:00;10:00\nc;Monkey;09:00;10:00\nd;Marzo;09:00;10:00\n'),
+      csv('Calendars.csv', 'id;days;from;to\na;Lunes-Viernes;09:00;10:00\nb;sáb. domingo;09:00;10:00\nc;Monkey;09:00;10:00\nd;Marzo;09:00;10:00\ne;MON - FRI;09:00;10:00\nf;Lun – Vie;09:00;10:00\n'),
       asIs(),
       pedidoIr(),
     );
     expect(plan.changes.map((change) => (change.after as { intervals: { days: string[] }[] }).intervals[0]!.days)).toEqual([
       ['MON', 'TUE', 'WED', 'THU', 'FRI'],
       ['SAT', 'SUN'],
+      ['MON', 'TUE', 'WED', 'THU', 'FRI'],
+      ['MON', 'TUE', 'WED', 'THU', 'FRI'],
     ]);
     expect(plan.issues.filter((issue) => issue.kind === 'error').map((issue) => issue.row)).toEqual([4, 5]);
   });

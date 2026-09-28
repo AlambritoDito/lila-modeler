@@ -651,7 +651,10 @@ export function planScenarioImport(
       }
     }
     const csv = sheet.delimiter !== undefined;
-    const style: NumberStyle = csv ? (sheet.delimiter === ';' ? 'comma' : 'dot') : locale === 'es' ? 'comma' : 'dot';
+    // `;` means decimal comma and `,` decimal dot; a tab says nothing (Excel's «Unicode Text» is
+    // tab-separated in every language), so a tab file follows the app like a workbook does.
+    const byLocale: NumberStyle = locale === 'es' ? 'comma' : 'dot';
+    const style: NumberStyle = sheet.delimiter === ';' ? 'comma' : sheet.delimiter === ',' ? 'dot' : byLocale;
     tables.push({ table, sheet: sheet.name, columns, headers, rows, style, csv });
   }
 
@@ -1304,7 +1307,8 @@ function readDays(value: string): string[] | null {
     return own(DAY_NAMES, token.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\.$/, '').toUpperCase());
   };
   const days: string[] = [];
-  for (const token of value.split(/[,;\s]+/)) {
+  // `MON - FRI`, `Lun – Vie`: spaces around a hyphen or a dash still make one range.
+  for (const token of value.replace(/\s*[-\u2013\u2014]\s*/g, '-').split(/[,;\s]+/)) {
     if (token === '') continue;
     const range = token.split('-');
     if (range.length === 2) {
