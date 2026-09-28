@@ -204,7 +204,8 @@ export function parseNumber(cell: ReadCell | undefined, style: NumberStyle = 'do
   if (percent) text = text.slice(0, -1);
   const [decimal, group] = style === 'comma' ? [',', '.'] : ['.', ','];
   if (text.includes(group)) {
-    const grouped = new RegExp(`^[-+]?\\d{1,3}(\\${group}\\d{3})+(\\${decimal}\\d*)?$`);
+    // A first group of `0` (`0,375`) is never thousands: it is a decimal in the other convention.
+    const grouped = new RegExp(`^[-+]?[1-9]\\d{0,2}(\\${group}\\d{3})+(\\${decimal}\\d*)?$`);
     if (!grouped.test(text)) return Number.NaN;
     text = text.split(group).join('');
   }

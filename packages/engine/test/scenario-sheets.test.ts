@@ -179,7 +179,8 @@ describe('(b) CSV from a Spanish Excel', () => {
     ]);
     // A separator that is not the decimal one has to group by three: no guessing.
     for (const text of ['1.5', '1,234.5', '1,2,3', '12.34.5']) expect(comma(text), text).toBeNaN();
-    for (const text of ['1,5', '1.234,5', '1,2,3']) expect(dot(text), text).toBeNaN();
+    for (const text of ['1,5', '1.234,5', '1,2,3', '0,375', '1 234,5']) expect(dot(text), text).toBeNaN();
+    expect(comma('0.375')).toBeNaN();
     // Not finite, not a number.
     for (const text of ['1e999', '1E+309', 'Infinity', 'abc', '0x10', '(5)', '$1,200']) expect(dot(text), text).toBeNaN();
     expect(parseNumber(Number.POSITIVE_INFINITY)).toBeNaN();
