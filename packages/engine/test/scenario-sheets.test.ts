@@ -234,6 +234,41 @@ describe('(c) rows that match nothing, and ambiguous names', () => {
   });
 });
 
+describe('ids from the file never reach Object.prototype', () => {
+  test('__proto__, constructor and prototype are row errors; inherited names match nothing', () => {
+    const plan = planScenarioImport(
+      [
+        ...csv('Elements.csv', 'id;fixedCost;calendar\n__proto__;7;\ntoString;7;\nconstructor;7;\nTask_Preparar;1;constructor\n'),
+        ...csv('Resources.csv', 'id;capacity;costPerHour\n__proto__;3;99\nprototype;3;99\n'),
+        ...csv('Calendars.csv', 'id;days;from;to\n__proto__;MON;09:00;10:00\n'),
+        ...csv('Assignments.csv', 'elementId;resourceId\nTask_Preparar;hasOwnProperty\nTask_Revisar;__proto__\n'),
+        ...csv('Arrivals.csv', 'name;distribution;mean\nhasOwnProperty;constructor;3\n'),
+      ],
+      asIs(),
+      pedidoIr(),
+    );
+    const probe = {} as Record<string, unknown>;
+    for (const key of ['fixedCost', 'capacity', 'costPerHour', 'intervals', 'resources']) expect(probe[key], key).toBeUndefined();
+    expect(Object.getOwnPropertyNames(Object.prototype).sort()).not.toContain('fixedCost');
+    expect(plan.changes).toEqual([]);
+    expect(plan.issues.map((issue) => [issue.sheet, issue.row, issue.kind])).toEqual([
+      ['Calendars', 2, 'error'],
+      ['Resources', 2, 'error'],
+      ['Resources', 3, 'error'],
+      ['Elements', 2, 'error'],
+      ['Elements', 3, 'unmatched'],
+      ['Elements', 4, 'error'],
+      ['Elements', 5, 'error'],
+      ['Arrivals', 2, 'unmatched'],
+      ['Assignments', 2, 'unmatched'],
+      ['Assignments', 3, 'error'],
+      ['Assignments', 2, 'warning'],
+      ['Assignments', 3, 'warning'],
+    ]);
+    expect(plan.issues[0]!.message).toBe('"__proto__" cannot be used as an id; the row was not applied.');
+  });
+});
+
 describe('(d) invalid values name the sheet, the row and the column', () => {
   test('unknown distribution, negative numbers and bad references', () => {
     const sheets = csv(

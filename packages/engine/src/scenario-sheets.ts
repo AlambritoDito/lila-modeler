@@ -201,6 +201,21 @@ export function parseNumber(cell: ReadCell | undefined): number | null {
   return percent ? value / 100 : value;
 }
 
+/**
+ * Keys the file may not name: on a plain object they reach `Object.prototype` instead of an own
+ * property. A row whose id is one of them is an error; every other lookup goes through `own`.
+ */
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function isReservedKey(key: string): boolean {
+  return RESERVED_KEYS.has(key);
+}
+
+/** `record[key]` only when it is an own property: `own({}, 'toString')` is `undefined`. */
+function own<T>(record: Readonly<Record<string, T>> | undefined, key: string): T | undefined {
+  return record !== undefined && Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -217,19 +232,12 @@ export function sameValue(a: unknown, b: unknown): boolean {
   return keysA.length === keysB.length && keysA.every((key) => sameValue(a[key], b[key]));
 }
 
-function readPath(root: unknown, path: readonly string[]): unknown {
-  let current = root;
-  for (const segment of path) {
-    if (!isObject(current)) return undefined;
-    current = current[segment];
-  }
-  return current;
-}
-
 function writePath(root: Record<string, unknown>, path: readonly string[], value: unknown): void {
+  // Defence in depth: the planner rejects these ids per row, so reaching here is a bug.
+  if (path.some(isReservedKey)) throw new Error(`reserved key in ${path.join('.')}`);
   let current = root;
   for (const segment of path.slice(0, -1)) {
-    if (!isObject(current[segment])) current[segment] = {};
+    if (!isObject(own(current, segment))) current[segment] = {};
     current = current[segment] as Record<string, unknown>;
   }
   current[path[path.length - 1]!] = value;
@@ -240,7 +248,7 @@ function clone<T>(value: T): T {
 }
 
 function section(scenario: Record<string, unknown>, key: string): Record<string, Record<string, unknown>> {
-  const value = scenario[key];
+  const value = own(scenario, key);
   return isObject(value) ? (value as Record<string, Record<string, unknown>>) : {};
 }
 
@@ -275,7 +283,7 @@ export function describeImportValue(value: unknown): string {
 
 function baseFactor(scenario: Record<string, unknown>): { unit: string; factor: number } {
   const run = scenario['run'];
-  const unit = isObject(run) && typeof run['baseTimeUnit'] === 'string' && run['baseTimeUnit'] in UNITS ? run['baseTimeUnit'] : 's';
+  const unit = isObject(run) && typeof run['baseTimeUnit'] === 'string' && Object.hasOwn(UNITS, run['baseTimeUnit']) ? run['baseTimeUnit'] : 's';
   return { unit, factor: UNITS[unit]! };
 }
 
@@ -340,7 +348,7 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
   const elements = section(scenario, 'elements');
   const resources = section(scenario, 'resources');
   const calendars = section(scenario, 'calendars');
-  const nameOf = (id: string): string => ir.nodes[id]?.name ?? ir.flows[id]?.name ?? '';
+  const nameOf = (id: string): string => own(ir.nodes, id)?.name ?? own(ir.flows, id)?.name ?? '';
 
   const elementIds = [
     ...Object.entries(ir.nodes)
@@ -348,17 +356,17 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
       .map(([id]) => id),
     ...Object.entries(ir.flows)
       .filter(([id, flow]) => {
-        const from = ir.nodes[flow.from]?.type;
+        const from = own(ir.nodes, flow.from)?.type;
         return from === 'xor' || from === 'or' || id in elements;
       })
       .map(([id]) => id),
   ];
   const elementRows = elementIds.map((id) => {
-    const element = elements[id] ?? {};
+    const element = own(elements, id) ?? {};
     return [
       id,
       nameOf(id),
-      ir.nodes[id]?.type ?? 'flow',
+      own(ir.nodes, id)?.type ?? 'flow',
       ...distributionCells(element['processingTime'], scenario),
       optional(element['fixedCost']),
       optional(element['calendar']),
@@ -371,7 +379,7 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
     .filter(([, node]) => node.type === 'start')
     .map(([id]) => id);
   const arrivalRows = startIds.map((id) => {
-    const element = elements[id] ?? {};
+    const element = own(elements, id) ?? {};
     return [
       id,
       nameOf(id),
@@ -399,7 +407,7 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
     if (!Array.isArray(element['resources'])) continue;
     for (const entry of element['resources'] as Record<string, unknown>[]) {
       const ref = String(entry['ref']);
-      assignmentRows.push([id, nameOf(id), ref, optional(resources[ref]?.['name']), optional(entry['quantity'])]);
+      assignmentRows.push([id, nameOf(id), ref, optional(own(resources, ref)?.['name']), optional(entry['quantity'])]);
     }
   }
 
@@ -503,7 +511,8 @@ interface Table {
 /** Which table a sheet is: by its name, then by the columns it has. */
 function tableOf(name: string, headers: ReadonlySet<string>): TableId | null {
   const key = normalized(name);
-  if (TABLE_ALIASES[key] !== undefined) return TABLE_ALIASES[key];
+  const exact = own(TABLE_ALIASES, key);
+  if (exact !== undefined) return exact;
   for (const [alias, table] of Object.entries(TABLE_ALIASES)) if (key.includes(alias)) return table;
   if (headers.has('days')) return 'calendars';
   if (headers.has('resourceid') || headers.has('resourcename')) return 'assignments';
@@ -669,6 +678,13 @@ function commit(context: Context, planned: ImportChange[]): void {
   }
 }
 
+/** An id the file may not use as a key (`__proto__`…): reported as a row error, `true`. */
+function rejectReserved(context: Context, t: Table, row: number, column: string, id: string): boolean {
+  if (!isReservedKey(id)) return false;
+  context.issue('error', t.sheet, row, header(t, column), context.M.reservedId(id));
+  return true;
+}
+
 /** Matching result: an id, or the reason there is none (already reported). */
 type Match = { id: string } | null;
 
@@ -676,7 +692,8 @@ type Match = { id: string } | null;
 function matchElement(context: Context, t: Table, row: number, id: string, name: string, idColumn: string, nameColumn: string): Match {
   const { ir, M } = context;
   if (id !== '') {
-    if (ir.nodes[id] !== undefined || ir.flows[id] !== undefined) return { id };
+    if (rejectReserved(context, t, row, idColumn, id)) return null;
+    if (Object.hasOwn(ir.nodes, id) || Object.hasOwn(ir.flows, id)) return { id };
     const sanitized = Object.entries(ir.source.originalIds).find(([, original]) => original === id)?.[0];
     if (sanitized !== undefined) return { id: sanitized };
     context.issue('unmatched', t.sheet, row, header(t, idColumn), M.notFound(id));
@@ -705,7 +722,7 @@ function matchResource(context: Context, t: Table, row: number, name: string, na
 }
 
 function elementLabel(ir: ProcessIR, id: string): string {
-  const name = ir.nodes[id]?.name ?? ir.flows[id]?.name ?? '';
+  const name = own(ir.nodes, id)?.name ?? own(ir.flows, id)?.name ?? '';
   return name.trim() === '' ? id : `${name} (${id})`;
 }
 
@@ -745,7 +762,7 @@ function numberField(
 }
 
 function calendarExists(context: Context, id: string): boolean {
-  return section(context.next, 'calendars')[id] !== undefined;
+  return !isReservedKey(id) && own(section(context.next, 'calendars'), id) !== undefined;
 }
 
 /**
@@ -777,7 +794,7 @@ function readDistribution(
     if (given.length > 0) errors.add('distribution', M.missingDistribution());
     return undefined;
   }
-  const type = DISTRIBUTION_ALIASES[normalized(typeText)];
+  const type = own(DISTRIBUTION_ALIASES, normalized(typeText));
   if (type === undefined) {
     errors.add('distribution', M.unknownDistribution(typeText, Object.keys(DISTRIBUTIONS).join(', ')));
     return undefined;
@@ -786,7 +803,7 @@ function readDistribution(
   const unitText = text(t, cells, 'unit');
   let factor = baseFactor(context.next).factor;
   if (unitText !== '') {
-    const unit = UNIT_ALIASES[normalized(unitText)];
+    const unit = own(UNIT_ALIASES, normalized(unitText));
     if (unit === undefined) {
       errors.add('unit', M.unknownUnit(unitText, Object.keys(UNITS).join(', ')));
       return undefined;
@@ -879,14 +896,14 @@ function planElements(context: Context, t: Table, seen: Map<string, number>): vo
       if (probability !== undefined) fields['probability'] = probability;
       const selection = text(t, cells, 'selection');
       if (selection !== '') {
-        const value = { and: 'and', y: 'and', or: 'or', o: 'or' }[selection.toLowerCase()];
+        const value = own<string>({ and: 'and', y: 'and', or: 'or', o: 'or' }, selection.toLowerCase());
         if (value === undefined) errors.add('selection', M.unknownValue(selection, 'and, or'));
         else fields['selection'] = value;
       }
     }
     if (!flush(context, t, row, errors)) continue;
 
-    const current = section(context.next, 'elements')[match.id] ?? {};
+    const current = own(section(context.next, 'elements'), match.id) ?? {};
     const planned: ImportChange[] = [];
     for (const [field, after] of Object.entries(fields)) {
       if (sameValue(current[field], after)) continue;
@@ -939,6 +956,7 @@ function planResources(context: Context, t: Table, seen: Map<string, number>): v
     const idText = text(t, cells, 'id');
     const name = text(t, cells, 'name');
     let id: string;
+    if (rejectReserved(context, t, row, 'id', idText)) continue;
     if (idText !== '') id = idText;
     else if (name !== '') {
       const match = matchResource(context, t, row, name, 'name');
@@ -955,14 +973,14 @@ function planResources(context: Context, t: Table, seen: Map<string, number>): v
     }
     seen.set(id, row);
 
-    const current = section(context.next, 'resources')[id];
+    const current = own(section(context.next, 'resources'), id);
     const errors = rowErrors();
     const fields: Record<string, unknown> = {};
     // A name only renames when the row says which pool by id; matched by name, it is the key.
     if (name !== '' && idText !== '') fields['name'] = name;
     const type = text(t, cells, 'type');
     if (type !== '') {
-      const value = { role: 'role', rol: 'role', equipment: 'equipment', equipo: 'equipment' }[type.toLowerCase()];
+      const value = own<string>({ role: 'role', rol: 'role', equipment: 'equipment', equipo: 'equipment' }, type.toLowerCase());
       if (value === undefined) errors.add('type', M.unknownValue(type, 'role, equipment'));
       else fields['type'] = value;
     }
@@ -1036,8 +1054,12 @@ function planAssignments(context: Context, t: Table): void {
     // An element with an empty resource is how a sheet says "no resources": it counts as a row.
     if (resourceId === '' && resourceName === '') continue;
     let ref: string | null = null;
+    if (rejectReserved(context, t, row, 'resourceId', resourceId)) {
+      group.failed = true;
+      continue;
+    }
     if (resourceId !== '') {
-      if (section(context.next, 'resources')[resourceId] !== undefined) ref = resourceId;
+      if (!isReservedKey(resourceId) && own(section(context.next, 'resources'), resourceId) !== undefined) ref = resourceId;
       else context.issue('unmatched', t.sheet, row, header(t, 'resourceId'), M.unknownResource(resourceId));
     } else {
       ref = matchResource(context, t, row, resourceName, 'resourceName')?.id ?? null;
@@ -1062,7 +1084,7 @@ function planAssignments(context: Context, t: Table): void {
       context.issue('warning', t.sheet, group.firstRow, undefined, M.groupNotApplied(elementLabel(ir, id)));
       continue;
     }
-    const before = section(context.next, 'elements')[id]?.['resources'];
+    const before = own(section(context.next, 'elements'), id)?.['resources'];
     if (sameValue(before, group.entries)) continue;
     commit(context, [
       {
@@ -1083,7 +1105,7 @@ function planAssignments(context: Context, t: Table): void {
 function readDays(value: string): string[] | null {
   const day = (token: string): string | undefined => {
     const three = token.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().slice(0, 3);
-    const english = SPANISH_DAYS[three] ?? three;
+    const english = own(SPANISH_DAYS, three) ?? three;
     return (WEEKDAYS as readonly string[]).includes(english) ? english : undefined;
   };
   const days: string[] = [];
@@ -1135,6 +1157,7 @@ function planCalendars(context: Context, t: Table): void {
       context.issue('error', t.sheet, row, undefined, M.noKey());
       continue;
     }
+    if (rejectReserved(context, t, row, 'id', id)) continue;
     let group = groups.get(id);
     if (group === undefined) {
       group = { rows: [], intervals: [], failed: false };
@@ -1163,7 +1186,7 @@ function planCalendars(context: Context, t: Table): void {
 
   for (const [id, group] of groups) {
     const firstRow = group.rows[0] ?? t.rows[0]?.row ?? 1;
-    const current = section(context.next, 'calendars')[id];
+    const current = own(section(context.next, 'calendars'), id);
     if (current !== undefined && !isWeekly(current)) {
       context.issue('warning', t.sheet, firstRow, undefined, M.calendarNotWeekly(id));
       continue;
