@@ -8,8 +8,8 @@ vocabulary, so you do not have to relearn the workflow to get your first number 
 discrete-event **simulator** for BPMN: an engine, a CLI, an MCP server and an editor around them.
 It is not a process documentation or publishing suite: File → Export process document writes a
 Word (.docx) file or a single-page HTML with the diagram, each element's documentation and the
-scenario and results tables, but there are no document templates and no shared repository of
-processes. Bizagi Modeler is cited here as the
+scenario and results tables, but there are no document templates. One project can hold several
+processes, but there is no shared multi-user repository. Bizagi Modeler is cited here as the
 reference and inspiration this project learned the workflow from, and as the source of the public
 examples the engine is validated against.
 

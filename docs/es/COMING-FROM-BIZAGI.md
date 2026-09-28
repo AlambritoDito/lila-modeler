@@ -8,8 +8,9 @@ reaprender el flujo antes de sacar tu primer número. Lila es un **simulador** d
 para BPMN: un motor, una CLI, un servidor MCP y un editor alrededor. No es una suite de
 documentación ni de publicación de procesos: Archivo → Exportar documento del proceso escribe un
 Word (.docx) o un HTML de una página con el diagrama, la documentación de cada elemento y las
-tablas del escenario y de resultados, pero no hay plantillas de documento ni repositorio compartido
-de procesos. Bizagi Modeler se cita como la referencia y la
+tablas del escenario y de resultados, pero no hay plantillas de documento. Un proyecto puede
+contener varios procesos, pero no hay un repositorio compartido entre usuarios. Bizagi Modeler se
+cita como la referencia y la
 inspiración de la que este proyecto aprendió el flujo, y como origen de los ejemplos públicos
 contra los que se valida el motor.
 
