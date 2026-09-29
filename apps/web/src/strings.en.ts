@@ -1429,6 +1429,10 @@ export const en = {
     /** «Save as» of a loose diagram over the folder that already is its project (LILA-208). */
     errorMismaCarpeta:
       'This folder already has its model.bpmn; to turn the loose diagram into a project pick another folder.',
+    /** `E-CARPETA-OCUPADA` from the disk (#517): the destination holds another project's files. */
+    errorCarpetaOcupada:
+      'E-CARPETA-OCUPADA: the destination already holds files of another project or process, and ' +
+      'saving would overwrite them. Pick another empty folder, or use "Save as" to save this project elsewhere.',
   },
 
   simulacion: {

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import { en as S } from '../strings.en';
+import { es } from '../strings.es';
 import { setLocale } from '../i18n';
 
 // English is the base language (LILA-210); it is set here so the message does not depend on the
@@ -600,6 +601,34 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     await expect(store.saveProject(documentoBase(), { saveAs: true })).rejects.toThrow(
       S.almacen.errorMismaCarpeta,
     );
+  });
+
+  it('E-CARPETA-OCUPADA from the disk is shown in the UI language, with the way out (#517)', async () => {
+    const detalle = 'Error invoking remote method \'lila:writeProject\': Error: E-CARPETA-OCUPADA: "processes/compras/" ya tiene archivos de otro proceso (model.bpmn); el proceso nuevo necesita otra carpeta.';
+    const bridge = new FakeBridge();
+    bridge.writeProject = async () => { throw new Error(detalle); };
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    try {
+      for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
+        setLocale(locale);
+        // A normal save of the open project, a «Save as» and a new project all reach the same text.
+        bridge.queueChooseFolder('/carpeta/pedido');
+        await store.openProject();
+        await expect(store.saveProject(documentoBase())).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+        bridge.queueChooseFolder('/carpeta/otra');
+        await expect(store.saveProject(documentoBase(), { saveAs: true, asFolder: true })).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+        bridge.queueChooseFolder('/carpeta/nueva');
+        await expect(store.createProject(documentoBase())).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+      }
+      // The code stays in the message (contract), and any other error is left as it came.
+      expect(es.almacen.errorCarpetaOcupada).toMatch(/^E-CARPETA-OCUPADA: /);
+      expect(S.almacen.errorCarpetaOcupada).toMatch(/^E-CARPETA-OCUPADA: /);
+      bridge.writeProject = async () => { throw new Error('E-CAMBIO-EXTERNO: model.bpmn'); };
+      await expect(store.saveProject(documentoBase())).rejects.toThrow('E-CAMBIO-EXTERNO: model.bpmn');
+    } finally {
+      setLocale('en');
+    }
   });
 
   it('«Guardar como» de un suelto de ~/Descargas sobre su MISMA carpeta: sigue creando el proyecto al lado (QA de LILA-208)', async () => {

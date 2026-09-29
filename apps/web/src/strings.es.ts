@@ -1410,6 +1410,10 @@ export const es: Strings = {
     /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
     errorMismaCarpeta:
       'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
+    /** `E-CARPETA-OCUPADA` del disco (#517): el destino tiene archivos de otro proyecto. */
+    errorCarpetaOcupada:
+      'E-CARPETA-OCUPADA: el destino ya tiene archivos de otro proyecto o proceso, y guardar los ' +
+      'sobrescribiría. Elige otra carpeta vacía, o usa "Guardar como" para guardar este proyecto en otro sitio.',
   },
 
   simulacion: {

@@ -93,7 +93,7 @@ export class DesktopStore implements ProjectSessionStore {
   async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
     const dir = await this.bridge.chooseFolder();
     if (dir === null) return null;
-    await this.bridge.writeProject(dir, document, { saveAs: true });
+    await this.bridge.writeProject(dir, document, { saveAs: true }).catch(traducirOcupada);
     this.occupied = new Set();
     this.activeDir = dir;
     this.activeDocument = document;
@@ -200,7 +200,7 @@ export class DesktopStore implements ProjectSessionStore {
       if (sobreSuPropiaCarpeta && (error instanceof Error) && error.message.includes('E-CARPETA-OCUPADA')) {
         throw new Error(strings().almacen.errorMismaCarpeta);
       }
-      throw error;
+      traducirOcupada(error);
     }
     this.activeDir = dir;
     this.activeDocument = document;
@@ -368,4 +368,16 @@ export class DesktopStore implements ProjectSessionStore {
     };
     await this.saveProject({ ...base, runs: [...base.runs, run] });
   }
+}
+
+/**
+ * `E-CARPETA-OCUPADA` reaches here as `"<code>: <Spanish detail>"` from main (#517, item 3): it is
+ * shown in the UI language, with the way out the user has, instead of raw and only in Spanish.
+ * Any other error is rethrown as it came.
+ */
+function traducirOcupada(error: unknown): never {
+  if (error instanceof Error && error.message.includes('E-CARPETA-OCUPADA')) {
+    throw new Error(strings().almacen.errorCarpetaOcupada);
+  }
+  throw error;
 }
