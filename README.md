@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Download-Beta_16_(macOS_%2B_Windows)-0969da" alt="Download Beta 16"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Download-Beta_16_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download Beta 16 (macOS; Windows untested)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

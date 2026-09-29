@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Descargar-Beta_16_(macOS_%2B_Windows)-0969da" alt="Descargar Beta 16"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Descargar-Beta_16_(macOS_%C2%B7_Windows_sin_probar)-0969da" alt="Descargar Beta 16 (macOS; Windows sin probar)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -96,7 +96,7 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
 - **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
   **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
   ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
-  «Windows protegió tu PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
+  «Windows protegió su PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
   SignPath Foundation rechazó firmar el instalador hasta que el proyecto tenga usuarios, así que no
   hay un build firmado de Windows que prometer. ¿Quieres ser quien lo pruebe primero?
   [`docs/es/GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) está escrita para quien no es

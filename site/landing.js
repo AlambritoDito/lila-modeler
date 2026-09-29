@@ -12,7 +12,7 @@
   // Spanish strings; the English ones are the page's own markup, captured at load.
   const ES = {
     nav1: 'Capacidades', nav2: 'Cómo corre', nav3: 'Comparar', nav4: 'Inicio rápido', nav5: 'Pantallas',
-    badge: 'Beta de escritorio para macOS y Windows · Novedades →',
+    badge: 'Beta de escritorio: macOS · Windows (sin probar) · Novedades →',
     h1: 'Mira tu proceso <span class="hl">correr</span> antes de que corra.',
     lede: 'Simulador de eventos discretos para BPMN, de código abierto. Dibuja el proceso, define tiempos, recursos y calendarios, y reproduce cada caso sobre el diagrama — con <strong>comparaciones AS-IS vs TO-BE al 95% de confianza</strong>. Sin cuenta, sin servidor.',
     ctaDemo: 'Probar la demo', ctaQuick: 'Inicio rápido', ctaBizagi: '¿Vienes de Bizagi?',

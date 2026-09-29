@@ -36,8 +36,10 @@ can also build it yourself (see below).
 **Verify the download** before opening it, with both files in the same folder:
 
 ```bash
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
+
+`SHA256SUMS` also lists the Windows installer; `--ignore-missing` skips it if you did not download it.
 
 The app is **ad-hoc sealed but not notarized**: it has no Developer ID signature (`identity: null` in
 `electron-builder.yml`; `scripts/adhoc-sign.cjs` seals the bundle after packing).

@@ -23,8 +23,8 @@ Two things to know before you start:
 
 ## Steps
 
-Menu and button names below are the app's English ones. If your app is in Spanish, open **File ▸
-Preferences…** (`Ctrl+,`), go to **General** and set **Language** to **English**, or read the
+Menu and button names below are the app's English ones. If your app is in Spanish, open **Archivo ▸
+Preferencias…** (`Ctrl+,`), go to **General** and set **Idioma** to **English**, or read the
 [Spanish guide](es/GUIA-PROBADOR-WINDOWS.md), which uses the Spanish names.
 
 1. **Download the installer.** Open the
@@ -32,10 +32,12 @@ Preferences…** (`Ctrl+,`), go to **General** and set **Language** to **English
    (it is a prerelease, so it does not appear under “Latest”) and download
    `Lila-Modeler-1.0.0-beta.16-win-x64.exe` from the **Assets** list. Your browser may ask you to
    confirm that you want to keep the file; confirm it.
-2. **Optional: check the download.** In PowerShell, run
-   `Get-FileHash .\Lila-Modeler-1.0.0-beta.16-win-x64.exe -Algorithm SHA256` in the folder where you
-   saved it and compare the result with the line for that file in the release's `SHA256SUMS`
-   (download it too). If they differ, do not run the file and tell us.
+2. **Optional: check the download.** Open the folder where you saved the file (usually
+   **Downloads**) in File Explorer, right-click an empty spot and choose **Open in Terminal** (or
+   type `powershell` in the address bar and press Enter). Run
+   `Get-FileHash .\Lila-Modeler-1.0.0-beta.16-win-x64.exe -Algorithm SHA256` and compare the result
+   with the line for that file in the release's `SHA256SUMS` (download it too). Upper and lower
+   case do not matter. If they differ, do not run the file and tell us.
 3. **Get past the SmartScreen warning.** Double-click the `.exe`. Windows shows **“Windows protected
    your PC”**. Click **More info**, then **Run anyway**. If Windows asks for permission to make
    changes, choose **Yes**. If anything different appears (a different message, an antivirus block,
@@ -53,12 +55,13 @@ Preferences…** (`Ctrl+,`), go to **General** and set **Language** to **English
 8. **Export the process document.** Choose **File ▸ Export process document (Word)…**, save the
    file, and open it in Word. Check that it has a cover, the diagram and one section per element.
 9. **Import scenario parameters from Excel.** Go back to **Simulate**. In the scenario panel on the
-   right, click **Download template** and save the `.xlsx`. Open it in Excel, change one number (for
-   example a processing time), save, and close Excel. Back in Lila Modeler click **Import
+   right, click **Download template** and save the `.xlsx`. Open it in Excel, change one number (in the
+   **Elements** sheet, the **Take order** row, the **min** column: make it smaller), save, and close Excel. Back in Lila Modeler click **Import
    Excel/CSV…** and pick that file. A report lists the changes to make: check that your change is
    in it, then click **Apply**. You can click **Undo import** afterwards. More on this in
    [Scenario parameters from Excel or CSV](SCENARIO_SHEETS.md).
-10. **Add a second process.** Above the diagram, click the **+** button (tooltip **New process**).
+10. **Add a second process.** Below the diagram, in the row of process tabs, click the **+** button
+    next to the tab (tooltip **New process**; not the zoom + at the canvas's right edge).
     Leave the suggested name in **Process name** and click **Create**. A second tab appears; click
     between the two tabs to check that each keeps its own diagram.
 11. **Save as a `.lila` file.** Choose **File ▸ Save as…**, pick a folder you know (for example

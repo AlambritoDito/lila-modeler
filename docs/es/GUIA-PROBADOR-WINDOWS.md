@@ -32,12 +32,14 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
    (es un prerelease, así que no aparece como «Latest») y descarga
    `Lila-Modeler-1.0.0-beta.16-win-x64.exe` de la lista **Assets**. Tu navegador puede pedirte que
    confirmes que quieres conservar el archivo; confírmalo.
-2. **Opcional: verifica la descarga.** En PowerShell, dentro de la carpeta donde lo guardaste, ejecuta
+2. **Opcional: verifica la descarga.** Abre en el Explorador de archivos la carpeta donde guardaste el
+   archivo (normalmente **Descargas**), haz clic derecho en un espacio vacío y elige **Abrir en
+   Terminal** (o escribe `powershell` en la barra de direcciones y pulsa Enter). Ejecuta
    `Get-FileHash .\Lila-Modeler-1.0.0-beta.16-win-x64.exe -Algorithm SHA256` y compara el resultado
-   con la línea de ese archivo en el `SHA256SUMS` del release (descárgalo también). Si no
-   coinciden, no ejecutes el archivo y avísanos.
+   con la línea de ese archivo en el `SHA256SUMS` del release (descárgalo también). Da igual si son
+   mayúsculas o minúsculas. Si no coinciden, no ejecutes el archivo y avísanos.
 3. **Pasa el aviso de SmartScreen.** Haz doble clic en el `.exe`. Windows muestra **«Windows protegió
-   tu PC»**. Pulsa **Más información** y luego **Ejecutar de todas formas**. Si Windows pide permiso
+   su PC»**. Pulsa **Más información** y luego **Ejecutar de todas formas**. Si Windows pide permiso
    para hacer cambios, elige **Sí**. Si aparece algo distinto (otro mensaje, un bloqueo del antivirus,
    ningún botón), toma una captura: eso también es un resultado.
 4. **Instala.** Se espera que el instalador funcione con un solo clic, sin preguntas, y abra Lila
@@ -55,11 +57,13 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
    elemento.
 9. **Importa parámetros de escenario desde Excel.** Vuelve a **Simular**. En el panel del escenario,
    a la derecha, pulsa **Descargar plantilla** y guarda el `.xlsx`. Ábrelo en Excel, cambia un número
-   (por ejemplo un tiempo de proceso), guarda y cierra Excel. De vuelta en Lila Modeler pulsa
+   (en la hoja **Elements**, fila **Take order**, columna **min**: ponlo más pequeño), guarda y cierra Excel. De vuelta en Lila Modeler pulsa
    **Importar Excel/CSV…** y elige ese archivo. Un informe lista los cambios por aplicar: comprueba
    que tu cambio está, y pulsa **Aplicar**. Después puedes pulsar **Deshacer importación**. Más en
    [Parámetros de escenario desde Excel o CSV](SCENARIO_SHEETS.md).
-10. **Agrega un segundo proceso.** Sobre el diagrama, pulsa el botón **+** (tooltip **Nuevo proceso**).
+10. **Agrega un segundo proceso.** Debajo del diagrama, en la fila de pestañas de procesos, pulsa el
+    botón **+** junto a la pestaña (tooltip **Nuevo proceso**; no el + de zoom del borde derecho del
+    lienzo).
     Deja el nombre sugerido en **Nombre del proceso** y pulsa **Crear**. Aparece una segunda pestaña;
     alterna entre las dos para comprobar que cada una conserva su diagrama.
 11. **Guarda como archivo `.lila`.** Elige **Archivo ▸ Guardar como…**, escoge una carpeta que

@@ -36,8 +36,10 @@ en `.gitignore`): también puedes compilarlo tú mismo (ver más abajo).
 **Verifica la descarga** antes de abrirla, con ambos archivos en la misma carpeta:
 
 ```bash
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
+
+`SHA256SUMS` también lista el instalador de Windows; `--ignore-missing` lo omite si no lo descargaste.
 
 La app lleva un **sello ad hoc pero no está notarizada**: no tiene firma de Developer ID
 (`identity: null` en `electron-builder.yml`; `scripts/adhoc-sign.cjs` sella el paquete tras

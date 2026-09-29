@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Bienvenida, pistaConAtajo } from './Bienvenida';
 import { EJEMPLOS } from './ejemplos';
 import { en as T } from './strings.en';
+import { es as TES } from './strings.es';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -58,7 +59,7 @@ it('la pista de abrir y nuevo muestra Ctrl fuera de macOS y ⌘ en macOS, con el
 });
 
 it('los textos de la bienvenida ya no llevan el atajo escrito: lo compone el componente', () => {
-  for (const pista of [T.bienvenida.abrirCarpetaPista, T.bienvenida.nuevoPista]) expect(pista).not.toMatch(/[⌘⌃]|Ctrl/);
+  for (const pista of [T, TES].flatMap((c) => [c.bienvenida.abrirCarpetaPista, c.bienvenida.nuevoPista])) expect(pista).not.toMatch(/[⌘⌃]|Ctrl/);
 });
 
 it('en una plataforma que no es Mac (jsdom) las acciones dicen Ctrl+O y Ctrl+N, no ⌘', async () => {
