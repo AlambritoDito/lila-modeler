@@ -1,11 +1,15 @@
 name: Desktop
 
-# Build unsigned installers on PRs and manual runs. A `v*` tag additionally attaches the
-# macOS arm64 DMG and its checksum to a DRAFT release (prerelease when the version has a
-# suffix); the owner reviews the assets and publishes the release manually. Windows and
-# Linux builds stay CI artifacts only: they are built but not validated, so they are not
-# advertised as release assets. Build jobs run with read-only credentials; only the
-# separate `release` job can write to the repository.
+# Build unsigned installers on PRs and manual runs. Tags and manual runs then collect the release
+# candidate: the macOS arm64 DMG, the Windows x64 NSIS installer and a SHA256SUMS covering both,
+# plus the release notes from docs/releases/v<version>.md when that file exists. The candidate is
+# uploaded as the CI artifact `lila-release-candidate-<sha>`, so a manual run rehearses a release
+# without creating one. Only a `v*` tag attaches the candidate to a DRAFT release (prerelease when
+# the version has a suffix), never replacing assets and never touching a published release; the
+# owner reviews the assets and publishes the release manually. The Windows installer is unsigned
+# and untested by CI (SmartScreen warns on first run). Linux builds and `.blockmap` files stay CI
+# artifacts only. Build and collect jobs run with read-only credentials; only the separate
+# `release` job can write to the repository.
 on:
   workflow_dispatch:
   pull_request:
@@ -65,7 +69,7 @@ jobs:
           lipo -archs "$app/Contents/MacOS/Lila Modeler" | tee /dev/stderr | grep -qw arm64
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$version"
           codesign --verify --deep --strict --verbose=2 "$app"
-          (cd release && shasum -a 256 *-mac-arm64.dmg > SHA256SUMS && cat SHA256SUMS)
+          shasum -a 256 "$dmg"  # SHA256SUMS is written by the collect job, over both installers
           cat release/ORIGEN.txt 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
@@ -73,19 +77,69 @@ jobs:
           path: apps/desktop/release/**
           if-no-files-found: error
 
-  release:
-    # Only the validated platform reaches the release, only from a tag, only as a draft.
-    if: github.ref_type == 'tag'
+  collect:
+    # Gathers exactly what a release attaches. Runs on tags and on manual runs (to rehearse a
+    # release); read-only, and its output is a CI artifact, never a release.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            apps/desktop/package.json
+            docs/releases
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: lila-desktop-macos-latest-${{ github.sha }}
+          path: built/mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: lila-desktop-windows-latest-${{ github.sha }}
+          path: built/win
+      - name: Collect the DMG, the Windows installer, their checksums and the release notes
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          dmg="built/mac/Lila-Modeler-${version}-mac-arm64.dmg"
+          exe="built/win/Lila-Modeler-${version}-win-x64.exe"
+          for f in "$dmg" "$exe"; do
+            test -f "$f" || { echo "::error::Missing $f"; ls -la built/mac built/win; exit 1; }
+          done
+          mkdir -p candidate/assets
+          cp "$dmg" "$exe" candidate/assets/
+          (cd candidate/assets && sha256sum -- *.dmg *.exe > SHA256SUMS && sha256sum -c SHA256SUMS && cat SHA256SUMS)
+          test "$(wc -l < candidate/assets/SHA256SUMS)" -eq 2
+          notes="docs/releases/v${version}.md"
+          if [ -f "$notes" ]; then
+            cp "$notes" candidate/notes.md
+            echo "Release body: $notes"
+          else
+            echo "No $notes; the release body stays empty."
+          fi
+          ls -la candidate candidate/assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lila-release-candidate-${{ github.sha }}
+          path: candidate/
+          if-no-files-found: error
+
+  release:
+    # Only a tag publishes the collected candidate, only as a draft, never over a published release.
+    if: github.ref_type == 'tag'
+    needs: collect
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: lila-desktop-macos-latest-${{ github.sha }}
-          path: release
+          name: lila-release-candidate-${{ github.sha }}
+          path: candidate
       - name: Refuse to touch a release that is already published
+        id: guard
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
@@ -103,13 +157,17 @@ jobs:
               *) echo "::error::Could not inspect release $REF_NAME: $out"; exit 1 ;;
             esac
           fi
-          ls -la release
+          # An empty body_path keeps the action's default (no body).
+          if [ -f candidate/notes.md ]; then echo "body_path=candidate/notes.md" >> "$GITHUB_OUTPUT"; fi
+          ls -laR candidate
       - uses: softprops/action-gh-release@v2 # the repository allowlist only admits this pattern, not a SHA pin
         with:
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           overwrite_files: false
+          body_path: ${{ steps.guard.outputs.body_path }}
           files: |
-            release/*-mac-arm64.dmg
-            release/SHA256SUMS
+            candidate/assets/*-mac-arm64.dmg
+            candidate/assets/*-win-x64.exe
+            candidate/assets/SHA256SUMS
           fail_on_unmatched_files: true

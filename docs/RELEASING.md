@@ -33,7 +33,42 @@ public docs site (`INTERNAL` in `tools/build-docs.mjs`).
    ```
 
    The tag push runs `release.yml`: version check, build, test, typecheck, `test:package` and a
-   pack dry run. It never publishes to npm. The desktop workflow opens a draft GitHub Release.
+   pack dry run. It never publishes to npm. The desktop workflow opens a draft GitHub Release
+   (see below).
+
+## Desktop installers on the GitHub Release
+
+`.github/workflows/desktop.yml` builds macOS (arm64), Windows (x64) and Linux on every run. For a
+`v*` tag its `collect` job gathers the release candidate and its `release` job attaches it to a
+**draft** release (marked prerelease when the version has a suffix):
+
+- `Lila-Modeler-<version>-mac-arm64.dmg` — ad-hoc signed, not notarized.
+- `Lila-Modeler-<version>-win-x64.exe` — NSIS installer, **unsigned** and not tested by CI.
+- `SHA256SUMS` — two lines, one per installer, written over the final files
+  (`shasum -a 256 -c SHA256SUMS` checks them).
+
+`.blockmap` files and the Linux AppImage are not attached; they stay in the build artifacts. The
+release body comes from `docs/releases/v<version>.md` when that file exists at the tagged commit;
+otherwise the draft has no body. CI never replaces an asset (`overwrite_files: false`) and refuses
+to touch a release that is already published; review the draft and publish it by hand.
+
+Windows testers will see SmartScreen's "Windows protected your PC" on the first run, because the
+installer has no code signature: **More info** → **Run anyway**. Say so in the release notes.
+
+### Rehearsing the collection without a release
+
+A manual run builds and collects the same files but never creates a release:
+
+```bash
+gh workflow run desktop.yml --ref <branch> --repo AlambritoDito/lila-modeler
+gh run list --workflow desktop.yml --branch <branch> -L 1   # note the run id
+gh run watch <run-id> --exit-status
+gh run download <run-id> -n lila-release-candidate-<sha> -D candidate
+(cd candidate/assets && ls && shasum -a 256 -c SHA256SUMS)
+```
+
+`<sha>` is the commit the run built (`headSha` in `gh run view <run-id> --json headSha`). The
+artifact holds `assets/` (what the release would attach) and, when present, `notes.md` (the body).
 
 ## Publishing to npm
 
