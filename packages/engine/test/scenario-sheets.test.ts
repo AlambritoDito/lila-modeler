@@ -347,7 +347,7 @@ describe('(d) invalid values name the sheet, the row and the column', () => {
     const texts = plan.issues.map((issue) => issue.text);
     expect(texts[0]).toMatch(/^Elements, row 2, column distribution: unknown distribution "gaussian"; use one of constant, /);
     expect(texts[1]).toBe('Elements, row 3, column mean: must be > 0');
-    expect(texts[2]).toMatch(/^Elements, row 4, column distribution: .*min ≤ max/);
+    expect(texts[2]).toMatch(/^Elements, row 4, column distribution: .*minimum ≤ maximum/);
     expect(texts[3]).toBe('Elements, row 5, column fixedCost: must be a number ≥ 0.');
     expect(texts[4]).toBe('Elements, row 5, column calendar: calendar "noche" does not exist in the scenario nor in the Calendars sheet.');
     expect(texts[5]).toMatch(/^Elements, row 6, column probability: must be a probability/);
@@ -477,6 +477,8 @@ describe('(e) the imported scenario passes validateScenario', () => {
       ['Elements', 2],
     ]);
     expect(lint[0]!.text).toMatch(/^Resources, row 2: cajero · capacity: /);
+    // #519: exactly that, with no second `cajero:` and no path.
+    expect(lint[0]!.text).toBe('Resources, row 2: cajero · capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.');
     // Without the technical path: the element by its name, the field after it.
     expect(lint[1]!.text).toMatch(/^Elements, row 2: Preparar \(Task_Preparar\) · probability: /);
     expect(lint[1]!.text).not.toContain('elements.');

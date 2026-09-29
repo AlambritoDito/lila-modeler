@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1"><img src="https://img.shields.io/badge/Download-Beta_1_(macOS)-0969da" alt="Download Beta 1"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Download-Beta_16_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download Beta 16 (macOS; Windows untested)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -79,24 +79,35 @@ asks for a minimal `.bpmn` file or scenario that shows it.
 
 ### Desktop beta
 
-Beta 1 attaches a single installer to the release: `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` for
-macOS on Apple Silicon, plus a `SHA256SUMS` file to check it —
-[Beta 1 on GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
-(not `/releases/latest` — GitHub excludes prereleases from that link). It is **neither signed nor
-notarized**, so the first launch is blocked. After the first blocked attempt (double-clicking the
-app), go to **System Settings ▸ Privacy & Security** and click **Open Anyway** next to the message
-naming the app, then confirm **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open**
-works directly. Do not disable Gatekeeper to work around this. Beta 1 verified on macOS 27.0 that the quarantined download is blocked on first launch and that System Settings ▸ Privacy & Security offers Open Anyway (the app is ad-hoc sealed, so macOS does not report it as damaged).
-[`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks through the whole flow, including
-checksum verification.
+Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
+(not `/releases/latest` — GitHub excludes prereleases from that link) attaches two installers and a
+`SHA256SUMS` file to check them. Where each platform stands:
 
-CI also builds Windows (`.exe`) and Linux (`.AppImage`) installers, but they are untested CI
-artifacts, not offered as part of the Beta 1 release. The desktop app registers itself as the
-editor for `.bpmn` and `.lila` files.
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg`. The platform the project is
+  developed and tested on. The app is ad-hoc sealed but **not notarized**, so the first launch is
+  blocked: after the first blocked attempt (double-clicking the app), go to **System Settings ▸
+  Privacy & Security** and click **Open Anyway** next to the message naming the app, then confirm
+  **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open** works directly. Do not
+  disable Gatekeeper to work around this. [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks
+  through the whole flow, including checksum verification.
+- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
+  **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
+  clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
+  **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer
+  until the project has users, so there is no signed Windows build to promise. Want to be the first
+  tester? [`docs/WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) is written for people who are
+  not developers and ends with a report template.
+- **Linux** — an AppImage is built by CI, untested, and not attached to the release.
+- **Web** — runs in the browser; Chrome is the one tested. Safari acceptance is pending (#379).
+
+The desktop app registers itself as the editor for `.bpmn` and `.lila` files and, since beta.10,
+tells you when a newer version is out (it does not update itself).
 
 ### CLI
 
-Requires Node.js **22 or later**. Nothing is published to npm yet: the CLI comes from a checkout.
+Requires Node.js **22 or later**. The engine and the CLI are on npm as `@lila-modeler/engine` (under
+the `beta` tag): `npx @lila-modeler/engine@beta validate model.bpmn`. The examples below run from a
+checkout, which also has the reference benchmark:
 
 ```bash
 git clone https://github.com/AlambritoDito/lila-modeler.git
@@ -182,7 +193,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Results export | Excel | CSV and XLSX |
 | Percentiles, queue lengths, throughput, cost per case, bottleneck ranking, off-hours wait | ✗ | ✓ |
 | Live-counter animation | ✓ | ✓ Animate replays the event log |
-| Platforms | Windows only | web app, macOS, Windows, Linux |
+| Platforms | Windows only | web app (Chrome tested), macOS (tested); Windows installer unsigned and untested; Linux AppImage untested |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
 | Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
 | Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
@@ -195,7 +206,6 @@ not a claim of parity: the full checklist, with every documented difference and 
   (interrupting and not), event-based gateway with timer or message branches, tasks (all
   variants), call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
   ([`docs/SEMANTICS.md`](docs/SEMANTICS.md) §§ 2–3).
-- **Not on npm yet**: no `npm install @lila-modeler/engine`; clone and build as above.
 - **Calendars keep `run.start`'s UTC offset**: weekly, monthly and annual recurrence and holidays
   are supported, but there is no per-calendar timezone and no DST (`timezone` is a reserved field).
 
@@ -206,7 +216,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 - `packages/mcp` — `@lila-modeler/mcp` (private): the MCP server, a thin layer over the engine.
 - `apps/web` — React 19 + Vite + bpmn-js editor and viewer.
 - `apps/desktop` — Electron packaging of `apps/web`; `.github/workflows/desktop.yml` builds the
-  three installers on `v*` tags and leaves a draft Release.
+  three installers on `v*` tags and attaches the macOS DMG and the Windows `.exe` (plus checksums) to a draft Release.
 - `examples/` — `pedido` (reference benchmark), `bizagi-levels` (Bizagi's published examples),
   `mm1`, `bizagi-exports` (real Bizagi exports from the BPMN MIWG).
 - `docs/` — contracts and guides; `tools/` — build and check scripts; `site/` — the Pages landing.
@@ -229,6 +239,7 @@ English is the base language; Spanish versions live under `docs/es/`.
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
 - [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
+- [`WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) — trying the untested, unsigned Windows installer and reporting what happens.
 - [`EXAMPLES_POLICY.md`](docs/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — examples policy, test oracles, Pages deployment.
 - [`RELEASING.md`](docs/RELEASING.md) — cutting a version and publishing `@lila-modeler/engine` to npm.

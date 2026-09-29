@@ -208,7 +208,7 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     row: 'startQuantity distinto de 1',
     xml: processWith('Task_StartQuantity', `<bpmn:task id="Task_StartQuantity" startQuantity="2" />`),
     messages: [
-      message('Task_StartQuantity', 'bpmn:task', 'atributo startQuantity distinto de 1'),
+      message('Task_StartQuantity', 'bpmn:task', 'atributo `startQuantity` distinto de 1'),
     ],
   },
   {
@@ -221,7 +221,7 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
       message(
         'Task_CompletionQuantity',
         'bpmn:task',
-        'atributo completionQuantity distinto de 1',
+        'atributo `completionQuantity` distinto de 1',
       ),
     ],
   },

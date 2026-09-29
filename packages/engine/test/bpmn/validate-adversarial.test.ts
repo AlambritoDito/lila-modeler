@@ -148,12 +148,12 @@ test('W-MSGFLOW se agrega entre collaborations y W-COND conserva un aviso por fl
     {
       code: 'W-COND',
       id: 'Flow_A',
-      message: 'Flow_A: conditionExpression se ignora; el ramaje es probabilístico.',
+      message: 'Flow_A: la condición del flujo (`conditionExpression`) se ignora; el ramaje es probabilístico.',
     },
     {
       code: 'W-COND',
       id: 'Flow_B',
-      message: 'Flow_B: conditionExpression se ignora; el ramaje es probabilístico.',
+      message: 'Flow_B: la condición del flujo (`conditionExpression`) se ignora; el ramaje es probabilístico.',
     },
   ]);
 });
