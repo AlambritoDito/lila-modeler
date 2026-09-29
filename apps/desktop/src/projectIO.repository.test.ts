@@ -225,3 +225,46 @@ describe('a second process', () => {
     expect(await files(dir)).toEqual({});
   });
 });
+
+describe('process folders that are not this project\'s (#517)', () => {
+  const repo = (): ProjectDocument => withProcesses(v1, [...processesOf(v1), facturacion]);
+  const ajeno = '<definitions id="ajeno"/>';
+
+  it('Save As refuses a folder without a manifest whose processes/ is populated, and leaves it untouched', async () => {
+    await mkdir(join(dir, 'processes/pedido'), { recursive: true });
+    await writeFile(join(dir, 'processes/pedido/model.bpmn'), ajeno);
+    await writeFile(join(dir, `processes/pedido/${AS_IS}`), '{"version":1,"name":"ajeno"}\n');
+    const antes = await files(dir);
+    await expect(writeProjectFolder(dir, repo(), { saveAs: true })).rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    // A version 1 project would not write into processes/, but the folder is still somebody else's.
+    await expect(writeProjectFolder(dir, v1, { saveAs: true })).rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    expect(await files(dir)).toEqual(antes);
+  });
+
+  it('a process folder created by hand after opening is not overwritten by a new process taking its slug', async () => {
+    await writeProjectFolder(dir, repo());
+    const { document } = await readProjectFolder(dir);
+    const ocupados = await occupiedSlugs(dir); // the snapshot the app takes on open
+    // Somebody creates processes/compras/ by hand (only its model) while the project is open.
+    await mkdir(join(dir, 'processes/compras'));
+    await writeFile(join(dir, 'processes/compras/model.bpmn'), ajeno);
+    const antes = await files(dir);
+    const compras: ProcessDocument = { slug: processSlug('Compras', ocupados), name: 'Compras', model: { id: 'Process_Compras', name: 'model.bpmn', xml: XML('Process_Compras'), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+    expect(compras.slug).toBe('compras');
+    await expect(writeProjectFolder(dir, withProcesses(document, [...processesOf(document), compras])))
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    expect(await files(dir)).toEqual(antes);
+  });
+
+  it('nor is a same-named scenario in such a folder', async () => {
+    await writeProjectFolder(dir, repo());
+    const { document } = await readProjectFolder(dir);
+    await mkdir(join(dir, 'processes/compras'));
+    await writeFile(join(dir, `processes/compras/${AS_IS}`), '{"version":1,"name":"ajeno"}\n');
+    const antes = await files(dir);
+    const compras: ProcessDocument = { ...facturacion, slug: 'compras', name: 'Compras', runs: [] };
+    await expect(writeProjectFolder(dir, withProcesses(document, [...processesOf(document), compras])))
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    expect(await files(dir)).toEqual(antes);
+  });
+});
