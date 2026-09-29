@@ -1418,6 +1418,59 @@ it('un proceso se renombra y se borra con confirmación; el último no se puede 
   porEtiqueta(T.app.cerrarArchivo('model.bpmn'));
 });
 
+it('a tab switch while the process document is being exported waits: the document is all of one process (#522)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Facturación');
+  // The picture says which process was on the canvas when it was taken.
+  mocks.exportarSvg.mockImplementation(async () => `<svg id="${lienzo.xml().includes('Facturación') ? 'facturacion' : 'primero'}"/>`);
+  // A PNG header whose width tells the two pictures apart (the document drops what is not a PNG).
+  const png = (ancho: number): Uint8Array => {
+    const bytes = new Uint8Array(24);
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(bytes.buffer).setUint32(16, ancho);
+    new DataView(bytes.buffer).setUint32(20, 1);
+    return bytes;
+  };
+  mocks.aPng.mockImplementation(async (svg: string) => new Blob([png(svg.includes('facturacion') ? 2 : 1).slice()], { type: 'image/png' }));
+  let soltar!: () => void;
+  const retenido = new Promise<void>((r) => { soltar = r; });
+  await act(async () => {
+    // The export's read of the canvas is slow; the tab click lands in the middle of it.
+    mocks.exportXml.mockImplementationOnce(async () => { const xml = lienzo.xml(); await retenido; return xml; });
+    ejecutarArchivo(T.app.exportarHtml);
+  });
+  await act(async () => pestanasProceso()[0]!.click());
+  await act(async () => soltar());
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  const [html, nombre] = mocks.descargar.mock.calls[0]! as [Blob, string];
+  expect(nombre).toBe('Facturación.html');
+  const texto = await html.text();
+  expect(texto).toContain('<h1>Facturación</h1>');
+  expect(texto).toContain(`data:image/png;base64,${btoa(String.fromCharCode(...png(2)))}"`);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  // Once the export is done the switch goes through.
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
+});
+
+it('a second process document export while one is running is refused with a notice (#522)', async () => {
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  let soltar!: () => void;
+  const retenido = new Promise<void>((r) => { soltar = r; });
+  mocks.aPng.mockImplementation(async () => { await retenido; return new Blob(['png'], { type: 'image/png' }); });
+  await act(async () => ejecutarArchivo(T.app.exportarDocx));
+  await act(async () => ejecutarArchivo(T.app.exportarHtml));
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.exportacionOcupada);
+  await act(async () => soltar());
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalled());
+  await act(async () => {});
+  expect(mocks.descargar.mock.calls.map((c) => c[1])).toEqual([`${T.app.proyectoDemo}.docx`]);
+  // Once it is done, the next export goes through and the notice goes away.
+  await act(async () => ejecutarArchivo(T.app.exportarHtml));
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledTimes(2));
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
+});
+
 it('guardar desde la segunda pestaña guarda de verdad: «Guardar y continuar» continúa (QA de #511, must-fix 1)', async () => {
   lienzoQueRecuerda();
   // The first process ends at revision 1, the second at 0: they must not be compared.
