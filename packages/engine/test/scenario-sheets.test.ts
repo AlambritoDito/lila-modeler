@@ -477,6 +477,8 @@ describe('(e) the imported scenario passes validateScenario', () => {
       ['Elements', 2],
     ]);
     expect(lint[0]!.text).toMatch(/^Resources, row 2: cajero · capacity: /);
+    // #519: exactly that, with no second `cajero:` and no path.
+    expect(lint[0]!.text).toBe('Resources, row 2: cajero · capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.');
     // Without the technical path: the element by its name, the field after it.
     expect(lint[1]!.text).toMatch(/^Elements, row 2: Preparar \(Task_Preparar\) · probability: /);
     expect(lint[1]!.text).not.toContain('elements.');

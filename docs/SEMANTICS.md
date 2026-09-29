@@ -153,8 +153,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `bpmn:subProcess` with `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
 | `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `choreographyDiagram` | `choreography diagram` | `diagrama de coreografía` |
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
-| `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | `atributo startQuantity distinto de 1` |
-| `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | `atributo completionQuantity distinto de 1` |
+| `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
+| `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
 | `bpmn:endEvent` with a trigger other than *none* or `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
 | `bpmn:startEvent` with a trigger other than *none* or `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
@@ -945,8 +945,8 @@ R-CAL-12/13), and `holidays` closes whole days (R-CAL-14).
   holiday takes the dated path, whose results can differ from the weekly ones in the last ULP
   (about 10⁻¹⁵ relative) even when the holiday falls after the end of the run, because the
   engine does not know the run's end when it compiles a calendar. The error text for a calendar
-  that only opens on its holidays is `calendars.<name>: every opening of the calendar falls on
-  one of its holidays.` Everything dated is civil-day arithmetic, with no `Date` and no
+  that only opens on its holidays is `every opening of the calendar falls on
+  one of its holidays (calendars.<name>).` Everything dated is civil-day arithmetic, with no `Date` and no
   `Intl` (R-DET-5): the result does not depend on the timezone of the process that runs it.
   *(test: #82)*
 - **R-CAL-15 — No timezone of its own, no DST (limit).** Every date and time of a calendar is read
@@ -1147,15 +1147,15 @@ Exact texts of R-CAL-11's two errors (`packages/engine/src/scenario.ts` for the 
 `en` and in `es`:
 
 ```
-resources.<pool>.capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (<pool>).
 E-REC-CAPACIDAD: <pool>: capacity must declare at least one slice.
 E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
 ```
 
 ```
-resources.<pool>.capacity: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
+la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (<pool>).
 E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.
 E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.
 ```

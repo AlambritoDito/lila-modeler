@@ -249,7 +249,7 @@ describe('#369 — blocked-token singular and plural messages', () => {
     expect(en.codes['W-JOIN-BLOQUEADO']('Join', count))
       .toBe(`Join: ${english} left with tokens waiting at the join.`);
     expect(es.codes['W-JOIN-BLOQUEADO']('Join', count))
-      .toBe(`Join: ${spanish} con tokens esperando en el join.`);
+      .toBe(`Join: ${spanish} con tokens esperando en la compuerta de unión.`);
     expect(en.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
       .toBe(`Gateway: no branch event declares processingTime; ${english} left with their token waiting at the gateway.`);
     expect(es.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
@@ -278,7 +278,7 @@ describe('#356 — replications without observations', () => {
 describe('#519 — Spanish messages contain no English field names', () => {
   /** Terms of the scenario format that used to leak into Spanish sentences. */
   const ENGLISH_TERMS =
-    /\b(?:capacity|quantity|calendars?|processingTime|interTriggerTimer|triggerCount|probability|sequence\s+flow|resources?|duration|seed|defaults?|start|currency|holidays|days|monthDays|monthWeekdays|dates|nth|mean|sd|from|to|min|max|mode|pool|timer|user|process|isDefault|conditionExpression|run\.[a-zA-Z]+|compare\(\))\b/i;
+    /\b(?:capacity|quantity|calendars?|processingTime|interTriggerTimer|triggerCount|probability|sequence\s+flow|resources?|duration|seed|defaults?|start|currency|holidays|days|monthDays|monthWeekdays|dates|nth|mean|sd|from|to|min|max|mode|pool|timer|gateway|terminate|join|fork|user|process|isDefault|conditionExpression|run\.[a-zA-Z]+|compare\(\))\b/i;
 
   /** Drops what is quoted (`"HH:MM"`) or in backticks: identifiers are allowed there. */
   const withoutQuoted = (text: string): string => text.replace(/`[^`]*`/g, '').replace(/"[^"]*"/g, '');

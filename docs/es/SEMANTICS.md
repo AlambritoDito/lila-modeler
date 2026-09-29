@@ -152,8 +152,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:subProcess` con `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
 | `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `choreographyDiagram` | `choreography diagram` | `diagrama de coreografía` |
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
-| `startQuantity` distinto de 1 | `startQuantity` | `startQuantity attribute other than 1` | `atributo startQuantity distinto de 1` |
-| `completionQuantity` distinto de 1 | `completionQuantity` | `completionQuantity attribute other than 1` | `atributo completionQuantity distinto de 1` |
+| `startQuantity` distinto de 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
+| `completionQuantity` distinto de 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
 | `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
 | `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
@@ -1135,15 +1135,15 @@ Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts`
 en `en` y en `es`:
 
 ```
-resources.<pool>.capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (<pool>).
 E-REC-CAPACIDAD: <pool>: capacity must declare at least one slice.
 E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
 ```
 
 ```
-resources.<pool>.capacity: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
+la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (<pool>).
 E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.
 E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.
 ```

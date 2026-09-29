@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { entradasHuerfanas, prepareSimulation, sinHuerfanas } from './simulationGate';
+import { entradasHuerfanas, prepareSimulation, sinHuerfanas, sinRepetir } from './simulationGate';
 import { setLocale } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
@@ -118,4 +118,34 @@ it('a subprocess id is an orphan unless its entry carries processingTime, resour
   expect(Object.keys(sinHuerfanas(con({ calendar: 'x' }), ir))).toEqual(['s']);
   expect(entradasHuerfanas(con({ processingTime: { type: 'constant', value: 1 } }), ir)).toEqual([]);
   expect(entradasHuerfanas(con({ fixedCost: 3 }), ir)).toEqual([]);
+});
+
+// #519: the path may open the message (ids, schema) or close it, in parentheses (lint); an id that
+// is only a prefix of another one (Task_1 / Task_10) must not count as already cited.
+it.each([
+  ['E-X', 'Task_1', 'Task_1: has no start.', 'E-X: Task_1: has no start.'],
+  ['E-X', 'elements.T.p', 'is outside [0, 1] (elements.T.p).', 'E-X: is outside [0, 1] (elements.T.p).'],
+  ['E-X', 'Task_1', 'Task_10: something else.', 'E-X: Task_1: Task_10: something else.'],
+  ['E-X', 'Task_1', 'the flow leaves Task_10 (elements.Task_10).', 'E-X: Task_1: the flow leaves Task_10 (elements.Task_10).'],
+])('sinRepetir(%s, %s) does not confuse an id with a longer one (#519)', (code, where, message, expected) => {
+  expect(sinRepetir(code, where, message)).toBe(expected);
+});
+
+// #519: the two lint errors whose subject used to be an id now carry the path at the end; the gate
+// prints `code: message` with nothing in front and nothing repeated.
+it('E-CAL-VACIO and E-CAPACIDAD-Y-CALENDARIO reach the alert as one clean line each (#519)', async () => {
+  const scenario = {
+    ...raw,
+    calendars: {
+      navidad: { intervals: [{ dates: ['12-25'], from: '09:00', to: '13:00' }], holidays: ['12-25'] },
+      dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] },
+    },
+    resources: { cajero: { capacity: [{ calendar: 'dia', capacity: 2 }], calendar: 'dia' } },
+  };
+  const error = await prepareSimulation(xml, 'base', { base: scenario }).catch((e: unknown) => e as Error);
+  const lines = (error as Error).message.split('\n');
+  expect(lines).toContain('E-CAL-VACIO: todas las aperturas del calendario caen en uno de sus festivos (calendars.navidad).');
+  expect(lines).toContain(
+    'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (resources.cajero.capacity).',
+  );
 });

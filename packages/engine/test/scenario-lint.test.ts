@@ -679,3 +679,51 @@ describe('#360 — actionable missing-parameter warnings', () => {
     expect(warnings(ir, { Gateway_X: {} })).toEqual(['elements.Start']);
   });
 });
+
+describe('#519 — no lint message opens with its own JSON path', () => {
+  const scenario = ScenarioSchema.parse({
+    ...BASE,
+    calendars: {
+      navidad: { intervals: [{ dates: ['12-25'], from: '09:00', to: '13:00' }], holidays: ['12-25'] },
+      dia: { intervals: [{ days: ['MON'], from: '08:00', to: '20:00' }] },
+    },
+    resources: {
+      cocinero: { capacity: [{ calendar: 'dia', capacity: 3 }], calendar: 'dia', preempt: true },
+      sinCal: { capacity: 1, calendar: 'fantasma' },
+    },
+    elements: {
+      Task_Preparar: {
+        processingTime: { type: 'normal', mean: 10, sd: 20 },
+        resources: [{ ref: 'cocinero', quantity: 9 }, { ref: 'nadie' }],
+        probability: 0.5,
+      },
+      StartEvent_Pedido: {
+        interTriggerTimer: { type: 'user', points: [{ value: 1, probability: 0.2 }, { value: 2, probability: 0.2 }] },
+        triggerCount: 5,
+      },
+      Fantasma: { fixedCost: 1 },
+    },
+  });
+
+  test.each(['en', 'es'] as const)('validateScenario in %s', (locale) => {
+    const problems = validateScenario(scenario, pedidoIrWithTask('Task_Preparar'), { locale });
+    const codes = new Set(problems.map((p) => p.code));
+    for (const code of [
+      'E-CAL-VACIO',
+      'E-CAPACIDAD-Y-CALENDARIO',
+      'W-NORMAL-NEGATIVA',
+      'W-USER-NORMALIZADA',
+      'E-RESERVADO',
+      'E-REF-DESCONOCIDA',
+      'E-REC-DESCONOCIDO',
+      'E-REC-CANTIDAD',
+      'E-PROB-EN-NODO',
+      'E-ELEMENTO-DESCONOCIDO',
+    ]) {
+      expect(codes.has(code as never), `the scenario triggers ${code}`).toBe(true);
+    }
+    for (const problem of problems) {
+      expect(problem.message.startsWith(problem.path), `${problem.code}: ${problem.message}`).toBe(false);
+    }
+  });
+});

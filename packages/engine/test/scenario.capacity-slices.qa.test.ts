@@ -199,10 +199,10 @@ describe('(13) catálogo de errores de § 17', () => {
   test('`E-CAPACIDAD-Y-CALENDARIO` sale carácter a carácter como está documentado', () => {
     const mensaje = mensajeDe(sim([{ calendar: 'dia', capacity: 2 }], { calendar: 'dia' }));
     expect(mensaje).toBe(
-      'E-CAPACIDAD-Y-CALENDARIO: enfermera: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.',
+      'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (enfermera).',
     );
     expect(semantics).toContain(
-      'E-CAPACIDAD-Y-CALENDARIO: <pool>: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.',
+      'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (<pool>).',
     );
   });
 

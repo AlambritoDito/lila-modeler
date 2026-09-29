@@ -97,11 +97,11 @@ export const es: Catalog = {
     'W-MSGFLOW': (processId, count) =>
       `${processId}: se ignoraron ${count} flujos de mensaje (bpmn:messageFlow).`,
     'W-COND': (flowId) => `${flowId}: la condición del flujo (\`conditionExpression\`) se ignora; el ramaje es probabilístico.`,
-    'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: el gateway no tiene entradas.`,
-    'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: el gateway no tiene salidas.`,
+    'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: la compuerta no tiene entradas.`,
+    'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: la compuerta no tiene salidas.`,
     'E-SIN-START': (processId) => `${processId}: el proceso no tiene ningún evento de inicio.`,
     'E-SIN-END': (processId) =>
-      `${processId}: el proceso no tiene ningún evento de fin ni terminate.`,
+      `${processId}: el proceso no tiene ningún evento de fin, ni normal ni terminal.`,
     'E-INALCANZABLE': (id) => `${id}: el nodo no es alcanzable desde ningún evento de inicio.`,
 
     'E-RESERVADO': (path) => `campo reservado, no soportado por el simulador en v1 (${path}).`,
@@ -130,7 +130,7 @@ export const es: Catalog = {
     'E-XOR-SUMA-CERO': (path) =>
       `las probabilidades del XOR suman 0; no hay ruta posible (${path}).`,
     'E-SIN-PARADA': (path) =>
-      `falta una condición de parada; declara la duración de la corrida o un máximo de llegadas (${path}).`,
+      `falta una condición de parada; declara la duración de la corrida o las llegadas máximas (${path}).`,
     'W-SIN-SEED': (path) =>
       `el escenario no declara semilla; la corrida usa la semilla 1 (${path}).`,
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
@@ -164,8 +164,8 @@ export const es: Catalog = {
     eventSubProcess: 'subproceso de eventos',
     choreographyDiagram: 'diagrama de coreografía',
     conversationDiagram: 'diagrama de conversación',
-    startQuantity: 'atributo startQuantity distinto de 1',
-    completionQuantity: 'atributo completionQuantity distinto de 1',
+    startQuantity: 'atributo `startQuantity` distinto de 1',
+    completionQuantity: 'atributo `completionQuantity` distinto de 1',
     endEventTrigger: 'evento de fin con ese disparador',
     startEventTrigger: 'evento de inicio con ese disparador',
     outOfProfile: 'elemento fuera del perfil v1',

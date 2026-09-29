@@ -11,7 +11,7 @@ import type { CoreCatalog } from './types.js';
 export const coreEs: CoreCatalog = {
   codes: {
     'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
-      `${nodeId}: caso ${caseId}, réplica ${replication}, instante ${instant} s: se alcanzó el límite de ${limit} eventos sin avance temporal. Revisa los ciclos y los tiempos de procesamiento.`,
+      `${nodeId}: caso ${caseId}, réplica ${replication}, instante ${instant} s: se alcanzó el límite de ${limit} eventos sin avance temporal. Revisa los ciclos y los tiempos de proceso.`,
     'E-ID-DUPLICADO': (id) => `${id}: el id está declarado a la vez como nodo y como flujo.`,
     'E-REF-INEXISTENTE/entrante': (id, flowId) =>
       `${id}: el flujo entrante ${flowId} no existe en el proceso.`,
@@ -23,15 +23,15 @@ export const coreEs: CoreCatalog = {
       `${id}: el flujo entra al nodo ${to}, que no existe en el proceso.`,
 
     'E-CAPACIDAD-Y-CALENDARIO': (subject) =>
-      `${subject}: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.`,
+      `la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (${subject}).`,
     'E-REC-CAPACIDAD/sin-tramos': (poolId) => `${poolId}: la capacidad debe declarar al menos un tramo.`,
     'E-REC-CAPACIDAD/entero': (poolId) =>
       `${poolId}: la capacidad debe ser un entero mayor o igual que 1.`,
     'E-REC-DESCONOCIDO/en-elemento': (subject, poolId) =>
-      `${subject}: el grupo de recursos ${poolId} no existe.`,
-    'E-REC-DESCONOCIDO/pool': (poolId) => `el grupo de recursos ${poolId} no existe.`,
+      `${subject}: el recurso ${poolId} no existe.`,
+    'E-REC-DESCONOCIDO/pool': (poolId) => `el recurso ${poolId} no existe.`,
     'E-REC-DUPLICADO/pool': (subject, poolId) =>
-      `${subject}: el grupo de recursos ${poolId} aparece más de una vez.`,
+      `${subject}: el recurso ${poolId} aparece más de una vez.`,
     'E-REC-CANTIDAD/entero': (subject, poolId) =>
       `${subject}: la cantidad de ${poolId} debe ser un entero mayor o igual que 1.`,
     'E-REC-CANTIDAD/excede': (subject, quantity, capacity, poolId) =>
@@ -41,14 +41,14 @@ export const coreEs: CoreCatalog = {
     'E-CAL-VACIO/anonimo': () => 'el calendario no tiene intervalos abiertos.',
     'E-CAL-VACIO/interseccion': (elementId) =>
       `${elementId}: la intersección de los calendarios de la tarea es vacía.`,
-    'E-CAL-VACIO/pool-sin-tramos': () => 'el grupo de recursos no tiene ningún tramo de capacidad abierto.',
-    'E-CAL-VACIO/festivos': (name) => `${name}: todas las aperturas del calendario caen en uno de sus festivos.`,
+    'E-CAL-VACIO/pool-sin-tramos': () => 'el recurso no tiene ningún tramo de capacidad abierto.',
+    'E-CAL-VACIO/festivos': (name) => `todas las aperturas del calendario caen en uno de sus festivos (${name}).`,
     'E-CAL-DESCONOCIDO': (subject, calendar) =>
       `${subject}: el calendario ${calendar} no existe.`,
 
     'E-REC-LIBERACION': (requestId) => `${requestId} no tiene una asignación activa.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `ya existe la solicitud ${requestId}.`,
-    'E-REC-SIN-ASIGNACION': (requestId) => `${requestId}: falta un grupo de recursos.`,
+    'E-REC-SIN-ASIGNACION': (requestId) => `${requestId}: falta un recurso.`,
     'E-REC-ESTADO': (poolId) => `uso negativo en ${poolId}.`,
 
     'E-REPLICACIONES-INSUFICIENTES/valores': () =>
@@ -76,18 +76,18 @@ export const coreEs: CoreCatalog = {
     'W-START-SIN-LLEGADAS': (nodeId) =>
       `${nodeId}: el evento de inicio no declara tiempo entre llegadas ni llegadas máximas y no genera casos.`,
     'W-PROB-IGNORADA': (flowId, gatewayId) =>
-      `${flowId}: sale de un gateway paralelo (${gatewayId}); la probabilidad se ignora.`,
+      `${flowId}: sale de una compuerta paralela (${gatewayId}); la probabilidad se ignora.`,
     'W-PROB-IGNORADA/event': (flowId, gatewayId) =>
-      `${flowId}: sale de un gateway basado en eventos (${gatewayId}); la probabilidad se ignora porque la carrera entre eventos determina la ruta.`,
+      `${flowId}: sale de una compuerta basada en eventos (${gatewayId}); la probabilidad se ignora porque la carrera entre eventos determina la ruta.`,
     'W-TIMER-SIN-TIEMPO': (nodeId) => `${nodeId}: sin tiempo de proceso; retarda 0 segundos.`,
     'W-TIMER-SIN-TIEMPO/rama': (nodeId, gatewayId) =>
       `${nodeId}: sin tiempo de proceso; nunca dispara como rama de ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: temporizador de borde sin tiempo de proceso; nunca dispara sobre ${hostId}.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
-      `${nodeId}: llegó un token sin marca de fork; se comporta como mezcla.`,
+      `${nodeId}: llegó un token sin marca de división; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
-      `${nodeId}: ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con tokens esperando en el join.`,
+      `${nodeId}: ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con tokens esperando en la compuerta de unión.`,
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
       `${nodeId}: ninguna rama declara tiempo de proceso; ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con su token esperando en la compuerta.`,
 
