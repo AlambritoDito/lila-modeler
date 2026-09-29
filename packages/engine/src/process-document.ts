@@ -81,6 +81,14 @@ export interface ProcessDocumentInput {
   /** `parseBpmn(xml).lanes` and `.pool`: where the lanes' and the pool's extended attributes are (#509). */
   readonly lanes?: Readonly<Record<string, string>> | undefined;
   readonly pool?: string | undefined;
+  /**
+   * `parseBpmn(xml).nodeLanes`, `.laneParents` and `.poolName` (#516): lanes grouped by id, not by
+   * name, with their hierarchy, and the pool under a heading of its own. Without `nodeLanes` the
+   * lanes group by `Node.lane`, their label, as hand-built inputs carry nothing else.
+   */
+  readonly nodeLanes?: Readonly<Record<string, string>> | undefined;
+  readonly laneParents?: Readonly<Record<string, string>> | undefined;
+  readonly poolName?: string | undefined;
   /** `parseBpmn(xml).types`: the BPMN type of each node, which the IR flattens (#509). */
   readonly types?: Readonly<Record<string, string>> | undefined;
   readonly scenario?: ResolvedScenario;
@@ -181,13 +189,19 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
 
   // Extended attributes (#509): one labelled line per filled-in attribute, under the element.
   const definitions = Object.values(annotations).flatMap((a) => a.attributeDefinitions ?? []);
+  const attributesOf = (id: string, category: ElementCategory | undefined) =>
+    effectiveAttributes(definitions, category, annotations[id]?.attributes ?? []);
   const attributeLines = (id: string, category: ElementCategory | undefined): void => {
-    for (const { name, value } of effectiveAttributes(definitions, category, annotations[id]?.attributes ?? [])) {
+    for (const { name, value } of attributesOf(id, category)) {
       blocks.push({ kind: 'paragraph', label: name === '' ? C.docAttributeNoRef() : name, text: value });
     }
   };
   attributeLines(original(ir.id), 'process');
-  if (input.pool !== undefined) attributeLines(input.pool, 'lane');
+  // The pool's lines under its own heading (#516), or they read as the process's.
+  if (input.pool !== undefined && attributesOf(input.pool, 'lane').length > 0) {
+    blocks.push({ kind: 'heading', level: 2, text: input.poolName || input.pool });
+    attributeLines(input.pool, 'lane');
+  }
 
   // Flattened sub-processes (R-PLAN-1): their children inherit the lane of the sub-process, which
   // is the only shape the lane lists, and the sub-process gets its own section before them.
@@ -197,6 +211,37 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   const subName = (sub: string): string => subs[sub]?.name || original(sub);
   const laneOf = (id: string): string | undefined => ir.nodes[id]!.lane ?? subLane(ir.nodes[id]!.subprocessId);
 
+  // Lanes are keyed by id when the parse gave them (#516): same-named lanes stay apart, and a
+  // nested lane hangs from its parent. Without ids the key is the label, as before.
+  const nodeLanes = input.nodeLanes;
+  const parents = input.laneParents ?? {};
+  const subLaneKey = (sub: string | undefined): string | undefined =>
+    sub === undefined ? undefined : (nodeLanes?.[sub] ?? subLaneKey(subs[sub]?.parent));
+  const laneKeyOf = (id: string): string | undefined =>
+    nodeLanes === undefined ? laneOf(id) : (nodeLanes[id] ?? subLaneKey(ir.nodes[id]!.subprocessId));
+  const names = new Map<string, string>(Object.entries(input.lanes ?? {}));
+  for (const id of Object.keys(ir.nodes)) {
+    const key = laneKeyOf(id);
+    const label = laneOf(id);
+    if (key !== undefined && label !== undefined && !names.has(key)) names.set(key, label);
+  }
+  const ancestry = (key: string): string[] => {
+    const chain = [key];
+    for (let at = parents[key]; at !== undefined && !chain.includes(at); at = parents[at]) chain.unshift(at);
+    return chain;
+  };
+  // A nested lane reads `Parent / Child`; a heading two lanes still share gets the lane's id.
+  const path = (key: string): string => ancestry(key).map((k) => names.get(k) ?? k).join(' / ');
+  const laneKeys = new Set(Object.keys(ir.nodes).flatMap((id) => {
+    const key = laneKeyOf(id);
+    return key === undefined ? [] : ancestry(key);
+  }));
+  const pathCount = new Map<string, number>();
+  for (const key of laneKeys) pathCount.set(path(key), (pathCount.get(path(key)) ?? 0) + 1);
+  const laneTitle = (key: string): string =>
+    nodeLanes === undefined ? key : (pathCount.get(path(key))! > 1 ? `${path(key)} (${key})` : path(key));
+  const laneTitleOf = (key: string | undefined): string | undefined => (key === undefined ? undefined : laneTitle(key));
+
   const line = (label: string, text: string | undefined): void => {
     if (text !== undefined && text !== '') blocks.push({ kind: 'paragraph', label, text });
   };
@@ -205,7 +250,7 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     blocks.push({ kind: 'heading', level: 2, text: heading || original(id) });
     line(C.docType(), type);
     line(C.docId(), original(id));
-    line(C.docLane(), lane);
+    line(C.docLane(), laneTitleOf(lane));
     line(C.docSubprocess(), sub === undefined ? undefined : subName(sub));
     const host = ir.nodes[id]?.attachedTo;
     if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
@@ -221,26 +266,37 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     if (sub === undefined || opened.has(sub)) return;
     opened.add(sub);
     openSub(subs[sub]?.parent);
-    section(sub, subName(sub), C.docSubprocess(), subLane(sub), subs[sub]?.parent);
+    section(sub, subName(sub), C.docSubprocess(), nodeLanes === undefined ? subLane(sub) : subLaneKey(sub), subs[sub]?.parent);
   };
 
-  // Lanes in order of first appearance along the flow; `null` gathers the nodes outside every lane.
+  // Lanes in order of first appearance along the flow, a parent lane before its children and a
+  // lane's own elements before its children's; `null` gathers the nodes outside every lane.
   const order = flowOrder(ir);
   const lanes = new Map<string | null, string[]>();
   for (const id of order) {
-    const lane = laneOf(id) ?? null;
+    // Every lane of the chain gets its entry at the first node below it, so the order holds.
+    for (const key of ancestry(laneKeyOf(id) ?? '')) if (key !== '' && !lanes.has(key)) lanes.set(key, []);
+    const lane = laneKeyOf(id) ?? null;
     lanes.set(lane, [...(lanes.get(lane) ?? []), id]);
   }
-  const withLanes = order.some((id) => laneOf(id) !== undefined);
-  for (const [lane, ids] of withLanes ? lanes : new Map([[null, order]])) {
-    blocks.push({ kind: 'heading', level: 1, text: !withLanes ? C.docElements() : lane ?? C.docNoLane() });
-    for (const [laneId, label] of Object.entries(input.lanes ?? {})) if (withLanes && label === lane) attributeLines(laneId, 'lane');
+  const withLanes = order.some((id) => laneKeyOf(id) !== undefined);
+  const emit = (lane: string | null, ids: readonly string[]): void => {
+    blocks.push({ kind: 'heading', level: 1, text: !withLanes ? C.docElements() : lane === null ? C.docNoLane() : laneTitle(lane) });
+    if (lane !== null) {
+      // By id (#516); a hand-built input without ids still finds its lanes by their label.
+      for (const [laneId, label] of Object.entries(input.lanes ?? {})) {
+        if (nodeLanes === undefined ? label === lane : laneId === lane) attributeLines(laneId, 'lane');
+      }
+    }
     for (const id of ids) {
       const node = ir.nodes[id]!;
       openSub(node.subprocessId);
-      section(id, node.name, M.mcp.nodeType(node.type), laneOf(id), node.subprocessId);
+      section(id, node.name, M.mcp.nodeType(node.type), laneKeyOf(id), node.subprocessId);
     }
-  }
+    for (const [child, childIds] of lanes) if (child !== null && lane !== null && parents[child] === lane) emit(child, childIds);
+  };
+  if (!withLanes) emit(null, order);
+  else for (const [lane, ids] of lanes) if (lane === null || parents[lane] === undefined || !lanes.has(parents[lane])) emit(lane, ids);
 
   const { scenario, result } = input;
   const charts: Uint8Array[] = [];

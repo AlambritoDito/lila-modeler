@@ -379,6 +379,10 @@ interface Collector {
   /** Id final de cada elemento moddle, que solo difiere del suyo si hubo colisión. */
   idOf: Map<ModdleElement, string>;
   laneOf: Map<string, string>;
+  /** `moddle node id -> original id of its innermost lane` (#516): `laneOf` only has the label. */
+  laneIdOf: Map<string, string>;
+  /** `original lane id -> original id of the lane that contains it` (#516). */
+  laneParents: Record<string, string>;
   defaultFlowIds: Set<string>;
   sequenceFlows: ModdleElement[];
   /** Subprocesos en post-orden: el más interno se aplana primero. */
@@ -437,13 +441,21 @@ function claimId(el: ModdleElement, c: Collector): string {
   return id;
 }
 
-/** `id de nodo -> etiqueta del carril`, recursivo por `childLaneSet`. */
-function collectLanes(laneSets: readonly ModdleElement[], laneOf: Map<string, string>): void {
+/**
+ * `id de nodo -> etiqueta del carril` (y su id, #516), recursivo por `childLaneSet`: el carril
+ * hijo se visita después del padre, así que el nodo se queda con el más interno.
+ */
+function collectLanes(laneSets: readonly ModdleElement[], c: Collector, parent?: string): void {
   for (const laneSet of laneSets) {
     for (const lane of laneSet.lanes ?? []) {
       const label = lane.name ?? lane.id;
-      for (const ref of lane.flowNodeRef ?? []) laneOf.set(ref.id, label);
-      if (lane.childLaneSet) collectLanes([lane.childLaneSet], laneOf);
+      const id = c.sanitizedToOriginal.get(lane.id) ?? lane.id;
+      if (parent !== undefined) c.laneParents[id] = parent;
+      for (const ref of lane.flowNodeRef ?? []) {
+        c.laneOf.set(ref.id, label);
+        c.laneIdOf.set(ref.id, id);
+      }
+      if (lane.childLaneSet) collectLanes([lane.childLaneSet], c, id);
     }
   }
 }
@@ -454,7 +466,7 @@ function collectLanes(laneSets: readonly ModdleElement[], laneOf: Map<string, st
  * por el recableado, que hace `flattenBox`.
  */
 function walk(container: ModdleElement, subprocessId: string | undefined, c: Collector): void {
-  collectLanes(container.laneSets ?? [], c.laneOf);
+  collectLanes(container.laneSets ?? [], c);
 
   // Un boundary solo entra al perfil si tiene por dónde seguir (R-BND-1), y sus flujos viven en
   // este mismo contenedor. Los `<bpmn:outgoing>` del elemento no sirven: son opcionales en el XML.
@@ -626,7 +638,16 @@ export interface ParseResult {
    * to find their extended attributes. Optional for hand-built results.
    */
   lanes?: Record<string, string>;
+  /**
+   * `IR id -> original id of its innermost lane`, for the nodes and the flattened sub-processes
+   * (#516): `Node.lane` is only the label, and two lanes can share it.
+   */
+  nodeLanes?: Record<string, string>;
+  /** `original lane id -> original id of its parent lane`, for the nested lanes (#516). */
+  laneParents?: Record<string, string>;
   pool?: string;
+  /** The pool's name, when it has one (#516). */
+  poolName?: string;
   /**
    * The BPMN `$type` of every IR node and flattened sub-process, by IR id (#509): the IR flattens
    * every task variant, call activities included, to `task`, and the process document needs the
@@ -890,6 +911,8 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
     used: new Set(),
     idOf: new Map(),
     laneOf: new Map(),
+    laneIdOf: new Map(),
+    laneParents: {},
     defaultFlowIds: new Set(),
     sequenceFlows: [],
     boxes: [],
@@ -983,6 +1006,12 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
       .map((flow) => flow.id),
     subprocesses: c.subprocesses,
     lanes: laneLabels(main.laneSets ?? [], (id) => sanitizedToOriginal.get(id) ?? id),
+    nodeLanes: Object.fromEntries(
+      [...c.idOf]
+        .filter(([el, id]) => (c.nodes[id] !== undefined || c.subprocesses[id] !== undefined) && c.laneIdOf.has(el.id))
+        .map(([el, id]) => [id, c.laneIdOf.get(el.id)!]),
+    ),
+    laneParents: c.laneParents,
     types: Object.fromEntries(
       [...c.idOf].filter(([, id]) => c.nodes[id] !== undefined || c.subprocesses[id] !== undefined).map(([el, id]) => [id, el.$type]),
     ),
@@ -990,11 +1019,13 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
   };
 }
 
-/** The participant whose `processRef` is `main`, as `{ pool: original id }`, or nothing. */
-function poolOf(definitions: ModdleElement, main: ModdleElement, sanitizedToOriginal: ReadonlyMap<string, string>): { pool?: string } {
+/** The participant whose `processRef` is `main`, as `{ pool: original id, poolName }`, or nothing. */
+function poolOf(definitions: ModdleElement, main: ModdleElement, sanitizedToOriginal: ReadonlyMap<string, string>): { pool?: string; poolName?: string } {
   for (const root of definitions.rootElements ?? []) {
     const participant = (root.participants ?? []).find((p: ModdleElement) => p.processRef === main);
-    if (participant !== undefined) return { pool: sanitizedToOriginal.get(participant.id) ?? participant.id };
+    if (participant !== undefined) {
+      return { pool: sanitizedToOriginal.get(participant.id) ?? participant.id, ...(participant.name ? { poolName: participant.name } : {}) };
+    }
   }
   return {};
 }
