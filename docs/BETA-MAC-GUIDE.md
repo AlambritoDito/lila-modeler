@@ -2,6 +2,9 @@
 
 > Read this in: [Español](es/GUIA-BETA-MAC.md)
 
+Using Windows? See the [Windows tester guide](WINDOWS-TESTER-GUIDE.md) instead. Platform status is in
+the [README](../README.md#desktop-beta).
+
 This guide describes the desktop beta, including the language settings added on
 2026-09-09: `DesktopStore` is already wired up in `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore" — single choice point
@@ -20,22 +23,26 @@ something is not yet wired up, this is stated explicitly under "Limitations of t
 ## Where the installer is and how to open it unsigned
 
 The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
-named `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` for this release (hyphens, no spaces, matching the
-`SHA256SUMS` file's entry). Download both from
-[the `v1.0.0-beta.1` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
-— not `/releases/latest`, since GitHub excludes prereleases from that link. Only the macOS arm64
-`.dmg` and `SHA256SUMS` are attached to Beta 1; there is no Windows or Linux installer on this
-release (CI still builds them, but as untested artifacts — see "Limitations" below). The `.dmg` is
+named `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` for the current release (hyphens, no spaces, matching
+the `SHA256SUMS` file's entry). Download it and `SHA256SUMS` from
+[the `v1.0.0-beta.16` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
+— not `/releases/latest`, since GitHub excludes prereleases from that link. The release also attaches
+the Windows installer (`Lila-Modeler-1.0.0-beta.16-win-x64.exe`), which is unsigned and untested on a
+real Windows machine: see the [Windows tester guide](WINDOWS-TESTER-GUIDE.md). There is no Linux
+installer on the release (CI builds an AppImage, untested — see "Limitations" below). The `.dmg` is
 not distributed inside the repository (the `apps/desktop/release/` folder is in `.gitignore`): you
 can also build it yourself (see below).
 
 **Verify the download** before opening it, with both files in the same folder:
 
 ```bash
-shasum -a 256 -c SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
-The app is **not signed or notarized** (`identity: null` in `electron-builder.yml`).
+`SHA256SUMS` also lists the Windows installer; `--ignore-missing` skips it if you did not download it.
+
+The app is **ad-hoc sealed but not notarized**: it has no Developer ID signature (`identity: null` in
+`electron-builder.yml`; `scripts/adhoc-sign.cjs` seals the bundle after packing).
 
 ### Unsigned first launch (macOS 15 and newer)
 
@@ -289,14 +296,18 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.1, tag `v1.0.0-beta.1`; check whether any of these has already been resolved before
-trusting this list blindly at a later date)*
+*(as of 1.0.0-beta.16, tag `v1.0.0-beta.16`; the macOS verification notes below were recorded for
+Beta 1. Check whether any of these has already been resolved before trusting this list blindly at a
+later date)*
 
-- **No signing or notarization**: a received copy requires macOS's opening authorization (see
-  "Unsigned first launch" above). This is expected; do not disable Gatekeeper to work around it.
-- **Only macOS arm64 is offered and exercised**: the Windows (NSIS) and Linux (AppImage) installers
-  are built by the CI matrix (`.github/workflows/desktop.yml`) as untested artifacts; they are not
-  attached to the Beta 1 release and nobody on the project has tested them.
+- **No Developer ID signature or notarization**: a received copy requires macOS's opening
+  authorization (see "Unsigned first launch" above). This is expected; do not disable Gatekeeper to
+  work around it.
+- **Only macOS arm64 is exercised**: the Windows (NSIS) installer is built by the CI matrix
+  (`.github/workflows/desktop.yml`) and attached to the release, but it is unsigned and nobody on the
+  project has run it on a real Windows machine yet (see the [Windows tester
+  guide](WINDOWS-TESTER-GUIDE.md)); the Linux AppImage is built the same way, untested and not
+  attached.
 - **Finder double-click**: Beta 1 verified the macOS open-file route for `.lila` on macOS 27.0 (arm64) with `open -a`, the same event Finder sends on double-click, with the app closed and already running, including a name with accents and an em dash. A physical double-click in Finder, and opening a `.bpmn` that way, were not exercised.
 - **Saving a `.lila` opened by double-click or launch argument is fixed in Beta 1 (#378)**.
   Verified in Beta 1 by the real-Electron regression in `tools/e2e-desktop-open-path.mjs` (launch argument, open-file event, recents, dialog; ASCII, spaces, accents in NFC and NFD)
@@ -327,10 +338,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.1` for Beta 1):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.16` for Beta 16):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`

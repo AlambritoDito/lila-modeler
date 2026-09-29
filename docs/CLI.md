@@ -12,7 +12,17 @@ Every example below runs from the repository root, against the committed
 
 ## Install
 
-Not published on npm yet (#48): until then, run from a checkout.
+The CLI ships in the engine package, [`@lila-modeler/engine`](https://www.npmjs.com/package/@lila-modeler/engine)
+on npm, under the `beta` tag while the project is pre-1.0. Install it, or run it without installing:
+
+```bash
+npm install -g @lila-modeler/engine@beta      # puts `lila` on your PATH
+npx -p @lila-modeler/engine@beta lila validate model.bpmn
+npx @lila-modeler/engine@beta validate model.bpmn
+```
+
+The examples below use `npx lila …` from a checkout of the repository, which also has the
+`examples/pedido` benchmark they run against:
 
 ```bash
 git clone https://github.com/AlambritoDito/lila-modeler.git
@@ -25,13 +35,9 @@ npm run build
 registry lookup.
 
 `npx lila` only finds this CLI inside the checkout (after `npm ci`). Anywhere else it would fetch
-the unrelated `lila` package from npm, so from another directory call the bin directly (`node
+the unrelated `lila` package from npm, so from another directory use one of the
+`@lila-modeler/engine` commands above, call the bin directly (`node
 <checkout>/packages/engine/bin/lila.js …`) or use `npx --no lila …`, which refuses to install.
-Once published, use `npx @lila-modeler/engine@beta …`:
-
-```bash
-npx @lila-modeler/engine@beta validate model.bpmn
-```
 
 ## `validate`
 
