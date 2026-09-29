@@ -760,7 +760,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** `asFolder` solo cuenta con `saveAs`: elige carpeta de proyecto en vez de `.lila` (ADR-027). */
   async function saveWithOutcome(saveAs = false, asFolder = false): Promise<SaveOutcome> {
-    if (adapter === null || ioLock.current) return 'cancelled';
+    if (adapter === null) return 'cancelled';
+    // #522: an export (or another save, open or tab switch) holds the file lock; say so.
+    if (ioLock.current) { setIoError(S.app.guardadoOcupado); return 'cancelled'; }
     // A value still being typed goes into the file too, on ⌘S and on the close guard (#509).
     confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
     // Guardar reescribe `model.bpmn` en disco: con pérdida pasa por el mismo diálogo que
@@ -1828,13 +1830,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       return;
     }
     ioLock.current = true; setIoBusy(true); setIoError(null);
-    confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
-    // #498: the document is of the process on the canvas, and its cover says which one.
-    const titulo = procesos.length > 1 ? procesos[activo]?.name ?? projectName : projectName;
-    const nombre = nombreArchivo(titulo);
-    const lila = DESKTOP ? window.lila : undefined;
-    const run = corridaActual;
     try {
+      confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
+      // #498: the document is of the process on the canvas, and its cover says which one.
+      const titulo = procesos.length > 1 ? procesos[activo]?.name ?? projectName : projectName;
+      const nombre = nombreArchivo(titulo);
+      const lila = DESKTOP ? window.lila : undefined;
+      const run = corridaActual;
       // The diagram's XML and its picture, both read from the canvas in this same tick.
       const [xml, svg] = await Promise.all([modelador.exportar(), modelador.exportarSvg({ papel: true })]);
       const [{ ir: modelo, subprocesses, lanes, pool, types }, annotations, png] = await Promise.all([

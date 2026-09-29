@@ -271,6 +271,7 @@ export const en = {
     errorModeladorNoListo: 'The modeler is not ready yet.',
     errorModeloCambio: 'The model changed while saving. Save the current revision again.',
     exportacionOcupada: 'Another export, save or process switch is still running. Export again when it finishes.',
+    guardadoOcupado: 'An export, save or process switch is still running. Save again when it finishes.',
     errorProyectoCambio:
       'The project changed while the file was opening. Your changes are kept; open it again.',
     errorRecienteAusente: 'That project is no longer in its folder; it was removed from recents.',

@@ -1461,6 +1461,10 @@ it('a second process document export while one is running is refused with a noti
   await act(async () => ejecutarArchivo(T.app.exportarDocx));
   await act(async () => ejecutarArchivo(T.app.exportarHtml));
   expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.exportacionOcupada);
+  // ⌘S waits too, and says why (QA of #533).
+  await pulsar(document.body, mod('s'));
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.guardadoOcupado);
+  expect(session.saveProject).not.toHaveBeenCalled();
   await act(async () => soltar());
   await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalled());
   await act(async () => {});

@@ -254,6 +254,8 @@ export const es: Strings = {
       'El modelo cambió durante el guardado. Vuelve a guardar la revisión actual.',
     exportacionOcupada:
       'Todavía hay una exportación, un guardado o un cambio de proceso en curso. Vuelve a exportar cuando termine.',
+    guardadoOcupado:
+      'Todavía hay una exportación, un guardado o un cambio de proceso en curso. Vuelve a guardar cuando termine.',
     errorProyectoCambio:
       'El proyecto cambió mientras se abría el archivo. Conservamos tus cambios; vuelve a abrirlo.',
     errorRecienteAusente: 'Ese proyecto ya no está en su carpeta; se quitó de recientes.',

@@ -30,7 +30,7 @@ interface Borrado { context: { shape?: { type?: string; businessObject?: { proce
  * #515: bpmn-js's `UnclaimIdBehavior` frees a pool's process id in `preExecute`, outside the
  * command, so ⌘Z brings the process back with its id still free — and the next paste of that
  * pool kept it (`ModdleCopy._copyId`): two pools, one process. Undo claims it again; `executed`
- * (which redo also fires, unlike `preExecute`) frees it again.
+ * (which redo also fires, unlike `preExecute`) frees it again when it is still the pool's.
  */
 export class ReclamoDeProcesos {
   static $inject = ['eventBus', 'moddle'];
@@ -42,9 +42,10 @@ export class ReclamoDeProcesos {
       const p = proceso(e);
       if (p?.id !== undefined && !moddle.ids.assigned(p.id)) moddle.ids.claim(p.id, p);
     });
+    // Only if the id is still this process's: a pool pasted after the delete may have taken it.
     eventBus.on('commandStack.shape.delete.executed', (e) => {
-      const id = proceso(e)?.id;
-      if (id !== undefined) moddle.ids.unclaim(id);
+      const p = proceso(e);
+      if (p?.id !== undefined && moddle.ids.assigned(p.id) === p) moddle.ids.unclaim(p.id);
     });
   }
 }
