@@ -235,7 +235,9 @@ describe('process folders that are not this project\'s (#517)', () => {
     await writeFile(join(dir, 'processes/pedido/model.bpmn'), ajeno);
     await writeFile(join(dir, `processes/pedido/${AS_IS}`), '{"version":1,"name":"ajeno"}\n');
     const antes = await files(dir);
-    await expect(writeProjectFolder(dir, repo(), { saveAs: true })).rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    // The quoted "processes/…" is what the UI names as the thing to move (DesktopStore, QA of #531).
+    await expect(writeProjectFolder(dir, repo(), { saveAs: true }))
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA', message: expect.stringContaining('"processes/"') });
     // A version 1 project would not write into processes/, but the folder is still somebody else's.
     await expect(writeProjectFolder(dir, v1, { saveAs: true })).rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
     expect(await files(dir)).toEqual(antes);
@@ -289,7 +291,7 @@ describe('process folders that are not this project\'s (#517)', () => {
     const compras: ProcessDocument = { slug: processSlug('Compras', ocupados), name: 'Compras', model: { id: 'Process_Compras', name: 'model.bpmn', xml: XML('Process_Compras'), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
     expect(compras.slug).toBe('compras');
     await expect(writeProjectFolder(dir, withProcesses(document, [...processesOf(document), compras])))
-      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA', message: expect.stringContaining('"processes/compras/"') });
     expect(await files(dir)).toEqual(antes);
   });
 

@@ -603,27 +603,32 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     );
   });
 
-  it('E-CARPETA-OCUPADA from the disk is shown in the UI language, with the way out (#517)', async () => {
-    const detalle = 'Error invoking remote method \'lila:writeProject\': Error: E-CARPETA-OCUPADA: "processes/compras/" ya tiene archivos de otro proceso (model.bpmn); el proceso nuevo necesita otra carpeta.';
+  it('E-CARPETA-OCUPADA from the disk is shown in the UI language, naming what is in the way (#517)', async () => {
+    const remoto = (detalle: string): string => `Error invoking remote method 'lila:writeProject': Error: E-CARPETA-OCUPADA: ${detalle}`;
     const bridge = new FakeBridge();
-    bridge.writeProject = async () => { throw new Error(detalle); };
     bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
     const store = new DesktopStore(bridge);
     try {
       for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
         setLocale(locale);
-        // A normal save of the open project, a «Save as» and a new project all reach the same text.
+        const ocupada = catalogo.almacen.errorCarpetaOcupada;
+        // A normal save: a process folder created by hand after opening.
+        bridge.writeProject = async () => { throw new Error(remoto('"processes/compras/" ya tiene archivos de otro proceso (model.bpmn); el proceso nuevo necesita otra carpeta.')); };
         bridge.queueChooseFolder('/carpeta/pedido');
         await store.openProject();
-        await expect(store.saveProject(documentoBase())).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+        await expect(store.saveProject(documentoBase())).rejects.toThrow(ocupada('/carpeta/pedido/processes/compras/'));
+        // «Save as» onto a folder with another project's processes/ and no manifest.
+        bridge.writeProject = async () => { throw new Error(remoto('La carpeta ya contiene "processes/" con procesos de otro proyecto (a, b) sin manifiesto; "Guardar como" no puede escribir ahí.')); };
         bridge.queueChooseFolder('/carpeta/otra');
-        await expect(store.saveProject(documentoBase(), { saveAs: true, asFolder: true })).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+        await expect(store.saveProject(documentoBase(), { saveAs: true, asFolder: true })).rejects.toThrow(ocupada('/carpeta/otra/processes/'));
+        // A new project onto another project's folder: the folder itself is in the way.
+        bridge.writeProject = async () => { throw new Error(remoto('La carpeta ya contiene el proyecto "otro"; "Guardar como" no puede escribir ahí el proyecto "proyecto-1".')); };
         bridge.queueChooseFolder('/carpeta/nueva');
-        await expect(store.createProject(documentoBase())).rejects.toThrow(catalogo.almacen.errorCarpetaOcupada);
+        await expect(store.createProject(documentoBase())).rejects.toThrow(ocupada('/carpeta/nueva'));
       }
       // The code stays in the message (contract), and any other error is left as it came.
-      expect(es.almacen.errorCarpetaOcupada).toMatch(/^E-CARPETA-OCUPADA: /);
-      expect(S.almacen.errorCarpetaOcupada).toMatch(/^E-CARPETA-OCUPADA: /);
+      expect(es.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
+      expect(S.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
       bridge.writeProject = async () => { throw new Error('E-CAMBIO-EXTERNO: model.bpmn'); };
       await expect(store.saveProject(documentoBase())).rejects.toThrow('E-CAMBIO-EXTERNO: model.bpmn');
     } finally {

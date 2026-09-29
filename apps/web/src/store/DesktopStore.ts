@@ -93,7 +93,7 @@ export class DesktopStore implements ProjectSessionStore {
   async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
     const dir = await this.bridge.chooseFolder();
     if (dir === null) return null;
-    await this.bridge.writeProject(dir, document, { saveAs: true }).catch(traducirOcupada);
+    await this.bridge.writeProject(dir, document, { saveAs: true }).catch((error: unknown) => traducirOcupada(error, dir));
     this.occupied = new Set();
     this.activeDir = dir;
     this.activeDocument = document;
@@ -200,7 +200,7 @@ export class DesktopStore implements ProjectSessionStore {
       if (sobreSuPropiaCarpeta && (error instanceof Error) && error.message.includes('E-CARPETA-OCUPADA')) {
         throw new Error(strings().almacen.errorMismaCarpeta);
       }
-      traducirOcupada(error);
+      traducirOcupada(error, dir);
     }
     this.activeDir = dir;
     this.activeDocument = document;
@@ -372,12 +372,17 @@ export class DesktopStore implements ProjectSessionStore {
 
 /**
  * `E-CARPETA-OCUPADA` reaches here as `"<code>: <Spanish detail>"` from main (#517, item 3): it is
- * shown in the UI language, with the way out the user has, instead of raw and only in Spanish.
- * Any other error is rethrown as it came.
+ * shown in the UI language, naming what is in the way so the user knows what to move (QA of #531),
+ * instead of raw and only in Spanish. The disk detail quotes `processes/…` or `model.bpmn` when
+ * that is the obstacle (`projectIO.ts`); otherwise the obstacle is the destination `dir` itself
+ * (another project's folder or `.lila`). Any other error is rethrown as it came.
  */
-function traducirOcupada(error: unknown): never {
+function traducirOcupada(error: unknown, dir: string): never {
   if (error instanceof Error && error.message.includes('E-CARPETA-OCUPADA')) {
-    throw new Error(strings().almacen.errorCarpetaOcupada);
+    const dentro = /"(processes\/[^"]*|model\.bpmn)"/.exec(error.message)?.[1];
+    const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+    const ruta = dentro === undefined ? dir : `${dir.replace(/[\\/]+$/, '')}${sep}${dentro.replaceAll('/', sep)}`;
+    throw new Error(strings().almacen.errorCarpetaOcupada(ruta));
   }
   throw error;
 }
