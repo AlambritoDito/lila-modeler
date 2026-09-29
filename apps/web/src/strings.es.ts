@@ -274,9 +274,9 @@ export const es: Strings = {
     abrirLila: 'Abrir proyecto (.lila)…',
     abrirLilaPista: 'un archivo de proyecto con sus escenarios y corridas guardadas',
     abrirCarpeta: 'Abrir carpeta de proyecto',
-    abrirCarpetaPista: '⌘O · una carpeta con model.bpmn',
+    abrirCarpetaPista: 'una carpeta con model.bpmn',
     nuevo: 'Nuevo proceso',
-    nuevoPista: '⌘N · crea un .bpmn vacío',
+    nuevoPista: 'crea un .bpmn vacío',
     ejemplosTitulo: 'Ejemplos',
     ejemplos: {
       pedido: { titulo: 'Pedido de restaurante', pista: 'Atención en mostrador con escenarios AS-IS / TO-BE' },

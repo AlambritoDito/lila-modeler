@@ -13,7 +13,17 @@ Cada ejemplo de abajo corre desde la raíz del repositorio, sobre el benchmark
 
 ## Instalación
 
-Todavía no se publica en npm (#48): hasta entonces, la CLI sale de un clon.
+La CLI viaja en el paquete del motor, [`@lila-modeler/engine`](https://www.npmjs.com/package/@lila-modeler/engine)
+en npm, con la etiqueta `beta` mientras el proyecto es pre-1.0. Instálalo, o córrelo sin instalar:
+
+```bash
+npm install -g @lila-modeler/engine@beta      # pone `lila` en tu PATH
+npx -p @lila-modeler/engine@beta lila validate model.bpmn
+npx @lila-modeler/engine@beta validate model.bpmn
+```
+
+Los ejemplos de abajo usan `npx lila …` desde un clon del repositorio, que además trae el benchmark
+`examples/pedido` sobre el que corren:
 
 ```bash
 git clone https://github.com/AlambritoDito/lila-modeler.git
@@ -26,13 +36,9 @@ npm run build
 el registro.
 
 `npx lila` solo encuentra esta CLI dentro del clon (después de `npm ci`). En cualquier otro lado
-descarga el paquete `lila` ajeno de npm, así que desde otro directorio hay que llamar al binario
-directo (`node <clon>/packages/engine/bin/lila.js …`) o usar `npx --no lila …`, que se niega a
-instalar. Cuando se publique, usar `npx @lila-modeler/engine@beta …`:
-
-```bash
-npx @lila-modeler/engine@beta validate model.bpmn
-```
+descarga el paquete `lila` ajeno de npm, así que desde otro directorio usa uno de los comandos de
+`@lila-modeler/engine` de arriba, llama al binario directo (`node <clon>/packages/engine/bin/lila.js
+…`) o usa `npx --no lila …`, que se niega a instalar.
 
 ## `validate`
 

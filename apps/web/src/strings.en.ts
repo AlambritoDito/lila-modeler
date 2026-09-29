@@ -293,9 +293,9 @@ export const en = {
     abrirLila: 'Open project (.lila)…',
     abrirLilaPista: 'a project file with its scenarios and saved runs',
     abrirCarpeta: 'Open project folder',
-    abrirCarpetaPista: '⌘O · a folder with model.bpmn',
+    abrirCarpetaPista: 'a folder with model.bpmn',
     nuevo: 'New process',
-    nuevoPista: '⌘N · creates an empty .bpmn',
+    nuevoPista: 'creates an empty .bpmn',
     // #458: one row per public example (`docs/EXAMPLES_POLICY.md`), keyed by `Ejemplo['id']`
     // (`ejemplos.ts`) so `strings.test.ts` (LILA-210) catches a catalog and a gallery that drift.
     ejemplosTitulo: 'Examples',
