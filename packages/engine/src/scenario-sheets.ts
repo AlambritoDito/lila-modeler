@@ -731,10 +731,16 @@ function withoutIndexes(path: string): string {
   return path.replace(/\[\d+\]/g, '').replace(/\.\d+(?=\.|$)/g, '');
 }
 
-/** `elements.T.probability: must be…` → `must be…`: the report says the element by its name. */
+/**
+ * `elements.T.probability: must be…` → `must be…` and `…is outside [0, 1] (elements.T.probability).`
+ * → `…is outside [0, 1].`: the report says the element by its name. Since #519 the lint messages
+ * carry the path at the end, in parentheses; the schema's still carry it in front.
+ */
 function withoutPath(message: string, path: string): string {
-  for (const prefix of [path, withoutIndexes(path)]) {
-    if (message.startsWith(`${prefix}: `)) return message.slice(prefix.length + 2);
+  for (const where of [path, withoutIndexes(path)]) {
+    if (message.startsWith(`${where}: `)) return message.slice(where.length + 2);
+    const tail = ` (${where}).`;
+    if (message.endsWith(tail)) return `${message.slice(0, -tail.length)}.`;
   }
   return message;
 }

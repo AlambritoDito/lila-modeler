@@ -89,48 +89,51 @@ export const en: Catalog = {
     'W-PARSE/inofensivo': (id, notice) =>
       `${id}: XML reader notice, with no loss of nodes or flows: ${notice}.`,
     'W-XOR-DEFAULT-ROTO': (id, notice) =>
-      `${id}: the declared default flow does not exist; the isDefault mark is ignored and the split follows the rules of a XOR without a default: ${notice}.`,
+      `${id}: the declared default flow does not exist; the default-flow mark (\`isDefault\`) is ignored and the split follows the rules of a XOR without a default flow: ${notice}.`,
     'W-MSGFLOW': (processId, count) =>
       `${processId}: ${count} message flows (bpmn:messageFlow) were ignored.`,
-    'W-COND': (flowId) => `${flowId}: conditionExpression is ignored; branching is probabilistic.`,
+    'W-COND': (flowId) => `${flowId}: the flow's condition (\`conditionExpression\`) is ignored; branching is probabilistic.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: the gateway has no incoming flows.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: the gateway has no outgoing flows.`,
     'E-SIN-START': (processId) => `${processId}: the process has no start event.`,
     'E-SIN-END': (processId) => `${processId}: the process has no end event and no terminate.`,
     'E-INALCANZABLE': (id) => `${id}: the node is not reachable from any start event.`,
 
-    'E-RESERVADO': (path) => `${path}: reserved field, not supported by the simulator in v1.`,
+    'E-RESERVADO': (path) => `reserved field, not supported by the simulator in v1 (${path}).`,
     'E-REF-DESCONOCIDA': (path, calendar) =>
-      `${path}: the calendar ${calendar} does not exist in calendars.`,
+      `the calendar ${calendar} does not exist in the list of calendars (${path}).`,
     'E-REF-DESCONOCIDA/flujo': (path, flowId) =>
-      `${path}: the sequence flow ${flowId} does not exist in the model.`,
+      `the sequence flow ${flowId} does not exist in the model (${path}).`,
     'E-SUBPROC-PARAMETRO': (path, id) =>
-      `${path}: ${id} is an embedded subprocess and has no processing time, resources or cost of its own; its time is the sum of what happens inside.`,
-    'E-ELEMENTO-DESCONOCIDO': (path, id) => `${path}: the id ${id} does not exist in the model.`,
-    'E-PROB-EN-NODO': (path) => `${path}: only accepted on a sequence flow.`,
-    'E-PROB-RANGO': (path, value) => `${path}: ${value} is outside [0, 1].`,
-    'E-CAMPO-NO-APLICA/solo-inicio': (path) => `${path}: only accepted on a start event.`,
-    'E-CAMPO-NO-APLICA/solo-tarea': (path) => `${path}: only a task can consume resources.`,
-    'E-CAMPO-NO-APLICA/selection': (path) => `${path}: it only makes sense together with resources.`,
+      `${id} is an embedded subprocess and has no processing time, resources or cost of its own; its time is the sum of what happens inside (${path}).`,
+    'E-ELEMENTO-DESCONOCIDO': (path, id) => `the id ${id} does not exist in the model (${path}).`,
+    'E-PROB-EN-NODO': (path) => `a probability is only accepted on a sequence flow (${path}).`,
+    'E-PROB-RANGO': (path, value) => `${value} is outside [0, 1] (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-inicio': (path) => `only accepted on a start event (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-tarea': (path) => `only a task can consume resources (${path}).`,
+    'E-CAMPO-NO-APLICA/selection': (path) =>
+      `the resource selection only makes sense together with the task's resources (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
-      `${path}: only accepted on a sequence flow leaving a diverging exclusive gateway.`,
-    'E-TIMER-RECURSO': (path) => `${path}: a timer is a delay and consumes no resources.`,
+      `only accepted on a sequence flow leaving a diverging exclusive gateway (${path}).`,
+    'E-TIMER-RECURSO': (path) => `a timer is a delay and consumes no resources (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
-      `${path}: the resource ${ref} does not exist in resources.`,
-    'E-REC-DUPLICADO/ref': (path, ref) => `${path}: ${ref} appears more than once; use quantity.`,
+      `the resource ${ref} does not exist in the list of resources (${path}).`,
+    'E-REC-DUPLICADO/ref': (path, ref) =>
+      `${ref} appears more than once; use the quantity instead of repeating it (${path}).`,
     'E-REC-CANTIDAD/excede-ruta': (path, quantity, capacity, ref) =>
-      `${path}: ${quantity} exceeds capacity ${capacity} of ${ref}.`,
+      `the quantity ${quantity} exceeds the capacity ${capacity} of ${ref} (${path}).`,
     'E-XOR-SUMA-CERO': (path) =>
-      `${path}: the probabilities of the XOR add up to 0; there is no possible route.`,
+      `the probabilities of the XOR add up to 0; there is no possible route (${path}).`,
     'E-SIN-PARADA': (path) =>
-      `${path}: a stopping condition is missing; declare run.duration or a triggerCount.`,
-    'W-SIN-SEED': (path) => `${path}: the scenario declares no seed; the run uses seed = 1.`,
+      `a stopping condition is missing; declare the run duration or a maximum number of arrivals (${path}).`,
+    'W-SIN-SEED': (path) =>
+      `the scenario declares no seed; the run uses seed 1 (${path}).`,
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
-      `${path}: the element exists in the model and has no parameters; it takes its defaults.`,
+      `the element exists in the model and has no parameters; it takes its default values (${path}).`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it.`,
+      `${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} declares no probability, but ${gatewayId} has other outgoing flows that do; the undeclared flow is always taken (missing probability counts as 1).`,
+      `${flowId} declares no probability, but ${gatewayId} has other outgoing flows that do; the undeclared flow is always taken, because a missing probability counts as 1 (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },
@@ -181,30 +184,30 @@ export const en: Catalog = {
     unrecognizedKeys: (keys) => `unknown keys: ${keys}`,
     invalidUnion: () => 'does not match any of the accepted shapes',
 
-    distributionMinMax: (type) => `${type}: min ≤ max is required`,
-    distributionMinModeMax: (type) => `${type}: min ≤ mode ≤ max is required`,
-    startIso: () => 'run.start must be ISO 8601 with an explicit offset',
+    distributionMinMax: (type) => `${type}: minimum ≤ maximum is required`,
+    distributionMinModeMax: (type) => `${type}: minimum ≤ mode ≤ maximum is required`,
+    startIso: () => 'the start date must be ISO 8601 with an explicit offset',
     startInvalidDate: (start, monthDay) =>
-      `run.start: ${start} is not a valid date; ${monthDay} does not exist in the civil calendar.`,
+      `the start date ${start} is not a valid date; ${monthDay} does not exist in the civil calendar.`,
     startInvalidTime: (start, clock) =>
-      `run.start: ${start} is not a valid time; ${clock} does not exist on the civil clock.`,
+      `the start date ${start} does not have a valid time; ${clock} does not exist on the civil clock.`,
     startInvalidOffset: (start, offset) =>
-      `run.start: ${start} does not have a valid offset; ${offset} is not a time offset.`,
-    currencyIso: () => 'run.currency must be an ISO 4217 code',
-    intervalFrom: () => 'from must be "HH:MM"',
-    intervalTo: () => 'to must be "HH:MM" ("24:00" is accepted)',
+      `the start date ${start} does not have a valid offset; ${offset} is not a time offset.`,
+    currencyIso: () => 'the currency must be an ISO 4217 code',
+    intervalFrom: () => 'the start time of the interval must be "HH:MM"',
+    intervalTo: () => 'the end time of the interval must be "HH:MM" ("24:00" is accepted)',
     intervalOrder: () =>
-      'R13: to > from is required; a night window is declared as two intervals',
+      'R13: the end time must be later than the start time; a night window is declared as two intervals',
     monthDay: () =>
-      'monthDays: 0 is not a day; use 1…31, or -1…-31 counted from the end of the month',
+      'days of the month: 0 is not a day; use 1…31, or -1…-31 counted from the end of the month',
     monthWeekdayNth: () =>
-      'nth: 0 is not a week; use 1…5, or -1…-5 counted from the end of the month',
+      'week of the month: 0 is not a week; use 1…5, or -1…-5 counted from the end of the month',
     annualDate: () =>
-      'dates: an annual date is "MM-DD" and must exist in some year ("02-29" is accepted)',
+      'annual dates: an annual date is "MM-DD" and must exist in some year ("02-29" is accepted)',
     holidayDate: () =>
       'holidays: a holiday is "YYYY-MM-DD" (once) or "MM-DD" (every year) and must be a real date',
     intervalSelector: () =>
-      'each interval declares exactly one of days, monthDays, monthWeekdays or dates',
+      'each interval declares exactly one of: days of the week, days of the month, weekdays of the month or annual dates',
   },
   cli: {
     usage: () => EN_USAGE,

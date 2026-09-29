@@ -66,7 +66,7 @@ test('propaga W-MSGFLOW y cada W-COND en salida humana y JSON', async () => {
   expect(await main(['validate', warningsFixture])).toBe(0);
   const human = out.join('\n');
   expect(human).toContain('warning  W-MSGFLOW  Process_Warnings: 2 message flows');
-  expect(human).toContain('warning  W-COND  Flow_Condition: conditionExpression is ignored');
+  expect(human).toContain("warning  W-COND  Flow_Condition: the flow's condition (`conditionExpression`) is ignored");
   expect(human).toContain('0 errors, 2 warnings.');
 
   out = [];

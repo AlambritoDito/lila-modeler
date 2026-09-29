@@ -257,7 +257,7 @@ describe('QA LILA-186 · ataque 7: `triggerCount` en un timer intermedio', () =>
         code: 'E-CAMPO-NO-APLICA',
         path: 'elements.T.triggerCount',
         severity: 'error',
-        message: 'elements.T.triggerCount: only accepted on a start event.',
+        message: 'only accepted on a start event (elements.T.triggerCount).',
       },
     ]);
   });

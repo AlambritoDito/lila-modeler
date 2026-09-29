@@ -697,7 +697,7 @@ function checkElementDistributions(
         code: warning.code,
         path: `elements.${id}.${field}`,
         severity: 'warning',
-        message: `elements.${id}.${field}: ${warning.message}`,
+        message: `${warning.message.replace(/\.$/, '')} (elements.${id}.${field}).`,
       });
     }
   }

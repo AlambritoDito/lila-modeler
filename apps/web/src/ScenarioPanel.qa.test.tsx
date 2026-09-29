@@ -486,7 +486,7 @@ describe('rutas de los problemas', () => {
       document.getElementById('campo-elements.Timer_Reposo.selection')?.closest('.campo-schema')
         ?.textContent,
       // #280: el lint del panel habla el idioma de la app, que esta suite fija en español.
-    ).toContain('solo tiene sentido con resources');
+    ).toContain('solo tiene sentido junto con los recursos');
   });
 
   it('R4 se marca en el propio campo `probability`', () => {
@@ -495,7 +495,7 @@ describe('rutas de los problemas', () => {
       document
         .getElementById('campo-elements.Task_TomarPedido.probability')
         ?.closest('.campo-schema')?.textContent,
-    ).toContain('solo se admite en un sequence flow');
+    ).toContain('solo se admite en un flujo de secuencia');
   });
 });
 
