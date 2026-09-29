@@ -1819,7 +1819,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const lila = DESKTOP ? window.lila : undefined;
     try {
       const xml = await modelador.exportar();
-      const [{ ir: modelo, subprocesses, lanes, pool, types }, annotations, png] = await Promise.all([
+      const [{ ir: modelo, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types }, annotations, png] = await Promise.all([
         parseBpmn(xml),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
@@ -1836,7 +1836,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         graficasDelDocumento({ ir: modelo, scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result, log: logs.current.get(run.id) })
           .map(async ({ svg, alt }) => ({ alt, png: new Uint8Array(await (await aPng(svg)).arrayBuffer()) })),
       );
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, lanes, pool, types, title: titulo, date, locale, png, charts, ...escenario });
+      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: titulo, date, locale, png, charts, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);
