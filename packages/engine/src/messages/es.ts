@@ -93,10 +93,10 @@ export const es: Catalog = {
     'W-PARSE/inofensivo': (id, notice) =>
       `${id}: aviso del lector XML, sin pérdida de nodos ni flujos: ${notice}.`,
     'W-XOR-DEFAULT-ROTO': (id, notice) =>
-      `${id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: ${notice}.`,
+      `${id}: el flujo por defecto declarado no existe; se ignora la marca de flujo por defecto (\`isDefault\`) y el reparto sigue las reglas de un XOR sin flujo por defecto: ${notice}.`,
     'W-MSGFLOW': (processId, count) =>
       `${processId}: se ignoraron ${count} flujos de mensaje (bpmn:messageFlow).`,
-    'W-COND': (flowId) => `${flowId}: conditionExpression se ignora; el ramaje es probabilístico.`,
+    'W-COND': (flowId) => `${flowId}: la condición del flujo (\`conditionExpression\`) se ignora; el ramaje es probabilístico.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: el gateway no tiene entradas.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: el gateway no tiene salidas.`,
     'E-SIN-START': (processId) => `${processId}: el proceso no tiene ningún evento de inicio.`,
@@ -104,36 +104,41 @@ export const es: Catalog = {
       `${processId}: el proceso no tiene ningún evento de fin ni terminate.`,
     'E-INALCANZABLE': (id) => `${id}: el nodo no es alcanzable desde ningún evento de inicio.`,
 
-    'E-RESERVADO': (path) => `${path}: campo reservado, no soportado por el simulador en v1.`,
+    'E-RESERVADO': (path) => `campo reservado, no soportado por el simulador en v1 (${path}).`,
     'E-REF-DESCONOCIDA': (path, calendar) =>
-      `${path}: el calendario ${calendar} no existe en calendars.`,
+      `el calendario ${calendar} no existe en la lista de calendarios (${path}).`,
     'E-REF-DESCONOCIDA/flujo': (path, flowId) =>
-      `${path}: el sequence flow ${flowId} no existe en el modelo.`,
+      `el flujo de secuencia ${flowId} no existe en el modelo (${path}).`,
     'E-SUBPROC-PARAMETRO': (path, id) =>
-      `${path}: ${id} es un subproceso embebido y no tiene tiempo, recursos ni costo propios; su tiempo es la suma de lo que ocurre dentro.`,
-    'E-ELEMENTO-DESCONOCIDO': (path, id) => `${path}: el id ${id} no existe en el modelo.`,
-    'E-PROB-EN-NODO': (path) => `${path}: solo se admite en un sequence flow.`,
-    'E-PROB-RANGO': (path, value) => `${path}: ${value} está fuera de [0, 1].`,
-    'E-CAMPO-NO-APLICA/solo-inicio': (path) => `${path}: solo se admite en un evento de inicio.`,
-    'E-CAMPO-NO-APLICA/solo-tarea': (path) => `${path}: solo una tarea puede consumir recursos.`,
-    'E-CAMPO-NO-APLICA/selection': (path) => `${path}: solo tiene sentido con resources.`,
+      `${id} es un subproceso embebido y no tiene tiempo, recursos ni costo propios; su tiempo es la suma de lo que ocurre dentro (${path}).`,
+    'E-ELEMENTO-DESCONOCIDO': (path, id) => `el id ${id} no existe en el modelo (${path}).`,
+    'E-PROB-EN-NODO': (path) => `la probabilidad solo se admite en un flujo de secuencia (${path}).`,
+    'E-PROB-RANGO': (path, value) => `${value} está fuera de [0, 1] (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-inicio': (path) => `solo se admite en un evento de inicio (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-tarea': (path) => `solo una tarea puede consumir recursos (${path}).`,
+    'E-CAMPO-NO-APLICA/selection': (path) =>
+      `la selección de recursos solo tiene sentido junto con los recursos de la tarea (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
-      `${path}: solo se admite en un sequence flow que sale de una compuerta exclusiva divergente.`,
-    'E-TIMER-RECURSO': (path) => `${path}: un timer es un retardo y no consume recursos.`,
-    'E-REC-DESCONOCIDO/recurso': (path, ref) => `${path}: el recurso ${ref} no existe en resources.`,
-    'E-REC-DUPLICADO/ref': (path, ref) => `${path}: ${ref} aparece más de una vez; usa quantity.`,
+      `solo se admite en un flujo de secuencia que sale de una compuerta exclusiva divergente (${path}).`,
+    'E-TIMER-RECURSO': (path) => `un temporizador es un retardo y no consume recursos (${path}).`,
+    'E-REC-DESCONOCIDO/recurso': (path, ref) =>
+      `el recurso ${ref} no existe en la lista de recursos (${path}).`,
+    'E-REC-DUPLICADO/ref': (path, ref) =>
+      `${ref} aparece más de una vez; usa la cantidad en lugar de repetirlo (${path}).`,
     'E-REC-CANTIDAD/excede-ruta': (path, quantity, capacity, ref) =>
-      `${path}: ${quantity} excede capacity ${capacity} de ${ref}.`,
-    'E-XOR-SUMA-CERO': (path) => `${path}: las probabilidades del XOR suman 0; no hay ruta posible.`,
+      `la cantidad ${quantity} excede la capacidad ${capacity} de ${ref} (${path}).`,
+    'E-XOR-SUMA-CERO': (path) =>
+      `las probabilidades del XOR suman 0; no hay ruta posible (${path}).`,
     'E-SIN-PARADA': (path) =>
-      `${path}: falta una condición de parada; declara run.duration o un triggerCount.`,
-    'W-SIN-SEED': (path) => `${path}: el escenario no declara seed; la corrida usa seed = 1.`,
+      `falta una condición de parada; declara la duración de la corrida o un máximo de llegadas (${path}).`,
+    'W-SIN-SEED': (path) =>
+      `el escenario no declara semilla; la corrida usa la semilla 1 (${path}).`,
     'W-ELEMENTO-SIN-PARAMETROS': (path) =>
-      `${path}: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.`,
+      `el elemento existe en el modelo y no tiene parámetros; toma sus valores por defecto (${path}).`,
     'W-COND-INALCANZABLE': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre.`,
+      `${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
-      `${path}: ${flowId} no declara probability, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma (la probabilidad ausente vale 1).`,
+      `${flowId} no declara probabilidad, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma, porque la probabilidad ausente vale 1 (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },
@@ -184,30 +189,30 @@ export const es: Catalog = {
     unrecognizedKeys: (keys) => `claves desconocidas: ${keys}`,
     invalidUnion: () => 'no encaja con ninguna de las formas admitidas',
 
-    distributionMinMax: (type) => `${type}: se requiere min ≤ max`,
-    distributionMinModeMax: (type) => `${type}: se requiere min ≤ mode ≤ max`,
-    startIso: () => 'run.start debe ser ISO 8601 con offset',
+    distributionMinMax: (type) => `${type}: se requiere mínimo ≤ máximo`,
+    distributionMinModeMax: (type) => `${type}: se requiere mínimo ≤ moda ≤ máximo`,
+    startIso: () => 'la fecha de inicio debe ser ISO 8601 con desfase horario',
     startInvalidDate: (start, monthDay) =>
-      `run.start: ${start} no es una fecha válida; ${monthDay} no existe en el calendario civil.`,
+      `la fecha de inicio ${start} no es una fecha válida; ${monthDay} no existe en el calendario civil.`,
     startInvalidTime: (start, clock) =>
-      `run.start: ${start} no es una hora válida; ${clock} no existe en el reloj civil.`,
+      `la fecha de inicio ${start} no tiene una hora válida; ${clock} no existe en el reloj civil.`,
     startInvalidOffset: (start, offset) =>
-      `run.start: ${start} no tiene un offset válido; ${offset} no es un desplazamiento horario.`,
-    currencyIso: () => 'run.currency debe ser un código ISO 4217',
-    intervalFrom: () => 'from debe ser "HH:MM"',
-    intervalTo: () => 'to debe ser "HH:MM" (se admite "24:00")',
+      `la fecha de inicio ${start} no tiene un desfase horario válido; ${offset} no es un desplazamiento horario.`,
+    currencyIso: () => 'la moneda debe ser un código ISO 4217',
+    intervalFrom: () => 'la hora de inicio del intervalo debe ser "HH:MM"',
+    intervalTo: () => 'la hora de fin del intervalo debe ser "HH:MM" (se admite "24:00")',
     intervalOrder: () =>
-      'R13: se requiere to > from; una ventana nocturna se declara como dos intervalos',
+      'R13: la hora de fin debe ser posterior a la de inicio; una ventana nocturna se declara como dos intervalos',
     monthDay: () =>
-      'monthDays: 0 no es un día; usa 1…31, o -1…-31 contando desde el final del mes',
+      'días del mes: 0 no es un día; usa 1…31, o -1…-31 contando desde el final del mes',
     monthWeekdayNth: () =>
-      'nth: 0 no es una semana; usa 1…5, o -1…-5 contando desde el final del mes',
+      'semana del mes: 0 no es una semana; usa 1…5, o -1…-5 contando desde el final del mes',
     annualDate: () =>
-      'dates: una fecha anual es "MM-DD" y tiene que existir en algún año (se admite "02-29")',
+      'fechas anuales: una fecha anual es "MM-DD" y tiene que existir en algún año (se admite "02-29")',
     holidayDate: () =>
-      'holidays: un festivo es "YYYY-MM-DD" (una vez) o "MM-DD" (cada año) y tiene que ser una fecha real',
+      'festivos: un festivo es "YYYY-MM-DD" (una vez) o "MM-DD" (cada año) y tiene que ser una fecha real',
     intervalSelector: () =>
-      'cada intervalo declara exactamente uno de days, monthDays, monthWeekdays o dates',
+      'cada intervalo declara exactamente uno de estos: días de la semana, días del mes, días de la semana del mes o fechas anuales',
   },
   cli: {
     usage: () => ES_USAGE,

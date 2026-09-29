@@ -253,7 +253,7 @@ describe('#369 — blocked-token singular and plural messages', () => {
     expect(en.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
       .toBe(`Gateway: no branch event declares processingTime; ${english} left with their token waiting at the gateway.`);
     expect(es.codes['W-JOIN-BLOQUEADO/evento']('Gateway', count))
-      .toBe(`Gateway: ninguna rama declara processingTime; ${spanish} con su token esperando en la compuerta.`);
+      .toBe(`Gateway: ninguna rama declara tiempo de proceso; ${spanish} con su token esperando en la compuerta.`);
   });
 });
 
@@ -268,5 +268,29 @@ describe('#356 — replications without observations', () => {
       `W-REPLICACIONES-SIN-OBSERVACIONES: ${es.codes['W-REPLICACIONES-SIN-OBSERVACIONES/desenlace']('<endId>', '<m>', '<R>', '<n>')}`,
     ];
     for (const line of lines) expect(section17()).toContain(line);
+  });
+});
+
+/**
+ * #519 — the Spanish catalog is written entirely in Spanish, in user terms. A field name may
+ * appear only quoted or in backticks (`processingTime`), never as a word of the sentence.
+ */
+describe('#519 — Spanish messages contain no English field names', () => {
+  /** Terms of the scenario format that used to leak into Spanish sentences. */
+  const ENGLISH_TERMS =
+    /\b(?:capacity|quantity|calendars?|processingTime|interTriggerTimer|triggerCount|probability|sequence\s+flow|resources?|duration|seed|defaults?|start|currency|holidays|days|monthDays|monthWeekdays|dates|nth|mean|sd|from|to|min|max|mode|pool|timer|user|process|isDefault|conditionExpression|run\.[a-zA-Z]+|compare\(\))\b/i;
+
+  /** Drops what is quoted (`"HH:MM"`) or in backticks: identifiers are allowed there. */
+  const withoutQuoted = (text: string): string => text.replace(/`[^`]*`/g, '').replace(/"[^"]*"/g, '');
+
+  test.each(['codes', 'zod'] as const)('every `es.%s` entry', (namespace) => {
+    const offenders: string[] = [];
+    for (const [key, value] of Object.entries(entriesOf(es, namespace))) {
+      if (typeof value !== 'function') continue;
+      const text = withoutQuoted(callWithDummies(value as (...args: unknown[]) => string));
+      const found = ENGLISH_TERMS.exec(text);
+      if (found !== null) offenders.push(`${namespace}.${key}: «${found[0]}» in ${text}`);
+    }
+    expect(offenders).toEqual([]);
   });
 });

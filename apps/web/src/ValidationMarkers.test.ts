@@ -53,7 +53,7 @@ describe('problemasPorElemento (LILA-209)', () => {
     expect(validacion.marcadores.get('Task_Empacar')).toEqual({
       nivel: 'aviso',
       // #280: los mensajes del motor llegan en el idioma de la app, aquí fijado en español.
-      mensajes: ['elements.Task_Empacar: el elemento existe en el modelo y no tiene parámetros; toma sus defaults.'],
+      mensajes: ['el elemento existe en el modelo y no tiene parámetros; toma sus valores por defecto (elements.Task_Empacar).'],
     });
     expect(validacion.errores).toBe(0);
     // Los mismos números que la cabecera del panel de escenario: los dos leen la misma lista.

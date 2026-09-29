@@ -347,7 +347,7 @@ describe('(d) invalid values name the sheet, the row and the column', () => {
     const texts = plan.issues.map((issue) => issue.text);
     expect(texts[0]).toMatch(/^Elements, row 2, column distribution: unknown distribution "gaussian"; use one of constant, /);
     expect(texts[1]).toBe('Elements, row 3, column mean: must be > 0');
-    expect(texts[2]).toMatch(/^Elements, row 4, column distribution: .*min ≤ max/);
+    expect(texts[2]).toMatch(/^Elements, row 4, column distribution: .*minimum ≤ maximum/);
     expect(texts[3]).toBe('Elements, row 5, column fixedCost: must be a number ≥ 0.');
     expect(texts[4]).toBe('Elements, row 5, column calendar: calendar "noche" does not exist in the scenario nor in the Calendars sheet.');
     expect(texts[5]).toMatch(/^Elements, row 6, column probability: must be a probability/);

@@ -14,10 +14,10 @@ export interface PrepareSimulationOptions {
 
 /**
  * #419: many engine messages (E-SIN-START, E-SIN-END, E-INALCANZABLE, E-ELEMENTO-DESCONOCIDO…)
- * already open with the id or path they are about; prefixing it again printed it twice.
+ * already carry the id or path they are about, at the start or (since #519) at the end; prefixing it again printed it twice.
  */
 function sinRepetir(code: string, where: string, message: string): string {
-  return message.startsWith(where) ? `${code}: ${message}` : `${code}: ${where}: ${message}`;
+  return message.includes(where) ? `${code}: ${message}` : `${code}: ${where}: ${message}`;
 }
 
 /**

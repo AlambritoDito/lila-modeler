@@ -256,11 +256,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
     reparte igual sin ella. Texto exacto, en `en` y en `es`:
 
     ```
-    {id}: the declared default flow does not exist; the isDefault mark is ignored and the split follows the rules of a XOR without a default: {aviso}.
+    {id}: the declared default flow does not exist; the default-flow mark (`isDefault`) is ignored and the split follows the rules of a XOR without a default flow: {aviso}.
     ```
 
     ```
-    {id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: {aviso}.
+    {id}: el flujo por defecto declarado no existe; se ignora la marca de flujo por defecto (`isDefault`) y el reparto sigue las reglas de un XOR sin flujo por defecto: {aviso}.
     ```
 
   `{aviso}` es el mensaje de bpmn-moddle literal, aplanado a una sola línea. `{id}` es el id del
@@ -1020,16 +1020,16 @@ el motor los **rechaza** con error claro mientras no estén implementados (ADR-0
 - **R-RES-2 — Texto exacto del error.**
 
   ```
-  {ruta}: campo reservado, no soportado por el simulador en v1.
+  campo reservado, no soportado por el simulador en v1 ({ruta}).
   ```
 
   `{ruta}` es la ruta JSON del campo desde la raíz del escenario **resuelto**, con el id del
   elemento o del pool. Ejemplos literales:
 
   ```
-  elements.Task_TomarPedido.priority: campo reservado, no soportado por el simulador en v1.
-  resources.cajero.preempt: campo reservado, no soportado por el simulador en v1.
-  calendars.oficina.timezone: campo reservado, no soportado por el simulador en v1.
+  campo reservado, no soportado por el simulador en v1 (elements.Task_TomarPedido.priority).
+  campo reservado, no soportado por el simulador en v1 (resources.cajero.preempt).
+  campo reservado, no soportado por el simulador en v1 (calendars.oficina.timezone).
   ```
 
   Código `E-RESERVADO`. *(prueba: LILA-013)*
@@ -1142,10 +1142,10 @@ E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
 ```
 
 ```
-resources.<pool>.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
-E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.
-E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.
+resources.<pool>.capacity: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
+E-CAPACIDAD-Y-CALENDARIO: <pool>: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo.
+E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.
+E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.
 ```
 
 La primera línea es el `message` del problema que devuelve `validateScenario` (el `code` viaja
@@ -1285,7 +1285,7 @@ W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: no case ended here in <m> of <R> rep
 
 ```
 W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: ninguna instancia se completó en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
-W-REPLICACIONES-SIN-OBSERVACIONES: process: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: proceso: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
 W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
 ```
 

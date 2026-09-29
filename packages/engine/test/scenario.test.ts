@@ -177,9 +177,9 @@ describe('validateScenario contra el IR', () => {
 
     const errors = scenarioErrors(validateScenario(parsed.data!, pedidoIr()));
     expect(errors.map((e) => e.message)).toEqual([
-      'calendars.oficina.timezone: reserved field, not supported by the simulator in v1.',
-      'resources.cajero.preempt: reserved field, not supported by the simulator in v1.',
-      'elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.',
+      'reserved field, not supported by the simulator in v1 (calendars.oficina.timezone).',
+      'reserved field, not supported by the simulator in v1 (resources.cajero.preempt).',
+      'reserved field, not supported by the simulator in v1 (elements.Task_TomarPedido.priority).',
     ]);
   });
 
@@ -425,13 +425,13 @@ describe('mensajes del esquema (LILA-202, traducidos en LILA-211)', () => {
     // `refine`, `regex` y `min` con texto siguen diciendo lo suyo: zod no consulta el mapa. Por eso
     // el esquema se construye por idioma y no una sola vez (LILA-211).
     expect(defecto({ ...BASE, elements: { T: { processingTime: { type: 'uniform', min: 5, max: 1 } } } }).texto)
-      .toBe('elements.T.processingTime: uniform: min ≤ max is required');
+      .toBe('elements.T.processingTime: uniform: minimum ≤ maximum is required');
     expect(defecto({ ...BASE, elements: { T: { processingTime: { type: 'uniform', min: 5, max: 1 } } } }, 'es').texto)
-      .toBe('elements.T.processingTime: uniform: se requiere min ≤ max');
+      .toBe('elements.T.processingTime: uniform: se requiere mínimo ≤ máximo');
     expect(defecto({ ...BASE, run: { ...BASE.run, currency: 'pesos' } }).texto)
-      .toBe('run.currency: run.currency must be an ISO 4217 code');
+      .toBe('run.currency: the currency must be an ISO 4217 code');
     expect(defecto({ ...BASE, run: { ...BASE.run, currency: 'pesos' } }, 'es').texto)
-      .toBe('run.currency: run.currency debe ser un código ISO 4217');
+      .toBe('run.currency: la moneda debe ser un código ISO 4217');
     expect(defecto({ ...BASE, calendars: { c: { intervals: [] } } }).texto)
       .toBe('calendars.c.intervals: E-CAL-VACIO: the calendar has no open intervals.');
     expect(defecto({ ...BASE, calendars: { c: { intervals: [] } } }, 'es').texto)
