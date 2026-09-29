@@ -40,16 +40,18 @@ public docs site (`INTERNAL` in `tools/build-docs.mjs`).
 
 `.github/workflows/desktop.yml` builds macOS (arm64), Windows (x64) and Linux on every run. For a
 `v*` tag its `collect` job gathers the release candidate and its `release` job attaches it to a
-**draft** release (marked prerelease when the version has a suffix):
+**draft** release titled `Lila Modeler <version>`, plus ` (prerelease)` and the prerelease mark
+when the version has a suffix:
 
 - `Lila-Modeler-<version>-mac-arm64.dmg` — ad-hoc signed, not notarized.
 - `Lila-Modeler-<version>-win-x64.exe` — NSIS installer, **unsigned** and not tested by CI.
 - `SHA256SUMS` — two lines, one per installer, written over the final files
-  (`shasum -a 256 -c SHA256SUMS` checks them).
+  (`shasum -a 256 -c SHA256SUMS` checks both; with only one installer downloaded, use
+  `shasum -a 256 -c --ignore-missing SHA256SUMS`).
 
 `.blockmap` files and the Linux AppImage are not attached; they stay in the build artifacts. The
 release body comes from `docs/releases/v<version>.md` when that file exists at the tagged commit;
-otherwise the draft has no body. CI never replaces an asset (`overwrite_files: false`) and refuses
+otherwise the draft has no body and the collect job logs a warning. CI never replaces an asset (`overwrite_files: false`) and refuses
 to touch a release that is already published; review the draft and publish it by hand.
 
 Windows testers will see SmartScreen's "Windows protected your PC" on the first run, because the
@@ -57,7 +59,8 @@ installer has no code signature: **More info** → **Run anyway**. Say so in the
 
 ### Rehearsing the collection without a release
 
-A manual run builds and collects the same files but never creates a release:
+A manual run on a **branch** builds and collects the same files but never creates a release. (A
+manual run on a tag ref goes through the `release` job like a tag push: draft only, same guards.)
 
 ```bash
 gh workflow run desktop.yml --ref <branch> --repo AlambritoDito/lila-modeler

@@ -3,8 +3,8 @@ name: Desktop
 # Build unsigned installers on PRs and manual runs. Tags and manual runs then collect the release
 # candidate: the macOS arm64 DMG, the Windows x64 NSIS installer and a SHA256SUMS covering both,
 # plus the release notes from docs/releases/v<version>.md when that file exists. The candidate is
-# uploaded as the CI artifact `lila-release-candidate-<sha>`, so a manual run rehearses a release
-# without creating one. Only a `v*` tag attaches the candidate to a DRAFT release (prerelease when
+# uploaded as the CI artifact `lila-release-candidate-<sha>`, so a manual run on a branch rehearses
+# a release without creating one. Only a `v*` tag ref (pushed, or a manual run on it) attaches the candidate to a DRAFT release (prerelease when
 # the version has a suffix), never replacing assets and never touching a published release; the
 # owner reviews the assets and publishes the release manually. The Windows installer is unsigned
 # and untested by CI (SmartScreen warns on first run). Linux builds and `.blockmap` files stay CI
@@ -117,7 +117,8 @@ jobs:
             cp "$notes" candidate/notes.md
             echo "Release body: $notes"
           else
-            echo "No $notes; the release body stays empty."
+            msg="No $notes; the release body stays empty."
+            if [ "$GITHUB_REF_TYPE" = tag ]; then echo "::warning::$msg"; else echo "$msg"; fi
           fi
           ls -la candidate candidate/assets
       - uses: actions/upload-artifact@v4
@@ -157,11 +158,16 @@ jobs:
               *) echo "::error::Could not inspect release $REF_NAME: $out"; exit 1 ;;
             esac
           fi
+          # Release title as in 1.0.0-beta.1; the build job already checked tag == v<package version>.
+          version="${REF_NAME#v}"
+          case "$version" in *-*) name="Lila Modeler $version (prerelease)" ;; *) name="Lila Modeler $version" ;; esac
+          echo "name=$name" >> "$GITHUB_OUTPUT"
           # An empty body_path keeps the action's default (no body).
           if [ -f candidate/notes.md ]; then echo "body_path=candidate/notes.md" >> "$GITHUB_OUTPUT"; fi
           ls -laR candidate
       - uses: softprops/action-gh-release@v2 # the repository allowlist only admits this pattern, not a SHA pin
         with:
+          name: ${{ steps.guard.outputs.name }}
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           overwrite_files: false
