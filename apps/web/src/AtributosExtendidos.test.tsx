@@ -22,9 +22,12 @@ import lila from '../../../packages/engine/src/bpmn/lila.moddle.json' with { typ
 import BpmnFactory from 'bpmn-js/lib/features/modeling/BpmnFactory';
 import { Ids } from 'ids';
 import ModdleCopy from 'bpmn-js/lib/features/copy-paste/ModdleCopy';
+import BpmnCopyPaste from 'bpmn-js/lib/features/copy-paste/BpmnCopyPaste';
+import UnclaimIdBehavior from 'bpmn-js/lib/features/modeling/behavior/UnclaimIdBehavior';
+import IdClaimHandler from 'bpmn-js/lib/features/modeling/cmd/IdClaimHandler';
 import { GuardiaAtributos } from './atributos';
 import { confirmarEdicionEnCurso, hayBorradorPendiente } from './edicionEnCurso';
-import { LilaLote } from './lote';
+import { LilaLote, ReclamoDeProcesos } from './lote';
 import type { Modelador } from './Modeler';
 import { PanelPropiedades, type ElementoLienzo, type ElementoModdle, type Escritor } from './PropertiesPanel';
 import { setLocale } from './i18n';
@@ -499,6 +502,58 @@ describe('where the definitions live (QA 1, 2 and 5 of #513)', () => {
     const copia = new ModdleCopy(b.eventBus as never, factory, b.moddle as never)
       .copyElement(b.figura('Proc_A').businessObject as never, b.moddle.create('bpmn:Process', { id: 'Proc_Copia' }) as never) as unknown as ModdleElement;
     expect(copia.extensionElements?.values?.map((v) => v.$type)).toEqual(['lila:VersionTag']);
+  });
+
+  /** bpmn-js's own pieces over the bench: the behavior that frees a deleted pool's ids, and the copy-paste. */
+  async function bancoDePegado() {
+    const b = await banco(TRES_POOLS(''), 'Collab');
+    // What `BaseModeler` does after an import: every id in the file is claimed.
+    const ids = new Ids([32, 36, 1]);
+    (b.moddle as unknown as { ids: Ids }).ids = ids;
+    for (const el of recorrer(b.definitions)) ids.claim(el.id, el);
+    b.commandStack.register('id.updateClaim', new IdClaimHandler(b.moddle as never));
+    b.commandStack.register('shape.delete', { execute: () => [], revert: () => [] } as never);
+    new UnclaimIdBehavior({} as never, { invoke: (F: (bus: unknown) => void, self: unknown) => F.call(self, b.eventBus) } as never, b.moddle as never,
+      { unclaimId: (id: string, element: unknown) => b.commandStack.execute('id.updateClaim', { id, element }) } as never);
+    new ReclamoDeProcesos(b.eventBus as never, b.moddle as never);
+    const factory = new BpmnFactory(b.moddle as never);
+    new BpmnCopyPaste(factory as never, b.eventBus as never, new ModdleCopy(b.eventBus as never, factory, b.moddle as never) as never);
+    const pool = { ...b.figura('P_A'), di: b.moddle.create('bpmndi:BPMNShape', { id: 'P_A_di' }) };
+    const copiar = (): { processRef?: { id: string } } => {
+      const descriptor = {};
+      b.eventBus.fire('copyPaste.copyElement', { descriptor, element: pool });
+      return descriptor;
+    };
+    const pegar = (descriptor: { processRef?: { id: string } }): { id: string } => {
+      b.eventBus.fire('copyPaste.pasteElement', { descriptor, cache: {} });
+      return descriptor.processRef!;
+    };
+    return { b, ids, pool, copiar, pegar };
+  }
+
+  it('a pool deleted and brought back by ⌘Z, then copied and pasted, gets a process of its own (#515)', async () => {
+    const { b, ids, pool, copiar, pegar } = await bancoDePegado();
+    b.commandStack.execute('shape.delete', { shape: pool });
+    b.commandStack.undo();
+
+    const primero = pegar(copiar()).id;
+    expect(primero).not.toBe('Proc_A');
+    expect(pegar(copiar()).id).not.toBe(primero);
+    // Redo deletes the pool again and frees its process id, as the first delete did.
+    b.commandStack.redo();
+    expect(ids.assigned('Proc_A')).toBeFalsy();
+  });
+
+  it('redoing a pool delete leaves its process id alone when a pasted pool took it (#515, QA of #533)', async () => {
+    const { b, ids, pool, copiar, pegar } = await bancoDePegado();
+    const copia = copiar();
+    b.commandStack.execute('shape.delete', { shape: pool });
+    // The original is gone: the paste may take its id, and does.
+    const pegado = pegar(copia);
+    expect(pegado.id).toBe('Proc_A');
+    b.commandStack.undo();
+    b.commandStack.redo();
+    expect(ids.assigned('Proc_A')).toBe(pegado);
   });
 
   it('turning a process diagram into a collaboration (first pool) takes the definitions along, in one ⌘Z', async () => {
