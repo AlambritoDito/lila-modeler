@@ -94,14 +94,20 @@ function linesByHeading(blocks: ReturnType<typeof buildProcessDocument>['blocks'
 
 test('every filled-in attribute is a labelled line under its element; defaults count, orphans are kept', async () => {
   const xml = await annotated();
-  const { ir, subprocesses, lanes, pool, types } = await parseBpmn(xml);
+  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml);
   expect(types?.Call_Buro).toBe('bpmn:CallActivity');
   expect(lanes).toEqual({ Lane_Ventas: 'Ventas', Lane_Riesgo: 'Riesgo' });
   expect(pool).toBe('Pool_Banco');
-  const doc = buildProcessDocument({ ir, annotations: await readAnnotations(xml), subprocesses, lanes, pool, types, title: 'Crédito', date: '2026-09-28', locale: 'es' });
+  expect(poolName).toBe('Banco');
+  const doc = buildProcessDocument({
+    ir, annotations: await readAnnotations(xml), subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,
+    title: 'Crédito', date: '2026-09-28', locale: 'es',
+  });
   const lines = linesByHeading(doc.blocks);
 
-  expect(lines['Descripción del proceso']).toEqual(['Dueño: Gerencia de crédito', 'Área: Banca']);
+  // The pool's lines sit under the pool's own heading, apart from the process's (#516).
+  expect(lines['Descripción del proceso']).toEqual(['Dueño: Gerencia de crédito']);
+  expect(lines['Banco']).toEqual(['Área: Banca']);
   expect(lines['Riesgo']).toEqual(['Área: Riesgos']);
   expect(lines['Ventas']).toBeUndefined();
   expect(lines['Revisar']).toEqual(expect.arrayContaining(['SLA (h): 24', 'Nivel de riesgo: Alto & <crítico>', 'Attr_borrado: huérfano']));
@@ -131,4 +137,49 @@ test('a model without attributes gives the same document as before (no extra lin
   const annotations = await readAnnotations(XML);
   const base = { ir, annotations, subprocesses, title: 't', date: 'd' } as const;
   expect(buildProcessDocument({ ...base, lanes, pool })).toEqual(buildProcessDocument(base));
+});
+
+test('a parent lane keeps its section and attributes, and its child lanes hang from it (#516)', async () => {
+  const nested = XML.replace(
+    /<bpmn:laneSet id="LaneSet_1">[\s\S]*?<\/bpmn:laneSet>/,
+    `<bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Comercial" name="Comercial">
+        <bpmn:flowNodeRef>Start_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Revisar</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Call_Buro</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Ok</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sub_Firma</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_1</bpmn:flowNodeRef>
+        <bpmn:childLaneSet id="LaneSet_2">
+          <bpmn:lane id="Lane_Ventas" name="Ventas">
+            <bpmn:flowNodeRef>Start_1</bpmn:flowNodeRef>
+            <bpmn:flowNodeRef>Task_Revisar</bpmn:flowNodeRef>
+            <bpmn:flowNodeRef>Call_Buro</bpmn:flowNodeRef>
+          </bpmn:lane>
+          <bpmn:lane id="Lane_Riesgo" name="Riesgo">
+            <bpmn:flowNodeRef>Gateway_Ok</bpmn:flowNodeRef>
+            <bpmn:flowNodeRef>Sub_Firma</bpmn:flowNodeRef>
+            <bpmn:flowNodeRef>End_1</bpmn:flowNodeRef>
+          </bpmn:lane>
+        </bpmn:childLaneSet>
+      </bpmn:lane>
+    </bpmn:laneSet>`,
+  );
+  let xml = await annotateElement(nested, 'Proc_Credito', {
+    attributeDefinitions: [{ id: 'Attr_area', name: 'Área', type: 'text', appliesTo: 'lane' }],
+  });
+  xml = await annotateElement(xml, 'Lane_Comercial', { attributes: [{ ref: 'Attr_area', value: 'Comercial y riesgo' }] });
+  xml = await annotateElement(xml, 'Lane_Riesgo', { attributes: [{ ref: 'Attr_area', value: 'Riesgos' }] });
+  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml);
+  expect(laneParents).toEqual({ Lane_Ventas: 'Lane_Comercial', Lane_Riesgo: 'Lane_Comercial' });
+  const doc = buildProcessDocument({
+    ir, annotations: await readAnnotations(xml), subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,
+    title: 'Crédito', date: '2026-09-28', locale: 'es',
+  });
+  const lines = linesByHeading(doc.blocks);
+  expect(lines['Comercial']).toEqual(['Área: Comercial y riesgo']);
+  expect(lines['Comercial / Riesgo']).toEqual(['Área: Riesgos']);
+  const h1 = doc.blocks.filter((b) => b.kind === 'heading' && b.level === 1).map((b) => (b as { text: string }).text);
+  expect(h1).toEqual(['Descripción del proceso', 'Comercial', 'Comercial / Ventas', 'Comercial / Riesgo']);
+  expect(lines['Revisar']).toContain('Carril: Comercial / Ventas');
 });

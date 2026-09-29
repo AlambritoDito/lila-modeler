@@ -218,4 +218,38 @@ describe('process document (#454)', () => {
       .filter((b) => b.kind === 'heading').map((b) => (b as { text: string }).text);
     expect(headings).toEqual(['Process description', 'Front', 'start', 'orphan', 'Back', 'b', 'timer', 'No lane', 'z_end']);
   });
+
+  test('two lanes with the same name are two sections, each with its own elements (#516)', async () => {
+    const twins = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:laneSet id="LS">
+      <bpmn:lane id="Lane_A" name="Ventas"><bpmn:flowNodeRef>Start</bpmn:flowNodeRef><bpmn:flowNodeRef>TaskA</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="Lane_Mid" name="Riesgo"><bpmn:flowNodeRef>TaskMid</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="Lane_B" name="Ventas"><bpmn:flowNodeRef>TaskB</bpmn:flowNodeRef><bpmn:flowNodeRef>End</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start" name="Start" />
+    <bpmn:task id="TaskA" name="Task A" />
+    <bpmn:task id="TaskMid" name="Task mid" />
+    <bpmn:task id="TaskB" name="Task B" />
+    <bpmn:endEvent id="End" name="End" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="TaskA" />
+    <bpmn:sequenceFlow id="F2" sourceRef="TaskA" targetRef="TaskMid" />
+    <bpmn:sequenceFlow id="F3" sourceRef="TaskMid" targetRef="TaskB" />
+    <bpmn:sequenceFlow id="F4" sourceRef="TaskB" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>`;
+    const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(twins);
+    // `Node.lane` stays the label: the simulation, the CLI and the MCP server read it.
+    expect(ir.nodes.TaskA?.lane).toBe('Ventas');
+    expect(nodeLanes).toEqual({ Start: 'Lane_A', TaskA: 'Lane_A', TaskMid: 'Lane_Mid', TaskB: 'Lane_B', End: 'Lane_B' });
+    const doc = buildProcessDocument({
+      ir, annotations: await readAnnotations(twins), subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: 't', date: 'd',
+    });
+    const headings = doc.blocks.filter((b) => b.kind === 'heading').map((b) => (b as { text: string }).text);
+    expect(headings).toEqual(['Process description', 'Ventas (Lane_A)', 'Start', 'Task A', 'Riesgo', 'Task mid', 'Ventas (Lane_B)', 'Task B', 'End']);
+    const paragraphs = doc.blocks.filter((b) => b.kind === 'paragraph') as { label?: string; text: string }[];
+    expect(paragraphs.filter((p) => p.label === 'Lane').map((p) => p.text))
+      .toEqual(['Ventas (Lane_A)', 'Ventas (Lane_A)', 'Riesgo', 'Ventas (Lane_B)', 'Ventas (Lane_B)']);
+  });
 });

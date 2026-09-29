@@ -9,6 +9,7 @@
  * puente guarda diez y con la tarjeta de novedades no caben en 900 px de alto.
  */
 import type { Recent } from '../../desktop/src/bridge.js';
+import { atajoPorId, etiqueta, MAC, type AtajoId } from './atajos';
 import { EJEMPLOS, type EjemploId } from './ejemplos';
 import { useLocale, useStrings } from './i18n';
 import { version } from '../package.json';
@@ -16,6 +17,9 @@ import { version } from '../package.json';
 export const REPO_URL = 'https://github.com/AlambritoDito/lila-modeler';
 
 export type AccionBienvenida = 'openFile' | 'open' | 'new' | { readonly recent: string } | { readonly ejemplo: EjemploId };
+
+/** «⌘O · hint» on Mac, «Ctrl+O · hint» elsewhere: the key comes from the one shortcut map (#413). */
+export const pistaConAtajo = (id: AtajoId, pista: string, mac: boolean): string => `${etiqueta(atajoPorId(id), mac)} · ${pista}`;
 
 const UNIDADES: readonly (readonly [number, Intl.RelativeTimeFormatUnit])[] = [
   [60, 'second'], [3600, 'minute'], [86_400, 'hour'], [7 * 86_400, 'day'], [30 * 86_400, 'week'], [365 * 86_400, 'month'],
@@ -44,8 +48,8 @@ export function Bienvenida({ recientes, temaNombre, densidadTexto, onAccion, onA
   const locale = useLocale();
   const acciones = [
     { kind: 'openFile', titulo: S.abrirLila, pista: S.abrirLilaPista, clase: 'primaria', icono: <path d="M3 7h6l2 2h10v10H3z" /> },
-    { kind: 'open', titulo: S.abrirCarpeta, pista: S.abrirCarpetaPista, clase: '', icono: <path d="M3 7h6l2 2h10v10H3z" /> },
-    { kind: 'new', titulo: S.nuevo, pista: S.nuevoPista, clase: '', icono: <path d="M12 5v14M5 12h14" /> },
+    { kind: 'open', titulo: S.abrirCarpeta, pista: pistaConAtajo('abrir', S.abrirCarpetaPista, MAC), clase: '', icono: <path d="M3 7h6l2 2h10v10H3z" /> },
+    { kind: 'new', titulo: S.nuevo, pista: pistaConAtajo('nuevo', S.nuevoPista, MAC), clase: '', icono: <path d="M12 5v14M5 12h14" /> },
   ] as const;
   return (
     <section className="bienvenida" aria-label={S.titulo}>

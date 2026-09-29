@@ -3,6 +3,52 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.16] - 2026-09-28
+
+Lote I: a public beta other people can install. This release attaches the macOS installer and, for
+the first time, the Windows installer, says plainly which platforms are tested, adds a guide for the
+first Windows tester, and fixes the bugs the Lote H reviews left open.
+
+### Added
+
+- **Windows installer on the release (#525, #529)**: the draft release a `v*` tag creates now
+  carries `Lila-Modeler-<version>-win-x64.exe` next to the macOS DMG, and `SHA256SUMS` covers both.
+  The Windows installer is unsigned and has not yet been run on a real Windows machine; SmartScreen
+  warns before it runs. A manual run of the desktop workflow on a branch rehearses the collection
+  step without touching any release.
+- **Windows tester guide (#524, #530)**: `docs/WINDOWS-TESTER-GUIDE.md` (and the Spanish
+  `docs/es/GUIA-PROBADOR-WINDOWS.md`) walks a first tester who is not a developer through
+  installing, opening an example, simulating, exporting, importing a scenario from Excel, saving a
+  project with two processes and reporting what happened.
+
+### Changed
+
+- **Platform status in the docs (#523, #530)**: README, landing page, the macOS guide and the
+  Bizagi parity row now say where Lila stands: macOS tested (ad-hoc signed, Gatekeeper asks once);
+  Windows built by CI but untested and unsigned; Linux built by CI and not attached; the web app
+  tested in Chrome with Safari pending (#379). The docs no longer say the engine is missing from
+  npm.
+- **Validation messages in one language (#519, #532)**: Spanish engine messages no longer mix in
+  English field names, and scenario messages carry the JSON location at the end in parentheses
+  instead of opening with it. Error and warning codes are unchanged.
+- **Process document lanes (#516, #528)**: lanes are grouped by id, so two lanes with the same name
+  get two sections; child lanes nest under their parent, which keeps its own attributes; and the
+  pool's attributes get their own heading instead of mixing with the process's.
+
+### Fixed
+
+- **Process document from the wrong process (#522, #533)**: exporting the Word or HTML document
+  takes one snapshot of the active process and holds the project lock until it finishes, so a tab
+  switch or a second export can no longer mix two processes in one document.
+- **Pasted pool sharing the original process (#515, #533)**: after deleting a pool and undoing, the
+  first paste of that pool no longer reuses the original process id.
+- **Project folders that are not this project's (#517, #531)**: Save As onto a folder whose
+  `processes/` already holds another project's files is refused, a process folder created by hand
+  after opening is never overwritten, and the refusal (E-CARPETA-OCUPADA) is translated and names
+  what is in the way.
+- **Shortcut hints on Windows and Linux (#530)**: the welcome screen shows Ctrl+O and Ctrl+N
+  outside macOS instead of ⌘O and ⌘N.
+
 ## [1.0.0-beta.15] - 2026-09-28
 
 Lote H: several processes in one project, attributes you define once per element type, charts next

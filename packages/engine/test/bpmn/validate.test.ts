@@ -183,7 +183,7 @@ test('W-MSGFLOW agrega el conteo y W-COND cita cada flujo condicionado (LILA-163
     {
       code: 'W-COND',
       id: 'Flow_Condition',
-      message: 'Flow_Condition: conditionExpression se ignora; el ramaje es probabilístico.',
+      message: 'Flow_Condition: la condición del flujo (`conditionExpression`) se ignora; el ramaje es probabilístico.',
     },
   ]);
 });

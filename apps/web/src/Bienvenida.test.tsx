@@ -9,9 +9,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Bienvenida } from './Bienvenida';
+import { Bienvenida, pistaConAtajo } from './Bienvenida';
 import { EJEMPLOS } from './ejemplos';
 import { en as T } from './strings.en';
+import { es as TES } from './strings.es';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -48,4 +49,25 @@ it('pulsar una fila de la galería emite onAccion({ ejemplo }) con el id del cat
   const filas = [...container.querySelectorAll<HTMLLIElement>('.bienvenida-ejemplos li')];
   await act(async () => { filas[2]!.querySelector('button')!.click(); });
   expect(onAccion).toHaveBeenCalledExactlyOnceWith({ ejemplo: EJEMPLOS[2]!.id });
+});
+
+it('la pista de abrir y nuevo muestra Ctrl fuera de macOS y ⌘ en macOS, con el atajo del mapa único', () => {
+  expect(pistaConAtajo('abrir', T.bienvenida.abrirCarpetaPista, false)).toBe('Ctrl+O · a folder with model.bpmn');
+  expect(pistaConAtajo('nuevo', T.bienvenida.nuevoPista, false)).toBe('Ctrl+N · creates an empty .bpmn');
+  expect(pistaConAtajo('abrir', T.bienvenida.abrirCarpetaPista, true)).toBe('⌘O · a folder with model.bpmn');
+  expect(pistaConAtajo('nuevo', T.bienvenida.nuevoPista, true)).toBe('⌘N · creates an empty .bpmn');
+});
+
+it('los textos de la bienvenida ya no llevan el atajo escrito: lo compone el componente', () => {
+  for (const pista of [T, TES].flatMap((c) => [c.bienvenida.abrirCarpetaPista, c.bienvenida.nuevoPista])) expect(pista).not.toMatch(/[⌘⌃]|Ctrl/);
+});
+
+it('en una plataforma que no es Mac (jsdom) las acciones dicen Ctrl+O y Ctrl+N, no ⌘', async () => {
+  await act(async () => root.render(
+    <Bienvenida recientes={[]} temaNombre="Lila" densidadTexto="cómoda" onAccion={vi.fn()} onAjustes={() => {}} />,
+  ));
+  const pistas = [...container.querySelectorAll('.bienvenida-accion small')].map((s) => s.textContent);
+  expect(pistas).toContain('Ctrl+O · a folder with model.bpmn');
+  expect(pistas).toContain('Ctrl+N · creates an empty .bpmn');
+  expect(container.querySelector('.bienvenida-izq')!.textContent).not.toContain('⌘');
 });

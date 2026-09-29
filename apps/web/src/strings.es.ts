@@ -278,9 +278,9 @@ export const es: Strings = {
     abrirLila: 'Abrir proyecto (.lila)…',
     abrirLilaPista: 'un archivo de proyecto con sus escenarios y corridas guardadas',
     abrirCarpeta: 'Abrir carpeta de proyecto',
-    abrirCarpetaPista: '⌘O · una carpeta con model.bpmn',
+    abrirCarpetaPista: 'una carpeta con model.bpmn',
     nuevo: 'Nuevo proceso',
-    nuevoPista: '⌘N · crea un .bpmn vacío',
+    nuevoPista: 'crea un .bpmn vacío',
     ejemplosTitulo: 'Ejemplos',
     ejemplos: {
       pedido: { titulo: 'Pedido de restaurante', pista: 'Atención en mostrador con escenarios AS-IS / TO-BE' },
@@ -1414,6 +1414,10 @@ export const es: Strings = {
     /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
     errorMismaCarpeta:
       'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
+    /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
+    errorCarpetaOcupada: (ruta: string): string =>
+      `E-CARPETA-OCUPADA: ${ruta} tiene archivos de otro proyecto o proceso, y guardar los ` +
+      `sobrescribiría. Elige otro destino o mueve ${ruta} a otro sitio.`,
   },
 
   simulacion: {

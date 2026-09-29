@@ -543,7 +543,7 @@ test.each(['timer', 'message'] as const)(
       expect(warnings).toEqual(['Flow_Espera_Respuesta', 'Flow_Espera_Plazo'].map((flowId) =>
         locale === 'en'
           ? `W-PROB-IGNORADA: ${flowId}: it leaves an event-based gateway (Gateway_Espera); probability is ignored because the event race determines the route.`
-          : `W-PROB-IGNORADA: ${flowId}: sale de un gateway basado en eventos (Gateway_Espera); probability se ignora porque la carrera entre eventos determina la ruta.`,
+          : `W-PROB-IGNORADA: ${flowId}: sale de una compuerta basada en eventos (Gateway_Espera); la probabilidad se ignora porque la carrera entre eventos determina la ruta.`,
       ));
       expect(result.flows.Flow_Espera_Respuesta?.count).toBe(3);
       expect(result.flows.Flow_Espera_Plazo?.count).toBe(0);
@@ -576,7 +576,7 @@ test.each(['parallelGateway', 'exclusiveGateway', 'inclusiveGateway'] as const)(
       expect(warnings).toEqual(gatewayType === 'parallelGateway'
         ? ['Flow_Espera_Respuesta', 'Flow_Espera_Plazo'].map((flowId) => locale === 'en'
           ? `W-PROB-IGNORADA: ${flowId}: it leaves a parallel gateway (Gateway_Espera); probability is ignored.`
-          : `W-PROB-IGNORADA: ${flowId}: sale de un gateway paralelo (Gateway_Espera); probability se ignora.`)
+          : `W-PROB-IGNORADA: ${flowId}: sale de una compuerta paralela (Gateway_Espera); la probabilidad se ignora.`)
         : []);
       expect(result.flows.Flow_Espera_Respuesta?.count).toBe(gatewayType === 'parallelGateway' ? 1 : 0);
       expect(result.flows.Flow_Espera_Plazo?.count).toBe(1);

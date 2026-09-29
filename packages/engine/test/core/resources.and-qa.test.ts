@@ -502,7 +502,7 @@ describe('QA LILA-034 · integración DES', () => {
       ],
       [
         withResources({ a: { capacity: 1 }, b: { capacity: 3 } }, [{ ref: 'b', quantity: 2 }, { ref: 'a', quantity: 5 }]),
-        'E-REC-CANTIDAD: Task: quantity 5 exceeds capacity 1 of a.',
+        'E-REC-CANTIDAD: Task: the quantity 5 exceeds the capacity 1 of a.',
       ],
     ];
     for (const [scenario, message] of cases) {

@@ -164,7 +164,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       code: 'E-REF-DESCONOCIDA',
       path: 'elements.Flow_CauseScreening.conditions[0].flowTaken',
       severity: 'error',
-      message: 'elements.Flow_CauseScreening.conditions[0].flowTaken: the sequence flow Flow_Nope does not exist in the model.',
+      message: 'the sequence flow Flow_Nope does not exist in the model (elements.Flow_CauseScreening.conditions[0].flowTaken).',
     });
   });
 
@@ -181,7 +181,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       path: 'elements.Flow_CauseScreening.conditions[0].flowTaken',
       severity: 'warning',
       message:
-        'elements.Flow_CauseScreening.conditions[0].flowTaken: Flow_CauseEligibility cannot be reached before Gateway_Cause on any sequential path; the condition only applies if a parallel branch traverses it.',
+        'Flow_CauseEligibility cannot be reached before Gateway_Cause on any sequential path; the condition only applies if a parallel branch traverses it (elements.Flow_CauseScreening.conditions[0].flowTaken).',
     });
     // It is a warning: the scenario still runs.
     expect(scenarioErrors(problems)).toEqual([]);
@@ -197,7 +197,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       code: 'E-PROB-RANGO',
       path: 'elements.Flow_CauseScreening.conditions[0].probability',
       severity: 'error',
-      message: 'elements.Flow_CauseScreening.conditions[0].probability: 2 is outside [0, 1].',
+      message: '2 is outside [0, 1] (elements.Flow_CauseScreening.conditions[0].probability).',
     });
   });
 
@@ -211,7 +211,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       code: 'E-RESERVADO',
       path: 'elements.Task_Deny.conditions',
       severity: 'error',
-      message: 'elements.Task_Deny.conditions: reserved field, not supported by the simulator in v1.',
+      message: 'reserved field, not supported by the simulator in v1 (elements.Task_Deny.conditions).',
     });
   });
 
@@ -228,7 +228,7 @@ describe('the lint of `conditions` (ADR-028)', () => {
       path: 'elements.Flow_Deny_Inform.conditions',
       severity: 'error',
       message:
-        'elements.Flow_Deny_Inform.conditions: only accepted on a sequence flow leaving a diverging exclusive gateway.',
+        'only accepted on a sequence flow leaving a diverging exclusive gateway (elements.Flow_Deny_Inform.conditions).',
     });
   });
 });

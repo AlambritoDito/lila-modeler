@@ -60,11 +60,11 @@ describe('dated calendars in the scenario (#82)', () => {
   });
 
   test.each([
-    ['no selector', { from: '09:00', to: '12:00' }, /exactly one of days, monthDays, monthWeekdays or dates/],
+    ['no selector', { from: '09:00', to: '12:00' }, /exactly one of: days of the week, days of the month, weekdays of the month or annual dates/],
     ['two selectors', { days: ['MON'], monthDays: [1], from: '09:00', to: '12:00' }, /exactly one of/],
-    ['day 0', { monthDays: [0], from: '09:00', to: '12:00' }, /monthDays: 0 is not a day/],
+    ['day 0', { monthDays: [0], from: '09:00', to: '12:00' }, /days of the month: 0 is not a day/],
     ['day 32', { monthDays: [32], from: '09:00', to: '12:00' }, /monthDays\.0: must be ≤ 31/],
-    ['nth 0', { monthWeekdays: [{ nth: 0, day: 'MON' }], from: '09:00', to: '12:00' }, /nth: 0 is not a week/],
+    ['nth 0', { monthWeekdays: [{ nth: 0, day: 'MON' }], from: '09:00', to: '12:00' }, /week of the month: 0 is not a week/],
     ['nth 6', { monthWeekdays: [{ nth: 6, day: 'MON' }], from: '09:00', to: '12:00' }, /nth: must be ≤ 5/],
     ['February 30', { dates: ['02-30'], from: '09:00', to: '12:00' }, /an annual date is "MM-DD"/],
     ['a full date in dates', { dates: ['2026-12-24'], from: '09:00', to: '12:00' }, /an annual date/],
@@ -84,7 +84,7 @@ describe('dated calendars in the scenario (#82)', () => {
 
   test('the Spanish catalog has the same messages', () => {
     const parsed = parseScenario(withCalendar({ intervals: [{ from: '09:00', to: '12:00' }] }), { locale: 'es' });
-    expect(parsed.error!.issues.map((issue) => issue.message).join('\n')).toMatch(/exactamente uno de days/);
+    expect(parsed.error!.issues.map((issue) => issue.message).join('\n')).toMatch(/exactamente uno de estos: días de la semana/);
   });
 
   test('the XLSX parameters sheet describes every selector and the holidays', () => {

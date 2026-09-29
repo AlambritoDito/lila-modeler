@@ -199,21 +199,21 @@ describe('(13) catálogo de errores de § 17', () => {
   test('`E-CAPACIDAD-Y-CALENDARIO` sale carácter a carácter como está documentado', () => {
     const mensaje = mensajeDe(sim([{ calendar: 'dia', capacity: 2 }], { calendar: 'dia' }));
     expect(mensaje).toBe(
-      'E-CAPACIDAD-Y-CALENDARIO: enfermera: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.',
+      'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (enfermera).',
     );
     expect(semantics).toContain(
-      'E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.',
+      'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (<pool>).',
     );
   });
 
   test('las dos formas de `E-REC-CAPACIDAD` salen como están documentadas', () => {
-    expect(mensajeDe(sim([]))).toBe('E-REC-CAPACIDAD: enfermera: capacity debe declarar al menos un tramo.');
-    expect(semantics).toContain('E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.');
+    expect(mensajeDe(sim([]))).toBe('E-REC-CAPACIDAD: enfermera: la capacidad debe declarar al menos un tramo.');
+    expect(semantics).toContain('E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.');
 
     expect(mensajeDe(sim([{ calendar: 'dia', capacity: 0 }]))).toBe(
-      'E-REC-CAPACIDAD: enfermera: capacity debe ser un entero mayor o igual que 1.',
+      'E-REC-CAPACIDAD: enfermera: la capacidad debe ser un entero mayor o igual que 1.',
     );
-    expect(semantics).toContain('E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.');
+    expect(semantics).toContain('E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.');
   });
 
   /**
@@ -232,8 +232,8 @@ describe('(13) catálogo de errores de § 17', () => {
     ].sort();
 
     expect(textos).toEqual([
-      'E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.',
-      'E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.',
+      'E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.',
+      'E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.',
     ]);
     for (const texto of textos) expect(semantics).toContain(texto);
   });

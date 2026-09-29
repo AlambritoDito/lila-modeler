@@ -153,8 +153,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `bpmn:subProcess` with `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
 | `bpmn:choreographyTask`, `bpmn:choreography`, `bpmn:globalChoreographyTask` | `choreographyDiagram` | `choreography diagram` | `diagrama de coreografía` |
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
-| `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | `atributo startQuantity distinto de 1` |
-| `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | `atributo completionQuantity distinto de 1` |
+| `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
+| `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
 | `bpmn:endEvent` with a trigger other than *none* or `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
 | `bpmn:startEvent` with a trigger other than *none* or `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
@@ -259,11 +259,11 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
     (R-XOR-1/R-XOR-2) splits the same way without it. Exact text, in `en` and in `es`:
 
     ```
-    {id}: the declared default flow does not exist; the isDefault mark is ignored and the split follows the rules of a XOR without a default: {aviso}.
+    {id}: the declared default flow does not exist; the default-flow mark (`isDefault`) is ignored and the split follows the rules of a XOR without a default flow: {aviso}.
     ```
 
     ```
-    {id}: el flujo por defecto declarado no existe; se ignora la marca isDefault y el reparto sigue las reglas del XOR sin default: {aviso}.
+    {id}: el flujo por defecto declarado no existe; se ignora la marca de flujo por defecto (`isDefault`) y el reparto sigue las reglas de un XOR sin flujo por defecto: {aviso}.
     ```
 
   `{aviso}` is bpmn-moddle's literal message, flattened to a single line. `{id}` is the id of the
@@ -945,8 +945,8 @@ R-CAL-12/13), and `holidays` closes whole days (R-CAL-14).
   holiday takes the dated path, whose results can differ from the weekly ones in the last ULP
   (about 10⁻¹⁵ relative) even when the holiday falls after the end of the run, because the
   engine does not know the run's end when it compiles a calendar. The error text for a calendar
-  that only opens on its holidays is `calendars.<name>: every opening of the calendar falls on
-  one of its holidays.` Everything dated is civil-day arithmetic, with no `Date` and no
+  that only opens on its holidays is `every opening of the calendar falls on
+  one of its holidays (calendars.<name>).` Everything dated is civil-day arithmetic, with no `Date` and no
   `Intl` (R-DET-5): the result does not depend on the timezone of the process that runs it.
   *(test: #82)*
 - **R-CAL-15 — No timezone of its own, no DST (limit).** Every date and time of a calendar is read
@@ -1030,16 +1030,16 @@ the engine **rejects** them with a clear error while they are not implemented (A
 - **R-RES-2 — Exact error text.**
 
   ```
-  {path}: reserved field, not supported by the simulator in v1.
+  reserved field, not supported by the simulator in v1 ({path}).
   ```
 
   `{path}` is the JSON path of the field from the root of the **resolved** scenario, with the id
   of the element or the pool. Literal examples:
 
   ```
-  elements.Task_TomarPedido.priority: reserved field, not supported by the simulator in v1.
-  resources.cajero.preempt: reserved field, not supported by the simulator in v1.
-  calendars.oficina.timezone: reserved field, not supported by the simulator in v1.
+  reserved field, not supported by the simulator in v1 (elements.Task_TomarPedido.priority).
+  reserved field, not supported by the simulator in v1 (resources.cajero.preempt).
+  reserved field, not supported by the simulator in v1 (calendars.oficina.timezone).
   ```
 
   Code `E-RESERVADO`. *(test: LILA-013)*
@@ -1147,17 +1147,17 @@ Exact texts of R-CAL-11's two errors (`packages/engine/src/scenario.ts` for the 
 `en` and in `es`:
 
 ```
-resources.<pool>.capacity: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.
+capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (<pool>).
 E-REC-CAPACIDAD: <pool>: capacity must declare at least one slice.
 E-REC-CAPACIDAD: <pool>: capacity must be an integer greater than or equal to 1.
 ```
 
 ```
-resources.<pool>.capacity: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
-E-CAPACIDAD-Y-CALENDARIO: <pool>: capacity por intervalos y calendar son excluyentes; el calendario va en cada tramo.
-E-REC-CAPACIDAD: <pool>: capacity debe declarar al menos un tramo.
-E-REC-CAPACIDAD: <pool>: capacity debe ser un entero mayor o igual que 1.
+la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (resources.<pool>.capacity).
+E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (<pool>).
+E-REC-CAPACIDAD: <pool>: la capacidad debe declarar al menos un tramo.
+E-REC-CAPACIDAD: <pool>: la capacidad debe ser un entero mayor o igual que 1.
 ```
 
 The first line is the `message` of the problem returned by `validateScenario` (the `code` travels
@@ -1299,7 +1299,7 @@ W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: no case ended here in <m> of <R> rep
 
 ```
 W-REPLICACIONES-SIN-OBSERVACIONES: <nodeId>: ninguna instancia se completó en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
-W-REPLICACIONES-SIN-OBSERVACIONES: process: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
+W-REPLICACIONES-SIN-OBSERVACIONES: proceso: ningún caso se completó en <m> de <R> replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras <n>.
 W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
 ```
 

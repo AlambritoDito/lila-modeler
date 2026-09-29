@@ -20,23 +20,23 @@ export const coreEn: CoreCatalog = {
       `${id}: the flow enters node ${to}, which does not exist in the process.`,
 
     'E-CAPACIDAD-Y-CALENDARIO': (subject) =>
-      `${subject}: capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice.`,
+      `capacity by intervals and calendar are mutually exclusive; the calendar belongs in each slice (${subject}).`,
     'E-REC-CAPACIDAD/sin-tramos': (poolId) => `${poolId}: capacity must declare at least one slice.`,
     'E-REC-CAPACIDAD/entero': (poolId) => `${poolId}: capacity must be an integer greater than or equal to 1.`,
     'E-REC-DESCONOCIDO/en-elemento': (subject, poolId) => `${subject}: the pool ${poolId} does not exist.`,
     'E-REC-DESCONOCIDO/pool': (poolId) => `the pool ${poolId} does not exist.`,
     'E-REC-DUPLICADO/pool': (subject, poolId) => `${subject}: the pool ${poolId} appears more than once.`,
     'E-REC-CANTIDAD/entero': (subject, poolId) =>
-      `${subject}: quantity of ${poolId} must be an integer greater than or equal to 1.`,
+      `${subject}: the quantity of ${poolId} must be an integer greater than or equal to 1.`,
     'E-REC-CANTIDAD/excede': (subject, quantity, capacity, poolId) =>
-      `${subject}: quantity ${quantity} exceeds capacity ${capacity} of ${poolId}.`,
+      `${subject}: the quantity ${quantity} exceeds the capacity ${capacity} of ${poolId}.`,
 
     'E-CAL-VACIO/sin-intervalos': (name) => `${name}: the calendar has no open intervals.`,
     'E-CAL-VACIO/anonimo': () => 'the calendar has no open intervals.',
     'E-CAL-VACIO/interseccion': (elementId) =>
       `${elementId}: the intersection of the task's calendars is empty.`,
     'E-CAL-VACIO/pool-sin-tramos': () => 'the pool has no open capacity slice.',
-    'E-CAL-VACIO/festivos': (name) => `${name}: every opening of the calendar falls on one of its holidays.`,
+    'E-CAL-VACIO/festivos': (name) => `every opening of the calendar falls on one of its holidays (${name}).`,
     'E-CAL-DESCONOCIDO': (subject, calendar) => `${subject}: the calendar ${calendar} does not exist.`,
 
     'E-REC-LIBERACION': (requestId) => `${requestId} has no active allocation.`,
