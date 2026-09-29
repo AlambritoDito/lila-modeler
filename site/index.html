@@ -61,8 +61,8 @@
         <div class="wrap">
           <div class="logo-plate"><img src="branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" /></div>
           <br />
-          <a class="badge" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1">
-            <b>v1.0.0-beta.1</b><span data-i18n="badge">Desktop beta for macOS · What's new →</span>
+          <a class="badge" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16">
+            <b>v1.0.0-beta.16</b><span data-i18n="badge">Desktop beta for macOS and Windows · What's new →</span>
           </a>
           <h1 data-i18n="h1">Watch your process <span class="hl">run</span> before it runs.</h1>
           <p class="lede" data-i18n="lede">
@@ -200,7 +200,8 @@
             <p class="sec-p" data-i18n="qsP">Clone, npm ci &amp;&amp; npm run build, then validate, run and compare the restaurant example. Or hand the same engine to an agent over MCP.</p>
             <div class="qs-links">
               <span>web</span><a href="app/" data-i18n="qsWeb">Open the demo in your browser</a>
-              <span>mac</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1" data-i18n="qsMac">Download the desktop beta (Apple Silicon, unsigned)</a>
+              <span>mac</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsMac">Download the macOS beta (Apple Silicon, not notarized)</a>
+              <span>win</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsWin">Download the Windows installer (x64 — unsigned and not tested on a real PC yet; SmartScreen will warn)</a>
               <span>docs</span><a href="docs/" data-i18n="qsDocs">Read the documentation</a>
             </div>
           </div>
@@ -246,7 +247,7 @@
           <details><summary data-i18n="q2">Where does my work live?</summary><p data-i18n="a2">In the browser's local storage while you work — that is not a backup. File ▸ Save downloads the whole project as a portable .lila file.</p></details>
           <details><summary data-i18n="q3">Do I need Bizagi?</summary><p data-i18n="a3">No. Lila follows the same four-level workflow and result table layout so Bizagi users feel at home, but it is fully independent.</p></details>
           <details><summary data-i18n="q4">Can two people edit the same project?</summary><p data-i18n="a4">Not simultaneously. Sharing means passing a .lila file around; there is no backend and no real-time sync.</p></details>
-          <details><summary data-i18n="q5">Which platforms are supported?</summary><p data-i18n="a5">Any modern desktop browser for the web app. The desktop beta ships for macOS on Apple Silicon and is not signed or notarized — see the beta guide for the first launch, and do not disable Gatekeeper.</p></details>
+          <details><summary data-i18n="q5">Which platforms are supported?</summary><p data-i18n="a5">Any modern desktop browser for the web app (Chrome is the one tested; Safari is pending). The desktop beta ships for macOS on Apple Silicon — not notarized, so the first launch needs “Open Anyway”; see the <a href="docs/BETA-MAC-GUIDE.html">beta guide</a>, and do not disable Gatekeeper — and for Windows x64, whose installer is unsigned and has not been tested on a real Windows PC yet: SmartScreen will warn, and the <a href="docs/WINDOWS-TESTER-GUIDE.html">Windows tester guide</a> explains how to try it and report back. The Linux AppImage is built by CI but untested and not attached to the release.</p></details>
         </div>
       </section>
     </main>
@@ -263,6 +264,7 @@
           <a href="docs/SEMANTICS.html" data-i18n="ftSem">Engine semantics</a>
           <a href="docs/MCP.html" data-i18n="ftMcp">MCP server</a>
           <a href="docs/BETA-MAC-GUIDE.html" data-i18n="ftBeta">Desktop beta guide</a>
+          <a href="docs/WINDOWS-TESTER-GUIDE.html" data-i18n="ftWin">Windows tester guide</a>
         </div>
         <div>
           <span class="h" data-i18n="ftProj">Project</span>

@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1"><img src="https://img.shields.io/badge/Descargar-Beta_1_(macOS)-0969da" alt="Descargar Beta 1"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Descargar-Beta_16_(macOS_%2B_Windows)-0969da" alt="Descargar Beta 16"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -81,25 +81,38 @@ escritorio, o con doble clic en el Finder (ver la guía de la beta: la ruta open
 
 ### Beta de escritorio
 
-La Beta 1 adjunta un solo instalador al release: `Lila-Modeler-1.0.0-beta.1-mac-arm64.dmg` para
-macOS en Apple Silicon, más un archivo `SHA256SUMS` para verificarlo —
-[Beta 1 en GitHub Releases](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.1)
-(no `/releases/latest`: GitHub excluye los prereleases de ese enlace). **No está firmada ni
-notarizada**, así que el primer arranque se bloquea. Tras el primer intento bloqueado (doble clic
-en la app), ve a **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todos modos**
-junto al mensaje que nombra la app, luego confirma **Abrir**. En macOS más antiguo, Control-clic
-sobre la app ▸ **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar
-esto. La Beta 1 verificó en macOS 27.0 que la descarga en cuarentena se bloquea en el primer arranque y que Ajustes del Sistema ▸ Privacidad y seguridad ofrece Abrir de todos modos (la app lleva un sello ad hoc, así que macOS no la reporta como dañada).
-[`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
-verificación del checksum.
+Cada beta es un prerelease de GitHub. La [Beta 16](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
+(no `/releases/latest`: GitHub excluye los prereleases de ese enlace) adjunta dos instaladores y un
+archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
 
-CI también construye instaladores de Windows (`.exe`) y Linux (`.AppImage`), pero son artefactos
-de CI sin probar, no forman parte del release de la Beta 1. La app de escritorio se registra como
-editor de archivos `.bpmn` y `.lila`.
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg`. La plataforma en la que se
+  desarrolla y se prueba el proyecto. La app lleva un sello ad hoc pero **no está notarizada**, así
+  que el primer arranque se bloquea: tras el primer intento bloqueado (doble clic en la app), ve a
+  **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todos modos** junto al mensaje
+  que nombra la app, luego confirma **Abrir**. En macOS más antiguo, Control-clic sobre la app ▸
+  **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar esto.
+  [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
+  verificación del checksum.
+- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
+  **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
+  ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
+  «Windows protegió tu PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
+  SignPath Foundation rechazó firmar el instalador hasta que el proyecto tenga usuarios, así que no
+  hay un build firmado de Windows que prometer. ¿Quieres ser quien lo pruebe primero?
+  [`docs/es/GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) está escrita para quien no es
+  desarrollador y termina con una plantilla de reporte.
+- **Linux** — CI construye un AppImage, sin probar y no adjunto al release.
+- **Web** — funciona en el navegador; Chrome es el que se ha probado. La aceptación en Safari está
+  pendiente (#379).
+
+La app de escritorio se registra como editor de archivos `.bpmn` y `.lila` y, desde la beta.10, te
+avisa cuando hay una versión nueva (no se actualiza sola).
 
 ### CLI
 
-Requiere Node.js **22 o superior**. Todavía no se publica nada en npm: la CLI sale de un clon.
+Requiere Node.js **22 o superior**. El motor y la CLI están en npm como `@lila-modeler/engine` (con
+la etiqueta `beta`): `npx @lila-modeler/engine@beta validate model.bpmn`. Los ejemplos de abajo
+corren desde un clon, que además trae el benchmark de referencia:
 
 ```bash
 git clone https://github.com/AlambritoDito/lila-modeler.git
@@ -186,7 +199,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Exportación de resultados | Excel | CSV y XLSX |
 | Percentiles, longitud de cola, throughput, costo por caso, ranking de cuellos, espera fuera de horario | ✗ | ✓ |
 | Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
-| Plataformas | solo Windows | app web, macOS, Windows, Linux |
+| Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); instalador de Windows sin firmar y sin probar; AppImage de Linux sin probar |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
@@ -199,7 +212,6 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
   (interruptor o no), compuerta basada en eventos con ramas de tiempo o de mensaje, tareas (todas
   las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
-- **Todavía no está en npm**: no hay `npm install @lila-modeler/engine`; clona y compila como arriba.
 - **Los calendarios conservan el offset UTC de `run.start`**: hay recurrencia semanal, mensual y
   anual y festivos, pero no zona horaria por calendario ni horario de verano (`timezone` es un
   campo reservado).
@@ -211,7 +223,8 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 - `packages/mcp` — `@lila-modeler/mcp` (privado): el servidor MCP, capa fina sobre el motor.
 - `apps/web` — editor y visor en React 19 + Vite + bpmn-js.
 - `apps/desktop` — empaquetado Electron de `apps/web`; `.github/workflows/desktop.yml` construye
-  los tres instaladores con tags `v*` y deja un Release en borrador.
+  los tres instaladores con tags `v*` y adjunta el DMG de macOS y el `.exe` de Windows (más los
+  checksums) a un Release en borrador.
 - `examples/` — `pedido` (benchmark de referencia), `bizagi-levels` (los ejemplos publicados por
   Bizagi), `mm1`, `bizagi-exports` (exportaciones reales de Bizagi del BPMN MIWG).
 - `docs/` — contratos y guías; `tools/` — scripts de build y de comprobación; `site/` — la landing
@@ -238,6 +251,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
   usuarios de Bizagi.
 - [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — la beta de escritorio.
+- [`GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) — probar el instalador de Windows, sin firmar y sin probar, y reportar qué pasa.
 - [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — política de ejemplos, oráculos de test, despliegue de Pages (este
   último en inglés).
