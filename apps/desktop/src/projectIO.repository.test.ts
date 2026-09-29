@@ -241,6 +241,43 @@ describe('process folders that are not this project\'s (#517)', () => {
     expect(await files(dir)).toEqual(antes);
   });
 
+  it('Save As still accepts an empty process folder (QA of #531)', async () => {
+    await mkdir(join(dir, 'processes/vacia'), { recursive: true });
+    await writeProjectFolder(dir, repo(), { saveAs: true });
+    expect(processesOf((await readProjectFolder(dir)).document).map((p) => p.slug)).toEqual(['pedido', 'facturacion']);
+  });
+
+  it('Save As still accepts a process folder with only .DS_Store, for a repository and a v1 project (QA of #531)', async () => {
+    await mkdir(join(dir, 'processes/mac'), { recursive: true });
+    await writeFile(join(dir, 'processes/mac/.DS_Store'), 'x');
+    await writeProjectFolder(dir, v1, { saveAs: true });
+    expect(await readFile(join(dir, 'model.bpmn'), 'utf8')).toBe(v1.model.xml);
+    const otra = await mkdtemp(join(tmpdir(), 'lila-repo-'));
+    try {
+      await mkdir(join(otra, 'processes/mac'), { recursive: true });
+      await writeFile(join(otra, 'processes/mac/.DS_Store'), 'x');
+      await writeProjectFolder(otra, repo(), { saveAs: true });
+      expect(processesOf((await readProjectFolder(otra)).document)).toHaveLength(2);
+    } finally {
+      await rm(otra, { recursive: true, force: true });
+    }
+  });
+
+  it('a Save As that failed half-way can be retried into the same folder (QA of #531)', async () => {
+    let renames = 0;
+    const falla: WriteProjectFsImpl = {
+      rename: async (from, to) => {
+        renames += 1;
+        if (renames === 2) throw Object.assign(new Error('EIO'), { code: 'EIO' });
+        await rename(from, to);
+      },
+    };
+    await expect(writeProjectFolder(dir, repo(), { saveAs: true }, falla)).rejects.toThrow('EIO');
+    expect(await files(dir)).toEqual({});
+    await writeProjectFolder(dir, repo(), { saveAs: true });
+    expect(processesOf((await readProjectFolder(dir)).document)).toHaveLength(2);
+  });
+
   it('a process folder created by hand after opening is not overwritten by a new process taking its slug', async () => {
     await writeProjectFolder(dir, repo());
     const { document } = await readProjectFolder(dir);

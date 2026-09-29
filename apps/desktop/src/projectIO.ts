@@ -632,12 +632,16 @@ async function assertFolderNotOccupied(dir: string, documentId: string): Promise
   }
   // No manifest, but process folders of a repository (#517, item 1): the manifest may have been
   // lost or never copied, and a same-named `processes/<slug>/model.bpmn` or scenario would be
-  // overwritten without a word.
-  const slugs = await occupiedSlugs(dir);
+  // overwritten without a word. Only folders with Lila content count (QA of #531): an empty one,
+  // one with only `.DS_Store`, or the empty folders a failed «Save as» leaves behind do not.
+  const slugs: string[] = [];
+  for (const slug of await occupiedSlugs(dir)) {
+    if ((await foreignFiles(join(dir, PROCESSES_DIR, slug), { runs: [] })).length > 0) slugs.push(slug);
+  }
   if (slugs.length > 0) {
     throw new ProjectIOError(
       'E-CARPETA-OCUPADA',
-      `La carpeta ya contiene procesos de otro proyecto en "${PROCESSES_DIR}/" (${slugs.join(', ')}) sin manifiesto; "Guardar como" no puede escribir ahí.`,
+      `La carpeta ya contiene "${PROCESSES_DIR}/" con procesos de otro proyecto (${slugs.join(', ')}) sin manifiesto; "Guardar como" no puede escribir ahí.`,
     );
   }
   try {
@@ -1225,7 +1229,7 @@ async function writeRepositoryFolder(
  * (same-named or not: none of them was written for this process) and the `runs/*.result.json`
  * that `process` does not hold (a run with its id is compared byte for byte, `E-RUN-DUPLICADO`).
  */
-async function foreignFiles(processDir: string, process: ProcessDocument): Promise<string[]> {
+async function foreignFiles(processDir: string, process: Pick<ProcessDocument, 'runs'>): Promise<string[]> {
   const stale: string[] = [];
   if (await pathExists(join(processDir, MODEL_FILE))) stale.push(MODEL_FILE);
   const listar = async (folder: string, suffix: string): Promise<string[]> => {
