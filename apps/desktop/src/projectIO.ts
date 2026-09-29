@@ -609,8 +609,8 @@ export interface WriteProjectOptions {
  * Guardia de "Guardar como" (OP-14, revisión de A: "openProject no debe permitir guardar el
  * proyecto anterior en la carpeta nueva", issues #74/#70). Antes de escribir en una carpeta recién
  * elegida (no la que ya se venía usando), rechaza si esa carpeta ya contiene otro proyecto:
- * `lila-project.json` con un `id` distinto, o un `model.bpmn` sin manifiesto (contenido ajeno sin
- * forma de saber si es "el mismo proyecto"). Una carpeta vacía, o con el manifiesto del mismo
+ * `lila-project.json` con un `id` distinto, o un `model.bpmn` o carpetas en `processes/` sin
+ * manifiesto (contenido ajeno sin forma de saber si es "el mismo proyecto"). Una carpeta vacía, o con el manifiesto del mismo
  * `documentId`, es válida. Un manifiesto ilegible se trata como ausente (mismo criterio que
  * `readManifest`): no bloquea una carpeta que en realidad podría ser propia por un JSON roto.
  */
@@ -630,10 +630,24 @@ async function assertFolderNotOccupied(dir: string, documentId: string): Promise
     assertNotAnotherProject(manifestId, documentId, 'La carpeta');
     return;
   }
+  // No manifest, but process folders of a repository (#517, item 1): the manifest may have been
+  // lost or never copied, and a same-named `processes/<slug>/model.bpmn` or scenario would be
+  // overwritten without a word. Only folders with Lila content count (QA of #531): an empty one,
+  // one with only `.DS_Store`, or the empty folders a failed «Save as» leaves behind do not.
+  const slugs: string[] = [];
+  for (const slug of await occupiedSlugs(dir)) {
+    if ((await foreignFiles(join(dir, PROCESSES_DIR, slug), { runs: [] })).length > 0) slugs.push(slug);
+  }
+  if (slugs.length > 0) {
+    throw new ProjectIOError(
+      'E-CARPETA-OCUPADA',
+      `La carpeta ya contiene "${PROCESSES_DIR}/" con procesos de otro proyecto (${slugs.join(', ')}) sin manifiesto; "Guardar como" no puede escribir ahí.`,
+    );
+  }
   try {
     await stat(join(dir, MODEL_FILE));
   } catch (error) {
-    if (isNotFound(error)) return; // sin manifiesto ni modelo: carpeta vacía, válida.
+    if (isNotFound(error)) return; // sin manifiesto, modelo ni procesos: carpeta vacía, válida.
     throw error;
   }
   throw new ProjectIOError(
@@ -1152,15 +1166,17 @@ async function writeRepositoryFolder(
     }
   }
   // A new process that landed on the folder of a process deleted earlier (the writer never deletes
-  // folders) would inherit its scenarios and runs on the next read. The app avoids those slugs
-  // (`occupiedSlugs`, `processSlug`); this is the disk layer's own refusal, and it deletes nothing.
+  // folders) would inherit its scenarios and runs on the next read, and one that landed on a folder
+  // created after the project was opened (#517, item 2: the app's `occupiedSlugs` is a snapshot
+  // taken on open) would overwrite its model. The app avoids the slugs it knows of (`processSlug`);
+  // this is the disk layer's own refusal, listed right before writing, and it deletes nothing.
   for (const process of processes) {
     if (listados.has(process.slug)) continue;
-    const ajenos = await leftoverFiles(join(processesDir, process.slug), process);
+    const ajenos = await foreignFiles(join(processesDir, process.slug), process);
     if (ajenos.length > 0) {
       throw new ProjectIOError(
         'E-CARPETA-OCUPADA',
-        `"${PROCESSES_DIR}/${process.slug}/" ya tiene escenarios o corridas de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
+        `"${PROCESSES_DIR}/${process.slug}/" ya tiene archivos de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
       );
     }
   }
@@ -1207,9 +1223,15 @@ async function writeRepositoryFolder(
   }
 }
 
-/** The `*.scenario.json` and `runs/*.result.json` in `processDir` that `process` does not hold. */
-async function leftoverFiles(processDir: string, process: ProcessDocument): Promise<string[]> {
+/**
+ * What `processDir` — the folder of a process this project does not list yet — already holds and
+ * saving `process` there would overwrite or inherit: its `model.bpmn`, every `*.scenario.json`
+ * (same-named or not: none of them was written for this process) and the `runs/*.result.json`
+ * that `process` does not hold (a run with its id is compared byte for byte, `E-RUN-DUPLICADO`).
+ */
+async function foreignFiles(processDir: string, process: Pick<ProcessDocument, 'runs'>): Promise<string[]> {
   const stale: string[] = [];
+  if (await pathExists(join(processDir, MODEL_FILE))) stale.push(MODEL_FILE);
   const listar = async (folder: string, suffix: string): Promise<string[]> => {
     try {
       return (await readdir(folder, { withFileTypes: true }))
@@ -1220,9 +1242,7 @@ async function leftoverFiles(processDir: string, process: ProcessDocument): Prom
       throw error;
     }
   };
-  for (const name of await listar(processDir, SCENARIO_SUFFIX)) {
-    if (!(name in process.scenarios)) stale.push(name);
-  }
+  stale.push(...(await listar(processDir, SCENARIO_SUFFIX)));
   const runIds = new Set(process.runs.map((run) => `${run.id}${RUN_SUFFIX}`));
   const runsDir = join(processDir, RUNS_DIR);
   if (!(await isSymlink(runsDir))) {
