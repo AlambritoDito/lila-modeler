@@ -3175,6 +3175,66 @@ it('nodes that come back (⌘Z of a pool delete) are not seeded: the scenario is
   expect(asIs()).toEqual({ Start_A: llegadas });
 });
 
+it('Sample order with the Restaurant pool deleted and pasted back after Customer still runs the Restaurant (#546)', async () => {
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const pedido = readFileSync(resolve(aqui, '../../../examples/pedido/model.bpmn'), 'utf8');
+  const asIsInicial = JSON.parse(readFileSync(resolve(aqui, '../../../examples/pedido/as-is.scenario.json'), 'utf8')) as Record<string, unknown>;
+  const proceso = /\s*<bpmn:process id="Process_Restaurante"[\s\S]*?<\/bpmn:process>/.exec(pedido)![0];
+  const participante = /\s*<bpmn:participant id="Participant_Restaurante"[^>]*\/>/.exec(pedido)![0];
+  // Deleting the pool takes its process, its participant and its message flows.
+  const borrado = pedido.replace(proceso, '').replace(participante, '').replace(/\s*<bpmn:messageFlow [^>]*\/>/g, '');
+  // Pasting it back appends both at the end: Customer is now first in the document.
+  const pegado = borrado
+    .replace(/(\s*<\/bpmn:collaboration>)/, `${participante}$1`)
+    .replace(/(\s*<bpmn:process id="Process_Cliente"[\s\S]*?<\/bpmn:process>)/, `$1${proceso}`);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const doc = { version: 1, id: 'pedido', name: 'Pedido', model: { id: 'Process_Restaurante', name: 'model.bpmn', xml: pedido, revision: 0 },
+    scenarios: { 'as-is.scenario.json': asIsInicial }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(pedido);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  const antes = asIs();
+  expect(Object.keys(antes)).toContain('StartEvent_Pedido');
+
+  // With Restaurant gone, Customer is the only process: its start and task get seeds (#420).
+  await reparsear(borrado);
+  expect(Object.keys(asIs())).toEqual(expect.arrayContaining(['StartEvent_ClienteInicio', 'Task_ClienteRecibe']));
+  // Pasted back, last: the scenario still targets Restaurant, so the reparse follows it and the
+  // Customer seeds go away with their nodes.
+  await reparsear(pegado);
+  expect(asIs()).toEqual(antes);
+
+  // And Run's gate (the real one) simulates Restaurant with those scenarios.
+  const { prepareSimulation } = await vi.importActual<typeof import('./simulationGate')>('./simulationGate');
+  const { ir } = await prepareSimulation(pegado, 'as-is.scenario.json', mocks.escenarios, 'model.bpmn', { locale: 'en' });
+  expect(ir.id).toBe('Process_Restaurante');
+
+});
+
+it('opening a Sample order saved with Customer first does not touch its scenario (#546, QA of #560)', async () => {
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const pedido = readFileSync(resolve(aqui, '../../../examples/pedido/model.bpmn'), 'utf8');
+  const asIsInicial = JSON.parse(readFileSync(resolve(aqui, '../../../examples/pedido/as-is.scenario.json'), 'utf8')) as Record<string, unknown>;
+  const proceso = /\s*<bpmn:process id="Process_Restaurante"[\s\S]*?<\/bpmn:process>/.exec(pedido)![0];
+  const participante = /\s*<bpmn:participant id="Participant_Restaurante"[^>]*\/>/.exec(pedido)![0];
+  const clienteDelante = pedido.replace(proceso, '').replace(participante, '')
+    .replace(/(\s*<\/bpmn:collaboration>)/, `${participante}$1`)
+    .replace(/(\s*<bpmn:process id="Process_Cliente"[\s\S]*?<\/bpmn:process>)/, `$1${proceso}`);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const doc = { version: 1, id: 'pedido', name: 'Pedido', model: { id: 'Process_Restaurante', name: 'model.bpmn', xml: clienteDelante, revision: 0 },
+    scenarios: { 'as-is.scenario.json': asIsInicial }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(clienteDelante);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  // The open's baseline is Restaurant, like the live reparse: nothing is new, nothing is seeded.
+  expect(asIs()).toEqual(asIsInicial['elements']);
+});
+
 it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
   mocks.exportXml.mockResolvedValue(modelo([], []));
   await click(T.app.nuevo);

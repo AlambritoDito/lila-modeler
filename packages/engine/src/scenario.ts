@@ -731,10 +731,20 @@ function flowsBefore(ir: ProcessIR, gatewayId: string): Set<string> {
  *
  * Devuelve la lista completa en una pasada; `severity: 'error'` impide simular.
  */
+/** Options of `validateScenario`. */
+export interface ValidateScenarioOptions extends LocaleOptions {
+  /**
+   * #546: `parseBpmn(...).elsewhere`, the ids of the file's other processes. An `elements` key
+   * found there is still E-ELEMENTO-DESCONOCIDO, but its message says which process has it and
+   * which one is simulated.
+   */
+  elsewhere?: Readonly<Record<string, { processId: string; processName: string }>> | undefined;
+}
+
 export function validateScenario(
   scenario: Scenario,
   ir: ProcessIR,
-  options: LocaleOptions = {},
+  options: ValidateScenarioOptions = {},
 ): ScenarioProblem[] {
   const locale = options.locale ?? 'en';
   const M = messages(locale).codes;
@@ -831,11 +841,22 @@ export function validateScenario(
         });
       }
       if (subprocessFields.length === 0) {
+        const other = options.elsewhere?.[id];
         problems.push({
           code: 'E-ELEMENTO-DESCONOCIDO',
           path: `elements.${id}`,
           severity: 'error',
-          message: M['E-ELEMENTO-DESCONOCIDO'](`elements.${id}`, id),
+          message:
+            other === undefined
+              ? M['E-ELEMENTO-DESCONOCIDO'](`elements.${id}`, id)
+              : M['E-ELEMENTO-DESCONOCIDO/otro-proceso'](
+                  `elements.${id}`,
+                  id,
+                  other.processId,
+                  other.processName,
+                  ir.id,
+                  ir.name,
+                ),
         });
       }
       continue;

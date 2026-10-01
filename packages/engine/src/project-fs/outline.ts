@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { bpmnToOutline, outlineToBpmn, type NormalOutline } from '../bpmn/outline.js';
+import { parseBpmn } from '../bpmn/parse.js';
 import type { ValidationResult } from '../bpmn/validate.js';
 import { messages, type Locale } from '../messages/index.js';
 import {
@@ -207,7 +208,9 @@ export async function readLilaOutline(
 ): Promise<LilaOutline> {
   const input = await openLilaProcess(file, options);
   const scenario = input.process.scenarios[BASE_SCENARIO];
-  const reading = await bpmnToOutline(input.process.model.xml, { locale: options.locale, scenario, name: input.process.name });
+  // #546: the process its scenarios target, the one `run`, `raci` and the exports read.
+  const { ir } = await parseBpmn(input.process.model.xml, { scenarios: Object.values(input.process.scenarios) });
+  const reading = await bpmnToOutline(input.process.model.xml, { locale: options.locale, scenario, name: input.process.name, processId: ir.id });
   return {
     file: input.file,
     slug: input.process.slug,

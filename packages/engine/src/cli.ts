@@ -22,10 +22,11 @@ import {
   comparablePath,
   compareWarnings,
   loadModelSource,
-  loadValidatedModel,
   resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
+  targetScenarios,
+  validatedModelOf,
   withRunOverrides,
   writeJsonAtomic,
   type LoadedScenarioResult,
@@ -139,9 +140,10 @@ async function validateCommand(
   process?: string | undefined,
 ): Promise<number> {
   const C = messages(locale).cli;
-  const { xml } = await loadModelSource(file, { process, locale });
+  const { xml, lila } = await loadModelSource(file, { process, locale });
   // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
-  const report = await validateBpmnXml(xml, { locale });
+  // #546: in a `.lila`, the process its scenarios target, as `run` simulates it.
+  const report = await validateBpmnXml(xml, { locale, scenarios: targetScenarios(lila) });
   const { ir, ignoredProcessIds } = report;
   const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
 
@@ -572,16 +574,19 @@ async function runCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
+  const source = await loadModelSource(modelFile, { process: options.process, locale });
+  const { lila } = source;
+  if (options.save === true && lila === undefined) throw new Error(C.saveRunNeedsLila());
+  // The scenario comes first: the process it targets is the one simulated (#546).
+  const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
   const {
     path: modelPath,
     ir,
     validation: modelValidation,
-    lila,
-  } = await loadValidatedModel(modelFile, locale, { process: options.process });
-  if (options.save === true && lila === undefined) throw new Error(C.saveRunNeedsLila());
+    elsewhere,
+  } = await validatedModelOf(source, locale, [resolvedScenario]);
   if (modelHasErrors(modelValidation, locale)) return 1;
 
-  const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
   if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
     console.error(C.commandError('run', C.modelMismatch(modelPath, resolvedScenario.model)));
     return 1;
@@ -589,7 +594,7 @@ async function runCommand(
 
   const scenario = withRunOverrides(resolvedScenario, options);
 
-  const scenarioProblems = validateScenario(scenario, ir, { locale });
+  const scenarioProblems = validateScenario(scenario, ir, { locale, elsewhere });
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
     printScenarioProblems(scenarioProblems, locale);
@@ -822,12 +827,18 @@ async function compareCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
+  const source = await loadModelSource(modelFile, { process: options.process, locale });
+  const { lila } = source;
+  // The scenarios come first: the process they target is the one simulated (#546).
+  const resolvedScenarios = scenarioFiles.map(
+    (scenarioFile) => resolveScenarioArgument(scenarioFile, lila, locale).scenario,
+  );
   const {
     path: modelPath,
     ir,
     validation: modelValidation,
-    lila,
-  } = await loadValidatedModel(modelFile, locale, { process: options.process });
+    elsewhere,
+  } = await validatedModelOf(source, locale, resolvedScenarios);
   if (modelHasErrors(modelValidation, locale)) return 1;
 
   // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources` ni
@@ -840,8 +851,8 @@ async function compareCommand(
   }> = [];
   // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
   // simulación completa de los n − 1 anteriores.
-  for (const scenarioFile of scenarioFiles) {
-    const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
+  for (const [index, scenarioFile] of scenarioFiles.entries()) {
+    const resolvedScenario = resolvedScenarios[index]!;
     if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
       console.error(
         C.commandError('compare', C.modelMismatchIn(modelPath, resolvedScenario.model, scenarioFile)),
@@ -850,7 +861,7 @@ async function compareCommand(
     }
 
     const scenario = withRunOverrides(resolvedScenario, options);
-    const problems = validateScenario(scenario, ir, { locale });
+    const problems = validateScenario(scenario, ir, { locale, elsewhere });
     if (scenarioErrors(problems).length > 0) {
       console.error(C.commandError('compare', scenarioFile));
       printScenarioProblems(problems, locale);

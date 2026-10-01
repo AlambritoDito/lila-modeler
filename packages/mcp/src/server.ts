@@ -14,7 +14,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
-import { validateBpmnXml, type ValidateBpmnReport, type ValidationResult } from '@lila-modeler/engine/bpmn';
+import { validateBpmnXml, type TargetingScenario, type ValidateBpmnReport, type ValidationResult } from '@lila-modeler/engine/bpmn';
 import {
   absolutePath,
   comparablePath,
@@ -25,11 +25,13 @@ import {
   readJsonFile,
   resultWithBoundaryWarnings,
   scenarioSource,
+  targetScenarios,
   validatedModelOf,
   withRunOverrides,
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
+  type ValidatedModel,
 } from '@lila-modeler/engine/cli-shared';
 import {
   createLilaProcess,
@@ -265,12 +267,12 @@ function scenarioResources(
   file: string,
   locale: Locale,
   lila?: LilaProcess | undefined,
-): { resources: string[] } | { error: string } {
+): { resources: string[]; scenario: TargetingScenario } | { error: string } {
   try {
     const source = scenarioSource(file, lila, locale);
     const raw = resolveExtends(source.path, source.read);
     const parsed = parseScenario(raw, { locale });
-    if (parsed.success) return { resources: resourceLines(parsed.data) };
+    if (parsed.success) return { resources: resourceLines(parsed.data), scenario: parsed.data };
     // `$` para la raíz, igual que `schemaIssueLines` del motor: no es texto traducible.
     const detail = parsed.error.issues
       .map((issue) => `${issue.path.join('.') || '$'}: ${issue.message}`)
@@ -336,11 +338,13 @@ async function runSimulation(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
   try {
-    ({ ir, validation: modelValidation } =
+    // #546: the process the scenario targets is the one simulated.
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(modelPath, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(modelPath, locale, { scenarios: [resolved] })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, [resolved]));
   } catch (error) {
     return fail(message(error));
   }
@@ -349,7 +353,7 @@ async function runSimulation(
   }
 
   const withOverrides = withRunOverrides(resolved, { seed, replications });
-  const scenarioProblems = validateScenario(withOverrides, ir, { locale });
+  const scenarioProblems = validateScenario(withOverrides, ir, { locale, elsewhere });
   const scenarioIssues = scenarioErrors(scenarioProblems);
   if (scenarioIssues.length > 0) return fail(M.scenarioInvalid(JSON.stringify(scenarioIssues)));
 
@@ -444,11 +448,13 @@ async function compareScenarios(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
+  const all = resolved.map(({ scenario }) => scenario);
   try {
-    ({ ir, validation: modelValidation } =
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(referenceModel, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(referenceModel, locale, { scenarios: all })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, all));
   } catch (error) {
     return fail(message(error));
   }
@@ -460,7 +466,7 @@ async function compareScenarios(
   const validated: Array<{ label: string; scenario: ResolvedScenario; problems: readonly ScenarioProblem[] }> = [];
   for (const { label, scenario } of resolved) {
     const withOverrides = withRunOverrides(scenario, { seed, replications });
-    const problems = validateScenario(withOverrides, ir, { locale });
+    const problems = validateScenario(withOverrides, ir, { locale, elsewhere });
     const issues = scenarioErrors(problems);
     if (issues.length > 0) return fail(`${label}: ${M.scenarioInvalid(JSON.stringify(issues))}`);
     validated.push({ label, scenario: withOverrides, problems });
@@ -540,16 +546,17 @@ async function validatePatchedScenario(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
   // In a `.lila` the model is the process's own `model.bpmn` (#466): a patch that points `model`
   // elsewhere is refused, like `run_simulation` refuses a scenario of another model.
   if (lila !== undefined && comparablePath(scenario.model) !== comparablePath(lila.modelPath)) {
     return { ok: false, error: M.modelMismatch(lila.modelPath, scenario.model) };
   }
   try {
-    ({ ir, validation: modelValidation } =
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(scenario.model, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(scenario.model, locale, { scenarios: [scenario] })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, [scenario]));
   } catch (error) {
     return { ok: false, error: message(error) };
   }
@@ -557,7 +564,7 @@ async function validatePatchedScenario(
     return { ok: false, error: M.modelInvalid(JSON.stringify(modelValidation.errors)) };
   }
 
-  const problems = validateScenario(scenario, ir, { locale });
+  const problems = validateScenario(scenario, ir, { locale, elsewhere });
   const issues = scenarioErrors(problems);
   if (issues.length > 0) {
     return { ok: false, error: `${M.invalidAfterPatchLabel()} ${JSON.stringify(issues)}` };
@@ -832,7 +839,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
       if ('error' in read) return errorResult(read.error);
 
       try {
-        return textResult(await validateBpmnXml(read.xml, { locale: language }));
+        // #546: in a `.lila`, the process its scenarios target, as `run_simulation` simulates it.
+        return textResult(await validateBpmnXml(read.xml, { locale: language, scenarios: targetScenarios(read.lila) }));
       } catch (error) {
         return errorResult(toolMessage('validate_bpmn', message(error)));
       }
@@ -873,14 +881,16 @@ export function createServer(options: ServerOptions = {}): McpServer {
       const read = await modelXml('describe_process', path, xml, process, language);
       if ('error' in read) return errorResult(read.error);
 
+      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario, language, read.lila);
+      // #546: the process described is the one the scenarios target, as `run_simulation` runs it.
+      const given = scenarioResult !== undefined && 'scenario' in scenarioResult ? [scenarioResult.scenario] : [];
       let report: ValidateBpmnReport;
       try {
-        report = await validateBpmnXml(read.xml, { locale: language });
+        report = await validateBpmnXml(read.xml, { locale: language, scenarios: targetScenarios(read.lila, given) });
       } catch (error) {
         return errorResult(toolMessage('describe_process', message(error)));
       }
 
-      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario, language, read.lila);
       const resources = scenarioResult !== undefined && 'resources' in scenarioResult ? scenarioResult.resources : [];
       const scenarioError = scenarioResult !== undefined && 'error' in scenarioResult ? scenarioResult.error : undefined;
 
