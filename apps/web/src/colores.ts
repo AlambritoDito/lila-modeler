@@ -62,7 +62,7 @@ interface Di extends ElementoModdle {
 }
 
 /** A canvas element with its DI and its parent, as bpmn-js hands it out (`element.di`). */
-export type ElementoColoreable = ElementoLienzo & { di?: Di; parent?: ElementoColoreable };
+export type ElementoColoreable = ElementoLienzo & { di?: Di; parent?: ElementoColoreable | null };
 
 /** The DI attributes for a fill and a stroke; a connection has no fill. */
 function atributos(di: Di, fill: string | undefined, stroke: string | undefined): Record<string, string | undefined> {
@@ -108,7 +108,8 @@ export function trazoAlPintar(el: ElementoColoreable, tema: ColoresTema): string
   if (!etiqueta && el.di?.$type !== 'bpmndi:BPMNEdge') return undefined;
   const actual = etiqueta ? null : colorActual(el);
   if (actual === undefined) return undefined;
-  const padre = el.parent;
+  // `null` once bpmn-js has taken it off the canvas: ⌘Z of a pasted pool redraws its flows then (#534).
+  const padre = el.parent ?? undefined;
   const contenedor = padre === undefined ? undefined : COLORES.find((c) => c.id === colorActual(padre));
   const fondo = contenedor?.fill ?? tema.canvas;
   const propio = COLORES.find((c) => c.id === actual);

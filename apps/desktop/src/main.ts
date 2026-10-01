@@ -956,12 +956,12 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   });
 
   // Bloquea `window.open`/enlaces `target=_blank`; los http(s) se abren en el navegador del
-  // sistema en vez de crear una `BrowserWindow` sin las mismas protecciones. The one exception is
-  // the detached scenario window (design 2c): an empty `about:blank` of the app's own origin that
-  // the renderer fills with a React portal, so it needs no preload and gets none. Its size and
-  // position come from the features string of `window.open`. The About window (#408) takes the
-  // same path but is a fixed card: its size is pinned here and it cannot be resized, minimised or
-  // maximised.
+  // sistema en vez de crear una `BrowserWindow` sin las mismas protecciones. The exceptions are
+  // the detached scenario and Results windows (design 2c, #395): each an empty `about:blank` of the
+  // app's own origin that the renderer fills with a React portal, so it needs no preload and gets
+  // none. Size and position come from the features string of `window.open`. The About window
+  // (#408) takes the same path but is a fixed card: its size is pinned here and it cannot be
+  // resized, minimised or maximised.
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
     if (permiteVentanaHija(url, frameName)) {
       const acerca = frameName === 'lila-acerca';

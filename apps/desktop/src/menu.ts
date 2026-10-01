@@ -97,8 +97,8 @@ export function menuTemplate(
         // ⌘W (owner request, 2026-09-25): on macOS the `windowMenu` role brings Minimize, Zoom and
         // Bring All to Front but not Close, so the key did nothing; on Windows/Linux that same role
         // already carries Close (Ctrl+W), so adding it here would list it twice. The role closes
-        // the focused window (main, About or the detached scenario) through the same `close`
-        // guard as the red button; closing the main window quits, like the red button does.
+        // the focused window (main, About, the detached scenario or Results) through the same
+        // `close` guard as the red button; closing the main window quits, like the red button does.
         ...(mac
           ? [{ type: 'separator' as const }, { role: 'close' as const }]
           : [
@@ -132,12 +132,12 @@ export function menuTemplate(
   ];
 }
 
-/** What a key pressed in a child window (About, detached scenario) asks of the main process. */
+/** What a key pressed in a child window (About, detached scenario or Results) asks of main. */
 export type TeclaHija = 'cerrar' | 'salir' | null;
 
 /**
- * ⌘W / ⌘Q in a `window.open` child (About, detached scenario), handled from `before-input-event`
- * instead of trusting the menu to see them: in the installed beta.11, with the About window in
+ * ⌘W / ⌘Q in a `window.open` child (About, detached scenario or Results), handled from
+ * `before-input-event` instead of trusting the menu to see them: in the installed beta.11, with the About window in
  * front, neither closed nor quit, while the same keys worked in the main window. Only the bare
  * chord counts (⌥⌘W is Close All, ⌥⌘Q Quit and Keep Windows; both stay the menu's). Outside
  * macOS only Ctrl+W: there is no Ctrl+Q convention (Alt+F4 is the OS's).

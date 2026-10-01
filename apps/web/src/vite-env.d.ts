@@ -28,3 +28,8 @@ declare module 'bpmn-js-token-simulation/lib/features/simulation-styles' {
   const simulationStylesModule: Record<string, unknown>;
   export default simulationStylesModule;
 }
+// Its T-key bindings (#506), which `moduloSinTeclaT` guards; same use, in the same test.
+declare module 'bpmn-js-token-simulation/lib/features/keyboard-bindings' {
+  const keyboardBindingsModule: Record<string, unknown>;
+  export default keyboardBindingsModule;
+}

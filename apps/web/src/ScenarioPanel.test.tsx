@@ -136,16 +136,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
   pulsar(
     {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     }[paso],
   );
 }
@@ -422,7 +422,7 @@ describe('uniones del esquema', () => {
       />,
     );
     pulsar('Task_TomarPedido');
-    irAPaso('times');
+    irAPaso('parameters');
     const selector = document.getElementById(
       'campo-elements.Task_TomarPedido.processingTime',
     ) as HTMLSelectElement;
@@ -724,7 +724,7 @@ describe('campos reservados: quitar heredado', () => {
     );
 
     // Estado visible antes de tocar nada: heredado del padre, con su valor. `priority` es de un
-    // pool, y los pools viven en el paso 3 desde #333.
+    // pool, y los pools viven en Recursos desde #333.
     irAPaso('resources');
     expect(document.body.textContent).toContain('heredado: 1');
 

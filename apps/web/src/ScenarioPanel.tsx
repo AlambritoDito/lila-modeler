@@ -1548,8 +1548,8 @@ function VistaCompuerta({
  * ------------------------------------------------------------------ */
 
 /**
- * The step bar: Bizagi's four levels of simulation, in order, as the only navigation of the
- * panel.
+ * The step bar: Parameters, Resources, Calendars and Arrivals (#396), in order, as the only
+ * navigation of the panel.
  *
  * They are buttons and not tabs on purpose — a step is a filter over one document, not a
  * different document — and each carries `aria-pressed` (this one is the one chosen) plus
@@ -1599,7 +1599,7 @@ function BarraPasos({
  * of the same distribution shares it (R1, R2). Counts and shapes (`k`, `alpha`, `n`) are printed
  * as they are: `esTiempoEnSegundos` is the same table the form uses to decide what to scale.
  */
-function resumenDistribucion(
+export function resumenDistribucion(
   id: string,
   campo: string,
   valor: unknown,
@@ -1624,7 +1624,7 @@ function resumenDistribucion(
 }
 
 /** `elements[id].resources` as one line: «cashier ×1, till ×2», or «—» when there is none. */
-function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>): string {
+export function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>): string {
   if (!Array.isArray(valor) || valor.length === 0) return S.escenario.sinResumen;
   return valor
     .map((entrada) => {
@@ -2016,6 +2016,14 @@ export interface ScenarioPanelProps {
   avanzado?: boolean;
   /** Drawn inside the detached window (design 2c): Duplicate and Save move to a footer. */
   enVentana?: boolean;
+  /**
+   * #396: a step asked for from outside the panel — the «Edit in …» link of the properties
+   * panel's quick view. The panel opens it and calls `onPasoAtendido`, and the shell clears the
+   * request: it is consumed once, so a later remount (detaching, switching tabs) opens on the
+   * first step as before instead of on a stale ask. The step stays the panel's own state.
+   */
+  pasoPedido?: PasoId | null;
+  onPasoAtendido?: () => void;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -2035,6 +2043,8 @@ export function ScenarioPanel({
   onSeleccionar,
   avanzado = false,
   enVentana = false,
+  pasoPedido = null,
+  onPasoAtendido,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -2042,7 +2052,12 @@ export function ScenarioPanel({
    * this panel and of nothing else, and because keeping it here is what makes it survive picking
    * an element on the canvas and a whole run finishing: both of them only re-render the panel.
    */
-  const [paso, setPaso] = useState<PasoId>('validation');
+  const [paso, setPaso] = useState<PasoId>('parameters');
+  useEffect(() => {
+    if (pasoPedido === null) return;
+    setPaso(pasoPedido);
+    onPasoAtendido?.();
+  }, [pasoPedido, onPasoAtendido]);
   // The engine takes the language as a value, not as a catalog: `useLocale()` is what makes the
   // memoised lint below recompute when the app switches language.
   const locale = useLocale();
@@ -2258,9 +2273,9 @@ export function ScenarioPanel({
 
       <BarraPasos paso={paso} onPaso={setPaso} />
 
-      {/* Step 1 · Process validation: the run window and the arrivals count. `run` is whole here
-          because every one of its fields answers "does this model run and for how long". */}
-      {paso === 'validation' && (
+      {/* Parameters: the run window, replications and seed. `run` is whole here because every
+          one of its fields answers "how does this model run and for how long". */}
+      {paso === 'parameters' && (
         <details open>
           <summary>{S.escenario.seccionCorrida}</summary>
           <Propiedades esquema={esquemaDe('run')} ruta={['run']} ctx={ctx} />
@@ -2268,7 +2283,9 @@ export function ScenarioPanel({
         </details>
       )}
 
-      {/* Step 4 · Calendar analysis: the weekly grids. */}
+      {/* Calendars: the weekly grids. Until #396 the pool editor showed up here as well, because
+          a pool's `calendar` and per-shift `capacity` live inside it; now every control is in
+          exactly one step, so the pools stay in Resources and this step says where they went. */}
       {paso === 'calendars' && (
         <details open>
           <summary>{S.escenario.seccionCalendarios}</summary>
@@ -2279,16 +2296,16 @@ export function ScenarioPanel({
             requerido={false}
             ctx={ctx}
           />
+          <p className="ayuda">
+            {S.escenario.calendariosDePools}{' '}
+            <button type="button" className="boton" onClick={() => { setPaso('resources'); }}>
+              {S.escenario.irARecursos}
+            </button>
+          </p>
         </details>
       )}
 
-      {/* The pools belong to step 3, and they show up in step 4 as well because a pool's
-          `calendar` and its per-shift `capacity` are edited inside this same editor — they are
-          Bizagi's «resource × calendar» quantities, which is level 4 and not level 3.
-          ponytail: the ceiling is that step 4 shows the pool's other fields too (its name, its
-          cost); filtering them would mean threading `visibles` through the record branch of
-          `Campo`, which is a lot of plumbing for four fields that nobody is hurt by seeing. */}
-      {(paso === 'resources' || paso === 'calendars') && (
+      {paso === 'resources' && (
         <details open>
           <summary>{S.escenario.seccionRecursos}</summary>
           <Campo
@@ -2328,30 +2345,38 @@ export function ScenarioPanel({
               siDefinido={CAMPOS_DE_PASO[paso]}
             />
             <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
-            {/* The gateway is where the branching is parameterised, and branching is step 1:
-                what a gateway needs to be runnable is that its outgoing flows add up. */}
-            {paso === 'validation' && ir !== null && (clase === 'xor' || clase === 'or') && (
+            {/* The gateway is where the branching is parameterised, and branching is a
+                Parameters question: its outgoing flows have to add up. */}
+            {paso === 'parameters' && ir !== null && (clase === 'xor' || clase === 'or') && (
               <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} avanzado={avanzado} />
             )}
           </>
         )}
 
-        {/* Steps 2 and 3 list the elements they are about with what is already written on each,
-            selected or not: «which task still has no time» is the question of the step, and the
-            form of one element cannot answer it. */}
-        {paso === 'times' && (
+        {/* Parameters, Resources and Arrivals list the elements they are about with what is
+            already written on each, selected or not: «which task still has no time» is the
+            question of the step, and the form of one element cannot answer it. */}
+        {paso === 'parameters' && (
           <ListaElementos
             titulo={S.escenario.listaTiempos}
-            ids={idsPorTipo(['start', 'task', 'timer'])}
+            ids={idsPorTipo(['task', 'timer'])}
+            rotulo={rotulo}
+            resumen={(id) =>
+              resumenDistribucion(id, 'processingTime', leer(resuelto, ['elements', id, 'processingTime']), unidad, S)}
+            seleccion={idSeleccionado}
+            onSeleccionar={onSeleccionar}
+          />
+        )}
+        {paso === 'arrivals' && (
+          <ListaElementos
+            titulo={S.escenario.listaLlegadas}
+            ids={idsPorTipo(['start'])}
             rotulo={rotulo}
             resumen={(id) => {
-              const campo = ir?.nodes[id]?.type === 'start' ? 'interTriggerTimer' : 'processingTime';
-              return resumenDistribucion(
-                id,
-                campo,
-                leer(resuelto, ['elements', id, campo]),
-                unidad,
-                S,
+              const casos = leer(resuelto, ['elements', id, 'triggerCount']);
+              return S.escenario.resumenLlegada(
+                resumenDistribucion(id, 'interTriggerTimer', leer(resuelto, ['elements', id, 'interTriggerTimer']), unidad, S),
+                typeof casos === 'number' ? casos : null,
               );
             }}
             seleccion={idSeleccionado}
@@ -2377,8 +2402,8 @@ export function ScenarioPanel({
         }}
       />
 
-      {/* The validation list is live in **every** step, not only in step 1: a resource you break
-          in step 3 has to be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this
+      {/* The validation list is live in **every** step: a resource you break in Resources has to
+          be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this
           ("the validation list at the bottom of the panel is live in every step"). */}
       {problemas.length > 0 && (
         <details>

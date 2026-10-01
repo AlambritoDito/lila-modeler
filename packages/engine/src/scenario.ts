@@ -981,7 +981,9 @@ export function validateScenario(
             `elements.${id}.resources[${i}].quantity`,
             use.quantity,
             capacity,
-            use.ref,
+            // The resource by the name the user gave it, with its id when they differ, as elements
+            // are named (#537): the id stays in the message, which the sheet import reads (#521).
+            pool?.name === undefined || pool.name === use.ref ? use.ref : `${pool.name} (${use.ref})`,
           ),
         });
       }

@@ -15,37 +15,45 @@ examples the engine is validated against.
 
 ## The four levels, as four steps
 
-Bizagi teaches simulation as four levels, each adding one kind of parameter. Lila keeps the same
-vocabulary and the same order in the **Simulate** view, as four steps:
+Bizagi teaches simulation as four levels, each adding one kind of parameter. Lila's **Simulate**
+view has four steps too, named after what each one edits: **Parameters**, **Resources**,
+**Calendars** and **Arrivals**. Every Bizagi level maps onto them like this:
 
-| Bizagi level | Lila | What you fill in |
+| Bizagi level | Lila step | What you fill in |
 |---|---|---|
-| Process validation | Simulate → step 1 | Run start, duration, replications, seed; max arrival count; gateway percentages; model validation |
-| Time analysis | Simulate → step 2 | Interval between arrivals and processing time per element, constant or distribution |
-| Resource analysis | Simulate → step 3 | Resource pools, availability, costs, and which task uses which pool |
-| Calendar analysis | Simulate → step 4 | Calendars as day presets + from–to ranges and a weekly grid, resource × calendar, capacity per shift |
+| Process validation | Parameters (run window, gateway percentages) and Arrivals (max arrival count) | Run start, duration, replications, seed; gateway percentages; max arrival count; model validation |
+| Time analysis | Parameters (processing time) and Arrivals (interval between arrivals) | Processing time per task and timer; interval between arrivals per start event; constant or distribution |
+| Resource analysis | Resources | Resource pools, availability, costs, and which task uses which pool |
+| Calendar analysis | Calendars (the calendars and which element follows which) and Resources (a pool's calendar and capacity per shift, on the pool) | Calendars as day presets + from–to ranges and a weekly grid, resource × calendar, capacity per shift |
 
 Two things work differently from Bizagi, and both in your favour:
 
 - **There is no level switch.** You never "enable" a level. The engine degrades gracefully: an
   element with no processing time takes zero time, a task with no resource has infinite capacity,
-  a pool with no calendar is available 24×7. You can fill in step 3 and leave step 4 empty
+  a pool with no calendar is available 24×7. You can fill in Resources and leave Calendars empty
   forever.
 - **Steps are a reading order, not a wizard.** Everything is one scenario document; you can go
-  back to step 1 after step 4 without redoing anything, and the validation list at the bottom of
-  the panel is live in every step.
+  back to Parameters after Calendars without redoing anything, and the validation list at the
+  bottom of the panel is live in every step.
 
-The four steps are a bar at the top of the Simulate panel, labelled **1 · Process validation**,
-**2 · Time analysis**, **3 · Resource analysis** and **4 · Calendar analysis**. It opens on
-step 1, the step you are on survives picking elements on the canvas and running the simulation,
-and two things are there in every step: the validation list and **Advanced: scenario JSON**, which
-is where the scenario `name`, its `description` and anything the form does not draw are edited.
+The four steps are a bar at the top of the Simulate panel. It opens on **Parameters**, the step
+you are on survives picking elements on the canvas and running the simulation, and two things are
+there in every step: the validation list and **Advanced: scenario JSON**, which is where the
+scenario `name`, its `description` and anything the form does not draw are edited.
 
-Steps 2 and 3 also list the elements they are about — every task, timer and start event with the
-time it has, every task with the pool it takes — so “what is still missing” is one look and not a
-tour of the diagram; clicking a row selects that element on the canvas. The resource pools appear
-in step 3 **and** in step 4, because a pool's calendar and its capacity per shift are edited inside
-the pool and they are level 4, not level 3.
+Parameters, Resources and Arrivals also list the elements they are about — every task and timer
+with its time, every task with the pool it takes, every start event with how often and how many
+cases it creates — so “what is still missing” is one look and not a tour of the diagram; clicking a
+row selects that element on the canvas. Every control lives in exactly one step: the resource pools
+(their calendar and capacity per shift included) are edited in Resources, and Calendars says so.
+
+With an activity selected in **Model**, the properties panel shows a **Quick view · simulation**
+block: its time distribution and resource in the active scenario, and its wait in the last run (or
+*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Simulate
+dock and the Results «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
+when that run's event-log sample is complete; a longer run (more than 10,000 log rows in its first
+replication) shows the **mean** resource wait over every replication instead, and says so. Its **Edit in
+Parameters** / **Edit in Resources** links open that step in Simulate.
 
 ## Screen by screen
 
@@ -58,19 +66,19 @@ this section is the screen-level version of it.
 | Bizagi | Lila |
 |---|---|
 | Scenario name, Description | `name` / `description`, in **Advanced: scenario JSON** (the name is the panel's heading) |
-| Start date | step 1, `run.start` (ISO 8601 **with offset**) |
-| Duration | step 1, `run.duration`; may be left empty, then the run ends when the last case drains |
-| Base time unit, Currency | step 1, `run.baseTimeUnit`, `run.currency` |
-| Replications (what-if only) | step 1, `run.replications` — available in every run, not only in a comparison |
+| Start date | Parameters, `run.start` (ISO 8601 **with offset**) |
+| Duration | Parameters, `run.duration`; may be left empty, then the run ends when the last case drains |
+| Base time unit, Currency | Parameters, `run.baseTimeUnit`, `run.currency` |
+| Replications (what-if only) | Parameters, `run.replications` — available in every run, not only in a comparison |
 | — | `run.seed` and `run.warmup`, which Bizagi does not expose |
 
 ### Arrivals
 
 | Bizagi | Lila |
 |---|---|
-| Max arrival count | step 1, `triggerCount` on the start event |
-| Interval / time between arrivals | step 2, `interTriggerTimer` on the start event |
-| Arrival calendar | step 4, `calendar` on the start event |
+| Max arrival count | Arrivals, `triggerCount` on the start event |
+| Interval / time between arrivals | Arrivals, `interTriggerTimer` on the start event |
+| Arrival calendar | Calendars, `calendar` on the start event |
 
 `triggerCount` with no interval means all N cases arrive at `t = 0`, which is what Bizagi's level 1
 does.
@@ -95,7 +103,7 @@ object with **named** parameters, so nothing depends on argument order:
 
 | Bizagi | Lila |
 |---|---|
-| Resource, Name | step 3, a key in `resources` with its `name` |
+| Resource, Name | Resources, a key in `resources` with its `name` |
 | Type (role / equipment) | `type` |
 | Availability | `capacity` (an integer: how many units exist) |
 | Fixed cost | `fixedCost`, charged once per token that takes the resource |
@@ -105,7 +113,7 @@ object with **named** parameters, so nothing depends on argument order:
 
 | Bizagi | Lila |
 |---|---|
-| Activity resources *(Bizagi's name may differ by version)* | step 3, `resources[]` on the selected element |
+| Activity resources *(Bizagi's name may differ by version)* | Resources, `resources[]` on the selected element |
 | Quantity | `quantity` inside that entry |
 | AND / OR | `selection: "and"` / `"or"` |
 | Fixed cost (activity) | `fixedCost` on the element |
@@ -119,7 +127,7 @@ per-task assignment for you.
 
 | Bizagi | Lila |
 |---|---|
-| Calendars | step 4, `calendars`, keyed by name; the key `default` applies to every pool that declares none |
+| Calendars | Calendars, `calendars`, keyed by name; the key `default` applies to every pool that declares none |
 | Recurrence + start time + duration | «Mon–Fri / Every day / Weekend» or any days + from–to, one `intervals[]` entry per range, and a weekly grid to paint (24 h, `to` exclusive, `"24:00"` allowed) |
 | Resource calendar | `calendar` on the pool |
 | «Resource \| Morning \| Day \| Night» quantities | `capacity` as a list of `{ calendar, capacity }`: one pool, capacity per shift |
@@ -162,8 +170,8 @@ the table stays the reference.
 
 **1. Your Bizagi `.bpmn` brings the drawing, not the numbers.** Bizagi Modeler does not export
 simulation parameters: verified on five real files, only colours travel in the `bizagi:` namespace.
-So importing works, and then step 1 to step 4 are re-entered here once. Budget a few minutes for
-it, and use the lane-to-pool action to make step 3 nearly free.
+So importing works, and then the four steps are re-entered here once. Budget a few minutes for
+it, and use the lane-to-pool action to make Resources nearly free.
 
 **2. Shared paths are duplicated, because branching is probabilistic.** There is no routing on case
 data in v1 — `conditionExpression` is ignored, with a `W-COND` warning, and `conditions` is a
@@ -203,9 +211,9 @@ app) the example is opened as a diagram plus a pasted scenario, because a `.lila
 needs a manifest that the repository does not ship for this example:
 
 1. File → **Open .bpmn**, pick `examples/bizagi-levels/level-3/model.bpmn`.
-2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of step 1, replace its text
+2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of Parameters, replace its text
    with the contents of `examples/bizagi-levels/level-3/scenario.json`, and press **Apply**.
-3. Set Replications to 30 in step 1 and press **Run simulation**.
+3. Set Replications to 30 in Parameters and press **Run simulation**.
 
 The same run from the CLI, from the repository root:
 

@@ -222,21 +222,29 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ paletaAncho: '200', railAncho: Number.NaN })).toEqual({});
   });
 
+  it('the dock height (#394) is kept only as a number inside 120–640', () => {
+    expect(parseAjustes({ dockAlto: 120 })).toEqual({ dockAlto: 120 });
+    expect(parseAjustes({ dockAlto: 640 })).toEqual({ dockAlto: 640 });
+    expect(parseAjustes({ dockAlto: 119 })).toEqual({});
+    expect(parseAjustes({ dockAlto: 641 })).toEqual({});
+    expect(parseAjustes({ dockAlto: '240' })).toEqual({});
+  });
+
   it('avanzado (#447) is kept only as a boolean', () => {
     expect(parseAjustes({ avanzado: true })).toEqual({ avanzado: true });
     expect(parseAjustes({ avanzado: false })).toEqual({ avanzado: false });
     expect(parseAjustes({ avanzado: '1' })).toEqual({});
   });
 
-  it('paneles (#412) keeps only plain per-mode objects with the four boolean fields', () => {
+  it('paneles (#412) keeps only plain per-mode objects with the region booleans (the dock since #394)', () => {
     expect(parseAjustes({ paneles: {
       modelar: { izquierda: false, derecha: true, diagramas: 'no', estado: false, extra: false },
-      simular: { derecha: false },
+      simular: { derecha: false, dock: false },
       rutas: 'oculto',
       comparar: [true],
     } })).toEqual({ paneles: {
       modelar: { izquierda: false, derecha: true, estado: false },
-      simular: { derecha: false },
+      simular: { derecha: false, dock: false },
     } });
     expect(parseAjustes({ paneles: 'todo' })).toEqual({});
     expect(parseAjustes({ paneles: [{ derecha: false }] })).toEqual({});
@@ -298,6 +306,13 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ ventanaEscenario: { x: -1200, y: 20, width: 560, height: 720 } })).toEqual({
       ventanaEscenario: { x: -1200, y: 20, width: 560, height: 720 },
     });
+  });
+
+  it('keeps the detached Results window geometry under the same rule (#395)', () => {
+    const ventanaResultados = { x: 40, y: 60, width: 800, height: 600 };
+    expect(parseAjustes({ ventanaResultados })).toEqual({ ventanaResultados });
+    expect(parseAjustes({ ventanaResultados: { x: 40, y: 60, width: 419, height: 600 } })).toEqual({});
+    expect(parseAjustes({ ventanaResultados: { x: 40, y: 60, width: 800 } })).toEqual({});
   });
 
   it('withAjustes fusiona: guardar solo el tema no borra la densidad', () => {

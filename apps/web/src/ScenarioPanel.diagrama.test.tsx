@@ -115,16 +115,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
   pulsar(
     {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     }[paso],
   );
 }
@@ -220,9 +220,9 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('una tarea ofrece tiempo y recursos, y no las llegadas ni la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_RegisterRequest');
-    // #333: el tiempo de proceso vive en el paso 2; lo que este test fija es que en ese paso la
-    // tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
-    irAPaso('times');
+    // #333/#396: el tiempo de proceso vive en Parámetros; lo que este test fija es que en ese paso
+    // la tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
+    irAPaso('parameters');
     expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(true);
     expect(hay('campo-elements.Task_RegisterRequest.interTriggerTimer')).toBe(false);
     expect(hay('campo-elements.Task_RegisterRequest.probability')).toBe(false);
@@ -231,14 +231,11 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('un inicio ofrece las llegadas y no el tiempo de proceso', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('StartEvent_Request');
-    // #333: las dos llegadas se reparten entre dos pasos —cuántos casos es validación del
-    // proceso (paso 1) y cada cuánto llegan es análisis de tiempos (paso 2)—, así que el
-    // «ofrece» de este test se comprueba en el paso de cada uno.
-    irAPaso('times');
+    // #396: las dos llegadas —cada cuánto y cuántos casos— van juntas en el paso Llegadas.
+    irAPaso('arrivals');
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
-    expect(hay('campo-elements.StartEvent_Request.processingTime')).toBe(false);
-    irAPaso('validation');
     expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(true);
+    expect(hay('campo-elements.StartEvent_Request.processingTime')).toBe(false);
   });
 
   it('un flujo solo ofrece la probabilidad', () => {
@@ -452,7 +449,7 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
   it('con baseTimeUnit «min», teclear 5 guarda 300', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_RegisterRequest');
-    irAPaso('times');
+    irAPaso('parameters');
     // `constant` es la primera variante del `discriminatedUnion`.
     elegir('campo-elements.Task_RegisterRequest.processingTime', '0');
     teclear('campo-elements.Task_RegisterRequest.processingTime.value', '5');
@@ -471,13 +468,13 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
       />,
     );
     seleccionar('Task_RegisterRequest');
-    irAPaso('times');
+    irAPaso('parameters');
     const campo = document.getElementById(
       'campo-elements.Task_RegisterRequest.processingTime.value',
     ) as HTMLInputElement;
     expect(campo.value).toBe('5');
-    // `run.baseTimeUnit` se teclea en el paso 1, que es donde vive la corrida entera.
-    irAPaso('validation');
+    // `run.baseTimeUnit` se teclea en Parámetros, que es donde vive la corrida entera; el
+    // tiempo de la tarea está en el mismo paso, así que no hace falta moverse.
     elegir('campo-run.baseTimeUnit', 'h');
     expect((ultimo['elements'] as Json)['Task_RegisterRequest']).toEqual({
       processingTime: { type: 'constant', value: 300 },
