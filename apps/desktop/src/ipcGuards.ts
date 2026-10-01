@@ -12,7 +12,8 @@
 
 /**
  * The only child windows the renderer may open: the detached scenario panel (design 2c), the
- * detached Results view (#395) and the About window (#408), both an empty `about:blank` the app itself fills through a React portal.
+ * detached Results view (#395) and the About window (#408), each an empty `about:blank` the app
+ * itself fills through a React portal.
  * Anything else keeps being denied.
  */
 export function permiteVentanaHija(url: string, frameName: string): boolean {

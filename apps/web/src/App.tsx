@@ -2306,7 +2306,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             aria-label={ventanaResultados === null ? S.app.resultadosAcoplados : S.app.resultadosDesacoplados}
             title={ventanaResultados === null ? S.app.resultadosAcoplados : S.app.resultadosDesacoplados}
             onClick={() => { if (ventanaResultados === null) desacoplarResultados(); else acoplarResultados(); }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
+            {/* Bars + the same ↗: it sits next to the scenario toggle, which keeps the plain one. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 21h18M6 17v-5M11 17V9M16 17v-3M15 3h6v6M21 3l-6 6" /></svg>
           </button>
         )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y

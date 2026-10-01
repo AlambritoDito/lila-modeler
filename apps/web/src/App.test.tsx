@@ -2941,6 +2941,7 @@ it('detaches Results to its own window that follows the current run, and docks i
     // Not in Simulate: the toggle only shows in Results.
     expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)).toBeNull();
     await click(T.app.ejecutar);
+    await vi.waitFor(() => expect(zona().textContent).toContain('Resultado actual W-FRONTERA W-MOTOR'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', expect.stringMatching(/popup/));
     expect(hijo.document.title).toBe(T.app.tituloVentanaResultados);
@@ -2952,7 +2953,7 @@ it('detaches Results to its own window that follows the current run, and docks i
     // A new run lands in the window.
     mocks.worker.mockResolvedValueOnce({ result: { warnings: ['W-NUEVA'], bottlenecks: [] }, logSample: [] });
     await click(T.app.ejecutar);
-    expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA');
+    await vi.waitFor(() => expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA'));
 
     // «Dock» in the stand-in brings it back and remembers where the window was.
     await click(T.app.acoplar);
@@ -2984,6 +2985,7 @@ it('reopens the Results window where it was last left (#395)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
     await click(T.app.ejecutar);
+    await vi.waitFor(() => expect(container.querySelector('section.zona-resultados')?.textContent).toContain('Resultado actual'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', 'popup,width=640,height=480,left=12,top=34');
     // Blocked: it stays docked and says why.
