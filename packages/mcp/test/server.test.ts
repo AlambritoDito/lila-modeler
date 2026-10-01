@@ -57,17 +57,22 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las diez tools', async () => {
+test('listTools devuelve las quince tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([
+    'annotate_element',
     'compare_scenarios',
     'create_process',
+    'create_project',
     'describe_process',
     'export_diagram',
     'export_document',
     'export_results',
+    'export_scenario_template',
     'get_process_outline',
+    'get_raci_matrix',
+    'import_scenario_sheet',
     'patch_scenario',
     'run_simulation',
     'validate_bpmn',
@@ -500,13 +505,18 @@ test('`title`, `description` y los `describe()` de las tools están en inglés',
     }
   }
   expect(tools.map((tool) => tool.title).sort()).toEqual([
+    'Annotate element',
     'Compare scenarios',
     'Create process',
+    'Create project',
     'Describe process',
     'Export diagram',
     'Export process document',
     'Export results',
+    'Export scenario template',
+    'Get RACI matrix',
     'Get process outline',
+    'Import scenario sheet',
     'Patch scenario',
     'Run simulation',
     'Validate BPMN',

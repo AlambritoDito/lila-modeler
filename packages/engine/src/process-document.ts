@@ -182,6 +182,54 @@ function pngSize(png: Uint8Array | undefined): readonly [number, number] | null 
  * `bpmn:process` of the file and emit one chapter per pool.
  */
 export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocument {
+  return build(input);
+}
+
+/** One row of `raciMatrix`: an element of the document that has responsibilities. */
+export interface RaciRow {
+  /** The element's id as written in the `.bpmn` file. */
+  readonly id: string;
+  /** Its heading in the document: the name, or the id when it has none. */
+  readonly name: string;
+  /** Its lane as the document titles it, when it has one. */
+  readonly lane?: string;
+  /** Its `lila:responsibility` entries in file order, exactly what the document lists. */
+  readonly responsibilities: readonly { readonly type: string; readonly roleRef: string }[];
+  /** Role → its types on this element, joined with `, ` in file order (`R`, or `A, C`). */
+  readonly cells: Readonly<Record<string, string>>;
+}
+
+/** The RACI matrix of a process (#99): roles as columns, elements as rows. */
+export interface RaciMatrix {
+  /** Every `roleRef`, in order of first appearance along the rows. */
+  readonly roles: readonly string[];
+  readonly rows: readonly RaciRow[];
+}
+
+/**
+ * The RACI matrix the process document carries (#99): the elements the document has a section for
+ * (nodes and flattened sub-processes), in the document's own order, that have at least one
+ * `lila:responsibility`. Built by the same walk as `buildProcessDocument`, so the two cannot
+ * disagree on which elements, in which order, with which responsibilities.
+ */
+export function raciMatrix(input: ProcessDocumentInput): RaciMatrix {
+  const rows: RaciRow[] = [];
+  const roles: string[] = [];
+  build(input, (row) => {
+    if (row.responsibilities.length === 0) return;
+    const cells: Record<string, string> = Object.create(null) as Record<string, string>;
+    for (const { type, roleRef } of row.responsibilities) {
+      if (!roles.includes(roleRef)) roles.push(roleRef);
+      cells[roleRef] = Object.hasOwn(cells, roleRef) ? `${cells[roleRef]}, ${type}` : type;
+    }
+    rows.push({ ...row, cells: { ...cells } });
+  });
+  return { roles, rows };
+}
+
+type SectionVisitor = (row: Omit<RaciRow, 'cells'>) => void;
+
+function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocument {
   const { ir, annotations, locale = 'en' } = input;
   const M = messages(locale);
   const C = M.cli;
@@ -268,6 +316,12 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
     line(C.docDocumentation(), notes.documentation);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
+    visit?.({
+      id: original(id),
+      name: heading || original(id),
+      ...(laneTitleOf(lane) === undefined ? {} : { lane: laneTitleOf(lane)! }),
+      responsibilities: (notes.responsibilities ?? []).map(({ type, roleRef }) => ({ type, roleRef })),
+    });
     for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
     const bpmnType = input.types?.[id];
     const fallback = ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type];

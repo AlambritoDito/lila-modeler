@@ -67,6 +67,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 
+import { registerAgentTools } from './agent-tools.js';
 import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 
@@ -1208,6 +1209,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
       }
     },
   );
+  // Annotate, RACI, scenario sheets and project creation (#99, #403, #514).
+  registerAgentTools(server, localeOf);
 
   return server;
 }

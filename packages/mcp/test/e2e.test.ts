@@ -49,13 +49,18 @@ afterAll(async () => {
 test('`lila mcp` sirve sus tools por stdio', async () => {
   const { tools } = await client.listTools();
   expect(tools.map((tool) => tool.name).sort()).toEqual([
+    'annotate_element',
     'compare_scenarios',
     'create_process',
+    'create_project',
     'describe_process',
     'export_diagram',
     'export_document',
     'export_results',
+    'export_scenario_template',
     'get_process_outline',
+    'get_raci_matrix',
+    'import_scenario_sheet',
     'patch_scenario',
     'run_simulation',
     'validate_bpmn',
@@ -128,7 +133,7 @@ test('el servidor sobrevive a un error de tool y sigue respondiendo', async () =
   expect(roto.isError).toBe(true);
 
   const { tools } = await client.listTools();
-  expect(tools).toHaveLength(10);
+  expect(tools).toHaveLength(15);
 }, 120_000);
 
 test('nada de esto deja archivos nuevos en examples/pedido', () => {

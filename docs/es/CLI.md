@@ -175,6 +175,68 @@ npx lila export results examples/pedido.lila --out results/pedido.xlsx
 ```
 Código de salida: `1`.
 
+## `process annotate` y `process raci` (#99)
+
+Documenta un proceso desde la terminal, como lo hace el panel de propiedades de la app, y lee su
+matriz RACI:
+
+- `lila process annotate <proyecto.lila> <idElemento>` escribe en el elemento con ese id BPMN:
+  `--documentation <texto>` reemplaza su descripción (`""` la quita); `--responsibility TIPO:rol`
+  (repetible, `TIPO` uno de `R`, `A`, `C`, `I`) reemplaza toda su lista RACI, y
+  `--clear-responsibilities` la vacía; `--ref tipo=id` (repetible; `systemRef`, `documentRef`,
+  `riskRef`, `controlRef`, `kpiRef`, `input`, `output`) reemplaza las listas de los tipos dados
+  (`tipo=` vacía uno); `--attribute id=valor` (repetible, por id o nombre del atributo) fija un
+  atributo extendido, comprobado contra las definiciones de atributos del proyecto (`id=` quita el
+  valor; los atributos que no se dan se quedan). Imprime el elemento como queda; `--json` imprime
+  `{ file, process, elementId, dryRun, changed, written, before, after }`.
+- `lila process raci <proyecto.lila>` imprime la matriz RACI: una fila por elemento con
+  responsabilidades, en el orden del documento del proceso (`lila export doc`), una columna por
+  rol. `--json` imprime `{ file, process, roles, rows }`; `--csv` imprime `id,name,lane,<roles>`
+  como CSV.
+
+`--dry-run` muestra el resultado y no escribe nada. Una escritura guarda el `.lila` de forma
+atómica, bajo su candado, con los demás procesos intactos (ver
+[Un `.lila` como entrada](#un-lila-como-entrada-466)); la revisión del modelo sube en uno, como
+cuando guarda la app. Un elemento desconocido, un tipo que no es RACI o un valor de atributo que
+no cabe en su definición es un error, y no se escribe nada.
+
+```bash
+npx lila process annotate examples/pedido.lila Task_TomarPedido --responsibility R:cajero --responsibility A:gerente --ref systemRef=POS --dry-run
+```
+Código de salida: `0`.
+
+```bash
+npx lila process raci examples/pedido.lila --json
+```
+Código de salida: `0`.
+
+## `scenario import` y `scenario template` (#514)
+
+«Descargar plantilla» e «Importar Excel/CSV…» de la app (`docs/es/SCENARIO_SHEETS.md`) sobre un
+escenario de un `.lila`:
+
+- `lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx` escribe la hoja del
+  escenario (Elements, Arrivals, Resources, Assignments, Calendars), rellenada con sus valores,
+  para que una persona la complete. Un archivo existente se rechaza salvo con `--force`.
+- `lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv>` planifica la hoja contra
+  el escenario resuelto e imprime cada cambio (`Cajero (cajero) · capacity: 2 → 3`), las filas no
+  aplicadas y las notas, y escribe los cambios en el archivo propio del escenario — su delta cuando
+  hace `extends` de otro, exactamente como la app. Un plan que dejaría el escenario con errores se
+  rechaza y no se escribe nada. `--dry-run` imprime el plan y no escribe nada; `--json` imprime
+  `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
+
+```bash
+npx lila scenario template examples/pedido.lila as-is --out results/as-is.xlsx
+```
+Código de salida: `0`.
+
+```text
+npx lila scenario template proyecto.lila as-is --out as-is.xlsx
+# … una persona rellena as-is.xlsx …
+npx lila scenario import proyecto.lila as-is as-is.xlsx --dry-run
+npx lila scenario import proyecto.lila as-is as-is.xlsx
+```
+
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
