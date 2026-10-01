@@ -89,6 +89,8 @@ Código de salida: `0`.
   Parámetros. Sin hoja de event log: para eso está `--csv`.
 - Las tres crean los directorios que falten, escriben a una ruta temporal y renombran de forma
   atómica, y se niegan a sobrescribir una ruta que sea un directorio.
+- `--save` (con un `.lila` y un escenario suyo) guarda la corrida en el proyecto, como la app; ver
+  «Guardar una corrida» en [`export`](#export-538).
 
 ## `compare`
 
@@ -109,6 +111,69 @@ La tabla por defecto es un subconjunto curado de KPI; `--all` imprime todas las 
 produce `compare()` para cada elemento, recurso, flujo y desenlace. `--json <archivo>` escribe el
 `CompareResult`; `--xlsx <archivo>` escribe un libro con una pestaña por escenario más una pestaña
 Comparación. `compare` no tiene `--csv`: compara corridas ya terminadas, no reproduce una.
+
+## `export` (#538)
+
+Produce los entregables sin la app —sin ventana ni navegador— con el mismo código del motor que
+usa la app:
+
+- `lila export diagram <modelo.bpmn|proyecto.lila>` dibuja el diagrama con el renderizador SVG
+  propio del motor (la geometría del DI de BPMN, colores de Lila Light sobre blanco). Sin `--out`
+  imprime el SVG por stdout.
+- `lila export doc <proyecto.lila> --out archivo.docx|archivo.html` escribe el documento del
+  proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo, el
+  escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG. El Word va
+  **sin diagrama** y ninguno de los dos lleva las gráficas de la corrida: Word necesita un PNG y el
+  motor no rasteriza. Una nota por stderr dice qué quedó fuera.
+- `lila export results <proyecto.lila> --out libro.xlsx|directorio` escribe los resultados de una
+  corrida guardada: un `.xlsx` (Resumen, Elementos, Flujos, Recursos, Parámetros) o, con
+  `--format csv`, `elements.csv`, `flows.csv`, `resources.csv` y `process.csv` en el directorio,
+  los mismos archivos que escribe `lila run` (una corrida guardada no conserva el log de eventos,
+  así que no hay `log.csv`).
+
+`--format` sale por defecto de la extensión de `--out` (`.docx`, `.html`, `.xlsx`). `--process`
+elige el proceso de un repositorio, como en el resto. Las **corridas** son las que la app guardó en
+el `.lila`: `--run latest` (por defecto) es la corrida del modelo y escenario actuales,
+`--scenario <nombre>` la acota a un escenario (necesario si varios tienen una corrida actual) y
+`--run <id>` elige una por id; un error lista los ids; `--run <id>` junto con `--scenario` es un error. El documento solo admite una corrida actual
+y, sin ella, va sin resultados; `results` sin corrida es un error que lo dice. Los resultados de
+una corrida anterior se exportan contra el modelo con el que corrió.
+
+**No se sobrescribe nada**: un archivo de salida que ya existe es un error y no se escribe nada,
+salvo con `--force`. El archivo que se exporta (el `.lila` o `.bpmn`) nunca es un destino, con
+`--force` o sin él, por ninguna ruta que llegue a él. Cada archivo se escribe en un temporal a su
+lado y se publica de una vez, así que un error nunca deja medio archivo.
+
+```bash
+npx lila export diagram examples/pedido.lila --out results/pedido.svg
+```
+Código de salida: `0`.
+
+```bash
+npx lila export doc examples/pedido.lila --out results/pedido.html
+```
+Código de salida: `0`.
+
+**Guardar una corrida**: `lila run <proyecto.lila> <escenario> --save` simula un escenario del
+archivo y guarda la corrida en el `.lila` exactamente como la app (misma forma, las revisiones de
+modelo y escenario con que corrió, construida por la misma función del motor), así que la app la
+abre como corrida actual y `lila export` la usa. La escritura es atómica y bajo el candado del
+archivo; las escrituras concurrentes llegan todas, y se rechaza guardar si el modelo o ese escenario
+cambiaron. Un `.bpmn` o un escenario en disco no se pueden guardar. La app conserva todas las
+corridas, y `--save` también:
+
+```text
+npx lila run proyecto.lila as-is --seed 42 --replications 5 --save
+npx lila export results proyecto.lila --out results/as-is.xlsx
+```
+
+`examples/pedido.lila` no guarda corridas, así que sus resultados no se pueden exportar hasta
+guardar una (el mensaje dice cómo):
+
+```bash
+npx lila export results examples/pedido.lila --out results/pedido.xlsx
+```
+Código de salida: `1`.
 
 ## `mcp`
 
@@ -140,7 +205,7 @@ Código de salida: `0`.
 | Código | Significado |
 | --- | --- |
 | `0` | El comando corrió; `validate` puede haber impreso avisos igual. |
-| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, o un error no capturado del comando (mensaje por stderr). |
+| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
 
 ## Para agentes
 

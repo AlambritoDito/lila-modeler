@@ -44,14 +44,14 @@ function extractExamples(markdown: string): DocExample[] {
   return examples;
 }
 
-const VALUE_FLAGS = new Set(['--seed', '--replications', '--lang', '--process']);
-const OUTPUT_FLAGS = new Set(['--json', '--csv', '--xlsx']);
+const VALUE_FLAGS = new Set(['--seed', '--replications', '--lang', '--process', '--format', '--run', '--scenario']);
+const OUTPUT_FLAGS = new Set(['--json', '--csv', '--xlsx', '--out']);
 
 /**
  * Turns one documented `npx lila …` command into an argv for `main()`: positionals that name a
  * path in the repo resolve against the repo root (the doc says every example runs from there),
  * and any other positional — a scenario named inside a `.lila` (#466) — passes through as
- * written; `--seed`/`--replications`/`--process` pass through untouched, and `--json`/`--csv`/`--xlsx` targets are redirected into `outputDir`
+ * written; `--seed`/`--replications`/`--process`/`--format`/`--run`/`--scenario` pass through untouched, and `--json`/`--csv`/`--xlsx`/`--out` targets are redirected into `outputDir`
  * so the test never writes into the repository itself.
  */
 function toArgv(command: string, outputDir: string): { argv: string[]; outputs: Map<string, string> } {

@@ -86,6 +86,8 @@ Exit code: `0`.
   sheets. No event log sheet — use `--csv` for that.
 - All three create missing directories, write to a temporary path and rename atomically, and
   refuse to overwrite a path that is a directory.
+- `--save` (with a `.lila` and a scenario of it) stores the run in the project, as the app does;
+  see «Storing a run» under [`export`](#export-538).
 
 ## `compare`
 
@@ -106,6 +108,67 @@ The default table is a curated KPI subset; `--all` prints every metric `compare(
 every element, resource, flow and outcome. `--json <file>` writes the `CompareResult`; `--xlsx
 <file>` writes one workbook with one tab per scenario plus a Comparison tab. `compare` has no
 `--csv` — it compares finished runs, it does not replay one.
+
+## `export` (#538)
+
+Produces the deliverables without the app — no window, no browser — from the same engine code
+the app uses:
+
+- `lila export diagram <model.bpmn|project.lila>` draws the diagram with the engine's own SVG
+  renderer (the BPMN DI geometry, Lila Light colours on white). Without `--out` it prints the SVG
+  on stdout.
+- `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
+  app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
+  a stored run. The HTML embeds the SVG diagram. The Word file has **no diagram**, and neither
+  format has the run's charts: Word needs a PNG and the engine has no rasteriser. A note on stderr
+  says what was left out.
+- `lila export results <project.lila> --out book.xlsx|directory` writes the results of a stored
+  run: one `.xlsx` (Summary, Elements, Flows, Resources, Parameters), or with `--format csv`
+  `elements.csv`, `flows.csv`, `resources.csv` and `process.csv` in the directory, the same files
+  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`).
+
+`--format` defaults to the extension of `--out` (`.docx`, `.html`, `.xlsx`). `--process` picks
+the process of a repository, as elsewhere. **Runs** are the ones the app saved in the `.lila`:
+`--run latest` (the default) is the run of the current model and scenario, `--scenario <name>`
+narrows it to one scenario (needed when several scenarios have a current run), and `--run <id>`
+picks one by id — an error lists the ids; `--run <id>` and `--scenario` together are an error. The document only takes a current run and, without one,
+goes without results; `results` without a run is an error saying so. An older run's results are
+exported against the model it ran on.
+
+**Nothing is overwritten**: an existing output file is an error and nothing is written, unless
+`--force`. The file being exported (the `.lila` or `.bpmn`) is never a destination, `--force` or
+not, by any path that reaches it. Every file is written to a temporary file next to it and then
+published at once, so an error never leaves half a file.
+
+```bash
+npx lila export diagram examples/pedido.lila --out results/pedido.svg
+```
+Exit code: `0`.
+
+```bash
+npx lila export doc examples/pedido.lila --out results/pedido.html
+```
+Exit code: `0`.
+
+**Storing a run**: `lila run <project.lila> <scenario> --save` simulates a scenario of the archive
+and stores the run in the `.lila` exactly as the app does (same shape, the model and scenario
+revisions it ran on, built by the same engine function), so the app opens it as the current run
+and `lila export` uses it. The write is atomic and under the file's lock; concurrent saves all
+land, and a save after the model or that scenario changed is refused. A `.bpmn` or a scenario file
+on disk cannot be saved. The app keeps every run, and so does `--save`:
+
+```text
+npx lila run project.lila as-is --seed 42 --replications 5 --save
+npx lila export results project.lila --out results/as-is.xlsx
+```
+
+`examples/pedido.lila` stores no run, so its results cannot be exported until one is saved (the
+message says how):
+
+```bash
+npx lila export results examples/pedido.lila --out results/pedido.xlsx
+```
+Exit code: `1`.
 
 ## `mcp`
 
@@ -137,7 +200,7 @@ Exit code: `0`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The command ran; `validate` may still have printed warnings. |
-| `1` | Usage error, unknown command, a model/scenario validation error, a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, or an uncaught error from the command (message on stderr). |
+| `1` | Usage error, unknown command, a model/scenario validation error, a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
 
 ## For agents
 

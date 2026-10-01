@@ -45,6 +45,8 @@ import {
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
+import { exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile } from './project-fs/exports.js';
+import { saveSimulationRun } from './project-fs/save-run.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
@@ -553,6 +555,8 @@ interface RunCommandOptions {
   json?: string | undefined;
   csv?: string | undefined;
   xlsx?: string | undefined;
+  /** `--save` (#538): store the run in the `.lila`, as the app does. */
+  save?: boolean | undefined;
   locale: Locale;
 }
 
@@ -569,6 +573,7 @@ async function runCommand(
     validation: modelValidation,
     lila,
   } = await loadValidatedModel(modelFile, locale, { process: options.process });
+  if (options.save === true && lila === undefined) throw new Error(C.saveRunNeedsLila());
   if (modelHasErrors(modelValidation, locale)) return 1;
 
   const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
@@ -612,6 +617,10 @@ async function runCommand(
         scenarioWorkbook(ir, scenario, result, resourceNamesOf(scenario), locale),
         locale,
       );
+    }
+    if (options.save === true) {
+      const saved = await saveSimulationRun(lila!, scenarioFile, scenario, result, locale);
+      console.log(C.runSaved(saved.id, saved.file, saved.process));
     }
     return 0;
   } catch (error) {
@@ -903,6 +912,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
       json: { type: 'string' },
       csv: { type: 'string' },
       xlsx: { type: 'string' },
+      save: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -920,6 +930,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
     json: values.json,
     csv: values.csv,
     xlsx: values.xlsx,
+    save: values.save === true,
     locale,
   });
 }
@@ -963,6 +974,86 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
  * `@lila-modeler/mcp` (que se compila después) y el paquete solo se resuelve cuando alguien corre `lila mcp`.
  */
 const MCP_PACKAGE = '@lila-modeler/mcp';
+
+const EXPORT_FORMATS = { doc: ['docx', 'html'], results: ['xlsx', 'csv'] } as const;
+
+/** `--format`, or the one `--out`'s extension names (`.htm` is html). */
+function exportFormat<K extends 'doc' | 'results'>(
+  kind: K,
+  format: string | undefined,
+  out: string,
+  locale: Locale,
+): (typeof EXPORT_FORMATS)[K][number] {
+  const accepted: readonly string[] = EXPORT_FORMATS[kind];
+  const extension = /\.([a-z0-9]+)$/i.exec(out)?.[1]?.toLowerCase();
+  const chosen = format ?? (extension === 'htm' ? 'html' : extension);
+  if (chosen === undefined || !accepted.includes(chosen)) {
+    throw new Error(messages(locale).cli.exportInvalidFormat(format ?? '', accepted.join(', ')));
+  }
+  return chosen as (typeof EXPORT_FORMATS)[K][number];
+}
+
+/**
+ * `lila export diagram|doc|results` (#538): the same engine functions as the MCP export tools
+ * (`@lila-modeler/engine/project-fs`), printing the paths written and any note on stderr.
+ */
+async function dispatchExport(argv: readonly string[], locale: Locale): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      process: { type: 'string' },
+      out: { type: 'string' },
+      format: { type: 'string' },
+      run: { type: 'string' },
+      scenario: { type: 'string' },
+      force: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: true,
+  });
+  const C = messages(locale).cli;
+  if (values.help === true) {
+    console.log(C.usage());
+    return 0;
+  }
+  if (positionals.length !== 2) {
+    console.error(C.commandError('export', C.expectedPositionals(C.exportPaths())));
+    return 1;
+  }
+  const [kind, file] = positionals as [string, string];
+  const source = { file, process: values.process, locale };
+  const write = { overwrite: values.force === true, locale };
+  if (kind === 'diagram') {
+    const { svg, file: from } = await exportDiagram(source);
+    if (values.out === undefined) process.stdout.write(`${svg}\n`);
+    else console.log(`SVG: ${writeExportFile(values.out, svg, { ...write, source: from })}`);
+    return 0;
+  }
+  if (kind !== 'doc' && kind !== 'results') {
+    console.error(C.commandError('export', C.exportUnknownKind(kind)));
+    return 1;
+  }
+  if (values.out === undefined) {
+    console.error(C.commandError('export', C.exportOutRequired(kind)));
+    return 1;
+  }
+  const selection = { run: values.run, scenario: values.scenario };
+  if (kind === 'doc') {
+    const format = exportFormat('doc', values.format, values.out, locale);
+    const doc = await exportDocument({ ...source, ...selection, format });
+    console.log(`${format.toUpperCase()}: ${writeExportFile(values.out, doc.data, { ...write, source: doc.file })}`);
+    for (const note of doc.notes) console.error(note);
+    return 0;
+  }
+  const format = exportFormat('results', values.format, values.out, locale);
+  const results = await exportResults({ ...source, ...selection, format });
+  if (results.data instanceof Uint8Array) {
+    console.log(`XLSX: ${writeExportFile(values.out, results.data, { ...write, source: results.file })}`);
+  } else {
+    for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
+  }
+  return 0;
+}
 
 async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -1035,6 +1126,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'validate') return await dispatchValidate(args, locale);
     if (command === 'run') return await dispatchRun(args, locale);
     if (command === 'compare') return await dispatchCompare(args, locale);
+    if (command === 'export') return await dispatchExport(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
     console.error(C.unknownCommand(command));
     console.error(C.usage());

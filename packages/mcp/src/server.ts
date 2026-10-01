@@ -39,6 +39,12 @@ import {
   lilaScenarioReader,
   openLilaProcess,
   writeLilaScenario,
+  exportDiagram,
+  exportDocument,
+  exportResults,
+  saveSimulationRun,
+  writeExportDirectory,
+  writeExportFile,
   type LilaProcess,
 } from '@lila-modeler/engine/project-fs';
 import { runResultSchema } from '@lila-modeler/engine/result-schema';
@@ -287,6 +293,7 @@ interface RunSimulationInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  saveRun?: boolean | undefined;
   locale?: Locale | undefined;
 }
 
@@ -297,7 +304,7 @@ interface RunSimulationInput {
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
 async function runSimulation(
-  { model, process, scenario, seed, replications, saveTo }: RunSimulationInput,
+  { model, process, scenario, seed, replications, saveTo, saveRun }: RunSimulationInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
@@ -310,6 +317,11 @@ async function runSimulation(
     resolved = resolveScenarioInput(scenario, locale, lila);
   } catch (error) {
     return fail(message(error));
+  }
+  // `saveRun` (#538) stores the run in the archive: it needs a `.lila` and one of its scenarios.
+  if (saveRun === true && lila === undefined) return fail(messages(locale).cli.saveRunNeedsLila());
+  if (saveRun === true && typeof scenario !== 'string') {
+    return fail(messages(locale).cli.saveRunNeedsArchiveScenario(M.inlineScenario()));
   }
 
   const modelPath =
@@ -353,7 +365,18 @@ async function runSimulation(
     }
   }
 
-  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false, structuredContent: result };
+  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(result, null, 2) }];
+  if (saveRun === true) {
+    try {
+      // The `RunResult` stays the structured content (its `outputSchema`); where the run went is a
+      // second text block.
+      const savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
+      content.push({ type: 'text', text: JSON.stringify({ savedRun }, null, 2) });
+    } catch (error) {
+      return fail(message(error));
+    }
+  }
+  return { content, isError: false, structuredContent: result };
 }
 
 interface CompareScenariosInput {
@@ -873,7 +896,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`scenario` accepts a .json path (resolves `extends`) or the already resolved scenario as an ' +
         'inline object. `model` may be a .lila project: `scenario` is then also the name of a ' +
         'scenario of that process (a .json path that exists wins), and `process` picks the process ' +
-        'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`. ' +
+        'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`; ' +
+        '`saveRun` stores the run in the .lila, like `lila run --save`. ' +
         'isError only marks that the tool failed (invalid model/scenario, unreadable file).',
       inputSchema: z.object({
         model: z.string().optional().describe('Path to the .bpmn or .lila; defaults to scenario.model.'),
@@ -885,6 +909,14 @@ export function createServer(options: ServerOptions = {}): McpServer {
         seed: z.number().int().optional().describe('Overrides run.seed.'),
         replications: z.number().int().min(1).optional().describe('Overrides run.replications.'),
         saveTo: z.string().optional().describe('Path to write the RunResult as JSON.'),
+        saveRun: z
+          .boolean()
+          .optional()
+          .describe(
+            'With a .lila `model` and a scenario of it: store the run in the project, as the app does ' +
+              '(it opens as the current run; export_document/export_results use it). A second content ' +
+              'block returns { savedRun: { id, file, process, scenario } }.',
+          ),
         locale: localeSchema,
       }),
       outputSchema: runResultSchema,
@@ -976,6 +1008,125 @@ export function createServer(options: ServerOptions = {}): McpServer {
       }),
     },
     async (input): Promise<CallToolResult> => patchScenario(input, localeOf(input.locale)),
+  );
+
+  // App-free exports (#538): thin layers over `@lila-modeler/engine/project-fs`, like `lila export`.
+  const processSchema = z
+    .string()
+    .optional()
+    .describe('Slug of the process when the .lila holds several; implicit when it holds one.');
+  const runSchema = z
+    .string()
+    .optional()
+    .describe('A stored run id, or "latest" (default): the run of the current model and scenario.');
+  const scenarioSchema = z
+    .string()
+    .optional()
+    .describe('With "latest", the run of this scenario (needed when several scenarios have one).');
+  const overwriteSchema = z.boolean().optional().describe('Replace an existing file. Default false: existing files are never overwritten.');
+
+  server.registerTool(
+    'export_diagram',
+    {
+      title: 'Export diagram',
+      description:
+        'Draws the diagram of a .bpmn, or of one process of a .lila, as SVG with the engine\'s own ' +
+        'renderer (no app, no browser): the BPMN DI geometry in the Lila Light colours on white. ' +
+        'Without `saveTo` the SVG comes back in `svg`; with it, it is written atomically and `file` ' +
+        'is the absolute path. Like `lila export diagram`.',
+      inputSchema: z.object({
+        project: z.string().optional().describe('Path to a .lila, relative to the cwd of the server process.'),
+        path: z.string().optional().describe('Path to a .bpmn (or .lila), instead of `project`.'),
+        process: processSchema,
+        saveTo: z.string().optional().describe('Path of the .svg to write.'),
+        overwrite: overwriteSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, path, process, saveTo, overwrite, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      const M = messages(language).mcp;
+      if (project !== undefined && path !== undefined) return errorResult(toolMessage('export_diagram', M.bothProjectAndPath()));
+      const file = project ?? path;
+      if (file === undefined) return errorResult(toolMessage('export_diagram', M.projectOrPath()));
+      try {
+        const { svg, process: slug, file: source } = await exportDiagram({ file, process, locale: language });
+        if (saveTo === undefined) return textResult({ process: slug ?? null, svg });
+        return textResult({ process: slug ?? null, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
+      } catch (error) {
+        return errorResult(toolMessage('export_diagram', message(error)));
+      }
+    },
+  );
+
+  server.registerTool(
+    'export_document',
+    {
+      title: 'Export process document',
+      description:
+        'Writes the process document of one process of a .lila, like the app\'s Export document: ' +
+        'diagram, element descriptions in flow order, the scenario and the results of a stored run. ' +
+        '`run` "latest" (default) takes the run of the current model and scenario, and the document ' +
+        'goes without results when there is none; an older run is refused. `format` docx or html; ' +
+        'the HTML embeds the SVG diagram, the Word file has no diagram and neither has the run\'s ' +
+        'charts (no rasteriser): `notes` says what was left out. Like `lila export doc`.',
+      inputSchema: z.object({
+        project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
+        process: processSchema,
+        run: runSchema,
+        scenario: scenarioSchema,
+        format: z.enum(['docx', 'html']),
+        saveTo: z.string().describe('Path of the .docx or .html to write.'),
+        overwrite: overwriteSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, run, scenario, format, saveTo, overwrite, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      try {
+        const doc = await exportDocument({ file: project, process, run, scenario, format, locale: language });
+        const file = writeExportFile(saveTo, doc.data, { overwrite, source: doc.file, locale: language });
+        return textResult({ file, format, project: doc.file, process: doc.process, run: doc.run, notes: doc.notes });
+      } catch (error) {
+        return errorResult(toolMessage('export_document', message(error)));
+      }
+    },
+  );
+
+  server.registerTool(
+    'export_results',
+    {
+      title: 'Export results',
+      description:
+        'Writes the results of a run stored in a .lila, like `lila run --xlsx`/`--csv`: `xlsx` is ' +
+        'one workbook (Summary, Elements, Flows, Resources, Parameters) at `saveTo`; `csv` writes ' +
+        'elements, flows, resources and process .csv into the directory `saveTo` (a stored run ' +
+        'keeps no event log). `run` "latest" (default) is the run of the current model and ' +
+        'scenario; an older run is exported by id against the model it ran on. An error says so ' +
+        'when the process has no run. Like `lila export results`.',
+      inputSchema: z.object({
+        project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
+        process: processSchema,
+        run: runSchema,
+        scenario: scenarioSchema,
+        format: z.enum(['xlsx', 'csv']),
+        saveTo: z.string().describe('Path of the .xlsx, or the directory for the CSV files.'),
+        overwrite: overwriteSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, run, scenario, format, saveTo, overwrite, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      try {
+        const results = await exportResults({ file: project, process, run, scenario, format, locale: language });
+        const files = results.data instanceof Uint8Array
+          ? [writeExportFile(saveTo, results.data, { overwrite, source: results.file, locale: language })]
+          : writeExportDirectory(saveTo, results.data, { overwrite, source: results.file, locale: language });
+        return textResult({ files, format, project: results.file, process: results.process, run: results.run });
+      } catch (error) {
+        return errorResult(toolMessage('export_results', message(error)));
+      }
+    },
   );
 
   return server;

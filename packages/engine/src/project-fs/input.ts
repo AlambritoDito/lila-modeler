@@ -237,6 +237,15 @@ async function exclusive<T>(file: string, work: () => Promise<T>): Promise<T> {
  * version, the second one is refused (`lilaChangedOnDisk`) instead of silently overwriting the
  * first. Returns `document`.
  */
+/**
+ * An `Error` with the message in the caller's language and a stable `code` (#538), so a caller can
+ * tell «changed on disk» (`E-CAMBIO-EXTERNO`) and «busy» (`E-ARCHIVO-OCUPADO`) apart without
+ * reading the text.
+ */
+function codedError(message: string, code: 'E-CAMBIO-EXTERNO' | 'E-ARCHIVO-OCUPADO'): Error & { code: string } {
+  return Object.assign(new Error(message), { code });
+}
+
 export async function writeLilaProject(
   input: LilaProcess,
   document: ProjectDocument,
@@ -251,16 +260,16 @@ export async function writeLilaProject(
         overwrite: true,
         beforeWrite: async () => {
           if (!sameSnapshot(await snapshotOf(input.file), input.snapshot)) {
-            throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
+            throw codedError(messages(locale).cli.lilaChangedOnDisk(input.file), 'E-CAMBIO-EXTERNO');
           }
         },
       });
     } catch (error) {
       if (error instanceof ProjectIOError && error.code === 'E-ARCHIVO-OCUPADO') {
-        throw new Error(messages(locale).cli.lilaBusy(input.file));
+        throw codedError(messages(locale).cli.lilaBusy(input.file), 'E-ARCHIVO-OCUPADO');
       }
       if (error instanceof ProjectIOError && error.code === 'E-CAMBIO-EXTERNO') {
-        throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
+        throw codedError(messages(locale).cli.lilaChangedOnDisk(input.file), 'E-CAMBIO-EXTERNO');
       }
       if (error instanceof ProjectIOError) throw new Error(`${input.file}: ${error.code}: ${error.message}`);
       throw error;
