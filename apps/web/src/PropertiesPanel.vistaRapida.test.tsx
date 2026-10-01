@@ -35,7 +35,7 @@ beforeAll(async () => {
   asIs = JSON.parse(readFileSync(resolve(RAIZ, 'examples/pedido/as-is.scenario.json'), 'utf8')) as Record<string, unknown>;
 });
 
-/** A run where Task_TomarPedido waited 3 min on average (2 for a clerk, 1 off hours). */
+/** A run where Task_TomarPedido waited 2 min on average for a clerk, plus 1 min off hours. */
 function corrida(): RunResult {
   const stat = (mean: number) => ({ min: 0, max: 0, mean, sd: 0, total: 0 });
   return {
@@ -60,13 +60,15 @@ describe('datosVistaRapida', () => {
     expect(datos).toEqual({ tiempo: 'Triangular 1 / 2 / 5 min', recurso: 'cajero ×1', espera: null });
   });
 
-  it('with a run but no log, the mean wait (resource + off hours), flagged as not p95', () => {
+  it('with a run but no log, the mean resource wait (off hours apart, as the dock and the canvas), flagged as not p95', () => {
     const datos = datosVistaRapida({ id: 'Task_TomarPedido', ir, escenario: asIs, resultado: corrida(), S: S() });
-    expect(datos?.espera).toEqual({ texto: '3 min', p95: false });
+    // QA of #394: 2 min, not 3 — the off-hours minute is not a wait for a resource.
+    expect(datos?.espera).toEqual({ texto: '2 min', p95: false });
   });
 
   it('with the log in memory, the p95 of the completed instances', () => {
-    const rows = Array.from({ length: 21 }, (_, i) => fila('Task_TomarPedido', `a${i}`, i * 60));
+    // Off-hours time on every row: the resource-wait p95 leaves it out (QA of #394).
+    const rows = Array.from({ length: 21 }, (_, i) => ({ ...fila('Task_TomarPedido', `a${i}`, i * 60), offHoursWait: 3600 }));
     // An in-flight instance does not count, whatever it waited (RESULTS_FORMAT § 5).
     rows.push(fila('Task_TomarPedido', 'vuelo', 999_999, 'inFlight'));
     const datos = datosVistaRapida({
@@ -78,7 +80,7 @@ describe('datosVistaRapida', () => {
     const truncado = datosVistaRapida({
       id: 'Task_TomarPedido', ir, escenario: asIs, resultado: corrida(), log: { rows, truncated: true }, S: S(),
     });
-    expect(truncado?.espera?.p95).toBe(false);
+    expect(truncado?.espera).toEqual({ texto: '2 min', p95: false });
   });
 
   it('a timer has a time and no resource row; gateways, events and flows have no quick view', () => {

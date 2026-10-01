@@ -27,6 +27,14 @@ export type MedidaInstancia = (fila: EventLogRow) => number;
 /** The wait before starting: `resourceWait + offHoursWait`, as `process.waitTime` adds them. */
 export const ESPERA: MedidaInstancia = (fila) => fila.resourceWait + fila.offHoursWait;
 
+/**
+ * The wait for a resource only (`resourceWait`): what the engine's `elements[id].resourceWait`, the
+ * bottleneck ranking, the canvas labels and the Results «waiting for resource» columns measure. The
+ * activity views (the Simulate dock, the properties quick view) use this one, so a task's wait reads
+ * the same everywhere (QA of #394).
+ */
+export const ESPERA_RECURSO: MedidaInstancia = (fila) => fila.resourceWait;
+
 /** Empirical percentile `p` (0..1) with linear interpolation; `NaN` for an empty sample. */
 export function percentil(muestra: readonly number[], p: number): number {
   if (muestra.length === 0) return Number.NaN;
@@ -79,4 +87,13 @@ export function percentilesPorElemento(
   return new Map(
     [...muestrasPorElemento(rows, warmup, medida)].map(([id, muestra]) => [id, ps.map((p) => percentil(muestra, p))]),
   );
+}
+
+/**
+ * Whether a log sample can give a p95: present and complete. One rule for the properties quick view
+ * and the Simulate dock (QA of #394): a truncated sample covers the first cases only and would bias
+ * the percentile, so neither shows one from it.
+ */
+export function p95Fiable(log: { truncated: boolean } | undefined): log is { rows: readonly EventLogRow[]; truncated: boolean } {
+  return log !== undefined && !log.truncated;
 }

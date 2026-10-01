@@ -75,6 +75,8 @@ export const ATAJOS = [
   { id: 'derecha', grupo: 'paneles', tecla: 'Mod+Shift+P' },
   { id: 'diagramas', grupo: 'paneles', tecla: 'Mod+Shift+D' },
   { id: 'estado', grupo: 'paneles', tecla: 'Mod+Shift+B' },
+  // The Simulate dock (#394): ⌘J, the bottom panel key of VS Code and other editors.
+  { id: 'dock', grupo: 'paneles', tecla: 'Mod+J' },
   { id: 'irModos', grupo: 'paneles', tecla: 'F6' },
   { id: 'irPanel', grupo: 'paneles', tecla: 'Shift+F6' },
 ] as const satisfies readonly Atajo[];

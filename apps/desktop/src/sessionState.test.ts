@@ -222,21 +222,29 @@ describe('ajustes de apariencia (LILA-113)', () => {
     expect(parseAjustes({ paletaAncho: '200', railAncho: Number.NaN })).toEqual({});
   });
 
+  it('the dock height (#394) is kept only as a number inside 120–640', () => {
+    expect(parseAjustes({ dockAlto: 120 })).toEqual({ dockAlto: 120 });
+    expect(parseAjustes({ dockAlto: 640 })).toEqual({ dockAlto: 640 });
+    expect(parseAjustes({ dockAlto: 119 })).toEqual({});
+    expect(parseAjustes({ dockAlto: 641 })).toEqual({});
+    expect(parseAjustes({ dockAlto: '240' })).toEqual({});
+  });
+
   it('avanzado (#447) is kept only as a boolean', () => {
     expect(parseAjustes({ avanzado: true })).toEqual({ avanzado: true });
     expect(parseAjustes({ avanzado: false })).toEqual({ avanzado: false });
     expect(parseAjustes({ avanzado: '1' })).toEqual({});
   });
 
-  it('paneles (#412) keeps only plain per-mode objects with the four boolean fields', () => {
+  it('paneles (#412) keeps only plain per-mode objects with the region booleans (the dock since #394)', () => {
     expect(parseAjustes({ paneles: {
       modelar: { izquierda: false, derecha: true, diagramas: 'no', estado: false, extra: false },
-      simular: { derecha: false },
+      simular: { derecha: false, dock: false },
       rutas: 'oculto',
       comparar: [true],
     } })).toEqual({ paneles: {
       modelar: { izquierda: false, derecha: true, estado: false },
-      simular: { derecha: false },
+      simular: { derecha: false, dock: false },
     } });
     expect(parseAjustes({ paneles: 'todo' })).toEqual({});
     expect(parseAjustes({ paneles: [{ derecha: false }] })).toEqual({});

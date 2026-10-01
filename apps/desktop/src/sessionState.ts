@@ -87,6 +87,7 @@ export function parseAjustes(value: unknown): Ajustes {
     panelAncho?: number;
     paletaAncho?: number;
     railAncho?: number;
+    dockAlto?: number;
     avanzado?: boolean;
     paneles?: Record<string, VisibilidadPaneles>;
     ventanaEscenario?: WindowBounds;
@@ -109,6 +110,8 @@ export function parseAjustes(value: unknown): Ajustes {
   // Left column widths (#406): the palette's 180–360 px and the rail's 160–320 px.
   if (typeof value.paletaAncho === 'number' && value.paletaAncho >= 180 && value.paletaAncho <= 360) ajustes.paletaAncho = value.paletaAncho;
   if (typeof value.railAncho === 'number' && value.railAncho >= 160 && value.railAncho <= 320) ajustes.railAncho = value.railAncho;
+  // Height of the Simulate dock (#394): the renderer's 120–640 px.
+  if (typeof value.dockAlto === 'number' && value.dockAlto >= 120 && value.dockAlto <= 640) ajustes.dockAlto = value.dockAlto;
   // «Advanced» (#447): a plain on/off switch.
   if (typeof value.avanzado === 'boolean') ajustes.avanzado = value.avanzado;
   const paneles = parsePaneles(value.paneles);
@@ -122,12 +125,12 @@ export function parseAjustes(value: unknown): Ajustes {
 }
 
 /** Region names of `VisibilidadPaneles` (#412); anything else in a mode's entry is dropped. */
-const REGIONES = ['izquierda', 'derecha', 'diagramas', 'estado'] as const;
+const REGIONES = ['izquierda', 'derecha', 'diagramas', 'estado', 'dock'] as const;
 
 /**
  * Per-mode panel visibility (#412). Main does not know the mode ids (the renderer does and ignores
  * the unknown ones), so it only checks the shape: a plain object of at most 16 modes, each a plain
- * object from which only the four boolean fields are copied.
+ * object from which only the region fields (booleans) are copied.
  */
 function parsePaneles(value: unknown): Record<string, VisibilidadPaneles> | undefined {
   if (!isPlainObject(value) || Object.keys(value).length > 16) return undefined;

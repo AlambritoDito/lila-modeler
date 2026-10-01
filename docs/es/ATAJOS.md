@@ -96,6 +96,7 @@ La paleta de figuras de la izquierda filtra al teclear e inserta la figura resal
 | Mostrar u ocultar el panel derecho | `⇧⌘P` | `Ctrl+Shift+P` |
 | Mostrar u ocultar las pestañas de diagramas | `⇧⌘D` | `Ctrl+Shift+D` |
 | Mostrar u ocultar la barra de estado | `⇧⌘B` | `Ctrl+Shift+B` |
+| Mostrar u ocultar el dock de simulación (Simular) | `⌘J` | `Ctrl+J` |
 | Llevar el foco a los modos | `F6` | `F6` |
 | Llevar el foco al panel derecho | `⇧F6` | `Shift+F6` |
 

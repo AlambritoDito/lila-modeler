@@ -139,10 +139,19 @@ follow that same setting. This walkthrough uses the English labels.
   runs, a **Cancel** button and a progress indicator (`% · replication N`) appear. The
   **Bottlenecks** toggle turns the diagram overlay on or off without
   re-simulating.
+- **Simulation dock** (under the canvas): when a run finishes you stay in Simulate and the dock
+  opens on **Quick results** — one row per task with cases, average wait (every replication), wait
+  p95 (from the event log sample, as the note under the table says), utilization of the busiest
+  pool and total fixed cost, plus a total row — with the scenario's KPIs and the main bottleneck
+  on top (click it to select it on the canvas). The other tabs are **Bottlenecks**, **Run log** and
+  **Warnings** (grouped by code). **Open in Results** goes to
+  the full tables and **Export CSV** downloads `elements.csv`. Drag its top edge or use the arrow
+  keys on it to resize it (it never takes more than the window leaves after a usable canvas); `⌘J`,
+  the View menu, a double-click or `Enter` on that edge hides and shows it.
 
 ### Results («Resultados»)
 
-When a simulation finishes, the app switches to this mode on its own. Each table (elements, flows,
+Open it from the dock's **Open in Results** (or the Results mode): a finished run no longer switches here on its own. Each table (elements, flows,
 resources, process) has its own **Export CSV** button, which downloads exactly the
 same content, byte for byte, that `npx lila run --csv` writes to disk (`elements.csv`, `flows.csv`,
 `resources.csv`, `process.csv`).
