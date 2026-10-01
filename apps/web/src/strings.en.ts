@@ -262,6 +262,9 @@ export const en = {
     sinValor: '—',
     densidadEstado: (nombre: string): string => `${nombre} density`,
     zoom: (porCiento: number): string => `Zoom ${porCiento} % · fit`,
+    cambioExterno: 'The file changed outside Lila',
+    recargarCambioExterno: 'Reload',
+    mantenerMios: 'Keep mine',
     diagramaSuelto: 'Loose diagram: scenarios and runs are not saved until «Save as»',
     perdidaAlExportar: (n: number, lista: string): string =>
       `${n} ${n === 1 ? 'element or reference' : 'elements or references'} will be lost on export: ${lista}`,

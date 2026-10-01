@@ -283,6 +283,22 @@ export class DesktopStore implements ProjectSessionStore {
     return document;
   }
 
+  /**
+   * #539: main reports a change it did not make to the project it watches; news about a project
+   * this store has since left (another one opened, an example from the gallery) is dropped.
+   */
+  onExternalChange(cb: () => void): () => void {
+    return this.bridge.onExternalChange?.((dir) => {
+      if (dir === this.activeDir) cb();
+    }) ?? (() => {});
+  }
+
+  /** #539: the open project again, through `openRecent` (the door Open and the recents use). */
+  async reload(): Promise<ProjectDocument | null> {
+    if (this.activeDir === null) return null;
+    return this.openRecent(this.activeDir, this.activeModelFile);
+  }
+
   /** `.bpmn` pendiente de abrir (doble clic, `open-file`, argumento de línea de comandos). Se consume una vez. */
   async pendingOpenPath(): Promise<OpenPathRequest | null> {
     return this.bridge.pendingOpenPath();

@@ -56,6 +56,11 @@ const lila = {
     ipcRenderer.on('lila:open-path', listener);
     return () => ipcRenderer.removeListener('lila:open-path', listener);
   },
+  onExternalChange: (cb: (dir: string) => void) => {
+    const listener = (_event: unknown, dir: string) => cb(dir);
+    ipcRenderer.on('lila:reload', listener);
+    return () => ipcRenderer.removeListener('lila:reload', listener);
+  },
   readSettings: () => ipcRenderer.invoke('lila:readSettings') as Promise<Ajustes>,
   writeSettings: (ajustes: Ajustes) => ipcRenderer.invoke('lila:writeSettings', ajustes) as Promise<void>,
   exportar: (exportacion: Exportacion) => ipcRenderer.invoke('lila:exportar', exportacion) as Promise<string | null>,

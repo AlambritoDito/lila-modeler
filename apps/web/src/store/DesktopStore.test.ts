@@ -109,6 +109,7 @@ class FakeBridge implements LilaBridge {
 
   recents: Recent[] = [];
   openRecentImpl: ((dir: string, file?: string) => Promise<LilaProjectDocument | null>) | null = null;
+  onExternalChange?: (cb: (dir: string) => void) => () => void;
   private openPathCb: ((path: OpenPathRequest) => void) | null = null;
   pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
 
@@ -778,5 +779,39 @@ describe('DesktopStore.saveProject · destino de «Guardar como»', () => {
     await expect(store.saveProject(otro)).resolves.not.toBeNull();
     expect(bridge.dialogos.at(-1)).toBe('saveFile');
     expect(bridge.writes.at(-1)).toMatchObject({ dir: '/proyectos/otro.lila', options: { saveAs: true } });
+  });
+});
+
+describe('DesktopStore and changes made outside Lila (#539)', () => {
+  it('passes on only news about the open project, and reloads it through openRecent', async () => {
+    const bridge = new FakeBridge();
+    let avisar: (dir: string) => void = () => {};
+    bridge.onExternalChange = (cb) => { avisar = cb; return () => {}; };
+    const lecturas: (string | undefined)[][] = [];
+    bridge.openRecentImpl = async (dir, file) => { lecturas.push([dir, file]); return { ...documentoBase({ name: `leído ${lecturas.length}` }), problems: [] }; };
+    const store = new DesktopStore(bridge);
+    const avisos: number[] = [];
+    store.onExternalChange(() => avisos.push(1));
+
+    await expect(store.reload()).resolves.toBeNull(); // Nothing open, nothing to read.
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([]);
+
+    await store.openRecent('/proyectos/pedido.lila');
+    avisar('/proyectos/otro.lila'); // A project this store has left.
+    expect(avisos).toEqual([]);
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([1]);
+    await expect(store.reload()).resolves.toMatchObject({ name: 'leído 2' });
+    expect(lecturas.at(-1)).toEqual(['/proyectos/pedido.lila', undefined]);
+
+    store.forget(); // An example from the gallery: no longer the file's project.
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([1]);
+  });
+
+  it('a bridge without the watcher subscribes to nothing', () => {
+    const store = new DesktopStore(new FakeBridge());
+    expect(() => store.onExternalChange(() => {})()).not.toThrow();
   });
 });

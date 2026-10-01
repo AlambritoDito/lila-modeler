@@ -241,6 +241,9 @@ export const es: Strings = {
     sinValor: '—',
     densidadEstado: (nombre: string): string => `Densidad ${nombre}`,
     zoom: (porCiento: number): string => `Zoom ${porCiento} % · ajustar`,
+    cambioExterno: 'El archivo cambió fuera de Lila',
+    recargarCambioExterno: 'Recargar',
+    mantenerMios: 'Conservar los míos',
     diagramaSuelto: 'Diagrama suelto: los escenarios y las corridas no se guardan hasta «Guardar como»',
     perdidaAlExportar: (n: number, lista: string): string =>
       `${n} ${n === 1 ? 'elemento o referencia' : 'elementos o referencias'} ${

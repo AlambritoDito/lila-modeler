@@ -129,6 +129,13 @@ export interface LilaBridge {
    * suscripción.
    */
   onOpenPath(cb: (path: OpenPathRequest) => void): () => void;
+  /**
+   * The open project changed on disk and Lila did not write it (#539): an agent rewrote the
+   * `.lila` or the folder through the CLI or MCP. `dir` is the path the project was opened or saved
+   * by, so a renderer that has since moved on can ignore it. Main only reports the change; the
+   * renderer decides between reloading and asking (unsaved changes). Returns the unsubscriber.
+   */
+  onExternalChange?(cb: (dir: string) => void): () => void;
 
   /**
    * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell
