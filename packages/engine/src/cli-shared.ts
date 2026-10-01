@@ -29,8 +29,9 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { parseBpmn } from './bpmn/parse.js';
-import { validate, type ValidationResult } from './bpmn/validate.js';
+import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
+import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
+import type { ValidationResult } from './bpmn/validate.js';
 import type { RunResult } from './core/result.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
@@ -146,29 +147,56 @@ export async function loadModelSource(
   return { path, xml: readFileSync(path, 'utf8') };
 }
 
-/** Parses and validates an already loaded model; `run`, `compare` and the MCP tools start here. */
+/** A parsed and validated model; `elsewhere` goes to `validateScenario` (#546). */
+export interface ValidatedModel {
+  path: string;
+  ir: ParsedIr;
+  validation: ValidationResult;
+  elsewhere: ValidatedBpmnModel['elsewhere'];
+}
+
+/**
+ * #546: the scenarios that choose the simulated process (`ParseBpmnOptions.scenarios`): those of
+ * the `.lila` process, as the app counts them, plus the ones about to run. A `.bpmn` has no
+ * document scenarios, so its explicit scenarios decide alone.
+ */
+export function targetScenarios(
+  lila: LilaProcess | undefined,
+  given: readonly TargetingScenario[] = [],
+): TargetingScenario[] {
+  return [...given, ...Object.values(lila?.process.scenarios ?? {})];
+}
+
+/**
+ * Parses and validates an already loaded model; `run`, `compare` and the MCP tools start here.
+ * `scenarios` are the ones about to run; with the process's own (`targetScenarios`) they choose
+ * the process simulated (#546).
+ */
 export async function validatedModelOf(
-  source: Pick<ModelSource, 'path' | 'xml'>,
+  source: Pick<ModelSource, 'path' | 'xml' | 'lila'>,
   locale: Locale = 'en',
-): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
-  const parsed = await parseBpmn(source.xml);
-  const validation = validate(parsed.ir, {
-    unsupported: parsed.unsupported,
-    messageFlowCount: parsed.messageFlowCount,
-    conditionFlowIds: parsed.conditionFlowIds,
-    locale,
-  });
-  return { path: source.path, ir: parsed.ir, validation };
+  scenarios: readonly TargetingScenario[] = [],
+): Promise<ValidatedModel> {
+  const model = await validateBpmnModel(source.xml, { locale, scenarios: targetScenarios(source.lila, scenarios) });
+  return {
+    path: source.path,
+    ir: model.ir,
+    validation: { errors: model.errors, warnings: model.warnings },
+    elsewhere: model.elsewhere,
+  };
 }
 
 /** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
 export async function loadValidatedModel(
   modelFile: string,
   locale: Locale = 'en',
-  options: { process?: string | undefined } = {},
-): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult; lila?: LilaProcess | undefined }> {
+  options: {
+    process?: string | undefined;
+    scenarios?: readonly TargetingScenario[] | undefined;
+  } = {},
+): Promise<ValidatedModel & { lila?: LilaProcess | undefined }> {
   const source = await loadModelSource(modelFile, { process: options.process, locale });
-  return { ...(await validatedModelOf(source, locale)), lila: source.lila };
+  return { ...(await validatedModelOf(source, locale, options.scenarios)), lila: source.lila };
 }
 
 function isFile(path: string): boolean {

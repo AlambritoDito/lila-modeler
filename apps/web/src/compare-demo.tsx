@@ -85,7 +85,7 @@ function CompareDemo() {
     const toBe = loadResolvedScenario('to-be-3-cajeros.scenario.json');
 
     async function run(): Promise<{ ir: ProcessIR; results: RunResult[] } | undefined> {
-      const { ir } = await parseBpmn(modelXml);
+      const { ir } = await parseBpmn(modelXml, { scenarios: [asIs, toBe] });
       if (!vivo) return undefined;
 
       setStatus({ kind: 'running', label: SCENARIO_NAMES[0], progress: null });
