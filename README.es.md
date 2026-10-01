@@ -183,7 +183,9 @@ claude mcp add lila -- node /ruta/a/lila-modeler/packages/engine/bin/lila.js mcp
 
 El repo trae un `.mcp.json` de proyecto, así que abrir Claude Code en la raíz del repo registra el
 servidor solo. Contratos de cada tool y límites conocidos (sin cancelación; todo I/O contra el
-disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md).
+disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md), con la configuración para Claude Desktop,
+Codex y Hermes Agent. La [guía para agentes](docs/es/GUIA-AGENTES.md) recorre el flujo completo de un
+agente: entrevista, esquema, escenario, corrida, documento y la app abierta que se recarga sola.
 
 ## Cómo se compara con Bizagi Modeler
 
@@ -244,6 +246,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — la carpeta de proyecto y el archivo `.lila`
   (en inglés).
 - [`BPMN_EXTENSION.md`](docs/es/BPMN_EXTENSION.md) — el namespace `lila:` y la política de ids.
+- [`GUIA-AGENTES.md`](docs/es/GUIA-AGENTES.md) — el flujo de un agente, de una entrevista a un documento.
 - [`CLI.md`](docs/es/CLI.md) — la línea de comandos `lila`: cada subcomando, códigos de salida y
   una sección «para agentes».
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciséis tools.
