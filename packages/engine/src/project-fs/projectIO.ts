@@ -119,6 +119,17 @@ export async function rememberSnapshot(path: string): Promise<void> {
   else lastSeen.set(path, snap);
 }
 
+/**
+ * `true` when `path` on disk is exactly what this process last read or wrote (#539): the desktop
+ * watcher uses it to tell Lila's own saves from an agent's. A file this process never saw and that
+ * does not exist counts as own (an atomic write's temporary file that is already gone); one that
+ * exists but was never seen does not (a new file someone else wrote). Read-only: it never updates
+ * the snapshot, so a later save still meets `E-CAMBIO-EXTERNO`.
+ */
+export async function isOwnSnapshot(path: string): Promise<boolean> {
+  return sameSnapshot(await currentSnapshot(path), lastSeen.get(path) ?? null);
+}
+
 /** Manifiesto por defecto cuando `lila-project.json` falta o no se pudo interpretar. */
 function defaultManifest(dir: string): Manifest {
   const nombre = basename(dir);

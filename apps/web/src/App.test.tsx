@@ -3805,3 +3805,78 @@ it('a failed run opens the dock on Warnings (QA of #394)', async () => {
   await click(T.app.ejecutar);
   expect(dock()!.dataset['pestana']).toBe('avisos');
 });
+
+// ---------- the open project changed on disk (#539) ----------
+
+/**
+ * Mounts the app again on a session that has the desktop's `onExternalChange`/`reload`; `avisar`
+ * plays main's watcher reporting a change Lila did not make.
+ */
+async function montarConVigilancia(): Promise<{ avisar: () => Promise<void>; reload: ReturnType<typeof vi.fn> }> {
+  let avisar: () => void = () => {};
+  const reload = vi.fn();
+  session = { ...session, onExternalChange: (cb: () => void) => { avisar = cb; return () => {}; }, reload } as unknown as ProjectSessionStore;
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await click(T.app.modos.simular);
+  return { avisar: async () => { await act(async () => { avisar(); await new Promise((r) => setTimeout(r, 0)); }); }, reload };
+}
+const avisoCambioExterno = () => [...container.querySelectorAll('[role="alert"]')].find((n) => n.textContent?.includes(T.app.cambioExterno));
+
+it('a change on disk with nothing unsaved reloads, keeping the mode, the process and the scenario on screen (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  await act(async () => { filaRail(T.proyecto.escenarioToBe).click(); });
+  // An agent renames the second process's diagram through the CLI.
+  const deFuera: ProjectDocument = { ...guardado, processes: guardado.processes!.map((p) => ({ ...p, model: { ...p.model, xml: p.model.xml.replace('name="Cobro"', 'name="Cobro por agente"') } })) };
+  reload.mockResolvedValue(deFuera);
+
+  await avisar();
+  // The reload parses the BPMN for real: wait for it to put the second process back on the canvas.
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.abrir.mock.calls.at(-1)![0]).toContain('name="Cobro por agente"');
+  });
+
+  expect(reload).toHaveBeenCalledOnce();
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual([T.app.proyectoDemo, 'Cobro']);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(container.querySelector('.estado')!.textContent).toContain(T.proyecto.escenarioToBe);
+  expect(filaRail(T.proyecto.escenarioToBe)).toBeDefined(); // Still in Simulate: its rail is there.
+  // Reloaded is saved: nothing asks before closing.
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([false]);
+});
+
+it('with unsaved changes it asks: «Keep mine» keeps them, «Reload» reads the file again (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockResolvedValue(null);
+  await act(async () => mocks.scenarioChange({ version: 1, name: 'AS-IS editado' }));
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([true]);
+
+  await avisar();
+  const aviso = avisoCambioExterno();
+  expect(aviso).toBeDefined();
+  expect(reload).not.toHaveBeenCalled();
+  const botones = [...aviso!.querySelectorAll('button')];
+  expect(botones.map((b) => b.textContent)).toEqual([T.app.recargarCambioExterno, T.app.mantenerMios]);
+  expect(botones.every((b) => b.type === 'button')).toBe(true); // Reachable and pressed by keyboard.
+
+  await click(T.app.mantenerMios);
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledOnce(); // The button went away: the focus goes to the canvas.
+  expect(reload).not.toHaveBeenCalled();
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([true]);
+
+  await avisar();
+  await click(T.app.recargarCambioExterno);
+  expect(reload).toHaveBeenCalledOnce();
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledTimes(2);
+  // `null`: the file is gone from disk; the store already took it off the recents.
+  expect(container.textContent).toContain(T.app.errorRecienteAusente);
+});
