@@ -31,7 +31,6 @@ import {
   type LoadedScenarioResult,
   type ParsedIr,
 } from '@lila-modeler/engine/cli-shared';
-import { OutlineSchema } from '@lila-modeler/engine/outline';
 import {
   createLilaProcess,
   findLilaScenario,
@@ -1078,9 +1077,18 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'stored (normal form), the validator warnings and a one-line `summary`. With `dryRun`, ' +
         'builds and checks everything and writes nothing.',
       inputSchema: z.object({
-        outline: OutlineSchema.describe(
-          'The process: {name, lanes?, steps: [{id, name?, lane?, type?, next?, branches?, end?, duration?, resources?}]}.',
-        ),
+        // A plain object on purpose (QA of #553): a strict schema here would let the SDK reject the
+        // call before the handler, in English and one problem at a time. `createLilaProcess` checks
+        // everything in one pass, in the call's language, with `steps[i].field` paths.
+        outline: z
+          .record(z.string(), z.unknown())
+          .describe(
+            'The process: {name, lanes?: [lane names], steps: [{id, name?, lane?, type? (task | userTask | ' +
+              'serviceTask | callActivity | xor | and | or | timer | subprocess), next? (id or ids), branches? ' +
+              '(gateways: [{label?, to | end: true, probability?}]), end?: true, duration? ("20m", ' +
+              '"normal(20m, 5m)", seconds or a distribution object), resources? ([name | {name, quantity}]), ' +
+              'selection? ("and" | "or")}]}. List order is the flow. See docs/MCP.md.',
+          ),
         project: z.string().describe('Path to the .lila (created if missing), relative to the cwd of the server process.'),
         process: z
           .string()

@@ -84,8 +84,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** (#97) — convierte un
   esquema del proceso —carriles más una lista ordenada de pasos— en un proceso BPMN maquetado y
   validado, y lo escribe como un proceso nuevo del `.lila` `project` (o en un `.lila` nuevo). Nunca
-  reemplaza un proceso. Devuelve `{ file, slug, name, newFile, dryRun, warnings, outline, summary,
-  slugs }`. Ver [Crear un proceso desde un esquema](#crear-un-proceso-desde-un-esquema).
+  reemplaza un proceso. Devuelve `{ file, slug, name, newFile, dryRun, warnings, notes, outline,
+  summary, slugs }`. Ver [Crear un proceso desde un esquema](#crear-un-proceso-desde-un-esquema).
 - **`get_process_outline({ project, process?, locale? })`** (#97) — lee un proceso de un `.lila`
   como esquema: `{ file, slug, name, outline, warnings }`.
 
@@ -219,21 +219,30 @@ incluidos), lo valida como `validate_bpmn` y lo escribe en el `.lila`. `lila pro
 - **El escenario base.** El proceso recibe `as-is.scenario.json`: las llegadas por defecto de la app
   para un proceso nuevo (20 casos, uno por minuto), cada `duration` como `processingTime` (tareas)
   o demora (temporizadores), cada entrada de `resources` (un nombre, o `{ name, quantity }`; el
-  recurso se crea con la capacidad de su mayor pedido) y cada `probability` de rama como la
+  recurso se crea con la capacidad de su mayor pedido; con varios, `selection: "or"` toma
+  cualquiera de ellos en vez de todos) y cada `probability` de rama como la
   probabilidad de su flujo. Las ramas de un XOR sin probabilidad se reparten lo que falta para 1.
-  Una `duration` es un número de segundos, un tiempo con unidad (`90s`, `20m`, `1.5h`, `1d`; las
+  Una `duration` es un número de segundos, un tiempo con unidad (`90s`, `20m`, `1.5h`, `1h30m`, `1d`; las
   unidades de las hojas de escenario, en español incluidas), una distribución del formato de
   escenario escrita corta —`normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`,
   posicional en el orden de `docs/es/SCENARIO_FORMAT.md` o con nombre— o un objeto de distribución
   en segundos.
 - **El slug** del nuevo `processes/<slug>/` es `process`, o uno derivado del nombre (`name`, si no
   `outline.name`). Un slug que ya está en el archivo es un error y no se escribe nada. Un `project`
-  que no existe se crea como un `.lila` de un proceso cuyo slug sale del nombre. Todos los demás
+  que no existe se crea como un `.lila` de un proceso cuyo slug sale del nombre (ahí un `process`
+  distinto es un error: un archivo de un proceso no puede llevar su propio slug). Todos los demás
   procesos quedan byte a byte como estaban; la escritura es la misma, atómica y con candado, que
   la de `patch_scenario`.
-- **Un esquema mal formado** falla con todos sus problemas a la vez, cada uno con su ruta
-  (`steps[2].branches: …`), y no se escribe nada. Lo mismo un esquema cuyo modelo no valida (los
-  errores del validador vuelven con sus códigos).
+- **Un esquema mal formado** falla con todos sus problemas a la vez, en el idioma de la llamada,
+  cada uno con su ruta (`steps[2].branches[0].to: …`, `steps[0].duraton: campo desconocido
+  "duraton".`), y no se escribe nada. `outline` se declara a propósito como un objeto suelto, para
+  que el SDK de MCP nunca rechace la llamada antes de estas comprobaciones. Un paso desde el que
+  ningún camino llega a un fin (un ciclo sin salida) también es un problema, uno por paso
+  atascado, y lo mismo un esquema cuyo modelo no valida (los errores del validador vuelven con
+  sus códigos, en el paso del que hablan).
+- **`notes`** son los avisos propios de Lila sobre un esquema aceptado, como una unión paralela
+  (`and`) que espera ramas de una sola compuerta exclusiva (`xor`), donde los casos esperarían
+  para siempre.
 
 ```json
 { "name": "create_process", "arguments": { "project": "credit.lila", "outline": { "name": "Credit application", "lanes": ["Customer", "Analyst"], "steps": [ … ] } } }
@@ -244,9 +253,13 @@ omite para `task`, `next` aparece solo cuando no es simplemente el paso siguient
 termina el proceso lleva `end: true`, las salidas de las compuertas son `branches`, las duraciones
 son objetos de distribución en segundos y las probabilidades del XOR vienen completas. Es la forma
 que `create_process` devuelve como `outline`, así que un proceso va y vuelve igual. Duraciones,
-recursos y probabilidades salen del `as-is.scenario.json` del proceso cuando lo tiene. Para un
-proceso que Lila no generó, `warnings` lista lo que un esquema no puede llevar (otros tipos de
-evento, inicios extra, carriles anidados); los pasos conservan el orden del documento.
+recursos y probabilidades (y la `selection` de recursos) salen del `as-is.scenario.json` del
+proceso cuando lo tiene. Para un proceso que Lila no generó, `warnings` dice una vez por tipo lo
+que el esquema deja fuera: otros pools, flujos de mensaje, los nombres de los eventos de inicio y
+fin, anotaciones, marcas de flujo por defecto, otros tipos de evento, carriles anidados y lo del
+escenario que un esquema no lleva (llegadas, calendarios, costos, capacidades y tipos de recurso,
+ruteo condicionado; el escenario no se toca). Un proceso sin nombre toma el del `.lila`, si no su
+id. Los pasos conservan el orden del documento.
 
 ## Idioma
 
@@ -529,7 +542,8 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
 - **Todo pasa por el disco del servidor.** `saveTo` escribe con los permisos del proceso servidor y
   sobrescribe sin preguntar; no hay sandbox de rutas.
 - **`create_process` maqueta con `bpmn-auto-layout` 1.3, que no dibuja pool ni carriles**: Lila
-  conserva sus columnas y filas, mueve cada nodo a su carril y vuelve a trazar los flujos en
-  ángulo recto. Un flujo que salta varias columnas en una fila puede cruzar las figuras de en
-  medio, y un subproceso se crea colapsado con un paso vacío dentro. Si el dibujo importa, se
+  conserva sus columnas y filas, mueve cada nodo a su carril, vuelve a trazar los flujos en ángulo
+  recto (rodeando las figuras que estorban) y pone la etiqueta de cada rama sobre su propia rama.
+  Los carriles pueden salir más altos de lo necesario, el nombre de una compuerta puede quedar
+  sobre un flujo que sale por abajo, y un subproceso se crea colapsado con un paso vacío dentro. Si el dibujo importa, se
   acomoda en la app.

@@ -30,6 +30,7 @@ los casos actuales y futuros, incluyendo documentación, capturas, textos de Iss
 | `examples/outline/` | Esquema sintético (#97) para `lila process create` y la tool MCP `create_process`. |
 | `examples/bizagi-levels/` | Reconstrucciones atribuidas de ejemplos públicos de referencia, con URLs, valores esperados y diferencias documentadas. |
 | `examples/bizagi-exports/` | Fixtures de interoperabilidad BPMN MIWG sin modificar, con commit de origen y atribución CC BY 3.0. |
+| `packages/engine/test/fixtures/outlines/` | Esquemas sintéticos (#97) del QA de #553: orden de ramas, saltos en la misma fila, troncos compartidos de compuerta. |
 | `packages/engine/test/fixtures/service-request/` | Datos neutrales de regresión para recursos, desenlaces, interfaz y replay. |
 | `packages/engine/test/fixtures/service-shared-denial.bpmn` | Fixture neutral de ruta compartida para invariantes del enrutamiento condicionado. |
 | `packages/engine/test/fixtures/zero-time-driver.ts` | Modelos sintéticos de ciclos sin avance temporal y controles finitos para #368; ejecutados en procesos hijos con timeout externo. |

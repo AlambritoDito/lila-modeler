@@ -1,0 +1,24 @@
+{ "name": "Trámite con salidas",
+  "lanes": ["Ventanilla", "Supervisor"],
+  "steps": [
+    { "id": "s1", "name": "Recibir", "duration": "2m" },
+    { "id": "g1", "type": "xor", "name": "¿Vigente?", "branches": [
+        { "label": "No", "end": true, "probability": 0.1 },
+        { "label": "Express", "to": "s9", "probability": 0.2 },
+        { "label": "Normal", "to": "s2" } ] },
+    { "id": "s2", "name": "Capturar", "duration": "5m" },
+    { "id": "s3", "name": "Validar firma", "duration": "1m" },
+    { "id": "g2", "type": "xor", "name": "¿Firma válida?", "branches": [
+        { "label": "No", "to": "s_rech", "probability": 0.05 },
+        { "label": "Sí", "to": "s4" } ] },
+    { "id": "s4", "name": "Escanear", "duration": "3m" },
+    { "id": "s5", "name": "Autorizar", "lane": "Supervisor", "duration": "4m" },
+    { "id": "g3", "type": "xor", "name": "¿Autoriza?", "branches": [
+        { "label": "No", "end": true, "probability": 0.15 },
+        { "label": "Sí", "to": "s6" } ] },
+    { "id": "s6", "name": "Sellar", "lane": "Ventanilla", "duration": "1m" },
+    { "id": "s7", "name": "Imprimir", "duration": "1m" },
+    { "id": "s8", "name": "Foliar", "duration": "1m" },
+    { "id": "s9", "name": "Entregar", "duration": "2m", "end": true },
+    { "id": "s_rech", "name": "Rechazar", "lane": "Supervisor", "duration": "2m", "end": true }
+  ] }

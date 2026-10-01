@@ -105,6 +105,20 @@ test('dryRun writes nothing; a malformed outline is an error with every issue', 
   expect(bad.text).toContain('steps[0].next: step "a": "nowhere" is not the id of a step.');
   expect(bad.text).toContain('steps[1].duration: step "b": duration "soon" is not a distribution.');
 
-  const schema = await call('create_process', { outline: { name: 'Bad', steps: [] }, project: 'bad.lila' });
-  expect(schema.isError).toBe(true);
+  // QA of #553: a typo does not stop the SDK before the handler; every problem comes back at once,
+  // in the call's language.
+  const typo = await call('create_process', {
+    outline: { name: 'Bad', steps: [{ id: 'a', duraton: '5m', next: 'zz' }] },
+    project: 'bad.lila',
+    locale: 'es',
+  });
+  expect(typo.isError).toBe(true);
+  expect(typo.text).toBe(
+    'create_process: el esquema del proceso no es válido:\n' +
+      '  steps[0].duraton: campo desconocido "duraton".\n' +
+      '  steps[0].next: paso "a": "zz" no es el id de ningún paso.',
+  );
+
+  const empty = await call('create_process', { outline: { name: 'Bad', steps: [] }, project: 'bad.lila' });
+  expect(empty.text).toContain('steps: must be a non-empty list of steps.');
 }, 120_000);

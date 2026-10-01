@@ -122,6 +122,13 @@ describe('createLilaProcess', () => {
     expect(readFileSync(file).equals(bytes)).toBe(true);
   });
 
+  test('a slug for a new .lila must be the one its name gives', async () => {
+    const fresh = join(scratch, 'new.lila');
+    await expect(createLilaProcess(fresh, CREDIT, { process: 'my-slug' })).rejects.toThrow('cannot be "my-slug"');
+    expect(existsSync(fresh)).toBe(false);
+    expect((await createLilaProcess(fresh, CREDIT, { process: 'credit-application' })).slug).toBe('credit-application');
+  });
+
   test('a bad outline, slug or path writes nothing', async () => {
     const file = repository();
     const bytes = readFileSync(file);
@@ -164,6 +171,13 @@ describe('readLilaOutline', () => {
     // The XOR's rejected branch goes straight to an end event: it reads as a branch that ends.
     const approval = read.outline.steps.find((s) => s.id === 'Gateway_Aprobacion')!;
     expect(approval.branches).toContainEqual(expect.objectContaining({ end: true, probability: 0.22 }));
+    // QA of #553: "or" resource selection is kept, and nothing is dropped without a warning.
+    expect(read.outline.steps.find((s) => s.id === 'Task_Revisar')!.selection).toBe('or');
+    const said = read.warnings.join('\n');
+    expect(said).toContain('other pools are not part of the outline and were left out: Customer');
+    expect(said).toContain('2 message flows');
+    expect(said).toContain('their names were left out');
+    expect(said).toContain("the scenario's arrivals, calendars, costs");
   });
 });
 
@@ -190,6 +204,17 @@ describe('lila process', () => {
     const result = JSON.parse(out.join('\n'));
     expect(result).toMatchObject({ slug: 'tarjeta', name: 'Tarjeta', dryRun: true, newFile: false });
     expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
+  test('--json: a failure is JSON on stdout too, with every issue', async () => {
+    const bad = join(scratch, 'bad.json');
+    writeFileSync(bad, JSON.stringify({ name: 'X', steps: [{ id: 'a', next: 'zz' }, { id: 'b', typo: 1 }] }));
+    expect(await main(['process', 'create', '--outline', bad, '-p', join(scratch, 'x.lila'), '--json'])).toBe(1);
+    const json = JSON.parse(out.slice(0, out.findIndex((line) => line.startsWith('lila process:'))).join('\n'));
+    expect(json.issues).toEqual([
+      { path: 'steps[1].typo', message: 'unknown field "typo".' },
+      { path: 'steps[0].next', message: 'step "a": "zz" is not the id of a step.' },
+    ]);
   });
 
   test('errors exit 1 with a message, in the chosen language', async () => {

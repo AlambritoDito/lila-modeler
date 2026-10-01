@@ -30,6 +30,7 @@ cases, including documentation, screenshots, issue/PR text and attachments.
 | `examples/outline/` | Synthetic outline (#97) for `lila process create` and the MCP tool `create_process`. |
 | `examples/bizagi-levels/` | Attributed reconstructions of public reference examples, with source URLs, expected values and documented differences. |
 | `examples/bizagi-exports/` | Unmodified BPMN MIWG interoperability fixtures, with upstream commit and CC BY 3.0 attribution. |
+| `packages/engine/test/fixtures/outlines/` | Synthetic outlines (#97) from the QA of #553: branch order, same-row skips, shared gateway trunks. |
 | `packages/engine/test/fixtures/service-request/` | Neutral regression inputs for resource, outcome, UI and replay checks. |
 | `packages/engine/test/fixtures/service-shared-denial.bpmn` | Neutral shared-path fixture for conditional-routing invariants. |
 | `packages/engine/test/fixtures/zero-time-driver.ts` | Synthetic zero-time loop and finite-control regression models for #368; executed in timeout-protected child processes. |

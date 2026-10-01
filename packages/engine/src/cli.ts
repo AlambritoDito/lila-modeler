@@ -1126,6 +1126,20 @@ function printOutline(outline: NormalOutline, slug: string, locale: Locale): voi
 }
 
 async function dispatchProcess(argv: readonly string[], locale: Locale): Promise<number> {
+  try {
+    return await processCommand(argv, locale);
+  } catch (error) {
+    // With --json an agent gets the failure as JSON on stdout too: the message and, for an outline,
+    // every issue with its path. The text still goes to stderr through `main`.
+    if (argv.includes('--json')) {
+      const issues = (error as { issues?: unknown }).issues;
+      console.log(JSON.stringify({ error: error instanceof Error ? error.message : String(error), ...(Array.isArray(issues) ? { issues } : {}) }, null, 2));
+    }
+    throw error;
+  }
+}
+
+async function processCommand(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
@@ -1190,6 +1204,7 @@ async function dispatchProcess(argv: readonly string[], locale: Locale): Promise
   } else {
     console.log(created.summary);
     for (const warning of created.warnings) console.log(`${C.warningLabel()} ${warning.code} ${warning.id}: ${warning.message}`);
+    for (const note of created.notes) console.log(`${C.warningLabel()}: ${note}`);
   }
   return 0;
 }

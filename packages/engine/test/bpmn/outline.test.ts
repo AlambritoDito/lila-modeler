@@ -2,6 +2,9 @@
  * Outlines (#97): `outlineToBpmn` builds a laid-out, valid BPMN from a step list and
  * `bpmnToOutline` reads it back. The #97 example (two lanes and a XOR) is the acceptance case.
  */
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, test } from 'vitest';
 
@@ -239,7 +242,7 @@ describe('a malformed outline is an OutlineError with every issue, nothing built
   test('schema problems', async () => {
     const error = await issues({ name: 'X', steps: [{ id: 'a', type: 'gateway' }], extra: 1 });
     expect(error.code).toBe('LILA-OUTLINE');
-    expect(error.issues.map((i) => i.path).sort()).toEqual(['(root)', 'steps.0.type']);
+    expect(error.issues.map((i) => i.path).sort()).toEqual(['extra', 'steps[0].type']);
   });
 
   test('graph problems, all at once', async () => {
@@ -287,12 +290,197 @@ describe('a malformed outline is an OutlineError with every issue, nothing built
     // `b` is never reached and never leaves: the validator's own errors come back as issues.
     const error = await issues({ name: 'X', steps: [{ id: 'a', end: true }, { id: 'g', type: 'xor', next: 'a' }] });
     expect(error.issues.length).toBeGreaterThan(0);
-    expect(error.issues.every((i) => i.path.startsWith('bpmn.'))).toBe(true);
+    // The validator's errors come back with their codes, at the step they are about.
+    expect(new Set(error.issues.map((i) => i.path))).toEqual(new Set(['steps[1]']));
+    expect(error.issues[0]!.message).toMatch(/^E-[A-Z-]+: /);
   });
 
   test('messages follow the locale', async () => {
     const error = await issues({ name: 'X', steps: [{ id: 'a', next: 'zz' }] }, 'es');
     expect(error.message).toContain('el esquema del proceso no es válido');
     expect(error.message).toContain('"zz" no es el id de ningún paso');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Regressions from the QA of #553 (fixtures: test/fixtures/outlines/)
+ * ------------------------------------------------------------------ */
+
+const fixtures = fileURLToPath(new URL('../fixtures/outlines/', import.meta.url));
+const qa = (name: string): unknown => JSON.parse(readFileSync(`${fixtures}${name}.json`, 'utf8'));
+
+interface Edge {
+  id: string;
+  source: string;
+  target: string;
+  name?: string;
+  points: { x: number; y: number }[];
+  label?: Box;
+}
+
+async function edges(xml: string): Promise<Edge[]> {
+  const { rootElement } = await BpmnModdle().fromXML(xml);
+  return ((rootElement as any).diagrams[0].plane.planeElement as any[])
+    .filter((di) => di.$type === 'bpmndi:BPMNEdge')
+    .map((di) => ({
+      id: di.bpmnElement.id,
+      source: di.bpmnElement.sourceRef.id,
+      target: di.bpmnElement.targetRef.id,
+      name: di.bpmnElement.name,
+      points: di.waypoint.map((p: any) => ({ x: p.x, y: p.y })),
+      label: di.label?.bounds,
+    }));
+}
+
+/** Does a segment of `points` go through the inside of `box`? */
+function through(points: { x: number; y: number }[], box: Box): boolean {
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1]!, points[i]!];
+    const [x1, x2, y1, y2] = [Math.min(a.x, b.x), Math.max(a.x, b.x), Math.min(a.y, b.y), Math.max(a.y, b.y)];
+    if (x2 > box.x + 1 && x1 < box.x + box.width - 1 && y2 > box.y + 1 && y1 < box.y + box.height - 1) return true;
+  }
+  return false;
+}
+
+describe('QA of #553', () => {
+  test('1. branches listed out of chain order no longer crash the layouter', async () => {
+    const minimal = {
+      name: 'Order',
+      steps: [
+        { id: 's1' },
+        { id: 'g1', type: 'xor', branches: [{ to: 's4' }, { to: 's3' }, { to: 's2' }] },
+        { id: 's2' },
+        { id: 's3' },
+        { id: 's4' },
+      ],
+    };
+    for (const outline of [minimal, qa('06-ramas-terminan-saltos')]) {
+      const { xml, scenario } = await outlineToBpmn(outline);
+      expect((await validateBpmnXml(xml)).errors).toEqual([]);
+      expect((await bpmnToOutline(xml, { scenario })).outline).toEqual(normalizeOutline(outline));
+    }
+  });
+
+  test.each(['02-tarjeta', '05-and-or', '06-ramas-terminan-saltos', '10-entrevista-desordenada', '12-compras-un-carril'])(
+    '2. %s: no flow is drawn through a shape it does not connect',
+    async (name) => {
+      const { xml } = await outlineToBpmn(qa(name));
+      await expectLaidOut(xml);
+      const { shapes, types } = await geometry(xml);
+      for (const edge of await edges(xml)) {
+        for (const [id, box] of shapes) {
+          if (id === edge.source || id === edge.target || ['bpmn:Participant', 'bpmn:Lane'].includes(types.get(id)!)) continue;
+          expect(through(edge.points, box), `${edge.id} goes through ${id}`).toBe(false);
+        }
+      }
+    },
+  );
+
+  test.each(['02-tarjeta', '05-and-or', '10-entrevista-desordenada', '12-compras-un-carril'])(
+    '3. %s: every branch label sits on its own branch, nearer its target than any sibling\'s',
+    async (name) => {
+      const { xml } = await outlineToBpmn(qa(name));
+      const { shapes } = await geometry(xml);
+      const all = await edges(xml);
+      const centre = (b: Box): { x: number; y: number } => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+      const distance = (a: { x: number; y: number }, b: { x: number; y: number }): number => Math.hypot(a.x - b.x, a.y - b.y);
+      // The distance from a point to the polyline of an edge.
+      const toEdge = (p: { x: number; y: number }, e: Edge): number =>
+        Math.min(
+          ...e.points.slice(1).map((b, i) => {
+            const a = e.points[i]!;
+            const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (Math.hypot(b.x - a.x, b.y - a.y) ** 2 || 1)));
+            return distance(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+          }),
+        );
+      for (const edge of all.filter((e) => e.name)) {
+        expect(edge.label, `${edge.id} has a BPMNLabel`).toBeDefined();
+        const label = centre(edge.label!);
+        const siblings = all.filter((e) => e.source === edge.source && e.id !== edge.id);
+        for (const sibling of siblings) {
+          expect(toEdge(label, edge), `${edge.id} "${edge.name}" vs ${sibling.id}`).toBeLessThanOrEqual(toEdge(label, sibling));
+        }
+        void shapes;
+      }
+    },
+  );
+
+  test('4. every problem at once, in the caller\'s language, with steps[i].field paths', async () => {
+    let error: OutlineError | undefined;
+    try {
+      await outlineToBpmn(
+        {
+          name: 'X',
+          steps: [
+            { id: 'a', duraton: '5m' },
+            { id: 'a' },
+            { id: 'g', type: 'xor', branches: [{ to: 'zz', probability: 0.8 }, { to: 'a', probability: 0.5 }] },
+            { id: 'c', duration: 'normal(5m)', resources: [{ name: 'R', quantity: 0 }] },
+          ],
+        },
+        { locale: 'es' },
+      );
+    } catch (e) {
+      error = e as OutlineError;
+    }
+    expect(error?.issues.map((i) => i.path)).toEqual([
+      'steps[0].duraton',
+      'steps[3].resources[0].quantity',
+      'steps[1].id',
+      'steps[2].branches[0].to',
+      'steps[2].branches',
+      'steps[3].duration',
+    ]);
+    expect(error?.message).toContain('campo desconocido "duraton"');
+    expect(error?.message).toContain('debe ser un número entero de al menos 1');
+    expect(error?.message).not.toMatch(/Unrecognized|Too small|expected/);
+  });
+
+  test('5. a loop with no way out is refused, one issue per stuck step', async () => {
+    const outline = {
+      name: 'C',
+      steps: [
+        { id: 's' },
+        { id: 'g', type: 'xor', branches: [{ to: 'a', probability: 0.5 }, { end: true }] },
+        { id: 'a' },
+        { id: 'b', next: 'a' },
+      ],
+    };
+    await expect(outlineToBpmn(outline)).rejects.toMatchObject({
+      issues: [
+        { path: 'steps[2]', message: expect.stringContaining('from step "a" no path reaches an end') },
+        { path: 'steps[3]', message: expect.stringContaining('from step "b"') },
+      ],
+    });
+  });
+
+  test('nits: rounded probabilities, 1h30m, and a parallel join behind an exclusive split', async () => {
+    const { outline, scenario, notes } = await outlineToBpmn({
+      name: 'N',
+      steps: [
+        { id: 'a', duration: '1h30m' },
+        { id: 'g', type: 'xor', branches: [{ to: 'b', probability: 0.8 }, { to: 'c' }] },
+        { id: 'b', next: 'j' },
+        { id: 'c' },
+        { id: 'j', type: 'and' },
+      ],
+    });
+    expect(outline.steps[1]!.branches!.map((b) => b.probability)).toEqual([0.8, 0.2]);
+    expect((scenario['elements'] as any)['a'].processingTime).toEqual({ type: 'constant', value: 5400 });
+    expect(notes).toEqual([expect.stringContaining('parallel join "j" waits for branches of the exclusive gateway "g"')]);
+  });
+
+  test('6. resource selection is part of the outline and reaches the scenario', async () => {
+    const outline = { name: 'S', steps: [{ id: 't', resources: ['A', 'B'], selection: 'or' }] };
+    const built = await outlineToBpmn(outline);
+    expect((built.scenario['elements'] as any)['t'].selection).toBe('or');
+    expect((await bpmnToOutline(built.xml, { scenario: built.scenario })).outline.steps[0]!.selection).toBe('or');
+  });
+
+  test('6. a BPMN without names takes the process id as its name', async () => {
+    const examples = fileURLToPath(new URL('../../../../examples/bizagi-exports/', import.meta.url));
+    const file = readdirSync(examples).find((f) => f.endsWith('.bpmn'))!;
+    const { outline } = await bpmnToOutline(readFileSync(examples + file, 'utf8'));
+    expect(outline.name).not.toBe('');
   });
 });

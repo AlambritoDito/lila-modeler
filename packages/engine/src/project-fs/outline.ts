@@ -52,6 +52,8 @@ export interface CreatedLilaProcess {
   readonly dryRun: boolean;
   /** Validator warnings on the generated model. */
   readonly warnings: ValidationResult['warnings'];
+  /** Lila's own warnings on the outline (`OutlineBpmn.notes`). */
+  readonly notes: readonly string[];
   /** The outline as stored, in normal form. */
   readonly outline: NormalOutline;
   /** One line for a person: what was (or would be) created where. */
@@ -122,6 +124,10 @@ export async function createLilaProcess(
   const name = options.name ?? outlineName;
   // A new `.lila` holds one process, written as a version 1 project: its slug is its name's.
   const slug = document === null ? processSlug(name) : (options.process ?? processSlug(name));
+  // A new `.lila` is a version 1 project: its one process cannot carry a slug of its own.
+  if (document === null && options.process !== undefined && options.process !== slug) {
+    throw new Error(C.processSlugNewFile(options.process, slug));
+  }
   if (others.some((p) => p.slug === slug)) throw new Error(C.processExists(slug, path));
 
   const built = await outlineToBpmn(name === outlineName ? outline : { ...(outline as object), name }, {
@@ -175,6 +181,7 @@ export async function createLilaProcess(
     newFile: document === null,
     dryRun,
     warnings: built.warnings,
+    notes: built.notes,
     outline: built.outline,
     summary: (dryRun ? C.processDryRun : C.processCreated)(name, slug, path, steps, lanes, document === null),
     slugs: processesOf(next).map((p) => p.slug),
@@ -200,7 +207,7 @@ export async function readLilaOutline(
 ): Promise<LilaOutline> {
   const input = await openLilaProcess(file, options);
   const scenario = input.process.scenarios[BASE_SCENARIO];
-  const reading = await bpmnToOutline(input.process.model.xml, { locale: options.locale, scenario });
+  const reading = await bpmnToOutline(input.process.model.xml, { locale: options.locale, scenario, name: input.process.name });
   return {
     file: input.file,
     slug: input.process.slug,

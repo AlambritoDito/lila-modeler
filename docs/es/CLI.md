@@ -203,7 +203,9 @@ existe, lo crea. `--name` sustituye el nombre del esquema y `--process` elige el
 del nombre). Nunca reemplaza un proceso: un slug que ya está en el archivo sale con `1` y no escribe
 nada, igual que un esquema con problemas (se listan todos, cada uno con su ruta). `--dry-run` arma
 y comprueba todo sin escribir. Imprime un resumen de una línea y los avisos del validador; `--json`
-imprime en su lugar el objeto resultado de `create_process`.
+imprime en su lugar el objeto resultado de `create_process` y, si falla, `{ "error", "issues" }`
+(cada problema con su `path` y su `message`) antes de salir con `1`. Con un `.lila` nuevo,
+`--process` tiene que ser el slug que da el nombre.
 
 ```bash
 npx lila process create --outline examples/outline/credit-application.json -p credit.lila --dry-run --lang es

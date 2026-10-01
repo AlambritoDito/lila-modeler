@@ -197,7 +197,9 @@ not exist is created. `--name` overrides the outline's name, `--process` picks t
 from the name otherwise). It never replaces a process: a slug already in the file exits `1` and
 writes nothing, and so does an outline with problems (all of them are listed, each with its path).
 `--dry-run` builds and checks everything and writes nothing. It prints a one-line summary and the
-validator warnings; `--json` prints the result object of `create_process` instead.
+validator warnings and Lila's notes; `--json` prints the result object of `create_process`
+instead, and on a failure `{ "error", "issues" }` (each issue with its `path` and `message`) before
+exiting `1`. With a new `.lila`, `--process` must be the slug the name gives.
 
 ```bash
 npx lila process create --outline examples/outline/credit-application.json -p credit.lila --dry-run

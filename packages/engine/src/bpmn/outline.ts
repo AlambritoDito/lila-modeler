@@ -9,8 +9,9 @@
  * Lanes. `bpmn-auto-layout` 1.3 lays out the flow (columns and rows) but draws no pool and no
  * lanes: it ignores the `laneSet` and keeps the plane on the process. With lanes, this module
  * keeps its columns, moves every node into its lane's band (keeping the layouter's row order
- * inside the lane), routes the flows again orthogonally and adds the pool and the lane shapes.
- * Without lanes, the layouter's DI is used as it comes.
+ * inside the lane), routes the flows again orthogonally (around the shapes in their way) and adds
+ * the pool and the lane shapes. Without lanes, the layouter's DI is used as it comes. Either way
+ * every named flow gets a label on its own segment, not on a trunk it shares with its siblings.
  *
  * Normal form. `normalizeOutline` turns any accepted outline into one canonical shape, which is
  * also what `bpmnToOutline` returns, so a round trip compares equal: every step names its lane
@@ -19,12 +20,12 @@
  * `branches`, durations are scenario distributions in seconds, and the XOR probabilities that
  * were left out share what is left of 1.
  */
-import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
-import { layoutProcess } from 'bpmn-auto-layout';
+import { BpmnModdle } from 'bpmn-moddle';
 import { z } from 'zod';
 
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
+import { autoLayout, labelFlows, layOutLanes, LayoutError, separateSubprocessPlanes, sortOutgoing, type El } from './layout.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
@@ -101,6 +102,10 @@ const OutlineStepSchema = z.strictObject({
     .min(1)
     .optional()
     .describe('Resource names the task needs (one unit each), or {name, quantity}.'),
+  selection: z
+    .enum(['and', 'or'])
+    .optional()
+    .describe('With several resources: "and" needs all of them (default), "or" any one.'),
 });
 
 /** The outline as an agent writes it (#97). Exported for the MCP tools' input schema. */
@@ -131,6 +136,7 @@ export interface NormalStep {
   end?: true;
   duration?: Distribution;
   resources?: NormalResource[];
+  selection?: 'and' | 'or';
 }
 /** The canonical outline (see the header): what `normalizeOutline` and `bpmnToOutline` return. */
 export interface NormalOutline {
@@ -166,6 +172,8 @@ interface Successor {
   to: string | typeof END;
   label?: string | undefined;
   probability?: number | undefined;
+  /** Where the outline named it, for issues (`steps[2].branches[0].to`). */
+  path?: string | undefined;
 }
 interface GraphStep {
   id: string;
@@ -175,6 +183,7 @@ interface GraphStep {
   succ: Successor[];
   duration?: Distribution | undefined;
   resources?: { name: string; quantity: number }[] | undefined;
+  selection?: 'and' | 'or' | undefined;
 }
 interface Graph {
   name: string;
@@ -192,6 +201,17 @@ function fail(C: CliMessages, issues: OutlineIssue[], wrap: (detail: string) => 
 
 /** `20m`, `1.5 h`, `90` (seconds): a time in seconds, or `null`. */
 function seconds(text: string): number | null {
+  // `1h30m`, `2 h 15 min`: several number-unit pairs add up.
+  const parts = [...text.trim().matchAll(/([0-9]*\.?[0-9]+)\s*([a-zA-Zíá]+)\s*/g)];
+  if (parts.length > 1 && parts.map((m) => m[0]).join('') === text.trim().replace(/^\s+/, '')) {
+    let total = 0;
+    for (const part of parts) {
+      const one = seconds(`${part[1]}${part[2]}`);
+      if (one === null) return null;
+      total += one;
+    }
+    return total;
+  }
   const match = /^([0-9]*\.?[0-9]+(?:e[+-]?\d+)?)\s*([a-zA-Zíá]*)$/.exec(text.trim());
   if (match === null) return null;
   const value = Number(match[1]);
@@ -242,16 +262,153 @@ export function parseDuration(value: string | number | Distribution): Distributi
  * Outline → graph (with every check) and graph → normal form
  * ------------------------------------------------------------------ */
 
-function toGraph(input: unknown, C: CliMessages): Graph {
-  const parsed = OutlineSchema.safeParse(input);
-  if (!parsed.success) {
-    fail(
-      C,
-      parsed.error.issues.map((issue) => ({ path: issue.path.join('.') || '(root)', message: issue.message })),
-    );
+interface RawBranch {
+  label?: string | undefined;
+  to?: string | undefined;
+  end?: boolean | undefined;
+  probability?: number | undefined;
+}
+interface RawStep {
+  id: string;
+  name?: string | undefined;
+  lane?: string | undefined;
+  type?: OutlineStepType | undefined;
+  next?: string[] | undefined;
+  /** `next` was written as one id (paths say `next`, not `next[0]`). */
+  nextSingle?: boolean;
+  branches?: RawBranch[] | undefined;
+  end?: boolean | undefined;
+  duration?: unknown;
+  resources?: { name: string; quantity: number }[] | undefined;
+  selection?: 'and' | 'or' | undefined;
+}
+interface RawOutline {
+  name: string;
+  lanes?: string[] | undefined;
+  steps: RawStep[];
+}
+
+const STEP_KEYS = new Set(['id', 'name', 'lane', 'type', 'next', 'branches', 'end', 'duration', 'resources', 'selection']);
+const BRANCH_KEYS = new Set(['label', 'to', 'end', 'probability']);
+const ROOT_KEYS = new Set(['name', 'lanes', 'steps']);
+
+/** Probabilities in the normal form carry no floating-point noise (0.7, not 0.7000000000000001). */
+const round9 = (value: number): number => Math.round(value * 1e9) / 1e9;
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * Reads `input` in one pass, recording every problem as an issue with a catalog message and a
+ * `steps[i].field` path, and dropping only the field that is wrong so the checks of `toGraph` still
+ * run on the rest (QA of #553: every problem at once, in the caller's language).
+ */
+function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): RawOutline {
+  const bad = (path: string, message: string): undefined => {
+    issues.push({ path, message });
+    return undefined;
+  };
+  const unknownKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>, path: string): void => {
+    for (const key of Object.keys(value)) if (!keys.has(key)) bad(path === '' ? key : `${path}.${key}`, C.outlineUnknownKey(key));
+  };
+  const text = (value: unknown, path: string): string | undefined =>
+    value === undefined ? undefined : isText(value) ? value : bad(path, C.outlineNotText());
+  const optionalString = (value: unknown, path: string): string | undefined =>
+    value === undefined ? undefined : typeof value === 'string' ? value : bad(path, C.outlineNotText());
+  const boolean = (value: unknown, path: string): boolean | undefined =>
+    value === undefined ? undefined : typeof value === 'boolean' ? value : bad(path, C.outlineNotBoolean());
+
+  if (!isObject(input)) {
+    bad('(root)', C.outlineNotObject());
+    return { name: '', steps: [] };
   }
-  const outline = parsed.data;
+  unknownKeys(input, ROOT_KEYS, '');
+  const name = isText(input['name']) ? input['name'] : (bad('name', C.outlineNotText()) ?? '');
+  let lanes: string[] | undefined;
+  if (input['lanes'] !== undefined) {
+    if (!Array.isArray(input['lanes'])) bad('lanes', C.outlineNotTextList());
+    else {
+      lanes = [];
+      input['lanes'].forEach((lane, i) => (isText(lane) ? lanes!.push(lane) : bad(`lanes[${i}]`, C.outlineNotText())));
+    }
+  }
+  if (!Array.isArray(input['steps']) || input['steps'].length === 0) {
+    bad('steps', C.outlineNoSteps());
+    return { name, lanes, steps: [] };
+  }
+
+  const steps = (input['steps'] as unknown[]).map((value, index): RawStep => {
+    const at = `steps[${index}]`;
+    if (!isObject(value)) {
+      bad(at, C.outlineNotObject());
+      return { id: '' };
+    }
+    unknownKeys(value, STEP_KEYS, at);
+    const step: RawStep = { id: isText(value['id']) ? value['id'] : (bad(`${at}.id`, C.outlineNotText()) ?? '') };
+    step.name = optionalString(value['name'], `${at}.name`);
+    step.lane = text(value['lane'], `${at}.lane`);
+    if (value['type'] !== undefined) {
+      if ((OUTLINE_STEP_TYPES as readonly unknown[]).includes(value['type'])) step.type = value['type'] as OutlineStepType;
+      else bad(`${at}.type`, C.outlineBadType(String(value['type']), OUTLINE_STEP_TYPES.join(', ')));
+    }
+    const next = value['next'];
+    if (isText(next)) {
+      step.next = [next];
+      step.nextSingle = true;
+    } else if (Array.isArray(next) && next.length > 0 && next.every(isText)) step.next = next as string[];
+    else if (next !== undefined) bad(`${at}.next`, C.outlineBadNext());
+    if (value['branches'] !== undefined) {
+      if (!Array.isArray(value['branches']) || value['branches'].length === 0) bad(`${at}.branches`, C.outlineNoSteps());
+      else {
+        step.branches = (value['branches'] as unknown[]).map((b, k): RawBranch => {
+          const bat = `${at}.branches[${k}]`;
+          if (!isObject(b)) return bad(bat, C.outlineNotObject()) ?? {};
+          unknownKeys(b, BRANCH_KEYS, bat);
+          const probability = b['probability'];
+          return {
+            label: optionalString(b['label'], `${bat}.label`),
+            to: text(b['to'], `${bat}.to`),
+            end: boolean(b['end'], `${bat}.end`),
+            probability:
+              probability === undefined
+                ? undefined
+                : typeof probability === 'number' && probability >= 0 && probability <= 1
+                  ? probability
+                  : bad(`${bat}.probability`, C.outlineNotProbability()),
+          };
+        });
+      }
+    }
+    step.end = boolean(value['end'], `${at}.end`);
+    step.duration = value['duration'];
+    if (value['resources'] !== undefined) {
+      if (!Array.isArray(value['resources']) || value['resources'].length === 0) bad(`${at}.resources`, C.outlineBadResource());
+      else {
+        step.resources = [];
+        (value['resources'] as unknown[]).forEach((r, k) => {
+          const rat = `${at}.resources[${k}]`;
+          if (isText(r)) return void step.resources!.push({ name: r, quantity: 1 });
+          if (!isObject(r) || !isText(r['name'])) return void bad(rat, C.outlineBadResource());
+          unknownKeys(r, new Set(['name', 'quantity']), rat);
+          const quantity = r['quantity'] ?? 1;
+          if (!Number.isInteger(quantity) || (quantity as number) < 1) return void bad(`${rat}.quantity`, C.outlineNotQuantity());
+          step.resources!.push({ name: r['name'], quantity: quantity as number });
+        });
+      }
+    }
+    if (value['selection'] !== undefined) {
+      if (value['selection'] === 'and' || value['selection'] === 'or') step.selection = value['selection'];
+      else bad(`${at}.selection`, C.outlineBadSelection());
+    }
+    return step;
+  });
+  return { name, lanes, steps };
+}
+
+function toGraph(input: unknown, C: CliMessages): Graph {
   const issues: OutlineIssue[] = [];
+  const outline = readOutline(input, C, issues);
   const at = (index: number, field?: string): string => `steps[${index}]${field === undefined ? '' : `.${field}`}`;
 
   const lanes = [...(outline.lanes ?? [])];
@@ -264,6 +421,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
 
   const ids = new Set<string>();
   for (const [index, step] of outline.steps.entries()) {
+    if (step.id === '') continue;
     if (!isNCName(step.id)) issues.push({ path: at(index, 'id'), message: C.outlineBadId(step.id) });
     if (ids.has(step.id)) issues.push({ path: at(index, 'id'), message: C.outlineDuplicateId(step.id) });
     ids.add(step.id);
@@ -294,7 +452,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     if (step.branches !== undefined && step.next !== undefined) {
       issues.push({ path: at(index, 'next'), message: C.outlineEndWithNext(step.id) });
     }
-    const nextList = step.next === undefined ? undefined : Array.isArray(step.next) ? step.next : [step.next];
+    const nextList = step.next;
     if (nextList !== undefined && nextList.length > 1 && !gateway) {
       issues.push({ path: at(index, 'next'), message: C.outlineManyNextNeedGateway(step.id) });
     }
@@ -306,16 +464,18 @@ function toGraph(input: unknown, C: CliMessages): Graph {
         if ((b.end === true) === (b.to !== undefined)) {
           issues.push({ path: at(index, `branches[${k}]`), message: C.outlineBranchTarget(step.id) });
         }
-        return { to: b.to ?? END, label: b.label, probability: b.probability };
+        return { to: b.to ?? END, label: b.label, probability: b.probability, path: at(index, `branches[${k}].to`) };
       });
-    } else if (nextList !== undefined) succ = nextList.map((to) => ({ to }));
+    } else if (nextList !== undefined) {
+      succ = nextList.map((to, k) => ({ to, path: at(index, step.nextSingle === true ? 'next' : `next[${k}]`) }));
+    }
     else {
       const following = outline.steps[index + 1];
       succ = [{ to: following === undefined ? END : following.id }];
     }
     for (const s of succ) {
       if (s.to !== END && !ids.has(s.to)) {
-        issues.push({ path: at(index, step.branches ? 'branches' : 'next'), message: C.outlineUnknownTarget(step.id, s.to) });
+        issues.push({ path: s.path ?? at(index, 'next'), message: C.outlineUnknownTarget(step.id, s.to) });
       }
     }
 
@@ -328,7 +488,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
       const sum = given.reduce((total, s) => total + s.probability!, 0);
       if (sum > 1 + 1e-9) issues.push({ path: at(index, 'branches'), message: C.outlineProbabilitySum(step.id, Math.round(sum * 1e9) / 1e9) });
       const open = succ.filter((s) => s.probability === undefined);
-      for (const s of open) s.probability = Math.max(0, 1 - sum) / open.length;
+      for (const s of open) s.probability = round9(Math.max(0, 1 - sum) / open.length);
     }
 
     let duration: Distribution | undefined;
@@ -347,12 +507,31 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     if (step.resources !== undefined && !WORK.has(type)) {
       issues.push({ path: at(index, 'resources'), message: C.outlineFieldNotApplicable(step.id, 'resources', type) });
     }
-    const resources = step.resources?.map((r) =>
-      typeof r === 'string' ? { name: r, quantity: 1 } : { name: r.name, quantity: r.quantity ?? 1 },
-    );
+    if (step.selection !== undefined && (step.resources === undefined || !WORK.has(type))) {
+      issues.push({ path: at(index, 'selection'), message: C.outlineFieldNotApplicable(step.id, 'selection', type) });
+    }
 
-    return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources };
+    return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection };
   });
+
+  // A step from which no path reaches an end would trap its cases forever (QA of #553): reverse
+  // reachability from the ends, one issue per stuck step. Only meaningful once every target is known.
+  if (issues.length === 0) {
+    const reaches = new Set<string>();
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const step of steps) {
+        if (reaches.has(step.id)) continue;
+        if (step.succ.some((s) => s.to === END || reaches.has(s.to))) {
+          reaches.add(step.id);
+          grew = true;
+        }
+      }
+    }
+    steps.forEach((step, index) => {
+      if (!reaches.has(step.id)) issues.push({ path: at(index), message: C.outlineNoWayOut(step.id) });
+    });
+  }
 
   if (issues.length > 0) fail(C, issues);
   // Lanes named only further down the list: the steps before them go to the first lane.
@@ -374,7 +553,7 @@ function toNormal(graph: Graph): NormalOutline {
       out.branches = step.succ.map((s) => {
         const branch: NormalBranch = s.to === END ? { end: true } : { to: s.to };
         if (s.label !== undefined && s.label !== '') branch.label = s.label;
-        if (s.probability !== undefined) branch.probability = s.probability;
+        if (s.probability !== undefined) branch.probability = round9(s.probability);
         return branch;
       });
     } else if (toSteps.length === 0) {
@@ -389,6 +568,7 @@ function toNormal(graph: Graph): NormalOutline {
     if (step.resources !== undefined && step.resources.length > 0) {
       out.resources = step.resources.map((r) => (r.quantity === 1 ? r.name : { name: r.name, quantity: r.quantity }));
     }
+    if (step.selection !== undefined) out.selection = step.selection;
     return out;
   });
   return graph.lanes.length > 0 ? { name: graph.name, lanes: [...graph.lanes], steps } : { name: graph.name, steps };
@@ -403,7 +583,6 @@ export function normalizeOutline(input: unknown, options: { locale?: Locale | un
  * Outline → BPMN
  * ------------------------------------------------------------------ */
 
-type El = { $type: string; id: string } & Record<string, any>;
 
 const START_ID = 'StartEvent';
 /** Id of the `k`-th end event after `step` (a gateway may have several branches that end). */
@@ -422,11 +601,6 @@ const BPMN_TYPE: Readonly<Record<OutlineStepType, string>> = {
   subprocess: 'bpmn:SubProcess',
 };
 
-/** Layout grid of `bpmn-auto-layout` 1.3 (its `DEFAULT_CELL_HEIGHT`). */
-const CELL_HEIGHT = 140;
-/** The pool's label strip plus the lane's label strip, as bpmn-js draws them. */
-const HEADER = 30;
-const MARGIN = 40;
 
 export interface OutlineToBpmnOptions {
   locale?: Locale | undefined;
@@ -441,8 +615,38 @@ export interface OutlineBpmn {
   readonly scenario: ScenarioDocument;
   /** The validator's warnings on the generated model. */
   readonly warnings: ValidationResult['warnings'];
+  /** Lila's own warnings on the outline, e.g. a parallel join behind an exclusive split. */
+  readonly notes: readonly string[];
   /** The outline in normal form. */
   readonly outline: NormalOutline;
+}
+
+/**
+ * A parallel join that waits for branches of one exclusive split, which only ever sends a case
+ * down one of them: the simulation reports it (W-JOIN-BLOQUEADO) but only after running. Each
+ * incoming path is followed back through plain one-in steps to the gateway it comes from.
+ */
+function joinNotes(graph: Graph, C: CliMessages): string[] {
+  const incoming = new Map<string, string[]>();
+  for (const step of graph.steps) for (const s of step.succ) if (s.to !== END) (incoming.get(s.to) ?? incoming.set(s.to, []).get(s.to)!).push(step.id);
+  const byId = new Map(graph.steps.map((step) => [step.id, step]));
+  const notes: string[] = [];
+  for (const join of graph.steps) {
+    const from = incoming.get(join.id) ?? [];
+    if (join.type !== 'and' || from.length < 2) continue;
+    const origins = from.map((id) => {
+      let current = id;
+      const seen = new Set<string>();
+      while (!GATEWAYS.has(byId.get(current)!.type) && (incoming.get(current) ?? []).length === 1 && !seen.has(current)) {
+        seen.add(current);
+        current = incoming.get(current)![0]!;
+      }
+      return current;
+    });
+    const split = origins.find((id, i) => byId.get(id)!.type === 'xor' && origins.indexOf(id) !== i);
+    if (split !== undefined) notes.push(C.outlineXorAndJoin(join.id, split));
+  }
+  return notes;
 }
 
 /**
@@ -552,6 +756,9 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
     }
   }
 
+  // bpmn-auto-layout needs `outgoing` in the order the targets appear (see `layout.ts`).
+  sortOutgoing(nodes.values(), (process['flowElements'] as El[]).map((el) => el.id));
+
   const rootElements: El[] = [];
   if (graph.lanes.length > 0) {
     const lanes = graph.lanes.map((name, i) =>
@@ -574,133 +781,6 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
   return { definitions, laneOf, flows };
 }
 
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * An orthogonal route from `s` to `t`: straight when they share a row; out of a gateway's top or
- * bottom and into a gateway's top or bottom when the rows differ (as bpmn-js draws a split and a
- * join); a backward flow (a loop) goes under both shapes.
- */
-function route(s: Box, t: Box, sourceGateway: boolean, targetGateway: boolean): { x: number; y: number }[] {
-  const sy = s.y + s.height / 2;
-  const ty = t.y + t.height / 2;
-  const sx = s.x + s.width / 2;
-  const tx = t.x + t.width / 2;
-  if (t.x >= s.x + s.width) {
-    if (Math.abs(sy - ty) < 1) return [{ x: s.x + s.width, y: sy }, { x: t.x, y: ty }];
-    if (sourceGateway) {
-      return [{ x: sx, y: ty > sy ? s.y + s.height : s.y }, { x: sx, y: ty }, { x: t.x, y: ty }];
-    }
-    if (targetGateway) {
-      return [{ x: s.x + s.width, y: sy }, { x: tx, y: sy }, { x: tx, y: sy > ty ? t.y + t.height : t.y }];
-    }
-    const x = t.x - 25;
-    return [{ x: s.x + s.width, y: sy }, { x, y: sy }, { x, y: ty }, { x: t.x, y: ty }];
-  }
-  const below = Math.max(s.y + s.height, t.y + t.height) + 25;
-  return [{ x: sx, y: s.y + s.height }, { x: sx, y: below }, { x: tx, y: below }, { x: tx, y: t.y + t.height }];
-}
-
-/**
- * Moves every node of the main plane into its lane's band and adds the pool and lane shapes (see
- * the header). Each lane is as tall as the layouter rows its nodes use, compacted; columns stay.
- */
-function layOutLanes(definitions: El, graph: Graph, laneOf: Map<string, string>, create: (type: string, attrs?: Record<string, unknown>) => El): void {
-  const process = (definitions['rootElements'] as El[]).find((el) => el.$type === 'bpmn:Process')!;
-  const collaboration = (definitions['rootElements'] as El[]).find((el) => el.$type === 'bpmn:Collaboration')!;
-  const participant = collaboration['participants'][0] as El;
-  const diagram = (definitions['diagrams'] as El[]).find((d) => d['plane']['bpmnElement'] === process)!;
-  const plane = diagram['plane'] as El;
-  const planeElements = plane['planeElement'] as El[];
-  const shapeOf = new Map<string, El>();
-  for (const di of planeElements) if (di.$type === 'bpmndi:BPMNShape') shapeOf.set(di['bpmnElement'].id, di);
-
-  const nodes = (process['flowElements'] as El[]).filter((el) => el.$type !== 'bpmn:SequenceFlow');
-  const rowOf = (shape: El): number => Math.round((shape['bounds'].y + shape['bounds'].height / 2 - CELL_HEIGHT / 2) / CELL_HEIGHT);
-
-  // Rows each lane uses, compacted top to bottom; an empty lane still gets one row.
-  let top = 0;
-  const bands = new Map<string, { top: number; rows: Map<number, number>; height: number }>();
-  for (const lane of graph.lanes) {
-    const rows = [...new Set(nodes.filter((n) => laneOf.get(n.id) === lane).map((n) => rowOf(shapeOf.get(n.id)!)))].sort((a, b) => a - b);
-    const height = Math.max(1, rows.length) * CELL_HEIGHT;
-    bands.set(lane, { top, rows: new Map(rows.map((row, index) => [row, index])), height });
-    top += height;
-  }
-
-  let right = 0;
-  for (const node of nodes) {
-    const shape = shapeOf.get(node.id)!;
-    const band = bands.get(laneOf.get(node.id)!)!;
-    const bounds = shape['bounds'];
-    const index = band.rows.get(rowOf(shape))!;
-    bounds.x += 2 * HEADER;
-    bounds.y = band.top + index * CELL_HEIGHT + (CELL_HEIGHT - bounds.height) / 2;
-    right = Math.max(right, bounds.x + bounds.width);
-  }
-
-  const gateway = (el: El): boolean => el.$type.endsWith('Gateway');
-  for (const di of planeElements) {
-    if (di.$type !== 'bpmndi:BPMNEdge') continue;
-    const flow = di['bpmnElement'] as El;
-    const source = shapeOf.get(flow['sourceRef'].id)!['bounds'];
-    const target = shapeOf.get(flow['targetRef'].id)!['bounds'];
-    di['waypoint'] = route(source, target, gateway(flow['sourceRef']), gateway(flow['targetRef'])).map((p) =>
-      create('dc:Point', { x: Math.round(p.x), y: Math.round(p.y) }),
-    );
-  }
-
-  const width = right + MARGIN;
-  const shapes: El[] = [
-    create('bpmndi:BPMNShape', {
-      id: `${participant.id}_di`,
-      bpmnElement: participant,
-      isHorizontal: true,
-      bounds: create('dc:Bounds', { x: 0, y: 0, width, height: top }),
-    }),
-  ];
-  for (const lane of process['laneSets'][0]['lanes'] as El[]) {
-    const band = bands.get(lane['name'])!;
-    shapes.push(
-      create('bpmndi:BPMNShape', {
-        id: `${lane.id}_di`,
-        bpmnElement: lane,
-        isHorizontal: true,
-        bounds: create('dc:Bounds', { x: HEADER, y: band.top, width: width - HEADER, height: band.height }),
-      }),
-    );
-  }
-  plane['planeElement'] = [...shapes, ...planeElements];
-  plane['bpmnElement'] = collaboration;
-}
-
-/**
- * `bpmn-auto-layout` 1.3 draws a sub-process collapsed but leaves the DI of its content on the
- * main plane, where bpmn-js would paint it over the process. Each sub-process gets its own
- * diagram instead (the drill-down plane bpmn-js opens), and its content's DI moves there.
- */
-function separateSubprocessPlanes(definitions: El, create: (type: string, attrs?: Record<string, unknown>) => El): void {
-  const main = (definitions['diagrams'] as El[])[0]!['plane'] as El;
-  const moved = new Map<El, El[]>();
-  const keep: El[] = [];
-  for (const di of main['planeElement'] as El[]) {
-    const parent = di['bpmnElement']?.['$parent'] as El | undefined;
-    if (parent?.$type === 'bpmn:SubProcess') (moved.get(parent) ?? moved.set(parent, []).get(parent)!).push(di);
-    else keep.push(di);
-  }
-  if (moved.size === 0) return;
-  main['planeElement'] = keep;
-  for (const [subprocess, elements] of moved) {
-    const plane = create('bpmndi:BPMNPlane', { id: `BPMNPlane_${subprocess.id}`, bpmnElement: subprocess, planeElement: elements });
-    (definitions['diagrams'] as El[]).push(create('bpmndi:BPMNDiagram', { id: `BPMNDiagram_${subprocess.id}`, plane }));
-  }
-}
-
 function baseScenario(graph: Graph, built: Built): ScenarioDocument {
   const resources: Record<string, { name: string; capacity: number }> = {};
   const idOf = new Map<string, string>();
@@ -721,6 +801,7 @@ function baseScenario(graph: Graph, built: Built): ScenarioDocument {
         return { ref, quantity: r.quantity };
       });
     }
+    if (step.selection !== undefined) element['selection'] = step.selection;
     if (Object.keys(element).length > 0) elements[step.id] = element;
   }
   for (const flow of built.flows) if (flow.probability !== undefined) elements[flow.id] = { probability: flow.probability };
@@ -746,11 +827,18 @@ export async function outlineToBpmn(outline: unknown, options: OutlineToBpmnOpti
 
   const moddle = BpmnModdle({ lila });
   const { xml: semantic } = await moddle.toXML(built.definitions);
-  const laidOut = await layoutProcess(semantic);
+  let laidOut: string;
+  try {
+    laidOut = await autoLayout(semantic);
+  } catch (error) {
+    if (!(error instanceof LayoutError)) throw error;
+    fail(C, [{ path: 'steps', message: C.outlineLayoutFailed(error.message) }]);
+  }
   const { rootElement: definitions } = await moddle.fromXML(laidOut);
   const create = (type: string, attrs: Record<string, unknown> = {}): El => moddle.create(type, attrs) as El;
   separateSubprocessPlanes(definitions as El, create);
-  if (graph.lanes.length > 0) layOutLanes(definitions as El, graph, built.laneOf, create);
+  if (graph.lanes.length > 0) layOutLanes(definitions as El, graph.lanes, built.laneOf, create);
+  labelFlows((definitions as El)['diagrams'][0]['plane'] as El, create);
   const { xml: raw } = await moddle.toXML(definitions, { format: true });
   const xml = marcarExportador(raw);
 
@@ -758,11 +846,14 @@ export async function outlineToBpmn(outline: unknown, options: OutlineToBpmnOpti
   if (report.errors.length > 0) {
     fail(
       C,
-      report.errors.map((e) => ({ path: `bpmn.${e.id}`, message: `${e.code}: ${e.message}` })),
+      report.errors.map((e) => {
+        const index = graph.steps.findIndex((step) => step.id === e.id);
+        return { path: index === -1 ? `bpmn.${e.id}` : `steps[${index}]`, message: `${e.code}: ${e.message}` };
+      }),
       C.outlineBpmnInvalid,
     );
   }
-  return { xml, scenario: baseScenario(graph, built), warnings: report.warnings, outline: toNormal(graph) };
+  return { xml, scenario: baseScenario(graph, built), warnings: report.warnings, notes: joinNotes(graph, C), outline: toNormal(graph) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -793,6 +884,8 @@ export interface BpmnToOutlineOptions {
    * and flow `probability` come back as `duration`, `resources` and branch `probability`.
    */
   scenario?: Record<string, unknown> | undefined;
+  /** Name to use when the BPMN names neither the pool nor the process (before the process id). */
+  name?: string | undefined;
 }
 
 export interface OutlineReading {
@@ -800,6 +893,38 @@ export interface OutlineReading {
   readonly outline: NormalOutline;
   /** What the outline could not carry (other event types, extra start events, nested lanes…). */
   readonly warnings: readonly string[];
+}
+
+/**
+ * The kinds of scenario content an outline does not carry: arrivals other than the defaults a
+ * created process gets, calendars, costs, resource capacities or types other than the ones
+ * `baseScenario` derives, and conditional routing. The scenario itself is never changed.
+ */
+function scenarioOutside(scenario: Record<string, any>, startIds: readonly string[], steps: readonly GraphStep[]): string[] {
+  const kinds: string[] = [];
+  const elements = record(scenario['elements']);
+  const resources = record(scenario['resources']);
+  const entries = [...Object.values(elements), ...Object.values(resources)].map(record);
+  const arrivals = startIds.map((id) => elements[id]).filter((e) => e !== undefined);
+  if (arrivals.some((e) => JSON.stringify(e) !== JSON.stringify(DEFAULT_ARRIVALS))) kinds.push('arrivals');
+  if (Object.keys(record(scenario['calendars'])).length > 0 || entries.some((e) => e['calendar'] !== undefined)) kinds.push('calendars');
+  if (entries.some((e) => (e['fixedCost'] ?? 0) !== 0 || (e['costPerHour'] ?? 0) !== 0)) kinds.push('costs');
+  const largest = new Map<string, number>();
+  for (const step of steps) for (const r of step.resources ?? []) largest.set(r.name, Math.max(largest.get(r.name) ?? 1, r.quantity));
+  const derived = Object.entries(resources).some(([ref, value]) => {
+    const r = record(value);
+    const name = typeof r['name'] === 'string' ? r['name'] : ref;
+    const keys = Object.keys(r).filter((k) => !['name', 'capacity', 'type', 'costPerHour', 'fixedCost', 'calendar'].includes(k));
+    return (
+      keys.length > 0 ||
+      (r['type'] !== undefined && r['type'] !== 'role') ||
+      typeof r['capacity'] !== 'number' ||
+      r['capacity'] !== (largest.get(name) ?? 1)
+    );
+  });
+  if (derived) kinds.push('capacities');
+  if (Object.values(elements).some((e) => record(e)['conditions'] !== undefined)) kinds.push('conditions');
+  return kinds;
 }
 
 function record(value: unknown): Record<string, any> {
@@ -823,6 +948,17 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   if (process === undefined) throw new OutlineError(C.outlineNoProcess(), [{ path: 'bpmn', message: C.outlineNoProcess() }]);
 
   const warnings: string[] = [];
+  // What the outline cannot carry is said once per kind, never dropped silently (QA of #553).
+  const collaborations = roots.filter((el) => el.$type === 'bpmn:Collaboration');
+  const otherPools = [
+    ...collaborations.flatMap((c) => (c['participants'] ?? []) as El[]).filter((p) => p !== participant),
+    ...roots.filter((el) => el.$type === 'bpmn:Process' && el !== process && !collaborations.some((c) => ((c['participants'] ?? []) as El[]).some((p) => p['processRef'] === el))),
+  ];
+  if (otherPools.length > 0) warnings.push(C.outlineDroppedPools(otherPools.map((p) => (p['name'] as string | undefined) || p.id).join(', ')));
+  const messageFlows = collaborations.reduce((n, c) => n + ((c['messageFlows'] ?? []) as El[]).length, 0);
+  if (messageFlows > 0) warnings.push(C.outlineDroppedMessageFlows(messageFlows));
+  const artifacts = [process, ...collaborations].reduce((n, el) => n + ((el['artifacts'] ?? []) as El[]).length, 0);
+  if (artifacts > 0) warnings.push(C.outlineDroppedArtifacts(artifacts));
   const laneOf = new Map<string, string>();
   const lanes: string[] = [];
   for (const lane of ((process['laneSets']?.[0]?.['lanes'] ?? []) as El[])) {
@@ -853,6 +989,12 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
     else warnings.push(C.outlineUnsupported(el.id, el.$type));
   }
   for (const extra of starts.slice(1)) warnings.push(C.outlineUnsupported(extra.id, extra.$type));
+  const namedEvents = flowElements.filter(
+    (el) => (el === starts[0] || ends.has(el.id)) && typeof el['name'] === 'string' && el['name'] !== '',
+  );
+  if (namedEvents.length > 0) warnings.push(C.outlineDroppedEventNames(namedEvents.map((el) => `${el.id} "${el['name']}"`).join(', ')));
+  const defaults = flowElements.filter((el) => el['default'] !== undefined).map((el) => el.id);
+  if (defaults.length > 0) warnings.push(C.outlineDroppedDefaults(defaults.join(', ')));
 
   const flowsFrom = new Map<string, El[]>();
   for (const flow of flowElements.filter((el) => el.$type === 'bpmn:SequenceFlow')) {
@@ -894,9 +1036,13 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
           return { name: typeof name === 'string' ? name : ref, quantity: typeof quantity === 'number' ? quantity : 1 };
         })
       : undefined;
-    return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources };
+    const selection = element['selection'] === 'and' || element['selection'] === 'or' ? (element['selection'] as 'and' | 'or') : undefined;
+    return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources, selection };
   });
+  const outside = scenarioOutside(scenario, starts.map((el) => el.id), steps);
+  if (outside.length > 0) warnings.push(C.outlineScenarioOutside(outside.join(',')));
 
-  const name = (participant?.['name'] as string | undefined) ?? (process['name'] as string | undefined) ?? '';
+  // Bizagi exports often have no names at all: the process id is still a name (QA of #553).
+  const name = (participant?.['name'] as string | undefined) || (process['name'] as string | undefined) || options.name || process.id;
   return { outline: toNormal({ name, lanes, steps }), warnings };
 }
