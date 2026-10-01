@@ -98,8 +98,10 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
   corridas de la versión anterior. Los demás procesos, escenarios y corridas pasan sin cambios y,
   en un archivo escrito por la app o el motor, byte a byte; las entradas que no son parte del
   formato se descartan, como en cualquier guardado de un `.lila`. Si el archivo cambió en disco
-  mientras la tool trabajaba (otro programa u otra llamada a este servidor), no se escribe nada y la
-  tool falla: vuelve a llamarla. Un `project` que no es un `.lila` se rechaza.
+  mientras la tool trabajaba (otro programa, otro servidor MCP, la CLI o la app de escritorio), no se
+  escribe nada y la tool falla: vuelve a llamarla. Quienes escriben el mismo `.lila` se turnan con un
+  archivo de bloqueo junto a él (`<archivo>.lila.lock`, nunca dentro del archivo); un bloqueo de más
+  de 10 segundos se toma como restos de un cierre inesperado y se borra. Un `project` que no es un `.lila` se rechaza.
 
 ```json
 { "name": "run_simulation", "arguments": { "model": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "seed": 42, "replications": 3 } }

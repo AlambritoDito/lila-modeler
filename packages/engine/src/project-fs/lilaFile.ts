@@ -8,7 +8,8 @@
  * checked that `file` is an authorized path before getting here. Nothing in this module decides
  * whether a path may be touched. Moved from `apps/desktop/src/` with `projectIO.ts` (#466).
  */
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { decodeLila, encodeLila, ProjectFormatError } from '../project/index.js';
 import type { ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
@@ -102,7 +103,7 @@ async function existingProjectId(file: string): Promise<string | null> {
 }
 
 /**
- * Writes `document` over `file` with the same guarantee `commitWithRollback` gives the folder
+ * Writes `document` over `file`, holding `${file}.lock` (`withLilaLock`), with the same guarantee `commitWithRollback` gives the folder
  * writer: a temporary file next to the destination and a `rename` on top of it, so a crash or a
  * full disk leaves the previous project intact instead of a truncated archive. A single file
  * needs no rollback bookkeeping — `rename` within a directory is atomic, and the whole project is
@@ -114,11 +115,83 @@ async function existingProjectId(file: string): Promise<string | null> {
  * or wrote it (`E-CAMBIO-EXTERNO`). `modelFile`/`diagramOnly` have no meaning in a container that
  * is the whole project or nothing, and are ignored.
  */
+/** `writeLilaFile`'s options: the folder writer's, plus a check that runs while the lock is held. */
+export interface WriteLilaOptions extends WriteProjectOptions {
+  /**
+   * Runs inside the lock, before anything is written; throwing aborts the write. This is where a
+   * caller compares the disk with what it read (`writeLilaProject`), so that no other writer can
+   * slip in between that comparison and the `rename`.
+   */
+  readonly beforeWrite?: (() => Promise<void>) | undefined;
+}
+
+/** How long to wait for another writer's lock, and when a lock is old enough to be a crash's. */
+const LOCK_WAIT_MS = 3_000;
+const LOCK_RETRY_MS = 20;
+const LOCK_STALE_MS = 10_000;
+
+function errorCode(error: unknown): unknown {
+  return (error as { code?: unknown } | null)?.code;
+}
+
+/**
+ * Runs `work` holding `${file}.lock`, a sibling file created with `wx` (exclusive create), so two
+ * writers of the same `.lila` — the desktop, the CLI, two MCP servers — never interleave their
+ * check-then-write, whatever process they run in. Waits up to `LOCK_WAIT_MS` for a lock held by
+ * someone else and then refuses with `E-CAMBIO-EXTERNO` (somebody else is changing the file); a lock
+ * older than `LOCK_STALE_MS` is taken as left behind by a crash and removed. The lock is always
+ * released in a `finally`. It lives next to the archive, never inside it.
+ */
+export async function withLilaLock<T>(file: string, work: () => Promise<T>): Promise<T> {
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      const handle = await open(lock, 'wx');
+      await handle.close();
+      break;
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') throw error;
+    }
+    try {
+      if (Date.now() - (await stat(lock)).mtimeMs > LOCK_STALE_MS) {
+        // Renamed away before deleting: of two writers that both found it stale, only one wins
+        // the rename, and the other one never deletes a lock somebody just took.
+        const stale = `${lock}.stale-${crypto.randomUUID()}`;
+        await rename(lock, stale);
+        await unlink(stale).catch(() => {});
+        continue;
+      }
+    } catch (error) {
+      if (errorCode(error) === 'ENOENT') continue; // released meanwhile: try again at once
+      throw error;
+    }
+    if (Date.now() >= deadline) {
+      throw new ProjectIOError(
+        'E-CAMBIO-EXTERNO',
+        `Otro programa está guardando este archivo ahora mismo; no se guardó nada: ${basename(file)}.`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+  }
+  try {
+    return await work();
+  } finally {
+    await unlink(lock).catch(() => {});
+  }
+}
+
 export async function writeLilaFile(
   file: string,
   document: ProjectDocument,
-  options: WriteProjectOptions = {},
+  options: WriteLilaOptions = {},
 ): Promise<void> {
+  await withLilaLock(file, () => writeLilaFileLocked(file, document, options));
+}
+
+/** `writeLilaFile` with the lock already held. */
+async function writeLilaFileLocked(file: string, document: ProjectDocument, options: WriteLilaOptions): Promise<void> {
+  await options.beforeWrite?.();
   if (options.saveAs === true) {
     assertNotAnotherProject(await existingProjectId(file), document.id, 'El archivo');
   }

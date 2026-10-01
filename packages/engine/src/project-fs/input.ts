@@ -230,7 +230,9 @@ async function exclusive<T>(file: string, work: () => Promise<T>): Promise<T> {
  * Saves `document` over `input.file`: the shared write of every tool that edits an opened `.lila`
  * (`patch_scenario`, and the process tools built on it). Atomic (`writeLilaFile`: a temporary file
  * and a `rename`, so an error never leaves a partial archive), and refused, writing nothing, unless
- * the file on disk is still the one `openLilaProcess` read (`input.snapshot`). Writes to the same
+ * the file on disk is still the one `openLilaProcess` read (`input.snapshot`). The comparison runs
+ * inside `writeLilaFile`'s cross-process lock (`${file}.lock`), so a writer in another process (a
+ * second MCP server, the CLI, the desktop) cannot pass the same check before either renames. Writes to the same
  * file are serialized within the process, so of two concurrent callers that opened the same
  * version, the second one is refused (`lilaChangedOnDisk`) instead of silently overwriting the
  * first. Returns `document`.
@@ -242,13 +244,21 @@ export async function writeLilaProject(
 ): Promise<ProjectDocument> {
   const { problems: _problems, loose: _loose, ...clean } = document;
   return exclusive(input.file, async () => {
-    if (!sameSnapshot(await snapshotOf(input.file), input.snapshot)) {
-      throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
-    }
     try {
-      // `overwrite`: the check above, against this caller's own snapshot, replaces the shared one.
-      await writeLilaFile(input.file, clean, { overwrite: true });
+      // `overwrite`: the check in `beforeWrite`, against this caller's own snapshot and inside the
+      // cross-process lock, replaces the shared map of `projectIO.ts`.
+      await writeLilaFile(input.file, clean, {
+        overwrite: true,
+        beforeWrite: async () => {
+          if (!sameSnapshot(await snapshotOf(input.file), input.snapshot)) {
+            throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
+          }
+        },
+      });
     } catch (error) {
+      if (error instanceof ProjectIOError && error.code === 'E-CAMBIO-EXTERNO') {
+        throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
+      }
       if (error instanceof ProjectIOError) throw new Error(`${input.file}: ${error.code}: ${error.message}`);
       throw error;
     }

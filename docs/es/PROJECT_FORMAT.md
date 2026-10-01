@@ -166,4 +166,8 @@ Los códigos del motor son `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LIL
 `E-ZIP`, `E-NO-MANIFEST`, `E-MANIFEST`, `E-NO-MODEL`, `E-ENTRY-PATH`, `E-DOCUMENTO`, `E-DIAGNOSTICO`,
 `E-CORRIDA`, `E-ENTRADAS-CORRIDA` en la frontera IPC (un mapa explícito en `lilaFile.ts`, listado en
 la cabecera de `bridge.ts`); la app web los traduce en `apps/web/src/project.ts`. Guardar un `.lila`
-pasa por las mismas guardias `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO` que guardar una carpeta.
+pasa por las mismas guardias `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO` que guardar una carpeta, con un
+`<archivo>.lila.lock` junto al archivo mientras comprueba y escribe, para que quienes escriben desde
+procesos distintos (el escritorio, la CLI, servidores MCP) se turnen; quien no consigue el bloqueo en
+3 segundos rechaza con `E-CAMBIO-EXTERNO`, y un bloqueo de más de 10 segundos se borra como restos de
+un cierre inesperado.

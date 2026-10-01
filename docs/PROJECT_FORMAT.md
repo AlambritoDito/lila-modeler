@@ -166,4 +166,7 @@ own `E-ZIP`, `E-NO-MANIFEST`, `E-MANIFEST`, `E-NO-MODEL`, `E-ENTRY-PATH`, `E-DOC
 `E-DIAGNOSTICO`, `E-CORRIDA`, `E-ENTRADAS-CORRIDA` at the IPC boundary (an explicit map in
 `lilaFile.ts`, listed in the `bridge.ts` header); the web app localises them in
 `apps/web/src/project.ts`. A `.lila` save runs the same `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO`
-guards as a folder save.
+guards as a folder save, holding a `<file>.lila.lock` next to the archive while it checks and
+writes, so writers in different processes (the desktop, the CLI, MCP servers) take turns; a writer
+that cannot get the lock within 3 seconds refuses with `E-CAMBIO-EXTERNO`, and a lock older than 10
+seconds is removed as left by a crash.

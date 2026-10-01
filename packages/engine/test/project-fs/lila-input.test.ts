@@ -3,7 +3,8 @@
  * the archive as on the extracted `.bpmn` + scenario files, a repository picks its process with
  * `--process`, and `writeLilaScenario` rewrites one scenario without touching anything else.
  */
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ import {
   findLilaScenario,
   lilaScenarioEntryName,
   openLilaProcess,
+  writeLilaFile,
   writeLilaProject,
   writeLilaScenario,
 } from '../../src/project-fs/index.js';
@@ -294,3 +296,110 @@ describe('writeLilaScenario', () => {
     await expect(writeLilaScenario(lila, 'x', { version: 1 })).rejects.toThrow('changed on disk');
   });
 });
+
+/**
+ * Two writers in two **processes** (QA round 2 of #550): two MCP servers, or the CLI and the
+ * desktop. Each child opens the same file, says it is ready, waits for the go and writes its own
+ * process. A run ends with both changes on disk or one refused with "changed on disk"; two OKs
+ * with one change missing is a silent loss and fails.
+ */
+describe('writers in different processes', () => {
+  const dist = join(repo, 'packages/engine/dist/project-fs/index.js');
+  const child = `
+    import { existsSync, writeFileSync } from 'node:fs';
+    const [dist, file, slug, entry, ready, go] = process.argv.slice(1);
+    const { openLilaProcess, writeLilaScenario } = await import(dist);
+    const lila = await openLilaProcess(file, { process: slug });
+    writeFileSync(ready, '');
+    while (!existsSync(go)) await new Promise((resolve) => setTimeout(resolve, 2));
+    try {
+      await writeLilaScenario(lila, entry, { ...lila.process.scenarios[entry], description: slug });
+      console.log(JSON.stringify({ ok: true }));
+    } catch (error) {
+      console.log(JSON.stringify({ ok: false, message: error.message }));
+    }
+  `;
+
+  function run(args: string[]): Promise<{ ok: boolean; message?: string }> {
+    return new Promise((resolve, reject) => {
+      const proc = spawn(process.execPath, ['--input-type=module', '-e', child, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+      proc.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+      proc.on('error', reject);
+      proc.on('close', (code) => (code === 0 ? resolve(JSON.parse(stdout) as { ok: boolean }) : reject(new Error(stderr))));
+    });
+  }
+
+  async function until(condition: () => boolean): Promise<void> {
+    while (!condition()) await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+
+  test('both changes are kept, or one is refused: never a silent loss', async () => {
+    const outcomes = { both: 0, refused: 0 };
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const file = writeArchive(`race-${attempt}.lila`, repositoryDocument());
+      const go = join(scratch, `go-${attempt}`);
+      const ready = [join(scratch, `ready-a-${attempt}`), join(scratch, `ready-b-${attempt}`)];
+      const results = Promise.all([
+        run([dist, file, 'pedido', 'as-is.scenario.json', ready[0]!, go]),
+        run([dist, file, 'copia', 'solo.scenario.json', ready[1]!, go]),
+      ]);
+      await until(() => ready.every((path) => existsSync(path)));
+      writeFileSync(go, '');
+      const [first, second] = await results;
+      const [pedido, copia] = processesOf(decodeLila(new Uint8Array(readFileSync(file))));
+      const kept = [
+        pedido!.scenarios['as-is.scenario.json']?.['description'] === 'pedido',
+        copia!.scenarios['solo.scenario.json']?.['description'] === 'copia',
+      ];
+      expect(kept[0], JSON.stringify(first)).toBe(first!.ok);
+      expect(kept[1], JSON.stringify(second)).toBe(second!.ok);
+      for (const result of [first!, second!].filter((r) => !r.ok)) expect(result.message).toContain('changed on disk');
+      expect(first!.ok || second!.ok).toBe(true);
+      if (first!.ok && second!.ok) outcomes.both++;
+      else outcomes.refused++;
+      expect(existsSync(`${file}.lock`)).toBe(false);
+    }
+    expect(outcomes.both + outcomes.refused).toBe(8);
+  }, 60_000);
+});
+
+describe('the .lila lock', () => {
+  test('a lock left by a crash (older than the stale limit) does not block the save', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lock = `${file}.lock`;
+    writeFileSync(lock, '');
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lock, old, old);
+    await writeLilaFile(file, { ...pedidoDocument(), name: 'saved' });
+    expect(decodeLila(new Uint8Array(readFileSync(file))).name).toBe('saved');
+    expect(existsSync(lock)).toBe(false);
+    expect(readdirSync(scratch)).toEqual(['pedido.lila']);
+  });
+
+  test('a live lock held by another writer: the save waits, then refuses without writing', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lock = `${file}.lock`;
+    writeFileSync(lock, '');
+    const untouched = readFileSync(file);
+    await expect(writeLilaFile(file, { ...pedidoDocument(), name: 'saved' })).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
+    expect(readFileSync(file).equals(untouched)).toBe(true);
+    // Somebody else's lock is not ours to delete.
+    expect(existsSync(lock)).toBe(true);
+    const lila = await openLilaProcess(file);
+    await expect(writeLilaScenario(lila, 'x', { version: 1 })).rejects.toThrow('changed on disk');
+  }, 20_000);
+
+  test('the lock is released when the write fails', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lila = await openLilaProcess(file);
+    await expect(
+      writeLilaFile(file, pedidoDocument(), { beforeWrite: async () => Promise.reject(new Error('no')) }),
+    ).rejects.toThrow('no');
+    expect(existsSync(`${file}.lock`)).toBe(false);
+    await writeLilaScenario(lila, 'x', { version: 1 });
+  });
+});
+

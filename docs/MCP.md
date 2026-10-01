@@ -75,8 +75,10 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
   the old version as stale. Every other process, scenario and run is carried through unchanged
   and, in an archive written by the app or the engine, byte for byte; entries outside the
   project layout are dropped, as in any `.lila` save. If the file changed on disk while the tool
-  worked (another program, or another call to this server), nothing is written and the tool fails:
-  call it again. A `project` that is not a `.lila` is refused.
+  worked (another program, another MCP server, the CLI or the desktop app), nothing is written and
+  the tool fails: call it again. Writers of the same `.lila` take turns through a lock file next to
+  it (`<file>.lila.lock`, never inside the archive); a lock older than 10 seconds is treated as
+  left by a crash and removed. A `project` that is not a `.lila` is refused.
 
 ```json
 { "name": "run_simulation", "arguments": { "model": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "seed": 42, "replications": 3 } }

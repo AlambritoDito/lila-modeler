@@ -19,7 +19,8 @@ export {
   writeProjectFolder,
 } from './projectIO.js';
 export type { WriteProjectFsImpl, WriteProjectOptions } from './projectIO.js';
-export { readLilaFile, writeLilaFile } from './lilaFile.js';
+export { readLilaFile, withLilaLock, writeLilaFile } from './lilaFile.js';
+export type { WriteLilaOptions } from './lilaFile.js';
 export { isLilaPath, isMiscasedModelFile, isSymlink } from './paths.js';
 export {
   findLilaScenario,
