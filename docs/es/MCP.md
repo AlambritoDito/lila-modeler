@@ -7,6 +7,9 @@
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
+Para el flujo completo de un agente — entrevista, esquema, escenario, corrida, documento y ver el
+resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
+
 - **`validate_bpmn({ path | xml, process?, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
   `path` **o** `xml`, nunca los dos: pasar ambos es un error de la tool, no una precedencia
@@ -351,6 +354,7 @@ cambiaría y no escribe nada.
 ```json
 { "name": "import_scenario_sheet", "arguments": { "project": "proyecto.lila", "scenario": "as-is", "sheet": "as-is.xlsx", "dryRun": true } }
 ```
+
 ## Editar un proceso
 
 `edit_process` (#98) cambia un proceso que ya existe, lo haya hecho quien sea: `create_process`, la
@@ -438,9 +442,15 @@ LILA-053 y hay agentes y tests que la leen por nombre. Cambia su contenido, no s
 
 ## Instalación
 
-Hoy, desde un checkout del repo:
+**`@lila-modeler/mcp` no está publicado.** El motor en npm (`@lila-modeler/engine`) trae el comando
+`lila`, pero `lila mcp` carga el servidor MCP del workspace aparte `@lila-modeler/mcp`, que es
+`private`. Por eso `npx -y @lila-modeler/engine mcp` **no** funciona hoy: instala el motor y se
+detiene con `lila mcp: falta el paquete @lila-modeler/mcp`. Mientras el servidor MCP no se publique,
+córrelo desde un clon del repo, con Node 22 o posterior:
 
 ```bash
+git clone https://github.com/AlambritoDito/lila-modeler.git
+cd lila-modeler
 npm ci
 npm run build
 ```
@@ -454,8 +464,12 @@ Eso deja listos los dos puntos de entrada, que arrancan **el mismo servidor**:
 ya tiene instalado. Como `@lila-modeler/mcp` depende de `@lila-modeler/engine`, importarlo estáticamente desde
 `cli.ts` sería un ciclo entre paquetes: se carga con `import()` dinámico
 (`packages/engine/src/cli.ts`, `dispatchMcp`) y, si el paquete no está, el comando lo dice por
-stderr y sale con 1 en vez de romperse. Instalar el paquete del motor no instala el workspace
-privado `@lila-modeler/mcp`. Usa el checkout hasta que exista una distribución MCP instalable por separado.
+stderr y sale con 1 en vez de romperse.
+
+Todos los clientes de abajo arrancan el servidor como subproceso por stdio: `command` es `node`
+(con ruta absoluta cuando el cliente no hereda tu `PATH`) y `args` son la ruta absoluta a
+`packages/engine/bin/lila.js` y `mcp`. Agrega `--lang es` (o la variable `LILA_LANG=es`) para los
+mensajes en español.
 
 `lila mcp` habla MCP por **stdout**: nada más puede escribir ahí. Todo diagnóstico (paquete
 ausente, fallo de arranque) sale por stderr, que es lo único que ve quien registró el servidor.
@@ -510,42 +524,93 @@ Claude Desktop no tiene CLI: se edita a mano
 Usa rutas absolutas para Node y el punto de entrada. Pasa también rutas absolutas de modelo y
 escenario en cada llamada, sin depender del directorio de trabajo que elija el cliente.
 
-### Ejemplos
+## Registro en Codex
+
+```bash
+codex mcp add lila -- node /ruta/absoluta/al/repo/packages/engine/bin/lila.js mcp
+```
+
+o, en `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.lila]
+command = "node"
+args = ["/ruta/absoluta/al/repo/packages/engine/bin/lila.js", "mcp"]
+```
+
+## Registro en Hermes Agent
+
+[Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp) lee los
+servidores stdio de `mcp_servers` en `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  lila:
+    command: "/ruta/absoluta/a/node"
+    args: ["/ruta/absoluta/al/repo/packages/engine/bin/lila.js", "mcp"]
+    cwd: "/ruta/absoluta/a/tus/proyectos"
+    env:
+      LILA_LANG: "es"
+    timeout: 300
+```
+
+- Hermes solo le pasa al servidor las variables de entorno que aparecen en `env`, así que da
+  `command` como ruta absoluta a `node` (`which node`) en vez de depender del `PATH`.
+- `cwd` es donde caen las rutas relativas de las tools (`project: "tarjeta.lila"`, `saveTo`).
+  Si lo omites, usa rutas absolutas en las llamadas.
+- `timeout` es por llamada, en segundos: un `run_simulation` o `compare_scenarios` largo bloquea el
+  servidor hasta terminar, así que deja margen.
+- Después de editar el archivo, corre `/reload-mcp` en una sesión de Hermes. Hermes nombra las tools
+  `mcp_lila_<tool>` (`mcp_lila_create_process`); los argumentos son los de esta página.
+- `tools: { include: [...] }` limita lo que ve el agente; por ejemplo, a las de solo lectura
+  `validate_bpmn`, `describe_process`, `get_process_outline`, `get_raci_matrix` y `run_simulation`
+  (que solo escribe con `saveTo` o `saveRun`).
+
+El mismo bloque, con `command` y `args`, es la configuración stdio genérica para cualquier otro
+cliente MCP.
+
+## Ejemplos
+
+Una llamada por cada tool que las secciones de arriba no muestran ya, escrita como la manda un
+agente (`name` y `arguments`); las rutas son relativas al directorio de trabajo del servidor.
+
+```json
+{ "name": "validate_bpmn", "arguments": { "path": "examples/pedido/model.bpmn" } }
+```
+
+```json
+{ "name": "describe_process", "arguments": { "path": "examples/pedido/model.bpmn", "scenario": "examples/pedido/as-is.scenario.json" } }
+```
 
 ```jsonc
 // run_simulation
-{
-  "scenario": "examples/pedido/as-is.scenario.json",
-  "seed": 42
-}
+{ "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "seed": 42 } }
 // -> { "elements": {...}, "flows": {...}, "resources": {...}, "process": {...},
 //      "bottlenecks": [...], "replications": {...}, "warnings": [...] }
 ```
 
 ```jsonc
-// compare_scenarios
-{
-  "scenarios": [
-    "examples/pedido/as-is.scenario.json",
-    "examples/pedido/to-be-3-cajeros.scenario.json"
-  ],
-  "seed": 42
-}
+// compare_scenarios (el primero es la base)
+{ "name": "compare_scenarios", "arguments": {
+  "scenarios": ["examples/pedido/as-is.scenario.json", "examples/pedido/to-be-3-cajeros.scenario.json"], "seed": 42 } }
 // -> { "comparison": { "count": 2, "rows": [...] }, "notes": [...] }
 ```
 
 ```jsonc
 // patch_scenario, modo (b): crea un TO-BE con extends al AS-IS
-{
+{ "name": "patch_scenario", "arguments": {
   "scenario": "examples/pedido/as-is.scenario.json",
   "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 3 }],
   "saveTo": "examples/pedido/to-be-3-cajeros.scenario.json",
-  "name": "TO-BE 3 cajeros"
-}
+  "name": "TO-BE 3 cajeros" } }
 // -> escribe { "version": 1, "name": "TO-BE 3 cajeros",
 //              "extends": "as-is.scenario.json", "resources": { "cajero": { "capacity": 3 } } }
 //    y devuelve { "scenario": {...resuelto...}, "file": "/ruta/.../to-be-3-cajeros.scenario.json",
 //                 "notes": [...] }
+```
+
+```json
+{ "name": "get_process_outline", "arguments": { "project": "credit.lila", "process": "credit-application" } }
 ```
 
 ## Los dos flujos de la aceptación de M4, como conversación

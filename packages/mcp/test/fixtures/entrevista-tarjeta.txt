@@ -1,0 +1,21 @@
+Entrevista sintética (ficticia) para la prueba de extremo a extremo de agentes (#540).
+Ninguna persona, banco ni dato real: todo está inventado para la prueba.
+
+Entrevistadora: ¿Cómo empieza una solicitud de tarjeta de crédito?
+Ejecutiva de sucursal: El cliente llega a la sucursal y yo recibo la solicitud. Capturarla me
+lleva entre cinco y veinte minutos, lo normal son diez.
+Entrevistadora: ¿Y luego?
+Ejecutiva de sucursal: Valido los documentos: identificación, comprobante de domicilio y de
+ingresos. Unos ocho minutos. Si los documentos no están completos, le solicito los documentos
+faltantes al cliente y, cuando los trae, vuelvo a validarlos. Pasa más o menos en una de cada
+siete solicitudes.
+Entrevistadora: ¿Quién sigue cuando los documentos están completos?
+Analista de crédito: Yo. Primero consulto el buró de crédito; es un servicio automático que
+tarda unos tres minutos en promedio. Después evalúo la capacidad de pago, que es lo más
+pesado: unos veinticinco minutos, a veces mucho más.
+Entrevistadora: ¿Cuántas se aprueban?
+Analista de crédito: Cerca de dos de cada tres. Si la solicitud está aprobada, la mesa de
+control emite la tarjeta. Si no, la ejecutiva notifica el rechazo al cliente.
+Entrevistadora: ¿Cuánta gente hay y cuántas solicitudes llegan?
+Gerente: Tenemos tres ejecutivas, dos analistas y una persona en la mesa de control. Llegan
+unas cuatro solicitudes por hora, más o menos una cada quince minutos.

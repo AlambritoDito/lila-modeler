@@ -86,7 +86,7 @@ function render(markdown, from, published) {
 const titleOf = (markdown, fallback) => markdown.match(/^#\s+(.+)$/m)?.[1].replace(/`/g, '') ?? fallback;
 
 /** Spanish docs whose file name differs from their English counterpart. */
-const ES_ALIAS = { 'ATAJOS.md': 'SHORTCUTS.md', 'GUIA-BETA-MAC.md': 'BETA-MAC-GUIDE.md', 'GUIA-PROBADOR-WINDOWS.md': 'WINDOWS-TESTER-GUIDE.md' };
+const ES_ALIAS = { 'ATAJOS.md': 'SHORTCUTS.md', 'GUIA-BETA-MAC.md': 'BETA-MAC-GUIDE.md', 'GUIA-PROBADOR-WINDOWS.md': 'WINDOWS-TESTER-GUIDE.md', 'GUIA-AGENTES.md': 'AGENT_GUIDE.md' };
 /** English name of a doc, which is what places it in the sidebar in both languages. */
 const canonical = (doc) => { const base = path.posix.basename(doc); return ES_ALIAS[base] ?? base; };
 
@@ -94,7 +94,7 @@ const GROUPS = [
   { en: 'Getting started', es: 'Primeros pasos', docs: ['BETA-MAC-GUIDE.md', 'WINDOWS-TESTER-GUIDE.md', 'COMING-FROM-BIZAGI.md'] },
   { en: 'Guides', es: 'Guías', docs: ['SCENARIO_SHEETS.md', 'THEMES.md', 'SHORTCUTS.md', 'BIZAGI_PARITY.md'] },
   { en: 'Reference', es: 'Referencia', docs: ['SCENARIO_FORMAT.md', 'RESULTS_FORMAT.md', 'PROJECT_FORMAT.md', 'SEMANTICS.md', 'BPMN_EXTENSION.md'] },
-  { en: 'Integrations', es: 'Integraciones', docs: ['MCP.md', 'ORACLES.md'] },
+  { en: 'Integrations', es: 'Integraciones', docs: ['AGENT_GUIDE.md', 'MCP.md', 'ORACLES.md'] },
   { en: 'Project', es: 'Proyecto', docs: ['DECISIONS.md', 'EXAMPLES_POLICY.md', 'BRANDING.md'] },
 ];
 const LABELS = {
@@ -103,7 +103,7 @@ const LABELS = {
   'THEMES.md': ['Themes', 'Temas'], 'SHORTCUTS.md': ['Keyboard shortcuts', 'Atajos de teclado'], 'BIZAGI_PARITY.md': ['Bizagi parity', 'Paridad con Bizagi'],
   'SCENARIO_FORMAT.md': ['Scenario format', 'Formato de escenario'], 'RESULTS_FORMAT.md': ['Results format', 'Formato de resultados'],
   'PROJECT_FORMAT.md': ['Project format', 'Formato de proyecto'], 'SEMANTICS.md': ['Engine semantics', 'Semántica del motor'],
-  'BPMN_EXTENSION.md': ['BPMN extension', 'Extensión BPMN'], 'MCP.md': ['MCP server', 'Servidor MCP'], 'ORACLES.md': ['Oracles', 'Oráculos'],
+  'BPMN_EXTENSION.md': ['BPMN extension', 'Extensión BPMN'], 'AGENT_GUIDE.md': ['Agent guide', 'Guía para agentes'], 'MCP.md': ['MCP server', 'Servidor MCP'], 'ORACLES.md': ['Oracles', 'Oráculos'],
   'DECISIONS.md': ['Architecture decisions', 'Decisiones de arquitectura'], 'EXAMPLES_POLICY.md': ['Examples policy', 'Política de ejemplos'],
   'BRANDING.md': ['Branding', 'Branding'],
 };
