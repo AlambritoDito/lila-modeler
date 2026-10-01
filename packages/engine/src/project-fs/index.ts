@@ -32,3 +32,11 @@ export {
   writeLilaScenario,
 } from './input.js';
 export type { LilaProcess, LilaSnapshot } from './input.js';
+export {
+  exportDiagram,
+  exportDocument,
+  exportResults,
+  writeExportDirectory,
+  writeExportFile,
+} from './exports.js';
+export type { DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection } from './exports.js';

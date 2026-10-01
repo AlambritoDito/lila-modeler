@@ -57,12 +57,15 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las cinco tools', async () => {
+test('listTools devuelve las ocho tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([
     'compare_scenarios',
     'describe_process',
+    'export_diagram',
+    'export_document',
+    'export_results',
     'patch_scenario',
     'run_simulation',
     'validate_bpmn',
@@ -481,7 +484,7 @@ test('run_simulation: un escenario inline inválido no cita un archivo que no ex
  * Idioma (LILA-211, parte 2)
  * ------------------------------------------------------------------ */
 
-test('`title`, `description` y los `describe()` de las cinco tools están en inglés', async () => {
+test('`title`, `description` y los `describe()` de las tools están en inglés', async () => {
   const { tools } = await client.listTools();
   // La superficie del protocolo no depende del `locale`: el cliente la leyó una sola vez.
   for (const tool of tools) {
@@ -497,13 +500,16 @@ test('`title`, `description` y los `describe()` de las cinco tools están en ing
   expect(tools.map((tool) => tool.title).sort()).toEqual([
     'Compare scenarios',
     'Describe process',
+    'Export diagram',
+    'Export process document',
+    'Export results',
     'Patch scenario',
     'Run simulation',
     'Validate BPMN',
   ]);
 });
 
-test('las cinco tools aceptan `locale` como enum opcional', async () => {
+test('todas las tools aceptan `locale` como enum opcional', async () => {
   const { tools } = await client.listTools();
   for (const tool of tools) {
     const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};

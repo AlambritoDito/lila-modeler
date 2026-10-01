@@ -36,12 +36,19 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                 [--replications n] [--json result.json] [--csv directory] [--xlsx book.xlsx]
        lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
                     [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
+       lila export diagram <model.bpmn|project.lila> [--process slug] [--out file.svg] [--force]
+       lila export doc <project.lila> --out file.docx|file.html [--format docx|html]
+                       [--process slug] [--run id|latest] [--scenario name] [--force]
+       lila export results <project.lila> --out book.xlsx|directory [--format xlsx|csv]
+                           [--process slug] [--run id|latest] [--scenario name] [--force]
        lila mcp
 
 Commands:
   validate   Parses the BPMN, prints its IR and validates the model.
   run        Validates model and scenario, simulates and shows the result tables.
   compare    Simulates two or more scenarios on the same model and compares them side by side.
+  export     Exports without the app: the diagram as SVG, the process document as Word or
+             HTML, or the results of a run saved in the .lila as .xlsx or CSV.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -71,6 +78,19 @@ compare options:
                     Comparison sheet (value, 95% CI, delta and CI overlap per KPI).
   --all             Prints every KPI of compare(), not just the curated subset.
                     The first scenario listed is the base: the rest are compared against it.
+
+export options:
+  --out path        Where to write. Without it, export diagram prints the SVG on stdout.
+  --format f        docx|html (doc) or xlsx|csv (results); by default from the --out extension
+                    (.docx, .html, .xlsx). csv writes elements, flows, resources and process
+                    .csv into the --out directory.
+  --run id|latest   The stored run: latest (default) is the run of the current model and scenario;
+                    the document only takes a current run and goes without results when there is
+                    none.
+  --scenario name   With latest, the run of that scenario (needed when several have one).
+  --force           Replaces existing files; without it nothing existing is overwritten.
+  The Word document has no diagram and no document has the run's charts: the engine has no
+  rasteriser. The HTML document has the diagram.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
@@ -370,6 +390,34 @@ export const en: Catalog = {
       `another program is saving ${file} right now; nothing was written. Try again in a moment.`,
     lilaChangedOnDisk: (file) =>
       `${file} changed on disk while this call was working on it; nothing was written. Try again.`,
+
+    exportNeedsLila: (file) => `${file} is not a .lila project: the document and the results are exported from one.`,
+    exportRunUnknown: (id, slug, file, runs) =>
+      `process "${slug}" of ${file} has no run "${id}"; ` + (runs === '' ? 'it has no stored runs.' : `its runs are: ${runs}.`),
+    exportNoRun: (file, slug, scenario) =>
+      `process "${slug}" of ${file} has no stored run${scenario === '' ? '' : ` of ${scenario}`}. ` +
+      'Simulate it in Lila Modeler and save the project, then export again.',
+    exportNoCurrentRun: (file, slug, runs) =>
+      `process "${slug}" of ${file} has no run of its current model and scenario; older runs: ${runs}. ` +
+      'Pass one by id (--run, `run` in MCP) or simulate again in Lila Modeler.',
+    exportRunAmbiguous: (file, slug, scenarios) =>
+      `process "${slug}" of ${file} has current runs of several scenarios (${scenarios}): ` +
+      'choose one with --scenario (`scenario` in MCP) or pass a run id.',
+    exportRunStale: (id, slug, file) =>
+      `run "${id}" of process "${slug}" of ${file} is of an older model or scenario: the document would ` +
+      'mix today\'s model with old results. Export its results instead, or simulate again.',
+    exportNoDiagram: () => 'The model has no diagram (BPMN DI): the document goes without one.',
+    exportDocxNoDiagram: () =>
+      'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
+    exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
+    exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,
+    exportNotDirectory: (path) => `cannot write into ${path}: it is a file, not a directory.`,
+    exportUnknownKind: (kind) => `unknown export "${kind}": expected diagram, doc or results.`,
+    exportPaths: () => 'diagram|doc|results and a <model.bpmn|project.lila>',
+    exportInvalidFormat: (value, accepted) =>
+      value === '' ? `choose a format with --format: ${accepted}.` : `--format only accepts: ${accepted}; got "${value}".`,
+    exportOutRequired: (kind) => `lila export ${kind} needs --out <path>.`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,
@@ -391,6 +439,8 @@ export const en: Catalog = {
     fileMissing: (file) => `the file ${file} does not exist.`,
     bothPathAndXml: () => 'pass `path` or `xml`, not both.',
     pathOrXml: () => 'pass `path` or `xml`.',
+    projectOrPath: () => 'pass `project` or `path`.',
+    bothProjectAndPath: () => 'pass `project` or `path`, not both.',
     modelMismatch: (modelPath, scenarioModel) =>
       `the model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
     modelInvalid: (detail) => `the model does not pass validation: ${detail}`,

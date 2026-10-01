@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: cinco tools por ahora, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: ocho tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -70,6 +70,18 @@ Las tres tools de LILA-054/055 reutilizan `@lila-modeler/engine/cli-shared`, ext
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 
+- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** — dibuja el
+  diagrama de un proceso de un `.lila` (`project`) o de un `.bpmn` (`path`) como SVG, con el
+  renderizador propio del motor. Devuelve `{ process, svg }` o, con `saveTo`, `{ process, file }`.
+- **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
+  escribe el documento del proceso (`format`: `docx` o `html`) con los resultados de una corrida
+  guardada. Devuelve `{ file, format, project, process, run, notes }`.
+- **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
+  escribe los resultados de una corrida guardada (`format`: `xlsx`, o `csv` en el directorio
+  `saveTo`). Devuelve `{ files, format, project, process, run }`.
+
+Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app).
+
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
 
@@ -113,6 +125,37 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
   "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
 ```
 
+## Exportar sin la app
+
+`export_diagram`, `export_document` y `export_results` (#538) son `lila export diagram|doc|results`
+(`docs/es/CLI.md`) como tools. No necesitan la app ni un navegador:
+
+- **El diagrama** sale del renderizador SVG del motor: la geometría del DI de BPMN con los colores
+  de Lila Light sobre blanco. El documento HTML lo incrusta. El Word va **sin diagrama** y ninguno
+  de los dos lleva las gráficas de la corrida: Word necesita un PNG y el motor no rasteriza.
+  `notes` dice qué quedó fuera.
+- **Las corridas** son las que la app guardó en el `.lila`. `run: "latest"` (por defecto) es la
+  corrida del modelo y escenario actuales. `scenario` la acota a un escenario, y hace falta cuando
+  varios tienen una corrida actual. `run: "<id>"` elige una, y un id desconocido lista los ids. El
+  documento solo admite una corrida actual; sin ella va sin resultados y el `run` de la respuesta
+  es `null`. `export_results` sin corrida es `isError`, con un mensaje que lo dice. Los resultados
+  de una corrida anterior se exportan contra el modelo con el que corrió.
+- **No se sobrescribe nada.** Si ya existe un archivo en `saveTo` (o, en CSV, cualquiera de los
+  cuatro del directorio), la tool devuelve `isError` y no escribe nada, salvo con
+  `overwrite: true`. Las escrituras son atómicas: primero un temporal y luego se publica.
+
+```json
+{ "name": "export_diagram", "arguments": { "project": "examples/pedido.lila", "saveTo": "out/pedido.svg" } }
+```
+
+```json
+{ "name": "export_document", "arguments": { "project": "proyecto.lila", "format": "html", "saveTo": "out/pedido.html" } }
+```
+
+```json
+{ "name": "export_results", "arguments": { "project": "proyecto.lila", "scenario": "as-is", "format": "xlsx", "saveTo": "out/as-is.xlsx" } }
+```
+
 ## Idioma
 
 El `title`, la `description` y los `describe()` de cada tool están **fijos en inglés**: son la
@@ -124,7 +167,7 @@ de `docs/SEMANTICS.md` § 17).
 - El **idioma del servidor** sale de quien lo arrancó: `lila mcp --lang es` se lo pasa hecho, y el
   bin `lila-mcp` (que no tiene línea de comandos) lo resuelve del entorno con la misma regla que la
   CLI: `LILA_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`; inglés si no hay ninguna.
-- El **idioma de una llamada** es `locale: "en" | "es"`, opcional en las cinco tools. Solo afecta a
+- El **idioma de una llamada** es `locale: "en" | "es"`, opcional en todas las tools. Solo afecta a
   esa respuesta; no cambia el idioma del servidor para las siguientes.
 
 La clave `resumen` de `describe_process` **no** se renombra al traducir: es contrato desde
@@ -316,7 +359,8 @@ idioma que pidió la llamada (§ Idioma).
 se le pase (relativa al cwd, como todo lo demás). Sobrescribe un archivo existente sin preguntar,
 igual que `lila run --json <ruta>`, y publica con `rename` desde un temporal en el mismo
 directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es un error de la
-tool, no un borrado. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
+tool, no un borrado. Las tools de exportación son la excepción: nunca reemplazan un archivo
+salvo con `overwrite: true` (ver [Exportar sin la app](#exportar-sin-la-app)). `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
 bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el modo de la tool
 (§ arriba): sin `saveTo` se sobrescribe `scenario`; con `saveTo` se crea un archivo nuevo con
 `extends` y solo el delta del patch.
