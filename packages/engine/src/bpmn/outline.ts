@@ -891,6 +891,8 @@ export interface BpmnToOutlineOptions {
   scenario?: Record<string, unknown> | undefined;
   /** Name to use when the BPMN names neither the pool nor the process (before the process id). */
   name?: string | undefined;
+  /** #546: the process to read (the one its scenarios target, `parseBpmn`); default, the first pool's. */
+  processId?: string | undefined;
 }
 
 export interface OutlineReading {
@@ -948,8 +950,9 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   const participant = roots
     .filter((el) => el.$type === 'bpmn:Collaboration')
     .flatMap((el) => (el['participants'] ?? []) as El[])
-    .find((p) => p['processRef'] !== undefined);
-  const process = (participant?.['processRef'] as El | undefined) ?? roots.find((el) => el.$type === 'bpmn:Process');
+    .find((p) => p['processRef'] !== undefined && (options.processId === undefined || (p['processRef'] as El).id === options.processId));
+  const process = (participant?.['processRef'] as El | undefined) ??
+    roots.find((el) => el.$type === 'bpmn:Process' && (options.processId === undefined || el.id === options.processId));
   if (process === undefined) throw new OutlineError(C.outlineNoProcess(), [{ path: 'bpmn', message: C.outlineNoProcess() }]);
 
   const warnings: string[] = [];

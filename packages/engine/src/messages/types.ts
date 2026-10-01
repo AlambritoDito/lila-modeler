@@ -38,6 +38,15 @@ export interface OuterCodeMessages {
   'E-REF-DESCONOCIDA/flujo': (path: string, flowId: string) => string;
   'E-SUBPROC-PARAMETRO': (path: string, id: string) => string;
   'E-ELEMENTO-DESCONOCIDO': (path: string, id: string) => string;
+  /** #546: the id is in another process of the file, not in the simulated one. */
+  'E-ELEMENTO-DESCONOCIDO/otro-proceso': (
+    path: string,
+    id: string,
+    ownerId: string,
+    ownerName: string,
+    simulatedId: string,
+    simulatedName: string,
+  ) => string;
   'E-PROB-EN-NODO': (path: string) => string;
   'E-PROB-RANGO': (path: string, value: number) => string;
   'E-CAMPO-NO-APLICA/solo-inicio': (path: string) => string;
