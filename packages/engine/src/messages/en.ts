@@ -366,6 +366,8 @@ export const en: Catalog = {
       `several scenarios are named "${name}": ${matches}. Use the file name instead.`,
     lilaScenarioEntryName: (name) =>
       `"${name}" is not a scenario name inside a .lila: use a flat <name>.scenario.json, without folders.`,
+    lilaBusy: (file) =>
+      `another program is saving ${file} right now; nothing was written. Try again in a moment.`,
     lilaChangedOnDisk: (file) =>
       `${file} changed on disk while this call was working on it; nothing was written. Try again.`,
   },

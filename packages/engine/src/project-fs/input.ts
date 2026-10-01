@@ -256,6 +256,9 @@ export async function writeLilaProject(
         },
       });
     } catch (error) {
+      if (error instanceof ProjectIOError && error.code === 'E-ARCHIVO-OCUPADO') {
+        throw new Error(messages(locale).cli.lilaBusy(input.file));
+      }
       if (error instanceof ProjectIOError && error.code === 'E-CAMBIO-EXTERNO') {
         throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
       }

@@ -375,9 +375,15 @@ export class DesktopStore implements ProjectSessionStore {
  * shown in the UI language, naming what is in the way so the user knows what to move (QA of #531),
  * instead of raw and only in Spanish. The disk detail quotes `processes/…` or `model.bpmn` when
  * that is the obstacle (`projectIO.ts`); otherwise the obstacle is the destination `dir` itself
- * (another project's folder or `.lila`). Any other error is rethrown as it came.
+ * (another project's folder or `.lila`). `E-ARCHIVO-OCUPADO` is translated the same way. Any
+ * other error is rethrown as it came.
  */
 function traducirOcupada(error: unknown, dir: string): never {
+  // `E-ARCHIVO-OCUPADO` (#466): another program held the `.lila`'s lock while it saved. Nothing
+  // changed on disk and nothing was written; the user only has to try again.
+  if (error instanceof Error && error.message.includes('E-ARCHIVO-OCUPADO')) {
+    throw new Error(strings().almacen.errorArchivoOcupado(dir));
+  }
   if (error instanceof Error && error.message.includes('E-CARPETA-OCUPADA')) {
     const dentro = /"(processes\/[^"]*|model\.bpmn)"/.exec(error.message)?.[1];
     const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';

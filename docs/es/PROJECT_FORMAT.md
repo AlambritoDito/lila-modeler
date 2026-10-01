@@ -169,5 +169,6 @@ la cabecera de `bridge.ts`); la app web los traduce en `apps/web/src/project.ts`
 pasa por las mismas guardias `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO` que guardar una carpeta, con un
 `<archivo>.lila.lock` junto al archivo mientras comprueba y escribe, para que quienes escriben desde
 procesos distintos (el escritorio, la CLI, servidores MCP) se turnen; quien no consigue el bloqueo en
-3 segundos rechaza con `E-CAMBIO-EXTERNO`, y un bloqueo de más de 10 segundos se borra como restos de
-un cierre inesperado.
+3 segundos rechaza con `E-ARCHIVO-OCUPADO` (no se escribe nada). Quien lo tiene lo toca cada 2
+segundos, así que un bloqueo sin tocar durante 10 segundos se borra como restos de un cierre
+inesperado; nadie borra un bloqueo cuyo token (un id aleatorio escrito dentro) no haya comprobado.

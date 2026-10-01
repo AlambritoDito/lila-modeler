@@ -384,13 +384,45 @@ describe('the .lila lock', () => {
     const lock = `${file}.lock`;
     writeFileSync(lock, '');
     const untouched = readFileSync(file);
-    await expect(writeLilaFile(file, { ...pedidoDocument(), name: 'saved' })).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
+    await expect(writeLilaFile(file, { ...pedidoDocument(), name: 'saved' })).rejects.toMatchObject({ code: 'E-ARCHIVO-OCUPADO' });
     expect(readFileSync(file).equals(untouched)).toBe(true);
     // Somebody else's lock is not ours to delete.
     expect(existsSync(lock)).toBe(true);
+    // Through the shared write it is «busy», not «changed on disk» (QA round 3 of #550), en and es.
     const lila = await openLilaProcess(file);
-    await expect(writeLilaScenario(lila, 'x', { version: 1 })).rejects.toThrow('changed on disk');
-  }, 20_000);
+    await expect(writeLilaScenario(lila, 'x', { version: 1 })).rejects.toThrow('another program is saving');
+    await expect(writeLilaScenario(lila, 'x', { version: 1 }, 'es')).rejects.toThrow('otro programa está guardando');
+    expect(readFileSync(file).equals(untouched)).toBe(true);
+  }, 30_000);
+
+  test('a writer never removes a lock it does not own', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lock = `${file}.lock`;
+    // While the write runs, somebody replaces the lock (as if they had taken it as stale).
+    await writeLilaFile(file, pedidoDocument(), {
+      beforeWrite: async () => {
+        expect(readFileSync(lock, 'utf8')).toMatch(/^[0-9a-f-]{36}$/);
+        writeFileSync(lock, 'someone-else');
+      },
+    });
+    expect(readFileSync(lock, 'utf8')).toBe('someone-else');
+  });
+
+  test('a long write keeps its lock fresh, so it is never taken for a crash leftover', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lock = `${file}.lock`;
+    let touched = false;
+    await writeLilaFile(file, pedidoDocument(), {
+      beforeWrite: async () => {
+        const old = new Date(Date.now() - 60_000);
+        utimesSync(lock, old, old);
+        await new Promise((resolve) => setTimeout(resolve, 2_300));
+        touched = Date.now() - statSync(lock).mtimeMs < 5_000;
+      },
+    });
+    expect(touched).toBe(true);
+    expect(existsSync(lock)).toBe(false);
+  }, 15_000);
 
   test('the lock is released when the write fails', async () => {
     const file = writeArchive('pedido.lila', pedidoDocument());

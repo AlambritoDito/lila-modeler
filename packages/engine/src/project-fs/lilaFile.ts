@@ -8,7 +8,7 @@
  * checked that `file` is an authorized path before getting here. Nothing in this module decides
  * whether a path may be touched. Moved from `apps/desktop/src/` with `projectIO.ts` (#466).
  */
-import { open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, open, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { decodeLila, encodeLila, ProjectFormatError } from '../project/index.js';
 import type { ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
@@ -134,31 +134,56 @@ function errorCode(error: unknown): unknown {
   return (error as { code?: unknown } | null)?.code;
 }
 
+/** How often a holder touches its lock, so a long write never looks like a crash's leftover. */
+const LOCK_REFRESH_MS = 2_000;
+
+/** The token a lock file holds, or `null` when there is no lock to read. */
+async function lockToken(lock: string): Promise<string | null> {
+  try {
+    return await readFile(lock, 'utf8');
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 /**
- * Runs `work` holding `${file}.lock`, a sibling file created with `wx` (exclusive create), so two
- * writers of the same `.lila` — the desktop, the CLI, two MCP servers — never interleave their
- * check-then-write, whatever process they run in. Waits up to `LOCK_WAIT_MS` for a lock held by
- * someone else and then refuses with `E-CAMBIO-EXTERNO` (somebody else is changing the file); a lock
- * older than `LOCK_STALE_MS` is taken as left behind by a crash and removed. The lock is always
- * released in a `finally`. It lives next to the archive, never inside it.
+ * Runs `work` holding `${file}.lock`, a sibling file created with `wx` (exclusive create) that
+ * holds a random token, so two writers of the same `.lila` — the desktop, the CLI, two MCP
+ * servers — never interleave their check-then-write, whatever process they run in.
+ *
+ * - Another writer's lock: wait up to `LOCK_WAIT_MS`, then refuse with `E-ARCHIVO-OCUPADO`
+ *   (somebody else is saving the file right now; nothing was written).
+ * - A lock untouched for `LOCK_STALE_MS` is a crash's leftover and is removed. The holder touches
+ *   its lock every `LOCK_REFRESH_MS`, so a slow write is never mistaken for one.
+ * - A writer only ever removes a lock whose token it has just read (its own, or the stale one it
+ *   checked), never one somebody else took in between.
+ * - Always released in a `finally`. It lives next to the archive, never inside it.
  */
 export async function withLilaLock<T>(file: string, work: () => Promise<T>): Promise<T> {
   const lock = `${file}.lock`;
+  const token = crypto.randomUUID();
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
       const handle = await open(lock, 'wx');
-      await handle.close();
+      try {
+        await handle.writeFile(token, 'utf8');
+      } finally {
+        await handle.close();
+      }
       break;
     } catch (error) {
       if (errorCode(error) !== 'EEXIST') throw error;
     }
     try {
-      if (Date.now() - (await stat(lock)).mtimeMs > LOCK_STALE_MS) {
-        // Renamed away before deleting: of two writers that both found it stale, only one wins
-        // the rename, and the other one never deletes a lock somebody just took.
-        const stale = `${lock}.stale-${crypto.randomUUID()}`;
+      const seen = await lockToken(lock);
+      if (seen !== null && Date.now() - (await stat(lock)).mtimeMs > LOCK_STALE_MS) {
+        // Renamed away before deleting, and checked after: of two writers that both found it
+        // stale only one wins the rename, and a lock somebody took in between is put back.
+        const stale = `${lock}.stale-${token}`;
         await rename(lock, stale);
+        if ((await lockToken(stale)) !== seen) await link(stale, lock).catch(() => {});
         await unlink(stale).catch(() => {});
         continue;
       }
@@ -168,16 +193,22 @@ export async function withLilaLock<T>(file: string, work: () => Promise<T>): Pro
     }
     if (Date.now() >= deadline) {
       throw new ProjectIOError(
-        'E-CAMBIO-EXTERNO',
+        'E-ARCHIVO-OCUPADO',
         `Otro programa está guardando este archivo ahora mismo; no se guardó nada: ${basename(file)}.`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
   }
+  const refresh = setInterval(() => {
+    const now = new Date();
+    void utimes(lock, now, now).catch(() => {});
+  }, LOCK_REFRESH_MS);
+  refresh.unref();
   try {
     return await work();
   } finally {
-    await unlink(lock).catch(() => {});
+    clearInterval(refresh);
+    if ((await lockToken(lock).catch(() => null)) === token) await unlink(lock).catch(() => {});
   }
 }
 

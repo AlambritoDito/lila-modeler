@@ -372,6 +372,8 @@ export const es: Catalog = {
       `hay varios escenarios llamados "${name}": ${matches}. Usa el nombre de archivo.`,
     lilaScenarioEntryName: (name) =>
       `"${name}" no es un nombre de escenario dentro de un .lila: usa un <nombre>.scenario.json plano, sin carpetas.`,
+    lilaBusy: (file) =>
+      `otro programa está guardando ${file} ahora mismo; no se escribió nada. Vuelve a intentarlo en un momento.`,
     lilaChangedOnDisk: (file) =>
       `${file} cambió en disco mientras esta llamada trabajaba con él; no se escribió nada. Vuelve a intentarlo.`,
   },

@@ -286,6 +286,8 @@ export interface CliMessages {
   lilaScenarioAmbiguous: (name: string, matches: string) => string;
   lilaScenarioEntryName: (name: string) => string;
   lilaChangedOnDisk: (file: string) => string;
+  /** Another writer held the file's lock for too long (the busy code of `project-fs/lilaFile.ts`). */
+  lilaBusy: (file: string) => string;
 }
 
 /**
