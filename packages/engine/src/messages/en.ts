@@ -45,6 +45,13 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila process create --outline <outline.json> -p <project.lila> [--name name]
                            [--process slug] [--dry-run] [--json]
        lila process show -p <project.lila> [--process slug] [--json]
+       lila process annotate <project.lila> <elementId> [--process slug] [--documentation text]
+                             [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
+                             [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
+       lila process raci <project.lila> [--process slug] [--json|--csv]
+       lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
+                            [--dry-run] [--json]
+       lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
        lila mcp
 
 Commands:
@@ -55,6 +62,10 @@ Commands:
              HTML, or the results of a run saved in the .lila as .xlsx or CSV.
   process    create: builds a laid-out process from an outline (a step list) into a .lila.
              show: prints one process of a .lila as an outline. See docs/CLI.md.
+             annotate: writes an element's description, RACI, catalog references and extended
+             attributes into the .lila. raci: prints the RACI matrix of the process document.
+  scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
+             app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -106,6 +117,18 @@ process options:
   --name name       create: name of the process (default: the outline's).
   --dry-run         create: build and check everything, write nothing.
   --json            Prints the result (create) or the outline (show) as JSON.
+
+process annotate options:
+  --documentation t Replaces the description ("" removes it).
+  --responsibility  TYPE:role, repeatable; replaces the element's whole RACI list.
+  --clear-responsibilities  Removes every responsibility.
+  --ref kind=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input or output;
+                    repeatable; replaces the lists of the kinds given (kind= empties one).
+  --attribute k=v   An extended attribute by id or name; repeatable; "k=" removes its value.
+  --dry-run         Shows the result without writing.
+
+scenario import options:
+  --dry-run         Shows the planned changes and the rows not applied without writing.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
@@ -497,7 +520,7 @@ export const en: Catalog = {
       `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes. Nothing was written.`,
-    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create or show.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, annotate or raci.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
     processShowLanes: (lanes) => `Lanes: ${lanes}`,

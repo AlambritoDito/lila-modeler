@@ -19,6 +19,7 @@
  *
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066.
  */
+import { documentationHolder } from '@lila-modeler/engine/bpmn';
 import { useEffect, useReducer, useState } from 'react';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
@@ -235,10 +236,15 @@ export function escribirTextoAnotacion(
 export function procesoRelacionado(elemento: ElementoLienzo): ElementoLienzo | undefined {
   if (elemento.businessObject.$type === 'bpmn:Process') return elemento;
   const processRef = elemento.businessObject.processRef;
-  if (elemento.businessObject.$type !== 'bpmn:Participant' || processRef?.id === undefined) {
-    return undefined;
-  }
-  return { id: processRef.id, type: processRef.$type, businessObject: processRef };
+  // The same rule as the engine's `annotateLilaElement` (`documentationHolder`, #559): a pool with
+  // a process documents it there; anything else has no related process.
+  const titular = documentationHolder({
+    id: elemento.id,
+    type: elemento.businessObject.$type,
+    processRef: processRef?.id,
+  });
+  if (processRef === undefined || titular === elemento.id) return undefined;
+  return { id: titular, type: processRef.$type, businessObject: processRef };
 }
 
 export function leerVersionTag(elemento: ElementoLienzo): string {
