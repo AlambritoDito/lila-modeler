@@ -31,11 +31,11 @@ const NODE_TYPES: Record<string, string> = {
   eventGateway: 'event-based gateway',
 };
 
-const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]
-       lila run <model.bpmn> <scenario.json> [--seed n] [--replications n]
-                [--json result.json] [--csv directory] [--xlsx book.xlsx]
-       lila compare <model.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                    [--json result.json] [--xlsx book.xlsx] [--all]
+const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug] [--json]
+       lila run <model.bpmn|project.lila> <scenario> [--process slug] [--seed n]
+                [--replications n] [--json result.json] [--csv directory] [--xlsx book.xlsx]
+       lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
+                    [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
        lila mcp
 
 Commands:
@@ -43,6 +43,13 @@ Commands:
   run        Validates model and scenario, simulates and shows the result tables.
   compare    Simulates two or more scenarios on the same model and compares them side by side.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
+
+A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
+such file exists, the name of a scenario of that process (its file name, with or without
+.scenario.json, or its "name"). A .lila with several processes needs --process.
+
+Options of validate, run and compare:
+  --process slug    The process of a .lila with several processes (implicit with one).
 
 validate options:
   --json     Prints the IR and the problems on stdout.
@@ -330,10 +337,10 @@ export const en: Catalog = {
     minimumIntegerRequired: (option, minimum, raw) =>
       `--${option} requires an integer >= ${minimum}; got "${raw}".`,
     expectedPositionals: (expected) => `expected ${expected}.`,
-    bpmnPath: () => 'one .bpmn path',
-    runPaths: () => 'the paths <model.bpmn> <scenario.json>',
-    comparePaths: () => 'a <model.bpmn> and at least two scenarios <a.json> <b.json>',
-    missingBpmnPath: () => 'the path of the .bpmn file is missing.',
+    bpmnPath: () => 'one .bpmn or .lila path',
+    runPaths: () => 'a <model.bpmn|project.lila> and a <scenario>',
+    comparePaths: () => 'a <model.bpmn|project.lila> and at least two scenarios <a> <b>',
+    missingBpmnPath: () => 'the path of the .bpmn or .lila file is missing.',
     modelMismatch: (modelPath, scenarioModel) =>
       `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
     modelMismatchIn: (modelPath, scenarioModel, file) =>
@@ -343,6 +350,21 @@ export const en: Catalog = {
       `the package ${packageName} is missing. In the repo, \`npm ci && npm run build\` from the root.`,
     invalidLang: (value, accepted) => `lila: --lang only accepts: ${accepted}; got "${value}".`,
     missingLangValue: (accepted) => `lila: --lang requires a value: ${accepted}.`,
+
+    lilaProcessRequired: (file, slugs) =>
+      `${file} holds several processes (${slugs}): choose one with --process <slug> (\`process\` in MCP).`,
+    lilaUnknownProcess: (file, slug, slugs) => `${file} has no process "${slug}"; its processes are: ${slugs}.`,
+    processOnlyForLila: () => 'a process slug only applies when the model is a .lila file.',
+    lilaUnreadable: (file, detail) => `${file} cannot be opened as a .lila project: ${detail}`,
+    lilaScenarioNotFound: (name, slug, file, available) =>
+      `there is no file "${name}" and no scenario of that name in process "${slug}" of ${file}; ` +
+      (available === '' ? 'that process has no scenarios.' : `its scenarios are: ${available}.`),
+    lilaScenarioAmbiguous: (name, matches) =>
+      `several scenarios are named "${name}": ${matches}. Use the file name instead.`,
+    lilaScenarioEntryName: (name) =>
+      `"${name}" is not a scenario name inside a .lila: use a flat <name>.scenario.json, without folders.`,
+    lilaChangedOnDisk: (file) =>
+      `${file} changed on disk while this call was working on it; nothing was written. Try again.`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

@@ -4,13 +4,13 @@
  * module is only the disk half, kept apart from `projectIO.ts` so that the folder reader stays
  * the pure `node:fs` module its header promises.
  *
- * Same rule as `projectIO.ts` about who validates what: `main.ts` is the only caller and it has
- * already checked that `file` is an authorized path before getting here. Nothing in this module
- * decides whether a path may be touched.
+ * Same rule as `projectIO.ts` about who validates what: in the desktop, `main.ts` has already
+ * checked that `file` is an authorized path before getting here. Nothing in this module decides
+ * whether a path may be touched. Moved from `apps/desktop/src/` with `projectIO.ts` (#466).
  */
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { decodeLila, encodeLila, ProjectFormatError } from '@lila-modeler/engine/project';
-import type { ProjectErrorCode } from '@lila-modeler/engine/project';
+import { decodeLila, encodeLila, ProjectFormatError } from '../project/index.js';
+import type { ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,
@@ -18,7 +18,6 @@ import {
   rememberSnapshot,
   type WriteProjectOptions,
 } from './projectIO.js';
-import type { ProjectDocument, ProjectProblem } from './projectTypes.js';
 
 /**
  * Traduce un error de formato del motor al `ProjectIOError` que el puente ya sabe reportar. El

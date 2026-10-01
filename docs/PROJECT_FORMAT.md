@@ -153,8 +153,11 @@ validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over 
 version 2 manifest), `repository.ts` (`processesOf`/`withProcesses`, which fold the list of processes
 into the document: its top-level fields are the first process, and `process`/`processes` carry the
 rest).
-Published as `@lila-modeler/engine/project`. The folder reader/writer is
-`apps/desktop/src/projectIO.ts`; the `.lila` half of the desktop is `apps/desktop/src/lilaFile.ts`.
+Published as `@lila-modeler/engine/project`, which stays browser-safe. The disk half is
+`packages/engine/src/project-fs/`, published as `@lila-modeler/engine/project-fs` (Node only, #466):
+the folder reader/writer `projectIO.ts`, the `.lila` file `lilaFile.ts`, and `input.ts`, which opens
+one process of a `.lila` for the CLI and the MCP server and writes a scenario back. The desktop, the
+CLI and the MCP server all use it.
 
 The engine's codes are `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LILA-NO-MODEL`,
 `LILA-ENTRY-PATH` (the container) and `LILA-DOCUMENT`, `LILA-PROBLEMS`, `LILA-RUN`,

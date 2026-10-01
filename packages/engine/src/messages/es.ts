@@ -35,11 +35,11 @@ const TIPOS_NODO: Record<string, string> = {
   eventGateway: 'gateway basado en eventos',
 };
 
-const ES_USAGE = `Uso: lila validate <archivo.bpmn> [--json]
-     lila run <modelo.bpmn> <escenario.json> [--seed n] [--replications n]
-              [--json resultado.json] [--csv directorio] [--xlsx libro.xlsx]
-     lila compare <modelo.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                  [--json resultado.json] [--xlsx libro.xlsx] [--all]
+const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slug] [--json]
+     lila run <modelo.bpmn|proyecto.lila> <escenario> [--process slug] [--seed n]
+              [--replications n] [--json resultado.json] [--csv directorio] [--xlsx libro.xlsx]
+     lila compare <modelo.bpmn|proyecto.lila> <a> <b> [...] [--process slug] [--seed n]
+                  [--replications n] [--json resultado.json] [--xlsx libro.xlsx] [--all]
      lila mcp
 
 Comandos:
@@ -47,6 +47,13 @@ Comandos:
   run        Valida modelo y escenario, simula y muestra tablas de resultados.
   compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
+
+Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
+si no existe ese archivo, el nombre de un escenario de ese proceso (su nombre de archivo, con o sin
+.scenario.json, o su "name"). Un .lila con varios procesos necesita --process.
+
+Opciones de validate, run y compare:
+  --process slug    El proceso de un .lila con varios procesos (implícito si hay uno).
 
 Opciones de validate:
   --json     Imprime el IR y los problemas por stdout.
@@ -336,10 +343,10 @@ export const es: Catalog = {
     minimumIntegerRequired: (option, minimum, raw) =>
       `--${option} requiere un entero >= ${minimum}; se recibió "${raw}".`,
     expectedPositionals: (expected) => `se esperaba ${expected}.`,
-    bpmnPath: () => 'una ruta .bpmn',
-    runPaths: () => 'las rutas <modelo.bpmn> <escenario.json>',
-    comparePaths: () => 'un <modelo.bpmn> y al menos dos escenarios <a.json> <b.json>',
-    missingBpmnPath: () => 'falta la ruta del archivo .bpmn.',
+    bpmnPath: () => 'una ruta .bpmn o .lila',
+    runPaths: () => 'un <modelo.bpmn|proyecto.lila> y un <escenario>',
+    comparePaths: () => 'un <modelo.bpmn|proyecto.lila> y al menos dos escenarios <a> <b>',
+    missingBpmnPath: () => 'falta la ruta del archivo .bpmn o .lila.',
     modelMismatch: (modelPath, scenarioModel) =>
       `el modelo posicional (${modelPath}) no coincide con scenario.model (${scenarioModel}).`,
     modelMismatchIn: (modelPath, scenarioModel, file) =>
@@ -349,6 +356,21 @@ export const es: Catalog = {
       `falta el paquete ${packageName}. En el repo, \`npm ci && npm run build\` desde la raíz.`,
     invalidLang: (value, accepted) => `lila: --lang solo acepta: ${accepted}; se recibió "${value}".`,
     missingLangValue: (accepted) => `lila: --lang requiere un valor: ${accepted}.`,
+
+    lilaProcessRequired: (file, slugs) =>
+      `${file} contiene varios procesos (${slugs}): elige uno con --process <slug> (\`process\` en MCP).`,
+    lilaUnknownProcess: (file, slug, slugs) => `${file} no tiene el proceso "${slug}"; sus procesos son: ${slugs}.`,
+    processOnlyForLila: () => 'el slug de proceso solo aplica cuando el modelo es un archivo .lila.',
+    lilaUnreadable: (file, detail) => `${file} no se puede abrir como proyecto .lila: ${detail}`,
+    lilaScenarioNotFound: (name, slug, file, available) =>
+      `no existe el archivo "${name}" ni un escenario con ese nombre en el proceso "${slug}" de ${file}; ` +
+      (available === '' ? 'ese proceso no tiene escenarios.' : `sus escenarios son: ${available}.`),
+    lilaScenarioAmbiguous: (name, matches) =>
+      `hay varios escenarios llamados "${name}": ${matches}. Usa el nombre de archivo.`,
+    lilaScenarioEntryName: (name) =>
+      `"${name}" no es un nombre de escenario dentro de un .lila: usa un <nombre>.scenario.json plano, sin carpetas.`,
+    lilaChangedOnDisk: (file) =>
+      `${file} cambió en disco mientras esta llamada trabajaba con él; no se escribió nada. Vuelve a intentarlo.`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,

@@ -272,6 +272,18 @@ export interface CliMessages {
   /** `accepted` arrives already joined (`en, es`), like every list in the catalog. */
   invalidLang: (value: string, accepted: string) => string;
   missingLangValue: (accepted: string) => string;
+
+  /* --- a `.lila` as input (#466), shared by the CLI and the MCP server -- */
+  /** `slugs` arrives already joined (`cobro, pedido`). */
+  lilaProcessRequired: (file: string, slugs: string) => string;
+  lilaUnknownProcess: (file: string, slug: string, slugs: string) => string;
+  processOnlyForLila: () => string;
+  lilaUnreadable: (file: string, detail: string) => string;
+  /** `available` arrives already joined, or empty when the process has no scenarios. */
+  lilaScenarioNotFound: (name: string, slug: string, file: string, available: string) => string;
+  lilaScenarioAmbiguous: (name: string, matches: string) => string;
+  lilaScenarioEntryName: (name: string) => string;
+  lilaChangedOnDisk: (file: string) => string;
 }
 
 /**

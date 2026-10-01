@@ -7,11 +7,11 @@
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
-- **`validate_bpmn({ path | xml, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
+- **`validate_bpmn({ path | xml, process?, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
   `path` **o** `xml`, nunca los dos: pasar ambos es un error de la tool, no una precedencia
   silenciosa.
-- **`describe_process({ path | xml, scenario?, locale? })`** — parsea un `.bpmn` (por ruta o XML inline,
+- **`describe_process({ path | xml, process?, scenario?, locale? })`** — parsea un `.bpmn` (por ruta o XML inline,
   uno de los dos, con la misma regla que `validate_bpmn`) y devuelve su IR (`ProcessIR`)
   junto con un resumen legible (la clave `resumen`, en el idioma que diga `locale`): conteo de
   nodos por tipo, gateways con sus salidas,
@@ -21,7 +21,7 @@ terminal en vez de un cliente MCP.
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, scenario, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
@@ -29,13 +29,13 @@ terminal en vez de un cliente MCP.
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
-- **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno.
-- **`patch_scenario({ scenario, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
   § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
@@ -69,6 +69,45 @@ terminal en vez de un cliente MCP.
 Las tres tools de LILA-054/055 reutilizan `@lila-modeler/engine/cli-shared`, extraído de `cli.ts` en
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
+
+Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
+[Un `.lila` como entrada](#un-lila-como-entrada).
+
+## Un `.lila` como entrada
+
+Un `.lila` (`docs/PROJECT_FORMAT.md`) se acepta donde una tool recibe un modelo (#466): `path` de
+`validate_bpmn`/`describe_process`, `model` de `run_simulation`/`compare_scenarios` y `project`
+de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` como entrada»):
+
+- **`process`** es el slug del proceso cuando el proyecto tiene varios (un repositorio de
+  versión 2). Con un solo proceso es implícito; con varios y sin `process`, la tool falla con un
+  mensaje que lista los slugs. `process` con un `.bpmn` es un error, no se ignora.
+- **Un escenario como texto** es una ruta `.json` si ese archivo existe y, si no, el nombre de un
+  escenario del proceso: su nombre de entrada (`as-is.scenario.json`), ese nombre sin
+  `.scenario.json` (`as-is`) o su `"name"` (`"AS-IS"`, único en el proceso). Un escenario del
+  disco se simula contra el proceso del archivo; uno del archivo resuelve `model` y `extends`
+  dentro de él.
+- **Un escenario inline** queda anclado dentro del proceso: `extends: "as-is.scenario.json"`
+  nombra un escenario del archivo, y si falta `model` es el `model.bpmn` del proceso.
+- **`patch_scenario` con `project`** lee `scenario` (y `extendsFrom`) como nombres dentro del
+  proceso —nunca como rutas del disco— y `saveTo` como el nombre de la entrada nueva (se añade
+  `.scenario.json` si falta; sin carpetas). Valida contra el modelo del proceso y solo escribe un
+  resultado válido, igual que en disco. La escritura pasa por el códec del motor (`encodeLila`) a
+  un temporal que luego se renombra sobre el `.lila`, así que un fallo nunca deja un archivo a
+  medias. La revisión del escenario sube en uno, para que la app vea como desactualizadas las
+  corridas de la versión anterior. Los demás procesos, escenarios y corridas pasan sin cambios y,
+  en un archivo escrito por la app o el motor, byte a byte; las entradas que no son parte del
+  formato se descartan, como en cualquier guardado de un `.lila`. Si el archivo cambió en disco
+  mientras la tool trabajaba, no se escribe nada y la tool falla: vuelve a llamarla.
+
+```json
+{ "name": "run_simulation", "arguments": { "model": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "seed": 42, "replications": 3 } }
+```
+
+```json
+{ "name": "patch_scenario", "arguments": { "project": "proyecto.lila", "process": "pedido", "scenario": "as-is",
+  "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
+```
 
 ## Idioma
 
@@ -281,7 +320,8 @@ bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el 
 ## Rutas
 
 `path` y `scenario` se resuelven contra el **cwd del proceso servidor**, no contra el del cliente
-ni la raíz del repo. En Claude Code eso es el directorio desde el que se lanzó el servidor; en la
+ni la raíz del repo; dentro de un `.lila`, `model` y `extends` se resuelven respecto del lugar del
+escenario en el archivo. En Claude Code eso es el directorio desde el que se lanzó el servidor; en la
 duda, pasa rutas absolutas.
 
 ## Paquete del SDK

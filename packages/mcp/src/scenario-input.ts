@@ -9,8 +9,14 @@
  * (de `@lila-modeler/engine/cli-shared`, LILA-054) hace la misma validación de escenario resuelto para
  * ambos casos: no se duplica frente a la CLI.
  */
-import { absolutePath, loadResolvedScenario, readJsonFile } from '@lila-modeler/engine/cli-shared';
+import {
+  absolutePath,
+  loadResolvedScenario,
+  readJsonFile,
+  resolveScenarioArgument,
+} from '@lila-modeler/engine/cli-shared';
 import { messages, type Locale } from '@lila-modeler/engine/messages';
+import { lilaScenarioReader, type LilaProcess } from '@lila-modeler/engine/project-fs';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 
 export type ScenarioInput = string | Record<string, unknown>;
@@ -18,16 +24,25 @@ export type ScenarioInput = string | Record<string, unknown>;
 /** Nombre del ancla virtual: no existe en disco, así que nunca debe salir en un mensaje. */
 const INLINE_FILE = '<escenario-inline>.json';
 
-export function resolveScenarioInput(input: ScenarioInput, locale: Locale = 'en'): ResolvedScenario {
-  if (typeof input === 'string') return loadResolvedScenario(absolutePath(input), undefined, locale);
+/**
+ * With `lila` (the model is a `.lila`, #466), a string is a `.json` path or a scenario name of
+ * the process (`resolveScenarioArgument`), and an inline object is anchored inside the process's
+ * folder of the archive instead of the cwd: its `extends: "as-is.scenario.json"` names a scenario
+ * of the process, and a missing `model` means the process's `model.bpmn`.
+ */
+export function resolveScenarioInput(
+  input: ScenarioInput,
+  locale: Locale = 'en',
+  lila?: LilaProcess | undefined,
+): ResolvedScenario {
+  if (typeof input === 'string') return resolveScenarioArgument(input, lila, locale).scenario;
 
-  const virtualPath = absolutePath(INLINE_FILE);
+  const disk = (file: string): unknown => readJsonFile(file, locale);
+  const virtualPath = lila === undefined ? absolutePath(INLINE_FILE) : `${lila.root}${INLINE_FILE}`;
+  const read = lila === undefined ? disk : lilaScenarioReader(lila, disk, locale);
+  const anchored = lila !== undefined && !('model' in input) ? { ...input, model: 'model.bpmn' } : input;
   try {
-    return loadResolvedScenario(
-      virtualPath,
-      (file) => (file === virtualPath ? input : readJsonFile(file, locale)),
-      locale,
-    );
+    return loadResolvedScenario(virtualPath, (file) => (file === virtualPath ? anchored : read(file)), locale);
   } catch (error) {
     // Los mensajes de `loadResolvedScenario`/`resolveExtends` citan el archivo. El ancla no existe
     // en disco: dejarla en el mensaje manda al agente a leer una ruta inventada.

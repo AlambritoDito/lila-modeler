@@ -7,6 +7,9 @@ context only; message flows are preserved but do not transport simulation tokens
 - `model.bpmn`: English labels with stable BPMN IDs.
 - `as-is.scenario.json`: current operation with two cashiers and three cooks.
 - `to-be-3-cajeros.scenario.json`: inherits AS-IS and increases cashier capacity to three.
+- `../pedido.lila`: this folder as one `.lila` project file, for the `.lila` examples of
+  `docs/CLI.md` and `docs/MCP.md`. Regenerate it with `node tools/example-lila.mjs` after changing
+  the model or a scenario; a test fails while the two differ.
 
 ```bash
 npx lila validate examples/pedido/model.bpmn
