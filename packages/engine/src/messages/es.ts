@@ -365,6 +365,9 @@ export const es: Catalog = {
     lilaScenarioNotFound: (name, slug, file, available) =>
       `no existe el archivo "${name}" ni un escenario con ese nombre en el proceso "${slug}" de ${file}; ` +
       (available === '' ? 'ese proceso no tiene escenarios.' : `sus escenarios son: ${available}.`),
+    lilaScenarioUnknown: (name, slug, file, available) =>
+      `no hay un escenario "${name}" en el proceso "${slug}" de ${file}; ` +
+      (available === '' ? 'ese proceso no tiene escenarios.' : `sus escenarios son: ${available}.`),
     lilaScenarioAmbiguous: (name, matches) =>
       `hay varios escenarios llamados "${name}": ${matches}. Usa el nombre de archivo.`,
     lilaScenarioEntryName: (name) =>
@@ -403,5 +406,6 @@ export const es: Catalog = {
     patchedMissingRun: () => 'el escenario resultante no declara run.',
     patchedName: (name) => `${name} (parcheado)`,
     inlineScenario: () => 'escenario inline',
+    projectNotLila: (file) => `\`project\` tiene que ser un archivo .lila; se recibió ${file}.`,
   },
 };

@@ -1,7 +1,7 @@
 /**
  * Writes `examples/pedido.lila`, the `.lila` twin of the `examples/pedido` folder (#466): the file
  * the `.lila` examples of `docs/CLI.md` and `docs/MCP.md` run against. Run it after changing the
- * folder's model or scenarios; `packages/engine/test/project-fs/example-lila.test.ts` fails until
+ * folder's model or scenarios; `packages/engine/test/project-fs/lila-input.test.ts` fails until
  * the two say the same thing.
  *
  *   npm run build && node tools/example-lila.mjs

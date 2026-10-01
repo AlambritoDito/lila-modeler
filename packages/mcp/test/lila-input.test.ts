@@ -216,6 +216,47 @@ describe('patch_scenario on a .lila', () => {
     expect(readdirSync(scratch)).toEqual(['pedido.lila']);
   });
 
+  test('two concurrent patches of the same .lila: one is refused or both are kept, never one lost', async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const file = archive(`race-${attempt}.lila`, repositoryDocument());
+      const [first, second] = await Promise.all([
+        call('patch_scenario', {
+          project: file,
+          process: 'pedido',
+          scenario: 'as-is',
+          patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 7 }],
+        }),
+        call('patch_scenario', {
+          project: file,
+          process: 'copia',
+          scenario: 'solo',
+          patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 9 }],
+        }),
+      ]);
+      const [pedido, copia] = processesOf(decodeLila(new Uint8Array(readFileSync(file))));
+      const capacityOf = (process: ProcessDocument | undefined, entry: string): number =>
+        (process!.scenarios[entry] as { resources: { cajero: { capacity: number } } }).resources.cajero.capacity;
+      const kept = [capacityOf(pedido, 'as-is.scenario.json') === 7, capacityOf(copia, 'solo.scenario.json') === 9];
+      // Every call that answered OK has its change on disk; a refused one says why.
+      expect(kept[0], first.text).toBe(!first.isError);
+      expect(kept[1], second.text).toBe(!second.isError);
+      for (const result of [first, second].filter((r) => r.isError)) expect(result.text).toContain('changed on disk');
+      expect(first.isError && second.isError).toBe(false);
+    }
+    expect(readdirSync(scratch).every((name) => name.endsWith('.lila'))).toBe(true);
+  });
+
+  test('project must be a .lila, and a missing name does not talk about files', async () => {
+    const notLila = await call('patch_scenario', { project: model, scenario: 'as-is', patch: [{ op: 'test', path: '/version', value: 1 }] });
+    expect(notLila.isError).toBe(true);
+    expect(notLila.text).toContain('`project` must be a .lila file');
+    const file = archive('pedido.lila', pedidoDocument());
+    const missing = await call('patch_scenario', { project: file, scenario: 'nada', patch: [{ op: 'test', path: '/version', value: 1 }] });
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain('there is no scenario "nada"');
+    expect(missing.text).not.toContain('file "nada"');
+  });
+
   test('a repository without process, and a scenario that is not there', async () => {
     const file = archive('repo.lila', repositoryDocument());
     const patch = [{ op: 'replace', path: '/run/seed', value: 1 }];

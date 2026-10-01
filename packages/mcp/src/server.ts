@@ -588,7 +588,12 @@ interface PatchScenarioInput {
  * se escribe una única vez).
  */
 async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise<CallToolResult> {
-  if (input.project !== undefined) return patchLilaScenario(input, input.project, locale);
+  if (input.project !== undefined) {
+    if (!isLilaPath(input.project)) {
+      return errorResult(toolMessage('patch_scenario', messages(locale).mcp.projectNotLila(input.project)));
+    }
+    return patchLilaScenario(input, input.project, locale);
+  }
   if (input.process !== undefined) {
     return errorResult(toolMessage('patch_scenario', messages(locale).cli.processOnlyForLila()));
   }

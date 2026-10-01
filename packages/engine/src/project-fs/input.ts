@@ -14,7 +14,7 @@
  * the project folder and in the web app, and the CLI's model-mismatch check needs no special case.
  * Those paths never exist on disk; `lilaScenarioReader` serves them from memory.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { messages, type Locale } from '../messages/index.js';
@@ -28,7 +28,7 @@ import {
   type ScenarioDocument,
 } from '../project/index.js';
 import { writeLilaFile } from './lilaFile.js';
-import { ProjectIOError, rememberSnapshot } from './projectIO.js';
+import { ProjectIOError } from './projectIO.js';
 
 const SCENARIO_SUFFIX = '.scenario.json';
 const MODEL_FILE = 'model.bpmn';
@@ -47,6 +47,34 @@ export interface LilaProcess {
   readonly root: string;
   /** Virtual path of the process's `model.bpmn`: `${root}model.bpmn`. */
   readonly modelPath: string;
+  /**
+   * The file as it was on disk when it was opened, taken **before** reading it: a write is refused
+   * unless the file is still exactly this (`writeLilaProject`). Its own copy, not the shared map
+   * of `projectIO.ts`, so two writers in one process cannot vouch for each other.
+   */
+  readonly snapshot: LilaSnapshot;
+}
+
+/** Identity of a file on disk for the "did it change?" check. */
+export interface LilaSnapshot {
+  readonly mtimeMs: number;
+  readonly size: number;
+  /** Changes with every `rename` over the file, which is how every `.lila` write lands. */
+  readonly ino: number;
+}
+
+async function snapshotOf(path: string): Promise<LilaSnapshot | null> {
+  try {
+    const info = await stat(path);
+    return { mtimeMs: info.mtimeMs, size: info.size, ino: info.ino };
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function sameSnapshot(a: LilaSnapshot | null, b: LilaSnapshot): boolean {
+  return a !== null && a.mtimeMs === b.mtimeMs && a.size === b.size && a.ino === b.ino;
 }
 
 /** `/`-separated absolute path, the same rule as `absolutePath` in `cli-shared.ts`. */
@@ -70,6 +98,10 @@ export async function openLilaProcess(
 ): Promise<LilaProcess> {
   const C = messages(options.locale ?? 'en').cli;
   const path = absolute(file);
+  // Snapshot first, bytes second: if the file changes in between, the snapshot is the older one
+  // and the write is refused, rather than the newer snapshot vouching for older bytes.
+  const snapshot = await snapshotOf(path);
+  if (snapshot === null) throw new Error(messages(options.locale ?? 'en').mcp.fileMissing(path));
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(path));
@@ -86,7 +118,6 @@ export async function openLilaProcess(
     if (error instanceof ProjectFormatError) throw new Error(C.lilaUnreadable(path, `${error.code}: ${error.message}`));
     throw error;
   }
-  await rememberSnapshot(path);
 
   const all = processesOf(document);
   const slugs = all.map((p) => p.slug);
@@ -101,7 +132,7 @@ export async function openLilaProcess(
   }
   const process = selected as ProcessDocument;
   const root = isVersion2(document) ? `${path}/processes/${process.slug}/` : `${path}/`;
-  return { file: path, document, process, slugs, root, modelPath: `${root}${MODEL_FILE}` };
+  return { file: path, document, process, slugs, root, modelPath: `${root}${MODEL_FILE}`, snapshot };
 }
 
 /**
@@ -109,7 +140,12 @@ export async function openLilaProcess(
  * in this order: the entry name itself, the entry name without `.scenario.json`, and the
  * scenario's own `"name"` field (which must then be unique in the process).
  */
-export function findLilaScenario(input: LilaProcess, name: string, locale: Locale = 'en'): string {
+export function findLilaScenario(
+  input: LilaProcess,
+  name: string,
+  locale: Locale = 'en',
+  options: { fileTried?: boolean } = {},
+): string {
   const C = messages(locale).cli;
   const scenarios = input.process.scenarios;
   if (Object.hasOwn(scenarios, name)) return name;
@@ -119,8 +155,12 @@ export function findLilaScenario(input: LilaProcess, name: string, locale: Local
     .filter((entry) => scenarios[entry]?.['name'] === name);
   if (byName.length === 1) return byName[0]!;
   if (byName.length > 1) throw new Error(C.lilaScenarioAmbiguous(name, byName.join(', ')));
+  const available = Object.keys(scenarios).sort().join(', ');
+  // `fileTried`: the caller (a CLI argument) looked for a file of that name first, so say so.
   throw new Error(
-    C.lilaScenarioNotFound(name, input.process.slug, input.file, Object.keys(scenarios).sort().join(', ')),
+    options.fileTried === true
+      ? C.lilaScenarioNotFound(name, input.process.slug, input.file, available)
+      : C.lilaScenarioUnknown(name, input.process.slug, input.file, available),
   );
 }
 
@@ -146,7 +186,7 @@ export function lilaScenarioReader(
     const scenario = entry === '' || entry.includes('/') ? undefined : input.process.scenarios[entry];
     if (scenario === undefined || !Object.hasOwn(input.process.scenarios, entry)) {
       throw new Error(
-        messages(locale).cli.lilaScenarioNotFound(
+        messages(locale).cli.lilaScenarioUnknown(
           path.slice(input.file.length + 1),
           input.process.slug,
           input.file,
@@ -172,15 +212,57 @@ export function lilaScenarioEntryName(name: string, locale: Locale = 'en'): stri
   return entry;
 }
 
+/** One write at a time per file in this process: check-then-write must not interleave. */
+const writing = new Map<string, Promise<unknown>>();
+
+async function exclusive<T>(file: string, work: () => Promise<T>): Promise<T> {
+  const run = (writing.get(file) ?? Promise.resolve()).catch(() => {}).then(work);
+  const tail = run.catch(() => {});
+  writing.set(file, tail);
+  try {
+    return await run;
+  } finally {
+    if (writing.get(file) === tail) writing.delete(file);
+  }
+}
+
 /**
- * Writes `scenario` as the entry `entry` of `input`'s process and saves the `.lila` atomically
- * (`writeLilaFile`: a temporary file and a `rename`, so an error never leaves a partial archive).
+ * Saves `document` over `input.file`: the shared write of every tool that edits an opened `.lila`
+ * (`patch_scenario`, and the process tools built on it). Atomic (`writeLilaFile`: a temporary file
+ * and a `rename`, so an error never leaves a partial archive), and refused, writing nothing, unless
+ * the file on disk is still the one `openLilaProcess` read (`input.snapshot`). Writes to the same
+ * file are serialized within the process, so of two concurrent callers that opened the same
+ * version, the second one is refused (`lilaChangedOnDisk`) instead of silently overwriting the
+ * first. Returns `document`.
+ */
+export async function writeLilaProject(
+  input: LilaProcess,
+  document: ProjectDocument,
+  locale: Locale = 'en',
+): Promise<ProjectDocument> {
+  const { problems: _problems, loose: _loose, ...clean } = document;
+  return exclusive(input.file, async () => {
+    if (!sameSnapshot(await snapshotOf(input.file), input.snapshot)) {
+      throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
+    }
+    try {
+      // `overwrite`: the check above, against this caller's own snapshot, replaces the shared one.
+      await writeLilaFile(input.file, clean, { overwrite: true });
+    } catch (error) {
+      if (error instanceof ProjectIOError) throw new Error(`${input.file}: ${error.code}: ${error.message}`);
+      throw error;
+    }
+    return clean;
+  });
+}
+
+/**
+ * Writes `scenario` as the entry `entry` of `input`'s process and saves the `.lila` through
+ * `writeLilaProject` (atomic, refused if the file changed since it was opened).
  * The scenario's revision goes up by one, so the app sees the runs of the old version as stale.
  * Every other process, scenario and run is carried through unchanged; the archive is re-encoded
  * canonically (`encodeLila`), so an archive the app or the engine wrote keeps every other entry
  * byte for byte. Entries outside the project layout are dropped, as in any save of a `.lila`.
- *
- * Refuses, writing nothing, when the file changed on disk since `openLilaProcess` read it.
  * Returns the project as written.
  */
 export async function writeLilaScenario(
@@ -198,16 +280,5 @@ export async function writeLilaScenario(
       scenarioRevisions: { ...p.scenarioRevisions, [name]: (p.scenarioRevisions[name] ?? 0) + 1 },
     };
   });
-  const { problems: _problems, loose: _loose, ...base } = input.document;
-  const document = withProcesses(base, processes);
-  try {
-    await writeLilaFile(input.file, document);
-  } catch (error) {
-    if (error instanceof ProjectIOError && error.code === 'E-CAMBIO-EXTERNO') {
-      throw new Error(messages(locale).cli.lilaChangedOnDisk(input.file));
-    }
-    if (error instanceof ProjectIOError) throw new Error(`${input.file}: ${error.code}: ${error.message}`);
-    throw error;
-  }
-  return document;
+  return writeLilaProject(input, withProcesses(input.document, processes), locale);
 }

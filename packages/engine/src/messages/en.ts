@@ -359,6 +359,9 @@ export const en: Catalog = {
     lilaScenarioNotFound: (name, slug, file, available) =>
       `there is no file "${name}" and no scenario of that name in process "${slug}" of ${file}; ` +
       (available === '' ? 'that process has no scenarios.' : `its scenarios are: ${available}.`),
+    lilaScenarioUnknown: (name, slug, file, available) =>
+      `there is no scenario "${name}" in process "${slug}" of ${file}; ` +
+      (available === '' ? 'that process has no scenarios.' : `its scenarios are: ${available}.`),
     lilaScenarioAmbiguous: (name, matches) =>
       `several scenarios are named "${name}": ${matches}. Use the file name instead.`,
     lilaScenarioEntryName: (name) =>
@@ -397,5 +400,6 @@ export const en: Catalog = {
     patchedMissingRun: () => 'the resulting scenario does not declare run.',
     patchedName: (name) => `${name} (patched)`,
     inlineScenario: () => 'inline scenario',
+    projectNotLila: (file) => `\`project\` must be a .lila file; got ${file}.`,
   },
 };

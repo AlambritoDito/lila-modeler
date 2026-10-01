@@ -27,6 +27,7 @@ export {
   lilaScenarioPath,
   lilaScenarioReader,
   openLilaProcess,
+  writeLilaProject,
   writeLilaScenario,
 } from './input.js';
-export type { LilaProcess } from './input.js';
+export type { LilaProcess, LilaSnapshot } from './input.js';

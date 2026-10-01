@@ -18,6 +18,7 @@ import {
   findLilaScenario,
   lilaScenarioEntryName,
   openLilaProcess,
+  writeLilaProject,
   writeLilaScenario,
 } from '../../src/project-fs/index.js';
 
@@ -260,5 +261,36 @@ describe('writeLilaScenario', () => {
     await expect(writeLilaScenario(lila, 'as-is.scenario.json', { version: 1 })).rejects.toThrow('changed on disk');
     expect(readFileSync(file).equals(untouched)).toBe(true);
     expect(readdirSync(scratch)).toEqual(['pedido.lila']);
+  });
+
+  test('two writers that opened the same version: the second is refused, the first is kept', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const [a, b] = await Promise.all([openLilaProcess(file), openLilaProcess(file)]);
+    const results = await Promise.allSettled([
+      writeLilaScenario(a, 'a', { version: 1, name: 'A' }),
+      writeLilaScenario(b, 'b', { version: 1, name: 'B' }),
+    ]);
+    expect(results[0]!.status).toBe('fulfilled');
+    expect(results[1]!.status).toBe('rejected');
+    expect(String((results[1] as PromiseRejectedResult).reason)).toContain('changed on disk');
+    const decoded = decodeLila(new Uint8Array(readFileSync(file)));
+    expect(Object.keys(decoded.scenarios)).toContain('a.scenario.json');
+    expect(Object.keys(decoded.scenarios)).not.toContain('b.scenario.json');
+    // A fresh open sees the first write and may write again.
+    await writeLilaProject(await openLilaProcess(file), decoded);
+  });
+
+  test('a file replaced by another with the same size and mtime is still caught (inode)', async () => {
+    const file = writeArchive('pedido.lila', pedidoDocument());
+    const lila = await openLilaProcess(file);
+    const { mtime, atime } = statSync(file);
+    const copy = join(scratch, 'copy.tmp');
+    writeFileSync(copy, readFileSync(file));
+    utimesSync(copy, atime, mtime);
+    rmSync(file);
+    writeFileSync(file, readFileSync(copy));
+    utimesSync(file, atime, mtime);
+    rmSync(copy);
+    await expect(writeLilaScenario(lila, 'x', { version: 1 })).rejects.toThrow('changed on disk');
   });
 });

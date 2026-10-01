@@ -220,7 +220,7 @@ export function scenarioSource(
   if (lila === undefined || isFile(argument)) {
     return { label: argument, path: absolutePath(argument), read: disk, inArchive: false };
   }
-  const entry = findLilaScenario(lila, argument, locale);
+  const entry = findLilaScenario(lila, argument, locale, { fileTried: true });
   return { label: entry, path: lilaScenarioPath(lila, entry), read: lilaScenarioReader(lila, disk, locale), inArchive: true };
 }
 
