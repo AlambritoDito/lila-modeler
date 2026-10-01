@@ -84,13 +84,13 @@ function lugar(el: Moddle | undefined): Lugar | undefined {
 }
 
 /**
- * #534: ⌘Z of a delete puts the element back at the END of its parent's list — a pool at the end
+ * #534: ⌘Z of a delete (or of a move to another parent) puts the element back at the END of its parent's list — a pool at the end
  * of `participants` and its process at the end of `definitions.rootElements`, each of its shapes
  * and flows at the end of `flowElements`, its DI at the end of the plane
  * (`BpmnUpdater.updateSemanticParent`/`updateDiParent`). The engine reads the document in order:
  * it simulates the first non-empty process (`parseBpmn`), so undoing the delete of the first pool
  * switched the simulated process (E-ELEMENTO-DESCONOCIDO), and the order of the flow elements
- * changes the results of a fixed seed. The places are taken right before each delete runs (in
+ * changes the results of a fixed seed. The places are taken right before each delete or move runs (in
  * `execute`, so redo takes them too, after the handler's own `preExecute` has removed the
  * element's connections and children) and given back after bpmn-js's revert. Undo runs in reverse
  * order, so each element finds its list exactly as it left it.
@@ -99,15 +99,16 @@ export class OrdenAlDeshacer {
   static $inject = ['eventBus'];
 
   constructor(eventBus: { on(eventos: string[], prioridad: number, escuchar: (e: BorradoConLugar) => void): void }) {
-    const borrados = ['commandStack.shape.delete', 'commandStack.connection.delete'];
-    eventBus.on(borrados.map((b) => `${b}.execute`), 1000, ({ context }) => {
+    // A move to another pool or sub-process changes lists too, and its ⌘Z appends the same way.
+    const comandos = ['commandStack.shape.delete', 'commandStack.connection.delete', 'commandStack.shape.move'];
+    eventBus.on(comandos.map((b) => `${b}.execute`), 1000, ({ context }) => {
       const el = context.shape ?? context.connection;
       if (el === undefined || el.labelTarget !== undefined) return;
       const bo = el.businessObject;
       context.lilaLugares = [lugar(bo), lugar(el.di), lugar(bo?.processRef)].filter((l) => l !== undefined);
     });
     // Below the default priority: after `BpmnUpdater` has put them back.
-    eventBus.on(borrados.map((b) => `${b}.reverted`), 500, ({ context }) => {
+    eventBus.on(comandos.map((b) => `${b}.reverted`), 500, ({ context }) => {
       for (const { lista, el, indice } of context.lilaLugares ?? []) {
         const actual = lista.indexOf(el);
         if (actual < 0 || actual === indice) continue;

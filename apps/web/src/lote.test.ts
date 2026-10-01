@@ -112,3 +112,33 @@ it('a paste redone after undoing it and the delete before it keeps its ids, so t
   expect(ids.assigned('Participant_R')).toBe(pegado);
   expect(ids.assigned('Process_R')).toBe(procesoPegado);
 });
+
+it('moving a task to another pool and undoing it puts it back in its place, not at the end (#534, QA)', async () => {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement: definitions } = await moddle.fromXML(pedido.modelo);
+  const eventBus = new EventBus();
+  const commandStack = new CommandStack(eventBus, { get: () => undefined } as never);
+  type Ctx = { shape: { businessObject: ModdleElement }; newParent: ModdleElement; oldParent?: ModdleElement | undefined };
+  // `MoveShapeHandler` + `BpmnUpdater`, minus the canvas: the task changes process, and ⌘Z puts it
+  // back at the END of its old process's `flowElements`.
+  commandStack.register('shape.move', {
+    execute: (ctx: Ctx) => {
+      ctx.oldParent = ctx.shape.businessObject.$parent;
+      BpmnUpdater.prototype.updateSemanticParent.call({}, ctx.shape.businessObject as never, ctx.newParent as never, undefined as never);
+      return [];
+    },
+    revert: (ctx: Ctx) => {
+      BpmnUpdater.prototype.updateSemanticParent.call({}, ctx.shape.businessObject as never, ctx.oldParent as never, undefined as never);
+      return [];
+    },
+  } as never);
+  new OrdenAlDeshacer(eventBus as never);
+
+  const [restaurante, cliente] = ['Process_Restaurante', 'Process_Cliente'].map((id) => definitions.rootElements!.find((r) => r.id === id)!);
+  const antes = restaurante!.flowElements!.map((e) => e.id);
+  const tarea = restaurante!.flowElements!.find((e) => e.id === 'Task_TomarPedido')!;
+  commandStack.execute('shape.move', { shape: { businessObject: tarea }, newParent: cliente });
+  expect(cliente!.flowElements).toContain(tarea);
+  commandStack.undo();
+  expect(restaurante!.flowElements!.map((e) => e.id)).toEqual(antes);
+});
