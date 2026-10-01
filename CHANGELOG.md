@@ -3,6 +3,46 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.17] - 2026-09-30
+
+Lote J: Simulate phase 2 (epic #526). Finishing a run no longer throws you to the Results view: a dock
+under the canvas shows the quick results, the Simulate steps are renamed to what they hold, Results can
+live in its own window, and undoing the delete of a pool no longer breaks the simulation.
+
+### Added
+
+- **Simulate dock (#394, #544)**: a dock under the canvas in Simulate with the scenario KPIs, a
+  Quick results table per task (cases, wait p50/p95, utilization, fixed cost, total row), the charts,
+  Bottlenecks, Run log and Warnings tabs, **Open in Results** and **Export CSV**. A finished run stays
+  in Simulate instead of jumping to Results. The dock is resizable (height persisted), can be hidden
+  per mode, and toggles with Cmd+J / Ctrl+J.
+- **Results in its own window (#395, #542)**: the Results view detaches to a non-modal window like the
+  scenario window, with a stand-in (Show, Dock) in the main window, persisted geometry on the web and
+  the desktop, and charts that resize in the child window.
+- **Arrivals by start event (#543)**: a list of each start event's arrival interval and case count in
+  the new Arrivals step.
+
+### Changed
+
+- **Simulate steps renamed (#543)**: Parameters, Resources, Calendars and Arrivals (Parametros,
+  Recursos, Calendarios, Llegadas), with no number prefix; every control appears in exactly one step.
+  Times by element in Parameters now covers tasks and timers only.
+- **Warnings grouped by message (#544)**: repeated warnings from replications are one line with the
+  count, numbers normalised.
+- **Top bar and guides (#537, #541, #547)**: with several processes the top bar shows the active
+  process name; the macOS and Windows guides (en/es) describe the dock, the Results window, the renamed
+  steps and the current menus.
+
+### Fixed
+
+- **Plain T toggled the token animation (#506, #541)**: typing T on the canvas no longer turns the
+  token simulation on or off; it is controlled from Validate paths only.
+- **Stale notices and resource messages (#537, #541)**: the "still running" export and save notices
+  clear when the work finishes, and E-REC-CANTIDAD names the resource by its name.
+- **Undoing a pool delete broke the simulation (#534, #545)**: undo restores the pool, its process
+  and its elements in their original order, so the simulated process and the seeded results are the
+  same as before; undoing a paste no longer throws, and pasting after undo and redo gets a fresh id.
+
 ## [1.0.0-beta.16] - 2026-09-28
 
 Lote I: a public beta other people can install. This release attaches the macOS installer and, for
