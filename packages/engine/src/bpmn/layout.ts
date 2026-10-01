@@ -163,52 +163,126 @@ export function labelFlows(plane: El, create: Create): void {
   }
 }
 
+/** One lane of a process, with its nesting depth and whether it has lanes of its own. */
+export interface LaneEntry {
+  lane: El;
+  depth: number;
+  leaf: boolean;
+}
+
+/** Every lane of `process`, depth first, top to bottom. */
+export function lanesOf(process: El): LaneEntry[] {
+  const out: LaneEntry[] = [];
+  const visit = (laneSet: El | undefined, depth: number): void => {
+    for (const lane of (laneSet?.['lanes'] ?? []) as El[]) {
+      const children = (lane['childLaneSet']?.['lanes'] ?? []) as El[];
+      out.push({ lane, depth, leaf: children.length === 0 });
+      visit(lane['childLaneSet'], depth + 1);
+    }
+  };
+  for (const laneSet of (process['laneSets'] ?? []) as El[]) visit(laneSet, 0);
+  return out;
+}
+
+/** The deepest lane `node` is listed in (`flowNodeRef`). */
+export function laneOfNode(process: El, node: El): El | undefined {
+  let found: LaneEntry | undefined;
+  for (const entry of lanesOf(process)) {
+    if (((entry.lane['flowNodeRef'] ?? []) as El[]).includes(node) && (found === undefined || entry.depth >= found.depth)) found = entry;
+  }
+  return found?.lane;
+}
+
+const isFlowNode = (el: El): boolean =>
+  typeof el['$instanceOf'] === 'function' ? (el['$instanceOf'] as (t: string) => boolean)('bpmn:FlowNode') : el.$type !== 'bpmn:SequenceFlow';
+
 /**
- * Moves every node of the main plane into its lane's band and adds the pool and lane shapes (see
- * the header). Each lane is as tall as the layouter rows its nodes use, compacted; columns stay.
+ * Lays the top-level nodes of `process` out in lanes, in place on `plane`, where their shapes sit at
+ * the positions `bpmn-auto-layout` gave them (see the header): each node moves into the band of its
+ * lane (the deepest lane that lists it; a node in no lane goes to the first one), the layouter's
+ * rows compacted per leaf lane (an empty lane keeps one row), columns kept. Nested lanes stack their
+ * leaves; a parent lane spans its children. Boundary events stay on their host. The sequence flows
+ * are routed again with `route`, around the other shapes. The pool and lane shapes are updated, or
+ * created (`<id>_di`), with the pool's corner at `origin`, and the plane moves to the collaboration.
+ * Used by `create_process` (a new model) and `edit_process` (an existing one). Returns the pool's
+ * bounds.
  */
-export function layOutLanes(definitions: El, laneNames: readonly string[], laneOf: ReadonlyMap<string, string>, create: Create): void {
-  const process = (definitions['rootElements'] as El[]).find((el) => el.$type === 'bpmn:Process')!;
-  const collaboration = (definitions['rootElements'] as El[]).find((el) => el.$type === 'bpmn:Collaboration')!;
-  const participant = collaboration['participants'][0] as El;
-  const diagram = (definitions['diagrams'] as El[]).find((d) => d['plane']['bpmnElement'] === process)!;
-  const plane = diagram['plane'] as El;
-  const planeElements = plane['planeElement'] as El[];
+export function layOutLanes(plane: El, process: El, participant: El, create: Create, origin: Point = { x: 0, y: 0 }): Box {
+  const planeElements = (plane['planeElement'] ??= []) as El[];
   const shapeOf = new Map<string, El>();
-  for (const di of planeElements) if (di.$type === 'bpmndi:BPMNShape') shapeOf.set(di['bpmnElement'].id, di);
+  for (const di of planeElements) if (di.$type === 'bpmndi:BPMNShape' && di['bpmnElement'] !== undefined) shapeOf.set(di['bpmnElement'].id, di);
 
-  const nodes = (process['flowElements'] as El[]).filter((el) => el.$type !== 'bpmn:SequenceFlow');
-  const rowOf = (shape: El): number => Math.round((shape['bounds'].y + shape['bounds'].height / 2 - CELL_HEIGHT / 2) / CELL_HEIGHT);
+  const lanes = lanesOf(process);
+  const leaves = lanes.filter((l) => l.leaf);
+  const nodes = ((process['flowElements'] ?? []) as El[]).filter((el) => isFlowNode(el) && shapeOf.has(el.id));
+  const laid = new Map(nodes.map((n) => [n.id, { ...(shapeOf.get(n.id)!['bounds'] as Box) }]));
+  const leafOf = (node: El): El => {
+    const lane = laneOfNode(process, node);
+    if (lane === undefined) return leaves[0]!.lane;
+    const entry = lanes.find((l) => l.lane === lane)!;
+    if (entry.leaf) return lane;
+    // A node of a parent lane only: that lane's first leaf.
+    return lanes.slice(lanes.indexOf(entry)).find((l) => l.leaf && l.depth > entry.depth)?.lane ?? leaves[0]!.lane;
+  };
 
-  // Rows each lane uses, compacted top to bottom; an empty lane still gets one row.
+  // Rows each leaf lane uses, compacted top to bottom; an empty lane still gets one row.
+  const indent = HEADER * (2 + Math.max(0, ...leaves.map((l) => l.depth)));
+  const rowOf = (b: Box): number => Math.round((b.y + b.height / 2 - CELL_HEIGHT / 2) / CELL_HEIGHT);
+  const hosts = nodes.filter((n) => n['attachedToRef'] === undefined);
+  const final = new Map<string, Box>();
+  const bands = new Map<El, { top: number; height: number }>();
   let top = 0;
-  const bands = new Map<string, { top: number; rows: Map<number, number>; height: number }>();
-  for (const lane of laneNames) {
-    const rows = [...new Set(nodes.filter((n) => laneOf.get(n.id) === lane).map((n) => rowOf(shapeOf.get(n.id)!)))].sort((a, b) => a - b);
+  for (const { lane } of leaves) {
+    const mine = hosts.filter((n) => leafOf(n) === lane);
+    const rows = [...new Set(mine.map((n) => rowOf(laid.get(n.id)!)))].sort((a, b) => a - b);
     const height = Math.max(1, rows.length) * CELL_HEIGHT;
-    bands.set(lane, { top, rows: new Map(rows.map((row, index) => [row, index])), height });
+    bands.set(lane, { top, height });
+    for (const n of mine) {
+      const b = laid.get(n.id)!;
+      final.set(n.id, { ...b, x: origin.x + b.x + indent, y: origin.y + top + rows.indexOf(rowOf(b)) * CELL_HEIGHT + (CELL_HEIGHT - b.height) / 2 });
+    }
     top += height;
   }
+  // Boundary events keep their place on their host.
+  for (const n of nodes) {
+    const host = n['attachedToRef'] as El | undefined;
+    const hostLaid = host === undefined ? undefined : laid.get(host.id);
+    const hostFinal = host === undefined ? undefined : final.get(host.id);
+    if (hostLaid === undefined || hostFinal === undefined) continue;
+    const b = laid.get(n.id)!;
+    final.set(n.id, { ...b, x: b.x + hostFinal.x - hostLaid.x, y: b.y + hostFinal.y - hostLaid.y });
+  }
 
-  let right = 0;
-  for (const node of nodes) {
-    const shape = shapeOf.get(node.id)!;
-    const band = bands.get(laneOf.get(node.id)!)!;
-    const bounds = shape['bounds'];
-    const index = band.rows.get(rowOf(shape))!;
-    bounds.x += 2 * HEADER;
-    bounds.y = band.top + index * CELL_HEIGHT + (CELL_HEIGHT - bounds.height) / 2;
-    right = Math.max(right, bounds.x + bounds.width);
+  // An end the layouter left behind its only predecessor (a branch that ends, QA of #553) goes to
+  // its right, in its own row, clear of the other shapes.
+  for (const n of hosts) {
+    const incoming = ((process['flowElements'] ?? []) as El[]).filter((f) => f.$type === 'bpmn:SequenceFlow' && f['targetRef'] === n);
+    const outgoing = ((process['flowElements'] ?? []) as El[]).filter((f) => f.$type === 'bpmn:SequenceFlow' && f['sourceRef'] === n);
+    const source = incoming.length === 1 && outgoing.length === 0 ? final.get(incoming[0]!['sourceRef']?.id) : undefined;
+    const box = final.get(n.id)!;
+    if (source === undefined || box.x >= source.x + source.width) continue;
+    box.x = source.x + source.width + 50;
+    const others = [...final.values()].filter((b) => b !== box);
+    while (others.some((b) => b.x < box.x + box.width + 10 && box.x < b.x + b.width + 10 && b.y < box.y + box.height && box.y < b.y + b.height)) box.x += 50;
+  }
+
+  let right = origin.x;
+  for (const [id, b] of final) {
+    shapeOf.get(id)!['bounds'] = create('dc:Bounds', { x: Math.round(b.x), y: Math.round(b.y), width: b.width, height: b.height });
+    right = Math.max(right, b.x + b.width);
   }
 
   const gateway = (el: El): boolean => el.$type.endsWith('Gateway');
-  const boxes = nodes.map((node) => shapeOf.get(node.id)!['bounds'] as Box);
+  const boxes = [...final.values()];
   const entries = new Map<string, number>();
+  let lowest = -Infinity;
+  const flows = new Set(((process['flowElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:SequenceFlow'));
   for (const di of planeElements) {
-    if (di.$type !== 'bpmndi:BPMNEdge') continue;
+    if (di.$type !== 'bpmndi:BPMNEdge' || !flows.has(di['bpmnElement'])) continue;
     const flow = di['bpmnElement'] as El;
-    const source = shapeOf.get(flow['sourceRef'].id)!['bounds'];
-    const target = shapeOf.get(flow['targetRef'].id)!['bounds'];
+    const source = final.get(flow['sourceRef']?.id);
+    const target = final.get(flow['targetRef']?.id);
+    if (source === undefined || target === undefined) continue;
     const points = route(source, target, gateway(flow['sourceRef']), gateway(flow['targetRef']), boxes);
     // Two detours entering the same shape from below (or above) would share their last stretch:
     // each later one comes in a little further right.
@@ -220,33 +294,45 @@ export function layOutLanes(definitions: El, laneNames: readonly string[], laneO
       a.x += seen * 12;
       b.x += seen * 12;
     }
-    di['waypoint'] = points.map((p) =>
-      create('dc:Point', { x: Math.round(p.x), y: Math.round(p.y) }),
-    );
+    di['waypoint'] = points.map((p) => create('dc:Point', { x: Math.round(p.x), y: Math.round(p.y) }));
+    delete di['label'];
+    lowest = Math.max(lowest, ...points.map((p) => p.y));
   }
 
-  const width = right + MARGIN;
-  const shapes: El[] = [
-    create('bpmndi:BPMNShape', {
-      id: `${participant.id}_di`,
-      bpmnElement: participant,
-      isHorizontal: true,
-      bounds: create('dc:Bounds', { x: 0, y: 0, width, height: top }),
-    }),
-  ];
-  for (const lane of process['laneSets'][0]['lanes'] as El[]) {
-    const band = bands.get(lane['name'])!;
-    shapes.push(
-      create('bpmndi:BPMNShape', {
-        id: `${lane.id}_di`,
-        bpmnElement: lane,
-        isHorizontal: true,
-        bounds: create('dc:Bounds', { x: HEADER, y: band.top, width: width - HEADER, height: band.height }),
-      }),
-    );
+  // A detour under the last row would hug the pool's border (QA of #553): the last lane grows.
+  const room = lowest + 25 - (origin.y + top);
+  if (room > 0 && leaves.length > 0) {
+    bands.get(leaves[leaves.length - 1]!.lane)!.height += room;
+    top += room;
   }
-  plane['planeElement'] = [...shapes, ...planeElements];
-  plane['bpmnElement'] = collaboration;
+  // A parent lane spans its children.
+  for (const entry of [...lanes].reverse()) {
+    if (entry.leaf) continue;
+    const children = ((entry.lane['childLaneSet']?.['lanes'] ?? []) as El[]).map((c) => bands.get(c)).filter((b) => b !== undefined);
+    if (children.length === 0) continue;
+    const last = children[children.length - 1]!;
+    bands.set(entry.lane, { top: children[0]!.top, height: last.top + last.height - children[0]!.top });
+  }
+
+  // The pool and the lanes: updated when they have a shape, created first in the plane when not.
+  const pool: Box = { x: origin.x, y: origin.y, width: right - origin.x + MARGIN, height: top };
+  const added: El[] = [];
+  const draw = (el: El, box: Box): void => {
+    const bounds = create('dc:Bounds', { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) });
+    const shape = shapeOf.get(el.id);
+    if (shape !== undefined) shape['bounds'] = bounds;
+    else added.push(create('bpmndi:BPMNShape', { id: `${el.id}_di`, bpmnElement: el, isHorizontal: true, bounds }));
+  };
+  draw(participant, pool);
+  for (const { lane, depth } of lanes) {
+    const band = bands.get(lane);
+    if (band === undefined) continue;
+    const x = origin.x + HEADER * (depth + 1);
+    draw(lane, { x, y: origin.y + band.top, width: pool.x + pool.width - x, height: band.height });
+  }
+  plane['planeElement'] = [...added, ...planeElements];
+  if (plane['bpmnElement'] === process && participant['$parent'] !== undefined) plane['bpmnElement'] = participant['$parent'];
+  return pool;
 }
 
 /**

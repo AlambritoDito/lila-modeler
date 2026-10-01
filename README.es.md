@@ -57,7 +57,7 @@ proyecto que se mantiene estable.
 - **Temas** — `eva-01` (oscuro, por defecto), `papel` (claro), `tieso` (claro, azules del ITESO), `akira` (oscuro, Neo-Tokio) y `montana` (morado, rosa chicle y dorado, inspirado en Hannah Montana Linux), archivos JSON.
 - **Inglés y español** en la app, la CLI y el servidor MCP.
 - **Pantalla de bienvenida de escritorio** con proyectos recientes (solo Electron).
-- **Servidor MCP** con diez tools, para que un agente cree un proceso desde una lista de pasos, valide, describa, corra, compare, parchee y exporte.
+- **Servidor MCP** con dieciséis tools, para que un agente cree un proceso desde una lista de pasos, lo edite y lo anote, valide, describa, corra, compare, parchee y exporte.
 
 ## Inicio rápido
 
@@ -170,9 +170,12 @@ y una sección «para agentes»: [`docs/es/CLI.md`](docs/es/CLI.md).
 
 ### MCP
 
-`lila mcp` arranca un servidor MCP por stdio con diez tools sobre el mismo motor:
-`validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`,
-`create_process`, `get_process_outline`, `export_diagram`, `export_document`, `export_results`.
+`lila mcp` arranca un servidor MCP por stdio con dieciséis tools sobre el mismo motor:
+`validate_bpmn`,
+`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
+`get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
+`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
+`create_project`.
 
 ```bash
 claude mcp add lila -- node /ruta/a/lila-modeler/packages/engine/bin/lila.js mcp
@@ -243,7 +246,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`BPMN_EXTENSION.md`](docs/es/BPMN_EXTENSION.md) — el namespace `lila:` y la política de ids.
 - [`CLI.md`](docs/es/CLI.md) — la línea de comandos `lila`: cada subcomando, códigos de salida y
   una sección «para agentes».
-- [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus diez tools.
+- [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciséis tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
   ADR-028).

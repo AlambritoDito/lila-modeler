@@ -57,7 +57,7 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las quince tools', async () => {
+test('listTools devuelve todas las tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([
@@ -66,6 +66,7 @@ test('listTools devuelve las quince tools', async () => {
     'create_process',
     'create_project',
     'describe_process',
+    'edit_process',
     'export_diagram',
     'export_document',
     'export_results',
@@ -510,6 +511,7 @@ test('`title`, `description` y los `describe()` de las tools están en inglés',
     'Create process',
     'Create project',
     'Describe process',
+    'Edit process',
     'Export diagram',
     'Export process document',
     'Export results',

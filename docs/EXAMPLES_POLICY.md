@@ -27,7 +27,7 @@ cases, including documentation, screenshots, issue/PR text and attachments.
 |---|---|
 | `examples/pedido/` | Project restaurant-order demo and regression benchmark; see its README for assumptions and commands. |
 | `examples/mm1/` | Synthetic queueing models with analytical Erlang C expectations and reproduction scripts. |
-| `examples/outline/` | Synthetic outline (#97) for `lila process create` and the MCP tool `create_process`. |
+| `examples/outline/` | Synthetic outline (#97) for `lila process create` and the MCP tool `create_process`, and synthetic edit operations (#98) for `lila process edit` and `edit_process`. |
 | `examples/bizagi-levels/` | Attributed reconstructions of public reference examples, with source URLs, expected values and documented differences. |
 | `examples/bizagi-exports/` | Unmodified BPMN MIWG interoperability fixtures, with upstream commit and CC BY 3.0 attribution. |
 | `packages/engine/test/fixtures/outlines/` | Synthetic outlines (#97) from the QA of #553: branch order, same-row skips, shared gateway trunks. |

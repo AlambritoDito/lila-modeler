@@ -837,7 +837,12 @@ export async function outlineToBpmn(outline: unknown, options: OutlineToBpmnOpti
   const { rootElement: definitions } = await moddle.fromXML(laidOut);
   const create = (type: string, attrs: Record<string, unknown> = {}): El => moddle.create(type, attrs) as El;
   separateSubprocessPlanes(definitions as El, create);
-  if (graph.lanes.length > 0) layOutLanes(definitions as El, graph.lanes, built.laneOf, create);
+  if (graph.lanes.length > 0) {
+    const roots = (definitions as El)['rootElements'] as El[];
+    const process = roots.find((el) => el.$type === 'bpmn:Process')!;
+    const participant = roots.find((el) => el.$type === 'bpmn:Collaboration')!['participants'][0] as El;
+    layOutLanes((definitions as El)['diagrams'][0]['plane'] as El, process, participant, create);
+  }
   labelFlows((definitions as El)['diagrams'][0]['plane'] as El, create);
   const { xml: raw } = await moddle.toXML(definitions, { format: true });
   const xml = marcarExportador(raw);

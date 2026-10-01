@@ -65,3 +65,5 @@ export type {
   SheetImportRequest,
   SheetImportResult,
 } from './agent-tools.js';
+export { editLilaProcess } from './edit.js';
+export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
