@@ -1040,6 +1040,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (adapter === null || modelador === null || ioLock.current || respuestaPerdida.current !== null) return;
     if (dirty && !confirmed) { setPendingAction(kind); return; }
     const beforeToken = tokenRef.current;
+    recordarFocoLienzo();
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
       if (kind === 'open' || kind === 'openFile') {
@@ -1073,7 +1074,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const created = await adapter.createProject(doc);
       if (created) await activate(created, true, beforeToken);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally {
+      ioLock.current = false; setIoBusy(false);
+      if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
+    }
   }
 
   /**
@@ -1106,6 +1110,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const base = baseId;
     const modoPrevio = modo;
     const beforeToken = tokenRef.current;
+    recordarFocoLienzo();
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
       const raw = await adapter.reload();
@@ -1123,19 +1128,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally {
       ioLock.current = false; setIoBusy(false);
-      enfocarTrasRecarga.current = enfocar;
+      if (enfocar) enfocarTrasRecarga.current = true;
+      if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
     }
   }
   /**
    * The canvas is `inert` while `ioBusy` (QA round 2 of #551): focusing it from `recargar` itself
-   * fails silently, so it is focused once the render that lifts `inert` has been committed.
+   * fails silently, so it is focused once the render that lifts `inert` has been committed. Set by
+   * the notice's «Reload», and by `recordarFocoLienzo` when an open or an automatic reload starts
+   * with the focus on the canvas: the import replaces the canvas's `svg`, and the focus with it.
    */
   const enfocarTrasRecarga = useRef(false);
+  // Bumped when the operation ends, so the effect runs even if React batched `ioBusy`'s true and
+  // false into one render (then `ioBusy` alone would not change).
+  const [focoPendiente, setFocoPendiente] = useState(0);
+  function recordarFocoLienzo(): void {
+    if (document.activeElement?.closest('.djs-container') != null) enfocarTrasRecarga.current = true;
+  }
   useEffect(() => {
     if (ioBusy || !enfocarTrasRecarga.current) return;
     enfocarTrasRecarga.current = false;
     modelador?.enfocar?.();
-  }, [ioBusy, modelador]);
+  }, [ioBusy, focoPendiente, modelador]);
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
