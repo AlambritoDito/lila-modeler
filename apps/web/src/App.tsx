@@ -144,6 +144,9 @@ async function preferencias(): Promise<Ajustes> {
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
     let ventana: unknown = null;
     try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
+    // And of the detached Results window (#395).
+    let ventanaResultados: unknown = null;
+    try { ventanaResultados = JSON.parse(localStorage.getItem('lila.ventanaResultados') ?? 'null'); } catch { /* only this one is lost */ }
     // Per-mode panel visibility (#412): its own `try` too; `sanearPaneles` checks the shape.
     let paneles: unknown = null;
     try { paneles = JSON.parse(localStorage.getItem('lila.paneles') ?? 'null'); } catch { /* only this one is lost */ }
@@ -162,6 +165,7 @@ async function preferencias(): Promise<Ajustes> {
       ...(ranuraOscura === null ? {} : { temaOscuro: ranuraOscura }),
       ...(avisoSeguirSistema === null ? {} : { avisoSeguirSistema: avisoSeguirSistema === '1' }),
       ...(geometriaValida(ventana) ? { ventanaEscenario: ventana } : {}),
+      ...(geometriaValida(ventanaResultados) ? { ventanaResultados } : {}),
     };
   } catch { return {}; }
 }
@@ -189,6 +193,7 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
     if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
+    if (ajustes.ventanaResultados !== undefined) localStorage.setItem('lila.ventanaResultados', JSON.stringify(ajustes.ventanaResultados));
     if (ajustes.avanzado === true) localStorage.setItem('lila.avanzado', '1');
     else if (ajustes.avanzado === false) localStorage.removeItem('lila.avanzado');
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
@@ -613,6 +618,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
+  /** The Results view detached to its own window (#395), same pattern as the scenario's. */
+  const [ventanaResultados, setVentanaResultados] = useState<Window | null>(null);
+  const geomResultados = useRef<Geometria | undefined>(undefined);
+  const toggleResultados = useRef<HTMLButtonElement>(null);
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
@@ -1292,6 +1301,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       panelesRef.current = sanearPaneles(guardadas.paneles);
       setPaneles(panelesRef.current);
       geomEscenario.current = guardadas.ventanaEscenario;
+      geomResultados.current = guardadas.ventanaResultados;
       // Un valor guardado que ya no vale —de una versión anterior, o de un `estado.json` tocado a
       // mano— cae en `auto`, que es arrancar en el idioma del sistema.
       const preferido = valido(guardadas.idioma, PREFERENCIAS, 'auto');
@@ -1517,10 +1527,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   useEffect(() => window.lila?.onMenu((a) => ejecutarRef.current(a)), []);
 
   /** Only a sane size counts: a window already gone reports zeros. */
-  function recordarGeometria(geometria: Geometria): void {
+  function recordarGeometria(geometria: Geometria, clave: 'ventanaEscenario' | 'ventanaResultados' = 'ventanaEscenario'): void {
     if (!geometriaValida(geometria)) return;
-    geomEscenario.current = geometria;
-    recordar({ ventanaEscenario: geometria });
+    (clave === 'ventanaEscenario' ? geomEscenario : geomResultados).current = geometria;
+    recordar({ [clave]: geometria });
   }
   /** Detach the scenario panel (design 2c). A blocked popup leaves it docked and says why. */
   function desacoplar(): void {
@@ -1537,6 +1547,26 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setVentanaEscenario(null);
     window.focus();
     toggleEscenario.current?.focus();
+  }
+  /** Detach the Results view (#395). It shows whatever run is current, so a new run updates it. */
+  function desacoplarResultados(): void {
+    const ventana = abrirVentanaFlotante('lila-resultados', geomResultados.current);
+    if (ventana === null) { setIoError(S.app.resultadosBloqueada); return; }
+    setVentanaResultados(ventana);
+  }
+  /** Idempotent, like `acoplar`: the child's own `pagehide` lands here too. */
+  function acoplarResultados(): void {
+    const ventana = ventanaResultados;
+    if (ventana === null) return;
+    if (!ventana.closed) { recordarGeometria(geometriaDe(ventana), 'ventanaResultados'); ventana.close(); }
+    setVentanaResultados(null);
+    window.focus();
+    toggleResultados.current?.focus();
+  }
+  /** «Open in Results»: raises the detached Results window, or switches to the Results mode. */
+  function enfocarResultados(): void {
+    if (ventanaResultados !== null) ventanaResultados.focus();
+    else elegirModo('resultados');
   }
   /**
    * Command palette (#410). Not while a file operation holds the app (`ioBusy`: the canvas and the
@@ -1637,8 +1667,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     window.focus();
   }
   const acoplarRef = useRef(acoplar);
-  acoplarRef.current = acoplar;
-  // Another project (or the app going away) docks the window: it was editing the previous one.
+  acoplarRef.current = () => { acoplar(); acoplarResultados(); };
+  // Another project (or the app going away) docks the windows: they showed the previous one.
   useEffect(() => () => acoplarRef.current(), [projectId]);
 
   /**
@@ -2066,6 +2096,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setCompacta(!compacta);
   }
 
+  /** The Results view, written once: docked in `zona-resultados` or inside its own window (#395). */
+  const vistaResultados = corrida !== null && ir !== null
+    ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null}
+        log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)} />
+    : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>;
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
    * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
@@ -2272,6 +2307,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6" /></svg>
           </button>
         )}
+        {(modo === 'resultados' || ventanaResultados !== null) && (
+          <button ref={toggleResultados} type="button" className="boton icono desacoplar" aria-pressed={ventanaResultados !== null}
+            aria-label={ventanaResultados === null ? S.app.resultadosAcoplados : S.app.resultadosDesacoplados}
+            title={ventanaResultados === null ? S.app.resultadosAcoplados : S.app.resultadosDesacoplados}
+            onClick={() => { if (ventanaResultados === null) desacoplarResultados(); else acoplarResultados(); }}>
+            {/* Bars + the same ↗: it sits next to the scenario toggle, which keeps the plain one. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 21h18M6 17v-5M11 17V9M16 17v-3M15 3h6v6M21 3l-6 6" /></svg>
+          </button>
+        )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
             el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo. */}
         {sim.tipo === 'simulando' ? (
@@ -2384,6 +2428,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           onTecla={teclasHija}
         >
           {panelEscenario}
+        </VentanaFlotante>
+      )}
+      {ventanaResultados !== null && (
+        <VentanaFlotante
+          ventana={ventanaResultados}
+          titulo={S.app.tituloVentanaResultados}
+          tema={decoratedTheme}
+          esquema={esquema}
+          densidad={densidad}
+          inert={ioBusy}
+          onAcoplar={acoplarResultados}
+          onGeometria={(g) => recordarGeometria(g, 'ventanaResultados')}
+          onTecla={teclasHija}
+        >
+          <div className="zona-resultados">{vistaResultados}</div>
         </VentanaFlotante>
       )}
 
@@ -2508,10 +2567,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       </div>
       {modo === 'resultados' && (
         <section className="zona-resultados">
-          {corrida !== null && ir !== null
-            ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null}
-                log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)} />
-            : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>}
+          {ventanaResultados === null ? vistaResultados : (
+            <div className="panel-desacoplado">
+              <p>{S.app.resultadosEnVentana}</p>
+              <button type="button" className="boton" onClick={enfocarResultados}>{S.app.mostrarVentana}</button>
+              <button type="button" className="boton" onClick={acoplarResultados}>{S.app.acoplar}</button>
+            </div>
+          )}
         </section>
       )}
       {modo === 'comparar' && <section className="zona-resultados">

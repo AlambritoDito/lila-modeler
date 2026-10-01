@@ -154,6 +154,12 @@ export const en = {
     ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
     acercaBloqueada: 'The About window was blocked; allow pop-ups for this site.',
     tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
+    /** Detachable Results window (#395): same toggle and stand-in as the scenario's. */
+    resultadosAcoplados: 'Results docked ↗',
+    resultadosDesacoplados: 'Results in their own window',
+    resultadosEnVentana: 'Results in another window ↗',
+    resultadosBloqueada: 'The browser blocked the Results window. Allow pop-ups for this site to detach it.',
+    tituloVentanaResultados: 'Results — Lila Modeler',
 
     /** Canvas zoom controls. */
     acercar: 'Zoom in',

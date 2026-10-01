@@ -300,6 +300,13 @@ describe('ajustes de apariencia (LILA-113)', () => {
     });
   });
 
+  it('keeps the detached Results window geometry under the same rule (#395)', () => {
+    const ventanaResultados = { x: 40, y: 60, width: 800, height: 600 };
+    expect(parseAjustes({ ventanaResultados })).toEqual({ ventanaResultados });
+    expect(parseAjustes({ ventanaResultados: { x: 40, y: 60, width: 419, height: 600 } })).toEqual({});
+    expect(parseAjustes({ ventanaResultados: { x: 40, y: 60, width: 800 } })).toEqual({});
+  });
+
   it('withAjustes fusiona: guardar solo el tema no borra la densidad', () => {
     const conDensidad = withAjustes(defaultSessionState(), { densidad: 'comoda' });
     expect(withAjustes(conDensidad, { tema: 'papel' }).ajustes).toEqual({ densidad: 'comoda', tema: 'papel' });

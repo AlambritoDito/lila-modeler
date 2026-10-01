@@ -90,6 +90,7 @@ export function parseAjustes(value: unknown): Ajustes {
     avanzado?: boolean;
     paneles?: Record<string, VisibilidadPaneles>;
     ventanaEscenario?: WindowBounds;
+    ventanaResultados?: WindowBounds;
   } = {};
   if (typeof value.tema === 'string') ajustes.tema = value.tema;
   if (typeof value.densidad === 'string') ajustes.densidad = value.densidad;
@@ -115,6 +116,8 @@ export function parseAjustes(value: unknown): Ajustes {
   // Geometry of the detached scenario window (design 2c), no smaller than its `minWidth`/`minHeight`
   // in `main.ts`, which also recentres it if it no longer fits any display.
   if (isWindowBounds(value.ventanaEscenario, 420, 360)) ajustes.ventanaEscenario = value.ventanaEscenario;
+  // Same rule for the detached Results window (#395).
+  if (isWindowBounds(value.ventanaResultados, 420, 360)) ajustes.ventanaResultados = value.ventanaResultados;
   return ajustes;
 }
 
