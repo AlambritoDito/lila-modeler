@@ -636,6 +636,31 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
     }
   });
 
+  it('E-ARCHIVO-OCUPADO (another program holds the .lila lock) is shown in the UI language (#466)', async () => {
+    const bridge = new FakeBridge();
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    try {
+      for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
+        setLocale(locale);
+        bridge.writeProject = async () => {
+          throw new Error(
+            "Error invoking remote method 'lila:writeProject': Error: E-ARCHIVO-OCUPADO: Otro programa está guardando este archivo ahora mismo; no se guardó nada: pedido.lila.",
+          );
+        };
+        bridge.queueChooseFolder('/proyectos/pedido.lila');
+        await store.openProject();
+        await expect(store.saveProject(documentoBase())).rejects.toThrow(
+          catalogo.almacen.errorArchivoOcupado('/proyectos/pedido.lila'),
+        );
+      }
+      expect(S.almacen.errorArchivoOcupado('x')).toMatch(/^E-ARCHIVO-OCUPADO: another program/);
+      expect(es.almacen.errorArchivoOcupado('x')).toMatch(/^E-ARCHIVO-OCUPADO: otro programa/);
+    } finally {
+      setLocale('en');
+    }
+  });
+
   it('«Guardar como» de un suelto de ~/Descargas sobre su MISMA carpeta: sigue creando el proyecto al lado (QA de LILA-208)', async () => {
     const bridge = new FakeBridge();
     const store = new DesktopStore(bridge);

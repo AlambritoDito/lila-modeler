@@ -15,6 +15,8 @@
  * - Carpeta y `.lila` por igual: `E-CARPETA-OCUPADA` («Guardar como» sobre un destino que ya tiene
  *   otro proyecto), `E-CAMBIO-EXTERNO` (algo cambió en disco desde la última lectura/escritura y
  *   no se pidió `overwrite`), `E-SIN-MODELO` (no hay proyecto que leer).
+ * - Solo `.lila` (escritura): `E-ARCHIVO-OCUPADO` (otro programa tiene `<archivo>.lila.lock` y no lo
+ *   soltó en 3 s; no se escribió nada, #466).
  * - Solo carpeta: `E-RUN-DUPLICADO`, `E-SYMLINK`, `E-DESTINO-INVALIDO`, `E-RECUPERACION-PENDIENTE`.
  * - Solo `.lila` (ADR-027, contenido del archivo): `E-ZIP` (no se pudo descomprimir),
  *   `E-NO-MANIFEST` (sin `lila-project.json`), `E-MANIFEST` (manifiesto inválido o de otra

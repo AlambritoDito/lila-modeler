@@ -42,7 +42,7 @@ descarga el paquete `lila` ajeno de npm, así que desde otro directorio usa uno 
 
 ## `validate`
 
-Parsea un archivo `.bpmn`, imprime su IR (nodos, flujos, lanes) y la validación completa
+Parsea un archivo `.bpmn` (o un proceso de un `.lila`, ver [abajo](#un-lila-como-entrada-466)), imprime su IR (nodos, flujos, lanes) y la validación completa
 (códigos de error/aviso de `docs/SEMANTICS.md` §17). Solo avisos sigue saliendo con `0`; cualquier
 error sale con `1`.
 
@@ -140,7 +140,7 @@ Código de salida: `0`.
 | Código | Significado |
 | --- | --- |
 | `0` | El comando corrió; `validate` puede haber impreso avisos igual. |
-| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un escenario cuyo `model` no coincide con el archivo dado, o un error no capturado del comando (mensaje por stderr). |
+| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, o un error no capturado del comando (mensaje por stderr). |
 
 ## Para agentes
 
@@ -164,18 +164,59 @@ Un cambio de modelo solo es seguro de entregar después de este ciclo, todo sobr
 Las tablas de texto en stdout llevan los mismos números; existen para una persona en una
 terminal, no para parsearlas.
 
-## `.lila` no es una entrada de la CLI
+## Un `.lila` como entrada (#466)
 
-Con honestidad: un archivo `.lila` es un **zip** de una carpeta de proyecto Lila
-(`docs/PROJECT_FORMAT.md`) — `lila-project.json`, `model.bpmn`, un `<nombre>.scenario.json` por
-escenario, `runs/*.result.json`. La CLI de esta versión toma rutas `.bpmn` y `.json` directas; no
-abre un `.lila`. Hasta que eso exista, hay que descomprimirlo primero:
+Un archivo `.lila` es un **zip** de una carpeta de proyecto Lila (`docs/PROJECT_FORMAT.md`).
+`validate`, `run` y `compare` lo aceptan donde aceptan un `.bpmn`; no hay que descomprimir nada
+antes. El [`examples/pedido.lila`](../../examples/pedido.lila) del repositorio es la carpeta
+`examples/pedido` en un solo archivo:
 
 ```bash
-unzip proyecto.lila -d proyecto
-node <clon>/packages/engine/bin/lila.js validate proyecto/model.bpmn
-node <clon>/packages/engine/bin/lila.js run proyecto/model.bpmn proyecto/as-is.scenario.json
+npx lila validate examples/pedido.lila
+```
+Código de salida: `0`.
+
+Con un modelo `.lila`, un **argumento de escenario** se resuelve en este orden:
+
+1. **Un archivo que existe** en esa ruta (relativa al directorio actual) es ese archivo, igual que
+   con un `.bpmn`. Se simula contra el proceso del archivo `.lila`; su propio campo `model` no se
+   compara con el archivo, y `validateScenario` sigue rechazando un id de elemento que el proceso
+   no tenga.
+2. **Si no, nombra un escenario del proceso**: por su nombre de entrada
+   (`to-be-3-cajeros.scenario.json`), ese mismo nombre sin `.scenario.json` (`to-be-3-cajeros`) o
+   el `"name"` del escenario (`"TO-BE 3 cashiers"`, que entonces tiene que ser único en el
+   proceso). Su `model` y su `extends` se resuelven dentro del archivo, exactamente como en la
+   carpeta del proyecto. Un nombre que no coincide con nada lista los escenarios que sí existen.
+
+```bash
+npx lila run examples/pedido.lila as-is --seed 42 --replications 3 --json results/run.json
+```
+Código de salida: `0`.
+
+```bash
+npx lila compare examples/pedido.lila as-is to-be-3-cajeros --seed 42 --replications 3
+```
+Código de salida: `0`.
+
+Los dos imprimen, y escriben, exactamente lo mismo que esos comandos sobre
+`examples/pedido/model.bpmn` y sus archivos de escenario. Las rutas de salida (`--json`, `--csv`,
+`--xlsx`) no cambian: relativas al directorio actual, nunca dentro del archivo — la CLI no escribe
+en un `.lila`.
+
+**Varios procesos.** Un proyecto de versión 2 (un *repositorio*, `docs/PROJECT_FORMAT.md`) tiene
+más de un proceso, cada uno con su modelo y sus escenarios. `--process <slug>` elige uno; con un
+solo proceso es implícito, y con varios y sin `--process` el comando se detiene con un error que
+lista los slugs. Un slug que no está en el proyecto también es un error, igual que `--process` con
+un `.bpmn`:
+
+```bash
+npx lila validate examples/pedido.lila --process facturacion
+```
+Código de salida: `1`.
+
+```text
+lila run proyecto.lila as-is --process pedido --seed 1 --replications 30 --json results/run.json
 ```
 
-Seguimiento en [#466](https://github.com/AlambritoDito/lila-modeler/issues/466) («`.lila` como
-entrada de la CLI»).
+Las tools MCP aceptan un `.lila` de la misma forma, y `patch_scenario` puede escribir un escenario
+dentro de uno (`docs/MCP.md`).

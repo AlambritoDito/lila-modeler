@@ -1436,6 +1436,10 @@ export const es: Strings = {
     /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
     errorMismaCarpeta:
       'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
+    /** `E-ARCHIVO-OCUPADO` del disco (#466): otro programa tiene el bloqueo del `.lila`. */
+    errorArchivoOcupado: (ruta: string): string =>
+      `E-ARCHIVO-OCUPADO: otro programa está guardando ${ruta} ahora mismo, así que no se guardó nada. ` +
+      'Vuelve a intentarlo en un momento.',
     /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
     errorCarpetaOcupada: (ruta: string): string =>
       `E-CARPETA-OCUPADA: ${ruta} tiene archivos de otro proyecto o proceso, y guardar los ` +

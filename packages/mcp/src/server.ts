@@ -19,15 +19,28 @@ import {
   absolutePath,
   comparablePath,
   compareWarnings,
+  loadModelSource,
   loadResolvedScenario,
   loadValidatedModel,
   readJsonFile,
   resultWithBoundaryWarnings,
+  scenarioSource,
+  validatedModelOf,
   withRunOverrides,
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
 } from '@lila-modeler/engine/cli-shared';
+import {
+  findLilaScenario,
+  isLilaPath,
+  lilaScenarioEntryName,
+  lilaScenarioPath,
+  lilaScenarioReader,
+  openLilaProcess,
+  writeLilaScenario,
+  type LilaProcess,
+} from '@lila-modeler/engine/project-fs';
 import { runResultSchema } from '@lila-modeler/engine/result-schema';
 import {
   resolveExtends,
@@ -96,19 +109,46 @@ function readModel(tool: string, file: string, locale: Locale): { xml: string } 
  * de los dos, nunca los dos a la vez (pasar ambos sería una precedencia silenciosa sobre un modelo
  * que el usuario no pidió).
  */
-function modelXml(
+async function modelXml(
   tool: string,
   path: string | undefined,
   xml: string | undefined,
+  process: string | undefined,
   locale: Locale,
-): { xml: string } | { error: string } {
+): Promise<{ xml: string; lila?: LilaProcess | undefined } | { error: string }> {
   const M = messages(locale).mcp;
   if (path !== undefined && xml !== undefined) {
     return { error: toolMessage(tool, M.bothPathAndXml()) };
   }
+  // `process` selects a process of a `.lila` (#466); with a `.bpmn` or inline XML it is a mistake.
+  if (process !== undefined && (path === undefined || !isLilaPath(path))) {
+    return { error: toolMessage(tool, messages(locale).cli.processOnlyForLila()) };
+  }
   if (xml !== undefined) return { xml };
+  if (path !== undefined && isLilaPath(path)) {
+    try {
+      const source = await loadModelSource(path, { process, locale });
+      return { xml: source.xml, lila: source.lila };
+    } catch (error) {
+      return { error: toolMessage(tool, message(error)) };
+    }
+  }
   if (path !== undefined) return readModel(tool, absolutePath(path), locale);
   return { error: toolMessage(tool, M.pathOrXml()) };
+}
+
+/**
+ * The `.lila` named by `model` (#466), opened on `process`; `undefined` for a `.bpmn` or no model.
+ * A `process` without a `.lila` model is refused instead of being ignored.
+ */
+async function lilaModel(
+  model: string | undefined,
+  process: string | undefined,
+  locale: Locale,
+): Promise<LilaProcess | undefined> {
+  if (model !== undefined && isLilaPath(model)) return openLilaProcess(model, { process, locale });
+  if (process !== undefined) throw new Error(messages(locale).cli.processOnlyForLila());
+  return undefined;
 }
 
 const GATEWAY_TYPES = new Set(['xor', 'or', 'and', 'eventGateway']);
@@ -211,9 +251,14 @@ function resourceLines(scenario: Scenario): string[] {
 }
 
 /** Recursos por elemento del escenario, o el motivo por el que no se pudo leer. */
-function scenarioResources(file: string, locale: Locale): { resources: string[] } | { error: string } {
+function scenarioResources(
+  file: string,
+  locale: Locale,
+  lila?: LilaProcess | undefined,
+): { resources: string[] } | { error: string } {
   try {
-    const raw = resolveExtends(absolutePath(file), (path) => readJsonFile(path, locale));
+    const source = scenarioSource(file, lila, locale);
+    const raw = resolveExtends(source.path, source.read);
     const parsed = parseScenario(raw, { locale });
     if (parsed.success) return { resources: resourceLines(parsed.data) };
     // `$` para la raíz, igual que `schemaIssueLines` del motor: no es texto traducible.
@@ -237,6 +282,7 @@ const scenarioInputSchema = z.union([
 
 interface RunSimulationInput {
   model?: string | undefined;
+  process?: string | undefined;
   scenario: ScenarioInput;
   seed?: number | undefined;
   replications?: number | undefined;
@@ -251,20 +297,23 @@ interface RunSimulationInput {
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
 async function runSimulation(
-  { model, scenario, seed, replications, saveTo }: RunSimulationInput,
+  { model, process, scenario, seed, replications, saveTo }: RunSimulationInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('run_simulation', body));
 
+  let lila: LilaProcess | undefined;
   let resolved: ResolvedScenario;
   try {
-    resolved = resolveScenarioInput(scenario, locale);
+    lila = await lilaModel(model, process, locale);
+    resolved = resolveScenarioInput(scenario, locale, lila);
   } catch (error) {
     return fail(message(error));
   }
 
-  const modelPath = model === undefined ? resolved.model : absolutePath(model);
+  const modelPath =
+    lila !== undefined ? lila.modelPath : model === undefined ? resolved.model : absolutePath(model);
   if (model !== undefined && comparablePath(modelPath) !== comparablePath(resolved.model)) {
     return fail(M.modelMismatch(modelPath, resolved.model));
   }
@@ -272,7 +321,10 @@ async function runSimulation(
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(modelPath, locale));
+    ({ ir, validation: modelValidation } =
+      lila === undefined
+        ? await loadValidatedModel(modelPath, locale)
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
   } catch (error) {
     return fail(message(error));
   }
@@ -306,6 +358,7 @@ async function runSimulation(
 
 interface CompareScenariosInput {
   model?: string | undefined;
+  process?: string | undefined;
   scenarios: ScenarioInput[];
   seed?: number | undefined;
   replications?: number | undefined;
@@ -326,24 +379,36 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
  * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
  */
 async function compareScenarios(
-  { model, scenarios, seed, replications, saveTo }: CompareScenariosInput,
+  { model, process, scenarios, seed, replications, saveTo }: CompareScenariosInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('compare_scenarios', body));
   if (scenarios.length < 2) return fail(M.atLeastTwoScenarios());
 
+  let lila: LilaProcess | undefined;
+  try {
+    lila = await lilaModel(model, process, locale);
+  } catch (error) {
+    return fail(message(error));
+  }
+
   const resolved: Array<{ label: string; scenario: ResolvedScenario }> = [];
   for (const [index, entry] of scenarios.entries()) {
     const label = scenarioLabel(entry, index);
     try {
-      resolved.push({ label, scenario: resolveScenarioInput(entry, locale) });
+      resolved.push({ label, scenario: resolveScenarioInput(entry, locale, lila) });
     } catch (error) {
       return fail(`${label}: ${message(error)}`);
     }
   }
 
-  const referenceModel = model === undefined ? resolved[0]!.scenario.model : absolutePath(model);
+  const referenceModel =
+    lila !== undefined
+      ? lila.modelPath
+      : model === undefined
+        ? resolved[0]!.scenario.model
+        : absolutePath(model);
   for (const { label, scenario } of resolved) {
     if (comparablePath(referenceModel) !== comparablePath(scenario.model)) {
       return fail(`${label}: ${M.modelMismatch(referenceModel, scenario.model)}`);
@@ -353,7 +418,10 @@ async function compareScenarios(
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(referenceModel, locale));
+    ({ ir, validation: modelValidation } =
+      lila === undefined
+        ? await loadValidatedModel(referenceModel, locale)
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
   } catch (error) {
     return fail(message(error));
   }
@@ -424,6 +492,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 async function validatePatchedScenario(
   raw: unknown,
   locale: Locale,
+  lila?: LilaProcess | undefined,
 ): Promise<{ ok: true; scenario: ResolvedScenario; notes: string[] } | { ok: false; error: string }> {
   const M = messages(locale).mcp;
   const parsed = parseScenario(raw, { locale });
@@ -444,8 +513,16 @@ async function validatePatchedScenario(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  // In a `.lila` the model is the process's own `model.bpmn` (#466): a patch that points `model`
+  // elsewhere is refused, like `run_simulation` refuses a scenario of another model.
+  if (lila !== undefined && comparablePath(scenario.model) !== comparablePath(lila.modelPath)) {
+    return { ok: false, error: M.modelMismatch(lila.modelPath, scenario.model) };
+  }
   try {
-    ({ ir, validation: modelValidation } = await loadValidatedModel(scenario.model, locale));
+    ({ ir, validation: modelValidation } =
+      lila === undefined
+        ? await loadValidatedModel(scenario.model, locale)
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
   } catch (error) {
     return { ok: false, error: message(error) };
   }
@@ -492,6 +569,8 @@ function withRelativeModel(scenario: ResolvedScenario, file: string): ResolvedSc
 
 interface PatchScenarioInput {
   scenario: string;
+  project?: string | undefined;
+  process?: string | undefined;
   patch: JsonPatchOp[];
   saveTo?: string | undefined;
   extendsFrom?: string | undefined;
@@ -508,10 +587,17 @@ interface PatchScenarioInput {
  * si el escenario resultante valida contra el modelo; nunca dos veces (primero se valida, después
  * se escribe una única vez).
  */
-async function patchScenario(
-  { scenario, patch, saveTo, extendsFrom, name, description }: PatchScenarioInput,
-  locale: Locale,
-): Promise<CallToolResult> {
+async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise<CallToolResult> {
+  if (input.project !== undefined) {
+    if (!isLilaPath(input.project)) {
+      return errorResult(toolMessage('patch_scenario', messages(locale).mcp.projectNotLila(input.project)));
+    }
+    return patchLilaScenario(input, input.project, locale);
+  }
+  if (input.process !== undefined) {
+    return errorResult(toolMessage('patch_scenario', messages(locale).cli.processOnlyForLila()));
+  }
+  const { scenario, patch, saveTo, extendsFrom, name, description } = input;
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('patch_scenario', body));
   const scenarioPath = absolutePath(scenario);
@@ -583,6 +669,100 @@ async function patchScenario(
   }
 }
 
+/**
+ * `patch_scenario` on a scenario inside a `.lila` (#466). The same two modes as on disk, with every
+ * name inside the archive: `scenario` and `extendsFrom` name scenarios of the process
+ * (`findLilaScenario`), and `saveTo` is the name of the new entry. Validation runs against the
+ * process's own model, and only a scenario that validates is written — through `writeLilaScenario`,
+ * which saves the whole archive atomically and carries every other process through unchanged.
+ */
+async function patchLilaScenario(
+  { scenario, process, patch, saveTo, extendsFrom, name, description }: PatchScenarioInput,
+  project: string,
+  locale: Locale,
+): Promise<CallToolResult> {
+  const M = messages(locale).mcp;
+  const fail = (body: string): CallToolResult => errorResult(toolMessage('patch_scenario', body));
+
+  let lila: LilaProcess;
+  let entry: string;
+  let base: ResolvedScenario;
+  try {
+    lila = await openLilaProcess(project, { process, locale });
+    entry = findLilaScenario(lila, scenario, locale);
+    base = loadResolvedScenario(
+      lilaScenarioPath(lila, entry),
+      lilaScenarioReader(lila, (file) => readJsonFile(file, locale), locale),
+      locale,
+    );
+  } catch (error) {
+    return fail(message(error));
+  }
+  const read = lilaScenarioReader(lila, (file) => readJsonFile(file, locale), locale);
+  const written = (target: string, resolvedScenario: ResolvedScenario, notes: string[]): CallToolResult =>
+    textResult({ scenario: resolvedScenario, file: lila.file, process: lila.process.slug, entry: target, notes });
+
+  let patchedRaw: unknown;
+  try {
+    patchedRaw = applyJsonPatch(base, patch);
+  } catch (error) {
+    return fail(message(error));
+  }
+
+  if (saveTo === undefined) {
+    if (isPlainObject(patchedRaw)) {
+      if (name !== undefined) patchedRaw.name = name;
+      if (description !== undefined) patchedRaw.description = description;
+    }
+    const outcome = await validatePatchedScenario(patchedRaw, locale, lila);
+    if (!outcome.ok) return fail(outcome.error);
+    try {
+      const path = lilaScenarioPath(lila, entry);
+      await writeLilaScenario(lila, entry, withRelativeModel(outcome.scenario, path), locale);
+      return written(entry, outcome.scenario, outcome.notes);
+    } catch (error) {
+      return fail(message(error));
+    }
+  }
+
+  if (!isPlainObject(patchedRaw)) return fail(M.patchNotAnObject());
+  let target: string;
+  let parent: string;
+  try {
+    target = lilaScenarioEntryName(saveTo, locale);
+    parent = extendsFrom === undefined ? entry : findLilaScenario(lila, extendsFrom, locale);
+  } catch (error) {
+    return fail(message(error));
+  }
+  const delta = buildPatchDelta(patch, patchedRaw);
+  // Both entries live in the same folder of the archive, so `extends` is the parent's entry name.
+  const candidate: Record<string, unknown> = { version: base.version, extends: parent, ...delta };
+  candidate['name'] = name ?? (typeof delta['name'] === 'string' ? delta['name'] : M.patchedName(base.name));
+  if (description !== undefined) candidate['description'] = description;
+
+  const targetPath = lilaScenarioPath(lila, target);
+  let resolvedCandidate: ResolvedScenario;
+  try {
+    resolvedCandidate = loadResolvedScenario(
+      targetPath,
+      (file) => (file === targetPath ? candidate : read(file)),
+      locale,
+    );
+  } catch (error) {
+    return fail(withoutPhantomFile(error, targetPath, locale));
+  }
+
+  const outcome = await validatePatchedScenario(resolvedCandidate, locale, lila);
+  if (!outcome.ok) return fail(outcome.error);
+
+  try {
+    await writeLilaScenario(lila, target, candidate, locale);
+    return written(target, outcome.scenario, outcome.notes);
+  } catch (error) {
+    return fail(message(error));
+  }
+}
+
 /** Opciones de arranque comunes a `createServer` y `startStdioServer`. */
 export interface ServerOptions {
   /** Idioma por defecto de las respuestas; cada llamada puede pedir otro con `locale`. */
@@ -600,20 +780,28 @@ export function createServer(options: ServerOptions = {}): McpServer {
     {
       title: 'Validate BPMN',
       description:
-        'Parses and validates a .bpmn file (by path or inline XML, one of the two) and returns the ' +
+        'Parses and validates a .bpmn file or one process of a .lila project (by path or inline ' +
+        'XML, one of the two) and returns the ' +
         'same JSON as `lila validate --json`: the IR, the ignored processes, and structured ' +
         'errors/warnings. A model with a non-empty `errors` cannot be simulated, but that is a ' +
         'valid result of the tool: isError only marks that the tool failed (bad arguments, ' +
         'unreadable file, impenetrable XML).',
       inputSchema: z.object({
-        path: z.string().optional().describe('Path to the .bpmn, relative to the cwd of the server process.'),
+        path: z
+          .string()
+          .optional()
+          .describe('Path to the .bpmn or .lila, relative to the cwd of the server process.'),
         xml: z.string().optional().describe('XML content of the .bpmn, instead of a path.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
         locale: localeSchema,
       }),
     },
-    async ({ path, xml, locale }): Promise<CallToolResult> => {
+    async ({ path, xml, process, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
-      const read = modelXml('validate_bpmn', path, xml, language);
+      const read = await modelXml('validate_bpmn', path, xml, process, language);
       if ('error' in read) return errorResult(read.error);
 
       try {
@@ -629,21 +817,33 @@ export function createServer(options: ServerOptions = {}): McpServer {
     {
       title: 'Describe process',
       description:
-        'Parses a .bpmn (by path or inline XML, one of the two) and returns its IR (ProcessIR) ' +
+        'Parses a .bpmn or one process of a .lila (by path or inline XML, one of the two) and ' +
+        'returns its IR (ProcessIR) ' +
         'together with a readable summary (the `resumen` key): node count by type, gateways with ' +
         'their outgoing flows, lanes, subprocesses, other processes in the file and whether the ' +
         'model passes validation. With the optional `scenario` (path to a .json scenario, resolves ' +
-        '`extends`) it adds the resources referenced by element.',
+        '`extends`; with a .lila, also the name of a scenario of that process) it adds the ' +
+        'resources referenced by element.',
       inputSchema: z.object({
-        path: z.string().optional().describe('Path to the .bpmn, relative to the cwd of the server process.'),
+        path: z
+          .string()
+          .optional()
+          .describe('Path to the .bpmn or .lila, relative to the cwd of the server process.'),
         xml: z.string().optional().describe('XML content of the .bpmn, instead of a path.'),
-        scenario: z.string().optional().describe('Path to a .json scenario, relative to the cwd.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
+        scenario: z
+          .string()
+          .optional()
+          .describe('Path to a .json scenario, relative to the cwd; with a .lila, or a scenario name in it.'),
         locale: localeSchema,
       }),
     },
-    async ({ path, xml, scenario, locale }): Promise<CallToolResult> => {
+    async ({ path, xml, process, scenario, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
-      const read = modelXml('describe_process', path, xml, language);
+      const read = await modelXml('describe_process', path, xml, process, language);
       if ('error' in read) return errorResult(read.error);
 
       let report: ValidateBpmnReport;
@@ -653,7 +853,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         return errorResult(toolMessage('describe_process', message(error)));
       }
 
-      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario, language);
+      const scenarioResult = scenario === undefined ? undefined : scenarioResources(scenario, language, read.lila);
       const resources = scenarioResult !== undefined && 'resources' in scenarioResult ? scenarioResult.resources : [];
       const scenarioError = scenarioResult !== undefined && 'error' in scenarioResult ? scenarioResult.error : undefined;
 
@@ -671,10 +871,16 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'Validates model and scenario, simulates with `log: false` and returns the same `RunResult` ' +
         'as `lila run --json` (elements, flows, resources, process, bottlenecks and warnings). ' +
         '`scenario` accepts a .json path (resolves `extends`) or the already resolved scenario as an ' +
-        'inline object. `saveTo` writes the same JSON atomically, like `lila run --json <path>`. ' +
+        'inline object. `model` may be a .lila project: `scenario` is then also the name of a ' +
+        'scenario of that process (a .json path that exists wins), and `process` picks the process ' +
+        'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`. ' +
         'isError only marks that the tool failed (invalid model/scenario, unreadable file).',
       inputSchema: z.object({
-        model: z.string().optional().describe('Path to the .bpmn; defaults to scenario.model.'),
+        model: z.string().optional().describe('Path to the .bpmn or .lila; defaults to scenario.model.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
         scenario: scenarioInputSchema,
         seed: z.number().int().optional().describe('Overrides run.seed.'),
         replications: z.number().int().min(1).optional().describe('Overrides run.replications.'),
@@ -694,10 +900,18 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'Validates and simulates two or more scenarios on the same model (the first one is the ' +
         'base) and returns the same `CompareResult` as `lila compare --json`, plus `notes`: the ' +
         'warnings the CLI prints beside the table (different seeds, different `baseTimeUnit`, too ' +
-        'few replications for a 95% CI). `scenarios` accepts .json paths and inline objects, mixed. ' +
+        'few replications for a 95% CI). `scenarios` accepts .json paths and inline objects, mixed; ' +
+        'with a .lila `model`, also scenario names of that process (`process` picks it). ' +
         '`saveTo` writes `comparison` as JSON, like `lila compare --json`.',
       inputSchema: z.object({
-        model: z.string().optional().describe('Path to the .bpmn; defaults to the model of the first scenario.'),
+        model: z
+          .string()
+          .optional()
+          .describe('Path to the .bpmn or .lila; defaults to the model of the first scenario.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
         // Sin `.min(2)`: así el mensaje lo da `compareScenarios` en el idioma pedido, no el
         // validador del SDK, que solo habla inglés.
         scenarios: z.array(scenarioInputSchema),
@@ -723,9 +937,21 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`to-be-3-cajeros.scenario.json`. Returns the resulting resolved scenario, the path written ' +
         'and `notes` with the lint warnings. A patch that leaves the scenario invalid (`probability` ' +
         'outside `[0,1]`, `capacity` < 1, a `ref` that does not exist in `resources`, …) is rejected ' +
-        'without writing anything.',
+        'without writing anything. With `project` (a .lila), `scenario`, `extendsFrom` and `saveTo` ' +
+        'are scenario names inside that process, and the archive is rewritten atomically with every ' +
+        'other process unchanged.',
       inputSchema: z.object({
-        scenario: z.string().describe('Path to the .json scenario to read and patch, relative to the cwd.'),
+        scenario: z
+          .string()
+          .describe('Path to the .json scenario to read and patch, relative to the cwd; with `project`, its name.'),
+        project: z
+          .string()
+          .optional()
+          .describe('Path to a .lila: patch a scenario inside it instead of a .json on disk.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process of `project` when it holds several; implicit when it holds one.'),
         patch: z
           .array(
             z.object({
