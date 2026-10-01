@@ -11,7 +11,7 @@
  * `docs/RESULTS_FORMAT.md` § 6).
  */
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
-import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatDuration, formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
@@ -249,14 +249,16 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
   const { filas, total } = filasRapidas(ir, result, scenario, log);
   // Without a usable sample there is no p95 column at all; the note says why (QA of #394).
   const conP95 = p95Fiable(log);
+  const tiempo = (segundos: number): string => formatNumber(redondear(segundos / SECONDS_PER_UNIT[unit], 2));
   const celdas = (f: FilaRapida): ReactNode => (
     <>
       {/* Whole cases: a mean over replications (1485.23…) reads as a count (QA of #394). */}
       <td style={numero()} title={formatNumber(f.casos)}>{formatNumber(Math.round(f.casos))}</td>
-      <td style={numero()}>{guion(f.esperaMedia, (v) => formatDuration(v, unit))}</td>
-      {conP95 && <td style={numero()}>{guion(f.esperaP95, (v) => formatDuration(v, unit))}</td>}
-      <td style={numero()}>{guion(f.utilizacion, (v) => formatNumber(v * 100))}</td>
-      <td style={numero()}>{formatNumber(f.costo)}</td>
+      {/* Rounded like the KPIs, the exact value as the title (QA of #394). */}
+      <td style={numero()} title={guion(f.esperaMedia, (v) => formatDuration(v, unit))}>{guion(f.esperaMedia, tiempo)}</td>
+      {conP95 && <td style={numero()} title={guion(f.esperaP95, (v) => formatDuration(v, unit))}>{guion(f.esperaP95, tiempo)}</td>}
+      <td style={numero()} title={guion(f.utilizacion, (v) => formatNumber(v * 100))}>{guion(f.utilizacion, (v) => formatNumber(redondear(v * 100, 1)))}</td>
+      <td style={numero()} title={formatNumber(f.costo)}>{formatNumber(redondear(f.costo, 2))}</td>
     </>
   );
   return (
@@ -330,5 +332,5 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
 function Avisos({ grupos }: { grupos: readonly GrupoAvisos[] }): ReactNode {
   const S = useStrings();
   if (grupos.length === 0) return <p className="vacio">{S.dock.sinAvisos}</p>;
-  return <ul className="dock-avisos">{grupos.map((g) => <AvisoAgrupado key={g.codigo} grupo={g} />)}</ul>;
+  return <ul className="dock-avisos">{grupos.map((g) => <AvisoAgrupado key={g.clave} grupo={g} />)}</ul>;
 }

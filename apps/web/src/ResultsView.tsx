@@ -771,7 +771,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false, lo
               {todoEnCalentamiento && <li>{S.resultados.todoEnCalentamiento}</li>}
               {/* One line per code (#394): the engine repeats a cause once per replication. */}
               {agruparAvisos(result.warnings.map((mensaje) => ({ mensaje, severidad: 'warning' as const }))).map((grupo) => (
-                <AvisoAgrupado key={grupo.codigo} grupo={grupo} />
+                <AvisoAgrupado key={grupo.clave} grupo={grupo} />
               ))}
             </ul>
           )}

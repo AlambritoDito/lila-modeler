@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { elementsCsv } from '@lila-modeler/engine/csv';
-import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatDuration, formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
@@ -88,12 +88,16 @@ describe('quick results (#394)', () => {
     // Cases and fixed cost only: the process wait per case is another quantity (QA of #394).
     // Whole cases (a mean over replications reads as a count).
     expect(celdas).toEqual([formatNumber(Math.round(result.process.completed)), '—', '—', '—',
-      formatNumber(tareas.reduce((suma, id) => suma + result.elements[id]!.fixedCostTotal, 0))]);
+      formatNumber(Math.round(tareas.reduce((suma, id) => suma + result.elements[id]!.fixedCostTotal, 0) * 100) / 100)]);
     expect(tabla.querySelectorAll('thead th')[5]!.textContent).toBe(S.dock.columnas.costo);
     // The mean wait column is the engine's, the same figure as the Results view.
     const primera = tabla.querySelector('tbody tr')!;
     const id = tareas[0]!;
-    expect(primera.querySelectorAll('td')[1]!.textContent).toBe(formatDuration(result.elements[id]!.resourceWait.mean, scenario.run.baseTimeUnit as BaseTimeUnit));
+    const media = primera.querySelectorAll('td')[1]!;
+    const unidad = scenario.run.baseTimeUnit as BaseTimeUnit;
+    expect(media.title).toBe(formatDuration(result.elements[id]!.resourceWait.mean, unidad));
+    // Shown rounded to two decimals, like the KPIs.
+    expect(media.textContent).toBe(formatNumber(Math.round(result.elements[id]!.resourceWait.mean / SECONDS_PER_UNIT[unidad] * 100) / 100));
     // The note says which population each wait column covers.
     expect(container.querySelector('.dock-nota')!.textContent).toBe(S.dock.notaPercentiles(log.rows.length));
     // The scenario KPIs head the dock, rounded, with the exact value as the title.
@@ -223,19 +227,26 @@ describe('tabs (#394)', () => {
     expect(tabs()[3]!.textContent).toBe(`${S.dock.pestanas.avisos} (4)`);
   });
 
-  test('agruparAvisos keeps two subjects of the same code apart (QA of #394)', () => {
+  test('agruparAvisos keeps two subjects of the same code apart, wherever the subject sits (QA of #394)', () => {
     const grupos = agruparAvisos([
       { mensaje: 'W-TAREA-SIN-TIEMPO: Task_A: no processingTime (30 times)', severidad: 'warning' },
       { mensaje: 'W-TAREA-SIN-TIEMPO: Task_B: no processingTime (12 times)', severidad: 'warning' },
       { mensaje: 'W-TAREA-SIN-TIEMPO: Task_A: no processingTime (28 times)', severidad: 'warning' },
     ]);
-    expect(grupos.map((g) => [g.codigo, g.mensajes.length])).toEqual([['W-TAREA-SIN-TIEMPO: Task_A', 2], ['W-TAREA-SIN-TIEMPO: Task_B', 1]]);
+    expect(grupos.map((g) => [g.codigo, g.mensajes.length])).toEqual([['W-TAREA-SIN-TIEMPO', 2], ['W-TAREA-SIN-TIEMPO', 1]]);
+    expect(grupos[1]!.mensajes[0]).toContain('Task_B');
+    // Scenario warnings carry the element at the end; ids with digits are not numbers.
+    const alFinal = agruparAvisos([
+      { mensaje: 'W-ELEMENTO-SIN-PARAMETROS: the element has no parameters (elements.Task_1).', severidad: 'warning' },
+      { mensaje: 'W-ELEMENTO-SIN-PARAMETROS: the element has no parameters (elements.Task_2).', severidad: 'warning' },
+    ]);
+    expect(alFinal).toHaveLength(2);
   });
 
   test('agruparAvisos keeps the first-seen order and promotes a group to error', () => {
     // A message with no subject segment groups by its code alone.
     expect(agruparAvisos([{ mensaje: 'W-X: a', severidad: 'warning' }, { mensaje: 'sin código', severidad: 'warning' }, { mensaje: 'W-X: a', severidad: 'error' }]))
-      .toEqual([{ codigo: 'W-X', severidad: 'error', mensajes: ['W-X: a', 'W-X: a'] }, { codigo: 'sin código', severidad: 'warning', mensajes: ['sin código'] }]);
+      .toEqual([{ codigo: 'W-X', clave: 'W-X: a', severidad: 'error', mensajes: ['W-X: a', 'W-X: a'] }, { codigo: 'sin código', clave: 'sin código', severidad: 'warning', mensajes: ['sin código'] }]);
   });
 
   test('without a run: an invitation to run, and the actions are disabled', async () => {
