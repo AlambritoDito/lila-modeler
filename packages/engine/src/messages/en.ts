@@ -34,6 +34,7 @@ const NODE_TYPES: Record<string, string> = {
 const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug] [--json]
        lila run <model.bpmn|project.lila> <scenario> [--process slug] [--seed n]
                 [--replications n] [--json result.json] [--csv directory] [--xlsx book.xlsx]
+                [--save]
        lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
                     [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
        lila export diagram <model.bpmn|project.lila> [--process slug] [--out file.svg] [--force]
@@ -69,6 +70,8 @@ run options:
                     log.csv is written streaming and carries ISO timestamps from run.start.
   --xlsx file       Writes one .xlsx workbook with the Summary, Elements, Flows, Resources
                     and Parameters sheets. The event log is only in --csv.
+  --save            Stores the run in the .lila (a scenario of the archive), as the app does:
+                    the app shows it as the current run, and lila export uses it.
 
 compare options:
   --seed n          Overrides run.seed in every compared scenario.
@@ -396,10 +399,10 @@ export const en: Catalog = {
       `process "${slug}" of ${file} has no run "${id}"; ` + (runs === '' ? 'it has no stored runs.' : `its runs are: ${runs}.`),
     exportNoRun: (file, slug, scenario) =>
       `process "${slug}" of ${file} has no stored run${scenario === '' ? '' : ` of ${scenario}`}. ` +
-      'Simulate it in Lila Modeler and save the project, then export again.',
+      'Simulate it with `lila run <file> <scenario> --save` (`saveRun` in MCP), or in Lila Modeler and save the project.',
     exportNoCurrentRun: (file, slug, runs) =>
       `process "${slug}" of ${file} has no run of its current model and scenario; older runs: ${runs}. ` +
-      'Pass one by id (--run, `run` in MCP) or simulate again in Lila Modeler.',
+      'Pass one by id (--run, `run` in MCP) or simulate again (`lila run … --save`).',
     exportRunAmbiguous: (file, slug, scenarios) =>
       `process "${slug}" of ${file} has current runs of several scenarios (${scenarios}): ` +
       'choose one with --scenario (`scenario` in MCP) or pass a run id.',
@@ -418,6 +421,12 @@ export const en: Catalog = {
     exportInvalidFormat: (value, accepted) =>
       value === '' ? `choose a format with --format: ${accepted}.` : `--format only accepts: ${accepted}; got "${value}".`,
     exportOutRequired: (kind) => `lila export ${kind} needs --out <path>.`,
+    saveRunNeedsLila: () => 'saving the run (--save, `saveRun` in MCP) needs a .lila model.',
+    saveRunNeedsArchiveScenario: (scenario) =>
+      `saving the run needs a scenario of the .lila, and "${scenario}" is not one: name a scenario of the process.`,
+    lilaRunStale: (file, scenario) =>
+      `the model or the scenario ${scenario} of ${file} changed while the simulation ran; the run was not saved. Run it again.`,
+    runSaved: (id, file, slug) => `Run ${id} saved in ${file} (process ${slug}).`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

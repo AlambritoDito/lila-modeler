@@ -96,3 +96,27 @@ test('export_results: an xlsx readWorkbook opens, CSV files, and a clear error w
   writeFileSync(join(temp, 'm.bpmn'), '<x/>');
   expect((await call('export_document', { project: 'm.bpmn', format: 'html', saveTo: 'x.html' })).text).toMatch(/is not a .lila project/);
 }, 120_000);
+
+test('run_simulation with saveRun stores the run; export_document then has the results', async () => {
+  const fresh = join(temp, 'fresh.lila');
+  await pedidoWithRuns(fresh, []);
+  const noRun = await call('export_document', { project: 'fresh.lila', format: 'html', saveTo: 'before.html' });
+  expect(JSON.parse(noRun.text).run).toBeNull();
+
+  const result = await client.callTool({
+    name: 'run_simulation',
+    arguments: { model: 'fresh.lila', scenario: 'as-is', seed: 42, replications: 1, saveRun: true },
+  });
+  expect(result.isError ?? false).toBe(false);
+  const blocks = result.content as { type: string; text: string }[];
+  const { savedRun } = JSON.parse(blocks[1]!.text) as { savedRun: { id: string; process: string; scenario: string } };
+  expect(savedRun).toMatchObject({ process: 'pedido', scenario: 'as-is.scenario.json' });
+
+  const after = await call('export_document', { project: 'fresh.lila', format: 'html', saveTo: 'after.html' });
+  expect(JSON.parse(after.text).run).toEqual({ id: savedRun.id, scenario: 'as-is.scenario.json', current: true });
+  expect(readFileSync(join(temp, 'after.html'), 'utf8')).toContain('<h2>Results</h2>');
+
+  // Without a .lila, or with an inline scenario, there is nowhere to store it.
+  const bpmn = await call('run_simulation', { model: join(repo, 'examples/pedido/model.bpmn'), scenario: join(repo, 'examples/pedido/as-is.scenario.json'), saveRun: true });
+  expect(bpmn.text).toMatch(/^run_simulation: saving the run .* needs a .lila model/);
+}, 120_000);

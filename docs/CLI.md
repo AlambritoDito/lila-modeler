@@ -86,6 +86,8 @@ Exit code: `0`.
   sheets. No event log sheet — use `--csv` for that.
 - All three create missing directories, write to a temporary path and rename atomically, and
   refuse to overwrite a path that is a directory.
+- `--save` (with a `.lila` and a scenario of it) stores the run in the project, as the app does;
+  see «Storing a run» under [`export`](#export-538).
 
 ## `compare`
 
@@ -147,8 +149,20 @@ npx lila export doc examples/pedido.lila --out results/pedido.html
 ```
 Exit code: `0`.
 
-`examples/pedido.lila` stores no run, so its results cannot be exported (the message says to
-simulate it in Lila Modeler and save the project):
+**Storing a run**: `lila run <project.lila> <scenario> --save` simulates a scenario of the archive
+and stores the run in the `.lila` exactly as the app does (same shape, the model and scenario
+revisions it ran on, built by the same engine function), so the app opens it as the current run
+and `lila export` uses it. The write is atomic and under the file's lock; concurrent saves all
+land, and a save after the model or that scenario changed is refused. A `.bpmn` or a scenario file
+on disk cannot be saved. The app keeps every run, and so does `--save`:
+
+```text
+npx lila run project.lila as-is --seed 42 --replications 5 --save
+npx lila export results project.lila --out results/as-is.xlsx
+```
+
+`examples/pedido.lila` stores no run, so its results cannot be exported until one is saved (the
+message says how):
 
 ```bash
 npx lila export results examples/pedido.lila --out results/pedido.xlsx

@@ -15,11 +15,13 @@ backed by `@lila-modeler/engine`. Its eight tools reuse the CLI validation and s
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, locale? })`** validates
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, locale? })`** validates
   the model and scenario, simulates with `log: false` and returns the same `RunResult` as
   `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
   or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
   model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
+  With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
+  [Saving a run](#saving-a-run)).
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
@@ -131,6 +133,26 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
 
 ```json
 { "name": "export_results", "arguments": { "project": "project.lila", "scenario": "as-is", "format": "xlsx", "saveTo": "out/as-is.xlsx" } }
+```
+
+## Saving a run
+
+`run_simulation` with `saveRun: true` (and `lila run … --save`) stores the run in the `.lila`
+exactly as the app does: the same stored shape, the model and scenario revisions it ran on, the
+model XML and the resolved scenario (with `model: "model.bpmn"`), built by the same engine function
+the app uses (`storedRun`). The app then opens it as the current run of that scenario, and
+`export_document` / `export_results` use it. It needs a `.lila` `model` and a scenario **of the
+archive** (by name); a `.bpmn`, a scenario file on disk or an inline scenario is `isError`, after
+nothing was written. The answer's `structuredContent` is still the `RunResult`; a second text block
+says `{ "savedRun": { "id", "file", "process", "scenario" } }`.
+
+The write is atomic, under the file's lock. If another writer saved the `.lila` meanwhile, the
+archive is read again and the run appended to what is there now, so concurrent saves all land. If
+the model or that scenario changed meanwhile, the run is already stale and is not saved
+(`isError`). The app keeps every run (there is no retention limit), and so does this.
+
+```json
+{ "name": "run_simulation", "arguments": { "model": "project.lila", "scenario": "as-is", "seed": 42, "replications": 5, "saveRun": true } }
 ```
 
 ## Language

@@ -89,6 +89,8 @@ Código de salida: `0`.
   Parámetros. Sin hoja de event log: para eso está `--csv`.
 - Las tres crean los directorios que falten, escriben a una ruta temporal y renombran de forma
   atómica, y se niegan a sobrescribir una ruta que sea un directorio.
+- `--save` (con un `.lila` y un escenario suyo) guarda la corrida en el proyecto, como la app; ver
+  «Guardar una corrida» en [`export`](#export-538).
 
 ## `compare`
 
@@ -151,8 +153,21 @@ npx lila export doc examples/pedido.lila --out results/pedido.html
 ```
 Código de salida: `0`.
 
-`examples/pedido.lila` no guarda corridas, así que sus resultados no se pueden exportar (el
-mensaje dice que lo simules en Lila Modeler y guardes el proyecto):
+**Guardar una corrida**: `lila run <proyecto.lila> <escenario> --save` simula un escenario del
+archivo y guarda la corrida en el `.lila` exactamente como la app (misma forma, las revisiones de
+modelo y escenario con que corrió, construida por la misma función del motor), así que la app la
+abre como corrida actual y `lila export` la usa. La escritura es atómica y bajo el candado del
+archivo; las escrituras concurrentes llegan todas, y se rechaza guardar si el modelo o ese escenario
+cambiaron. Un `.bpmn` o un escenario en disco no se pueden guardar. La app conserva todas las
+corridas, y `--save` también:
+
+```text
+npx lila run proyecto.lila as-is --seed 42 --replications 5 --save
+npx lila export results proyecto.lila --out results/as-is.xlsx
+```
+
+`examples/pedido.lila` no guarda corridas, así que sus resultados no se pueden exportar hasta
+guardar una (el mensaje dice cómo):
 
 ```bash
 npx lila export results examples/pedido.lila --out results/pedido.xlsx

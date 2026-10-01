@@ -150,7 +150,7 @@ describe('lila export results', () => {
   test('clear errors: no run, several scenarios, unknown id; an older run exports by id', async () => {
     const file = join(dir, 'p.lila');
     await pedidoWithRuns(file, []);
-    await expect(exportResults({ file, format: 'xlsx' })).rejects.toThrow(/has no stored run. Simulate it in Lila Modeler/);
+    await expect(exportResults({ file, format: 'xlsx' })).rejects.toThrow(/has no stored run. Simulate it with `lila run <file> <scenario> --save`/);
     await expect(exportResults({ file, format: 'xlsx', locale: 'es' })).rejects.toThrow(/no tiene corridas guardadas/);
 
     await pedidoWithRuns(file, ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);

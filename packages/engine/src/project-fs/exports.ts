@@ -25,7 +25,7 @@ import type { RunResult } from '../core/result.js';
 import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '../csv.js';
 import { messages, type Locale } from '../messages/index.js';
 import { buildProcessDocument, toDocx, toHtml } from '../process-document.js';
-import type { StoredRun } from '../project/index.js';
+import { isCurrentRun, type StoredRun } from '../project/index.js';
 import { parseScenario, resolveExtends, schemaIssueLines, type ResolvedScenario } from '../scenario.js';
 import { resourceNamesOf, scenarioWorkbook } from '../xlsx-report.js';
 import { findLilaScenario, lilaScenarioPath, lilaScenarioReader, openLilaProcess, type LilaProcess } from './input.js';
@@ -78,9 +78,7 @@ export async function exportDiagram(source: ExportSource): Promise<{ svg: string
 }
 
 function isCurrent(lila: LilaProcess, run: StoredRun): boolean {
-  const process = lila.process;
-  return run.inputs.modelRevision === process.model.revision &&
-    run.inputs.scenarioRevision === (process.scenarioRevisions[run.scenarioName] ?? 0);
+  return isCurrentRun(run, lila.process.model.revision, lila.process.scenarioRevisions);
 }
 
 function runList(runs: readonly StoredRun[]): string {

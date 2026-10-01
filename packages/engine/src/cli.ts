@@ -46,6 +46,7 @@ import {
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
 import { exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile } from './project-fs/exports.js';
+import { saveSimulationRun } from './project-fs/save-run.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
@@ -554,6 +555,8 @@ interface RunCommandOptions {
   json?: string | undefined;
   csv?: string | undefined;
   xlsx?: string | undefined;
+  /** `--save` (#538): store the run in the `.lila`, as the app does. */
+  save?: boolean | undefined;
   locale: Locale;
 }
 
@@ -570,6 +573,7 @@ async function runCommand(
     validation: modelValidation,
     lila,
   } = await loadValidatedModel(modelFile, locale, { process: options.process });
+  if (options.save === true && lila === undefined) throw new Error(C.saveRunNeedsLila());
   if (modelHasErrors(modelValidation, locale)) return 1;
 
   const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
@@ -613,6 +617,10 @@ async function runCommand(
         scenarioWorkbook(ir, scenario, result, resourceNamesOf(scenario), locale),
         locale,
       );
+    }
+    if (options.save === true) {
+      const saved = await saveSimulationRun(lila!, scenarioFile, scenario, result, locale);
+      console.log(C.runSaved(saved.id, saved.file, saved.process));
     }
     return 0;
   } catch (error) {
@@ -904,6 +912,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
       json: { type: 'string' },
       csv: { type: 'string' },
       xlsx: { type: 'string' },
+      save: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -921,6 +930,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
     json: values.json,
     csv: values.csv,
     xlsx: values.xlsx,
+    save: values.save === true,
     locale,
   });
 }

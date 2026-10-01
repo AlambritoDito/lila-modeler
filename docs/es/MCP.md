@@ -21,7 +21,7 @@ terminal en vez de un cliente MCP.
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, locale? })`** (LILA-054) — valida
   modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
@@ -29,6 +29,8 @@ terminal en vez de un cliente MCP.
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
+  Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
+  [Guardar una corrida](#guardar-una-corrida)).
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
@@ -154,6 +156,26 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
 
 ```json
 { "name": "export_results", "arguments": { "project": "proyecto.lila", "scenario": "as-is", "format": "xlsx", "saveTo": "out/as-is.xlsx" } }
+```
+
+## Guardar una corrida
+
+`run_simulation` con `saveRun: true` (y `lila run … --save`) guarda la corrida en el `.lila`
+exactamente como la app: la misma forma, las revisiones de modelo y escenario con que corrió, el
+XML del modelo y el escenario resuelto (con `model: "model.bpmn"`), construida por la misma función
+del motor que usa la app (`storedRun`). La app la abre como la corrida actual de ese escenario, y
+`export_document` / `export_results` la usan. Necesita un `model` `.lila` y un escenario **del
+archivo** (por nombre); un `.bpmn`, un escenario en disco o uno inline son `isError` y no se escribe
+nada. El `structuredContent` de la respuesta sigue siendo el `RunResult`; un segundo bloque de
+texto dice `{ "savedRun": { "id", "file", "process", "scenario" } }`.
+
+La escritura es atómica y bajo el candado del archivo. Si otro escritor guardó el `.lila` entre
+tanto, se vuelve a leer y la corrida se añade a lo que hay ahora, así que las escrituras concurrentes
+llegan todas. Si el modelo o ese escenario cambiaron entre tanto, la corrida ya es vieja y no se
+guarda (`isError`). La app conserva todas las corridas (no hay límite) y esto también.
+
+```json
+{ "name": "run_simulation", "arguments": { "model": "proyecto.lila", "scenario": "as-is", "seed": 42, "replications": 5, "saveRun": true } }
 ```
 
 ## Idioma

@@ -42,6 +42,7 @@ import {
   exportDiagram,
   exportDocument,
   exportResults,
+  saveSimulationRun,
   writeExportDirectory,
   writeExportFile,
   type LilaProcess,
@@ -292,6 +293,7 @@ interface RunSimulationInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  saveRun?: boolean | undefined;
   locale?: Locale | undefined;
 }
 
@@ -302,7 +304,7 @@ interface RunSimulationInput {
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
 async function runSimulation(
-  { model, process, scenario, seed, replications, saveTo }: RunSimulationInput,
+  { model, process, scenario, seed, replications, saveTo, saveRun }: RunSimulationInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
@@ -315,6 +317,11 @@ async function runSimulation(
     resolved = resolveScenarioInput(scenario, locale, lila);
   } catch (error) {
     return fail(message(error));
+  }
+  // `saveRun` (#538) stores the run in the archive: it needs a `.lila` and one of its scenarios.
+  if (saveRun === true && lila === undefined) return fail(messages(locale).cli.saveRunNeedsLila());
+  if (saveRun === true && typeof scenario !== 'string') {
+    return fail(messages(locale).cli.saveRunNeedsArchiveScenario(M.inlineScenario()));
   }
 
   const modelPath =
@@ -358,7 +365,18 @@ async function runSimulation(
     }
   }
 
-  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false, structuredContent: result };
+  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(result, null, 2) }];
+  if (saveRun === true) {
+    try {
+      // The `RunResult` stays the structured content (its `outputSchema`); where the run went is a
+      // second text block.
+      const savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
+      content.push({ type: 'text', text: JSON.stringify({ savedRun }, null, 2) });
+    } catch (error) {
+      return fail(message(error));
+    }
+  }
+  return { content, isError: false, structuredContent: result };
 }
 
 interface CompareScenariosInput {
@@ -878,7 +896,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`scenario` accepts a .json path (resolves `extends`) or the already resolved scenario as an ' +
         'inline object. `model` may be a .lila project: `scenario` is then also the name of a ' +
         'scenario of that process (a .json path that exists wins), and `process` picks the process ' +
-        'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`. ' +
+        'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`; ' +
+        '`saveRun` stores the run in the .lila, like `lila run --save`. ' +
         'isError only marks that the tool failed (invalid model/scenario, unreadable file).',
       inputSchema: z.object({
         model: z.string().optional().describe('Path to the .bpmn or .lila; defaults to scenario.model.'),
@@ -890,6 +909,14 @@ export function createServer(options: ServerOptions = {}): McpServer {
         seed: z.number().int().optional().describe('Overrides run.seed.'),
         replications: z.number().int().min(1).optional().describe('Overrides run.replications.'),
         saveTo: z.string().optional().describe('Path to write the RunResult as JSON.'),
+        saveRun: z
+          .boolean()
+          .optional()
+          .describe(
+            'With a .lila `model` and a scenario of it: store the run in the project, as the app does ' +
+              '(it opens as the current run; export_document/export_results use it). A second content ' +
+              'block returns { savedRun: { id, file, process, scenario } }.',
+          ),
         locale: localeSchema,
       }),
       outputSchema: runResultSchema,
