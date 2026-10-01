@@ -3,7 +3,7 @@ import type { watch as fsWatch } from 'node:fs';
 import { mkdir, mkdtemp, realpath, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeLila } from '@lila-modeler/engine/project';
 import type { ProjectDocument } from '@lila-modeler/engine/project';
 import { isOwnSnapshot, readLilaFile, writeLilaFile, writeProjectFolder } from '@lila-modeler/engine/project-fs';
@@ -42,11 +42,38 @@ function fakeWatch(): { watch: typeof fsWatch; fire: (filename: string) => void;
   return { watch, fire: (filename) => listener?.('rename', filename), calls, closed: () => closed };
 }
 
-/** Lets the async own-write check run to the end after the timer fires. */
+/**
+ * Own-write checks started and finished. `isOwnSnapshot` does a real `stat` in libuv's thread pool,
+ * which a loaded CI can delay past any fixed number of event-loop turns (QA round 2 of #551): the
+ * tests wait for the checks themselves instead.
+ */
+let empezadas = 0;
+let hechas = 0;
+function contado(isOwn: (file: string) => Promise<boolean>): (file: string) => Promise<boolean> {
+  return async (file) => {
+    empezadas += 1;
+    try {
+      return await isOwn(file);
+    } finally {
+      hechas += 1;
+    }
+  };
+}
+
+/**
+ * Fires the debounce and waits until every own-write check it started has finished, then one more
+ * turn for `onChange`, which runs right after the check that found a foreign change.
+ */
 async function settle(): Promise<void> {
   await vi.advanceTimersByTimeAsync(RELOAD_DEBOUNCE_MS);
-  for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
+  await vi.waitFor(() => expect(hechas).toBe(empezadas));
+  await new Promise((resolve) => setImmediate(resolve));
 }
+
+beforeEach(() => {
+  empezadas = 0;
+  hechas = 0;
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -60,7 +87,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const watcher = watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    const watcher = watchProject({ target: file, singleFile: true, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
     expect(fake.calls[0]).toEqual([dir, { recursive: false, persistent: false }]);
 
     // An agent rewrites it: temporary file, then the rename onto the name.
@@ -87,7 +114,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: file, singleFile: true, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
 
     for (const name of ['v2', 'v3', 'v4']) {
       await writeLilaFile(file, documento(name));
@@ -113,7 +140,7 @@ describe('watchProject on a .lila (#539)', () => {
     watchProject({
       target: file,
       singleFile: true,
-      isOwn: async (path) => { await inFlight; return isOwnSnapshot(path); },
+      isOwn: contado(async (path) => { await inFlight; return isOwnSnapshot(path); }),
       onChange,
       watch: fake.watch,
     });
@@ -121,7 +148,8 @@ describe('watchProject on a .lila (#539)', () => {
     await writeFile(file, encodeLila(documento('v2')));
     await utimes(file, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
     fake.fire('pedido.lila');
-    await settle();
+    await vi.advanceTimersByTimeAsync(RELOAD_DEBOUNCE_MS);
+    expect([empezadas, hechas]).toEqual([1, 0]); // Checking, and held by the save in flight.
     await readLilaFile(file); // What `writeLilaFile` does last: remember the snapshot.
     release();
     await settle();
@@ -135,7 +163,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const watcher = watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    const watcher = watchProject({ target: file, singleFile: true, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
     fake.fire('pedido.lila');
     watcher.close();
     await settle();
@@ -156,7 +184,7 @@ describe('watchProject on a project folder (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: dir, singleFile: false, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: dir, singleFile: false, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
     expect(fake.calls[0]).toEqual([dir, { recursive: true, persistent: false }]);
 
     await writeProjectFolder(dir, documento('v2'));
@@ -198,7 +226,7 @@ describe('watchProject with nested copies and loose diagrams (QA of #551)', () =
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: dir, singleFile: false, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: dir, singleFile: false, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
     await mkdir(join(dir, 'copia-vieja'));
     await writeFile(join(dir, 'copia-vieja', 'model.bpmn'), XML);
     fake.fire(join('copia-vieja', 'model.bpmn'));
@@ -215,7 +243,7 @@ describe('watchProject with nested copies and loose diagrams (QA of #551)', () =
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: file, singleFile: true, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
     expect(fake.calls[0]).toEqual([dir, { recursive: false, persistent: false }]);
 
     // Other programs writing diagrams next to it, or below it, are none of its business.

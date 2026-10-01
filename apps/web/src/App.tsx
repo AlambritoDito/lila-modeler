@@ -1090,9 +1090,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally {
       ioLock.current = false; setIoBusy(false);
-      if (enfocar) modelador.enfocar?.();
+      enfocarTrasRecarga.current = enfocar;
     }
   }
+  /**
+   * The canvas is `inert` while `ioBusy` (QA round 2 of #551): focusing it from `recargar` itself
+   * fails silently, so it is focused once the render that lifts `inert` has been committed.
+   */
+  const enfocarTrasRecarga = useRef(false);
+  useEffect(() => {
+    if (ioBusy || !enfocarTrasRecarga.current) return;
+    enfocarTrasRecarga.current = false;
+    modelador?.enfocar?.();
+  }, [ioBusy, modelador]);
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
