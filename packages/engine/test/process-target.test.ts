@@ -1,58 +1,52 @@
 /**
- * #546 — the simulated process is the one the scenario targets, not the first pool of the file.
+ * #546 — the simulated process is the one the scenarios target, not the first pool of the file,
+ * and every reader of a process (parse, run, compare, validate, exports) picks the same one.
  *
  * `examples/pedido` has two pools: Restaurant (simulated) and Customer (context). Deleting the
  * Restaurant pool in the editor and pasting it back leaves Customer first in the document; the
- * scenario still configures the Restaurant elements, so that is the process that has to run.
+ * scenarios still configure the Restaurant elements, so that is the process that has to run.
  */
-import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { parseBpmn, scenarioElementIds } from '../src/bpmn/parse.js';
+import { parseBpmn } from '../src/bpmn/parse.js';
 import { validateBpmnModel, validateBpmnXml } from '../src/bpmn/validate-report.js';
+import { main } from '../src/cli.js';
 import { validatedModelOf, withRunOverrides } from '../src/cli-shared.js';
 import { simulate } from '../src/index.js';
+import { exportDocument, exportResults } from '../src/project-fs/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario } from '../src/scenario.js';
+import { customerFirst, customerFirstLila } from './customer-first.js';
 
 const PEDIDO = readFileSync(new URL('../../../examples/pedido/model.bpmn', import.meta.url), 'utf8');
 const AS_IS = JSON.parse(
   readFileSync(new URL('../../../examples/pedido/as-is.scenario.json', import.meta.url), 'utf8'),
 ) as ResolvedScenario;
 
-/** The same model with the Customer participant and process first, as a delete + paste leaves it. */
-function customerFirst(xml: string): string {
-  const process = /\s*<bpmn:process id="Process_Cliente"[\s\S]*?<\/bpmn:process>/.exec(xml)![0];
-  const participant = /\s*<bpmn:participant id="Participant_Cliente"[^>]*\/>/.exec(xml)![0];
-  return xml
-    .replace(process, '')
-    .replace(participant, '')
-    .replace(/(\s*<bpmn:participant id="Participant_Restaurante")/, `${participant}$1`)
-    .replace(/(\s*<bpmn:process id="Process_Restaurante")/, `${process}$1`);
-}
-
 const REORDERED = customerFirst(PEDIDO);
 /** A short run: the point is that it is the same run, not a long one. */
 const SHORT = withRunOverrides({ ...AS_IS, run: { ...AS_IS.run, duration: 86_400, warmup: 0 } }, { replications: 2 });
 
-describe('#546: the scenario picks the process', () => {
-  test('the fixture really puts Customer first, and without a scenario the old rule still applies', async () => {
+describe('#546: the scenarios pick the process (parseBpmn)', () => {
+  test('the fixture really puts Customer first, and without scenarios the old rule still applies', async () => {
     expect(REORDERED.indexOf('id="Process_Cliente"')).toBeLessThan(REORDERED.indexOf('id="Process_Restaurante"'));
     const { ir, ignoredProcessIds } = await parseBpmn(REORDERED);
     expect(ir.id).toBe('Process_Cliente');
     expect(ignoredProcessIds).toEqual(['Process_Restaurante']);
   });
 
-  test('with the AS-IS ids, the reordered file gives the same IR as the original', async () => {
+  test('with the AS-IS scenario, the reordered file gives the same IR as the original', async () => {
     const original = await parseBpmn(PEDIDO);
-    const reordered = await parseBpmn(REORDERED, { scenarioIds: scenarioElementIds(AS_IS) });
+    const reordered = await parseBpmn(REORDERED, { scenarios: [AS_IS] });
     expect(reordered.ir.id).toBe('Process_Restaurante');
     expect(reordered.ignoredProcessIds).toEqual(['Process_Cliente']);
     expect(reordered.ir.nodes).toEqual(original.ir.nodes);
     expect(reordered.ir.flows).toEqual(original.ir.flows);
     expect(reordered.ir.source.originalIds).toEqual(original.ir.source.originalIds);
     // The original order is unchanged by the option.
-    const same = await parseBpmn(PEDIDO, { scenarioIds: scenarioElementIds(AS_IS) });
-    expect(same.ir).toEqual(original.ir);
+    expect((await parseBpmn(PEDIDO, { scenarios: [AS_IS] })).ir).toEqual(original.ir);
   });
 
   test('the reordered Sample order runs, and gives the same result as the original', async () => {
@@ -65,28 +59,23 @@ describe('#546: the scenario picks the process', () => {
     expect(simulate(reordered.ir, SHORT, { log: false })).toEqual(simulate(original.ir, SHORT, { log: false }));
   });
 
-  test('a few seeds of the other pool do not take the run away from the process the scenario configures', async () => {
-    // What the editor leaves after deleting Restaurant: the Customer start and task seeded (#420).
-    const seeded = { elements: { ...AS_IS.elements, StartEvent_ClienteInicio: {}, Task_ClienteRecibe: {} } };
-    const { ir } = await parseBpmn(REORDERED, { scenarioIds: scenarioElementIds(seeded) });
-    expect(ir.id).toBe('Process_Restaurante');
+  test('the union of the scenarios decides, by majority: a few seeds of the other pool do not take the run away', async () => {
+    // What the editor leaves after deleting Restaurant: the Customer start and task seeded (#420),
+    // here in a second scenario so the union is what counts.
+    const seeds = { elements: { StartEvent_ClienteInicio: {}, Task_ClienteRecibe: {} } };
+    expect((await parseBpmn(REORDERED, { scenarios: [AS_IS, seeds] })).ir.id).toBe('Process_Restaurante');
+    // Alone, the Customer scenario targets Customer (a `.bpmn` run with just that scenario).
+    expect((await parseBpmn(PEDIDO, { scenarios: [seeds] })).ir.id).toBe('Process_Cliente');
   });
 
-  test('ids the file does not know, or none, keep the document-order rule', async () => {
-    expect((await parseBpmn(REORDERED, { scenarioIds: ['Fantasma'] })).ir.id).toBe('Process_Cliente');
-    expect((await parseBpmn(REORDERED, { scenarioIds: [] })).ir.id).toBe('Process_Cliente');
-  });
-
-  test('scenarioElementIds is the union of the scenarios, ignoring what is not an object', () => {
-    expect(scenarioElementIds({ elements: { A: {}, B: {} } }, { elements: { B: {}, C: {} } }, {}, undefined, { elements: 3 })).toEqual([
-      'A',
-      'B',
-      'C',
-    ]);
+  test('ids the file does not know, none, or what is not an object keep the document-order rule', async () => {
+    expect((await parseBpmn(REORDERED, { scenarios: [{ elements: { Fantasma: {} } }] })).ir.id).toBe('Process_Cliente');
+    expect((await parseBpmn(REORDERED, { scenarios: [] })).ir.id).toBe('Process_Cliente');
+    expect((await parseBpmn(REORDERED, { scenarios: [null, undefined, {}, { elements: 3 }] })).ir.id).toBe('Process_Cliente');
   });
 
   test('validateBpmnXml keeps its documented report: no `elsewhere` in `lila validate --json`', async () => {
-    const report = await validateBpmnXml(REORDERED, { scenarioIds: scenarioElementIds(AS_IS) });
+    const report = await validateBpmnXml(REORDERED, { scenarios: [AS_IS] });
     expect(Object.keys(report).sort()).toEqual(['errors', 'ignoredProcessIds', 'ir', 'warnings']);
     expect(report.ir.id).toBe('Process_Restaurante');
   });
@@ -102,14 +91,14 @@ describe('#546: an ambiguous scenario says which process ran and how to fix it',
   test.each([
     [
       'en',
-      'the id StartEvent_Pedido belongs to the process "Restaurant" (Process_Restaurante), but the simulated process is "Customer" (Process_Cliente). A run simulates the process that holds most of the elements its scenario configures: remove from the scenario the entries of the process you do not want to simulate (elements.StartEvent_Pedido).',
+      `the id StartEvent_Pedido belongs to the process "Restaurant" (Process_Restaurante), but the simulated process is "Customer" (Process_Cliente). The simulated process is the one that holds most of the elements the process's scenarios configure, and on a tie the first one in the file: remove from the scenarios the entries of the process you do not want to simulate (elements.StartEvent_Pedido).`,
     ],
     [
       'es',
-      'el id StartEvent_Pedido pertenece al proceso «Restaurant» (Process_Restaurante), pero el proceso simulado es «Customer» (Process_Cliente). Una corrida simula el proceso que contiene la mayoría de los elementos que configura su escenario: quita del escenario las entradas del proceso que no quieres simular (elements.StartEvent_Pedido).',
+      'el id StartEvent_Pedido pertenece al proceso «Restaurant» (Process_Restaurante), pero el proceso simulado es «Customer» (Process_Cliente). Se simula el proceso que contiene la mayoría de los elementos que configuran los escenarios del proceso, y en un empate el primero del archivo: quita de los escenarios las entradas del proceso que no quieres simular (elements.StartEvent_Pedido).',
     ],
   ] as const)('%s', async (locale, message) => {
-    const model = await validateBpmnModel(REORDERED, { locale, scenarioIds: scenarioElementIds(tie) });
+    const model = await validateBpmnModel(REORDERED, { locale, scenarios: [tie] });
     expect(model.ir.id).toBe('Process_Cliente');
     const errors = scenarioErrors(validateScenario(tie, model.ir, { locale, elsewhere: model.elsewhere }));
     expect(errors).toEqual([
@@ -123,5 +112,43 @@ describe('#546: an ambiguous scenario says which process ran and how to fix it',
       validateScenario({ ...SHORT, elements: { Fantasma: {} } } as ResolvedScenario, model.ir, { elsewhere: model.elsewhere }),
     );
     expect(error?.message).toBe('the id Fantasma does not exist in the model (elements.Fantasma).');
+  });
+});
+
+describe('#546: a Customer-first .lila, through the CLI and the exports', () => {
+  let dir: string;
+  let file: string;
+  let out: string[];
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'lila-546-'));
+    file = join(dir, 're.lila');
+    await customerFirstLila(file, { run: true });
+    out = [];
+    vi.spyOn(console, 'log').mockImplementation((...args) => void out.push(args.join(' ')));
+    vi.spyOn(console, 'error').mockImplementation((...args) => void out.push(args.join(' ')));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('lila run, compare and validate all take Restaurant', async () => {
+    expect(await main(['run', file, 'as-is', '--replications', '1'])).toBe(0);
+    expect(out.join('\n')).toContain('Process Process_Restaurante (Restaurant)');
+    out.length = 0;
+    expect(await main(['compare', file, 'as-is', 'to-be-3-cajeros', '--replications', '1'])).toBe(0);
+    out.length = 0;
+    await main(['validate', file]);
+    expect(out.join('\n')).toContain('Process_Restaurante (Restaurant)');
+  });
+
+  test('exported results name the elements and the document describes Restaurant', async () => {
+    const results = await exportResults({ file, format: 'csv' });
+    const elements = (results.data as Record<string, string>)['elements.csv']!;
+    expect(elements).toMatch(/^StartEvent_Pedido,Order received,start,/m);
+    const doc = await exportDocument({ file, format: 'html', date: '2026-10-01' });
+    const html = typeof doc.data === 'string' ? doc.data : new TextDecoder().decode(doc.data);
+    expect(html).toContain('Order received');
+    expect(html).toContain('Take order');
   });
 });

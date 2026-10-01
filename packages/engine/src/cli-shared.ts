@@ -29,7 +29,7 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { parseBpmn, scenarioElementIds } from './bpmn/parse.js';
+import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
 import type { ValidationResult } from './bpmn/validate.js';
 import type { RunResult } from './core/result.js';
@@ -156,15 +156,28 @@ export interface ValidatedModel {
 }
 
 /**
+ * #546: the scenarios that choose the simulated process (`ParseBpmnOptions.scenarios`): those of
+ * the `.lila` process, as the app counts them, plus the ones about to run. A `.bpmn` has no
+ * document scenarios, so its explicit scenarios decide alone.
+ */
+export function targetScenarios(
+  lila: LilaProcess | undefined,
+  given: readonly TargetingScenario[] = [],
+): TargetingScenario[] {
+  return [...given, ...Object.values(lila?.process.scenarios ?? {})];
+}
+
+/**
  * Parses and validates an already loaded model; `run`, `compare` and the MCP tools start here.
- * `scenarios` are the ones about to run: the process they target is the one simulated (#546).
+ * `scenarios` are the ones about to run; with the process's own (`targetScenarios`) they choose
+ * the process simulated (#546).
  */
 export async function validatedModelOf(
-  source: Pick<ModelSource, 'path' | 'xml'>,
+  source: Pick<ModelSource, 'path' | 'xml' | 'lila'>,
   locale: Locale = 'en',
-  scenarios: ReadonlyArray<{ readonly elements?: unknown }> = [],
+  scenarios: readonly TargetingScenario[] = [],
 ): Promise<ValidatedModel> {
-  const model = await validateBpmnModel(source.xml, { locale, scenarioIds: scenarioElementIds(...scenarios) });
+  const model = await validateBpmnModel(source.xml, { locale, scenarios: targetScenarios(source.lila, scenarios) });
   return {
     path: source.path,
     ir: model.ir,
@@ -179,7 +192,7 @@ export async function loadValidatedModel(
   locale: Locale = 'en',
   options: {
     process?: string | undefined;
-    scenarios?: ReadonlyArray<{ readonly elements?: unknown }> | undefined;
+    scenarios?: readonly TargetingScenario[] | undefined;
   } = {},
 ): Promise<ValidatedModel & { lila?: LilaProcess | undefined }> {
   const source = await loadModelSource(modelFile, { process: options.process, locale });

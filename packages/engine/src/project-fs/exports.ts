@@ -164,7 +164,10 @@ export async function exportDocument(
   const run = selectRun(lila, source, true, locale);
   if (run !== undefined && !isCurrent(lila, run)) throw new Error(C.exportRunStale(run.id, lila.process.slug, lila.file));
   const xml = lila.process.model.xml;
-  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml);
+  // #546: the process the run and the process's scenarios target, the one the app simulates.
+  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml, {
+    scenarios: [run?.inputs.scenario, ...Object.values(lila.process.scenarios)],
+  });
   // A model bpmn-moddle cannot rewrite still gets its document, without the descriptions (as in the app).
   const annotations = await readAnnotations(xml).catch(() => ({}));
   const notes: string[] = [];
@@ -214,7 +217,8 @@ export async function exportResults(
   const locale = source.locale ?? 'en';
   const lila = await openLila(source);
   const run = selectRun(lila, source, false, locale)!;
-  const { ir } = await parseBpmn(run.inputs.xml);
+  // #546: the process that run simulated, chosen as the app chose it.
+  const { ir } = await parseBpmn(run.inputs.xml, { scenarios: [run.inputs.scenario, ...Object.values(lila.process.scenarios)] });
   const scenario = scenarioOfRun(lila, run, locale);
   const result = run.result as RunResult;
   const names = resourceNamesOf(scenario);

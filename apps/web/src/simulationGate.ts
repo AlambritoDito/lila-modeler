@@ -1,5 +1,5 @@
 import type { ProcessIR } from '@lila-modeler/engine';
-import { scenarioElementIds, validateBpmnModel } from '@lila-modeler/engine/bpmn';
+import { validateBpmnModel } from '@lila-modeler/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { getLocale, strings, type Locale } from './i18n';
 
@@ -41,8 +41,9 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   }), { locale });
   if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || '$'}: ${i.message}`).join('\n'));
   const scenario = parsed.data;
-  // #546: the process the scenario targets is the one simulated, wherever its pool is.
-  const model = await validateBpmnModel(xml, { locale, scenarioIds: scenarioElementIds(scenario) });
+  // #546: the process the project's scenarios target is the one simulated, wherever its pool is:
+  // all of them, as the editor's panel and seeding count them, not only the one that runs.
+  const model = await validateBpmnModel(xml, { locale, scenarios: Object.values(scenarios) });
   if (scenario.model === undefined || scenario.run === undefined) throw new Error(S.simulacion.errorFaltaModelORun);
   if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
   const problems = validateScenario(scenario, model.ir, { locale, elsewhere: model.elsewhere });

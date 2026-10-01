@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, readAnnotations, scenarioElementIds, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, validateBpmnModel, type ValidatedBpmnModel } from '@lila-modeler/engine/bpmn';
 import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
@@ -630,6 +630,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
+  /** `elsewhere` of the live reparse: the ids of the file's other processes (#546). */
+  const [otrosProcesos, setOtrosProcesos] = useState<ValidatedBpmnModel['elsewhere']>({});
   /** The scenarios as they are now, for the reparse that does not rerun when they change (#546). */
   const escenariosVivos = useRef(escenarios);
   escenariosVivos.current = escenarios;
@@ -747,7 +749,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `guardar()` ya obtuvo el sí del usuario si había pérdida; aquí no se decide nada.
     const xml = await modelador.exportar({ aceptarPerdida: true });
     if (atRevision !== revisionRef.current) throw new Error(S.app.errorModeloCambio);
-    const parsed = await parseBpmn(xml);
+    // #546: every reader of a process picks it by its scenarios (`ParseBpmnOptions.scenarios`).
+    const parsed = await parseBpmn(xml, { scenarios: Object.values(escenarios) });
     const yo = procesos[activo];
     // A one-process project has no slug on disk yet: the day it grows it takes a free one, never
     // the folder of a process deleted before (QA of #511).
@@ -820,7 +823,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
     if (modelador === null) return false;
     const doc = readProject(raw);
-    const parsed = await parseBpmn(doc.model.xml);
+    const parsed = await parseBpmn(doc.model.xml, { scenarios: Object.values(doc.scenarios) });
     if (expectedToken !== tokenRef.current) throw new Error(S.app.errorProyectoCambio);
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
@@ -856,7 +859,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function cargarProceso(lista: readonly ProcessDocument[], indice: number): Promise<boolean> {
     const destino = lista[indice];
     if (modelador === null || destino === undefined) return false;
-    const parsed = await parseBpmn(destino.model.xml);
+    const parsed = await parseBpmn(destino.model.xml, { scenarios: Object.values(destino.scenarios) });
     cancelarCorrida();
     if (!await modelador.abrir(destino.model.xml)) return false;
     procesoEnLienzo.current = destino.slug;
@@ -1248,7 +1251,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
       // A copy: the model's problems (#455) are appended to it, not to the lint's own list.
-      const problemas = [...problemasEscenario(resuelto, ir, locale), ...problemasModelo];
+      const problemas = [...problemasEscenario(resuelto, ir, locale, otrosProcesos), ...problemasModelo];
       // ponytail (#409): an empty process («New») is not an error yet. `E-SIN-START`/`E-SIN-END`
       // come from the engine's full `validate()`: the live reparse runs it since #455 but keeps only
       // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
@@ -1260,7 +1263,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
     // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
     // the whole lint— would stay in the language it was resolved in.
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
+    [escenarioId, escenarios, ir, otrosProcesos, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -1293,13 +1296,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     let vivo = true;
     const timer = setTimeout(() => {
-      // `validateBpmnXml` is `parseBpmn` plus the engine's `validate()`, and never throws for an
+      // `validateBpmnModel` is `parseBpmn` plus the engine's `validate()`, and never throws for an
       // invalid model: its `ir` is the same one `parseBpmn` returns (#455).
       // #546: the process the scenarios target is the one shown and run, wherever its pool is.
-      const scenarioIds = scenarioElementIds(...Object.values(escenariosVivos.current));
-      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale, scenarioIds })).then((informe) => {
+      const scenarios = Object.values(escenariosVivos.current);
+      void modelador.exportar().then((xml) => validateBpmnModel(xml, { locale, scenarios })).then((informe) => {
         if (!vivo) return;
-        setIr(informe.ir);
+        setIr(informe.ir); setOtrosProcesos(informe.elsewhere);
         // Unsupported elements never enter the IR, so the panel cannot read their name from it:
         // it comes from the canvas (seams QA of #476, E2 × E5).
         const nosop = informe.errors.filter((p) => p.code === 'E-NOSOP');
@@ -1967,7 +1970,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The diagram's XML and its picture, both read from the canvas in this same tick.
       const [xml, svg] = await Promise.all([modelador.exportar(), modelador.exportarSvg({ papel: true })]);
       const [{ ir: modelo, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types }, annotations, png] = await Promise.all([
-        parseBpmn(xml),
+        // #546: the process the run and the scenarios target, the one Run simulates.
+        parseBpmn(xml, { scenarios: [run?.inputs.scenario, ...Object.values(escenarios)] }),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
         aPng(svg).then(async (blob) => new Uint8Array(await blob.arrayBuffer())),
@@ -2209,6 +2213,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onGuardar={() => { void guardar(); }}
       onDuplicar={anadirEscenario}
       ir={ir}
+      otrosProcesos={otrosProcesos}
       problemasExtra={problemasModelo}
       nombresExtra={nombresModelo}
       seleccion={seleccion}

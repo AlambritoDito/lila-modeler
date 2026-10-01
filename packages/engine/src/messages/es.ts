@@ -183,7 +183,7 @@ export const es: Catalog = {
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `el id ${id} no existe en el modelo (${path}).`,
     'E-ELEMENTO-DESCONOCIDO/otro-proceso': (path, id, ownerId, ownerName, simulatedId, simulatedName) => {
       const label = (pid: string, name: string) => (name === '' ? pid : `«${name}» (${pid})`);
-      return `el id ${id} pertenece al proceso ${label(ownerId, ownerName)}, pero el proceso simulado es ${label(simulatedId, simulatedName)}. Una corrida simula el proceso que contiene la mayoría de los elementos que configura su escenario: quita del escenario las entradas del proceso que no quieres simular (${path}).`;
+      return `el id ${id} pertenece al proceso ${label(ownerId, ownerName)}, pero el proceso simulado es ${label(simulatedId, simulatedName)}. Se simula el proceso que contiene la mayoría de los elementos que configuran los escenarios del proceso, y en un empate el primero del archivo: quita de los escenarios las entradas del proceso que no quieres simular (${path}).`;
     },
     'E-PROB-EN-NODO': (path) => `la probabilidad solo se admite en un flujo de secuencia (${path}).`,
     'E-PROB-RANGO': (path, value) => `${value} está fuera de [0, 1] (${path}).`,

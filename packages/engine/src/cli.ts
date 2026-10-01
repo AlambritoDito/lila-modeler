@@ -25,6 +25,7 @@ import {
   resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
+  targetScenarios,
   validatedModelOf,
   withRunOverrides,
   writeJsonAtomic,
@@ -139,9 +140,10 @@ async function validateCommand(
   process?: string | undefined,
 ): Promise<number> {
   const C = messages(locale).cli;
-  const { xml } = await loadModelSource(file, { process, locale });
+  const { xml, lila } = await loadModelSource(file, { process, locale });
   // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
-  const report = await validateBpmnXml(xml, { locale });
+  // #546: in a `.lila`, the process its scenarios target, as `run` simulates it.
+  const report = await validateBpmnXml(xml, { locale, scenarios: targetScenarios(lila) });
   const { ir, ignoredProcessIds } = report;
   const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
 

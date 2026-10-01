@@ -42,7 +42,9 @@ Valen en todo el documento y en todo el código.
   existe en el IR produce error `E-ELEMENTO-DESCONOCIDO` citando el id. Un elemento del IR sin entrada
   en `elements` toma los defaults degradantes (sección 14) y produce aviso solo cuando la ausencia
   cambia la semántica (start sin `interTriggerTimer`). En un archivo con varios procesos se simula
-  el que contiene la mayoría de las claves de `elements`, esté donde esté su pool en el documento;
+  el que contiene la mayoría de las claves de `elements` de los escenarios del proceso (su unión:
+  la app, `run`, `compare`, `validate` y las exportaciones de un `.lila` cuentan todos los
+  escenarios del proceso; una corrida de un `.bpmn`, los escenarios dados), esté donde esté su pool;
   sin claves, o con empate, el primer proceso ejecutable y no vacío, y si no, el primero no vacío.
   Una clave de otro proceso sigue siendo `E-ELEMENTO-DESCONOCIDO`, y su mensaje nombra ese proceso
   y el simulado (#546). *(prueba: LILA-013, LILA-042, #546)*

@@ -179,7 +179,7 @@ export const en: Catalog = {
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `the id ${id} does not exist in the model (${path}).`,
     'E-ELEMENTO-DESCONOCIDO/otro-proceso': (path, id, ownerId, ownerName, simulatedId, simulatedName) => {
       const label = (pid: string, name: string) => (name === '' ? pid : `"${name}" (${pid})`);
-      return `the id ${id} belongs to the process ${label(ownerId, ownerName)}, but the simulated process is ${label(simulatedId, simulatedName)}. A run simulates the process that holds most of the elements its scenario configures: remove from the scenario the entries of the process you do not want to simulate (${path}).`;
+      return `the id ${id} belongs to the process ${label(ownerId, ownerName)}, but the simulated process is ${label(simulatedId, simulatedName)}. The simulated process is the one that holds most of the elements the process's scenarios configure, and on a tie the first one in the file: remove from the scenarios the entries of the process you do not want to simulate (${path}).`;
     },
     'E-PROB-EN-NODO': (path) => `a probability is only accepted on a sequence flow (${path}).`,
     'E-PROB-RANGO': (path, value) => `${value} is outside [0, 1] (${path}).`,

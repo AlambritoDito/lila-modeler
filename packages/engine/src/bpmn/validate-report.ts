@@ -5,15 +5,15 @@
  */
 import type { ProcessIR } from '../core/ir.js';
 import type { Locale } from '../messages/index.js';
-import { parseBpmn, type ParseResult } from './parse.js';
+import { parseBpmn, type ParseBpmnOptions, type ParseResult } from './parse.js';
 import { validate, type ValidationResult } from './validate.js';
 
 /** Opciones de `validateBpmnXml`. */
 export interface ValidateBpmnXmlOptions {
   /** Idioma de los `message` del reporte (LILA-211). */
   locale?: Locale | undefined;
-  /** #546: the ids the scenario to run configures; see `ParseBpmnOptions.scenarioIds`. */
-  scenarioIds?: Iterable<string> | undefined;
+  /** #546: the scenarios of the process document; see `ParseBpmnOptions.scenarios`. */
+  scenarios?: ParseBpmnOptions['scenarios'];
 }
 
 export interface ValidateBpmnReport {
@@ -29,8 +29,8 @@ export interface ValidatedBpmnModel extends ValidateBpmnReport {
 }
 
 /**
- * The one parse-and-validate step of every run (CLI, MCP, web and desktop): `scenarioIds` picks
- * the process the scenario targets, and `elsewhere` lets `validateScenario` say where an entry of
+ * The one parse-and-validate step of every run (CLI, MCP, web and desktop): `scenarios` picks
+ * the process they target, and `elsewhere` lets `validateScenario` say where an entry of
  * another process is. Never throws for an invalid model.
  */
 export async function validateBpmnModel(
@@ -38,7 +38,7 @@ export async function validateBpmnModel(
   options: ValidateBpmnXmlOptions = {},
 ): Promise<ValidatedBpmnModel> {
   const { ir, ignoredProcessIds, unsupported, messageFlowCount, conditionFlowIds, elsewhere } =
-    await parseBpmn(xml, { scenarioIds: options.scenarioIds });
+    await parseBpmn(xml, { scenarios: options.scenarios });
   const validation = validate(ir, {
     unsupported,
     messageFlowCount,

@@ -49,7 +49,7 @@ function ResultsDemo() {
     let vivo = true;
     const scenario = loadScenario();
 
-    void parseBpmn(modelXml)
+    void parseBpmn(modelXml, { scenarios: [scenario] })
       .then(({ ir }) => {
         if (!vivo) return undefined;
         setStatus({ kind: 'running', progress: null });

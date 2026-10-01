@@ -610,14 +610,19 @@ function flattenBox(box: SubprocessBox, c: Collector): void {
   }
 }
 
+/** A scenario as far as choosing the process goes: only its `elements` keys count. */
+export type TargetingScenario = { readonly elements?: unknown } | null | undefined;
+
 /** Options of `parseBpmn`. */
 export interface ParseBpmnOptions {
   /**
-   * #546: the element ids the scenario to run configures (`scenarioElementIds`). The
-   * `bpmn:process` that holds most of them is simulated instead of the first non-empty one, so
-   * moving a pool in the document does not change what runs; a tie keeps the first.
+   * #546: the scenarios of the process document (all of them: the app's panel, its Run, `compare`
+   * and the exports must agree on one process). The `bpmn:process` that holds most of the union of
+   * their `elements` keys is simulated, wherever its pool is in the document; with no keys, none
+   * the file knows, or a tie, the first executable non-empty process, else the first non-empty one.
+   * A single `.bpmn` run with an explicit scenario passes just that scenario.
    */
-  scenarioIds?: Iterable<string> | undefined;
+  scenarios?: Iterable<TargetingScenario> | undefined;
 }
 
 /** An element of a process that is not the simulated one: where it is (#546). */
@@ -631,7 +636,7 @@ export interface ParseResult {
   /**
    * Ids de los demás `bpmn:process` del archivo, que no se parsearon. Multiproceso: el IR es
    * de **un** proceso (un solo grafo de tokens, `LILA_MODELER_ESTRUCTURA.md` § 6), así que se
-   * toma el proceso al que apunta el escenario (`ParseBpmnOptions.scenarioIds`, #546); si no, el
+   * toma el proceso al que apuntan los escenarios (`ParseBpmnOptions.scenarios`, #546); si no, el
    * primer `bpmn:process` ejecutable y no vacío; si ninguno es ejecutable, el primero no vacío. Los demás se listan aquí para que la CLI avise, no se simulan.
    */
   ignoredProcessIds: string[];
@@ -738,20 +743,18 @@ function elementIdsOf(el: ModdleElement): Set<string> {
 }
 
 /**
- * #546: the process the scenario targets: the one that holds the most of its ids, wherever its
- * pool is in the document. Usually it holds all of them; a majority, not unanimity, because the
- * editor seeds the start and task of the pool left on the canvas when the other one is deleted
- * (#420), and pasting the deleted pool back must still run it. With no ids, none the file knows,
- * or a tie, `undefined`: the caller keeps the document-order rule, and the entries of the other
- * process come out as E-ELEMENTO-DESCONOCIDO naming where they are (`elsewhere`).
+ * #546: the process the scenarios target: the one that holds the most of their ids, wherever its
+ * pool is in the document. A majority, not unanimity, because the editor seeds the start and task
+ * of the pool left on the canvas when the other one is deleted (#420), and pasting the deleted pool
+ * back must still run it. With no ids, none the file knows, or a tie, `undefined`: the caller
+ * keeps the document-order rule, and the entries of the other process come out as
+ * E-ELEMENTO-DESCONOCIDO naming where they are (`elsewhere`).
  */
 function targetedProcess(
   processes: readonly ModdleElement[],
   idsOf: ReadonlyMap<ModdleElement, ReadonlySet<string>>,
-  scenarioIds: Iterable<string> | undefined,
+  wanted: readonly string[],
 ): ModdleElement | undefined {
-  if (scenarioIds === undefined) return undefined;
-  const wanted = [...new Set(scenarioIds)];
   const counts = processes
     .map((el) => ({ el, n: wanted.filter((id) => idsOf.get(el)?.has(id) === true).length }))
     .sort((a, b) => b.n - a.n);
@@ -759,16 +762,14 @@ function targetedProcess(
   return first !== undefined && first.n > 0 && first.n > (second?.n ?? 0) ? first.el : undefined;
 }
 
-/**
- * The ids a set of scenarios configures (their `elements` keys), the `scenarioIds` of
- * `parseBpmn`. Several scenarios (`compare`) give their union: they share one model.
- */
-export function scenarioElementIds(
-  ...scenarios: ReadonlyArray<{ readonly elements?: unknown } | null | undefined>
-): string[] {
-  const keys = (elements: unknown): string[] =>
-    elements !== null && typeof elements === 'object' ? Object.keys(elements) : [];
-  return [...new Set(scenarios.flatMap((scenario) => keys(scenario?.elements)))];
+/** The union of the `elements` keys of `scenarios`: what `targetedProcess` counts. */
+function scenarioElementIds(scenarios: Iterable<TargetingScenario>): string[] {
+  const ids = new Set<string>();
+  for (const scenario of scenarios) {
+    const elements = scenario?.elements;
+    if (elements !== null && typeof elements === 'object') for (const id of Object.keys(elements)) ids.add(id);
+  }
+  return [...ids];
 }
 
 /**
@@ -968,7 +969,7 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
   const processes = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
   const idsOf = new Map(processes.map((el) => [el, elementIdsOf(el)]));
   const main =
-    targetedProcess(processes, idsOf, options.scenarioIds) ??
+    targetedProcess(processes, idsOf, scenarioElementIds(options.scenarios ?? [])) ??
     processes.find((el) => el.isExecutable === true && isNonEmptyProcess(el)) ??
     processes.find(isNonEmptyProcess) ??
     processes[0];

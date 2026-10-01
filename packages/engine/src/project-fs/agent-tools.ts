@@ -319,7 +319,10 @@ export async function lilaRaciMatrix(target: LilaTarget): Promise<LilaRaciMatrix
   const locale = target.locale ?? 'en';
   const lila = await openLilaProcess(target.file, { process: target.process, locale });
   const xml = lila.process.model.xml;
-  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml);
+  // #546: the process its scenarios target, the one the process document describes.
+  const { ir, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types } = await parseBpmn(xml, {
+    scenarios: Object.values(lila.process.scenarios),
+  });
   const { annotations } = await readElements(xml, locale);
   const matrix = raciMatrix({
     ir, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: '', date: '', locale,
@@ -401,7 +404,7 @@ async function openScenario(target: LilaTarget & { readonly scenario: string }):
   const delta = lila.process.scenarios[entry] as Record<string, unknown>;
   const resolved = resolveExtends(path, read);
   const parent = typeof delta['extends'] === 'string' ? resolveExtends(resolveScenarioPath(path, delta['extends']), read) : null;
-  const { ir } = await parseBpmn(lila.process.model.xml);
+  const { ir } = await parseBpmn(lila.process.model.xml, { scenarios: Object.values(lila.process.scenarios) });
   return { lila, entry, delta, resolved, parent, ir };
 }
 

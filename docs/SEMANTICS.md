@@ -43,7 +43,9 @@ Hold throughout the document and throughout the code.
   element with no entry in `elements` takes the degrading defaults (section 14) and produces a
   warning only when the absence changes the semantics (a start with no `interTriggerTimer`).
   In a file with several processes, the one simulated is the process that holds most of the
-  `elements` keys, wherever its pool is in the document; with no keys, or a tie, the first
+  `elements` keys of the process's scenarios (their union: the app, `run`, `compare`, `validate`
+  and the exports of a `.lila` all count every scenario of the process; a `.bpmn` run counts the
+  scenarios given), wherever its pool is in the document; with no keys, or a tie, the first
   executable non-empty process, else the first non-empty one. A key of another process is still
   `E-ELEMENTO-DESCONOCIDO`, and its message names that process and the simulated one (#546).
   *(test: LILA-013, LILA-042, #546)*
