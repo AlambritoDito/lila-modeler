@@ -136,6 +136,12 @@ export const es: Strings = {
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
     acercaBloqueada: 'Se bloqueó la ventana Acerca de; permite ventanas emergentes para este sitio.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
+    /** Ventana de Resultados desacoplable (#395): mismo interruptor y sustituto que el escenario. */
+    resultadosAcoplados: 'Resultados acoplados ↗',
+    resultadosDesacoplados: 'Resultados en ventana aparte',
+    resultadosEnVentana: 'Resultados en otra ventana ↗',
+    resultadosBloqueada: 'El navegador bloqueó la ventana de Resultados. Permite ventanas emergentes para este sitio para desacoplarla.',
+    tituloVentanaResultados: 'Resultados — Lila Modeler',
 
     /** Controles de zoom del lienzo. */
     acercar: 'Acercar',

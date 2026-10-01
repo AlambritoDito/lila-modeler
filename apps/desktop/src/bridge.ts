@@ -221,6 +221,8 @@ export interface Ajustes {
    * `sessionState.ts` and its `node:` imports in.
    */
   readonly ventanaEscenario?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  /** Same, for the detached Results window (#395). */
+  readonly ventanaResultados?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 }
 
 /** Visibility of the four hideable regions of one mode (#412). */

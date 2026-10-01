@@ -2923,6 +2923,77 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
   }
 });
 
+it('detaches Results to its own window that follows the current run, and docks it back (#395)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const zona = (): HTMLElement => container.querySelector('section.zona-resultados')!;
+  const acoplarEnHija = async (): Promise<void> => {
+    const boton = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    expect(boton).toBeDefined();
+    await act(async () => {
+      boton!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+  };
+  try {
+    // Not in Simulate: the toggle only shows in Results.
+    expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)).toBeNull();
+    await click(T.app.ejecutar);
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', expect.stringMatching(/popup/));
+    expect(hijo.document.title).toBe(T.app.tituloVentanaResultados);
+    expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
+    expect(zona().textContent).not.toContain('Resultado actual');
+    expect(zona().textContent).toContain(T.app.resultadosEnVentana);
+    expect(porEtiqueta(T.app.resultadosDesacoplados).getAttribute('aria-pressed')).toBe('true');
+
+    // A new run lands in the window.
+    mocks.worker.mockResolvedValueOnce({ result: { warnings: ['W-NUEVA'], bottlenecks: [] }, logSample: [] });
+    await click(T.app.ejecutar);
+    expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA');
+
+    // «Dock» in the stand-in brings it back and remembers where the window was.
+    await click(T.app.acoplar);
+    expect(cerrar).toHaveBeenCalled();
+    expect(zona().textContent).toContain('Resultado actual');
+    expect(zona().textContent).not.toContain(T.app.resultadosEnVentana);
+    expect(JSON.parse(localStorage.getItem('lila.ventanaResultados')!)).toMatchObject({ width: hijo.innerWidth, height: hijo.innerHeight });
+
+    // The window's own «Dock» button, and closing the window, dock it too.
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    await acoplarEnHija();
+    expect(zona().textContent).toContain('Resultado actual');
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(zona().textContent).toContain(T.app.resultadosEnVentana);
+    await act(async () => { hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).Event('pagehide')); });
+    expect(zona().textContent).toContain('Resultado actual');
+    expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)!.getAttribute('aria-pressed')).toBe('false');
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('reopens the Results window where it was last left (#395)', async () => {
+  localStorage.setItem('lila.ventanaResultados', JSON.stringify({ x: 12, y: 34, width: 640, height: 480 }));
+  await act(async () => { root.unmount(); });
+  root = createRoot(container);
+  await act(async () => { root.render(<App store={session} />); });
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    await click(T.app.ejecutar);
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', 'popup,width=640,height=480,left=12,top=34');
+    // Blocked: it stays docked and says why.
+    expect(container.textContent).toContain(T.app.resultadosBloqueada);
+    expect(container.querySelector('section.zona-resultados')!.textContent).toContain('Resultado actual');
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
 it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
