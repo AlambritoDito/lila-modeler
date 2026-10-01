@@ -466,7 +466,7 @@ describe('R16 — `capacity` por intervalos (LILA-164)', () => {
     expect(error?.message).toMatch(/exceeds the capacity 3/);
   });
 
-  test('E-REC-CANTIDAD names the resource by its name, and by its id when it has none (#537)', () => {
+  test('E-REC-CANTIDAD names the resource by its name and id, and by its id alone when it has no name (#537)', () => {
     const mensaje = (name?: string) =>
       scenarioErrors(
         validateScenario(
@@ -478,7 +478,7 @@ describe('R16 — `capacity` por intervalos (LILA-164)', () => {
           pedidoIrWithTask('Task_R'),
         ),
       ).find((e) => e.code === 'E-REC-CANTIDAD')?.message;
-    expect(mensaje('Asesor')).toMatch(/of Asesor \(elements\.Task_R\.resources\[0\]\.quantity\)/);
+    expect(mensaje('Asesor')).toMatch(/of Asesor \(asesor\) \(elements\.Task_R\.resources\[0\]\.quantity\)/);
     expect(mensaje()).toMatch(/of asesor \(/);
   });
 });
