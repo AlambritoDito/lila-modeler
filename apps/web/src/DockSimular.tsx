@@ -247,12 +247,14 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
   const S = useStrings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const { filas, total } = filasRapidas(ir, result, scenario, log);
+  // Without a usable sample there is no p95 column at all; the note says why (QA of #394).
+  const conP95 = p95Fiable(log);
   const celdas = (f: FilaRapida): ReactNode => (
     <>
       {/* Whole cases: a mean over replications (1485.23…) reads as a count (QA of #394). */}
       <td style={numero()} title={formatNumber(f.casos)}>{formatNumber(Math.round(f.casos))}</td>
       <td style={numero()}>{guion(f.esperaMedia, (v) => formatDuration(v, unit))}</td>
-      <td style={numero()}>{guion(f.esperaP95, (v) => formatDuration(v, unit))}</td>
+      {conP95 && <td style={numero()}>{guion(f.esperaP95, (v) => formatDuration(v, unit))}</td>}
       <td style={numero()}>{guion(f.utilizacion, (v) => formatNumber(v * 100))}</td>
       <td style={numero()}>{formatNumber(f.costo)}</td>
     </>
@@ -265,7 +267,7 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
             <th scope="col" style={th()}>{S.dock.columnas.actividad}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.casos}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaMedia(unit)}</th>
-            <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaP95(unit)}</th>
+            {conP95 && <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaP95(unit)}</th>}
             <th scope="col" style={{ ...th(), textAlign: 'right' }} title={S.dock.columnas.utilizacionTitulo}>{S.dock.columnas.utilizacion}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.costo}</th>
           </tr>
@@ -278,8 +280,7 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
         </tfoot>
       </table>
       <p className="dock-nota">
-        {log === undefined ? S.dock.notaSinLog : S.dock.notaPercentiles(log.rows.length)}
-        {log?.truncated === true && <> <strong>{S.dock.muestraParcial(log.rows.length)}</strong></>}
+        {log === undefined ? S.dock.notaSinLog : log.truncated ? S.dock.muestraParcial(log.rows.length) : S.dock.notaPercentiles(log.rows.length)}
       </p>
       <div className="graficas-fila">
         <GraficaDeInstancias ir={ir} result={result} scenario={scenario} />

@@ -1276,10 +1276,10 @@ export const en = {
     /** Under the quick results table (QA of #394): the two wait columns cover different populations. */
     notaPercentiles: (filas: number): string =>
       `Mean: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
-    muestraParcial: (filas: number): string => `Partial sample: the log stopped at ${filas} rows, so there is no p95 (it would only cover the first cases).`,
+    muestraParcial: (filas: number): string => `The wait is the mean over every replication. There is no p95: the run’s log sample stopped at ${filas} rows and would only cover its first cases.`,
     /** «Warnings» grouped by code: the disclosure with the other occurrences. */
     ocurrencias: (n: number): string => `${n} occurrences`,
-    notaSinLog: 'This run has no event log in memory, so the wait p95 is not available: run it again to see it.',
+    notaSinLog: 'The wait is the mean over every replication. There is no p95: this run has no event log in memory (run it again to see it).',
     sinLog: 'This run has no event log in memory (it was reopened from a file): run it again to see it.',
     logTruncado: (n: number): string => `The log sample stopped at ${n} rows: later events are not in it.`,
     logMostrando: (mostradas: number, total: number): string => `Showing the first ${mostradas} of ${total} rows.`,

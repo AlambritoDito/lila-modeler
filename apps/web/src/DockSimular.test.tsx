@@ -103,11 +103,14 @@ describe('quick results (#394)', () => {
     expect(costo.textContent).toBe(`${formatNumber(Math.round(result.process.totalCost * 100) / 100)} ${scenario.run.currency}`);
   });
 
-  test('a truncated log says so under the table and gives no p95, the quick view\'s rule', async () => {
+  test('a truncated log hides the p95 column and the note says why, the quick view\'s rule', async () => {
     await montar({ log: { rows: log.rows, truncated: true } });
     expect(container.querySelector('.dock-nota')!.textContent).toContain(S.dock.muestraParcial(log.rows.length));
-    const p95 = [...container.querySelectorAll('table.dock-rapidos tbody tr')].map((tr) => tr.querySelectorAll('td')[2]!.textContent);
-    expect(p95.every((t) => t === '—')).toBe(true);
+    // No p95 column at all, header and cells (total row included).
+    const tabla = container.querySelector('table.dock-rapidos')!;
+    expect([...tabla.querySelectorAll('thead th')].map((t) => t.textContent)).not.toContain(S.dock.columnas.esperaP95(scenario.run.baseTimeUnit as BaseTimeUnit));
+    expect(tabla.querySelectorAll('thead th')).toHaveLength(5);
+    expect(tabla.querySelectorAll('tfoot td')).toHaveLength(4);
     expect(filasRapidas(ir, result, scenario, { rows: log.rows, truncated: true }).filas.every((f) => f.esperaP95 === null)).toBe(true);
   });
 

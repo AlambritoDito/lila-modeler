@@ -52,7 +52,7 @@ block: its time distribution and resource in the active scenario, and its wait i
 *no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Simulate
 dock and the Results «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
 when that run's event-log sample is complete; a longer run (more than 10,000 log rows in its first
-replication) shows the **mean** wait over every replication instead, and says so. Its **Edit in
+replication) shows the **mean** resource wait over every replication instead, and says so. Its **Edit in
 Parameters** / **Edit in Resources** links open that step in Simulate.
 
 ## Screen by screen

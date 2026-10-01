@@ -1229,9 +1229,9 @@ export const es: Strings = {
     total: 'Total',
     notaPercentiles: (filas: number): string =>
       `Media: todas las réplicas. p95: réplica 1 de la muestra del log (${filas} filas), casos iniciados tras el calentamiento.`,
-    muestraParcial: (filas: number): string => `Muestra parcial: el log se detuvo en ${filas} filas, así que no hay p95 (solo cubriría los primeros casos).`,
+    muestraParcial: (filas: number): string => `La espera es la media de todas las réplicas. No hay p95: la muestra del log de la corrida se detuvo en ${filas} filas y solo cubriría sus primeros casos.`,
     ocurrencias: (n: number): string => `${n} ocurrencias`,
-    notaSinLog: 'Esta corrida no tiene log en memoria, así que no hay p95 de espera: córrela otra vez para verlo.',
+    notaSinLog: 'La espera es la media de todas las réplicas. No hay p95: esta corrida no tiene log en memoria (córrela otra vez para verlo).',
     sinLog: 'Esta corrida no tiene log en memoria (se reabrió de un archivo): córrela otra vez para verlo.',
     logTruncado: (n: number): string => `La muestra del log se detuvo en ${n} filas: los eventos posteriores no están.`,
     logMostrando: (mostradas: number, total: number): string => `Se muestran las primeras ${mostradas} de ${total} filas.`,
