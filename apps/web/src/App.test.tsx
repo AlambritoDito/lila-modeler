@@ -3621,6 +3621,9 @@ it('the canvas group aligns and distributes when bpmn-js would move something; k
 const divisorDock = () => container.querySelector<HTMLElement>('.divisor-dock[role="separator"]')!;
 
 it('a run from Simulate keeps Simulate and reopens the dock on Quick results; Results and Compare stay put (#394)', async () => {
+  // The startup reparse (150 ms) bumps the revision and would make a run stale mid-test: wait it
+  // out first, like «valida antes del Worker…» (#494).
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   // Hide the dock and leave it on another tab: the run brings both back.
   await act(async () => mocks.dock!.onPestana('log'));
   expect(await pulsar(document.body, mod('j'))).toBe(true);
@@ -3634,7 +3637,7 @@ it('a run from Simulate keeps Simulate and reopens the dock on Quick results; Re
   await click(T.app.modos.resultados);
   await click(T.app.ejecutar);
   expect(modoActivo()).toBe(T.app.modos.resultados);
-  expect(container.textContent).toContain('Resultado actual');
+  await vi.waitFor(() => expect(container.textContent).toContain('Resultado actual'));
 });
 
 it('picking a bottleneck in the dock selects and centres it on the canvas (#394)', async () => {
