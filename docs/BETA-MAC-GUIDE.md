@@ -23,11 +23,11 @@ something is not yet wired up, this is stated explicitly under "Limitations of t
 ## Where the installer is and how to open it unsigned
 
 The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
-named `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` for the current release (hyphens, no spaces, matching
+named `Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg` for the current release (hyphens, no spaces, matching
 the `SHA256SUMS` file's entry). Download it and `SHA256SUMS` from
-[the `v1.0.0-beta.16` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
+[the `v1.0.0-beta.17` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17)
 — not `/releases/latest`, since GitHub excludes prereleases from that link. The release also attaches
-the Windows installer (`Lila-Modeler-1.0.0-beta.16-win-x64.exe`), which is unsigned and untested on a
+the Windows installer (`Lila-Modeler-1.0.0-beta.17-win-x64.exe`), which is unsigned and untested on a
 real Windows machine: see the [Windows tester guide](WINDOWS-TESTER-GUIDE.md). There is no Linux
 installer on the release (CI builds an AppImage, untested — see "Limitations" below). The `.dmg` is
 not distributed inside the repository (the `apps/desktop/release/` folder is in `.gitignore`): you
@@ -328,7 +328,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.16, tag `v1.0.0-beta.16`; the macOS verification notes below were recorded for
+*(as of 1.0.0-beta.17, tag `v1.0.0-beta.17`; the macOS verification notes below were recorded for
 Beta 1. Check whether any of these has already been resolved before trusting this list blindly at a
 later date)*
 
@@ -370,10 +370,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.16` for Beta 16):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.17` for Beta 17):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`

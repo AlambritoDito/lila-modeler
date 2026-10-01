@@ -769,7 +769,7 @@ export function ResultsView({ ir, scenario, result, onAnimar, sinLog = false, lo
           {(result.warnings.length > 0 || todoEnCalentamiento) && (
             <ul style={{ color: 'var(--status-warning)', margin: '8px 0 0', paddingLeft: 20 }}>
               {todoEnCalentamiento && <li>{S.resultados.todoEnCalentamiento}</li>}
-              {/* One line per code (#394): the engine repeats a cause once per replication. */}
+              {/* One line per message, numbers normalised (#394): the engine repeats a cause once per replication. */}
               {agruparAvisos(result.warnings.map((mensaje) => ({ mensaje, severidad: 'warning' as const }))).map((grupo) => (
                 <AvisoAgrupado key={grupo.clave} grupo={grupo} />
               ))}
