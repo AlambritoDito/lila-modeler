@@ -981,7 +981,8 @@ export function validateScenario(
             `elements.${id}.resources[${i}].quantity`,
             use.quantity,
             capacity,
-            use.ref,
+            // The name the user gave the resource, not its id (#537); the path keeps the id.
+            pool?.name ?? use.ref,
           ),
         });
       }
