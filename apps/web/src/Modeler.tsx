@@ -53,7 +53,7 @@ import { rotularMinimapa } from './minimapa';
 // Los colores del diagrama durante «Validar rutas» (#264). Van en `TokenSim.tsx` con el resto de
 // lo que sabe de ese módulo; aquí solo se registran detrás de él para sustituir dos de sus
 // servicios (ver `moduloColoresDelTema`).
-import { moduloColoresDelTema } from './TokenSim';
+import { moduloColoresDelTema, moduloSinTeclaT } from './TokenSim';
 // bpmn-js's context pad and replace menu in the app's language (#456).
 import { moduloTraduccion } from './bpmnTranslate';
 // Colours per element (#452): the command, the context pad entry and the Bizagi import hook.
@@ -300,7 +300,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloTraduccion, moduloColores, moduloLote],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },

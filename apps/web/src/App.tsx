@@ -476,6 +476,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const ioLock = useRef(false);
+  // A «still running» notice (#533) is only true while the lock is held: it goes once it is released (#537).
+  useEffect(() => {
+    if (!ioBusy) setIoError((e) => (e === S.app.exportacionOcupada || e === S.app.guardadoOcupado ? null : e));
+  }, [ioBusy]);
   /**
    * Slug of the process on the canvas (#522), set the moment `modelador.abrir` swaps it — before
    * the render that updates `procesos`/`activo`. A handler from an older render sees them differ.
@@ -2086,6 +2090,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** Light or dark native controls (design 2d); the detached window copies it like the theme. */
   const esquema = temaClaro(tema) ? 'claro' : 'oscuro';
+  const rotuloArchivo = procesos.length > 1 ? procesos[activo]?.name ?? archivo : archivo;
 
   return (
     <div
@@ -2148,8 +2153,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="separador" aria-hidden="true" />
           <div>
             <div className="proyecto">{projectName}</div>
-            <div className={dirty ? 'archivo sucio' : 'archivo'} title={`${archivo} · ${dirty ? S.app.sinGuardar : S.app.guardado}`}>
-              {archivo}<span className="archivo-estado"> · {dirty ? S.app.sinGuardar : S.app.guardado}</span>
+            {/* Several processes share the file name `model.bpmn`: the bar names the process on the canvas (#537). */}
+            <div className={dirty ? 'archivo sucio' : 'archivo'} title={`${rotuloArchivo} · ${dirty ? S.app.sinGuardar : S.app.guardado}`}>
+              {rotuloArchivo}<span className="archivo-estado"> · {dirty ? S.app.sinGuardar : S.app.guardado}</span>
             </div>
           </div>
         </div>

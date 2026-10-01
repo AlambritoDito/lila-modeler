@@ -1396,6 +1396,16 @@ it('«+» crea un segundo proceso en el mismo proyecto y cada pestaña trae su d
   expect(decodeLila(encodeLila(guardado))).toEqual(guardado);
 });
 
+it('with several processes the top bar names the process on the canvas, not model.bpmn (#537)', async () => {
+  lienzoQueRecuerda();
+  const rotulo = () => container.querySelector('header.barra .archivo')!.firstChild!.textContent;
+  expect(rotulo()).toBe('model.bpmn');
+  await nuevoProcesoConNombre('Facturación');
+  expect(rotulo()).toBe('Facturación');
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(rotulo()).toBe(T.app.proyectoDemo);
+});
+
 it('un proceso se renombra y se borra con confirmación; el último no se puede borrar', async () => {
   const lienzo = lienzoQueRecuerda();
   const primero = lienzo.xml();
@@ -1469,6 +1479,8 @@ it('a second process document export while one is running is refused with a noti
   await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalled());
   await act(async () => {});
   expect(mocks.descargar.mock.calls.map((c) => c[1])).toEqual([`${T.app.proyectoDemo}.docx`]);
+  // The notice goes with the export it was about, not with the next action (#537).
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
   // Once it is done, the next export goes through and the notice goes away.
   await act(async () => ejecutarArchivo(T.app.exportarHtml));
   await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledTimes(2));

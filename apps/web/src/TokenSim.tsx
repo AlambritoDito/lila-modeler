@@ -221,3 +221,32 @@ export const moduloColoresDelTema: Record<string, ['type', unknown]> = {
   neutralElementColors: ['type', ColoresNeutrosDelTema],
   simulationStyles: ['type', EstilosDelTema],
 };
+
+/* ---------- the library's T key (#506) ---------- */
+
+/** The bit of diagram-js's `keyboard` this needs. */
+interface Teclado {
+  addListener(prioridad: number, escuchar: (evento: { keyEvent: KeyboardEvent }) => boolean | undefined): void;
+}
+
+/**
+ * `bpmn-js-token-simulation`'s `KeyboardBindings` toggles the simulation on a `T` typed on the
+ * focused canvas, in every mode (#506): in Model the palette hid and the canvas locked. Lila turns
+ * the animation on and off only through «Validate paths» (`toggleMode`, see `TokenSim` above), so
+ * the key is swallowed one priority above the library's (10000); its L/Space/R keys, which act
+ * only while the animation is on, still work. A T with ⌘/Ctrl/Alt never gets here (`despachar` in
+ * `App.tsx`, #492).
+ */
+export class SinTeclaT {
+  static $inject = ['keyboard'];
+
+  constructor(teclado: Teclado) {
+    teclado.addListener(10001, ({ keyEvent }) => (keyEvent.key === 't' || keyEvent.key === 'T' ? true : undefined));
+  }
+}
+
+/** Registered after `bpmn-js-token-simulation` in `Modeler.tsx`. */
+export const moduloSinTeclaT = {
+  __init__: ['sinTeclaT'],
+  sinTeclaT: ['type', SinTeclaT] as ['type', unknown],
+};
