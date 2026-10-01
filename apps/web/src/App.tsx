@@ -838,7 +838,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
     // #420: the first IR of an opened project is a baseline, not a list of new nodes to seed.
-    nodosVistos.current = null; sembrados.current.clear();
+    nodosVistos.current = null; conocidos.current.clear(); sembrados.current.clear();
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir); setModo('modelar'); setBienvenida(false);
     setSavedToken(saved ? documentToken(doc) : '');
     return true;
@@ -861,7 +861,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const scenarios = Object.keys(destino.scenarios).length === 0 ? defaultScenarios(parsed.ir) : destino.scenarios;
     setEscenarios(scenarios); setScenarioRevisions({ ...destino.scenarioRevisions }); setRuns([...destino.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
-    nodosVistos.current = null; sembrados.current.clear();
+    nodosVistos.current = null; conocidos.current.clear(); sembrados.current.clear();
     setEscenarioId(first); setBaseId(first); setSeleccion(null); setCorrida(null); setIr(parsed.ir);
     // Back to one process the project is version 1 again (`snapshot` writes no list), but the
     // entry is kept so the process keeps its name if a second one comes back (QA of #511, nit 9).
@@ -1237,22 +1237,29 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * against the previous IR, only entries that do not exist, and only the first start with
    * arrivals (`triggerCount` or `interTriggerTimer`). A seeded node that goes away (delete, ⌘Z) takes its untouched seed with it: an entry
    * for an id that is not in the model is E-ELEMENTO-DESCONOCIDO and would block Run.
+   * #534: a node that comes back (⌘Z of a delete, a pool's process simulated again) is not new: it
+   * gets back the seed it took away, and one that never had a seed gets none.
    * ponytail: «untouched» is a JSON.stringify comparison with the seed and the seeds are tracked per
    * id, not per scenario; an edit reverted by hand in another key order counts as edited. Move to a
    * per-scenario record with a structural equal if that ever matters.
    */
   const nodosVistos = useRef<Set<string> | null>(null);
   const sembrados = useRef(new Map<string, Record<string, unknown>>());
+  /** Every node id seen since the project was opened, the baseline included. */
+  const conocidos = useRef(new Set<string>());
   useEffect(() => {
     // #431: batched with the seeding below, so a waiting Run sees the seeded scenarios.
     setReparseando(false);
     if (ir === null) return;
     const vistos = nodosVistos.current;
     nodosVistos.current = new Set(Object.keys(ir.nodes));
+    const vuelven = new Set([...nodosVistos.current].filter((id) => conocidos.current.has(id)));
+    for (const id of nodosVistos.current) conocidos.current.add(id);
     // The first IR after opening a project is only a baseline: opening never modifies it.
     if (vistos === null) return;
     const nuevos = Object.keys(ir.nodes).filter((id) => !vistos.has(id));
-    const idos = [...sembrados.current.keys()].filter((id) => !(id in ir.nodes));
+    // A seed stays known while its node is away, so the node gets it back if it returns.
+    const idos = [...sembrados.current.keys()].filter((id) => vistos.has(id) && !(id in ir.nodes));
     if (nuevos.length === 0 && idos.length === 0) return;
     const igual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
     for (const [archivo, escenario] of Object.entries(escenarios)) {
@@ -1265,14 +1272,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       for (const id of nuevos) {
         const type = ir.nodes[id]!.type;
         if ((type !== 'start' && type !== 'task') || elements[id] !== undefined) continue;
+        if (vuelven.has(id) && !sembrados.current.has(id)) continue;
         if (type === 'start' && Object.entries(elements).some(([otro, e]) => ir.nodes[otro]?.type === 'start' && (e['triggerCount'] !== undefined || e['interTriggerTimer'] !== undefined))) continue;
-        elements[id] = defaultElement(type);
+        elements[id] = vuelven.has(id) ? structuredClone(sembrados.current.get(id)!) : defaultElement(type);
         sembrados.current.set(id, elements[id]);
         cambio = true;
       }
       if (cambio) cambiarEscenario(archivo, { ...escenario, elements });
     }
-    for (const id of idos) sembrados.current.delete(id);
     // Only a new IR is a new diagram; `escenarios` is read as it is when the diagram changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ir]);
