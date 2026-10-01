@@ -547,6 +547,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // A partir de ahí ya no se remonta nunca: cambiar de tema es `modelador.repintar()`.
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
+  /** #539: the open project changed on disk while there were unsaved changes; asks Reload / Keep mine. */
+  const [cambioExterno, setCambioExterno] = useState(false);
   // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
@@ -827,6 +829,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     slugsBorrados.current.clear();
     setProjectProblems(doc.problems ?? []);
     setSuelto(doc.loose === true);
+    setCambioExterno(false); // A notice about the project being left, or the one just reloaded.
     if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
@@ -1037,6 +1040,67 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally { ioLock.current = false; setIoBusy(false); }
   }
+
+  /**
+   * #539: an agent rewrote the open project on disk (main's watcher, `projectWatcher.ts`). Clean,
+   * it reloads at once; with unsaved changes it asks first (`cambioExterno`). «Keep mine» only
+   * dismisses: the next save still meets `E-CAMBIO-EXTERNO`, as it did before there was a watcher.
+   */
+  const alCambiarFueraRef = useRef<() => void>(() => undefined);
+  alCambiarFueraRef.current = () => {
+    if (dirty) { setCambioExterno(true); return; }
+    void recargar();
+  };
+  useEffect(() => adapter?.onExternalChange?.(() => alCambiarFueraRef.current()), [adapter]);
+
+  /**
+   * Reads the open project again through the same door as Open, keeping the mode, the process on
+   * the canvas and the scenario in use when they are still there. A save, open or dialog in progress
+   * goes first; the change is looked at again when it is over. `enfocar`: it came from the notice's
+   * button, which goes away with it, so the focus goes to the canvas instead of falling to `body`.
+   */
+  async function recargar(enfocar = false): Promise<void> {
+    setCambioExterno(false);
+    if (adapter?.reload === undefined || modelador === null) return;
+    if (ioLock.current || respuestaPerdida.current !== null || pendingAction !== null) {
+      setTimeout(() => alCambiarFueraRef.current(), 500);
+      return;
+    }
+    const slug = procesos[activo]?.slug;
+    const escenario = escenarioId;
+    const base = baseId;
+    const modoPrevio = modo;
+    const beforeToken = tokenRef.current;
+    ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
+    try {
+      const raw = await adapter.reload();
+      // Deleted on disk: `openRecent` already took it off the recents, and says so.
+      if (raw === null) { setIoError(S.app.errorRecienteAusente); return; }
+      if (!await activate(raw, true, beforeToken)) return;
+      const doc = readProject(raw);
+      const lista = (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+      const indice = slug === undefined ? -1 : lista.findIndex((p) => p.slug === slug);
+      if (indice > 0 && !await cargarProceso(lista, indice)) return;
+      const escenarios = indice > 0 ? lista[indice]!.scenarios : doc.scenarios;
+      if (escenario in escenarios) setEscenarioId(escenario);
+      if (base in escenarios) setBaseId(base);
+      setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    finally {
+      ioLock.current = false; setIoBusy(false);
+      enfocarTrasRecarga.current = enfocar;
+    }
+  }
+  /**
+   * The canvas is `inert` while `ioBusy` (QA round 2 of #551): focusing it from `recargar` itself
+   * fails silently, so it is focused once the render that lifts `inert` has been committed.
+   */
+  const enfocarTrasRecarga = useRef(false);
+  useEffect(() => {
+    if (ioBusy || !enfocarTrasRecarga.current) return;
+    enfocarTrasRecarga.current = false;
+    modelador?.enfocar?.();
+  }, [ioBusy, modelador]);
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
@@ -1954,7 +2018,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * the whole session (QA of #429).
    */
   const hayAlerta = ioError !== null || perdidasAlExportar.length > 0 || estado.error !== null || avisoTema !== null
-    || errorSimOculto !== null;
+    || errorSimOculto !== null || cambioExterno;
   const visible: Record<Region, boolean> = {
     izquierda: hayIzquierda && visibles.izquierda,
     derecha: derechaVisible,
@@ -2747,6 +2811,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="aviso">{S.app.diagramaSuelto}</span>
         )}
         {avisoLlamada !== null && <span role="status" className="aviso">{avisoLlamada}</span>}
+        {cambioExterno && (
+          <span role="alert" className="aviso cambio-externo">
+            {S.app.cambioExterno}{' '}
+            <button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar(true)}>{S.app.recargarCambioExterno}</button>{' '}
+            <button type="button" className="enlace" onClick={() => { setCambioExterno(false); modelador?.enfocar?.(); }}>{S.app.mantenerMios}</button>
+          </span>
+        )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>

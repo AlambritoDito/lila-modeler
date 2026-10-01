@@ -11,6 +11,7 @@ export {
   assertNotAnotherProject,
   assertPathsUnchanged,
   hasProjectModel,
+  isOwnSnapshot,
   isRecordableProject,
   occupiedSlugs,
   ProjectIOError,
