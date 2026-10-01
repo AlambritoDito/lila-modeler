@@ -334,7 +334,8 @@ cambiaría y no escribe nada.
 
 ```json
 { "name": "create_project", "arguments": { "path": "proyecto.lila", "name": "Pedidos", "bpmn": "examples/pedido/model.bpmn",
-  "scenarios": [{ "name": "as-is", "scenario": { "version": 1, "name": "AS-IS", "run": { "start": "2026-10-05T08:00:00-06:00", "duration": 28800, "seed": 1 } } }] } }
+  "scenarios": [{ "name": "as-is", "scenario": { "version": 1, "name": "AS-IS", "run": { "start": "2026-10-05T08:00:00-06:00", "duration": 28800, "seed": 1 },
+    "elements": { "StartEvent_Pedido": { "interTriggerTimer": { "type": "exponential", "mean": 300 } } } } }] } }
 ```
 
 ```json
@@ -554,10 +555,14 @@ mcp_servers:
     timeout: 300
 ```
 
-- Hermes solo le pasa al servidor las variables de entorno que aparecen en `env`, así que da
-  `command` como ruta absoluta a `node` (`which node`) en vez de depender del `PATH`.
-- `cwd` es donde caen las rutas relativas de las tools (`project: "tarjeta.lila"`, `saveTo`).
-  Si lo omites, usa rutas absolutas en las llamadas.
+- Hermes no le pasa al servidor todo tu entorno: le pasa una base segura (`PATH`, `HOME`, `LANG`,
+  `TMPDIR`, `XDG_*` y similares) más las variables que aparecen en `env`. Pon en `env` `LILA_LANG`
+  o lo que Lila deba ver, y da `command` como ruta absoluta a `node` (`which node`) cuando el `PATH`
+  con que corre Hermes pueda no encontrarlo.
+- `cwd` es donde caen las rutas relativas de las tools (`project: "tarjeta.lila"`, `saveTo`). Solo
+  las versiones recientes de Hermes se lo pasan al servidor; las anteriores (la v0.17.0, por
+  ejemplo) lo ignoran. Las rutas absolutas en las llamadas funcionan con cualquier versión, así que
+  prefiérelas.
 - `timeout` es por llamada, en segundos: un `run_simulation` o `compare_scenarios` largo bloquea el
   servidor hasta terminar, así que deja margen.
 - Después de editar el archivo, corre `/reload-mcp` en una sesión de Hermes. Hermes nombra las tools
@@ -601,13 +606,16 @@ agente (`name` y `arguments`); las rutas son relativas al directorio de trabajo 
 { "name": "patch_scenario", "arguments": {
   "scenario": "examples/pedido/as-is.scenario.json",
   "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 3 }],
-  "saveTo": "examples/pedido/to-be-3-cajeros.scenario.json",
-  "name": "TO-BE 3 cajeros" } }
-// -> escribe { "version": 1, "name": "TO-BE 3 cajeros",
+  "saveTo": "examples/pedido/to-be-3-cajeros-copia.scenario.json",
+  "name": "TO-BE 3 cajeros (copia)" } }
+// -> escribe { "version": 1, "name": "TO-BE 3 cajeros (copia)",
 //              "extends": "as-is.scenario.json", "resources": { "cajero": { "capacity": 3 } } }
-//    y devuelve { "scenario": {...resuelto...}, "file": "/ruta/.../to-be-3-cajeros.scenario.json",
+//    y devuelve { "scenario": {...resuelto...}, "file": "/ruta/.../to-be-3-cajeros-copia.scenario.json",
 //                 "notes": [...] }
 ```
+
+`saveTo` es un archivo nuevo: nunca lo apuntes a un escenario que el repo versiona (como
+`to-be-3-cajeros.scenario.json`), porque se sobrescribe.
 
 ```json
 { "name": "get_process_outline", "arguments": { "project": "credit.lila", "process": "credit-application" } }
@@ -638,12 +646,12 @@ Dos llamadas más, sin tocar el AS-IS:
 
 2. `patch_scenario({ "scenario": "examples/pedido/as-is.scenario.json", "patch": [{ "op":
    "replace", "path": "/resources/cajero/capacity", "value": 3 }], "saveTo":
-   "examples/pedido/to-be-3-cajeros.scenario.json", "name": "TO-BE 3 cajeros" })` — escribe
-   `{ "version": 1, "name": "TO-BE 3 cajeros", "extends": "as-is.scenario.json",
+   "examples/pedido/to-be-3-cajeros-copia.scenario.json", "name": "TO-BE 3 cajeros (copia)" })` — escribe
+   `{ "version": 1, "name": "TO-BE 3 cajeros (copia)", "extends": "as-is.scenario.json",
    "resources": { "cajero": { "capacity": 3 } } }`: solo el delta, con `extends` al AS-IS. Un patch
    que deja el escenario inválido se rechaza **sin escribir nada**.
 3. `compare_scenarios({ "scenarios": ["examples/pedido/as-is.scenario.json",
-   "examples/pedido/to-be-3-cajeros.scenario.json"], "seed": 42 })` — 255 filas; la que importa es
+   "examples/pedido/to-be-3-cajeros-copia.scenario.json"], "seed": 42 })` — 255 filas; la que importa es
    `elements.Task_TomarPedido.resourceWait.mean`: **14.97 → 2.18 minutos, −85.4 %**, con
    `significant: [false, true]` (los IC 95 % no se solapan). El agente responde: un cajero más
    quita casi toda la cola del mostrador, y el cuello de botella se queda en `Task_Preparar`.

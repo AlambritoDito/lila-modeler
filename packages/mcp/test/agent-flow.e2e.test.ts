@@ -1,9 +1,11 @@
 /**
  * The whole agent flow of #527 with no UI (#540), through the official MCP client against the real
  * `lila mcp` over stdio: an interview transcript → an outline → `create_process` into a new .lila →
+ * `edit_process` and `annotate_element`/`get_raci_matrix` →
  * a scenario filled with `patch_scenario` and with a filled-in template (`export_scenario_template`
- * → `import_scenario_sheet`) → `run_simulation` with `saveRun` → `export_document` as Word and HTML. There is no LLM here: the outline is the one an agent would derive from the
- * transcript, written by hand. Requires `dist/` (the root `pretest` and the CI build first).
+ * → `import_scenario_sheet`) → `run_simulation` with `saveRun` → `export_document` as Word and HTML,
+ * `export_results` and `export_diagram`. There is no LLM here: the outline is the one an agent
+ * would derive from the transcript, written by hand. Requires `dist/` (the root `pretest` and the CI build first).
  *
  * This is the flow `docs/AGENT_GUIDE.md` walks through; keep the two in step.
  */
@@ -82,7 +84,7 @@ const patch = [
     value: {
       ejecutiva: { name: 'Ejecutiva', capacity: 3 },
       analista: { name: 'Analista', capacity: 2 },
-      mesa: { name: 'Mesa de control', capacity: 1 },
+      'mesa-de-control': { name: 'Mesa de control', capacity: 1 },
     },
   },
   { op: 'add', path: '/elements/recibir', value: { processingTime: { type: 'triangular', min: min(5), mode: min(10), max: min(20) }, resources: uses('ejecutiva') } },
@@ -90,7 +92,7 @@ const patch = [
   { op: 'add', path: '/elements/faltantes', value: { processingTime: { type: 'constant', value: min(5) }, resources: uses('ejecutiva') } },
   { op: 'add', path: '/elements/consultar', value: { processingTime: { type: 'exponential', mean: min(3) } } },
   { op: 'add', path: '/elements/evaluar', value: { processingTime: { type: 'normal', mean: min(25), sd: min(8) }, resources: uses('analista') } },
-  { op: 'add', path: '/elements/emitir', value: { processingTime: { type: 'constant', value: min(10) }, resources: uses('mesa') } },
+  { op: 'add', path: '/elements/emitir', value: { processingTime: { type: 'constant', value: min(10) }, resources: uses('mesa-de-control') } },
   { op: 'add', path: '/elements/rechazo', value: { processingTime: { type: 'constant', value: min(4) }, resources: uses('ejecutiva') } },
 ];
 
@@ -127,7 +129,7 @@ test('the outline only names what the interview says: its lanes are the roles th
   for (const lane of outline.lanes) expect(said, lane).toContain(lane.toLowerCase().replace(/^ejecutivo/, 'ejecutiva'));
 });
 
-test('interview → create_process → patch_scenario → run_simulation saveRun → export_document', async () => {
+test('interview → create_process → edit_process → annotate → scenario → run_simulation saveRun → every export', async () => {
   // b. A new .lila from the outline.
   const created = await answer<{ slug: string; newFile: boolean; outline: unknown; warnings: string[] }>('create_process', {
     outline,
@@ -142,6 +144,28 @@ test('interview → create_process → patch_scenario → run_simulation saveRun
   expect(read.outline).toEqual(created.outline);
   expect(read.outline.steps.map((s) => s.id)).toEqual(outline.steps.map((s) => s.id));
   expect(read.outline.steps.find((s) => s.id === 'evaluar')?.lane).toBe('Analista de crédito');
+
+  // b'. A second pass with the interviewee: the control desk also files the case. A dry run first,
+  // then the write; ids never change, and the scenario still simulates (nothing to remove).
+  const edit = {
+    project: 'tarjeta.lila',
+    operations: [{ op: 'add', step: { id: 'archivar', name: 'Archivar expediente', lane: 'Mesa de control' }, after: 'emitir' }],
+  };
+  const preview = await answer<{ dryRun: boolean; changes: { op: number }[]; scenarioRemovals: unknown[] }>('edit_process', { ...edit, dryRun: true });
+  expect(preview).toMatchObject({ dryRun: true, scenarioRemovals: [] });
+  expect(preview.changes).toHaveLength(1);
+  const edited = await answer<{ outline: { steps: { id: string; lane: string }[] } }>('edit_process', edit);
+  expect(edited.outline.steps.find((s) => s.id === 'archivar')?.lane).toBe('Mesa de control');
+
+  // b''. Who does what: the description and RACI of the heaviest step, read back as the matrix.
+  await answer('annotate_element', {
+    project: 'tarjeta.lila',
+    elementId: 'evaluar',
+    documentation: 'Revisa ingresos y deudas contra la política de crédito.',
+    responsibilities: [{ type: 'R', roleRef: 'analista' }, { type: 'A', roleRef: 'gerente' }],
+  });
+  const raci = await answer<{ roles: string[]; rows: { id: string; cells: Record<string, string> }[] }>('get_raci_matrix', { project: 'tarjeta.lila' });
+  expect(raci.rows.find((row) => row.id === 'evaluar')?.cells).toEqual({ analista: 'R', gerente: 'A' });
 
   // c. The numbers of the interview into the base scenario, in place.
   const patched = await answer<{ scenario: { resources: Record<string, { capacity: number }> } }>('patch_scenario', {
@@ -216,4 +240,13 @@ test('interview → create_process → patch_scenario → run_simulation saveRun
   expect(words).toContain('Resultados');
   expect(words).toContain('Instances completed');
   expect(words).toContain('EndEvent_emitir');
+  expect(words).toContain('Archivar expediente');
+  expect(words).toContain('Revisa ingresos y deudas contra la política de crédito.');
+
+  // The run's tables for a spreadsheet (sheet names in the server's language), and the diagram on its own.
+  await answer('export_results', { project: 'tarjeta.lila', format: 'xlsx', saveTo: 'out/resultados.xlsx' });
+  const book = readWorkbook(readFileSync(join(cwd, 'out/resultados.xlsx')));
+  expect(book.map((sheet) => sheet.name)).toEqual(expect.arrayContaining(['Resumen', 'Elementos', 'Recursos']));
+  const diagram = await answer<{ svg: string }>('export_diagram', { project: 'tarjeta.lila' });
+  for (const id of [...outline.steps.map((step) => step.id), 'archivar']) expect(diagram.svg, id).toContain(`data-element-id="${id}"`);
 }, 30_000);
