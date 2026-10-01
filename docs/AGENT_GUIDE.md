@@ -69,6 +69,14 @@ with `dryRun: true` first and show the `changes` to the person when the edit is 
   { "op": "rename", "id": "issue", "name": "Issue the card" } ] } }
 ```
 
+**After any edit the process still simulates.** Scenario entries that no longer apply are removed
+from every scenario of the process (the whole entry of a removed element, or the fields a retyped
+element cannot take, such as resources on a gateway), and each removal is reported in
+`scenarioRemovals` as `{ scenario, id, removed, entry }` with the previous values, so you can put
+them back elsewhere with `patch_scenario`. A dry run returns the same report. Then every scenario is
+validated against the edited model; an error it did not have before refuses the edit. `notes` also
+names the flows to patch when an XOR's probabilities no longer add up to 1.
+
 `get_process_outline` reads any process back as an outline, including one drawn in the app or
 imported from Bizagi; `warnings` says what an outline cannot carry.
 
@@ -181,11 +189,13 @@ outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-
 
 ## When a call fails
 
-- **Every problem at once, with its path.** A bad outline answers `isError: true` with all its
-  problems, each with where it is: `steps[2].branches[0].to: …`, `steps[0].duraton: unknown field
-  "duraton".` A bad edit names its operation: `operations[2] after: …`. A model the edit would
-  break answers with the validator's code: `operations[0] bpmn.Process_1: E-SIN-START: …`. Fix
-  those entries and call again; nothing was written.
+- **Every problem at once, with its path, in one pass.** A bad call answers `isError: true` with all
+  its problems together — malformed fields and semantic ones alike, in the call's language — each
+  with where it is. An outline: `steps[2].branches[0].to: …`, `steps[0].duraton: unknown field
+  "duraton".` An edit names its operation: `operations[2].after: …`, `operations[3].nombre: unknown
+  field "nombre".`, and a model the edit would break answers with the validator's code:
+  `operations[0].bpmn.Process_1: E-SIN-START: …`. Fix all of those entries and call again once;
+  nothing was written.
 - **`dryRun` before writing** whenever a human should see the change first: `create_process`,
   `edit_process`, `annotate_element` and `import_scenario_sheet` take it, check everything and
   write nothing.

@@ -1,9 +1,8 @@
 /**
  * The whole agent flow of #527 with no UI (#540), through the official MCP client against the real
  * `lila mcp` over stdio: an interview transcript → an outline → `create_process` into a new .lila →
- * a scenario filled with `patch_scenario` (and, once the server has `import_scenario_sheet`, with a
- * filled-in template) → `run_simulation` with `saveRun` → `export_document` as
- * Word and HTML. There is no LLM here: the outline is the one an agent would derive from the
+ * a scenario filled with `patch_scenario` and with a filled-in template (`export_scenario_template`
+ * → `import_scenario_sheet`) → `run_simulation` with `saveRun` → `export_document` as Word and HTML. There is no LLM here: the outline is the one an agent would derive from the
  * transcript, written by hand. Requires `dist/` (the root `pretest` and the CI build first).
  *
  * This is the flow `docs/AGENT_GUIDE.md` walks through; keep the two in step.
@@ -154,26 +153,23 @@ test('interview → create_process → patch_scenario → run_simulation saveRun
 
   // c'. When the numbers come from a person: hand out the template, take it back filled in. The
   // analyst's manager says there will be three, not two.
-  const { tools } = await client.listTools();
-  if (tools.some((tool) => tool.name === 'import_scenario_sheet')) {
-    await answer('export_scenario_template', { project: 'tarjeta.lila', scenario: 'as-is', saveTo: 'out/plantilla.xlsx' });
-    const sheets = readWorkbook(readFileSync(join(cwd, 'out/plantilla.xlsx')));
-    const resources = sheets.find((sheet) => sheet.name === 'Resources')!;
-    const [header, ...rows] = resources.rows;
-    const capacity = header!.findIndex((cell) => cell === 'capacity');
-    const analista = rows.find((row) => row[0] === 'analista')!;
-    expect(analista[capacity]).toBe(2);
-    analista[capacity] = 3;
-    writeFileSync(
-      join(cwd, 'out/plantilla-llena.xlsx'),
-      workbook(sheets.map((sheet) => ({ name: sheet.name, headers: (sheet.rows[0] ?? []) as string[], rows: sheet.rows.slice(1) as never }))),
-    );
-    const sheet = { project: 'tarjeta.lila', scenario: 'as-is', sheet: 'out/plantilla-llena.xlsx' };
-    const dry = await answer<{ written: boolean; changes: unknown[]; issues: unknown[] }>('import_scenario_sheet', { ...sheet, dryRun: true });
-    expect(dry).toMatchObject({ written: false, issues: [] });
-    expect(dry.changes).toHaveLength(1);
-    expect(await answer('import_scenario_sheet', sheet)).toMatchObject({ written: true });
-  }
+  await answer('export_scenario_template', { project: 'tarjeta.lila', scenario: 'as-is', saveTo: 'out/plantilla.xlsx' });
+  const sheets = readWorkbook(readFileSync(join(cwd, 'out/plantilla.xlsx')));
+  const resources = sheets.find((sheet) => sheet.name === 'Resources')!;
+  const [header, ...rows] = resources.rows;
+  const capacity = header!.findIndex((cell) => cell === 'capacity');
+  const analista = rows.find((row) => row[0] === 'analista')!;
+  expect(analista[capacity]).toBe(2);
+  analista[capacity] = 3;
+  writeFileSync(
+    join(cwd, 'out/plantilla-llena.xlsx'),
+    workbook(sheets.map((sheet) => ({ name: sheet.name, headers: (sheet.rows[0] ?? []) as string[], rows: sheet.rows.slice(1) as never }))),
+  );
+  const sheet = { project: 'tarjeta.lila', scenario: 'as-is', sheet: 'out/plantilla-llena.xlsx' };
+  const dry = await answer<{ written: boolean; changes: unknown[]; issues: unknown[] }>('import_scenario_sheet', { ...sheet, dryRun: true });
+  expect(dry).toMatchObject({ written: false, issues: [] });
+  expect(dry.changes).toHaveLength(1);
+  expect(await answer('import_scenario_sheet', sheet)).toMatchObject({ written: true });
 
   // d. Run it and keep the run in the project, as the app does.
   const run = await call('run_simulation', { model: 'tarjeta.lila', scenario: 'as-is', seed: 7, replications: 2, saveRun: true });

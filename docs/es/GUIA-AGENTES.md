@@ -72,6 +72,14 @@ trivial.
   { "op": "rename", "id": "emitir", "name": "Emitir la tarjeta" } ] } }
 ```
 
+**Después de cualquier edición el proceso sigue simulando.** Las entradas de escenario que ya no
+aplican se quitan de todos los escenarios del proceso (la entrada completa de un elemento borrado, o
+los campos que un elemento con otro tipo no admite, como recursos en una compuerta), y cada una se
+reporta en `scenarioRemovals` como `{ scenario, id, removed, entry }` con los valores anteriores,
+para que puedas ponerlos en otro lado con `patch_scenario`. Un dry run devuelve el mismo reporte.
+Después se valida cada escenario contra el modelo editado; un error que antes no tenía rechaza la
+edición. `notes` además nombra los flujos a corregir cuando las probabilidades de una XOR ya no suman 1.
+
 `get_process_outline` lee cualquier proceso como esquema, también uno dibujado en la app o
 importado de Bizagi; `warnings` dice lo que un esquema no puede llevar.
 
@@ -188,11 +196,13 @@ completas), así que un esquema va y vuelve igual. Las reglas completas están e
 
 ## Cuando una llamada falla
 
-- **Todos los problemas a la vez, cada uno con su ruta.** Un esquema mal formado responde
-  `isError: true` con todos sus problemas, cada uno con dónde está: `steps[2].branches[0].to: …`,
-  `steps[0].duraton: …`. Una edición mala nombra su operación: `operations[2] after: …`. Un modelo
-  que la edición rompería responde con el código del validador: `operations[0] bpmn.Process_1:
-  E-SIN-START: …`. Corrige esas entradas y vuelve a llamar; no se escribió nada.
+- **Todos los problemas a la vez, cada uno con su ruta, en una sola pasada.** Una llamada mala
+  responde `isError: true` con todos sus problemas juntos — de forma y de fondo, en el idioma de la
+  llamada — cada uno con dónde está. Un esquema: `steps[2].branches[0].to: …`, `steps[0].duraton:
+  …`. Una edición nombra su operación: `operations[2].after: …`, `operations[3].nombre: …`, y un
+  modelo que la edición rompería responde con el código del validador:
+  `operations[0].bpmn.Process_1: E-SIN-START: …`. Corrige todas esas entradas y vuelve a llamar una
+  vez; no se escribió nada.
 - **`dryRun` antes de escribir** cuando una persona deba ver el cambio primero: `create_process`,
   `edit_process`, `annotate_element` e `import_scenario_sheet` lo aceptan, revisan todo y no
   escriben nada.
