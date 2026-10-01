@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: quince tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: dieciséis tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -88,6 +88,10 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   summary, slugs }`. Ver [Crear un proceso desde un esquema](#crear-un-proceso-desde-un-esquema).
 - **`get_process_outline({ project, process?, locale? })`** (#97) — lee un proceso de un `.lila`
   como esquema: `{ file, slug, name, outline, warnings }`.
+- **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** (#98) — aplica una
+  lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane) a un proceso de
+  un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
+  scenarioRemovals, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`** —
   escribe la descripción, el RACI, las referencias al catálogo y los atributos extendidos de un
@@ -347,6 +351,73 @@ cambiaría y no escribe nada.
 ```json
 { "name": "import_scenario_sheet", "arguments": { "project": "proyecto.lila", "scenario": "as-is", "sheet": "as-is.xlsx", "dryRun": true } }
 ```
+## Editar un proceso
+
+`edit_process` (#98) cambia un proceso que ya existe, lo haya hecho quien sea: `create_process`, la
+app o una importación de Bizagi. Recibe una lista de `operations`, las aplica en orden sobre el
+modelo en memoria, valida el resultado y lo escribe solo si todas las operaciones salieron bien, el
+modelo no tiene ningún error de validación que no tuviera antes y cada escenario del proceso sigue
+simulando. Si no, no escribe nada y la llamada falla con todos los problemas a la vez —los de forma y
+los de significado en una sola pasada, en el idioma de la llamada—, cada uno con el índice de su
+operación y una ruta (`operations[2].after: …`, `operations[3].nombre: campo desconocido "nombre".`,
+`operations[0].bpmn.Process_1: E-SIN-START: …`). Un `operations` que no es una lista también es un
+error (`operations: debe ser una lista no vacía de operaciones.`). `lila process edit` (`docs/es/CLI.md`) hace lo
+mismo desde una terminal.
+
+```json
+{ "name": "edit_process", "arguments": { "project": "credit.lila", "operations": [
+  { "op": "add", "step": { "id": "verify", "name": "Verify identity", "duration": "5m", "resources": ["Analyst"] }, "after": "receive" },
+  { "op": "connect", "from": "ok", "to": "verify", "label": "Retry", "probability": 0.1 },
+  { "op": "rename", "id": "issue", "name": "Issue the card" },
+  { "op": "setType", "id": "check", "type": "serviceTask" },
+  { "op": "addLane", "name": "Back office" },
+  { "op": "moveToLane", "id": "issue", "lane": "Back office" },
+  { "op": "remove", "id": "reject" } ] } }
+```
+
+| Operación | Campos | Qué hace |
+| --- | --- | --- |
+| `add` | `step`, `after?` o `between?` | Agrega un paso. `step` es un paso de esquema sin sus conexiones: `{ id, name?, type?, lane?, duration?, resources? }`. Con `after: id`, el paso nuevo toma el flujo de salida de ese paso (se rechaza si tiene varios: usa `between`). Con `between: [from, to]`, va sobre el flujo from → to. El flujo donde cae conserva su id, nombre y probabilidad; un flujo nuevo sigue hasta el sucesor de antes. Sin ninguno de los dos, se agrega sin conectar. `lane` es, por defecto, el carril del paso al que sigue. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `id?` | Agrega un flujo de secuencia (id `Flow_<from>_<to>` por defecto). `probability` solo a la salida de un gateway `xor` u `or`. |
+| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él. También se puede quitar un flujo de secuencia. |
+| `rename` | `id`, `name` | Renombra cualquier elemento: paso, flujo, carril, pool, proceso. `""` borra el nombre. |
+| `setType` | `id`, `type` | Uno de los tipos del esquema. Se quedan el nombre, la documentación, los elementos de extensión y los flujos; un subproceso convertido en otra cosa pierde su contenido (va en `removed`). |
+| `moveToLane` | `id`, `lane` | Carril por nombre o id. |
+| `addLane` | `name`, `id?`, `after?` o `before?` | Agrega un carril (abajo, por defecto). El primer carril de un proceso sin carriles contiene todos sus pasos, y un proceso sin pool recibe uno. |
+
+- **Los ids no cambian.** Un paso renombrado conserva sus entradas de escenario, y uno con otro tipo
+  también, en lo que siga aplicando. El `duration`, los `resources` y el `selection` de un paso
+  agregado y la `probability` de una conexión van al `as-is.scenario.json` del proceso, como en
+  `create_process` (un recurso con el mismo nombre o clave se reutiliza). Un proceso sin ese
+  escenario rechaza esos campos.
+- **Después de editar, el proceso sigue simulando.** Las entradas de escenario que ya no aplican se
+  quitan de todos los escenarios del proceso: la entrada completa de un elemento que la edición
+  quitó, y los campos que un elemento con otro tipo ya no admite (recursos en un gateway, un
+  subproceso o un temporizador; una duración en un subproceso…). Nada se va en silencio:
+  `scenarioRemovals` lista cada una como `{ scenario, id, removed, entry }`, con los campos quitados
+  y sus valores anteriores, para que un agente los ponga en otro lado con `patch_scenario`; `notes`
+  dice lo mismo en palabras, y un `dryRun` devuelve el mismo reporte. Después se valida cada
+  escenario contra el modelo editado, y un error que no tenía antes rechaza la edición. `removed`
+  lista cada id que salió del modelo. `notes` avisa además de un XOR cuyas probabilidades de rama ya
+  no suman 1, con los flujos a corregir.
+- **Lo que no se toca se queda**: documentación, anotaciones `lila:` (RACI, referencias, atributos
+  extendidos), extensiones de otros fabricantes, anotaciones de texto, objetos de datos, otros pools
+  y flujos de mensaje. Un modelo que el lector BPMN no puede leer completo se rechaza en vez de
+  reescribirse con algo de menos.
+- **Maquetado.** Por defecto (`layout: true`) el proceso editado se maqueta de nuevo con el mismo
+  maquetador y el mismo arreglo de carriles que `create_process`: se pierden las posiciones puestas a
+  mano en ese proceso; las anotaciones de texto y los objetos de datos siguen a su elemento; los
+  pools de abajo (o de al lado) se mueven en bloque lo que creció. Con `layout: false` cada figura
+  conserva su lugar: un paso nuevo va a la derecha del paso al que sigue, en su carril (que crece una
+  fila si está lleno), y solo se vuelven a trazar los flujos cuyos extremos cambiaron. Para hacer
+  lugar a un paso insertado entre dos pasos muy juntos, lo que está a su derecha en ese pool se
+  corre a la derecha en un solo tanto; pools y carriles solo se ensanchan o se alargan.
+- **Qué proceso**: `process` cuando el `.lila` tiene varios. Dentro de su BPMN, el proceso que lee el
+  simulador (el ejecutable y no vacío); no se pueden editar pasos de otros pools.
+- La escritura es la misma escritura atómica y con candado que la de `patch_scenario`: si el archivo
+  cambió en disco desde que se leyó (otro agente, la app), la llamada se rechaza y no se pierde nada.
+  La revisión del modelo sube, así que la app ve sus corridas viejas como desactualizadas. Todos los
+  demás procesos quedan byte a byte. Con `dryRun`, se comprueba y devuelve todo y no se escribe nada.
 
 ## Idioma
 
@@ -634,3 +705,8 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
   Los carriles pueden salir más altos de lo necesario, el nombre de una compuerta puede quedar
   sobre un flujo que sale por abajo, y un subproceso se crea colapsado con un paso vacío dentro. Si el dibujo importa, se
   acomoda en la app.
+- **`edit_process` con `layout: true` maqueta de nuevo todo el proceso editado** (se pierden las
+  posiciones a mano en él); un subproceso expandido queda colapsado, y los pools verticales (como
+  los dibuja Bizagi) quedan horizontales. Con `layout: false` la colocación es simple: a la derecha
+  del predecesor, en su carril; no desenreda cruces. Solo se puede editar el proceso principal del
+  BPMN, y los carriles anidados solo a través de sus carriles hoja.

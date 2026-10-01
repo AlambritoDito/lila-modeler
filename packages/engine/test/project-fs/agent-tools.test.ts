@@ -380,7 +380,7 @@ describe('CLI', () => {
     expect(out[0]).toBe('Dry run: Task_Revisar would be annotated as shown; nothing was written.');
     out = [];
     expect(await main(['process', 'nope'])).toBe(1);
-    expect(out[0]).toBe('lila process: unknown subcommand "nope"; use create, show, annotate or raci.');
+    expect(out[0]).toBe('lila process: unknown subcommand "nope"; use create, show, edit, annotate or raci.');
   });
 
   test('lila scenario template, then import (dry run and for real)', async () => {

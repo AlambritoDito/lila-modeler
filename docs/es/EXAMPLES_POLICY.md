@@ -27,7 +27,7 @@ los casos actuales y futuros, incluyendo documentación, capturas, textos de Iss
 |---|---|
 | `examples/pedido/` | Demo de pedidos de restaurante y benchmark de regresión del proyecto; su README documenta supuestos y comandos. |
 | `examples/mm1/` | Modelos sintéticos de colas con resultados analíticos Erlang C y scripts de reproducción. |
-| `examples/outline/` | Esquema sintético (#97) para `lila process create` y la tool MCP `create_process`. |
+| `examples/outline/` | Esquema sintético (#97) para `lila process create` y la tool MCP `create_process`, y operaciones de edición sintéticas (#98) para `lila process edit` y `edit_process`. |
 | `examples/bizagi-levels/` | Reconstrucciones atribuidas de ejemplos públicos de referencia, con URLs, valores esperados y diferencias documentadas. |
 | `examples/bizagi-exports/` | Fixtures de interoperabilidad BPMN MIWG sin modificar, con commit de origen y atribución CC BY 3.0. |
 | `packages/engine/test/fixtures/outlines/` | Esquemas sintéticos (#97) del QA de #553: orden de ramas, saltos en la misma fila, troncos compartidos de compuerta. |

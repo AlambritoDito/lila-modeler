@@ -49,6 +49,8 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila process create --outline <esquema.json> -p <proyecto.lila> [--name nombre]
                          [--process slug] [--dry-run] [--json]
      lila process show -p <proyecto.lila> [--process slug] [--json]
+     lila process edit -p <proyecto.lila> --ops <operaciones.json> [--process slug]
+                       [--dry-run] [--no-layout] [--json]
      lila process annotate <proyecto.lila> <idElemento> [--process slug] [--documentation texto]
                            [--responsibility R|A|C|I:rol ...] [--clear-responsibilities]
                            [--ref tipo=id ...] [--attribute id=valor ...] [--dry-run] [--json]
@@ -65,7 +67,8 @@ Comandos:
   export     Exporta sin la app: el diagrama como SVG, el documento del proceso como Word o
              HTML, o los resultados de una corrida guardada en el .lila como .xlsx o CSV.
   process    create: arma un proceso maquetado desde un esquema (lista de pasos) en un .lila.
-             show: imprime un proceso de un .lila como esquema. Ver docs/CLI.md.
+             show: imprime un proceso de un .lila como esquema.
+             edit: aplica una lista de operaciones a un proceso, todas o ninguna. Ver docs/CLI.md.
              annotate: escribe en el .lila la descripción, el RACI, las referencias al catálogo y
              los atributos extendidos de un elemento. raci: imprime la matriz RACI del documento.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
@@ -116,10 +119,12 @@ Opciones de export:
 Opciones de process:
   --outline archivo  create: el JSON del esquema (carriles y pasos; docs/MCP.md).
   -p, --project a    El .lila; create lo crea si no existe.
-  --process slug     create: slug del proceso nuevo (por defecto, del nombre). show: cuál.
+  --ops archivo      edit: el JSON con la lista de operaciones (docs/CLI.md).
+  --process slug     create: slug del proceso nuevo (por defecto, del nombre). show, edit: cuál.
   --name nombre      create: nombre del proceso (por defecto, el del esquema).
-  --dry-run          create: arma y comprueba todo, no escribe nada.
-  --json             Imprime el resultado (create) o el esquema (show) como JSON.
+  --dry-run          create, edit: arma y comprueba todo, no escribe nada.
+  --no-layout        edit: conserva todas las posiciones; solo coloca las formas nuevas.
+  --json             Imprime el resultado (create, edit) o el esquema (show) como JSON.
 
 Opciones de process annotate:
   --documentation t Reemplaza la descripción ("" la quita).
@@ -526,10 +531,70 @@ export const es: Catalog = {
       `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles, escenario base as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles. No se escribió nada.`,
-    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, annotate o raci.`,
+    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate o raci.`,
     processMissingOption: (option) => `falta ${option}.`,
     processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
     processShowLanes: (lanes) => `Carriles: ${lanes}`,
+    editInvalid: (detail) => `la edición se rechazó; no se cambió nada:\n${detail}`,
+    editBpmnInvalid: (detail) => `el proceso editado no validaría; no se cambió nada:\n${detail}`,
+    editContentLoss: (detail) => `el modelo tiene contenido que el lector BPMN no sabe reescribir, así que editarlo lo perdería: ${detail}`,
+    editUnknownId: (id) => `"${id}" no es el id de un elemento del modelo.`,
+    editNotAStep: (id, type) => `"${id}" es un ${type}, no un paso (tarea, gateway, evento o subproceso).`,
+    editOtherProcess: (id, process) => `"${id}" no está en el proceso que se edita (${process}).`,
+    editBadId: (id) => `"${id}" no es un id BPMN válido (letras, dígitos, "_", "-" y ".", sin empezar por dígito).`,
+    editIdTaken: (id) => `el id "${id}" ya se usa en el modelo.`,
+    editAfterAndBetween: () => 'usa "after" o "between", no los dos.',
+    editAfterAndBefore: () => 'usa "after" o "before", no los dos.',
+    editAfterEnd: (id) => `"${id}" es un evento de fin: nada puede seguirle. Usa "between" con el paso anterior.`,
+    editAfterAmbiguous: (id, count) =>
+      `"${id}" tiene ${count} flujos de salida, así que "after" es ambiguo; usa "between": ["${id}", "<id del paso siguiente>"].`,
+    editNoFlowBetween: (from, to) => `no hay un flujo de "${from}" a "${to}".`,
+    editOtherContainer: (from, to) => `"${from}" y "${to}" no están en el mismo proceso o subproceso.`,
+    editFromEnd: (id) => `"${id}" es un evento de fin: no puede salir ningún flujo.`,
+    editToStart: (id) => `"${id}" es un evento de inicio o de borde: no puede llegarle ningún flujo.`,
+    editProbabilityNeedsChoice: (id) =>
+      `"probability" solo aplica a un flujo que sale de un gateway exclusivo (xor) o inclusivo (or); "${id}" no lo es.`,
+    editNeedsScenario: (field, scenario) =>
+      `"${field}" va al escenario base ${scenario}, y este proceso no lo tiene; ponlo con patch_scenario.`,
+    editRemoveAmbiguous: (id, incoming, outgoing) =>
+      `no se puede quitar "${id}": con ${incoming} flujos de entrada y ${outgoing} de salida no está claro cómo reconectarlos. Quita o reconecta sus flujos primero.`,
+    editRemoveBoundary: (id, boundaries) => `no se puede quitar "${id}": tiene eventos de borde (${boundaries}); quítalos primero.`,
+    editCannotRemove: (id, type) => `"${id}" es un ${type}; solo se pueden quitar pasos y flujos de secuencia.`,
+    editBoundaryNeedsActivity: (id, boundaries) =>
+      `"${id}" tiene eventos de borde (${boundaries}); solo una tarea, actividad de llamada o subproceso puede llevarlos.`,
+    editLaneUnknown: (lane, lanes) =>
+      lanes === '' ? `no hay un carril "${lane}": el proceso no tiene carriles; agrega uno con addLane.` : `no hay un carril "${lane}"; los carriles son: ${lanes}.`,
+    editLaneAmbiguous: (lane, ids) => `varios carriles se llaman "${lane}" (${ids}); usa el id del carril.`,
+    editLaneOutsideProcess: (id) => `"${id}" está dentro de un subproceso, que no tiene carriles.`,
+    editProbabilityNote: (gateway, scenario, sum, flows) =>
+      `gateway "${gateway}": las probabilidades de sus flujos de salida en ${scenario} ahora suman ${sum}; ajústalas con patch_scenario, un {"op": "replace", "path": "/elements/<flujo>/probability", "value": …} por cada flujo de ${flows}.`,
+    editScenarioRemoved: (scenario, id, removed) =>
+      `${scenario}: se quitó elements.${id} ${removed}, que ya no aplica al modelo; patch_scenario puede ponerlo en otro elemento.`,
+    editScenarioBroken: (detail) => `la edición dejaría un escenario que no simula; no se cambió nada:\n${detail}`,
+    editPositionAfter: (id) => `después de "${id}"`,
+    editPositionBetween: (from, to) => `entre "${from}" y "${to}"`,
+    editPositionAlone: () => 'sin conectar',
+    editPositionLane: (lane) => `en el carril "${lane}"`,
+    editAdded: (id, type, position) => `agregado ${type} "${id}" ${position}`,
+    editConnected: (from, to, flow) => `conectado "${from}" → "${to}" (${flow})`,
+    editRemovedFlow: (id) => `quitado el flujo "${id}"`,
+    editRemovedStep: (id, reconnected, also) =>
+      `quitado "${id}"${reconnected === '' ? '' : `; reconectado ${reconnected}`}${also === '' ? '' : `; también se quitó ${also}`}`,
+    editAlsoRemoved: (ids) => `; también se quitó ${ids}`,
+    editRenamed: (id, before, after) => `renombrado "${id}": "${before}" → "${after}"`,
+    editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
+    editMoved: (id, lane) => `movido "${id}" al carril "${lane}"`,
+    editLaneAdded: (name, id) => `agregado el carril "${name}" (${id})`,
+    processEdited: (name, slug, file, operations, removed) =>
+      `Editado el proceso "${name}" (${slug}) en ${file}: ${operations} operaciones, ${removed} elementos quitados.`,
+    processEditDryRun: (name, slug, file, operations, removed) =>
+      `Simulacro: se editaría el proceso "${name}" (${slug}) en ${file}: ${operations} operaciones, ${removed} elementos quitados. No se escribió nada.`,
+    editOpsUnreadable: (file, detail) => `no se pueden leer las operaciones ${file}: ${detail}`,
+    editNotList: () => 'debe ser una lista no vacía de operaciones.',
+    editUnknownOp: (op, accepted) => `"${op}" no es una operación; usa una de ${accepted}.`,
+    editBadBetween: () => 'deben ser dos ids de paso: [from, to].',
+    editDuplicateLane: (lane) => `ya hay un carril llamado "${lane}"; elige otro nombre.`,
+    editLayoutFailed: (detail) => `el maquetado automático falló en el proceso editado (${detail}); no se cambió nada. Prueba con layout: false (--no-layout).`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,

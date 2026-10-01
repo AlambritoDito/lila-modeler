@@ -1,0 +1,4 @@
+[
+  { "op": "rename", "id": "Task_Preparar", "name": "Cook" },
+  { "op": "remove", "id": "Gateway_ANDFork" }
+]
