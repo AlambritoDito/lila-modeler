@@ -8,26 +8,29 @@ backed by `@lila-modeler/engine`. Its five tools reuse the CLI validation and si
 
 ## Tools
 
-- **`validate_bpmn({ path | xml, locale? })`** parses and validates BPMN and returns the same JSON
+- **`validate_bpmn({ path | xml, process?, locale? })`** parses and validates BPMN and returns the same JSON
   as `lila validate --json`: IR, `ignoredProcessIds`, `errors` and `warnings`. Supply exactly
   one of `path` and inline `xml`; supplying both is an error.
-- **`describe_process({ path | xml, scenario?, locale? })`** returns the IR and a readable
+- **`describe_process({ path | xml, process?, scenario?, locale? })`** returns the IR and a readable
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, scenario, seed?, replications?, saveTo?, locale? })`** validates
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, locale? })`** validates
   the model and scenario, simulates with `log: false` and returns the same `RunResult` as
   `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
   or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
   model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
-- **`compare_scenarios({ model?, scenarios, seed?, replications?, saveTo?, locale? })`** validates
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
   with the same `CompareResult` as `lila compare --json`. Notes cover seeds, units, insufficient
   replications for confidence intervals, and engine warnings.
-- **`patch_scenario({ scenario, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
-  only when valid. It returns `{ scenario, file, notes }`.
+  only when valid. It returns `{ scenario, file, notes }` (plus `process` and `entry` inside a
+  `.lila`).
+
+Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
 ### Patch modes
 
@@ -46,6 +49,46 @@ Supported operations are `add`, `replace`, `remove` and `test`, with RFC 6901 po
 `/resources/cajero/capacity`. `move` and `copy` are unsupported. Invalid operations, out-of-range
 probabilities, nonpositive capacity, unknown resources and unknown BPMN IDs return
 `isError: true` without writing anything. Both modes validate the final candidate before writing.
+
+## A `.lila` as input
+
+A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (#466): `path` of
+`validate_bpmn`/`describe_process`, `model` of `run_simulation`/`compare_scenarios`, and
+`project` of `patch_scenario`. The rules are the CLI's (`docs/CLI.md`, «A `.lila` as input»):
+
+- **`process`** is the slug of the process when the project holds several (a version 2
+  repository). With one process it is implicit; with several and no `process`, the tool fails
+  with a message that lists the slugs. `process` with a `.bpmn` is an error, not ignored.
+- **A scenario string** is a `.json` path when that file exists, and otherwise the name of a
+  scenario of the process: its entry name (`as-is.scenario.json`), the same without
+  `.scenario.json` (`as-is`) or its `"name"` (`"AS-IS"`, unique in the process). A scenario from
+  disk is simulated against the archive's process; one from the archive resolves `model` and
+  `extends` inside it.
+- **An inline scenario** is anchored inside the process: `extends: "as-is.scenario.json"` names a
+  scenario of the archive, and a missing `model` means the process's `model.bpmn`.
+- **`patch_scenario` with `project`** reads `scenario` (and `extendsFrom`) as names inside the
+  process — never as disk paths — and `saveTo` as the name of the new scenario entry
+  (`.scenario.json` is added when missing; no folders). It validates against the process's model
+  and writes only a valid result, as on disk. The write goes through the engine's codec
+  (`encodeLila`) to a temporary file that is then renamed over the `.lila`, so a failure never
+  leaves a partial archive. The scenario's revision goes up by one, so the app sees the runs of
+  the old version as stale. Every other process, scenario and run is carried through unchanged
+  and, in an archive written by the app or the engine, byte for byte; entries outside the
+  project layout are dropped, as in any `.lila` save. If the file changed on disk while the tool
+  worked (another program, another MCP server, the CLI or the desktop app), nothing is written and
+  the tool fails: call it again. Writers of the same `.lila` take turns through a lock file next to
+  it (`<file>.lila.lock`, never inside the archive); when another writer holds it for more than 3
+  seconds the tool fails with «another program is saving», writing nothing. A lock left untouched
+  for 10 seconds is treated as left by a crash and removed. A `project` that is not a `.lila` is refused.
+
+```json
+{ "name": "run_simulation", "arguments": { "model": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "seed": 42, "replications": 3 } }
+```
+
+```json
+{ "name": "patch_scenario", "arguments": { "project": "project.lila", "process": "pedido", "scenario": "as-is",
+  "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
+```
 
 ## Language
 
@@ -198,7 +241,7 @@ in-place editing; supplying it selects the derived-scenario mode described above
 
 All relative paths are resolved from the server process's working directory, not the client's
 working directory. Inheritance and model references are resolved relative to the scenario that
-declares them. There is no filesystem sandbox around these tools.
+declares them; inside a `.lila`, relative to that scenario's place in the archive. There is no filesystem sandbox around these tools.
 
 ## SDK packages
 

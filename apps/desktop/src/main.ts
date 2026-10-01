@@ -28,8 +28,16 @@ import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
-import { readLilaFile, writeLilaFile } from './lilaFile.js';
-import { isRecordableProject, occupiedSlugs, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectOptions } from './projectIO.js';
+import {
+  isRecordableProject,
+  occupiedSlugs,
+  ProjectIOError,
+  readLilaFile,
+  readProjectFolder,
+  writeLilaFile,
+  writeProjectFolder,
+  type WriteProjectOptions,
+} from '@lila-modeler/engine/project-fs';
 import type { ProjectDocument } from './projectTypes.js';
 import { isProcessSlug, processesOf } from '@lila-modeler/engine/project';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';

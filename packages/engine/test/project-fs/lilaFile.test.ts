@@ -3,11 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
-import { readLilaFile, writeLilaFile } from './lilaFile.js';
-import { isLilaPath, withLilaExtension } from './openPath.js';
-import { ProjectIOError } from './projectIO.js';
-import type { ProjectDocument } from './projectTypes.js';
+import { decodeLila, encodeLila } from '../../src/project/index.js';
+import type { ProjectDocument } from '../../src/project/index.js';
+import { isLilaPath, ProjectIOError, readLilaFile, writeLilaFile } from '../../src/project-fs/index.js';
 
 /**
  * Carpetas reales con `mkdtemp`, igual que `projectIO.test.ts`: lo que se comprueba aquí es el
@@ -164,18 +162,5 @@ describe('writeLilaFile: guardias de "Guardar como" y de cambio externo', () => 
     await writeLilaFile(file, documento({ name: 'v2' }));
     await writeLilaFile(file, documento({ name: 'v3' }));
     expect((await readLilaFile(file)).document.name).toBe('v3');
-  });
-});
-
-describe('destino elegido en el diálogo de guardar', () => {
-  it('un nombre sin extensión produce un .lila que decodeLila abre', async () => {
-    // Lo que `lila:chooseSaveFile` hace con lo que devuelve `showSaveDialog` antes de dárselo al
-    // renderer (ADR-027): la parte que no necesita Electron para probarse.
-    const elegido = join(await carpeta(), 'pedido nuevo');
-    const file = withLilaExtension(elegido);
-    expect(file.endsWith('.lila')).toBe(true);
-
-    await writeLilaFile(file, documento(), { saveAs: true });
-    expect(decodeLila(new Uint8Array(await readFile(file)))).toEqual(documento());
   });
 });

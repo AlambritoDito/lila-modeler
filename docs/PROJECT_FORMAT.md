@@ -153,8 +153,11 @@ validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over 
 version 2 manifest), `repository.ts` (`processesOf`/`withProcesses`, which fold the list of processes
 into the document: its top-level fields are the first process, and `process`/`processes` carry the
 rest).
-Published as `@lila-modeler/engine/project`. The folder reader/writer is
-`apps/desktop/src/projectIO.ts`; the `.lila` half of the desktop is `apps/desktop/src/lilaFile.ts`.
+Published as `@lila-modeler/engine/project`, which stays browser-safe. The disk half is
+`packages/engine/src/project-fs/`, published as `@lila-modeler/engine/project-fs` (Node only, #466):
+the folder reader/writer `projectIO.ts`, the `.lila` file `lilaFile.ts`, and `input.ts`, which opens
+one process of a `.lila` for the CLI and the MCP server and writes a scenario back. The desktop, the
+CLI and the MCP server all use it.
 
 The engine's codes are `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LILA-NO-MODEL`,
 `LILA-ENTRY-PATH` (the container) and `LILA-DOCUMENT`, `LILA-PROBLEMS`, `LILA-RUN`,
@@ -163,4 +166,8 @@ own `E-ZIP`, `E-NO-MANIFEST`, `E-MANIFEST`, `E-NO-MODEL`, `E-ENTRY-PATH`, `E-DOC
 `E-DIAGNOSTICO`, `E-CORRIDA`, `E-ENTRADAS-CORRIDA` at the IPC boundary (an explicit map in
 `lilaFile.ts`, listed in the `bridge.ts` header); the web app localises them in
 `apps/web/src/project.ts`. A `.lila` save runs the same `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO`
-guards as a folder save.
+guards as a folder save, holding a `<file>.lila.lock` next to the archive while it checks and
+writes, so writers in different processes (the desktop, the CLI, MCP servers) take turns; a writer
+that cannot get the lock within 3 seconds refuses with `E-ARCHIVO-OCUPADO` (nothing is written). The
+holder touches the lock every 2 seconds, so a lock untouched for 10 seconds is removed as left by a
+crash; a writer only removes a lock whose token (a random id written into it) it has checked.
