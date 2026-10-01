@@ -5,9 +5,10 @@
 This guide is for an agent (Claude Code, Claude Desktop, Codex, Hermes Agent or any MCP client)
 that turns what people say about a process into a model, a simulation and a document, with no one
 clicking in the app. Every step is an MCP tool of `lila mcp` ([`MCP.md`](MCP.md), where each tool
-has its full contract) or the matching `lila` command ([`CLI.md`](CLI.md)). The whole flow below
-runs in CI with no UI: `packages/mcp/test/agent-flow.e2e.test.ts`, starting from the synthetic
-interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`.
+has its full contract) or the matching `lila` command ([`CLI.md`](CLI.md)). Steps 2 to 7 below,
+one tool call at a time, run in CI with no UI: `packages/mcp/test/agent-flow.e2e.test.ts`, starting
+from the synthetic interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. Step 8 needs the
+desktop app, so it is checked by hand with `tools/agent-live-check.mjs`.
 
 Setting up the server for each client is in [`MCP.md`](MCP.md#installation).
 
@@ -105,7 +106,7 @@ one-hour run) plus what the outline carried. Fill in the rest from the interview
 Scenario times are seconds; the format is [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md). Resource keys
 are the slugs of their names (`Branch officer` → `branch-officer`). A JSON Patch `add` needs its
 parent: when the outline had no `resources`, the scenario has no `/resources` yet, so add it whole
-(`{ "op": "add", "path": "/resources", "value": { "officer": { "name": "Branch officer", "capacity": 3 } } }`). For a TO-BE, pass `saveTo: "to-be-4-officers"`: the new scenario
+(`{ "op": "add", "path": "/resources", "value": { "branch-officer": { "name": "Branch officer", "capacity": 3 } } }`). For a TO-BE, pass `saveTo: "to-be-4-officers"`: the new scenario
 inherits from the original and holds only the changed keys.
 
 When the numbers come from people rather than from a transcript, hand them a sheet:
