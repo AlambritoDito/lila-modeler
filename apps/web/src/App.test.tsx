@@ -2940,6 +2940,9 @@ it('detaches Results to its own window that follows the current run, and docks i
   try {
     // Not in Simulate: the toggle only shows in Results.
     expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)).toBeNull();
+    // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
+    // it out first, like «valida antes del Worker…» (#494).
+    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
     await vi.waitFor(() => expect(zona().textContent).toContain('Resultado actual W-FRONTERA W-MOTOR'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
@@ -2984,6 +2987,9 @@ it('reopens the Results window where it was last left (#395)', async () => {
   await act(async () => { root.render(<App store={session} />); });
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
+    // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
+    // it out first, like «valida antes del Worker…» (#494).
+    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
     await vi.waitFor(() => expect(container.querySelector('section.zona-resultados')?.textContent).toContain('Resultado actual'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
