@@ -242,13 +242,14 @@ node packages/engine/bin/lila.js mcp
 
 ## `process`
 
-Creates a process from an **outline** and reads one back (#97). An outline is the process as data —
+Creates a process from an **outline**, reads one back (#97) and edits one (#98). An outline is the process as data —
 lanes plus an ordered list of steps with branches — and is the same JSON the MCP tool
 `create_process` takes; its format and rules are in [`docs/MCP.md`](MCP.md#creating-a-process-from-an-outline).
 
 ```text
 lila process create --outline <file.json> -p <file.lila> [--name name] [--process slug] [--dry-run] [--json]
 lila process show -p <file.lila> [--process slug] [--json]
+lila process edit -p <file.lila> --ops <ops.json> [--process slug] [--dry-run] [--no-layout] [--json]
 ```
 
 `process create` builds the BPMN, lays it out (pool, lanes, flows), validates it and adds it to the
@@ -296,6 +297,48 @@ Process "Restaurant" (pedido)
   Timer_Reposo  timer  "Rest"  constant(value=600) → end
 ```
 
+`process edit` applies a list of operations to one process, all or none: the JSON array the MCP
+tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
+`moveToLane`, `addLane`; format and rules in [`docs/MCP.md`](MCP.md#editing-a-process)). Every
+operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
+otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The
+process is laid out again unless `--no-layout`, which keeps every position and only places the new
+shapes. It prints a summary, one line per operation, notes (scenario entries of removed elements,
+which are kept; branch probabilities that no longer add up) and the validator warnings; `--json`
+prints the result object of `edit_process`. `--dry-run` writes nothing.
+
+`examples/outline/pedido-edit.json` adds a "Charge" step with a duration and the cashier, renames
+and retypes two steps, adds two lanes and moves the cooking to the kitchen lane:
+
+```bash
+npx lila process edit -p examples/pedido.lila --ops examples/outline/pedido-edit.json --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would edit process "pedido" (pedido) in /…/examples/pedido.lila: 6 operations, 0 elements removed. Nothing was written.
+  0: added task "Task_Cobrar" after "Task_TomarPedido"
+  1: renamed "Task_Preparar": "Prepare food" → "Cook"
+  2: "Task_Revisar": task → userTask
+  3: added lane "Counter" (Lane_1)
+  4: added lane "Kitchen" (Lane_2)
+  5: moved "Task_Preparar" to lane "Kitchen"
+warning W-MSGFLOW Process_Restaurante: Process_Restaurante: 2 message flows (bpmn:messageFlow) were ignored.
+```
+
+Removing the parallel split is ambiguous (one flow in, two out), so the whole edit is refused,
+the rename included:
+
+```bash
+npx lila process edit -p examples/pedido.lila --ops examples/outline/pedido-edit-ambiguous.json --dry-run
+```
+Exit code: `1`.
+
+```text
+lila process: the edit was refused; nothing was changed:
+  operations[1] id: cannot remove "Gateway_ANDFork": with 1 incoming and 2 outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.
+```
+
 ## General options
 
 Apply to every subcommand, in any position on the command line:
@@ -316,7 +359,7 @@ Exit code: `0`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The command ran; `validate` may still have printed warnings. |
-| `1` | Usage error, unknown command, a model/scenario validation error, an outline with problems or a process that already exists (`process create`), a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
+| `1` | Usage error, unknown command, a model/scenario validation error, an outline with problems or a process that already exists (`process create`), an edit that is refused (`process edit`), a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
 
 ## For agents
 

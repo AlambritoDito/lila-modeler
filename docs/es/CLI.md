@@ -249,7 +249,7 @@ node packages/engine/bin/lila.js mcp
 
 ## `process`
 
-Crea un proceso a partir de un **esquema** y lee uno de vuelta (#97). Un esquema es el proceso como
+Crea un proceso a partir de un **esquema**, lee uno de vuelta (#97) y edita uno (#98). Un esquema es el proceso como
 datos —carriles más una lista ordenada de pasos con ramas— y es el mismo JSON que recibe la tool
 MCP `create_process`; su formato y sus reglas están en
 [`docs/es/MCP.md`](MCP.md#crear-un-proceso-desde-un-esquema).
@@ -257,6 +257,7 @@ MCP `create_process`; su formato y sus reglas están en
 ```text
 lila process create --outline <archivo.json> -p <archivo.lila> [--name nombre] [--process slug] [--dry-run] [--json]
 lila process show -p <archivo.lila> [--process slug] [--json]
+lila process edit -p <archivo.lila> --ops <operaciones.json> [--process slug] [--dry-run] [--no-layout] [--json]
 ```
 
 `process create` arma el BPMN, lo maqueta (pool, carriles, flujos), lo valida y lo agrega al `.lila`
@@ -295,6 +296,39 @@ npx lila process show -p examples/pedido.lila --lang es
 ```
 Código de salida: `0`.
 
+`process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
+tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
+`moveToLane`, `addLane`; formato y reglas en [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
+comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
+no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se
+maqueta de nuevo salvo con `--no-layout`, que conserva todas las posiciones y solo coloca las figuras
+nuevas. Imprime un resumen, una línea por operación, notas (entradas de escenario de elementos
+quitados, que se conservan; probabilidades de rama que ya no suman 1) y los avisos del validador;
+`--json` imprime el objeto resultado de `edit_process`. `--dry-run` no escribe nada.
+
+`examples/outline/pedido-edit.json` agrega un paso "Charge" con duración y el cajero, renombra y
+cambia el tipo de dos pasos, agrega dos carriles y pasa la cocina al carril de cocina:
+
+```bash
+npx lila process edit -p examples/pedido.lila --ops examples/outline/pedido-edit.json --dry-run --lang es
+```
+Código de salida: `0`.
+
+```text
+Simulacro: se editaría el proceso "pedido" (pedido) en /…/examples/pedido.lila: 6 operaciones, 0 elementos quitados. No se escribió nada.
+  0: agregado task "Task_Cobrar" después de "Task_TomarPedido"
+  1: renombrado "Task_Preparar": "Prepare food" → "Cook"
+  …
+```
+
+Quitar el split paralelo es ambiguo (un flujo de entrada, dos de salida), así que se rechaza toda la
+edición, el renombre incluido:
+
+```bash
+npx lila process edit -p examples/pedido.lila --ops examples/outline/pedido-edit-ambiguous.json --dry-run --lang es
+```
+Código de salida: `1`.
+
 ## Opciones generales
 
 Aplican a cualquier subcomando, en cualquier posición de la línea de comandos:
@@ -315,7 +349,7 @@ Código de salida: `0`.
 | Código | Significado |
 | --- | --- |
 | `0` | El comando corrió; `validate` puede haber impreso avisos igual. |
-| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un esquema con problemas o un proceso que ya existe (`process create`), un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
+| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un esquema con problemas o un proceso que ya existe (`process create`), una edición rechazada (`process edit`), un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
 
 ## Para agentes
 

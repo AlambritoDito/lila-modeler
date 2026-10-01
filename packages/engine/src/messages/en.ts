@@ -45,6 +45,8 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila process create --outline <outline.json> -p <project.lila> [--name name]
                            [--process slug] [--dry-run] [--json]
        lila process show -p <project.lila> [--process slug] [--json]
+       lila process edit -p <project.lila> --ops <ops.json> [--process slug]
+                         [--dry-run] [--no-layout] [--json]
        lila process annotate <project.lila> <elementId> [--process slug] [--documentation text]
                              [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
                              [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
@@ -61,7 +63,8 @@ Commands:
   export     Exports without the app: the diagram as SVG, the process document as Word or
              HTML, or the results of a run saved in the .lila as .xlsx or CSV.
   process    create: builds a laid-out process from an outline (a step list) into a .lila.
-             show: prints one process of a .lila as an outline. See docs/CLI.md.
+             show: prints one process of a .lila as an outline.
+             edit: applies a list of operations to a process, all or none. See docs/CLI.md.
              annotate: writes an element's description, RACI, catalog references and extended
              attributes into the .lila. raci: prints the RACI matrix of the process document.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
@@ -113,10 +116,12 @@ export options:
 process options:
   --outline file    create: the outline JSON (lanes plus steps; docs/MCP.md).
   -p, --project f   The .lila; create makes it when it does not exist.
-  --process slug    create: slug of the new process (default: from the name). show: which one.
+  --ops file        edit: the JSON list of operations (docs/CLI.md).
+  --process slug    create: slug of the new process (default: from the name). show, edit: which one.
   --name name       create: name of the process (default: the outline's).
-  --dry-run         create: build and check everything, write nothing.
-  --json            Prints the result (create) or the outline (show) as JSON.
+  --dry-run         create, edit: build and check everything, write nothing.
+  --no-layout       edit: keep every position; place only the new shapes.
+  --json            Prints the result (create, edit) or the outline (show) as JSON.
 
 process annotate options:
   --documentation t Replaces the description ("" removes it).
@@ -520,10 +525,64 @@ export const en: Catalog = {
       `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes. Nothing was written.`,
-    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, annotate or raci.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
     processShowLanes: (lanes) => `Lanes: ${lanes}`,
+    editInvalid: (detail) => `the edit was refused; nothing was changed:\n${detail}`,
+    editBpmnInvalid: (detail) => `the edited process would not validate; nothing was changed:\n${detail}`,
+    editContentLoss: (detail) => `the model has content the BPMN reader cannot write back, so editing it would lose it: ${detail}`,
+    editUnknownId: (id) => `"${id}" is not the id of an element of the model.`,
+    editNotAStep: (id, type) => `"${id}" is a ${type}, not a step (task, gateway, event or sub-process).`,
+    editOtherProcess: (id, process) => `"${id}" is not in the process being edited (${process}).`,
+    editBadId: (id) => `"${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    editIdTaken: (id) => `id "${id}" is already used in the model.`,
+    editAfterAndBetween: () => 'use either "after" or "between", not both.',
+    editAfterAndBefore: () => 'use either "after" or "before", not both.',
+    editAfterEnd: (id) => `"${id}" is an end event: nothing can follow it. Use "between" with the step before it.`,
+    editAfterAmbiguous: (id, count) =>
+      `"${id}" has ${count} outgoing flows, so "after" is ambiguous; use "between": ["${id}", "<next step id>"].`,
+    editNoFlowBetween: (from, to) => `there is no flow from "${from}" to "${to}".`,
+    editOtherContainer: (from, to) => `"${from}" and "${to}" are not in the same process or sub-process.`,
+    editFromEnd: (id) => `"${id}" is an end event: no flow can leave it.`,
+    editToStart: (id) => `"${id}" is a start or boundary event: no flow can arrive at it.`,
+    editProbabilityNeedsChoice: (id) =>
+      `"probability" only applies to a flow out of an exclusive (xor) or inclusive (or) gateway; "${id}" is not one.`,
+    editNeedsScenario: (field, scenario) =>
+      `"${field}" goes into the base scenario ${scenario}, and this process has none; set it with patch_scenario instead.`,
+    editRemoveAmbiguous: (id, incoming, outgoing) =>
+      `cannot remove "${id}": with ${incoming} incoming and ${outgoing} outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.`,
+    editRemoveBoundary: (id, boundaries) => `cannot remove "${id}": boundary events are attached to it (${boundaries}); remove them first.`,
+    editCannotRemove: (id, type) => `"${id}" is a ${type}; only steps and sequence flows can be removed.`,
+    editBoundaryNeedsActivity: (id, boundaries) =>
+      `"${id}" has boundary events attached (${boundaries}); only a task, call activity or sub-process can hold them.`,
+    editLaneUnknown: (lane, lanes) =>
+      lanes === '' ? `there is no lane "${lane}": the process has no lanes; add one with addLane.` : `there is no lane "${lane}"; the lanes are: ${lanes}.`,
+    editLaneAmbiguous: (lane, ids) => `several lanes are named "${lane}" (${ids}); use the lane id.`,
+    editLaneOutsideProcess: (id) => `"${id}" is inside a sub-process, which has no lanes.`,
+    editProbabilityNote: (gateway, scenario, sum) =>
+      `gateway "${gateway}": the probabilities of its outgoing flows in ${scenario} now add up to ${sum}; adjust them with patch_scenario.`,
+    editScenarioEntries: (scenario, ids) => `${scenario} still has entries for removed elements (${ids}); they were kept.`,
+    editPositionAfter: (id) => `after "${id}"`,
+    editPositionBetween: (from, to) => `between "${from}" and "${to}"`,
+    editPositionAlone: () => 'unconnected',
+    editPositionLane: (lane) => `in lane "${lane}"`,
+    editAdded: (id, type, position) => `added ${type} "${id}" ${position}`,
+    editConnected: (from, to, flow) => `connected "${from}" → "${to}" (${flow})`,
+    editRemovedFlow: (id) => `removed flow "${id}"`,
+    editRemovedStep: (id, reconnected, also) =>
+      `removed "${id}"${reconnected === '' ? '' : `; reconnected ${reconnected}`}${also === '' ? '' : `; also removed ${also}`}`,
+    editAlsoRemoved: (ids) => `; also removed ${ids}`,
+    editRenamed: (id, before, after) => `renamed "${id}": "${before}" → "${after}"`,
+    editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
+    editMoved: (id, lane) => `moved "${id}" to lane "${lane}"`,
+    editLaneAdded: (name, id) => `added lane "${name}" (${id})`,
+    processEdited: (name, slug, file, operations, removed) =>
+      `Edited process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed.`,
+    processEditDryRun: (name, slug, file, operations, removed) =>
+      `Dry run: would edit process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed. Nothing was written.`,
+    editOpsUnreadable: (file, detail) => `cannot read the operations ${file}: ${detail}`,
+    editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

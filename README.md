@@ -55,7 +55,7 @@ stable.
 - **Themes** — `eva-01` (dark, default), `papel` (light), `tieso` (light, ITESO blues), `akira` (dark, Neo-Tokyo) and `montana` (purple, bubblegum pink and gold, inspired by Hannah Montana Linux), plain JSON files.
 - **English and Spanish** in the app, the CLI and the MCP server.
 - **Desktop welcome screen** with recent projects (Electron only).
-- **MCP server** with ten tools, so an agent can create a process from a step list, validate, describe, run, compare, patch and export.
+- **MCP server** with sixteen tools, so an agent can create a process from a step list, edit and annotate it, validate, describe, run, compare, patch and export.
 
 ## Quick start
 
@@ -164,9 +164,11 @@ section: [`docs/CLI.md`](docs/CLI.md).
 
 ### MCP
 
-`lila mcp` starts an MCP server over stdio with ten tools on the same engine: `validate_bpmn`,
+`lila mcp` starts an MCP server over stdio with sixteen tools on the same engine: `validate_bpmn`,
 `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
-`get_process_outline`, `export_diagram`, `export_document`, `export_results`.
+`get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
+`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
+`create_project`.
 
 ```bash
 claude mcp add lila -- node /path/to/lila-modeler/packages/engine/bin/lila.js mcp
@@ -233,7 +235,7 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
 - [`CLI.md`](docs/CLI.md) — the `lila` command line: every subcommand, exit codes, and a
   "for agents" section.
-- [`MCP.md`](docs/MCP.md) — the MCP server and its ten tools.
+- [`MCP.md`](docs/MCP.md) — the MCP server and its sixteen tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
 - [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-028).
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented

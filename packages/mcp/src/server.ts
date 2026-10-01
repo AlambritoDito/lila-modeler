@@ -33,6 +33,7 @@ import {
 } from '@lila-modeler/engine/cli-shared';
 import {
   createLilaProcess,
+  editLilaProcess,
   findLilaScenario,
   isLilaPath,
   lilaScenarioEntryName,
@@ -1211,6 +1212,58 @@ export function createServer(options: ServerOptions = {}): McpServer {
   );
   // Annotate, RACI, scenario sheets and project creation (#99, #403, #514).
   registerAgentTools(server, localeOf);
+
+  server.registerTool(
+    'edit_process',
+    {
+      title: 'Edit process',
+      description:
+        'Applies a list of operations to one process of a .lila, all or none: `add` (a step, as in ' +
+        'an outline, `after` a step or `between` two connected steps, or unconnected), `connect`, ' +
+        '`remove` (a step, reconnecting its predecessors to its successor when that is unambiguous, ' +
+        'or a flow), `rename`, `setType`, `moveToLane` and `addLane`. Ids never change, so renamed ' +
+        'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
+        'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
+        'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
+        'operation (`operations[i]`). Documentation, annotations, extended attributes and other ' +
+        'pools are kept. With `layout` (default true) the process is laid out again; with ' +
+        '`layout: false` every shape keeps its place and only new ones are placed. Returns what ' +
+        'each operation did (`changes`), the removed ids, the scenario entries of removed ids (kept, ' +
+        'not deleted), notes, the validator warnings and the outline after the edit. With `dryRun`, ' +
+        'nothing is written.',
+      inputSchema: z.object({
+        project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
+        // Loose on purpose: the engine checks the operations itself and reports every problem with
+        // the index of its operation and a catalog message, instead of the SDK's schema error.
+        operations: z
+          .array(z.unknown())
+          .describe(
+          'In order. Each one of: {op:"add", step:{id, name?, type?, lane?, duration?, resources?}, after?:id | between?:[from,to]}; ' +
+            '{op:"connect", from, to, label?, probability?, id?}; {op:"remove", id}; {op:"rename", id, name}; ' +
+            '{op:"setType", id, type: task|userTask|serviceTask|callActivity|xor|and|or|timer|subprocess}; ' +
+            '{op:"moveToLane", id, lane}; {op:"addLane", name, id?, after?|before?}. E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
+            '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
+            '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +
+            '{"op":"addLane","name":"Back office"}, {"op":"moveToLane","id":"issue","lane":"Back office"}].',
+        ),
+        dryRun: z.boolean().optional().describe('true: apply and validate in memory, write nothing.'),
+        layout: z.boolean().optional().describe('Default true: lay the process out again. false: keep positions, place only new shapes.'),
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, operations, dryRun, layout, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      try {
+        return textResult(await editLilaProcess(project, operations, { process, dryRun, layout, locale: language }));
+      } catch (error) {
+        return errorResult(toolMessage('edit_process', message(error)));
+      }
+    },
+  );
 
   return server;
 }

@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its fifteen tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its sixteen tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
@@ -48,6 +48,10 @@ backed by `@lila-modeler/engine`. Its fifteen tools reuse the CLI validation and
   [Creating a process from an outline](#creating-a-process-from-an-outline).
 - **`get_process_outline({ project, process?, locale? })`** reads one process of a `.lila` back as an
   outline: `{ file, slug, name, outline, warnings }`.
+- **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
+  operations (add, connect, remove, rename, setType, moveToLane, addLane) to one process of a
+  `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
+  scenarioEntries, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
   writes the description, RACI, catalog references and extended attributes of one element of a
@@ -325,6 +329,69 @@ written. `dryRun: true` answers what would change and writes nothing.
 
 ```json
 { "name": "import_scenario_sheet", "arguments": { "project": "project.lila", "scenario": "as-is", "sheet": "as-is.xlsx", "dryRun": true } }
+## Editing a process
+
+`edit_process` (#98) changes a process that already exists, whoever made it: `create_process`, the
+app, or a Bizagi import. It takes a list of `operations`, applies them in order on the model in
+memory, validates the result and writes it only when every operation was fine and the model has no
+validation error it did not have before. Otherwise nothing is written and the call fails with every
+problem, each with the index of its operation (`operations[2] after: …`, `operations[0]
+bpmn.Process_1: E-SIN-START: …`). `lila process edit` (`docs/CLI.md`) does the same from a
+terminal.
+
+```json
+{ "name": "edit_process", "arguments": { "project": "credit.lila", "operations": [
+  { "op": "add", "step": { "id": "verify", "name": "Verify identity", "duration": "5m", "resources": ["Analyst"] }, "after": "receive" },
+  { "op": "connect", "from": "ok", "to": "verify", "label": "Retry", "probability": 0.1 },
+  { "op": "rename", "id": "issue", "name": "Issue the card" },
+  { "op": "setType", "id": "check", "type": "serviceTask" },
+  { "op": "addLane", "name": "Back office" },
+  { "op": "moveToLane", "id": "issue", "lane": "Back office" },
+  { "op": "remove", "id": "reject" } ] } }
+```
+
+| Operation | Fields | What it does |
+| --- | --- | --- |
+| `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections: `{ id, name?, type?, lane?, duration?, resources? }`. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` only out of an `xor` or `or` gateway. |
+| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it. A sequence flow can be removed too. |
+| `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. `""` clears the name. |
+| `setType` | `id`, `type` | One of the outline types. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
+| `moveToLane` | `id`, `lane` | Lane by name or id. |
+| `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
+
+- **Ids never change.** A renamed or retyped step keeps its scenario entries. `duration` and
+  `resources` of an added step and the `probability` of a connection go into the process's
+  `as-is.scenario.json`, as with `create_process` (a resource with the same name or key is reused).
+  A process without that scenario refuses those fields.
+- **Removed ids are reported, not deleted from scenarios**: `removed` lists every id that left the
+  model and `scenarioEntries` the scenarios that still have entries for them. `notes` also flags an
+  XOR whose branch probabilities no longer add up to 1.
+- **What is not touched stays**: documentation, `lila:` annotations (RACI, references, extended
+  attributes), other vendors' extensions, text annotations, data objects, other pools and message
+  flows. A model the BPMN reader cannot read completely is refused rather than written back with
+  something missing.
+- **Layout.** By default (`layout: true`) the edited process is laid out again with the same
+  layouter and lane fix as `create_process`: positions set by hand in that process are lost; text
+  annotations and data objects follow their element; pools below (or beside) it move as one piece
+  by as much as it grew. With `layout: false` every shape keeps its place: a new step goes right of
+  the step it follows, in its lane (which grows a row when it is full), and only flows whose ends
+  changed are drawn again. To make room for a step inserted between two close steps, what lies to
+  its right in that pool shifts right by one amount; pools and lanes only get wider or taller.
+- **Which process**: `process` when the `.lila` holds several. Inside its BPMN, the process the
+  simulator reads (the executable, non-empty one); steps of other pools cannot be edited.
+- The write is the same atomic, locked write as `patch_scenario`: if the file changed on disk since
+  it was read (another agent, the app), the call is refused and nothing is lost. The model's
+  revision goes up, so the app sees its old runs as stale. Every other process stays byte for byte.
+  With `dryRun`, everything is checked and returned and nothing is written.
+
+```json
+{ "file": "/work/credit.lila", "slug": "credit-application", "name": "Credit application", "dryRun": false,
+  "summary": "Edited process \"Credit application\" (credit-application) in /work/credit.lila: 7 operations, 2 elements removed.",
+  "changes": [ { "op": 0, "message": "added task \"verify\" after \"receive\" in lane \"Analyst\"" }, … ],
+  "removed": [ "Flow_reject_EndEvent_reject", "reject" ],
+  "scenarioEntries": [], "notes": [ "gateway \"ok\": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario." ],
+  "warnings": [], "outline": { … } }
 ```
 
 ## Language
@@ -519,3 +586,8 @@ stays in the foreground, so it is not a CI smoke test.
   taller than needed, a gateway's name can sit on a flow that leaves it from below, and a
   sub-process is created collapsed with an empty pass-through inside. Move things in the app
   when the picture matters.
+- `edit_process` with `layout: true` lays out the whole edited process again (manual positions in
+  it are lost); an expanded sub-process becomes a collapsed one, and vertical pools (as Bizagi
+  draws them) become horizontal. With `layout: false`, placement is simple: right of the
+  predecessor, in its lane; it does not untangle crossings. Only the main process of the BPMN can
+  be edited, and nested lanes only through their leaf lanes.

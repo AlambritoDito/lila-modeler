@@ -1,0 +1,9 @@
+[
+  { "op": "add", "step": { "id": "Task_Cobrar", "name": "Charge", "duration": "2m", "resources": ["Cashier"] },
+    "after": "Task_TomarPedido" },
+  { "op": "rename", "id": "Task_Preparar", "name": "Cook" },
+  { "op": "setType", "id": "Task_Revisar", "type": "userTask" },
+  { "op": "addLane", "name": "Counter" },
+  { "op": "addLane", "name": "Kitchen" },
+  { "op": "moveToLane", "id": "Task_Preparar", "lane": "Kitchen" }
+]
