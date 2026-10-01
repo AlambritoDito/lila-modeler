@@ -117,14 +117,20 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
   corridas en una carpeta de proyecto, como se describe más abajo.
 - El lienzo central es el editor de bpmn-js: se edita arrastrando figuras de la paleta, igual que
   cualquier editor de bpmn.io.
-- **Deshacer** / **Rehacer**: barra inferior, junto al nombre del archivo activo.
+- **Deshacer** / **Rehacer**: botones arriba de la ventana, en la barra superior.
 - El XML editado se guarda como `model.bpmn` dentro de la carpeta del proyecto.
 
 ### Simular (pestaña "Simulación" del panel derecho)
 
-- Selector **Escenario**: elige entre los escenarios cargados (el proyecto trae `as-is` y
-  `to-be-3-cajeros` de ejemplo).
-- El panel de escenario permite editar `run`, `calendars`, `resources` y las propiedades por
+- La lista **Escenarios** a la izquierda de Simular muestra los escenarios cargados (el proyecto
+  trae `as-is` y `to-be-3-cajeros` de ejemplo); elige uno para activarlo, o duplica el activo
+  desde la lista.
+- El panel de escenario tiene cuatro pasos, en este orden: **Parámetros** (la ventana de corrida y
+  las réplicas, cómo ramifican las compuertas y el tiempo de cada tarea y temporizador),
+  **Recursos** (pools, unidades, el calendario y la capacidad por turno de un pool, y qué tarea
+  toma cuál), **Calendarios** (calendarios y festivos, y qué calendario sigue cada elemento) y
+  **Llegadas** (cada cuánto dispara cada evento de inicio y cuántos casos crea; la lista **Llegadas
+  por evento de inicio** las resume). Cada control vive en un solo paso. El panel permite editar `run`, `calendars`, `resources` y las propiedades por
   elemento del proceso. Los campos con forma de unión —hoy solo `resources.<id>.capacity`— tienen
   un selector explícito **Fija** (un número) / **Por turno** (una lista de tramos
   `{ calendar, capacity }`, con `calendar` como desplegable de los calendarios ya declarados).
@@ -135,7 +141,7 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 - **Guardar** (dentro del panel de escenario) y **Duplicar** (crea una copia con `extends` sobre el
   archivo actual — el "qué pasaría si" de la casa) son botones aparte de "Guardar proyecto" de la
   barra superior; no se deshabilitan nunca.
-- **Simular**: corre la simulación sobre lo que hay en el lienzo ahora mismo. Mientras corre,
+- **Ejecutar simulación**: corre la simulación sobre lo que hay en el lienzo ahora mismo. Mientras corre,
   aparece **Cancelar** y un progreso (`% · replicación N`). El interruptor **Cuellos de botella**
   pinta o apaga el overlay sobre el diagrama sin volver a simular.
 - **Dock de simulación** (bajo el lienzo): al terminar una corrida te quedas en Simular y el dock
@@ -148,9 +154,24 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
   ocupa más de lo que deja la ventana tras un lienzo usable); `⌘J`, el menú Vista, un doble clic o
   `Enter` sobre ese borde lo ocultan y lo muestran.
 
+- **Vista rápida · simulación**: selecciona un elemento en el lienzo y el panel Propiedades muestra
+  bajo la cabecera sus datos de simulación: **Tiempo**, **Recurso** (solo tareas) y la espera por
+  recurso (p95 si la muestra del log de la corrida está en memoria, la media si no; **sin
+  corrida** antes de la primera). **Editar en Parámetros** y **Editar en Recursos** saltan al paso
+  correspondiente.
+- El panel de escenario se puede separar en su propia ventana con el interruptor de la barra
+  superior (**Escenario acoplado ↗** / **En ventana aparte**); **Acoplar** en el sustituto, o
+  cerrar la ventana, lo devuelve.
+
 ### Resultados
 
-Se abre con **Abrir en Resultados** del dock (o con el modo Resultados): una corrida terminada ya no cambia sola a este modo. Cada tabla (elementos, flujos,
+Se abre con **Abrir en Resultados** del dock (o con el modo Resultados): una corrida terminada ya
+no cambia sola a este modo. Los resultados se pueden separar en su propia ventana con el
+interruptor de la barra superior (**Resultados acoplados ↗** / **Resultados en ventana aparte**,
+visible mientras estás en Resultados o la ventana está abierta). Mientras está separada, la vista
+Resultados muestra **Resultados en otra ventana ↗** con los botones **Mostrar** y **Acoplar**; la
+ventana siempre muestra la corrida actual, cerrarla acopla Resultados de nuevo y se recuerdan su
+tamaño y posición. Cada tabla (elementos, flujos,
 recursos, proceso) tiene su propio botón **Exportar CSV**, que descarga exactamente el mismo
 contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv`, `flows.csv`,
 `resources.csv`, `process.csv`).
@@ -178,6 +199,8 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
 
 ### Validar rutas
 
+- La animación se entra solo desde este modo: pulsar `T` a secas sobre el lienzo no la activa (antes
+  encendía y apagaba la simulación de tokens en cualquier modo).
 - **No es la simulación DES del motor**: anima los tokens de `bpmn-js-token-simulation` sobre el
   diagrama abierto. No lee el escenario activo ni produce resultados, y la propia pestaña lo dice:
   «Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni
@@ -219,8 +242,9 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   carpeta de proyecto, que es la forma que conviene para versionar con git. Las dos aplican las
   mismas reglas de `E-CARPETA-OCUPADA` que "Nuevo proyecto": un destino que ya contiene *otro*
   proyecto se rechaza sin tocarlo.
-- La barra superior muestra `<nombre del proyecto> · Sin guardar` o `· Guardado` según haya
-  cambios pendientes (`apps/web/src/App.tsx`).
+- La barra superior muestra el nombre del archivo seguido de `· Sin guardar` o `· Guardado` según
+  haya cambios pendientes (`apps/web/src/App.tsx`). Con varios procesos en el proyecto muestra el
+  nombre del proceso activo en lugar del nombre del archivo.
 - **Cerrar con cambios sin guardar**: la ventana (botón rojo, Cmd+Q, o cerrarla desde el Dock)
   muestra el diálogo nativo del sistema con **Guardar / Descartar / Cancelar**. "Guardar" espera
   hasta 30 s la respuesta de la app antes de cerrar; si falla o no llega, se avisa y la ventana no
@@ -287,8 +311,8 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ### Ajustes
 
-- `⌘,` (o el botón ⚙ de la barra, o «Tema: …» en la barra de estado) abre **Ajustes →
-  Apariencia**: uno de siete temas (Lila claro, Lila oscuro, Eva-01 oscuro, Papel claro, Tieso claro,
+- `⌘,` (o el botón ⚙ de la barra) abre **Ajustes** en la pestaña **General** (idioma e interruptor
+  **Avanzado**); **Apariencia** y **Atajos** son las otras dos pestañas. **Apariencia** tiene uno de siete temas (Lila claro, Lila oscuro, Eva-01 oscuro, Papel claro, Tieso claro,
   Akira oscuro, Montana morado) y densidad (compacta, normal, cómoda). El cambio
   de tema es inmediato, repinta también el diagrama y se recuerda entre arranques (localStorage de
   la app, bajo `lila://`). Cambiar de tema vuelve a montar el lienzo, así que vacía la pila de
