@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: ocho tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: diez tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -81,6 +81,13 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
   escribe los resultados de una corrida guardada (`format`: `xlsx`, o `csv` en el directorio
   `saveTo`). Devuelve `{ files, format, project, process, run }`.
+- **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** (#97) — convierte un
+  esquema del proceso —carriles más una lista ordenada de pasos— en un proceso BPMN maquetado y
+  validado, y lo escribe como un proceso nuevo del `.lila` `project` (o en un `.lila` nuevo). Nunca
+  reemplaza un proceso. Devuelve `{ file, slug, name, newFile, dryRun, warnings, outline, summary,
+  slugs }`. Ver [Crear un proceso desde un esquema](#crear-un-proceso-desde-un-esquema).
+- **`get_process_outline({ project, process?, locale? })`** (#97) — lee un proceso de un `.lila`
+  como esquema: `{ file, slug, name, outline, warnings }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app).
 
@@ -178,6 +185,68 @@ guarda (`isError`). La app conserva todas las corridas (no hay límite) y esto t
 ```json
 { "name": "run_simulation", "arguments": { "model": "proyecto.lila", "scenario": "as-is", "seed": 42, "replications": 5, "saveRun": true } }
 ```
+## Crear un proceso desde un esquema
+
+Un agente describe el proceso como datos en vez de escribir XML BPMN (#97). `create_process` arma
+el BPMN semántico con `bpmn-moddle`, lo maqueta con `bpmn-auto-layout` (pool, carriles y flujos
+incluidos), lo valida como `validate_bpmn` y lo escribe en el `.lila`. `lila process create`
+(`docs/es/CLI.md`) hace lo mismo desde una terminal.
+
+```json
+{ "name": "Credit application",
+  "lanes": ["Customer", "Analyst"],
+  "steps": [
+    { "id": "receive", "name": "Receive application", "lane": "Analyst" },
+    { "id": "check", "name": "Check bureau", "lane": "Analyst", "duration": "normal(20m, 5m)" },
+    { "id": "ok", "type": "xor", "name": "Approved?",
+      "branches": [ { "label": "Yes", "to": "issue" }, { "label": "No", "to": "reject", "probability": 0.3 } ] },
+    { "id": "issue", "name": "Issue card", "end": true },
+    { "id": "reject", "name": "Notify rejection", "lane": "Customer", "end": true } ] }
+```
+
+- **El orden de la lista es el flujo**: cada paso sigue al anterior salvo que tenga `next` (un id,
+  o varios después de una compuerta), `branches` (solo compuertas: `{ label?, to, probability? }`,
+  o `{ label?, end: true, probability? }` para una rama que termina el proceso) o `end: true`. El
+  último paso termina el proceso. Los eventos de inicio y fin se añaden solos.
+- **`type`** es `task` por defecto; los demás son `userTask`, `serviceTask`, `callActivity`, `xor`,
+  `and`, `or`, `timer` (un evento intermedio de temporizador) y `subprocess` (un subproceso
+  embebido colapsado, con un inicio y un fin de paso dentro).
+- **Los ids de los pasos son los ids BPMN**, así que los escenarios se refieren a ellos. Deben ser
+  ids BPMN válidos y no chocar con los que Lila genera (`StartEvent`, `EndEvent_<paso>`, `Flow_…`,
+  `Lane_<n>`, `Process_…`, `<id>_di`).
+- **`lane`** es por defecto el carril del paso anterior (el primero para el primer paso). Un carril
+  que no está en `lanes` es un error si `lanes` viene, y se agrega en orden si no viene.
+- **El escenario base.** El proceso recibe `as-is.scenario.json`: las llegadas por defecto de la app
+  para un proceso nuevo (20 casos, uno por minuto), cada `duration` como `processingTime` (tareas)
+  o demora (temporizadores), cada entrada de `resources` (un nombre, o `{ name, quantity }`; el
+  recurso se crea con la capacidad de su mayor pedido) y cada `probability` de rama como la
+  probabilidad de su flujo. Las ramas de un XOR sin probabilidad se reparten lo que falta para 1.
+  Una `duration` es un número de segundos, un tiempo con unidad (`90s`, `20m`, `1.5h`, `1d`; las
+  unidades de las hojas de escenario, en español incluidas), una distribución del formato de
+  escenario escrita corta —`normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`,
+  posicional en el orden de `docs/es/SCENARIO_FORMAT.md` o con nombre— o un objeto de distribución
+  en segundos.
+- **El slug** del nuevo `processes/<slug>/` es `process`, o uno derivado del nombre (`name`, si no
+  `outline.name`). Un slug que ya está en el archivo es un error y no se escribe nada. Un `project`
+  que no existe se crea como un `.lila` de un proceso cuyo slug sale del nombre. Todos los demás
+  procesos quedan byte a byte como estaban; la escritura es la misma, atómica y con candado, que
+  la de `patch_scenario`.
+- **Un esquema mal formado** falla con todos sus problemas a la vez, cada uno con su ruta
+  (`steps[2].branches: …`), y no se escribe nada. Lo mismo un esquema cuyo modelo no valida (los
+  errores del validador vuelven con sus códigos).
+
+```json
+{ "name": "create_process", "arguments": { "project": "credit.lila", "outline": { "name": "Credit application", "lanes": ["Customer", "Analyst"], "steps": [ … ] } } }
+```
+
+`get_process_outline` devuelve el esquema en **forma normal**: cada paso dice su carril, `type` se
+omite para `task`, `next` aparece solo cuando no es simplemente el paso siguiente, todo paso que
+termina el proceso lleva `end: true`, las salidas de las compuertas son `branches`, las duraciones
+son objetos de distribución en segundos y las probabilidades del XOR vienen completas. Es la forma
+que `create_process` devuelve como `outline`, así que un proceso va y vuelve igual. Duraciones,
+recursos y probabilidades salen del `as-is.scenario.json` del proceso cuando lo tiene. Para un
+proceso que Lila no generó, `warnings` lista lo que un esquema no puede llevar (otros tipos de
+evento, inicios extra, carriles anidados); los pasos conservan el orden del documento.
 
 ## Idioma
 
@@ -459,3 +528,8 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
   repo), aunque sí manda `structuredContent`. Un cliente estricto puede rechazarlo.
 - **Todo pasa por el disco del servidor.** `saveTo` escribe con los permisos del proceso servidor y
   sobrescribe sin preguntar; no hay sandbox de rutas.
+- **`create_process` maqueta con `bpmn-auto-layout` 1.3, que no dibuja pool ni carriles**: Lila
+  conserva sus columnas y filas, mueve cada nodo a su carril y vuelve a trazar los flujos en
+  ángulo recto. Un flujo que salta varias columnas en una fila puede cruzar las figuras de en
+  medio, y un subproceso se crea colapsado con un paso vacío dentro. Si el dibujo importa, se
+  acomoda en la app.

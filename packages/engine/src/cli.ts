@@ -10,7 +10,7 @@
  * `docs/BIZAGI_PARITY.md`.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -63,6 +63,9 @@ import {
 import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './messages/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
 import { version } from './version.js';
+import { createLilaProcess, readLilaOutline } from './project-fs/outline.js';
+import type { NormalOutline } from './bpmn/outline.js';
+import { describeDistribution } from './xlsx-report.js';
 
 export { resolveLocale } from './locale.js';
 
@@ -1098,6 +1101,99 @@ async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<num
   return 0;
 }
 
+/** `lila process show`: one line per step, the way an outline reads. */
+function printOutline(outline: NormalOutline, slug: string, locale: Locale): void {
+  const C = messages(locale).cli;
+  console.log(C.processShowHeader(outline.name, slug));
+  if (outline.lanes !== undefined) console.log(C.processShowLanes(outline.lanes.join(', ')));
+  for (const step of outline.steps) {
+    const parts = [`${step.id}`, step.type ?? 'task'];
+    if (step.name !== undefined) parts.push(`"${step.name}"`);
+    if (step.lane !== undefined) parts.push(`[${step.lane}]`);
+    if (step.duration !== undefined) parts.push(describeDistribution(step.duration));
+    if (step.resources !== undefined) {
+      parts.push(step.resources.map((r) => (typeof r === 'string' ? r : `${r.name}×${r.quantity}`)).join(', '));
+    }
+    let after = '';
+    if (step.end === true) after = ' → end';
+    else if (step.branches !== undefined) {
+      after = ` → ${step.branches
+        .map((b) => `${b.label === undefined ? '' : `${b.label}: `}${b.to ?? 'end'}${b.probability === undefined ? '' : ` (${b.probability})`}`)
+        .join(' | ')}`;
+    } else if (step.next !== undefined) after = ` → ${[step.next].flat().join(', ')}`;
+    console.log(`  ${parts.join('  ')}${after}`);
+  }
+}
+
+async function dispatchProcess(argv: readonly string[], locale: Locale): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      outline: { type: 'string' },
+      project: { type: 'string', short: 'p' },
+      process: { type: 'string' },
+      name: { type: 'string' },
+      'dry-run': { type: 'boolean' },
+      json: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: true,
+  });
+  const C = messages(locale).cli;
+  if (values.help === true) {
+    console.log(C.usage());
+    return 0;
+  }
+  const [sub, ...rest] = positionals;
+  if (sub !== 'create' && sub !== 'show') {
+    console.error(C.commandError('process', C.processUnknownSubcommand(sub ?? '')));
+    return 1;
+  }
+  if (rest.length > 0) {
+    console.error(C.commandError('process', C.expectedPositionals(sub)));
+    return 1;
+  }
+  if (values.project === undefined) {
+    console.error(C.commandError('process', C.processMissingOption('-p/--project <file.lila>')));
+    return 1;
+  }
+
+  if (sub === 'show') {
+    const read = await readLilaOutline(values.project, { process: values.process, locale });
+    if (values.json === true) console.log(JSON.stringify({ slug: read.slug, outline: read.outline, warnings: read.warnings }, null, 2));
+    else {
+      printOutline(read.outline, read.slug, locale);
+      for (const warning of read.warnings) console.error(`${C.warningLabel()}: ${warning}`);
+    }
+    return 0;
+  }
+
+  if (values.outline === undefined) {
+    console.error(C.commandError('process', C.processMissingOption('--outline <file.json>')));
+    return 1;
+  }
+  let outline: unknown;
+  try {
+    outline = JSON.parse(readFileSync(resolve(values.outline), 'utf8'));
+  } catch (error) {
+    console.error(C.commandError('process', C.outlineFileUnreadable(values.outline, error instanceof Error ? error.message : String(error))));
+    return 1;
+  }
+  const created = await createLilaProcess(values.project, outline, {
+    name: values.name,
+    process: values.process,
+    dryRun: values['dry-run'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(created, null, 2));
+  } else {
+    console.log(created.summary);
+    for (const warning of created.warnings) console.log(`${C.warningLabel()} ${warning.code} ${warning.id}: ${warning.message}`);
+  }
+  return 0;
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   // `--lang` se resuelve antes de repartir: es global, no de un subcomando (ver `extractLang`).
   const { argv: rest, lang, invalid } = extractLang(argv);
@@ -1128,6 +1224,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'compare') return await dispatchCompare(args, locale);
     if (command === 'export') return await dispatchExport(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
+    if (command === 'process') return await dispatchProcess(args, locale);
     console.error(C.unknownCommand(command));
     console.error(C.usage());
     return 1;

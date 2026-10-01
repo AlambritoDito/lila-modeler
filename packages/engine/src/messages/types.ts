@@ -317,6 +317,39 @@ export interface CliMessages {
   saveRunNeedsArchiveScenario: (scenario: string) => string;
   lilaRunStale: (file: string, scenario: string) => string;
   runSaved: (id: string, file: string, slug: string) => string;
+  /* --- outlines and `lila process` (#97), shared by the CLI and the MCP server -- */
+  /** `detail` is one problem per line, already joined. */
+  outlineInvalid: (detail: string) => string;
+  outlineDuplicateId: (id: string) => string;
+  outlineBadId: (id: string) => string;
+  outlineReservedId: (id: string) => string;
+  outlineDuplicateLane: (lane: string) => string;
+  outlineUnknownLane: (step: string, lane: string) => string;
+  outlineUnknownTarget: (step: string, target: string) => string;
+  outlineBranchesNeedGateway: (step: string, type: string) => string;
+  outlineManyNextNeedGateway: (step: string) => string;
+  outlineBranchTarget: (step: string) => string;
+  outlineEndWithNext: (step: string) => string;
+  outlineFieldNotApplicable: (step: string, field: string, type: string) => string;
+  outlineProbabilityOnAnd: (step: string) => string;
+  outlineProbabilitySum: (step: string, sum: number) => string;
+  outlineBadDuration: (step: string, text: string) => string;
+  /** `detail` is the validator's problems, one per line. */
+  outlineBpmnInvalid: (detail: string) => string;
+  outlineNoProcess: () => string;
+  outlineUnsupported: (id: string, type: string) => string;
+  outlineLostFlow: (id: string) => string;
+  outlineFileUnreadable: (file: string, detail: string) => string;
+  processNotLila: (file: string) => string;
+  processBadSlug: (slug: string) => string;
+  processExists: (slug: string, file: string) => string;
+  /** One-line summary of `create_process` / `lila process create`. */
+  processCreated: (name: string, slug: string, file: string, steps: number, lanes: number, newFile: boolean) => string;
+  processDryRun: (name: string, slug: string, file: string, steps: number, lanes: number, newFile: boolean) => string;
+  processUnknownSubcommand: (sub: string) => string;
+  processMissingOption: (option: string) => string;
+  processShowHeader: (name: string, slug: string) => string;
+  processShowLanes: (lanes: string) => string;
 }
 
 /**

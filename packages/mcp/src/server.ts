@@ -31,13 +31,16 @@ import {
   type LoadedScenarioResult,
   type ParsedIr,
 } from '@lila-modeler/engine/cli-shared';
+import { OutlineSchema } from '@lila-modeler/engine/outline';
 import {
+  createLilaProcess,
   findLilaScenario,
   isLilaPath,
   lilaScenarioEntryName,
   lilaScenarioPath,
   lilaScenarioReader,
   openLilaProcess,
+  readLilaOutline,
   writeLilaScenario,
   exportDiagram,
   exportDocument,
@@ -1060,6 +1063,46 @@ export function createServer(options: ServerOptions = {}): McpServer {
   );
 
   server.registerTool(
+    'create_process',
+    {
+      title: 'Create process',
+      description:
+        'Creates a process from an outline — lanes plus an ordered list of steps with branches — ' +
+        'laid out automatically (pool, lanes, flows) and validated, and writes it as a new ' +
+        '`processes/<slug>/` of the .lila `project`, or as a new .lila when the file does not exist. ' +
+        'It never replaces an existing process: a slug already in the file is an error and nothing ' +
+        'is written. List order is the flow: each step follows the previous one unless it has ' +
+        '`next`, `branches` or `end`. Start and end events are added. Step ids become the BPMN ids. ' +
+        'The process gets a base scenario `as-is.scenario.json` with arrivals and every ' +
+        '`duration`, `resources` and branch `probability` given. Returns the slug, the outline as ' +
+        'stored (normal form), the validator warnings and a one-line `summary`. With `dryRun`, ' +
+        'builds and checks everything and writes nothing.',
+      inputSchema: z.object({
+        outline: OutlineSchema.describe(
+          'The process: {name, lanes?, steps: [{id, name?, lane?, type?, next?, branches?, end?, duration?, resources?}]}.',
+        ),
+        project: z.string().describe('Path to the .lila (created if missing), relative to the cwd of the server process.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the new process folder in an existing .lila. Defaults to one derived from the name.'),
+        name: z.string().optional().describe('Name of the process; defaults to outline.name.'),
+        dryRun: z.boolean().optional().describe('true: build and validate, write nothing.'),
+        locale: localeSchema,
+      }),
+    },
+    async ({ outline, project, process, name, dryRun, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      try {
+        const created = await createLilaProcess(project, outline, { process, name, dryRun, locale: language });
+        return textResult(created);
+      } catch (error) {
+        return errorResult(toolMessage('create_process', message(error)));
+      }
+    },
+  );
+
+  server.registerTool(
     'export_document',
     {
       title: 'Export process document',
@@ -1125,6 +1168,35 @@ export function createServer(options: ServerOptions = {}): McpServer {
         return textResult({ files, format, project: results.file, process: results.process, run: results.run });
       } catch (error) {
         return errorResult(toolMessage('export_results', message(error)));
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_process_outline',
+    {
+      title: 'Get process outline',
+      description:
+        'Reads one process of a .lila as an outline (the format `create_process` takes, in normal ' +
+        'form: every step names its lane, `next` only when it is not the following step, `end: ' +
+        'true` where the process ends, durations as scenario distributions in seconds). Durations, ' +
+        'resources and branch probabilities come from its `as-is.scenario.json` when it has one. ' +
+        '`warnings` lists what the outline could not carry (other event types, nested lanes…).',
+      inputSchema: z.object({
+        project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
+        process: z
+          .string()
+          .optional()
+          .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, locale }): Promise<CallToolResult> => {
+      const language = localeOf(locale);
+      try {
+        return textResult(await readLilaOutline(project, { process, locale: language }));
+      } catch (error) {
+        return errorResult(toolMessage('get_process_outline', message(error)));
       }
     },
   );

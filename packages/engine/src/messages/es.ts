@@ -46,6 +46,9 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                      [--process slug] [--run id|latest] [--scenario nombre] [--force]
      lila export results <proyecto.lila> --out libro.xlsx|directorio [--format xlsx|csv]
                          [--process slug] [--run id|latest] [--scenario nombre] [--force]
+     lila process create --outline <esquema.json> -p <proyecto.lila> [--name nombre]
+                         [--process slug] [--dry-run] [--json]
+     lila process show -p <proyecto.lila> [--process slug] [--json]
      lila mcp
 
 Comandos:
@@ -54,6 +57,8 @@ Comandos:
   compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
   export     Exporta sin la app: el diagrama como SVG, el documento del proceso como Word o
              HTML, o los resultados de una corrida guardada en el .lila como .xlsx o CSV.
+  process    create: arma un proceso maquetado desde un esquema (lista de pasos) en un .lila.
+             show: imprime un proceso de un .lila como esquema. Ver docs/CLI.md.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -97,6 +102,13 @@ Opciones de export:
   --force           Reemplaza archivos existentes; sin él no se sobrescribe nada.
   El documento Word va sin diagrama y ningún documento lleva las gráficas de la corrida: el motor
   no rasteriza. El documento HTML sí lleva el diagrama.
+Opciones de process:
+  --outline archivo  create: el JSON del esquema (carriles y pasos; docs/MCP.md).
+  -p, --project a    El .lila; create lo crea si no existe.
+  --process slug     create: slug del proceso nuevo (por defecto, del nombre). show: cuál.
+  --name nombre      create: nombre del proceso (por defecto, el del esquema).
+  --dry-run          create: arma y comprueba todo, no escribe nada.
+  --json             Imprime el resultado (create) o el esquema (show) como JSON.
 
 Opciones de mcp:
   Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
@@ -438,6 +450,38 @@ export const es: Catalog = {
     lilaRunStale: (file, scenario) =>
       `el modelo o el escenario ${scenario} de ${file} cambió mientras corría la simulación; la corrida no se guardó. Vuelve a correrla.`,
     runSaved: (id, file, slug) => `Corrida ${id} guardada en ${file} (proceso ${slug}).`,
+    outlineInvalid: (detail) => `el esquema del proceso no es válido:\n${detail}`,
+    outlineDuplicateId: (id) => `el id de paso "${id}" se usa más de una vez.`,
+    outlineBadId: (id) => `el id de paso "${id}" no es un id BPMN válido (letras, dígitos, "_", "-" y ".", sin empezar por dígito).`,
+    outlineReservedId: (id) => `el id de paso "${id}" choca con un id que Lila genera (inicio, fin, flujos, carriles, diagrama); renombra el paso.`,
+    outlineDuplicateLane: (lane) => `el carril "${lane}" aparece más de una vez.`,
+    outlineUnknownLane: (step, lane) => `paso "${step}": el carril "${lane}" no está en "lanes".`,
+    outlineUnknownTarget: (step, target) => `paso "${step}": "${target}" no es el id de ningún paso.`,
+    outlineBranchesNeedGateway: (step, type) => `paso "${step}": "branches" necesita una compuerta (xor, or, and), no ${type}.`,
+    outlineBranchTarget: (step) => `paso "${step}": cada rama necesita "to" (el id de un paso) o "end": true.`,
+    outlineManyNextNeedGateway: (step) => `paso "${step}": varios pasos en "next" necesitan una compuerta (xor, or, and); añade una.`,
+    outlineEndWithNext: (step) => `paso "${step}": "end" no se puede combinar con "next" ni con "branches".`,
+    outlineFieldNotApplicable: (step, field, type) => `paso "${step}": "${field}" no aplica a un ${type}.`,
+    outlineProbabilityOnAnd: (step) => `paso "${step}": una compuerta paralela (and) toma todas las ramas; "probability" no aplica.`,
+    outlineProbabilitySum: (step, sum) => `paso "${step}": las probabilidades de las ramas suman ${sum}, más de 1.`,
+    outlineBadDuration: (step, text) =>
+      `paso "${step}": la duración "${text}" no es una distribución. Escribe un número de segundos, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", "exponential(mean=4m)" o un objeto de distribución del escenario.`,
+    outlineBpmnInvalid: (detail) => `el proceso construido a partir del esquema no valida:\n${detail}`,
+    outlineNoProcess: () => 'el BPMN no tiene ningún proceso.',
+    outlineUnsupported: (id, type) => `${id} (${type}) no tiene equivalente en el esquema y se omitió.`,
+    outlineLostFlow: (id) => `${id}: se descartó un flujo que llega o sale de un elemento omitido en el esquema.`,
+    outlineFileUnreadable: (file, detail) => `no se puede leer el esquema ${file}: ${detail}`,
+    processNotLila: (file) => `${file} no es un archivo .lila.`,
+    processBadSlug: (slug) => `"${slug}" no es un slug de proceso válido (minúsculas, dígitos y guiones).`,
+    processExists: (slug, file) => `${file} ya tiene un proceso "${slug}"; no se escribió nada. Elige otro nombre u otro slug.`,
+    processCreated: (name, slug, file, steps, lanes, newFile) =>
+      `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles, escenario base as-is.scenario.json.`,
+    processDryRun: (name, slug, file, steps, lanes, newFile) =>
+      `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles. No se escribió nada.`,
+    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create o show.`,
+    processMissingOption: (option) => `falta ${option}.`,
+    processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
+    processShowLanes: (lanes) => `Carriles: ${lanes}`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,

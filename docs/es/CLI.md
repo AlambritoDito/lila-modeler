@@ -185,6 +185,52 @@ registro en clientes están en [`docs/es/MCP.md`](MCP.md); el comando de fondo e
 node packages/engine/bin/lila.js mcp
 ```
 
+## `process`
+
+Crea un proceso a partir de un **esquema** y lee uno de vuelta (#97). Un esquema es el proceso como
+datos —carriles más una lista ordenada de pasos con ramas— y es el mismo JSON que recibe la tool
+MCP `create_process`; su formato y sus reglas están en
+[`docs/es/MCP.md`](MCP.md#crear-un-proceso-desde-un-esquema).
+
+```text
+lila process create --outline <archivo.json> -p <archivo.lila> [--name nombre] [--process slug] [--dry-run] [--json]
+lila process show -p <archivo.lila> [--process slug] [--json]
+```
+
+`process create` arma el BPMN, lo maqueta (pool, carriles, flujos), lo valida y lo agrega al `.lila`
+como un `processes/<slug>/` nuevo con un escenario base `as-is.scenario.json`; si el `.lila` no
+existe, lo crea. `--name` sustituye el nombre del esquema y `--process` elige el slug (si no, sale
+del nombre). Nunca reemplaza un proceso: un slug que ya está en el archivo sale con `1` y no escribe
+nada, igual que un esquema con problemas (se listan todos, cada uno con su ruta). `--dry-run` arma
+y comprueba todo sin escribir. Imprime un resumen de una línea y los avisos del validador; `--json`
+imprime en su lugar el objeto resultado de `create_process`.
+
+```bash
+npx lila process create --outline examples/outline/credit-application.json -p credit.lila --dry-run --lang es
+```
+Código de salida: `0`.
+
+```text
+Simulacro: se crearía el proceso "Credit application" (credit-application) en el archivo nuevo /…/credit.lila: 5 pasos, 2 carriles. No se escribió nada.
+```
+
+El slug `pedido` ya está en `examples/pedido.lila`, así que esto se rechaza:
+
+```bash
+npx lila process create --outline examples/outline/credit-application.json -p examples/pedido.lila --process pedido --dry-run
+```
+Código de salida: `1`.
+
+`process show` imprime el esquema de un proceso, un paso por línea con su tipo, nombre, carril,
+duración, recursos y a dónde va; `--json` imprime `{ slug, outline, warnings }`, con el esquema en
+forma normal (la que devuelve `create_process`). Duraciones, recursos y probabilidades de rama
+salen del `as-is.scenario.json` del proceso. Lo que un esquema no puede llevar se avisa por stderr.
+
+```bash
+npx lila process show -p examples/pedido.lila --lang es
+```
+Código de salida: `0`.
+
 ## Opciones generales
 
 Aplican a cualquier subcomando, en cualquier posición de la línea de comandos:
@@ -205,7 +251,7 @@ Código de salida: `0`.
 | Código | Significado |
 | --- | --- |
 | `0` | El comando corrió; `validate` puede haber impreso avisos igual. |
-| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
+| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un esquema con problemas o un proceso que ya existe (`process create`), un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
 
 ## Para agentes
 

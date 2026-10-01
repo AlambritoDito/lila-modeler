@@ -43,3 +43,5 @@ export {
 export type { DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection, WriteExportOptions } from './exports.js';
 export { saveLilaRun, saveSimulationRun } from './save-run.js';
 export type { SavedRun } from './save-run.js';
+export { BASE_SCENARIO, createLilaProcess, readLilaOutline } from './outline.js';
+export type { CreatedLilaProcess, CreateLilaProcessOptions, LilaOutline } from './outline.js';
