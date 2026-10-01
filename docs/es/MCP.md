@@ -91,7 +91,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** (#98) — aplica una
   lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane) a un proceso de
   un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
-  scenarioEntries, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
+  scenarioRemovals, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`** —
   escribe la descripción, el RACI, las referencias al catálogo y los atributos extendidos de un
@@ -355,10 +355,13 @@ cambiaría y no escribe nada.
 
 `edit_process` (#98) cambia un proceso que ya existe, lo haya hecho quien sea: `create_process`, la
 app o una importación de Bizagi. Recibe una lista de `operations`, las aplica en orden sobre el
-modelo en memoria, valida el resultado y lo escribe solo si todas las operaciones salieron bien y el
-modelo no tiene ningún error de validación que no tuviera antes. Si no, no escribe nada y la llamada
-falla con todos los problemas, cada uno con el índice de su operación (`operations[2] after: …`,
-`operations[0] bpmn.Process_1: E-SIN-START: …`). `lila process edit` (`docs/es/CLI.md`) hace lo
+modelo en memoria, valida el resultado y lo escribe solo si todas las operaciones salieron bien, el
+modelo no tiene ningún error de validación que no tuviera antes y cada escenario del proceso sigue
+simulando. Si no, no escribe nada y la llamada falla con todos los problemas a la vez —los de forma y
+los de significado en una sola pasada, en el idioma de la llamada—, cada uno con el índice de su
+operación y una ruta (`operations[2].after: …`, `operations[3].nombre: campo desconocido "nombre".`,
+`operations[0].bpmn.Process_1: E-SIN-START: …`). Un `operations` que no es una lista también es un
+error (`operations: debe ser una lista no vacía de operaciones.`). `lila process edit` (`docs/es/CLI.md`) hace lo
 mismo desde una terminal.
 
 ```json
@@ -382,13 +385,21 @@ mismo desde una terminal.
 | `moveToLane` | `id`, `lane` | Carril por nombre o id. |
 | `addLane` | `name`, `id?`, `after?` o `before?` | Agrega un carril (abajo, por defecto). El primer carril de un proceso sin carriles contiene todos sus pasos, y un proceso sin pool recibe uno. |
 
-- **Los ids no cambian.** Un paso renombrado o con otro tipo conserva sus entradas de escenario. El
-  `duration` y los `resources` de un paso agregado y la `probability` de una conexión van al
-  `as-is.scenario.json` del proceso, como en `create_process` (un recurso con el mismo nombre o
-  clave se reutiliza). Un proceso sin ese escenario rechaza esos campos.
-- **Los ids quitados se reportan, no se borran de los escenarios**: `removed` lista cada id que salió
-  del modelo y `scenarioEntries` los escenarios que aún tienen entradas para ellos. `notes` avisa
-  además de un XOR cuyas probabilidades de rama ya no suman 1.
+- **Los ids no cambian.** Un paso renombrado conserva sus entradas de escenario, y uno con otro tipo
+  también, en lo que siga aplicando. El `duration`, los `resources` y el `selection` de un paso
+  agregado y la `probability` de una conexión van al `as-is.scenario.json` del proceso, como en
+  `create_process` (un recurso con el mismo nombre o clave se reutiliza). Un proceso sin ese
+  escenario rechaza esos campos.
+- **Después de editar, el proceso sigue simulando.** Las entradas de escenario que ya no aplican se
+  quitan de todos los escenarios del proceso: la entrada completa de un elemento que la edición
+  quitó, y los campos que un elemento con otro tipo ya no admite (recursos en un gateway, un
+  subproceso o un temporizador; una duración en un subproceso…). Nada se va en silencio:
+  `scenarioRemovals` lista cada una como `{ scenario, id, removed, entry }`, con los campos quitados
+  y sus valores anteriores, para que un agente los ponga en otro lado con `patch_scenario`; `notes`
+  dice lo mismo en palabras, y un `dryRun` devuelve el mismo reporte. Después se valida cada
+  escenario contra el modelo editado, y un error que no tenía antes rechaza la edición. `removed`
+  lista cada id que salió del modelo. `notes` avisa además de un XOR cuyas probabilidades de rama ya
+  no suman 1, con los flujos a corregir.
 - **Lo que no se toca se queda**: documentación, anotaciones `lila:` (RACI, referencias, atributos
   extendidos), extensiones de otros fabricantes, anotaciones de texto, objetos de datos, otros pools
   y flujos de mensaje. Un modelo que el lector BPMN no puede leer completo se rechaza en vez de

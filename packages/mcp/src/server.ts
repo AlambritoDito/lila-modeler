@@ -1240,7 +1240,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         // Loose on purpose: the engine checks the operations itself and reports every problem with
         // the index of its operation and a catalog message, instead of the SDK's schema error.
         operations: z
-          .array(z.unknown())
+          .unknown()
           .describe(
           'In order. Each one of: {op:"add", step:{id, name?, type?, lane?, duration?, resources?}, after?:id | between?:[from,to]}; ' +
             '{op:"connect", from, to, label?, probability?, id?}; {op:"remove", id}; {op:"rename", id, name}; ' +

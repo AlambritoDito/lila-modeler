@@ -115,16 +115,58 @@ describe('editLilaProcess', () => {
     expect(sha(file)).toBe(hash);
   });
 
-  test('scenario entries of removed elements are reported and kept', async () => {
+  test('after a remove the process still simulates: the entries of removed ids go, reported with their values', async () => {
     const file = join(scratch, 'pedido.lila');
     writeFileSync(file, readFileSync(exampleLila));
+    const dry = await editLilaProcess(file, [{ op: 'remove', id: 'Task_Revisar' }], { dryRun: true });
     const edited = await editLilaProcess(file, [{ op: 'remove', id: 'Task_Revisar' }]);
+    expect(dry.scenarioRemovals).toEqual(edited.scenarioRemovals);
     expect(edited.removed).toEqual(['Flow_Revisar_Aprobacion', 'Task_Revisar']);
-    expect(edited.scenarioEntries).toEqual([{ scenario: 'as-is.scenario.json', ids: ['Task_Revisar'] }]);
-    expect(edited.notes).toEqual(['as-is.scenario.json still has entries for removed elements (Task_Revisar); they were kept.']);
+    const previous = { processingTime: { type: 'constant', value: 90 }, resources: [{ ref: 'cajero' }, { ref: 'cocinero' }], selection: 'or' };
+    expect(edited.scenarioRemovals).toEqual([{ scenario: 'as-is.scenario.json', id: 'Task_Revisar', removed: previous, entry: true }]);
+    expect(edited.notes).toEqual([
+      `as-is.scenario.json: removed elements.Task_Revisar ${JSON.stringify(previous)}, which no longer applies to the model; patch_scenario can put it back on another element.`,
+    ]);
     const document = decodeLila(new Uint8Array(readFileSync(file)));
-    expect((document.scenarios['as-is.scenario.json']!.elements as Record<string, unknown>)['Task_Revisar']).toBeDefined();
-    expect(document.model.xml).not.toContain('Task_Revisar"');
+    expect((document.scenarios['as-is.scenario.json']!.elements as Record<string, unknown>)['Task_Revisar']).toBeUndefined();
+    expect(document.scenarioRevisions['as-is.scenario.json']).toBe(2);
+    expect(await main(['run', file, 'as-is', '--replications', '1'])).toBe(0);
+    expect(await main(['run', file, 'to-be-3-cajeros', '--replications', '1'])).toBe(0);
+  });
+
+  test('after setType the process still simulates: fields the new type cannot take go, reported', async () => {
+    const file = join(scratch, 'pedido.lila');
+    writeFileSync(file, readFileSync(exampleLila));
+    // A task with a duration becomes a sub-process; a task with resources becomes a gateway.
+    const edited = await editLilaProcess(file, [
+      { op: 'setType', id: 'Task_TomarPedido', type: 'subprocess' },
+      { op: 'setType', id: 'Task_Preparar', type: 'xor' },
+    ]);
+    expect(edited.scenarioRemovals).toEqual([
+      {
+        scenario: 'as-is.scenario.json',
+        id: 'Task_TomarPedido',
+        removed: { processingTime: { type: 'triangular', min: 60, mode: 120, max: 300 }, resources: [{ ref: 'cajero', quantity: 1 }], fixedCost: 2.5 },
+        entry: true,
+      },
+      {
+        scenario: 'as-is.scenario.json',
+        id: 'Task_Preparar',
+        // The scenario format still accepts a time on a gateway: only the resources go.
+        removed: { resources: [{ ref: 'cocinero' }, { ref: 'horno' }], selection: 'and' },
+        entry: false,
+      },
+    ]);
+    expect(await main(['run', file, 'as-is', '--replications', '1'])).toBe(0);
+
+    // Only what no longer applies goes: a timer keeps its delay but not its resources.
+    const timer = join(scratch, 'timer.lila');
+    writeFileSync(timer, readFileSync(exampleLila));
+    const retimed = await editLilaProcess(timer, [{ op: 'setType', id: 'Task_TomarPedido', type: 'timer' }]);
+    expect(retimed.scenarioRemovals).toEqual([
+      { scenario: 'as-is.scenario.json', id: 'Task_TomarPedido', removed: { resources: [{ ref: 'cajero', quantity: 1 }] }, entry: false },
+    ]);
+    expect(await main(['run', timer, 'as-is', '--replications', '1'])).toBe(0);
   });
 
   test('two concurrent edits: one is written, the other is refused, nothing is lost', async () => {
@@ -175,7 +217,7 @@ describe('lila process edit', () => {
     const ops = join(scratch, 'bad.json');
     writeFileSync(ops, JSON.stringify([{ op: 'remove', id: 'Gateway_ANDFork' }]));
     expect(await main(['process', 'edit', '-p', file, '--ops', ops, '--lang', 'es'])).toBe(1);
-    expect(out.join('\n')).toContain('la edición se rechazó; no se cambió nada:\n  operations[0] id: no se puede quitar "Gateway_ANDFork"');
+    expect(out.join('\n')).toContain('la edición se rechazó; no se cambió nada:\n  operations[0].id: no se puede quitar "Gateway_ANDFork"');
     expect(sha(file)).toBe(hash);
 
     out = [];

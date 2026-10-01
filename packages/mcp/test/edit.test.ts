@@ -71,7 +71,7 @@ test('the docs example: written, validated, and read back by get_process_outline
   const result = JSON.parse(edited.text);
   expect(result.summary).toBe(`Edited process "Credit application" (credit-application) in ${join(cwd, 'credit.lila')}: 7 operations, 2 elements removed.`);
   expect(result.notes).toEqual([
-    'gateway "ok": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario.',
+    'gateway "ok": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario, one {"op": "replace", "path": "/elements/<flow>/probability", "value": …} per flow of Flow_ok_issue, Flow_ok_reject, Flow_ok_verify.',
   ]);
 
   const read = await call('get_process_outline', { project: 'credit.lila' });
@@ -99,7 +99,8 @@ test('a refused edit: isError, every problem with its operation, the file byte-i
   });
   expect(refused.isError).toBe(true);
   expect(refused.text).toContain('edit_process: the edit was refused; nothing was changed:');
-  expect(refused.text).toContain('operations[1] to:');
+  expect(refused.text).toContain('operations[1].to: must be a non-empty text.');
+  expect(refused.text).toContain('operations[2].id: "nope" is not the id of an element of the model.');
 
   const semantic = await call('edit_process', {
     project: 'credit.lila',
@@ -107,9 +108,14 @@ test('a refused edit: isError, every problem with its operation, the file byte-i
     locale: 'es',
   });
   expect(semantic.isError).toBe(true);
-  expect(semantic.text).toContain('operations[1] id: "nope" no es el id de un elemento del modelo.');
-  expect(semantic.text).toContain('operations[2] lane: no hay un carril "Nowhere"');
+  expect(semantic.text).toContain('operations[1].id: "nope" no es el id de un elemento del modelo.');
+  expect(semantic.text).toContain('operations[2].lane: no hay un carril "Nowhere"');
   expect(bytes('credit.lila').equals(before)).toBe(true);
+
+  // Not even a list: still the engine's own message, in the call's language.
+  const notList = await call('edit_process', { project: 'credit.lila', operations: { op: 'remove', id: 'check' }, locale: 'es' });
+  expect(notList.isError).toBe(true);
+  expect(notList.text).toBe('edit_process: la edición se rechazó; no se cambió nada:\n  operations: debe ser una lista no vacía de operaciones.');
 }, 120_000);
 
 test('editing the app example keeps the scenario keys; layout: false', async () => {

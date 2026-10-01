@@ -227,8 +227,15 @@ describe('all or none', () => {
       ],
       { scenario },
     );
-    // The schema is checked first: an unknown op stops there.
-    expect(error.issues).toEqual([expect.objectContaining({ op: 4, path: 'op' })]);
+    // One pass: the malformed operation and the semantic problems of the others, all at once.
+    expect(error.issues.map((i) => [i.op, i.path])).toEqual([
+      [1, 'step.id'],
+      [1, 'after'],
+      [2, 'to'],
+      [2, 'probability'],
+      [3, 'lane'],
+      [4, 'op'],
+    ]);
 
     const second = await refused(
       xml,
@@ -249,8 +256,53 @@ describe('all or none', () => {
       [2, 'probability'],
       [3, 'lane'],
     ]);
-    expect(second.message).toContain('operations[1] step.id: id "check" is already used in the model.');
-    expect(second.message).toContain('operations[3] lane: there is no lane "Nowhere"; the lanes are: Customer, Analyst.');
+    expect(second.message).toContain('operations[1].step.id: id "check" is already used in the model.');
+    expect(second.message).toContain('operations[3].lane: there is no lane "Nowhere"; the lanes are: Customer, Analyst.');
+  });
+
+  test('shape and meaning in one pass, in the caller\'s language (QA of #557)', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(
+      xml,
+      [
+        { op: 'add', step: { id: 'check' }, after: 'nope' },
+        { op: 'connect', from: 'receive', to: 'nope', probability: 0.5 },
+        { op: 'remove', id: 'nope' },
+        { op: 'rename', id: 'check', nombre: 'x' },
+        { op: 'setType', id: 'check', type: 'gateway' },
+        { op: 'moveToLane', id: 'check', lane: 'Legal' },
+        { op: 'add', step: { id: 'slow', duration: '20 minutoz' }, after: 'receive' },
+        { op: 'explode' },
+        'not an object',
+        { op: 'add', step: { id: 'x' }, between: ['receive'] },
+        { op: 'addLane', name: 'Customer' },
+      ],
+      { scenario, locale: 'es' },
+    );
+    expect(error.issues.map((i) => [i.op, i.path])).toEqual([
+      [0, 'step.id'],
+      [0, 'after'],
+      [1, 'to'],
+      [1, 'probability'],
+      [2, 'id'],
+      [3, 'nombre'],
+      [3, 'name'],
+      [4, 'type'],
+      [5, 'lane'],
+      [6, 'step.duration'],
+      [7, 'op'],
+      [8, '(operation)'],
+      [9, 'between'],
+      [10, 'name'],
+    ]);
+    expect(error.message).toContain('la edición se rechazó');
+    expect(error.message).toContain('operations[3].nombre: campo desconocido "nombre".');
+    expect(error.message).toContain('operations[4].type: "gateway" no es un tipo de paso');
+    expect(error.message).toContain('operations[7].op: "explode" no es una operación');
+    expect(error.message).toContain('operations[10].name: ya hay un carril llamado "Customer"');
+    expect(error.message).not.toMatch(/Invalid|expected/);
+    const notList = await refused(xml, { op: 'remove', id: 'check' }, { locale: 'es' });
+    expect(notList.issues).toEqual([{ op: null, path: 'operations', message: 'debe ser una lista no vacía de operaciones.' }]);
   });
 
   test('an edit that would break validation is refused with the validator errors', async () => {
@@ -413,6 +465,25 @@ describe('models made elsewhere', () => {
     }
   });
 
+  test('message flows into one task get their own entry point and stretch, and their labels apart (QA of #557)', async () => {
+    for (const layout of [true, false]) {
+      const edit = await editBpmn(pedidoXml, [{ op: 'add', step: { id: 'Task_Cobrar', name: 'Charge' }, after: 'Task_TomarPedido' }, { op: 'addLane', name: 'Counter' }], { layout });
+      const { rootElement } = await BpmnModdle().fromXML(edit.xml);
+      const edges = new Map<string, any>();
+      for (const el of (rootElement as any).diagrams[0].plane.planeElement) if (el.$type === 'bpmndi:BPMNEdge') edges.set(el.bpmnElement.id, el);
+      const a = edges.get('MessageFlow_Entregado');
+      const b = edges.get('MessageFlow_Rechazado');
+      const last = (e: any) => e.waypoint[e.waypoint.length - 1];
+      expect(last(a).x, String(layout)).not.toBe(last(b).x);
+      const stretch = (e: any) => e.waypoint.find((p: any, i: number) => i > 0 && p.y === e.waypoint[i - 1].y && p.x !== e.waypoint[i - 1].x)?.y;
+      expect(stretch(a)).not.toBe(stretch(b));
+      const la = a.label.bounds;
+      const lb = b.label.bounds;
+      const apart = la.x + la.width <= lb.x || lb.x + lb.width <= la.x || la.y + la.height <= lb.y || lb.y + lb.height <= la.y;
+      expect(apart, String(layout)).toBe(true);
+    }
+  });
+
   test('removing an element a message flow points at removes the message flow too, and says so', async () => {
     const edit = await editBpmn(pedidoXml, [{ op: 'add', step: { id: 'Task_Avisar' }, after: 'Timer_Reposo' }, { op: 'remove', id: 'EndEvent_Rechazado' }]);
     // EndEvent_Rechazado is the only target of Flow_Rechazado: removing it would leave a gateway branch nowhere.
@@ -431,6 +502,10 @@ describe('models made elsewhere', () => {
     expect(outline.lanes).toEqual(['Counter', 'Kitchen']);
     expect(outline.steps.filter((s) => s.lane === 'Kitchen').map((s) => s.id)).toEqual(['Task_Preparar']);
     expect(outline.steps.every((s) => s.lane !== undefined)).toBe(true);
+    // The lanes' title band is clear of the steps (QA of #557: it ran under the start event).
+    const { shapes } = await di(edit.xml);
+    const band = shapes.get('Lane_1')!.x + 30;
+    for (const id of ['StartEvent_Pedido', 'Task_TomarPedido', 'Task_Preparar']) expect(shapes.get(id)!.x, id).toBeGreaterThanOrEqual(band + 20);
   });
 
   test('a process without lanes or a pool gets one with its first lane', async () => {

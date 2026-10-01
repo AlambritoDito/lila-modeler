@@ -400,8 +400,9 @@ export interface CliMessages {
   editLaneUnknown: (lane: string, lanes: string) => string;
   editLaneAmbiguous: (lane: string, ids: string) => string;
   editLaneOutsideProcess: (id: string) => string;
-  editProbabilityNote: (gateway: string, scenario: string, sum: number) => string;
-  editScenarioEntries: (scenario: string, ids: string) => string;
+  editProbabilityNote: (gateway: string, scenario: string, sum: number, flows: string) => string;
+  editScenarioRemoved: (scenario: string, id: string, removed: string) => string;
+  editScenarioBroken: (detail: string) => string;
   editPositionAfter: (id: string) => string;
   editPositionBetween: (from: string, to: string) => string;
   editPositionAlone: () => string;
@@ -419,6 +420,10 @@ export interface CliMessages {
   processEdited: (name: string, slug: string, file: string, operations: number, removed: number) => string;
   processEditDryRun: (name: string, slug: string, file: string, operations: number, removed: number) => string;
   editOpsUnreadable: (file: string, detail: string) => string;
+  editNotList: () => string;
+  editUnknownOp: (op: string, accepted: string) => string;
+  editBadBetween: () => string;
+  editDuplicateLane: (lane: string) => string;
   editLayoutFailed: (detail: string) => string;
 }
 

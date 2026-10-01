@@ -134,6 +134,10 @@ export interface BpmnEdit {
   readonly warnings: ValidationResult['warnings'];
   /** Things worth a look that are not errors (branch probabilities that no longer add up to 1…). */
   readonly notes: readonly string[];
+  /** Ids of the elements whose type changed: their scenario entries may no longer apply. */
+  readonly retyped: readonly string[];
+  /** Element id → index of the last operation that touched it, to attribute later problems. */
+  readonly touched: ReadonlyMap<string, number>;
 }
 
 const BPMN_TYPE: Readonly<Record<OutlineStepType, string>> = {
@@ -193,6 +197,7 @@ function mainProcess(definitions: El): El | undefined {
 class Editor {
   readonly used = new Set<string>();
   readonly removed: string[] = [];
+  readonly retyped: string[] = [];
   /** element id → index of the last operation that touched it, to attribute validation errors */
   readonly touched = new Map<string, number>();
   readonly changes: EditChange[] = [];
@@ -772,6 +777,7 @@ class Editor {
     this.diagram.rerouteAround(replacement.id, this.links());
     if (is(replacement, 'bpmn:Gateway')) this.gateways.add(replacement);
     this.touch(replacement);
+    if (!this.retyped.includes(replacement.id)) this.retyped.push(replacement.id);
     this.change(this.C.editRetyped(op.id, from, op.type) + (also.length > 0 ? this.C.editAlsoRemoved(also.join(', ')) : ''));
   }
 
@@ -808,6 +814,7 @@ class Editor {
   addLane(op: Extract<Op, { op: 'addLane' }>, before: number): void {
     if (op.id !== undefined) this.checkNewId(op.id, 'id');
     if (op.after !== undefined && op.before !== undefined) this.issue('before', this.C.editAfterAndBefore());
+    if (lanesOf(this.process).some((l) => l.lane['name'] === op.name)) this.issue('name', this.C.editDuplicateLane(op.name));
     const ref = op.after ?? op.before;
     const neighbour = ref === undefined ? undefined : this.lane(ref, op.after !== undefined ? 'after' : 'before');
     if (this.issues.length > before) return;
@@ -838,6 +845,16 @@ class Editor {
       const depth = this.laneChain(lane).length;
       const x = poolBox.x + 30 * depth;
       if (first) {
+        // The lane's title band must not run under the steps (or their labels): what is too far
+        // left moves right, and the pool widens.
+        const left = Math.min(
+          ...this.diagram
+            .nodeShapes(plane)
+            .filter((di) => this.inProcess(di['bpmnElement']))
+            .flatMap((di) => [di['bounds'].x as number, ...(di['label']?.['bounds'] ? [di['label']['bounds'].x as number] : [])]),
+        );
+        const room = x + 30 + 20 - left;
+        if (Number.isFinite(room) && room > 0) this.diagram.makeRoom(plane, poolBox.x + 1, room, { top: poolBox.y, bottom: poolBox.y + poolBox.height });
         this.diagram.addShape(lane, plane, { x, y: poolBox.y, width: poolBox.x + poolBox.width - x, height: poolBox.height }, { isHorizontal: true });
       } else {
         const siblings = lanes.filter((l) => l !== lane).map((l) => this.diagram.bounds(l.id)).filter((b) => b !== undefined);
@@ -861,8 +878,131 @@ class Editor {
  * The entry point
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * Reading the operations: one pass, every problem, catalog messages
+ * ------------------------------------------------------------------ */
+
+const OP_KEYS: Readonly<Record<Op['op'], readonly string[]>> = {
+  add: ['op', 'step', 'after', 'between'],
+  connect: ['op', 'from', 'to', 'label', 'probability', 'id'],
+  remove: ['op', 'id'],
+  rename: ['op', 'id', 'name'],
+  setType: ['op', 'id', 'type'],
+  moveToLane: ['op', 'id', 'lane'],
+  addLane: ['op', 'name', 'id', 'after', 'before'],
+};
+const STEP_KEYS = new Set(['id', 'name', 'lane', 'type', 'duration', 'resources', 'selection']);
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+
+/**
+ * Reads `input` in one pass (the same rule as `outline.ts`): every malformed field is an issue with
+ * its operation's index, its path and a catalog message, and only that operation is dropped, so the
+ * semantic checks still run on every well-formed one and all the problems come back at once.
+ */
+function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (Op | undefined)[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    issues.push({ op: null, path: 'operations', message: C.editNotList() });
+    return [];
+  }
+  return input.map((value, index): Op | undefined => {
+    const before = issues.length;
+    const bad = (path: string, message: string): undefined => {
+      issues.push({ op: index, path, message });
+      return undefined;
+    };
+    if (!isObject(value)) return bad('(operation)', C.outlineNotObject());
+    const kind = value['op'];
+    if (typeof kind !== 'string' || !Object.hasOwn(OP_KEYS, kind)) {
+      return bad('op', C.editUnknownOp(String(kind), Object.keys(OP_KEYS).join(', ')));
+    }
+    const keys = OP_KEYS[kind as Op['op']];
+    for (const key of Object.keys(value)) if (!keys.includes(key)) bad(key, C.outlineUnknownKey(key));
+    const text = (key: string, required: boolean): string | undefined => {
+      const v = value[key];
+      if (v === undefined) return required ? bad(key, C.outlineNotText()) : undefined;
+      return isText(v) ? v : bad(key, C.outlineNotText());
+    };
+    const string = (key: string, required: boolean): string | undefined => {
+      const v = value[key];
+      if (v === undefined) return required ? bad(key, C.outlineNotText()) : undefined;
+      return typeof v === 'string' ? v : bad(key, C.outlineNotText());
+    };
+    const type = (v: unknown, path: string): OutlineStepType | undefined =>
+      (OUTLINE_STEP_TYPES as readonly unknown[]).includes(v) ? (v as OutlineStepType) : bad(path, C.outlineBadType(String(v), OUTLINE_STEP_TYPES.join(', ')));
+
+    let op: Record<string, unknown> = { op: kind };
+    switch (kind) {
+      case 'add': {
+        const step = value['step'];
+        let read: Record<string, unknown> | undefined;
+        if (!isObject(step)) bad('step', C.outlineNotObject());
+        else {
+          for (const key of Object.keys(step)) if (!STEP_KEYS.has(key)) bad(`step.${key}`, C.outlineUnknownKey(key));
+          read = { id: isText(step['id']) ? step['id'] : bad('step.id', C.outlineNotText()) };
+          if (step['name'] !== undefined) read['name'] = typeof step['name'] === 'string' ? step['name'] : bad('step.name', C.outlineNotText());
+          if (step['lane'] !== undefined) read['lane'] = isText(step['lane']) ? step['lane'] : bad('step.lane', C.outlineNotText());
+          if (step['type'] !== undefined) read['type'] = type(step['type'], 'step.type');
+          if (step['duration'] !== undefined) read['duration'] = step['duration'];
+          if (step['resources'] !== undefined) {
+            const list = step['resources'];
+            if (!Array.isArray(list) || list.length === 0) bad('step.resources', C.outlineBadResource());
+            else {
+              read['resources'] = list.map((r, k) => {
+                const at = `step.resources[${k}]`;
+                if (isText(r)) return r;
+                if (!isObject(r) || !isText(r['name'])) return bad(at, C.outlineBadResource());
+                for (const key of Object.keys(r)) if (key !== 'name' && key !== 'quantity') bad(`${at}.${key}`, C.outlineUnknownKey(key));
+                const quantity = r['quantity'] ?? 1;
+                if (!Number.isInteger(quantity) || (quantity as number) < 1) return bad(`${at}.quantity`, C.outlineNotQuantity());
+                return { name: r['name'], quantity };
+              });
+            }
+          }
+          if (step['selection'] !== undefined) {
+            read['selection'] = step['selection'] === 'and' || step['selection'] === 'or' ? step['selection'] : bad('step.selection', C.outlineBadSelection());
+          }
+        }
+        op = { ...op, step: read, after: text('after', false) };
+        const between = value['between'];
+        if (between !== undefined) {
+          if (Array.isArray(between) && between.length === 2 && between.every(isText)) op['between'] = between;
+          else bad('between', C.editBadBetween());
+        }
+        break;
+      }
+      case 'connect': {
+        op = { ...op, from: text('from', true), to: text('to', true), label: string('label', false), id: text('id', false) };
+        const p = value['probability'];
+        if (p !== undefined) op['probability'] = typeof p === 'number' && p >= 0 && p <= 1 ? p : bad('probability', C.outlineNotProbability());
+        break;
+      }
+      case 'remove':
+        op = { ...op, id: text('id', true) };
+        break;
+      case 'rename':
+        op = { ...op, id: text('id', true), name: string('name', true) };
+        break;
+      case 'setType':
+        op = { ...op, id: text('id', true), type: value['type'] === undefined ? bad('type', C.outlineNotText()) : type(value['type'], 'type') };
+        break;
+      case 'moveToLane':
+        op = { ...op, id: text('id', true), lane: text('lane', true) };
+        break;
+      case 'addLane':
+        op = { ...op, name: text('name', true), id: text('id', false), after: text('after', false), before: text('before', false) };
+        break;
+    }
+    if (issues.length > before) return undefined;
+    for (const key of Object.keys(op)) if (op[key] === undefined) delete op[key];
+    return op as Op;
+  });
+}
+
 function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => string = C.editInvalid): never {
-  const line = (i: EditIssue): string => `  ${i.op === null ? '' : `operations[${i.op}] `}${i.path}: ${i.message}`;
+  const line = (i: EditIssue): string => `  ${i.op === null ? '' : `operations[${i.op}].`}${i.path}: ${i.message}`;
   throw new EditError(wrap(issues.map(line).join('\n')), issues);
 }
 
@@ -873,17 +1013,9 @@ function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => str
 export async function editBpmn(xml: string, operations: unknown, options: EditBpmnOptions = {}): Promise<BpmnEdit> {
   const locale = options.locale ?? 'en';
   const C = messages(locale).cli;
-  const parsed = EditOperationsSchema.safeParse(operations);
-  if (!parsed.success) {
-    fail(
-      C,
-      parsed.error.issues.map((issue) => {
-        const [first, ...rest] = issue.path;
-        const op = typeof first === 'number' ? first : null;
-        return { op, path: (op === null ? issue.path : rest).join('.') || '(root)', message: issue.message };
-      }),
-    );
-  }
+  const shapeIssues: EditIssue[] = [];
+  const ops = readOperations(operations, C, shapeIssues);
+  if (ops.length === 0) fail(C, shapeIssues);
 
   const moddle = BpmnModdle({ lila });
   const { rootElement, warnings } = await moddle.fromXML(xml);
@@ -897,11 +1029,13 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
 
   const editor = new Editor(moddle, definitions, process, C, options.scenario, options.scenarioName ?? 'as-is.scenario.json');
   editor.incremental = options.layout === false;
-  for (const [index, op] of parsed.data.entries()) {
+  editor.issues.push(...shapeIssues);
+  for (const [index, op] of ops.entries()) {
+    if (op === undefined) continue;
     editor.op = index;
     editor.apply(op);
   }
-  if (editor.issues.length > 0) fail(C, editor.issues);
+  if (editor.issues.length > 0) fail(C, [...editor.issues].sort((a, b) => (a.op ?? -1) - (b.op ?? -1)));
 
   if (options.layout !== false) {
     try {
@@ -920,9 +1054,10 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     const now = editor.participant === undefined ? undefined : editor.diagram.bounds(editor.participant.id);
     if (plane !== undefined && editor.pool !== undefined && now !== undefined) editor.diagram.pushAside(plane, editor.pool, now, false);
     // Message flows and associations whose ends moved are drawn again.
-    for (const link of editor.links()) {
-      if (editor.diagram.moved.has(link['sourceRef']?.id) || editor.diagram.moved.has(link['targetRef']?.id)) editor.diagram.routeOther(link);
-    }
+    const links = editor.links();
+    const touched = (link: El): boolean => editor.diagram.moved.has(link['sourceRef']?.id) || editor.diagram.moved.has(link['targetRef']?.id);
+    for (const link of links) if (link.$type !== 'bpmn:MessageFlow' && touched(link)) editor.diagram.routeOther(link);
+    if (links.some((link) => link.$type === 'bpmn:MessageFlow' && touched(link))) editor.diagram.routeMessages(definitions);
   }
   const { xml: raw } = await moddle.toXML(rootElement, { format: true });
   const out = marcarExportador(raw);
@@ -934,7 +1069,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
   if (fresh.length > 0) {
     fail(
       C,
-      fresh.map((e) => ({ op: editor.touched.get(e.id) ?? (parsed.data.length === 1 ? 0 : null), path: `bpmn.${e.id}`, message: `${e.code}: ${e.message}` })),
+      fresh.map((e) => ({ op: editor.touched.get(e.id) ?? (ops.length === 1 ? 0 : null), path: `bpmn.${e.id}`, message: `${e.code}: ${e.message}` })),
       C.editBpmnInvalid,
     );
   }
@@ -948,7 +1083,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     if (given.length === 0 || outs.length < 2) continue;
     const sum = Math.round(given.reduce((a, b) => a + b, 0) * 1e9) / 1e9;
     if (sum > 1 + 1e-9 || (given.length === outs.length && sum < 1 - 1e-9)) {
-      notes.push(C.editProbabilityNote(gateway.id, options.scenarioName ?? 'as-is.scenario.json', sum));
+      notes.push(C.editProbabilityNote(gateway.id, options.scenarioName ?? 'as-is.scenario.json', sum, outs.map((f) => f.id).join(', ')));
     }
   }
 
@@ -959,5 +1094,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     scenario: editor.scenarioChanged ? (editor.scenario as ScenarioDocument) : undefined,
     warnings: report.warnings,
     notes,
+    retyped: editor.retyped,
+    touched: editor.touched,
   };
 }

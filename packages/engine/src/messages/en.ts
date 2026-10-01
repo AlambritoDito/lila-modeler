@@ -560,9 +560,11 @@ export const en: Catalog = {
       lanes === '' ? `there is no lane "${lane}": the process has no lanes; add one with addLane.` : `there is no lane "${lane}"; the lanes are: ${lanes}.`,
     editLaneAmbiguous: (lane, ids) => `several lanes are named "${lane}" (${ids}); use the lane id.`,
     editLaneOutsideProcess: (id) => `"${id}" is inside a sub-process, which has no lanes.`,
-    editProbabilityNote: (gateway, scenario, sum) =>
-      `gateway "${gateway}": the probabilities of its outgoing flows in ${scenario} now add up to ${sum}; adjust them with patch_scenario.`,
-    editScenarioEntries: (scenario, ids) => `${scenario} still has entries for removed elements (${ids}); they were kept.`,
+    editProbabilityNote: (gateway, scenario, sum, flows) =>
+      `gateway "${gateway}": the probabilities of its outgoing flows in ${scenario} now add up to ${sum}; adjust them with patch_scenario, one {"op": "replace", "path": "/elements/<flow>/probability", "value": …} per flow of ${flows}.`,
+    editScenarioRemoved: (scenario, id, removed) =>
+      `${scenario}: removed elements.${id} ${removed}, which no longer applies to the model; patch_scenario can put it back on another element.`,
+    editScenarioBroken: (detail) => `the edit would leave a scenario that does not simulate; nothing was changed:\n${detail}`,
     editPositionAfter: (id) => `after "${id}"`,
     editPositionBetween: (from, to) => `between "${from}" and "${to}"`,
     editPositionAlone: () => 'unconnected',
@@ -582,6 +584,10 @@ export const en: Catalog = {
     processEditDryRun: (name, slug, file, operations, removed) =>
       `Dry run: would edit process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed. Nothing was written.`,
     editOpsUnreadable: (file, detail) => `cannot read the operations ${file}: ${detail}`,
+    editNotList: () => 'must be a non-empty list of operations.',
+    editUnknownOp: (op, accepted) => `"${op}" is not an operation; use one of ${accepted}.`,
+    editBadBetween: () => 'must be two step ids: [from, to].',
+    editDuplicateLane: (lane) => `there is already a lane named "${lane}"; choose another name.`,
     editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
   },
   mcp: {

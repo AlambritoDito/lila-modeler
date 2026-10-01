@@ -302,8 +302,9 @@ tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `r
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se
 maqueta de nuevo salvo con `--no-layout`, que conserva todas las posiciones y solo coloca las figuras
-nuevas. Imprime un resumen, una línea por operación, notas (entradas de escenario de elementos
-quitados, que se conservan; probabilidades de rama que ya no suman 1) y los avisos del validador;
+nuevas. Imprime un resumen, una línea por operación, notas (cada entrada de escenario que se quitó
+porque ya no aplica, con sus valores anteriores, para que el proceso siga simulando; probabilidades de
+rama que ya no suman 1) y los avisos del validador;
 `--json` imprime el objeto resultado de `edit_process`. `--dry-run` no escribe nada.
 
 `examples/outline/pedido-edit.json` agrega un paso "Charge" con duración y el cajero, renombra y

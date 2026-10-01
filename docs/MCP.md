@@ -51,7 +51,7 @@ backed by `@lila-modeler/engine`. Its sixteen tools reuse the CLI validation and
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
   operations (add, connect, remove, rename, setType, moveToLane, addLane) to one process of a
   `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
-  scenarioEntries, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
+  scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
   writes the description, RACI, catalog references and extended attributes of one element of a
@@ -333,10 +333,13 @@ written. `dryRun: true` answers what would change and writes nothing.
 
 `edit_process` (#98) changes a process that already exists, whoever made it: `create_process`, the
 app, or a Bizagi import. It takes a list of `operations`, applies them in order on the model in
-memory, validates the result and writes it only when every operation was fine and the model has no
-validation error it did not have before. Otherwise nothing is written and the call fails with every
-problem, each with the index of its operation (`operations[2] after: …`, `operations[0]
-bpmn.Process_1: E-SIN-START: …`). `lila process edit` (`docs/CLI.md`) does the same from a
+memory, validates the result and writes it only when every operation was fine, the model has no
+validation error it did not have before, and every scenario of the process still simulates.
+Otherwise nothing is written and the call fails with every problem at once — malformed fields and
+semantic ones in one pass, in the call's language — each with the index of its operation and a path
+(`operations[2].after: …`, `operations[3].nombre: unknown field "nombre".`, `operations[0].bpmn.Process_1:
+E-SIN-START: …`). `operations` that is not a list is an error too (`operations: must be a non-empty
+list of operations.`). `lila process edit` (`docs/CLI.md`) does the same from a
 terminal.
 
 ```json
@@ -360,13 +363,20 @@ terminal.
 | `moveToLane` | `id`, `lane` | Lane by name or id. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
 
-- **Ids never change.** A renamed or retyped step keeps its scenario entries. `duration` and
-  `resources` of an added step and the `probability` of a connection go into the process's
-  `as-is.scenario.json`, as with `create_process` (a resource with the same name or key is reused).
-  A process without that scenario refuses those fields.
-- **Removed ids are reported, not deleted from scenarios**: `removed` lists every id that left the
-  model and `scenarioEntries` the scenarios that still have entries for them. `notes` also flags an
-  XOR whose branch probabilities no longer add up to 1.
+- **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
+  far as they still apply. `duration`, `resources` and `selection` of an added step and the
+  `probability` of a connection go into the process's `as-is.scenario.json`, as with
+  `create_process` (a resource with the same name or key is reused). A process without that
+  scenario refuses those fields.
+- **After an edit the process still simulates.** Scenario entries that no longer apply are removed
+  from every scenario of the process: the whole entry of an element the edit removed, and the
+  fields a retyped element cannot take (resources on a gateway, a sub-process or a timer; a
+  duration on a sub-process…). Nothing goes silently: `scenarioRemovals` lists each one as
+  `{ scenario, id, removed, entry }`, with the removed fields and their previous values, so an agent
+  can put them back elsewhere with `patch_scenario`; `notes` says the same in words, and a dry run
+  returns the same report. Then every scenario is validated against the edited model, and an error
+  it did not have before refuses the edit. `removed` lists every id that left the model. `notes`
+  also flags an XOR whose branch probabilities no longer add up to 1, naming the flows to patch.
 - **What is not touched stays**: documentation, `lila:` annotations (RACI, references, extended
   attributes), other vendors' extensions, text annotations, data objects, other pools and message
   flows. A model the BPMN reader cannot read completely is refused rather than written back with
@@ -390,7 +400,7 @@ terminal.
   "summary": "Edited process \"Credit application\" (credit-application) in /work/credit.lila: 7 operations, 2 elements removed.",
   "changes": [ { "op": 0, "message": "added task \"verify\" after \"receive\" in lane \"Analyst\"" }, … ],
   "removed": [ "Flow_reject_EndEvent_reject", "reject" ],
-  "scenarioEntries": [], "notes": [ "gateway \"ok\": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario." ],
+  "scenarioRemovals": [], "notes": [ "gateway \"ok\": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario, one {\"op\": \"replace\", \"path\": \"/elements/<flow>/probability\", \"value\": …} per flow of Flow_ok_issue, Flow_ok_reject, Flow_ok_verify." ],
   "warnings": [], "outline": { … } }
 ```
 

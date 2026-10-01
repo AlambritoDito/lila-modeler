@@ -566,9 +566,11 @@ export const es: Catalog = {
       lanes === '' ? `no hay un carril "${lane}": el proceso no tiene carriles; agrega uno con addLane.` : `no hay un carril "${lane}"; los carriles son: ${lanes}.`,
     editLaneAmbiguous: (lane, ids) => `varios carriles se llaman "${lane}" (${ids}); usa el id del carril.`,
     editLaneOutsideProcess: (id) => `"${id}" está dentro de un subproceso, que no tiene carriles.`,
-    editProbabilityNote: (gateway, scenario, sum) =>
-      `gateway "${gateway}": las probabilidades de sus flujos de salida en ${scenario} ahora suman ${sum}; ajústalas con patch_scenario.`,
-    editScenarioEntries: (scenario, ids) => `${scenario} conserva entradas de elementos quitados (${ids}); no se borraron.`,
+    editProbabilityNote: (gateway, scenario, sum, flows) =>
+      `gateway "${gateway}": las probabilidades de sus flujos de salida en ${scenario} ahora suman ${sum}; ajústalas con patch_scenario, un {"op": "replace", "path": "/elements/<flujo>/probability", "value": …} por cada flujo de ${flows}.`,
+    editScenarioRemoved: (scenario, id, removed) =>
+      `${scenario}: se quitó elements.${id} ${removed}, que ya no aplica al modelo; patch_scenario puede ponerlo en otro elemento.`,
+    editScenarioBroken: (detail) => `la edición dejaría un escenario que no simula; no se cambió nada:\n${detail}`,
     editPositionAfter: (id) => `después de "${id}"`,
     editPositionBetween: (from, to) => `entre "${from}" y "${to}"`,
     editPositionAlone: () => 'sin conectar',
@@ -588,6 +590,10 @@ export const es: Catalog = {
     processEditDryRun: (name, slug, file, operations, removed) =>
       `Simulacro: se editaría el proceso "${name}" (${slug}) en ${file}: ${operations} operaciones, ${removed} elementos quitados. No se escribió nada.`,
     editOpsUnreadable: (file, detail) => `no se pueden leer las operaciones ${file}: ${detail}`,
+    editNotList: () => 'debe ser una lista no vacía de operaciones.',
+    editUnknownOp: (op, accepted) => `"${op}" no es una operación; usa una de ${accepted}.`,
+    editBadBetween: () => 'deben ser dos ids de paso: [from, to].',
+    editDuplicateLane: (lane) => `ya hay un carril llamado "${lane}"; elige otro nombre.`,
     editLayoutFailed: (detail) => `el maquetado automático falló en el proceso editado (${detail}); no se cambió nada. Prueba con layout: false (--no-layout).`,
   },
   mcp: {

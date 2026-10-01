@@ -315,6 +315,38 @@ export class Diagram {
     }
   }
 
+  /**
+   * Draws the message flows of `definitions` again between their shapes, out of the top or bottom
+   * of the source and into the bottom or top of the target. Flows that share a target (or a
+   * source) get their own entry (exit) point and their own horizontal stretch, a little apart, and
+   * each label sits on its own stretch (QA of #557: two notifications into one task overlapped).
+   */
+  routeMessages(definitions: El): void {
+    const flows: El[] = [];
+    for (const root of (definitions['rootElements'] ?? []) as El[]) for (const m of (root['messageFlows'] ?? []) as El[]) flows.push(m);
+    const drawable = flows.filter((m) => this.edges.has(m.id) && this.bounds(m['sourceRef']?.id) && this.bounds(m['targetRef']?.id));
+    const slot = (key: (m: El) => string, m: El): { k: number; n: number } => {
+      const group = drawable.filter((o) => key(o) === key(m)).sort((a, b) => center(this.bounds(a['sourceRef'].id)!).x - center(this.bounds(b['sourceRef'].id)!).x);
+      return { k: group.indexOf(m), n: group.length };
+    };
+    for (const m of drawable) {
+      const s = this.bounds(m['sourceRef'].id)!;
+      const t = this.bounds(m['targetRef'].id)!;
+      const into = slot((o) => o['targetRef'].id, m);
+      const out = slot((o) => o['sourceRef'].id, m);
+      const spread = (b: Box, { k, n }: { k: number; n: number }): number => center(b).x + (k - (n - 1) / 2) * Math.min(20, b.width / (n + 1));
+      const sx = spread(s, out);
+      const tx = spread(t, into);
+      const down = center(t).y >= center(s).y;
+      const sy = down ? bottom(s) : s.y;
+      const ty = down ? t.y : bottom(t);
+      const mid = down ? ty - 15 - into.k * 24 : ty + 15 + into.k * 24;
+      const points = Math.abs(sx - tx) < 1 ? [{ x: sx, y: sy }, { x: tx, y: ty }] : [{ x: sx, y: sy }, { x: sx, y: mid }, { x: tx, y: mid }, { x: tx, y: ty }];
+      this.setWaypoints(m, points, undefined);
+    }
+    this.label(drawable);
+  }
+
   /** Shapes that contain others: pools, lanes and expanded sub-processes. */
   isContainer(shape: El): boolean {
     const el = shape['bpmnElement'];
@@ -697,7 +729,5 @@ export async function relayout(context: RelayoutContext): Promise<void> {
     }
   }
   for (const a of [...associations, ...dataAssociations]) diagram.routeOther(a);
-  for (const root of (definitions['rootElements'] ?? []) as El[]) {
-    for (const m of (root['messageFlows'] ?? []) as El[]) diagram.routeOther(m);
-  }
+  diagram.routeMessages(definitions);
 }

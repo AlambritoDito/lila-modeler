@@ -303,8 +303,9 @@ tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`,
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The
 process is laid out again unless `--no-layout`, which keeps every position and only places the new
-shapes. It prints a summary, one line per operation, notes (scenario entries of removed elements,
-which are kept; branch probabilities that no longer add up) and the validator warnings; `--json`
+shapes. It prints a summary, one line per operation, notes (each scenario entry removed because it no
+longer applies, with its previous values, so the process still simulates; branch probabilities that
+no longer add up) and the validator warnings; `--json`
 prints the result object of `edit_process`. `--dry-run` writes nothing.
 
 `examples/outline/pedido-edit.json` adds a "Charge" step with a duration and the cashier, renames
@@ -336,7 +337,7 @@ Exit code: `1`.
 
 ```text
 lila process: the edit was refused; nothing was changed:
-  operations[1] id: cannot remove "Gateway_ANDFork": with 1 incoming and 2 outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.
+  operations[1].id: cannot remove "Gateway_ANDFork": with 1 incoming and 2 outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.
 ```
 
 ## General options
