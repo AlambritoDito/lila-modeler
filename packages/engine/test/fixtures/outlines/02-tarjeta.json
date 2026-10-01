@@ -1,0 +1,26 @@
+{ "name": "Solicitud de tarjeta de crédito",
+  "lanes": ["Cliente", "Ejecutivo", "Analista de riesgo", "Operaciones"],
+  "steps": [
+    { "id": "llenar", "name": "Llenar solicitud", "lane": "Cliente", "duration": "15m" },
+    { "id": "recibir", "name": "Recibir solicitud", "lane": "Ejecutivo", "duration": "5m", "resources": ["Ejecutivo"] },
+    { "id": "completa", "type": "xor", "name": "¿Documentación completa?", "branches": [
+        { "label": "Sí", "to": "buro", "probability": 0.8 },
+        { "label": "No", "to": "pedir_docs" } ] },
+    { "id": "pedir_docs", "name": "Pedir documentos faltantes", "lane": "Ejecutivo", "duration": "3m", "resources": ["Ejecutivo"] },
+    { "id": "enviar_docs", "name": "Enviar documentos", "lane": "Cliente", "duration": "exponential(mean=1h)", "next": "recibir" },
+    { "id": "buro", "name": "Consultar buró", "lane": "Analista de riesgo", "type": "serviceTask", "duration": "30s" },
+    { "id": "score", "name": "Calcular score", "type": "serviceTask", "duration": "10s" },
+    { "id": "decision", "type": "xor", "name": "¿Score?", "branches": [
+        { "label": "Alto", "to": "emitir", "probability": 0.5 },
+        { "label": "Medio", "to": "revision", "probability": 0.3 },
+        { "label": "Bajo", "to": "rechazar", "probability": 0.2 } ] },
+    { "id": "revision", "name": "Revisión manual", "type": "userTask", "duration": "normal(20m, 5m)", "resources": ["Analista"] },
+    { "id": "aprueba", "type": "xor", "name": "¿Aprueba?", "branches": [
+        { "label": "Sí", "to": "emitir", "probability": 0.6 },
+        { "label": "No", "to": "rechazar" } ] },
+    { "id": "emitir", "name": "Emitir tarjeta", "lane": "Operaciones", "duration": "1h", "resources": ["Operador"] },
+    { "id": "entregar", "name": "Entregar plástico", "duration": "2d" },
+    { "id": "activar", "name": "Activar tarjeta", "lane": "Cliente", "duration": "5m", "end": true },
+    { "id": "rechazar", "name": "Notificar rechazo", "lane": "Ejecutivo", "duration": "5m", "resources": ["Ejecutivo"] },
+    { "id": "recibe_rechazo", "name": "Recibir notificación", "lane": "Cliente", "end": true }
+  ] }

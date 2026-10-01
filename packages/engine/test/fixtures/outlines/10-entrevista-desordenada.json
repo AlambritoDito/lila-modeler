@@ -1,0 +1,17 @@
+{ "name": "Compras (entrevista)",
+  "lanes": ["Solicitante", "Compras", "Almacén", "Tesorería"],
+  "steps": [
+    { "id": "req", "name": "Hacer requisición", "lane": "Solicitante" },
+    { "id": "aut", "name": "Autorizar requisición", "lane": "Compras", "duration": "1d" },
+    { "id": "monto", "type": "xor", "name": "¿Monto > 50 mil?", "branches": [
+        { "label": "Sí", "to": "licitar", "probability": 0.25 },
+        { "label": "No", "to": "comprar" } ] },
+    { "id": "licitar", "name": "Licitar con 3 proveedores", "duration": "5d", "next": "comprar" },
+    { "id": "comprar", "name": "Emitir orden de compra", "duration": "1h" },
+    { "id": "recibir", "name": "Recibir mercancía", "lane": "Almacén", "duration": "30m" },
+    { "id": "ok", "type": "xor", "name": "¿Llegó completo?", "branches": [
+        { "label": "No", "to": "comprar", "probability": 0.1 },
+        { "label": "Sí", "to": "pagar" } ] },
+    { "id": "pagar", "name": "Pagar factura", "lane": "Tesorería", "duration": "15m" },
+    { "id": "avisar", "name": "Avisar al solicitante", "lane": "Compras", "end": true }
+  ] }

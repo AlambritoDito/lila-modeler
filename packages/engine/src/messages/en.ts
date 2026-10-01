@@ -42,6 +42,9 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                        [--process slug] [--run id|latest] [--scenario name] [--force]
        lila export results <project.lila> --out book.xlsx|directory [--format xlsx|csv]
                            [--process slug] [--run id|latest] [--scenario name] [--force]
+       lila process create --outline <outline.json> -p <project.lila> [--name name]
+                           [--process slug] [--dry-run] [--json]
+       lila process show -p <project.lila> [--process slug] [--json]
        lila mcp
 
 Commands:
@@ -50,6 +53,8 @@ Commands:
   compare    Simulates two or more scenarios on the same model and compares them side by side.
   export     Exports without the app: the diagram as SVG, the process document as Word or
              HTML, or the results of a run saved in the .lila as .xlsx or CSV.
+  process    create: builds a laid-out process from an outline (a step list) into a .lila.
+             show: prints one process of a .lila as an outline. See docs/CLI.md.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -94,6 +99,13 @@ export options:
   --force           Replaces existing files; without it nothing existing is overwritten.
   The Word document has no diagram and no document has the run's charts: the engine has no
   rasteriser. The HTML document has the diagram.
+process options:
+  --outline file    create: the outline JSON (lanes plus steps; docs/MCP.md).
+  -p, --project f   The .lila; create makes it when it does not exist.
+  --process slug    create: slug of the new process (default: from the name). show: which one.
+  --name name       create: name of the process (default: the outline's).
+  --dry-run         create: build and check everything, write nothing.
+  --json            Prints the result (create) or the outline (show) as JSON.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
@@ -432,6 +444,63 @@ export const en: Catalog = {
     lilaRunStale: (file, scenario) =>
       `the model or the scenario ${scenario} of ${file} changed while the simulation ran; the run was not saved. Run it again.`,
     runSaved: (id, file, slug) => `Run ${id} saved in ${file} (process ${slug}).`,
+    outlineInvalid: (detail) => `the outline is invalid:\n${detail}`,
+    outlineDuplicateId: (id) => `step id "${id}" is used more than once.`,
+    outlineBadId: (id) => `step id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    outlineReservedId: (id) => `step id "${id}" clashes with an id Lila generates (start, end, flows, lanes, diagram); rename the step.`,
+    outlineDuplicateLane: (lane) => `lane "${lane}" is listed more than once.`,
+    outlineUnknownLane: (step, lane) => `step "${step}": lane "${lane}" is not in "lanes".`,
+    outlineUnknownTarget: (step, target) => `step "${step}": "${target}" is not the id of a step.`,
+    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and), not ${type}.`,
+    outlineBranchTarget: (step) => `step "${step}": each branch needs either "to" (a step id) or "end": true.`,
+    outlineManyNextNeedGateway: (step) => `step "${step}": several "next" steps need a gateway (xor, or, and); add one.`,
+    outlineEndWithNext: (step) => `step "${step}": "end" cannot be combined with "next" or "branches".`,
+    outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a ${type}.`,
+    outlineProbabilityOnAnd: (step) => `step "${step}": a parallel gateway (and) takes every branch; "probability" does not apply.`,
+    outlineProbabilitySum: (step, sum) => `step "${step}": the branch probabilities add up to ${sum}, more than 1.`,
+    outlineBadDuration: (step, text) =>
+      `step "${step}": duration "${text}" is not a distribution. Write a number of seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", "exponential(mean=4m)" or a scenario distribution object.`,
+    outlineBpmnInvalid: (detail) => `the process built from the outline does not validate:\n${detail}`,
+    outlineNoProcess: () => 'the BPMN has no process.',
+    outlineUnsupported: (id, type) => `${id} (${type}) has no outline equivalent and was left out.`,
+    outlineLostFlow: (id) => `${id}: a flow to or from an element the outline left out was dropped.`,
+    outlineUnknownKey: (key) => `unknown field "${key}".`,
+    outlineNotObject: () => 'must be an object.',
+    outlineNotText: () => 'must be a non-empty text.',
+    outlineNotTextList: () => 'must be a list of non-empty texts.',
+    outlineNotBoolean: () => 'must be true or false.',
+    outlineNotProbability: () => 'must be a number between 0 and 1.',
+    outlineNotQuantity: () => 'must be a whole number of at least 1.',
+    outlineNoSteps: () => 'must be a non-empty list of steps.',
+    outlineBadType: (value, accepted) => `"${value}" is not a step type; use one of ${accepted}.`,
+    outlineBadNext: () => 'must be a step id or a list of step ids.',
+    outlineBadResource: () => 'must be a resource name or {"name", "quantity"}.',
+    outlineBadSelection: () => 'must be "and" (every resource) or "or" (any one of them).',
+    outlineNoWayOut: (step) => `from step "${step}" no path reaches an end: a case that gets here would loop forever. Give the loop an exit.`,
+    outlineLayoutFailed: (detail) => `the automatic layout failed on this outline (${detail}). Try listing the branches in the order their steps appear.`,
+    outlineXorAndJoin: (join, split) =>
+      `parallel join "${join}" waits for branches of the exclusive gateway "${split}", which only ever takes one: cases would wait there forever. Use an xor (or or) join.`,
+    outlineDroppedPools: (names) => `other pools are not part of the outline and were left out: ${names}.`,
+    outlineDroppedMessageFlows: (count) => `${count} message flows are not part of the outline and were left out.`,
+    outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
+    outlineDroppedArtifacts: (count) => `${count} annotations, groups or associations are not part of the outline and were left out.`,
+    outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
+    outlineScenarioOutside: (kinds) =>
+      `the scenario's ${kinds.split(',').map((k) => ({ arrivals: 'arrivals', calendars: 'calendars', costs: 'costs', capacities: 'resource capacities and types', conditions: 'conditional routing' } as Record<string, string>)[k] ?? k).join(', ')} are not part of the outline; they stay in the scenario, which this reading does not change.`,
+    processSlugNewFile: (slug, derived) =>
+      `a new .lila holds one process, whose slug comes from its name ("${derived}"), so it cannot be "${slug}". Leave the slug out, or set a name that gives it.`,
+    outlineFileUnreadable: (file, detail) => `cannot read the outline ${file}: ${detail}`,
+    processNotLila: (file) => `${file} is not a .lila file.`,
+    processBadSlug: (slug) => `"${slug}" is not a valid process slug (lowercase letters, digits and hyphens).`,
+    processExists: (slug, file) => `${file} already has a process "${slug}"; nothing was written. Choose another name or slug.`,
+    processCreated: (name, slug, file, steps, lanes, newFile) =>
+      `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes, base scenario as-is.scenario.json.`,
+    processDryRun: (name, slug, file, steps, lanes, newFile) =>
+      `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes. Nothing was written.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create or show.`,
+    processMissingOption: (option) => `missing ${option}.`,
+    processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
+    processShowLanes: (lanes) => `Lanes: ${lanes}`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

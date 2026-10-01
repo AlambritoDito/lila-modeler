@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its eight tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its ten tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
@@ -41,6 +41,13 @@ backed by `@lila-modeler/engine`. Its eight tools reuse the CLI validation and s
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the results of a stored run (`format`: `xlsx`, or `csv` into the directory `saveTo`).
   Returns `{ files, format, project, process, run }`.
+- **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** turns an outline —
+  lanes plus an ordered list of steps — into a laid-out, validated BPMN process and writes it as a
+  new process of the `.lila` `project` (or a new `.lila`). It never replaces a process. Returns
+  `{ file, slug, name, newFile, dryRun, warnings, notes, outline, summary, slugs }`. See
+  [Creating a process from an outline](#creating-a-process-from-an-outline).
+- **`get_process_outline({ project, process?, locale? })`** reads one process of a `.lila` back as an
+  outline: `{ file, slug, name, outline, warnings }`.
 
 The three export tools are described in [App-free exports](#app-free-exports).
 
@@ -156,6 +163,84 @@ the model or that scenario changed meanwhile, the run is already stale and is no
 ```json
 { "name": "run_simulation", "arguments": { "model": "project.lila", "scenario": "as-is", "seed": 42, "replications": 5, "saveRun": true } }
 ```
+## Creating a process from an outline
+
+An agent describes a process as data instead of BPMN XML (#97). `create_process` builds the
+semantic BPMN with `bpmn-moddle`, lays it out with `bpmn-auto-layout` (pool, lanes and flows
+included), validates it like `validate_bpmn`, and writes it into the `.lila`. `lila process create`
+(`docs/CLI.md`) does the same from a terminal.
+
+```json
+{ "name": "Credit application",
+  "lanes": ["Customer", "Analyst"],
+  "steps": [
+    { "id": "receive", "name": "Receive application", "lane": "Analyst" },
+    { "id": "check", "name": "Check bureau", "lane": "Analyst", "duration": "normal(20m, 5m)" },
+    { "id": "ok", "type": "xor", "name": "Approved?",
+      "branches": [ { "label": "Yes", "to": "issue" }, { "label": "No", "to": "reject", "probability": 0.3 } ] },
+    { "id": "issue", "name": "Issue card", "end": true },
+    { "id": "reject", "name": "Notify rejection", "lane": "Customer", "end": true } ] }
+```
+
+- **List order is the flow**: each step follows the previous one unless it has `next` (one id, or
+  several after a gateway), `branches` (gateways only: `{ label?, to, probability? }`, or
+  `{ label?, end: true, probability? }` for a branch that ends the process) or `end: true`. The
+  last step ends the process. Start and end events are added.
+- **`type`** defaults to `task`; the others are `userTask`, `serviceTask`, `callActivity`, `xor`,
+  `and`, `or`, `timer` (an intermediate timer event) and `subprocess` (a collapsed embedded
+  sub-process with a pass-through start and end inside).
+- **Step ids become the BPMN ids**, so scenarios key on them. They must be valid BPMN ids and must
+  not clash with the ids Lila generates (`StartEvent`, `EndEvent_<step>`, `Flow_…`, `Lane_<n>`,
+  `Process_…`, `<id>_di`).
+- **`lane`** defaults to the previous step's lane (the first lane for the first step). Lanes not
+  listed in `lanes` are an error when `lanes` is given and are collected in order when it is not.
+- **The base scenario.** The process gets `as-is.scenario.json`: the app's default arrivals for a
+  new process (20 cases, one a minute), every `duration` as `processingTime` (tasks) or delay
+  (timers), every `resources` entry (a name, or `{ name, quantity }`; a resource is created with
+  the capacity of its largest request; with several, `selection: "or"` takes any one of them
+  instead of all), and every branch `probability` as the probability of its
+  flow. The XOR branches left without one share what is left of 1. A `duration` is a number of
+  seconds, a time with a unit (`90s`, `20m`, `1.5h`, `1h30m`, `1d`; the units of the scenario sheets,
+  Spanish included), a distribution of the scenario format written short — `normal(20m, 5m)`,
+  `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, positional in the order of
+  `docs/SCENARIO_FORMAT.md` or named — or a distribution object in seconds.
+- **The slug** of the new `processes/<slug>/` is `process`, or one derived from the name (`name`,
+  else `outline.name`). A slug already in the file is an error and nothing is written. A `project`
+  that does not exist is created as a one-process `.lila` whose slug comes from the name (a
+  different `process` is an error there, since a one-process file cannot carry its own slug). Every
+  other process stays byte for byte as it was; the write is the same atomic, locked write as
+  `patch_scenario`'s.
+- **A malformed outline** fails with every problem at once, in the call's language, each with its
+  path (`steps[2].branches[0].to: …`, `steps[0].duraton: unknown field "duraton".`), and nothing
+  is written. `outline` is declared as a plain object on purpose, so the MCP SDK never rejects a
+  call before these checks run. A step from which no path reaches an end (a loop with no exit)
+  is a problem too, one per stuck step, and so is an outline whose model does not validate (the
+  validator's errors come back with their codes, at the step they are about).
+- **`notes`** are Lila's own warnings on an outline that is accepted, such as a parallel (`and`)
+  join that waits for branches of one exclusive (`xor`) split, where cases would wait forever.
+
+```json
+{ "name": "create_process", "arguments": { "project": "credit.lila", "outline": { "name": "Credit application", "lanes": ["Customer", "Analyst"], "steps": [ … ] } } }
+```
+
+```json
+{ "file": "/work/credit.lila", "slug": "credit-application", "name": "Credit application", "newFile": true,
+  "dryRun": false, "warnings": [], "notes": [], "slugs": ["credit-application"], "outline": { … },
+  "summary": "Created process \"Credit application\" (credit-application) in the new file /work/credit.lila: 5 steps, 2 lanes, base scenario as-is.scenario.json." }
+```
+
+`get_process_outline` returns the outline in **normal form**: every step names its lane, `type` is
+left out for `task`, `next` appears only when it is not simply the following step, every step
+that finishes the process has `end: true`, gateway successors are `branches`, durations are
+distribution objects in seconds and the XOR probabilities are filled in. That is the form
+`create_process` returns as `outline`, so a process round-trips. Durations, resources and
+probabilities (and resource `selection`) come from the process's `as-is.scenario.json` when it has
+one. For a process Lila did not generate, `warnings` says once per kind what the outline leaves
+out: other pools, message flows, the names of start and end events, annotations, default-flow
+marks, other event types, nested lanes, and the parts of the scenario an outline does not carry
+(arrivals, calendars, costs, resource capacities and types, conditional routing; the scenario
+itself is not changed). A process with no name takes the one in the `.lila`, else its id. The
+steps keep the document order.
 
 ## Language
 
@@ -343,3 +428,9 @@ stays in the foreground, so it is not a CI smoke test.
 - Simulation results are returned as both text and `structuredContent`, increasing payload size.
 - `compare_scenarios` returns structured content but does not publish an `outputSchema`.
 - File writes use server permissions and can overwrite files without an interactive confirmation.
+- `create_process` lays out with `bpmn-auto-layout` 1.3, which draws no pool or lanes: Lila keeps
+  its columns and rows, moves each node into its lane, routes the flows again orthogonally (around
+  the shapes in their way) and places every branch label on its own branch. Lanes can come out
+  taller than needed, a gateway's name can sit on a flow that leaves it from below, and a
+  sub-process is created collapsed with an empty pass-through inside. Move things in the app
+  when the picture matters.
