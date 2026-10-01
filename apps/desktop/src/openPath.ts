@@ -14,13 +14,12 @@ export function isBpmnPath(p: string): boolean {
 }
 
 /**
- * `true` si `p` termina en `.lila`, el contenedor de proyecto de ADR-027 (insensible a mayúsculas,
- * mismo criterio que `isBpmnPath`). Vive aquí, en el módulo puro, porque lo necesitan tanto
- * `main.ts` como `lilaFile.ts` y este es el único que no arrastra `node:fs`.
+ * `isLilaPath` (`.lila`, ADR-027) and `isMiscasedModelFile` (LILA-206) live with the project disk IO
+ * in `@lila-modeler/engine/project-fs` since #466; re-exported here so `main.ts` and the tests keep
+ * importing them from this module.
  */
-export function isLilaPath(p: string): boolean {
-  return p.toLowerCase().endsWith('.lila');
-}
+export { isLilaPath, isMiscasedModelFile } from '@lila-modeler/engine/project-fs';
+import { isLilaPath } from '@lila-modeler/engine/project-fs';
 
 /**
  * La ruta que el diálogo nativo de «Guardar como» devolvió, con la extensión `.lila` puesta si le
@@ -32,29 +31,6 @@ export function isLilaPath(p: string): boolean {
  */
 export function withLilaExtension(p: string): string {
   return isLilaPath(p) ? p : `${p}.lila`;
-}
-
-/**
- * El `model.bpmn` de un proyecto Lila (el mismo `MODEL_FILE` de `projectIO.ts`, repetido aquí
- * porque este módulo es puro y no importa nada).
- */
-const MODEL_FILE = 'model.bpmn';
-
-/**
- * `true` si `name` es el `model.bpmn` del proyecto escrito con otras mayúsculas (`Model.bpmn`,
- * `MODEL.BPMN`) — un nombre que el puente RECHAZA (LILA-206, P3 del QA).
- *
- * `projectIO` compara el nombre del `.bpmn` abierto con `model.bpmn` usando `===`, así que
- * `Model.bpmn` cuenta como «otro diagrama» y se guarda en modo `diagramOnly`. En macOS y Windows
- * (sistemas de archivos insensibles a mayúsculas) es EL MISMO archivo: se sobrescribiría el
- * `model.bpmn` real dejando el manifiesto con la revisión vieja y sin guardar escenarios ni
- * corridas, en silencio. Normalizar a `model.bpmn` arreglaría eso ahí, pero en Linux `Model.bpmn`
- * y `model.bpmn` son dos archivos distintos y la normalización pisaría el modelo del proyecto con
- * otro diagrama: pérdida de datos. Como ninguna de las dos interpretaciones vale en las dos
- * plataformas, se rechaza; renombrar el archivo es cosa de un segundo y no pierde nada.
- */
-export function isMiscasedModelFile(name: string): boolean {
-  return name !== MODEL_FILE && name.toLowerCase() === MODEL_FILE;
 }
 
 /**

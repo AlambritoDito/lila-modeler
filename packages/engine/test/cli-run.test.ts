@@ -362,7 +362,7 @@ describe('lila run (LILA-046)', () => {
 
     output = [];
     expect(await main(['run', '--lang=es', fixture.model, fixture.scenario, 'extra'])).toBe(1);
-    expect(output.join('\n')).toContain('se esperaba las rutas');
+    expect(output.join('\n')).toContain('se esperaba un <modelo.bpmn|proyecto.lila> y un <escenario>');
   });
 
   test('separa --json booleano de validate y --json con ruta de run', async () => {
@@ -380,7 +380,7 @@ describe('lila run (LILA-046)', () => {
 
     output = [];
     expect(await main(['run', fixture.model, fixture.scenario, 'extra'])).toBe(1);
-    expect(output.join('\n')).toContain('expected the paths');
+    expect(output.join('\n')).toContain('expected a <model.bpmn|project.lila> and a <scenario>');
   });
 });
 

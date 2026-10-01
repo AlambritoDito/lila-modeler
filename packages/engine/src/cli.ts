@@ -10,7 +10,7 @@
  * `docs/BIZAGI_PARITY.md`.
  */
 
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -21,8 +21,9 @@ import {
   assertReplaceableFile,
   comparablePath,
   compareWarnings,
-  loadResolvedScenario,
+  loadModelSource,
   loadValidatedModel,
+  resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
   withRunOverrides,
@@ -124,9 +125,14 @@ function printValidationProblems({ errors, warnings }: ValidationResult, locale:
   for (const error of errors) console.log(`${C.errorLabel()}  ${error.code}  ${error.message}`);
 }
 
-async function validateCommand(file: string, json: boolean, locale: Locale): Promise<number> {
+async function validateCommand(
+  file: string,
+  json: boolean,
+  locale: Locale,
+  process?: string | undefined,
+): Promise<number> {
   const C = messages(locale).cli;
-  const xml = readFileSync(file, 'utf8');
+  const { xml } = await loadModelSource(file, { process, locale });
   // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
   const report = await validateBpmnXml(xml, { locale });
   const { ir, ignoredProcessIds } = report;
@@ -541,6 +547,7 @@ function openEventLogSink(directory: string, startMs: number, locale: Locale): E
 }
 
 interface RunCommandOptions {
+  process?: string | undefined;
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
@@ -556,11 +563,15 @@ async function runCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  const {
+    path: modelPath,
+    ir,
+    validation: modelValidation,
+    lila,
+  } = await loadValidatedModel(modelFile, locale, { process: options.process });
   if (modelHasErrors(modelValidation, locale)) return 1;
 
-  const scenarioPath = absolutePath(scenarioFile);
-  const resolvedScenario = loadResolvedScenario(scenarioPath, undefined, locale);
+  const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
   if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
     console.error(C.commandError('run', C.modelMismatch(modelPath, resolvedScenario.model)));
     return 1;
@@ -614,6 +625,7 @@ async function runCommand(
  * ------------------------------------------------------------------ */
 
 interface CompareCommandOptions {
+  process?: string | undefined;
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
@@ -796,7 +808,12 @@ async function compareCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  const {
+    path: modelPath,
+    ir,
+    validation: modelValidation,
+    lila,
+  } = await loadValidatedModel(modelFile, locale, { process: options.process });
   if (modelHasErrors(modelValidation, locale)) return 1;
 
   // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources` ni
@@ -810,7 +827,7 @@ async function compareCommand(
   // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
   // simulación completa de los n − 1 anteriores.
   for (const scenarioFile of scenarioFiles) {
-    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile), undefined, locale);
+    const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
     if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
       console.error(
         C.commandError('compare', C.modelMismatchIn(modelPath, resolvedScenario.model, scenarioFile)),
@@ -860,7 +877,7 @@ function positionalError(
 async function dispatchValidate(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
-    options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    options: { json: { type: 'boolean' }, process: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
     allowPositionals: true,
   });
   const C = messages(locale).cli;
@@ -873,13 +890,14 @@ async function dispatchValidate(argv: readonly string[], locale: Locale): Promis
     return 1;
   }
   if (positionals.length > 1) return positionalError('validate', C.bpmnPath(), locale);
-  return validateCommand(positionals[0]!, values.json === true, locale);
+  return validateCommand(positionals[0]!, values.json === true, locale, values.process);
 }
 
 async function dispatchRun(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
+      process: { type: 'string' },
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
@@ -896,6 +914,7 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
   }
   if (positionals.length !== 2) return positionalError('run', C.runPaths(), locale);
   return runCommand(positionals[0]!, positionals[1]!, {
+    process: values.process,
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
@@ -909,6 +928,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
+      process: { type: 'string' },
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
@@ -926,6 +946,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
   if (positionals.length < 3) return positionalError('compare', C.comparePaths(), locale);
   const [model, ...scenarios] = positionals;
   return compareCommand(model!, scenarios, {
+    process: values.process,
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,

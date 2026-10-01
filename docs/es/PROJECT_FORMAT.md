@@ -154,8 +154,11 @@ puede confundir uno con otro, porque un proyecto de Lila empieza con la firma ZI
 estructural, con códigos de error estables), `lila.ts` (`encodeLila`/`decodeLila` sobre `fflate`, y
 el manifiesto de la versión 2), `repository.ts` (`processesOf`/`withProcesses`, que pliegan la lista
 de procesos en el documento: sus campos de primer nivel son el primer proceso, y `process`/`processes`
-llevan el resto). Se publica como `@lila-modeler/engine/project`. El lector/escritor de carpetas es
-`apps/desktop/src/projectIO.ts`; la mitad `.lila` del escritorio es `apps/desktop/src/lilaFile.ts`.
+llevan el resto). Se publica como `@lila-modeler/engine/project`, que sigue siendo apto para el navegador. La mitad de
+disco es `packages/engine/src/project-fs/`, publicada como `@lila-modeler/engine/project-fs` (solo
+Node, #466): el lector/escritor de carpetas `projectIO.ts`, el archivo `.lila` `lilaFile.ts` e
+`input.ts`, que abre un proceso de un `.lila` para la CLI y el servidor MCP y escribe un escenario de
+vuelta. El escritorio, la CLI y el servidor MCP la usan.
 
 Los códigos del motor son `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LILA-NO-MODEL`,
 `LILA-ENTRY-PATH` (el contenedor) y `LILA-DOCUMENT`, `LILA-PROBLEMS`, `LILA-RUN`, `LILA-RUN-INPUTS`
@@ -163,4 +166,9 @@ Los códigos del motor son `LILA-ZIP`, `LILA-NO-MANIFEST`, `LILA-MANIFEST`, `LIL
 `E-ZIP`, `E-NO-MANIFEST`, `E-MANIFEST`, `E-NO-MODEL`, `E-ENTRY-PATH`, `E-DOCUMENTO`, `E-DIAGNOSTICO`,
 `E-CORRIDA`, `E-ENTRADAS-CORRIDA` en la frontera IPC (un mapa explícito en `lilaFile.ts`, listado en
 la cabecera de `bridge.ts`); la app web los traduce en `apps/web/src/project.ts`. Guardar un `.lila`
-pasa por las mismas guardias `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO` que guardar una carpeta.
+pasa por las mismas guardias `E-CARPETA-OCUPADA`/`E-CAMBIO-EXTERNO` que guardar una carpeta, con un
+`<archivo>.lila.lock` junto al archivo mientras comprueba y escribe, para que quienes escriben desde
+procesos distintos (el escritorio, la CLI, servidores MCP) se turnen; quien no consigue el bloqueo en
+3 segundos rechaza con `E-ARCHIVO-OCUPADO` (no se escribe nada). Quien lo tiene lo toca cada 2
+segundos, así que un bloqueo sin tocar durante 10 segundos se borra como restos de un cierre
+inesperado; nadie borra un bloqueo cuyo token (un id aleatorio escrito dentro) no haya comprobado.

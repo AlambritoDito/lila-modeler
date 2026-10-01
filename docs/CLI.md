@@ -41,7 +41,7 @@ the unrelated `lila` package from npm, so from another directory use one of the
 
 ## `validate`
 
-Parses a `.bpmn` file, prints its IR (nodes, flows, lanes) and the full validation
+Parses a `.bpmn` file (or one process of a `.lila`, see [below](#a-lila-as-input-466)), prints its IR (nodes, flows, lanes) and the full validation
 (`docs/SEMANTICS.md` §17 error/warning codes). Warnings alone still exit `0`; any error exits `1`.
 
 ```bash
@@ -137,7 +137,7 @@ Exit code: `0`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The command ran; `validate` may still have printed warnings. |
-| `1` | Usage error, unknown command, a model/scenario validation error, a scenario whose `model` does not match the file given, or an uncaught error from the command (message on stderr). |
+| `1` | Usage error, unknown command, a model/scenario validation error, a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, or an uncaught error from the command (message on stderr). |
 
 ## For agents
 
@@ -160,18 +160,58 @@ can decide without parsing prose:
 The text tables on stdout carry the same numbers; they exist for a human at a terminal, not for
 parsing.
 
-## `.lila` is not a CLI input
+## A `.lila` as input (#466)
 
-Honestly: a `.lila` file is a **zip** of a Lila project folder (`docs/PROJECT_FORMAT.md`) —
-`lila-project.json`, `model.bpmn`, one `<name>.scenario.json` per scenario, `runs/*.result.json`.
-The CLI in this release takes `.bpmn` and `.json` paths directly; it does not open a `.lila`.
-Until that lands, unzip it first:
+A `.lila` file is a **zip** of a Lila project folder (`docs/PROJECT_FORMAT.md`). `validate`, `run`
+and `compare` take it wherever they take a `.bpmn`; nothing has to be unzipped first. The
+committed [`examples/pedido.lila`](../examples/pedido.lila) is the `examples/pedido` folder in one
+file:
 
 ```bash
-unzip project.lila -d project
-node <checkout>/packages/engine/bin/lila.js validate project/model.bpmn
-node <checkout>/packages/engine/bin/lila.js run project/model.bpmn project/as-is.scenario.json
+npx lila validate examples/pedido.lila
+```
+Exit code: `0`.
+
+With a `.lila` model, a **scenario argument** is resolved in this order:
+
+1. **An existing file** at that path (relative to the current directory) is that file, as with a
+   `.bpmn`. It is simulated against the process in the archive; its own `model` field is not
+   compared with the archive, and `validateScenario` still rejects an element id that the
+   process does not have.
+2. **Otherwise it names a scenario of the process**, by its entry name
+   (`to-be-3-cajeros.scenario.json`), the same name without `.scenario.json`
+   (`to-be-3-cajeros`), or the scenario's `"name"` (`"TO-BE 3 cashiers"`, which must then be
+   unique in the process). Its `model` and `extends` resolve inside the archive, exactly as in
+   the project folder. A name that matches nothing lists the scenarios that exist.
+
+```bash
+npx lila run examples/pedido.lila as-is --seed 42 --replications 3 --json results/run.json
+```
+Exit code: `0`.
+
+```bash
+npx lila compare examples/pedido.lila as-is to-be-3-cajeros --seed 42 --replications 3
+```
+Exit code: `0`.
+
+Both print, and write, exactly what the same commands print on `examples/pedido/model.bpmn` and
+its scenario files. Output paths (`--json`, `--csv`, `--xlsx`) are unchanged: relative to the
+current directory, never inside the archive — the CLI does not write to a `.lila`.
+
+**Several processes.** A version 2 project (a *repository*, `docs/PROJECT_FORMAT.md`) holds more
+than one process, each with its own model and scenarios. `--process <slug>` picks one; with a
+single process it is implicit, and with several and no `--process` the command stops with an
+error that lists the slugs. A slug that is not in the project is an error too, and so is
+`--process` with a `.bpmn`:
+
+```bash
+npx lila validate examples/pedido.lila --process facturacion
+```
+Exit code: `1`.
+
+```text
+lila run project.lila as-is --process pedido --seed 1 --replications 30 --json results/run.json
 ```
 
-Tracked in [#466](https://github.com/AlambritoDito/lila-modeler/issues/466) («`.lila` as CLI
-input»).
+The MCP tools accept a `.lila` the same way, and `patch_scenario` can write a scenario back into
+one (`docs/MCP.md`).

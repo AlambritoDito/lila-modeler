@@ -34,7 +34,7 @@ import { validateScenario } from '@lila-modeler/engine/schema';
 
 `@lila-modeler/engine/bpmn` also draws a model's diagram without a browser: `renderSvg(xml)` returns an SVG of its BPMN DI.
 
-Typed entry points also include `messages`, `cli-shared`, `result-schema`, `csv`, and `format`. The dependency-free simulation core runs in Node.js and browser Web Workers.
+Typed entry points also include `messages`, `cli-shared`, `project`, `project-fs` (Node only: the project folder and `.lila` file on disk), `result-schema`, `csv`, and `format`. The dependency-free simulation core runs in Node.js and browser Web Workers.
 
 See the [scenario format](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/SCENARIO_FORMAT.md), [result format](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/RESULTS_FORMAT.md) and [semantics](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/SEMANTICS.md) for contracts and limitations.
 

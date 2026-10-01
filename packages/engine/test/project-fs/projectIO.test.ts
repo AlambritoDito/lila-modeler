@@ -7,8 +7,8 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { hasProjectModel, isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
-import type { ProjectDocument, StoredRun } from './projectTypes.js';
+import { hasProjectModel, isRecordableProject, ProjectIOError, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from '../../src/project-fs/index.js';
+import type { ProjectDocument, StoredRun } from '../../src/project/index.js';
 
 /** Ejecuta `fn`, espera que rechace, y devuelve el error capturado (o falla la prueba si no rechaza). */
 async function captureError(fn: () => Promise<unknown>): Promise<unknown> {

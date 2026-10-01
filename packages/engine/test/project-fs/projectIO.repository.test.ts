@@ -7,10 +7,10 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { processesOf, processSlug, withProcesses } from '@lila-modeler/engine/project';
-import type { ProcessDocument } from '@lila-modeler/engine/project';
-import { hasProjectModel, occupiedSlugs, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from './projectIO.js';
-import type { ProjectDocument, StoredRun } from './projectTypes.js';
+import { processesOf, processSlug, withProcesses } from '../../src/project/index.js';
+import type { ProcessDocument } from '../../src/project/index.js';
+import { hasProjectModel, occupiedSlugs, readProjectFolder, writeProjectFolder, type WriteProjectFsImpl } from '../../src/project-fs/index.js';
+import type { ProjectDocument, StoredRun } from '../../src/project/index.js';
 
 let dir: string;
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'lila-repositorio-')); });

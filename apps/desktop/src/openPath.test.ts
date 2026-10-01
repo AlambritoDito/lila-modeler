@@ -1,4 +1,10 @@
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { decodeLila } from '@lila-modeler/engine/project';
+import type { ProjectDocument } from '@lila-modeler/engine/project';
+import { writeLilaFile } from '@lila-modeler/engine/project-fs';
 import { findBpmnArg, isBpmnPath, isMiscasedModelFile, openPathRequest, withLilaExtension } from './openPath.js';
 
 describe('isBpmnPath', () => {
@@ -65,6 +71,32 @@ describe('withLilaExtension', () => {
   it('respeta la que ya está, en cualquier combinación de mayúsculas', () => {
     expect(withLilaExtension('/proyectos/pedido.lila')).toBe('/proyectos/pedido.lila');
     expect(withLilaExtension('/proyectos/PEDIDO.LILA')).toBe('/proyectos/PEDIDO.LILA');
+  });
+
+  // Moved here from `lilaFile.test.ts` when the `.lila` disk IO moved to the engine (#466).
+  it('un nombre sin extensión produce un .lila que decodeLila abre', async () => {
+    // Lo que `lila:chooseSaveFile` hace con lo que devuelve `showSaveDialog` antes de dárselo al
+    // renderer (ADR-027): la parte que no necesita Electron para probarse.
+    const documento: ProjectDocument = {
+      version: 1,
+      id: 'p1',
+      name: 'pedido',
+      model: {
+        id: 'Process_1',
+        name: 'model.bpmn',
+        xml: '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"/>',
+        revision: 3,
+      },
+      scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS' } },
+      scenarioRevisions: { 'as-is.scenario.json': 2 },
+      runs: [],
+    };
+    const elegido = join(await mkdtemp(join(tmpdir(), 'lila-file-')), 'pedido nuevo');
+    const file = withLilaExtension(elegido);
+    expect(file.endsWith('.lila')).toBe(true);
+
+    await writeLilaFile(file, documento, { saveAs: true });
+    expect(decodeLila(new Uint8Array(await readFile(file)))).toEqual(documento);
   });
 });
 
