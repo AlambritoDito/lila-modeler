@@ -1239,7 +1239,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'run') return await dispatchRun(args, locale);
     if (command === 'compare') return await dispatchCompare(args, locale);
     if (command === 'export') return await dispatchExport(args, locale);
-    if (command === 'process' && isProcessToolSubcommand(args[0])) return await dispatchProcessTools(args, locale);
+    if (command === 'process' && isProcessToolSubcommand(args)) return await dispatchProcessTools(args, locale);
     if (command === 'scenario') return await dispatchScenarioTools(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
     if (command === 'process') return await dispatchProcess(args, locale);

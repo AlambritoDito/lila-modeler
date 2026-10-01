@@ -92,7 +92,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`** —
   escribe la descripción, el RACI, las referencias al catálogo y los atributos extendidos de un
   elemento de un proceso de un `.lila`. Devuelve
-  `{ file, process, elementId, dryRun, changed, written, before, after }`.
+  `{ file, process, elementId, documentationOn?, dryRun, changed, written, before, after }`.
 - **`get_raci_matrix({ project, process?, locale? })`** — devuelve la matriz RACI del proceso:
   `{ file, process, roles, rows }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** — aplica
@@ -299,7 +299,11 @@ cambiaría y no escribe nada.
   panel de propiedades de la app: un `number` es un decimal simple (`12`, `-3.5`), un `date` es
   `AAAA-MM-DD`, un valor de `list` es una de sus opciones, y el atributo debe aplicarse al tipo del
   elemento. La revisión del modelo sube en uno, como cuando la app guarda una edición. Una
-  anotación que no cambia nada no escribe nada (`changed: false`).
+  anotación que no cambia nada no escribe nada (`changed: false`). Escribe donde la app lee: la
+  descripción de un pool es la del proceso al que apunta (se escribe ahí y se nombra en
+  `documentationOn`), y un proceso dentro de un pool guarda su RACI y sus referencias en el pool,
+  así que `responsibilities` o `refs` sobre ese proceso se rechazan con un mensaje que nombra el
+  pool.
 - **`get_raci_matrix`** lista lo que el documento del proceso (`export_document`) lista en
   «Responsabilidades (RACI)», en el mismo orden: una fila por elemento con responsabilidades, con
   su `id`, `name`, `lane` (si tiene), las `responsibilities` tal cual y `cells` (rol → `"R"`, o
@@ -310,7 +314,8 @@ cambiaría y no escribe nada.
   `before`, el `after` y un `text` legible de cada campo (`Cajero (cajero) · capacity: 2 → 3`, una
   distribución en la unidad de su fila); `issues` las filas no aplicadas (`error`, `unmatched`,
   `ambiguous`), las notas (`warning`) y los errores que tendría el resultado (`lint`). Un plan con
-  algún `lint` se rechaza (un `dryRun` lo informa). La revisión del escenario sube en uno.
+  algún `lint` se rechaza (un `dryRun` lo informa). Como en la app, las filas válidas se escriben
+  aunque otras no se apliquen, así que revisa `issues`. La revisión del escenario sube en uno.
 - **`export_scenario_template`** es «Descargar plantilla» de la app: dásela a una persona e importa
   lo que devuelva. Un `saveTo` que ya existe se rechaza salvo con `overwrite`.
 - **`create_project`** recibe `bpmn` como XML (empieza por `<`) o como ruta a un `.bpmn`. Un modelo

@@ -55,7 +55,10 @@ export function registerAgentTools(
         'the description ("" removes it); `responsibilities` replaces the whole RACI list ([] ' +
         'clears it); each kind in `refs` replaces that kind; `attributes` are merged by attribute ' +
         'id or name ("" removes a value) and checked against the project\'s attribute definitions. ' +
-        'Returns `before` and `after`; `dryRun` writes nothing. Like `lila process annotate`.',
+        'Writes where the app reads: a pool\'s description goes to the process it references ' +
+        '(`documentationOn`), and the RACI and references of a process inside a pool belong to ' +
+        'the pool (annotating them on the process is refused). Returns `before` and `after` as the ' +
+        'app shows the element; `dryRun` writes nothing. Like `lila process annotate`.',
       inputSchema: z.object({
         project: projectSchema,
         process: processSchema,
@@ -125,7 +128,9 @@ export function registerAgentTools(
         'like the app\'s Import Excel/CSV: `changes` (each with before, after and a readable ' +
         '`text`) and `issues` (rows not applied, notes, and `lint` errors the result would have). ' +
         'The scenario is saved atomically unless `dryRun`, nothing changes, or there is a `lint` ' +
-        'issue (then it is an error and nothing is written). Like `lila scenario import`.',
+        'issue (then it is an error and nothing is written). As in the app, the valid rows are ' +
+        'written even when other rows are not applied: read `issues` before calling the import ' +
+        'done. Like `lila scenario import`.',
       inputSchema: z.object({
         project: projectSchema,
         process: processSchema,

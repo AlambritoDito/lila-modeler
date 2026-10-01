@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { strToU8, unzipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { annotateElement, parseBpmn, readAnnotations } from '../../src/bpmn/index.js';
+import { annotateElement, documentationHolder, parseBpmn, readAnnotations } from '../../src/bpmn/index.js';
 import { main } from '../../src/cli.js';
 import { AGENT_TOOL_MESSAGES } from '../../src/messages/index.js';
 import { buildProcessDocument } from '../../src/process-document.js';
@@ -146,7 +146,10 @@ describe('annotateLilaElement (#99)', () => {
     ['en', { elementId: 'Task_Revisar', attributes: { 'attr-cost': '1,5' } }, /^"1,5" is not a number for attribute "Cost center"/],
     ['es', { elementId: 'Task_Revisar', attributes: { Due: '2026-02-30' } }, /^"2026-02-30" no es una fecha para el atributo "Due"; escríbela como AAAA-MM-DD\.$/],
     ['en', { elementId: 'Task_Revisar', attributes: { Level: 'mid' } }, /^"mid" is not an option of attribute "Level"; use one of low, high\.$/],
-    ['en', { elementId: 'Task_Revisar', attributes: { Owner: 'Ana' } }, /^attribute "Owner" applies to lane, and Task_Revisar is a task\.$/],
+    ['en', { elementId: 'Task_Revisar', attributes: { Owner: 'Ana' } }, /^attribute "Owner" applies to pools and lanes, not to Task_Revisar \(tasks\)\.$/],
+    ['es', { elementId: 'Task_Revisar', attributes: { Owner: 'Ana' } }, /^el atributo "Owner" se aplica a pools y carriles, no a Task_Revisar \(tareas\)\.$/],
+    ['en', { elementId: 'Process_Restaurante', responsibilities: [{ type: 'A', roleRef: 'owner' }] }, /^the responsibilities and references of process Process_Restaurante belong to its pool Participant_Restaurante, where the app shows them; annotate Participant_Restaurante instead\. Nothing was written\.$/],
+    ['es', { elementId: 'Process_Restaurante', refs: { systemRef: ['POS'] } }, /^las responsabilidades y referencias del proceso Process_Restaurante van en su pool Participant_Restaurante/],
     ['es', { elementId: 'Task_Revisar', attributes: { Missing: '1' } }, /^ningún atributo extendido tiene el id o el nombre "Missing"; definidos: attr-cost \(Cost center\)/],
   ] as const)('%s: refuses %j and leaves the file unchanged', async (locale, request, expected) => {
     const file = join(scratch, 'pedido.lila');
@@ -157,6 +160,36 @@ describe('annotateLilaElement (#99)', () => {
     expect(readFileSync(file)).toEqual(before);
     expect(readdirSync(scratch)).toEqual(['pedido.lila']);
   });
+});
+
+test('a pool is annotated where the app reads it: description on its process, RACI on the pool', async () => {
+  const file = join(scratch, 'pedido.lila');
+  writeFileSync(file, readFileSync(exampleLila));
+  const pool = await annotateLilaElement({
+    file,
+    elementId: 'Participant_Restaurante',
+    documentation: 'The restaurant pool.',
+    responsibilities: [{ type: 'A', roleRef: 'owner' }],
+  });
+  expect(pool).toMatchObject({
+    documentationOn: 'Process_Restaurante',
+    changed: true,
+    after: { documentation: 'The restaurant pool.', responsibilities: [{ type: 'A', roleRef: 'owner' }] },
+  });
+  const xml = (await openLilaProcess(file)).process.model.xml;
+  const annotations = await readAnnotations(xml);
+  expect(annotations['Participant_Restaurante']).toEqual({ responsibilities: [{ type: 'A', roleRef: 'owner' }] });
+  expect(annotations['Process_Restaurante']?.documentation).toBe('The restaurant pool.');
+  // What the app's pool panel shows (`procesoRelacionado`) and what the process document opens with.
+  expect(documentationHolder({ id: 'Participant_Restaurante', type: 'bpmn:Participant', processRef: 'Process_Restaurante' })).toBe('Process_Restaurante');
+  const parsed = await parseBpmn(xml);
+  const doc = buildProcessDocument({ ...parsed, annotations, title: 't', date: 'd' });
+  const description = doc.blocks.findIndex((block) => block.kind === 'heading' && block.text === 'Process description');
+  expect(doc.blocks[description + 1]).toEqual({ kind: 'paragraph', text: 'The restaurant pool.' });
+
+  // The process's own description can still be written on it; a second pool call changes nothing.
+  expect((await annotateLilaElement({ file, elementId: 'Process_Restaurante', documentation: 'The restaurant pool.' })).changed).toBe(false);
+  expect((await annotateLilaElement({ file, elementId: 'Participant_Restaurante', documentation: 'The restaurant pool.' })).changed).toBe(false);
 });
 
 describe('lilaRaciMatrix (#99)', () => {
@@ -341,6 +374,10 @@ describe('CLI', () => {
     out = [];
     expect(await main(['process', 'annotate', file, 'Task_Revisar', '--responsibility', 'cocinero'])).toBe(1);
     expect(out[0]).toMatch(/--responsibility takes TYPE:role/);
+    // Options before the subcommand (QA of #559).
+    out = [];
+    expect(await main(['process', '--documentation', 'x', 'annotate', file, 'Task_Revisar', '--dry-run'])).toBe(0);
+    expect(out[0]).toBe('Dry run: Task_Revisar would be annotated as shown; nothing was written.');
     out = [];
     expect(await main(['process', 'nope'])).toBe(1);
     expect(out[0]).toBe('lila process: unknown subcommand "nope"; use create, show, annotate or raci.');

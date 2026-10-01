@@ -12,7 +12,7 @@
  * was read) and `writeLilaFile` for a new one. Nothing is written before everything is validated,
  * and a dry run never writes.
  */
-import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmdirSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
 import {
@@ -21,6 +21,8 @@ import {
   annotatableElements,
   annotateElement,
   categoryOf,
+  documentationHolder,
+  poolOfProcess,
   parseBpmn,
   readAnnotations,
   uniqueDefinitions,
@@ -151,6 +153,8 @@ export interface AnnotateResult {
   readonly file: string;
   readonly process: string;
   readonly elementId: string;
+  /** For a pool: the process its description is written on (and read from), as in the app. */
+  readonly documentationOn?: string;
   readonly dryRun: boolean;
   /** `false`: the element already said this, and nothing was (or would be) written. */
   readonly changed: boolean;
@@ -234,10 +238,25 @@ export async function annotateLilaElement(request: AnnotateRequest): Promise<Ann
   const { elements, annotations } = await readElements(xml, locale);
   const id = request.elementId;
   if (!Object.hasOwn(elements, id)) throw new Error(T.unknownElement(id, lila.process.slug, lila.file));
-  const before: Annotations = Object.hasOwn(annotations, id) ? annotations[id]! : {};
+  // Write where the app reads (`annotation-holders.ts`): a pool's description is its process's,
+  // and a process inside a pool has its RACI and references on the pool.
+  const element = { id, ...elements[id]! };
+  const holder = documentationHolder(element);
+  if (element.type === 'bpmn:Process' && (request.responsibilities !== undefined || request.refs !== undefined)) {
+    const pool = poolOfProcess(id, Object.entries(elements).map(([key, value]) => ({ id: key, ...value })));
+    if (pool !== undefined) throw new Error(T.processRaciOnPool(id, pool));
+  }
+  const own = (key: string): Annotations => (Object.hasOwn(annotations, key) ? annotations[key]! : {});
+  /** The element as the app shows it: its own annotations, with the description of its holder. */
+  const view = (all: Readonly<Record<string, Annotations>>): Annotations => {
+    const { documentation: _own, ...rest } = Object.hasOwn(all, id) ? all[id]! : {};
+    const documentation = Object.hasOwn(all, holder) ? all[holder]!.documentation : undefined;
+    return { ...(documentation === undefined ? {} : { documentation }), ...rest };
+  };
+  const before = view(annotations);
 
   const change: Annotations = {};
-  if (request.documentation !== undefined) change.documentation = request.documentation;
+  if (request.documentation !== undefined && holder === id) change.documentation = request.documentation;
   if (request.responsibilities !== undefined) {
     change.responsibilities = request.responsibilities.map(({ type, roleRef }) => ({ type, roleRef: roleRef.trim() }));
   }
@@ -250,24 +269,37 @@ export async function annotateLilaElement(request: AnnotateRequest): Promise<Ann
     change.attributes = mergedAttributes(
       { ...request, attributes: request.attributes },
       elements[id]!,
-      before.attributes ?? [],
+      own(id).attributes ?? [],
       definitionsOf(annotations),
       locale,
     );
   }
 
-  let next: string;
+  let next = xml;
   try {
-    next = await annotateElement(xml, id, change);
+    if (Object.keys(change).length > 0) next = await annotateElement(next, id, change);
+    if (request.documentation !== undefined && holder !== id) {
+      next = await annotateElement(next, holder, { documentation: request.documentation });
+    }
   } catch (error) {
     if (error instanceof AnnotationContentLossError) throw new Error(T.contentLoss(error.detail));
     throw error;
   }
-  const after = (await readAnnotations(next))[id] ?? {};
+  const after = view(await readAnnotations(next));
   const changed = JSON.stringify(after) !== JSON.stringify(before);
   const dryRun = request.dryRun === true;
   if (changed && !dryRun) await writeLilaProject(lila, withModelXml(lila.document, lila.process.slug, next), locale);
-  return { file: lila.file, process: lila.process.slug, elementId: id, dryRun, changed, written: changed && !dryRun, before, after };
+  return {
+    file: lila.file,
+    process: lila.process.slug,
+    elementId: id,
+    ...(holder === id ? {} : { documentationOn: holder }),
+    dryRun,
+    changed,
+    written: changed && !dryRun,
+    before,
+    after,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -529,6 +561,18 @@ export interface CreateProjectResult {
 
 const MODEL_ENTRY = 'model.bpmn';
 
+/** Removes `folder` and its parents up to `top` (included) while they are empty; anything else stays. */
+function removeEmptyFolders(folder: string, top: string): void {
+  for (let at = resolve(folder); ; at = dirname(at)) {
+    try {
+      rmdirSync(at);
+    } catch {
+      return;
+    }
+    if (at === resolve(top) || dirname(at) === at) return;
+  }
+}
+
 function problemText(problem: { code: string; message: string }): string {
   return `${problem.code}: ${problem.message}`;
 }
@@ -634,11 +678,13 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     if (!overwrite) throw new Error(T.createExists(target));
   };
   refuseExisting();
-  mkdirSync(dirname(target), { recursive: true });
+  // The first folder this call creates, if any: removed again when the write fails (QA of #559).
+  const created = mkdirSync(dirname(target), { recursive: true });
   try {
     // Checked again inside the lock: another writer may have created the file in between.
     await writeLilaFile(target, document, { overwrite: true, beforeWrite: async () => refuseExisting() });
   } catch (error) {
+    if (created !== undefined) removeEmptyFolders(dirname(target), created);
     if (error instanceof ProjectIOError && error.code === 'E-ARCHIVO-OCUPADO') throw new Error(messages(locale).cli.lilaBusy(target));
     if (error instanceof ProjectIOError) throw new Error(`${target}: ${error.code}: ${error.message}`);
     throw error;

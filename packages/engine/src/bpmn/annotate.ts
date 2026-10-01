@@ -130,6 +130,8 @@ export class AnnotationContentLossError extends Error {
 export interface AnnotatableElement {
   type: string;
   name: string;
+  /** A pool's `processRef` id (see `annotation-holders.ts`). */
+  processRef?: string;
 }
 
 /**
@@ -143,7 +145,9 @@ export async function annotatableElements(xml: string): Promise<Record<string, A
   assertNoContentLoss(warnings);
   const result: Record<string, AnnotatableElement> = Object.create(null) as Record<string, AnnotatableElement>;
   for (const el of walk(definitions)) {
-    if (!Object.hasOwn(result, el.id)) result[el.id] = { type: el.$type, name: typeof el.name === 'string' ? el.name : '' };
+    if (Object.hasOwn(result, el.id)) continue;
+    const processRef = el.processRef?.id;
+    result[el.id] = { type: el.$type, name: typeof el.name === 'string' ? el.name : '', ...(typeof processRef === 'string' ? { processRef } : {}) };
   }
   return result;
 }

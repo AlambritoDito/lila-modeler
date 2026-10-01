@@ -19,6 +19,7 @@ export interface AgentToolMessages {
   unknownAttribute: (key: string, available: string) => string;
   ambiguousAttribute: (name: string, ids: string) => string;
   attributeNotApplicable: (name: string, appliesTo: string, id: string, category: string) => string;
+  processRaciOnPool: (process: string, pool: string) => string;
   attributeNumber: (name: string, value: string) => string;
   attributeDate: (name: string, value: string) => string;
   attributeOption: (name: string, value: string, options: string) => string;
@@ -58,6 +59,14 @@ export interface AgentToolMessages {
   newEntry: () => string;
 }
 
+/** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
+const EN_CATEGORIES: Readonly<Record<string, string>> = {
+  task: 'tasks', gateway: 'gateways', event: 'events', subProcess: 'sub-processes', lane: 'pools and lanes', process: 'the process',
+};
+const ES_CATEGORIES: Readonly<Record<string, string>> = {
+  task: 'tareas', gateway: 'compuertas', event: 'eventos', subProcess: 'subprocesos', lane: 'pools y carriles', process: 'el proceso',
+};
+
 const en: AgentToolMessages = {
   unknownElement: (id, slug, file) => `no element of process ${slug} in ${file} has the id "${id}"; nothing was written.`,
   contentLoss: (detail) =>
@@ -70,7 +79,9 @@ const en: AgentToolMessages = {
   unknownAttribute: (key, available) => `no extended attribute has the id or name "${key}"; defined: ${available}.`,
   ambiguousAttribute: (name, ids) => `the name "${name}" is shared by the attributes ${ids}; use the id.`,
   attributeNotApplicable: (name, appliesTo, id, category) =>
-    `attribute "${name}" applies to ${appliesTo}, and ${id} is ${category === '' ? 'an element that cannot carry attributes' : `a ${category}`}.`,
+    `attribute "${name}" applies to ${EN_CATEGORIES[appliesTo] ?? appliesTo}, not to ${id} (${category === '' ? 'it cannot carry attributes' : (EN_CATEGORIES[category] ?? category)}).`,
+  processRaciOnPool: (process, pool) =>
+    `the responsibilities and references of process ${process} belong to its pool ${pool}, where the app shows them; annotate ${pool} instead. Nothing was written.`,
   attributeNumber: (name, value) => `"${value}" is not a number for attribute "${name}"; write it like 12 or -3.5.`,
   attributeDate: (name, value) => `"${value}" is not a date for attribute "${name}"; write it as YYYY-MM-DD.`,
   attributeOption: (name, value, options) => `"${value}" is not an option of attribute "${name}"; use one of ${options}.`,
@@ -124,7 +135,9 @@ const es: AgentToolMessages = {
   unknownAttribute: (key, available) => `ningún atributo extendido tiene el id o el nombre "${key}"; definidos: ${available}.`,
   ambiguousAttribute: (name, ids) => `el nombre "${name}" lo comparten los atributos ${ids}; usa el id.`,
   attributeNotApplicable: (name, appliesTo, id, category) =>
-    `el atributo "${name}" se aplica a ${appliesTo}, y ${id} es ${category === '' ? 'un elemento que no lleva atributos' : `de tipo ${category}`}.`,
+    `el atributo "${name}" se aplica a ${ES_CATEGORIES[appliesTo] ?? appliesTo}, no a ${id} (${category === '' ? 'no lleva atributos' : (ES_CATEGORIES[category] ?? category)}).`,
+  processRaciOnPool: (process, pool) =>
+    `las responsabilidades y referencias del proceso ${process} van en su pool ${pool}, que es donde la app las muestra; anota ${pool}. No se escribió nada.`,
   attributeNumber: (name, value) => `"${value}" no es un número para el atributo "${name}"; escríbelo como 12 o -3.5.`,
   attributeDate: (name, value) => `"${value}" no es una fecha para el atributo "${name}"; escríbela como AAAA-MM-DD.`,
   attributeOption: (name, value, options) => `"${value}" no es una opción del atributo "${name}"; usa una de ${options}.`,

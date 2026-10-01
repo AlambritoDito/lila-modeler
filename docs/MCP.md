@@ -51,7 +51,7 @@ backed by `@lila-modeler/engine`. Its fifteen tools reuse the CLI validation and
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
   writes the description, RACI, catalog references and extended attributes of one element of a
-  `.lila` process. Returns `{ file, process, elementId, dryRun, changed, written, before, after }`.
+  `.lila` process. Returns `{ file, process, elementId, documentationOn?, dryRun, changed, written, before, after }`.
 - **`get_raci_matrix({ project, process?, locale? })`** returns the process's RACI matrix:
   `{ file, process, roles, rows }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** applies a
@@ -278,7 +278,10 @@ written. `dryRun: true` answers what would change and writes nothing.
   a plain decimal (`12`, `-3.5`), a `date` is `YYYY-MM-DD`, a `list` value is one of its
   options, and the attribute must apply to the element's type. The model's revision goes up by
   one, as when the app saves an edit. An annotation that changes nothing writes nothing
-  (`changed: false`).
+  (`changed: false`). It writes where the app reads: a pool's description is the description of
+  the process it references (written there, and named in `documentationOn`), and a process
+  inside a pool keeps its RACI and references on the pool, so `responsibilities` or `refs` on
+  such a process are refused with a message that names the pool.
 - **`get_raci_matrix`** lists what the process document (`export_document`) lists under
   «Responsibilities (RACI)», in the same order: one row per element with responsibilities, with
   its `id`, `name`, `lane` (when it has one), the raw `responsibilities`, and `cells` (role →
@@ -289,7 +292,8 @@ written. `dryRun: true` answers what would change and writes nothing.
   each field's `before`, `after` and a readable `text` (`Cashier (cajero) · capacity: 2 → 3`, a
   distribution in the unit of its row); `issues` the rows not applied (`error`, `unmatched`,
   `ambiguous`), notes (`warning`) and the errors the result would have (`lint`). A plan with a
-  `lint` issue is refused (it is reported by a `dryRun`). The scenario's revision goes up by one.
+  `lint` issue is refused (it is reported by a `dryRun`). As in the app, the valid rows are written
+  even when other rows are not applied, so read `issues`. The scenario's revision goes up by one.
 - **`export_scenario_template`** is the app's «Download template»: hand it to a person, then
   import what comes back. An existing `saveTo` is refused unless `overwrite`.
 - **`create_project`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`.

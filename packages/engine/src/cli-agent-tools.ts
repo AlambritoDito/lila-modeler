@@ -21,9 +21,30 @@ import {
 /** The `process` subcommands this file answers. */
 export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci'] as const;
 
-/** Whether `lila process <sub>` is one of this file's (the others are `create`/`show`, in `cli.ts`). */
-export function isProcessToolSubcommand(sub: string | undefined): boolean {
-  return (PROCESS_TOOL_SUBCOMMANDS as readonly (string | undefined)[]).includes(sub);
+/** Options of `lila process` (any subcommand) that take a value, so their value is not a subcommand. */
+const PROCESS_VALUE_OPTIONS = new Set([
+  '--outline', '--project', '-p', '--process', '--name',
+  '--documentation', '--responsibility', '--ref', '--attribute',
+]);
+
+/** Index of the subcommand in `lila process …` arguments: the first positional, past any option. */
+function subcommandIndex(argv: readonly string[]): number {
+  for (let index = 0; index < argv.length; index++) {
+    const token = argv[index]!;
+    if (token === '--') return index + 1 < argv.length ? index + 1 : -1;
+    if (!token.startsWith('-')) return index;
+    if (PROCESS_VALUE_OPTIONS.has(token)) index++;
+  }
+  return -1;
+}
+
+/**
+ * Whether `lila process …` is one of this file's subcommands (the others are `create`/`show`, in
+ * `cli.ts`), wherever it comes among the options: `lila process --process x annotate …` too.
+ */
+export function isProcessToolSubcommand(argv: readonly string[]): boolean {
+  const index = subcommandIndex(argv);
+  return index !== -1 && (PROCESS_TOOL_SUBCOMMANDS as readonly string[]).includes(argv[index]!);
 }
 
 /** `R:cajero` → `{ type: 'R', roleRef: 'cajero' }`. */
@@ -155,7 +176,9 @@ async function raciCommand(argv: readonly string[], locale: Locale): Promise<num
 /** `lila process annotate|raci`. */
 export async function dispatchProcessTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
-  const [sub, ...rest] = argv;
+  const index = subcommandIndex(argv);
+  const sub = index === -1 ? undefined : argv[index];
+  const rest = index === -1 ? [...argv] : [...argv.slice(0, index), ...argv.slice(index + 1)];
   if (sub === 'annotate') return annotateCommand(rest, locale);
   if (sub === 'raci') return raciCommand(rest, locale);
   return usageError('process', agentToolMessages(locale).processToolUnknown(sub ?? '', PROCESS_TOOL_SUBCOMMANDS.join(', ')), locale);
