@@ -48,9 +48,12 @@ fila selecciona ese elemento en el lienzo. Cada control vive en un solo paso: lo
 (con su calendario y su capacidad por turno) se editan en Recursos, y Calendarios lo dice.
 
 Con una actividad seleccionada en **Modelar**, el panel de propiedades enseña un bloque **Vista
-rápida · simulación**: su distribución de tiempo y su recurso en el escenario activo, y su espera p95
-en la última corrida (o *sin corrida*). Sus enlaces **Editar en Parámetros** / **Editar en Recursos**
-abren ese paso en Simular.
+rápida · simulación**: su distribución de tiempo y su recurso en el escenario activo, y su espera en
+la última corrida (o *sin corrida*). La espera es el **p95** de los casos medidos después del
+calentamiento en la primera réplica, cuando la muestra del log de esa corrida está completa; una
+corrida más larga (más de 10 000 filas de log en su primera réplica) enseña en su lugar la espera
+**media** de todas las réplicas, y lo dice. Sus enlaces **Editar en Parámetros** / **Editar en
+Recursos** abren ese paso en Simular.
 
 ## Pantalla por pantalla
 

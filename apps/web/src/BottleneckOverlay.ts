@@ -116,7 +116,7 @@ const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
  * 34.354969201139535%» medía 311 px sobre `examples/pedido` (#226). El texto completo no se
  * pierde: va en el `title` de la etiqueta.
  */
-function esperaCorta(seconds: number): string {
+export function esperaCorta(seconds: number): string {
   const S = strings();
   const unidad = UNIDADES.find((u) => seconds >= SEGUNDOS[u]) ?? 's';
   // Redondeo a un decimal *en la unidad elegida* antes de formatear, no después.

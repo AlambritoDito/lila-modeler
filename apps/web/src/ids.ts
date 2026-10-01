@@ -39,7 +39,7 @@ export type Densidad = (typeof DENSIDAD_IDS)[number];
  * simulation; the owner relabelled them after the design (Turno 2) so each step is named after
  * what it edits, and `docs/COMING-FROM-BIZAGI.md` maps them back to the levels. They are a
  * reading order, not a wizard: there is no "enable level N" switch anywhere, every step writes
- * into the same scenario document, and going back to step 1 after step 4 costs nothing. The id
+ * into the same scenario document, and going back to Parameters after Calendars costs nothing. The id
  * lives only in the panel's state (nothing persists it), so the rename needs no migration.
  */
 export const PASO_IDS = ['parameters', 'resources', 'calendars', 'arrivals'] as const;

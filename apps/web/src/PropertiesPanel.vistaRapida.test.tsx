@@ -20,7 +20,7 @@ import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import type { Modelador } from './Modeler.js';
 import { PanelPropiedades, type ElementoLienzo } from './PropertiesPanel.js';
 import { setLocale, strings } from './i18n';
-import { datosVistaRapida, esperasP95, percentil, type VistaRapidaDatos } from './vistaRapida';
+import { datosVistaRapida, type VistaRapidaDatos } from './vistaRapida';
 
 setLocale('en');
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,8 +46,9 @@ function corrida(): RunResult {
 function fila(elementId: string, instancia: string, espera: number, status: EventLogRow['status'] = 'completed'): EventLogRow {
   return {
     replication: 0, caseId: instancia, activityInstanceId: instancia, elementId, resourceId: 'cajero',
-    allocationIndex: 0, resourceQuantity: 1, status, enabledAt: 0, startedAt: espera, endedAt: espera + 1,
-    observedUntil: espera + 1, resourceWait: espera, offHoursWait: 0, elementCost: 0, resourceCost: 0, cost: 0,
+    // Enabled right at the example's warmup (3600 s), so every case of this helper is measured.
+    allocationIndex: 0, resourceQuantity: 1, status, enabledAt: 3600, startedAt: 3600 + espera, endedAt: 3601 + espera,
+    observedUntil: 3601 + espera, resourceWait: espera, offHoursWait: 0, elementCost: 0, resourceCost: 0, cost: 0,
   };
 }
 
@@ -94,10 +95,33 @@ describe('datosVistaRapida', () => {
     expect(datosVistaRapida({ id: 'Task_TomarPedido', ir, escenario: null, resultado: null, S: S() })).toBeNull();
   });
 
-  it('percentil interpolates like the engine, and an instance with two pools counts once', () => {
-    expect(percentil([0, 10], 0.95)).toBeCloseTo(9.5);
-    const dos = [fila('T', 'x', 10), { ...fila('T', 'x', 10), resourceId: 'horno', allocationIndex: 1 }, fila('T', 'y', 20)];
-    expect(esperasP95(dos).get('T')).toBeCloseTo(19.5);
+  it('a run without data for the element reads «—», not «no run»', () => {
+    const vacia = { elements: {} } as unknown as RunResult;
+    const datos = datosVistaRapida({ id: 'Task_TomarPedido', ir, escenario: asIs, resultado: vacia, S: S() });
+    expect(datos?.espera).toEqual({ texto: '—', p95: false });
+  });
+
+  it('the p95 leaves out the cases that started before run.warmup, as the engine does', () => {
+    // Case «pre» arrives at 0 (before a 3600 s warmup) and waits 100 min on the task; it is still
+    // in the log but out of every statistic (RESULTS_FORMAT § 8). Without the filter it would be
+    // the p95 on its own.
+    const pre = { ...fila('Task_TomarPedido', 'pre', 6000), enabledAt: 0 };
+    const medidos = Array.from({ length: 5 }, (_, i) => ({ ...fila('Task_TomarPedido', `m${i}`, 60), enabledAt: 4000, startedAt: 4060 }));
+    // A case is dated by its earliest row: a later row of the same case, enabled after the
+    // warmup, does not make a pre-warmup case count.
+    const tarde = { ...fila('Task_TomarPedido', 'pre', 6000), activityInstanceId: 'pre-2', enabledAt: 5000 };
+    const escenario = { ...asIs, run: { ...(asIs['run'] as object), warmup: 3600 } };
+    const datos = datosVistaRapida({
+      id: 'Task_TomarPedido', ir, escenario, resultado: corrida(), log: { rows: [pre, tarde, ...medidos], truncated: false }, S: S(),
+    });
+    expect(datos?.espera).toEqual({ texto: '1 min', p95: true });
+    // With warmup 0 the same rows put «pre» back in.
+    const sinWarmup = datosVistaRapida({
+      id: 'Task_TomarPedido', ir, escenario: { ...asIs, run: { ...(asIs['run'] as object), warmup: 0 } }, resultado: corrida(),
+      log: { rows: [pre, tarde, ...medidos], truncated: false }, S: S(),
+    });
+    // Rounded like the bottleneck labels: the coarsest unit where it is 1 or more, one decimal.
+    expect(sinWarmup?.espera?.texto).toBe('1.7 h');
   });
 });
 

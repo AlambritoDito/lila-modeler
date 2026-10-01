@@ -825,7 +825,8 @@ export const en = {
     pasoAyuda: {
       parameters:
         'How the model runs: the run window and replications, how the gateways branch and how long each activity takes.',
-      resources: 'Who does the work: pools, how many units, and which task takes which pool.',
+      resources:
+        'Who does the work: pools, how many units, when each pool works (its calendar and capacity per shift), and which task takes which pool.',
       calendars: 'When the work is possible: calendars and holidays, and which element follows which calendar.',
       arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
     } as Record<string, string>,

@@ -257,6 +257,46 @@ describe('los cuatro pasos del panel de simulación', () => {
  * 2 — El paso no se pierde por el camino
  * ------------------------------------------------------------------ */
 
+describe('a step asked for from outside (#396 «Edit in …»)', () => {
+  function Pedido({ montado }: { montado: boolean }): React.JSX.Element {
+    const [pedido, setPedido] = useState<PasoId | null>(null);
+    return (
+      <>
+        <button type="button" onClick={() => { setPedido('resources'); }}>ask:resources</button>
+        {montado && (
+          <ScenarioPanel
+            archivo={ARCHIVO}
+            escenarios={{ [ARCHIVO]: asIs() }}
+            onCambio={() => {}}
+            onGuardar={() => {}}
+            onDuplicar={() => {}}
+            ir={ir}
+            seleccion={null}
+            onSeleccionar={() => {}}
+            pasoPedido={pedido}
+            onPasoAtendido={() => { setPedido(null); }}
+          />
+        )}
+      </>
+    );
+  }
+
+  it('opens that step once, and twice in a row; a remount afterwards opens on Parameters again', () => {
+    montar(<Pedido montado />);
+    pulsar('ask:resources');
+    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    irAPaso('arrivals');
+    pulsar('ask:resources');
+    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+
+    // Detaching or switching tabs remounts the panel: the ask was consumed, it does not come back.
+    // Same root, so the host keeps its state: only the panel unmounts and mounts again.
+    act(() => { raiz!.render(<Pedido montado={false} />); });
+    act(() => { raiz!.render(<Pedido montado />); });
+    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('el paso elegido sobrevive', () => {
   it('seleccionar un elemento tras otro no devuelve el panel al primer paso', () => {
     montar(<Anfitrion inicial={asIs()} />);

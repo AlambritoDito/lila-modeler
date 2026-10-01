@@ -11,7 +11,8 @@
  * (`resumenDistribucion`, `resumenRecursos`), so the two never write a distribution differently.
  */
 import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
-import { formatDuration } from '@lila-modeler/engine/format';
+import { esperaCorta } from './BottleneckOverlay';
+import { percentilesPorElemento } from './percentilesPorElemento';
 import { resumenDistribucion, resumenRecursos } from './ScenarioPanel';
 import { esUnidadTiempo, type UnidadTiempo } from './scenarioFields';
 import type { Strings } from './strings.types';
@@ -23,11 +24,13 @@ export interface VistaRapidaDatos {
   recurso: string | null;
   /**
    * Wait before starting (`resourceWait + offHoursWait`) in the last valid run of the active
-   * scenario. The 95th percentile when the run's log sample is in memory and complete — the shell
-   * keeps replication 0 only, up to `LOG_SAMPLE_LIMIT` rows, the same sample the Results charts
-   * read —, otherwise the mean of `RunResult.elements[id]` over every replication, labelled as a
-   * mean: the result carries no per-element percentile, and a truncated sample would bias it.
-   * `null` when there is no run.
+   * scenario, rounded like the bottleneck labels (`esperaCorta`). The 95th percentile of the
+   * measured cohort (`percentilesPorElemento`: after `run.warmup`) when the run's log sample is in
+   * memory and complete — the shell keeps replication 0 only, up to `LOG_SAMPLE_LIMIT` rows, the
+   * same sample the Results charts read —, otherwise the mean of `RunResult.elements[id]` over
+   * every replication, labelled as a mean: the result carries no per-element percentile, and a
+   * truncated sample would bias it. `null` when there is no run; «—» when the run has no data
+   * for the element.
    */
   espera: { texto: string; p95: boolean } | null;
 }
@@ -53,39 +56,14 @@ function idDelIr(ir: ProcessIR, id: string): string | null {
   return enIr?.[0] ?? null;
 }
 
-/** Empirical percentile with linear interpolation, as `process.waitTime.p95` (RESULTS_FORMAT § 5). */
-export function percentil(muestra: readonly number[], p: number): number {
-  const orden = [...muestra].sort((a, b) => a - b);
-  const pos = (orden.length - 1) * p;
-  const bajo = Math.floor(pos);
-  const alto = Math.ceil(pos);
-  return orden[bajo]! + (orden[alto]! - orden[bajo]!) * (pos - bajo);
-}
-
-/** Wait p95 per element of a log, computed once per log (a log can hold a lot of rows). */
-const cache = new WeakMap<readonly EventLogRow[], Map<string, number>>();
-export function esperasP95(rows: readonly EventLogRow[]): Map<string, number> {
+/** Wait p95 per element of a log sample, computed once per sample and warmup (it can be 10k rows). */
+const cache = new WeakMap<readonly EventLogRow[], { warmup: number; p95: Map<string, number> }>();
+export function esperasP95(rows: readonly EventLogRow[], warmup = 0): Map<string, number> {
   const hecho = cache.get(rows);
-  if (hecho !== undefined) return hecho;
-  // Several rows share an activity instance (one per pool assignment, ADR-025); the wait is the
-  // instance's, so it is counted once. Only completed instances, like `process.waitTime`.
-  const porInstancia = new Map<string, { elemento: string; espera: number }>();
-  for (const row of rows) {
-    if (row.status !== 'completed') continue;
-    porInstancia.set(`${row.replication}:${row.activityInstanceId}`, {
-      elemento: row.elementId,
-      espera: row.resourceWait + row.offHoursWait,
-    });
-  }
-  const muestras = new Map<string, number[]>();
-  for (const { elemento, espera } of porInstancia.values()) {
-    const lista = muestras.get(elemento);
-    if (lista === undefined) muestras.set(elemento, [espera]);
-    else lista.push(espera);
-  }
-  const salida = new Map([...muestras].map(([id, lista]) => [id, percentil(lista, 0.95)]));
-  cache.set(rows, salida);
-  return salida;
+  if (hecho !== undefined && hecho.warmup === warmup) return hecho.p95;
+  const p95 = new Map([...percentilesPorElemento(rows, [0.95], { warmup })].map(([id, [valor]]) => [id, valor!]));
+  cache.set(rows, { warmup, p95 });
+  return p95;
 }
 
 export function datosVistaRapida({ id, ir, escenario, resultado, log, S }: EntradaVistaRapida): VistaRapidaDatos | null {
@@ -97,15 +75,20 @@ export function datosVistaRapida({ id, ir, escenario, resultado, log, S }: Entra
   const run = escenario['run'];
   const valorUnidad = esObjeto(run) ? run['baseTimeUnit'] : undefined;
   const unidad: UnidadTiempo = esUnidadTiempo(valorUnidad) ? valorUnidad : 's';
+  // The run was made with this same scenario revision (`corridaActual`), so its warmup is this one.
+  const warmup = esObjeto(run) && typeof run['warmup'] === 'number' ? run['warmup'] : 0;
   const elemento = esObjeto(escenario['elements']) ? escenario['elements'][idIr] : undefined;
   const campos = esObjeto(elemento) ? elemento : {};
 
   let espera: VistaRapidaDatos['espera'] = null;
-  const metricas = resultado?.elements[idIr];
-  if (metricas !== undefined) {
-    const p95 = log !== undefined && !log.truncated ? esperasP95(log.rows).get(idIr) : undefined;
-    const segundos = p95 ?? metricas.resourceWait.mean + metricas.offHoursWait.mean;
-    espera = { texto: `${formatDuration(segundos, unidad)} ${S.escenario.unidades[unidad]}`, p95: p95 !== undefined };
+  if (resultado !== null) {
+    const metricas = resultado.elements[idIr];
+    const p95 = log !== undefined && !log.truncated ? esperasP95(log.rows, warmup).get(idIr) : undefined;
+    const segundos = p95 ?? (metricas === undefined ? undefined : metricas.resourceWait.mean + metricas.offHoursWait.mean);
+    // A run that has nothing on this element (added after it ran, say) is «—», not «no run».
+    espera = segundos === undefined
+      ? { texto: S.escenario.sinResumen, p95: false }
+      : { texto: esperaCorta(segundos), p95: p95 !== undefined };
   }
 
   return {

@@ -2018,10 +2018,12 @@ export interface ScenarioPanelProps {
   enVentana?: boolean;
   /**
    * #396: a step asked for from outside the panel — the «Edit in …» link of the properties
-   * panel's quick view. `vez` changes on every ask, so asking twice for the same step after
-   * moving away from it still lands there. The step stays the panel's own state otherwise.
+   * panel's quick view. The panel opens it and calls `onPasoAtendido`, and the shell clears the
+   * request: it is consumed once, so a later remount (detaching, switching tabs) opens on the
+   * first step as before instead of on a stale ask. The step stays the panel's own state.
    */
-  pasoPedido?: { paso: PasoId; vez: number } | null;
+  pasoPedido?: PasoId | null;
+  onPasoAtendido?: () => void;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -2042,6 +2044,7 @@ export function ScenarioPanel({
   avanzado = false,
   enVentana = false,
   pasoPedido = null,
+  onPasoAtendido,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -2049,10 +2052,12 @@ export function ScenarioPanel({
    * this panel and of nothing else, and because keeping it here is what makes it survive picking
    * an element on the canvas and a whole run finishing: both of them only re-render the panel.
    */
-  const [paso, setPaso] = useState<PasoId>(pasoPedido?.paso ?? 'parameters');
+  const [paso, setPaso] = useState<PasoId>('parameters');
   useEffect(() => {
-    if (pasoPedido !== null) setPaso(pasoPedido.paso);
-  }, [pasoPedido]);
+    if (pasoPedido === null) return;
+    setPaso(pasoPedido);
+    onPasoAtendido?.();
+  }, [pasoPedido, onPasoAtendido]);
   // The engine takes the language as a value, not as a catalog: `useLocale()` is what makes the
   // memoised lint below recompute when the app switches language.
   const locale = useLocale();

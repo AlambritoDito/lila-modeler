@@ -611,8 +611,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * to sync between the two.
    */
   const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
-  /** #396: the step the quick view's «Edit in …» asked the scenario panel to open. */
-  const [pasoPedido, setPasoPedido] = useState<{ paso: PasoId; vez: number } | null>(null);
+  /** #396: the step the quick view's «Edit in …» asked the scenario panel to open, until it does. */
+  const [pasoPedido, setPasoPedido] = useState<PasoId | null>(null);
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
@@ -2072,7 +2072,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
    * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
-   * on goes back to the first one; lift `paso` to the shell if anybody minds.
+   * on goes back to the first one (an «Edit in …» ask is consumed once, #396); lift `paso` to the
+   * shell if anybody minds.
    */
   const panelEscenario = (
     <ScenarioPanel
@@ -2088,6 +2089,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       seleccion={seleccion}
       avanzado={avanzado}
       pasoPedido={pasoPedido}
+      onPasoAtendido={() => { setPasoPedido(null); }}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -2625,7 +2627,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 });
               },
               onEditar: (paso) => {
-                setPasoPedido((antes) => ({ paso, vez: (antes?.vez ?? 0) + 1 }));
+                setPasoPedido(paso);
                 elegirModo('simular');
                 ventanaEscenario?.focus();
               },
