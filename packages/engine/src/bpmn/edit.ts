@@ -28,6 +28,7 @@ import { z } from 'zod';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
 import { OUTLINE_STEP_TYPES, OutlineSchema, parseDuration, type OutlineStepType } from './outline.js';
+import type { ParseBpmnOptions } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
 import { Diagram, is, relayout, type El } from './edit-layout.js';
@@ -122,6 +123,8 @@ export interface EditBpmnOptions {
   scenarioName?: string | undefined;
   /** #546: the process to edit (the one its scenarios target, `parseBpmn`); default, the document-order rule. */
   processId?: string | undefined;
+  /** #546: the process's scenarios, so the before/after validation checks the process that runs. */
+  scenarios?: ParseBpmnOptions['scenarios'];
 }
 
 export interface BpmnEdit {
@@ -1067,8 +1070,9 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
   const out = marcarExportador(raw);
 
   // Only errors the edit brought in count: a model may already carry some (it is still editable).
-  const known = new Set((await validateBpmnXml(xml, { locale })).errors.map((e) => `${e.code}\u0000${e.id}`));
-  const report = await validateBpmnXml(out, { locale });
+  const scenarios = options.scenarios === undefined ? undefined : [...options.scenarios];
+  const known = new Set((await validateBpmnXml(xml, { locale, scenarios })).errors.map((e) => `${e.code}\u0000${e.id}`));
+  const report = await validateBpmnXml(out, { locale, scenarios });
   const fresh = report.errors.filter((e) => !known.has(`${e.code}\u0000${e.id}`));
   if (fresh.length > 0) {
     fail(

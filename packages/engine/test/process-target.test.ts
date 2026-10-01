@@ -157,6 +157,20 @@ describe('#546: a Customer-first .lila, through the CLI and the exports', () => 
     expect(names).not.toContain('Receive notification');
   });
 
+  test('edit_process refuses an edit that breaks Restaurant, though Customer still validates (QA of #560, round 3)', async () => {
+    const before = readFileSync(file);
+    const ops = [
+      { op: 'setType', id: 'EndEvent_Entregado', type: 'task' },
+      { op: 'setType', id: 'EndEvent_Rechazado', type: 'task' },
+    ];
+    for (const dryRun of [true, false]) {
+      const error = await editLilaProcess(file, ops, { dryRun }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain('E-SIN-END');
+    }
+    expect(readFileSync(file).equals(before)).toBe(true);
+  });
+
   test('exported results name the elements and the document describes Restaurant', async () => {
     const results = await exportResults({ file, format: 'csv' });
     const elements = (results.data as Record<string, string>)['elements.csv']!;

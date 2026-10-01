@@ -156,6 +156,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
     scenario: base,
     scenarioName: BASE_SCENARIO,
     processId: simulated.id,
+    scenarios: Object.values(current.scenarios),
   });
 
   // Scenario entries that no longer apply go, each one reported with what it held.
