@@ -6,6 +6,9 @@
 backed by `@lila-modeler/engine`. Its sixteen tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
+For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
+result in the app — read the [agent guide](AGENT_GUIDE.md).
+
 ## Tools
 
 - **`validate_bpmn({ path | xml, process?, locale? })`** parses and validates BPMN and returns the same JSON
@@ -329,6 +332,8 @@ written. `dryRun: true` answers what would change and writes nothing.
 
 ```json
 { "name": "import_scenario_sheet", "arguments": { "project": "project.lila", "scenario": "as-is", "sheet": "as-is.xlsx", "dryRun": true } }
+```
+
 ## Editing a process
 
 `edit_process` (#98) changes a process that already exists, whoever made it: `create_process`, the
@@ -417,9 +422,16 @@ summaries, catalogued engine diagnostics and tool messages use the selected lang
 
 ## Installation
 
-From a repository checkout with Node 22 or later:
+**`@lila-modeler/mcp` is not published.** The engine on npm (`@lila-modeler/engine`) has the `lila`
+command, but `lila mcp` loads the MCP server from the separate `@lila-modeler/mcp` workspace (a
+dynamic `import()`, to avoid a package cycle), and that workspace is `private`. So
+`npx -y @lila-modeler/engine mcp` does **not** work today: it installs the engine and stops with
+`lila mcp: the package @lila-modeler/mcp is missing`. Until the MCP server is published, run it from
+a repository checkout with Node 22 or later:
 
 ```bash
+git clone https://github.com/AlambritoDito/lila-modeler.git
+cd lila-modeler
 npm ci
 npm run build
 ```
@@ -431,10 +443,11 @@ node packages/engine/bin/lila.js mcp
 ./node_modules/.bin/lila-mcp
 ```
 
-`lila mcp` dynamically loads `@lila-modeler/mcp` to avoid a static package cycle. Installing the engine
-package alone does not install the private MCP workspace. Use the checkout until a separately
-installable MCP distribution exists. Missing packages and startup diagnostics go to stderr;
-stdout carries only MCP protocol messages.
+Every client below starts the server as a subprocess over stdio: `command` is `node` (an
+absolute path to it when the client does not inherit your `PATH`) and `args` are the absolute path
+to `packages/engine/bin/lila.js` and `mcp`. Missing packages and startup diagnostics go to stderr;
+stdout carries only MCP protocol messages. Add `--lang es` (or the environment variable
+`LILA_LANG=es`) for Spanish messages.
 
 ## Register with Claude Code
 
@@ -482,40 +495,100 @@ The usual configuration locations are
 `%APPDATA%\Claude\claude_desktop_config.json` on Windows. Restart the client after editing.
 Use absolute model and scenario paths rather than relying on a client-specific working directory.
 
+## Register with Codex
+
+```bash
+codex mcp add lila -- node /absolute/path/to/repo/packages/engine/bin/lila.js mcp
+```
+
+or, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.lila]
+command = "node"
+args = ["/absolute/path/to/repo/packages/engine/bin/lila.js", "mcp"]
+```
+
+## Register with Hermes Agent
+
+[Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp) reads stdio
+servers from `mcp_servers` in `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  lila:
+    command: "/absolute/path/to/node"
+    args: ["/absolute/path/to/repo/packages/engine/bin/lila.js", "mcp"]
+    cwd: "/absolute/path/to/your/projects"
+    env:
+      LILA_LANG: "es"
+    timeout: 300
+```
+
+- Hermes passes the server only the environment variables listed in `env`, so give `command` as an
+  absolute path to `node` (`which node`) rather than relying on `PATH`.
+- `cwd` is where relative tool paths (`project: "card.lila"`, `saveTo`) land. Omit it and use
+  absolute paths in the calls instead.
+- `timeout` is per tool call, in seconds: a long `run_simulation` or `compare_scenarios` blocks the
+  server until it finishes, so leave room for it.
+- Run `/reload-mcp` in a Hermes session after editing the file. Hermes names the tools
+  `mcp_lila_<tool>` (`mcp_lila_create_process`); the arguments are the ones on this page.
+- `tools: { include: [...] }` limits what the agent sees, for example to the read-only
+  `validate_bpmn`, `describe_process`, `get_process_outline`, `get_raci_matrix` and `run_simulation`
+  (which writes only with `saveTo` or `saveRun`).
+
+The same block, with `command` and `args`, is the generic stdio configuration for any other MCP
+client.
+
 ## Examples
+
+One call per tool that the sections above do not already show. The tool calls are written as an
+agent sends them (`name` and `arguments`); paths are relative to the server's working directory.
+
+Validate a model, or one process of a `.lila`:
+
+```json
+{ "name": "validate_bpmn", "arguments": { "path": "examples/pedido/model.bpmn" } }
+```
+
+Describe it, with the resources of a scenario:
+
+```json
+{ "name": "describe_process", "arguments": { "path": "examples/pedido/model.bpmn", "scenario": "examples/pedido/as-is.scenario.json" } }
+```
 
 Run a scenario:
 
 ```json
-{ "scenario": "examples/pedido/as-is.scenario.json", "seed": 42 }
+{ "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "seed": 42 } }
 ```
 
-Compare scenarios:
+Compare scenarios (the first is the baseline):
 
 ```json
-{
-  "scenarios": [
-    "examples/pedido/as-is.scenario.json",
-    "examples/pedido/to-be-3-cajeros.scenario.json"
-  ],
-  "seed": 42
-}
+{ "name": "compare_scenarios", "arguments": {
+  "scenarios": ["examples/pedido/as-is.scenario.json", "examples/pedido/to-be-3-cajeros.scenario.json"], "seed": 42 } }
 ```
 
 Create a derived scenario without changing AS-IS:
 
 ```json
-{
+{ "name": "patch_scenario", "arguments": {
   "scenario": "examples/pedido/as-is.scenario.json",
   "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 3 }],
   "saveTo": "examples/pedido/to-be-3-cajeros.scenario.json",
-  "name": "TO-BE 3 cashiers"
-}
+  "name": "TO-BE 3 cashiers" } }
 ```
 
 This writes `version`, `name`, `extends: "as-is.scenario.json"` and
 `resources: { "cajero": { "capacity": 3 } }`. Inline scenarios use the same resolved format;
 relative model paths are resolved against the server's working directory.
+
+Read a process back as an outline:
+
+```json
+{ "name": "get_process_outline", "arguments": { "project": "credit.lila", "process": "credit-application" } }
+```
 
 ## M4 acceptance workflows
 
