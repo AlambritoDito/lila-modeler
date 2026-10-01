@@ -301,6 +301,13 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   manifest, or a scenario after this window last read or saved it): when you try to save, the app
   refuses with `E-CAMBIO-EXTERNO: <files>` without touching disk. **There is no "Overwrite" button
   today**: the only way out from the interface is "Guardar como" (Save as, into another folder).
+- **The open project is watched** (#539): when an agent or a script rewrites the open `.lila` (or a
+  project folder's model, manifest or scenarios) through the CLI or MCP, the app notices within a
+  fraction of a second. With nothing unsaved it reloads on its own, keeping the mode, the process
+  tab and the scenario on screen when they still exist. With unsaved changes the status bar says
+  «The file changed outside Lila» with **Reload** (take the file, drop your edits) and **Keep
+  mine** (keep editing; the next save is still refused with `E-CAMBIO-EXTERNO`, as above). Lila's
+  own saves never trigger it.
 
 ### Recents and window («Recientes y ventana»)
 

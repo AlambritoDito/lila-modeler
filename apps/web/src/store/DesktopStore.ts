@@ -230,6 +230,7 @@ export class DesktopStore implements ProjectSessionStore {
   }
 
   forget(): void {
+    this.bridge.forgetProject?.(); // #539: nothing on disk to watch any more.
     this.occupied = new Set();
     this.activeDir = null;
     this.activeDocument = null;
@@ -281,6 +282,33 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeModelFile = file?.toLowerCase().endsWith('.bpmn') === true ? file : undefined;
     this.activeLoose = raw.loose === true;
     return document;
+  }
+
+  /**
+   * #539: main reports a change it did not make to the project it watches; news about a project
+   * this store has since left (another one opened, an example from the gallery) is dropped.
+   */
+  onExternalChange(cb: () => void): () => void {
+    return this.bridge.onExternalChange?.((dir) => {
+      if (dir === this.activeDir) cb();
+    }) ?? (() => {});
+  }
+
+  /** #539: the open project again, through `openRecent` (the door Open and the recents use). */
+  async reload(): Promise<ProjectDocument | null> {
+    if (this.activeDir === null) return null;
+    const dir = this.activeDir;
+    const file = this.activeModelFile;
+    try {
+      return await this.openRecent(dir, file);
+    } catch (error) {
+      // Main's error is `"Error invoking remote method …: Error: <code>: <Spanish detail>"`: only the
+      // code travels, in a sentence of the UI language that says it came from an outside change.
+      // A file another program is still saving (`E-ARCHIVO-OCUPADO`, #466) says so the same way.
+      const codigo = error instanceof Error ? /\bE-[A-Z0-9-]+/.exec(error.message)?.[0] : undefined;
+      const nombre = file ?? dir.split(/[\\/]/).pop() ?? dir;
+      throw new Error(strings().almacen.errorRecarga(nombre, codigo ?? 'E-RECARGA'));
+    }
   }
 
   /** `.bpmn` pendiente de abrir (doble clic, `open-file`, argumento de línea de comandos). Se consume una vez. */

@@ -96,6 +96,13 @@ export interface ProjectSessionStore extends ProjectStore {
    */
   forget?(): void;
   /**
+   * #539: `cb` runs when the open project changed on disk and Lila did not write it (an agent
+   * through the CLI or MCP). Only for the project this store has open now. Only `DesktopStore`.
+   */
+  onExternalChange?(cb: () => void): () => void;
+  /** #539: reads the open project again from disk, through the same door as Open. Only `DesktopStore`. */
+  reload?(): Promise<ProjectDocument | null>;
+  /**
    * Process slugs already taken on disk by the active project FOLDER (#498, QA of #511): a deleted
    * process's `processes/<slug>/` stays, so a new process must pick another slug or it would read
    * the old one's scenarios and runs. Only `DesktopStore`; a `.lila` is rewritten whole.

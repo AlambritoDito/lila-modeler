@@ -29,6 +29,7 @@ import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
 import {
+  isOwnSnapshot,
   isRecordableProject,
   occupiedSlugs,
   ProjectIOError,
@@ -39,6 +40,7 @@ import {
   type WriteProjectOptions,
 } from '@lila-modeler/engine/project-fs';
 import type { ProjectDocument } from './projectTypes.js';
+import { watchProject, type ProjectWatcher } from './projectWatcher.js';
 import { isProcessSlug, processesOf } from '@lila-modeler/engine/project';
 import { isFlatName, mimeFor, PathEscapeError, resolveWithin } from './safePaths.js';
 import { desktopStrings, type Strings } from './strings/index.js';
@@ -484,7 +486,45 @@ function scheduleSaveBounds(win: BrowserWindow): void {
   boundsSaveTimer = setTimeout(() => void saveBounds(win), 400);
 }
 
+// -- Reload when the open project changes on disk (#539, `projectWatcher.ts`) -----------------
+/** One watcher per window, on the project that window last opened or saved. */
+const projectWatchers = new Map<BrowserWindow, ProjectWatcher>();
+/**
+ * The project write in progress, if any. The own-write check waits for it: a save that is still
+ * renaming has not recorded its snapshot yet, and must not look like somebody else's change.
+ */
+let projectWrite: Promise<unknown> = Promise.resolve();
+
+/**
+ * Points `win`'s watcher at `target` (a `.lila`, a loose `.bpmn` or a project folder, `realpath`),
+ * replacing the one on the previous project. `reportAs` is the path the renderer knows the project by, sent back with
+ * `lila:reload` so it can ignore news about a project it has since left.
+ */
+function watchOpenProject(win: BrowserWindow, target: string, reportAs: string = target): void {
+  if (projectWatchers.get(win)?.target === target) return;
+  projectWatchers.get(win)?.close();
+  projectWatchers.set(win, watchProject({
+    target,
+    singleFile: isLilaPath(target) || isBpmnPath(target),
+    isOwn: async (file) => {
+      await projectWrite;
+      return isOwnSnapshot(file);
+    },
+    onChange: () => {
+      if (win.isDestroyed()) return;
+      void e2eLog('externalChange', { dir: reportAs });
+      win.webContents.send('lila:reload', reportAs);
+    },
+  }));
+}
+
+function unwatchProject(win: BrowserWindow): void {
+  projectWatchers.get(win)?.close();
+  projectWatchers.delete(win);
+}
+
 function registerIpcHandlers(win: BrowserWindow): void {
+  win.on('closed', () => unwatchProject(win));
   guardedHandle(win, 'lila:chooseFolder', async (_event, soloArchivoArg: unknown): Promise<string | null> => {
     // `true` cuando el renderer pide explícitamente un `.lila` (menú «Abrir proyecto .lila…»).
     const soloArchivo = soloArchivoArg === true;
@@ -571,6 +611,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
         ? await readLilaFile(dir)
         : await readProjectFolder(dir);
       await recordRecent(dir, document.name);
+      watchOpenProject(win, dir);
       return { ...document, problems, loose, ...(isLilaPath(dir) ? {} : { occupiedSlugs: await occupiedSlugs(dir) }) };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
@@ -589,8 +630,14 @@ function registerIpcHandlers(win: BrowserWindow): void {
       try {
         // Mismas `options` que el escritor de carpeta: un `.lila` se guarda con las mismas
         // guardias (`E-CARPETA-OCUPADA`, `E-CAMBIO-EXTERNO`), no con menos (ADR-027).
-        if (isLilaPath(dir)) await writeLilaFile(dir, document, options);
-        else await writeProjectFolder(dir, document, options);
+        const write = isLilaPath(dir) ? writeLilaFile(dir, document, options) : writeProjectFolder(dir, document, options);
+        projectWrite = write.catch(() => {});
+        await write;
+        // «Save as» moves the project: the watcher follows it. A loose diagram's save writes only
+        // its `.bpmn`, and only that file is watched (not the folder it happens to be in).
+        watchOpenProject(win, options.diagramOnly === true && options.modelFile !== undefined
+          ? path.join(dir, options.modelFile)
+          : dir);
         // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
         // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
         await recordRecentIfProject(dir, document.name);
@@ -605,6 +652,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
       }
     },
   );
+
+  // A project with no file behind it (a gallery example) replaces the one being watched (#539).
+  guardedOn(win, 'lila:forgetProject', () => unwatchProject(win));
 
   guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
     if (typeof value === 'boolean') setDirty(value);
@@ -697,6 +747,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
       try {
         const { document, problems, loose } = await readLilaFile(real);
         await recordRecent(real, document.name);
+        watchOpenProject(win, real, dirArg);
         return { ...document, problems, loose };
       } catch (error) {
         if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);
@@ -707,6 +758,8 @@ function registerIpcHandlers(win: BrowserWindow): void {
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
       await recordRecentIfProject(real, document.name);
+      // A loose `.bpmn` is watched alone: its folder may be `~/Downloads` (LILA-072).
+      watchOpenProject(win, loose && file !== undefined ? path.join(real, file) : real, dirArg);
       return { ...document, problems, loose, occupiedSlugs: await occupiedSlugs(real) };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);

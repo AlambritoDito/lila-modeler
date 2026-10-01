@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { decodeLila, encodeLila } from '../../src/project/index.js';
 import type { ProjectDocument } from '../../src/project/index.js';
-import { isLilaPath, ProjectIOError, readLilaFile, writeLilaFile } from '../../src/project-fs/index.js';
+import { isLilaPath, isOwnSnapshot, ProjectIOError, readLilaFile, writeLilaFile } from '../../src/project-fs/index.js';
 
 /**
  * Carpetas reales con `mkdtemp`, igual que `projectIO.test.ts`: lo que se comprueba aquí es el
@@ -162,5 +162,28 @@ describe('writeLilaFile: guardias de "Guardar como" y de cambio externo', () => 
     await writeLilaFile(file, documento({ name: 'v2' }));
     await writeLilaFile(file, documento({ name: 'v3' }));
     expect((await readLilaFile(file)).document.name).toBe('v3');
+  });
+});
+
+describe('isOwnSnapshot (#539)', () => {
+  it('tells this process\'s own write from a later one by someone else, without updating the snapshot', async () => {
+    const dir = await carpeta();
+    const file = join(dir, 'pedido.lila');
+    expect(await isOwnSnapshot(file)).toBe(true); // Never seen and absent: nothing to report.
+    await writeLilaFile(file, documento());
+    expect(await isOwnSnapshot(file)).toBe(true);
+    await writeFile(file, encodeLila(documento({ name: 'de un agente' })));
+    await utimes(file, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
+    expect(await isOwnSnapshot(file)).toBe(false);
+    expect(await isOwnSnapshot(file)).toBe(false); // Still foreign: asking does not remember it.
+    await expect(writeLilaFile(file, documento())).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
+    await readLilaFile(file);
+    expect(await isOwnSnapshot(file)).toBe(true);
+  });
+
+  it('a file this process never saw that exists is not its own', async () => {
+    const file = join(await carpeta(), 'nuevo.lila');
+    await writeFile(file, encodeLila(documento()));
+    expect(await isOwnSnapshot(file)).toBe(false);
   });
 });

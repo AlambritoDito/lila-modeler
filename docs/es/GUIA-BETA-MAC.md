@@ -296,6 +296,14 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   al intentar guardar, la app rechaza con `E-CAMBIO-EXTERNO: <archivos>` sin tocar disco. **Hoy no
   hay un botón "Sobrescribir"**: la única salida disponible desde la interfaz es "Guardar como"
   (hacia otra carpeta).
+- **El proyecto abierto se vigila** (#539): cuando un agente o un script reescribe el `.lila`
+  abierto (o el modelo, el manifiesto o los escenarios de una carpeta de proyecto) por la CLI o el
+  MCP, la app lo nota en una fracción de segundo. Sin cambios sin guardar, recarga sola y conserva
+  el modo, la pestaña del proceso y el escenario en pantalla si siguen existiendo. Con cambios sin
+  guardar, la barra de estado dice «El archivo cambió fuera de Lila» con **Recargar** (tomar el
+  archivo y descartar tus cambios) y **Conservar los míos** (seguir editando; el siguiente guardado
+  se sigue rechazando con `E-CAMBIO-EXTERNO`, como arriba). Los guardados de la propia Lila nunca
+  lo disparan.
 
 ### Recientes y ventana
 
