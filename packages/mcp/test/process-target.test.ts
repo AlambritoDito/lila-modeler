@@ -55,3 +55,11 @@ test('run_simulation runs Restaurant and export_results names its elements', asy
   expect(csv.isError).toBe(false);
   expect(readFileSync(join(dir, 'csv', 'elements.csv'), 'utf8')).toMatch(/^StartEvent_Pedido,Order received,start,/m);
 });
+
+test('get_process_outline reads Restaurant, as run_simulation runs it (QA of #560, round 2)', async () => {
+  const read = await call('get_process_outline', { project: file });
+  expect(read.isError, read.text).toBe(false);
+  const names = (JSON.parse(read.text) as { outline: { steps: { name?: string }[] } }).outline.steps.map((step) => step.name);
+  expect(names).toContain('Take order');
+  expect(names).not.toContain('Receive notification');
+});

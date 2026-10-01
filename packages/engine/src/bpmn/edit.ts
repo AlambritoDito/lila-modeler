@@ -120,6 +120,8 @@ export interface EditBpmnOptions {
   scenario?: ScenarioDocument | undefined;
   /** Its name, for messages. */
   scenarioName?: string | undefined;
+  /** #546: the process to edit (the one its scenarios target, `parseBpmn`); default, the document-order rule. */
+  processId?: string | undefined;
 }
 
 export interface BpmnEdit {
@@ -184,8 +186,10 @@ function* everything(root: unknown): Generator<El> {
 }
 
 /** The process the simulator reads (`parseBpmn`'s rule): executable and non-empty, else non-empty, else first. */
-function mainProcess(definitions: El): El | undefined {
+function mainProcess(definitions: El, processId?: string): El | undefined {
   const processes = ((definitions['rootElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:Process');
+  const chosen = processId === undefined ? undefined : processes.find((el) => el.id === processId);
+  if (chosen !== undefined) return chosen;
   const nonEmpty = (el: El): boolean => ((el['flowElements'] ?? []) as El[]).length > 0;
   return processes.find((el) => el['isExecutable'] === true && nonEmpty(el)) ?? processes.find(nonEmpty) ?? processes[0];
 }
@@ -1024,7 +1028,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     fail(C, [{ op: null, path: 'bpmn', message: C.editContentLoss(detail) }]);
   }
   const definitions = rootElement as unknown as El;
-  const process = mainProcess(definitions);
+  const process = mainProcess(definitions, options.processId);
   if (process === undefined) fail(C, [{ op: null, path: 'bpmn', message: C.outlineNoProcess() }]);
 
   const editor = new Editor(moddle, definitions, process, C, options.scenario, options.scenarioName ?? 'as-is.scenario.json');

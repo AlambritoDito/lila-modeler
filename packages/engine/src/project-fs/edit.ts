@@ -148,15 +148,18 @@ export async function editLilaProcess(file: string, operations: unknown, options
   const input = await openLilaProcess(file, { process: options.process, locale });
   const current = input.process;
   const base = current.scenarios[BASE_SCENARIO];
+  // #546: the process its scenarios target is the one edited, checked and read back.
+  const simulated = (await parseBpmn(current.model.xml, { scenarios: Object.values(current.scenarios) })).ir;
   const edit = await editBpmn(current.model.xml, operations, {
     locale,
     layout: options.layout,
     scenario: base,
     scenarioName: BASE_SCENARIO,
+    processId: simulated.id,
   });
 
   // Scenario entries that no longer apply go, each one reported with what it held.
-  const ir = (await parseBpmn(edit.xml)).ir;
+  const ir = (await parseBpmn(edit.xml, { scenarios: Object.values(current.scenarios) })).ir;
   const scenarios: Record<string, ScenarioDocument> = {
     ...current.scenarios,
     ...(edit.scenario === undefined ? {} : { [BASE_SCENARIO]: edit.scenario }),
@@ -205,7 +208,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
   };
 
   // The process must still simulate: no scenario may get an error it did not have.
-  const before = scenarioErrors(input, current, (await parseBpmn(current.model.xml)).ir, locale);
+  const before = scenarioErrors(input, current, simulated, locale);
   const after = scenarioErrors(input, edited, ir, locale);
   const fresh = [...after].filter(([key]) => !before.has(key)).map(([, p]) => p);
   if (fresh.length > 0) {
@@ -230,7 +233,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
   if (!dryRun) await writeLilaProject(input, next, locale);
   const count = Array.isArray(operations) ? operations.length : 0;
   const notes = [...edit.notes, ...scenarioRemovals.map((r) => C.editScenarioRemoved(r.scenario, r.id, JSON.stringify(r.removed)))];
-  const { outline } = await bpmnToOutline(edit.xml, { scenario: scenarios[BASE_SCENARIO], locale });
+  const { outline } = await bpmnToOutline(edit.xml, { scenario: scenarios[BASE_SCENARIO], locale, processId: ir.id });
   return {
     file: input.file,
     slug: current.slug,

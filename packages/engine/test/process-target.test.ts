@@ -16,7 +16,7 @@ import { validateBpmnModel, validateBpmnXml } from '../src/bpmn/validate-report.
 import { main } from '../src/cli.js';
 import { validatedModelOf, withRunOverrides } from '../src/cli-shared.js';
 import { simulate } from '../src/index.js';
-import { exportDocument, exportResults } from '../src/project-fs/index.js';
+import { editLilaProcess, exportDocument, exportResults } from '../src/project-fs/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario } from '../src/scenario.js';
 import { customerFirst, customerFirstLila } from './customer-first.js';
 
@@ -140,6 +140,21 @@ describe('#546: a Customer-first .lila, through the CLI and the exports', () => 
     out.length = 0;
     await main(['validate', file]);
     expect(out.join('\n')).toContain('Process_Restaurante (Restaurant)');
+  });
+
+  test('lila process show reads the Restaurant outline, not the first pool (QA of #560, round 2)', async () => {
+    expect(await main(['process', 'show', '-p', file, '--json'])).toBe(0);
+    const { outline, warnings } = JSON.parse(out.join('\n')) as { outline: { steps: { name?: string }[] }; warnings: string[] };
+    expect(outline.steps.map((step) => step.name)).toContain('Take order');
+    expect(outline.steps.map((step) => step.name)).not.toContain('Receive notification');
+    expect(warnings.join(' ')).toContain('Customer');
+  });
+
+  test('edit_process edits Restaurant and reads Restaurant back (with #557)', async () => {
+    const edited = await editLilaProcess(file, [{ op: 'add', step: { id: 'Task_Cobrar', name: 'Charge' }, after: 'Task_TomarPedido' }], { dryRun: true });
+    const names = edited.outline.steps.map((step) => step.name);
+    expect(names).toEqual(expect.arrayContaining(['Take order', 'Charge']));
+    expect(names).not.toContain('Receive notification');
   });
 
   test('exported results name the elements and the document describes Restaurant', async () => {

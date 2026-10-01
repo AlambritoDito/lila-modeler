@@ -639,7 +639,11 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
   }
   let report: ValidateBpmnReport;
   try {
-    report = await validateBpmnXml(xml, { locale });
+    // #546: validated as the process its scenarios target, the one that will run.
+    report = await validateBpmnXml(xml, {
+      locale,
+      scenarios: (request.scenarios ?? []).map((entry) => entry.scenario as { readonly elements?: unknown } | null),
+    });
   } catch (error) {
     throw new Error(T.createModelUnparsable(error instanceof Error ? error.message : String(error)));
   }
