@@ -6,9 +6,10 @@ Esta guía es para un agente (Claude Code, Claude Desktop, Codex, Hermes Agent o
 MCP) que convierte lo que la gente cuenta de un proceso en un modelo, una simulación y un
 documento, sin que nadie haga clic en la app. Cada paso es una tool MCP de `lila mcp`
 ([`MCP.md`](MCP.md), con el contrato completo de cada una) o el comando `lila` equivalente
-([`CLI.md`](CLI.md)). El flujo completo corre en el CI sin interfaz:
-`packages/mcp/test/agent-flow.e2e.test.ts`, a partir de la entrevista sintética
-`packages/mcp/test/fixtures/entrevista-tarjeta.txt`.
+([`CLI.md`](CLI.md)). Los pasos 2 a 7 de abajo, llamada por llamada,
+corren en el CI sin interfaz: `packages/mcp/test/agent-flow.e2e.test.ts`, a partir de la entrevista
+sintética `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. El paso 8 necesita la app de
+escritorio, así que se comprueba a mano con `tools/agent-live-check.mjs`.
 
 Cómo registrar el servidor en cada cliente está en [`MCP.md`](MCP.md#instalación).
 
@@ -109,7 +110,7 @@ Los tiempos del escenario van en segundos; el formato está en
 [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md). La clave de un recurso es el slug de su nombre
 (`Mesa de control` → `mesa-de-control`). Un `add` de JSON Patch necesita a su padre: si el esquema
 no traía `resources`, el escenario aún no tiene `/resources`, así que se agrega completo
-(`{ "op": "add", "path": "/resources", "value": { "ejecutiva": { "name": "Ejecutiva", "capacity": 3 } } }`).
+(`{ "op": "add", "path": "/resources", "value": { "ejecutivo": { "name": "Ejecutivo", "capacity": 3 } } }`).
 Para un TO-BE, pasa `saveTo: "to-be-4-ejecutivas"`: el escenario nuevo hereda del original y solo
 guarda las claves que cambian.
 
