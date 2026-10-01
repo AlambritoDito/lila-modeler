@@ -177,6 +177,10 @@ export const en: Catalog = {
     'E-SUBPROC-PARAMETRO': (path, id) =>
       `${id} is an embedded subprocess and has no processing time, resources or cost of its own; its time is the sum of what happens inside (${path}).`,
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `the id ${id} does not exist in the model (${path}).`,
+    'E-ELEMENTO-DESCONOCIDO/otro-proceso': (path, id, ownerId, ownerName, simulatedId, simulatedName) => {
+      const label = (pid: string, name: string) => (name === '' ? pid : `"${name}" (${pid})`);
+      return `the id ${id} belongs to the process ${label(ownerId, ownerName)}, but the simulated process is ${label(simulatedId, simulatedName)}. A run simulates the process that holds most of the elements its scenario configures: remove from the scenario the entries of the process you do not want to simulate (${path}).`;
+    },
     'E-PROB-EN-NODO': (path) => `a probability is only accepted on a sequence flow (${path}).`,
     'E-PROB-RANGO': (path, value) => `${value} is outside [0, 1] (${path}).`,
     'E-CAMPO-NO-APLICA/solo-inicio': (path) => `only accepted on a start event (${path}).`,

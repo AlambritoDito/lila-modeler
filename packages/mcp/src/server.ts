@@ -30,6 +30,7 @@ import {
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
+  type ValidatedModel,
 } from '@lila-modeler/engine/cli-shared';
 import {
   createLilaProcess,
@@ -336,11 +337,13 @@ async function runSimulation(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
   try {
-    ({ ir, validation: modelValidation } =
+    // #546: the process the scenario targets is the one simulated.
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(modelPath, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(modelPath, locale, { scenarios: [resolved] })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale, [resolved]));
   } catch (error) {
     return fail(message(error));
   }
@@ -349,7 +352,7 @@ async function runSimulation(
   }
 
   const withOverrides = withRunOverrides(resolved, { seed, replications });
-  const scenarioProblems = validateScenario(withOverrides, ir, { locale });
+  const scenarioProblems = validateScenario(withOverrides, ir, { locale, elsewhere });
   const scenarioIssues = scenarioErrors(scenarioProblems);
   if (scenarioIssues.length > 0) return fail(M.scenarioInvalid(JSON.stringify(scenarioIssues)));
 
@@ -444,11 +447,13 @@ async function compareScenarios(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
+  const all = resolved.map(({ scenario }) => scenario);
   try {
-    ({ ir, validation: modelValidation } =
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(referenceModel, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(referenceModel, locale, { scenarios: all })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale, all));
   } catch (error) {
     return fail(message(error));
   }
@@ -460,7 +465,7 @@ async function compareScenarios(
   const validated: Array<{ label: string; scenario: ResolvedScenario; problems: readonly ScenarioProblem[] }> = [];
   for (const { label, scenario } of resolved) {
     const withOverrides = withRunOverrides(scenario, { seed, replications });
-    const problems = validateScenario(withOverrides, ir, { locale });
+    const problems = validateScenario(withOverrides, ir, { locale, elsewhere });
     const issues = scenarioErrors(problems);
     if (issues.length > 0) return fail(`${label}: ${M.scenarioInvalid(JSON.stringify(issues))}`);
     validated.push({ label, scenario: withOverrides, problems });
@@ -540,16 +545,17 @@ async function validatePatchedScenario(
 
   let ir: ParsedIr;
   let modelValidation: ValidationResult;
+  let elsewhere: ValidatedModel['elsewhere'];
   // In a `.lila` the model is the process's own `model.bpmn` (#466): a patch that points `model`
   // elsewhere is refused, like `run_simulation` refuses a scenario of another model.
   if (lila !== undefined && comparablePath(scenario.model) !== comparablePath(lila.modelPath)) {
     return { ok: false, error: M.modelMismatch(lila.modelPath, scenario.model) };
   }
   try {
-    ({ ir, validation: modelValidation } =
+    ({ ir, validation: modelValidation, elsewhere } =
       lila === undefined
-        ? await loadValidatedModel(scenario.model, locale)
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale));
+        ? await loadValidatedModel(scenario.model, locale, { scenarios: [scenario] })
+        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml }, locale, [scenario]));
   } catch (error) {
     return { ok: false, error: message(error) };
   }
@@ -557,7 +563,7 @@ async function validatePatchedScenario(
     return { ok: false, error: M.modelInvalid(JSON.stringify(modelValidation.errors)) };
   }
 
-  const problems = validateScenario(scenario, ir, { locale });
+  const problems = validateScenario(scenario, ir, { locale, elsewhere });
   const issues = scenarioErrors(problems);
   if (issues.length > 0) {
     return { ok: false, error: `${M.invalidAfterPatchLabel()} ${JSON.stringify(issues)}` };

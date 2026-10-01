@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, readAnnotations, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, scenarioElementIds, validateBpmnXml } from '@lila-modeler/engine/bpmn';
 import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
@@ -630,6 +630,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
+  /** The scenarios as they are now, for the reparse that does not rerun when they change (#546). */
+  const escenariosVivos = useRef(escenarios);
+  escenariosVivos.current = escenarios;
   // IR del diagrama del lienzo, para que el panel valide con `validateScenario` (reglas R3…R14)
   // y no solo con el esquema. `null` mientras no se haya podido parsear.
   const [ir, setIr] = useState<ProcessIR | null>(null);
@@ -1292,7 +1295,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const timer = setTimeout(() => {
       // `validateBpmnXml` is `parseBpmn` plus the engine's `validate()`, and never throws for an
       // invalid model: its `ir` is the same one `parseBpmn` returns (#455).
-      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale })).then((informe) => {
+      // #546: the process the scenarios target is the one shown and run, wherever its pool is.
+      const scenarioIds = scenarioElementIds(...Object.values(escenariosVivos.current));
+      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale, scenarioIds })).then((informe) => {
         if (!vivo) return;
         setIr(informe.ir);
         // Unsupported elements never enter the IR, so the panel cannot read their name from it:

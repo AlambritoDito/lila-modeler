@@ -610,15 +610,37 @@ function flattenBox(box: SubprocessBox, c: Collector): void {
   }
 }
 
+/** Options of `parseBpmn`. */
+export interface ParseBpmnOptions {
+  /**
+   * #546: the element ids the scenario to run configures (`scenarioElementIds`). The
+   * `bpmn:process` that holds most of them is simulated instead of the first non-empty one, so
+   * moving a pool in the document does not change what runs; a tie keeps the first.
+   */
+  scenarioIds?: Iterable<string> | undefined;
+}
+
+/** An element of a process that is not the simulated one: where it is (#546). */
+export interface ForeignElement {
+  processId: string;
+  processName: string;
+}
+
 export interface ParseResult {
   ir: ProcessIR;
   /**
    * Ids de los demás `bpmn:process` del archivo, que no se parsearon. Multiproceso: el IR es
    * de **un** proceso (un solo grafo de tokens, `LILA_MODELER_ESTRUCTURA.md` § 6), así que se
-   * toma el primer `bpmn:process` ejecutable y no vacío; si ninguno es ejecutable, el primero
-   * no vacío. Los demás se listan aquí para que la CLI avise, no se simulan.
+   * toma el proceso al que apunta el escenario (`ParseBpmnOptions.scenarioIds`, #546); si no, el
+   * primer `bpmn:process` ejecutable y no vacío; si ninguno es ejecutable, el primero no vacío. Los demás se listan aquí para que la CLI avise, no se simulan.
    */
   ignoredProcessIds: string[];
+  /**
+   * #546: the flow element ids of the ignored processes, with the process that has them, so a
+   * scenario entry for one of them can say where it is (`validateScenario`'s `elsewhere`).
+   * Optional for hand-built results.
+   */
+  elsewhere?: Record<string, ForeignElement>;
   /**
    * Elementos del XML que no entraron al IR por estar fuera del perfil soportado, en orden de
    * aparición en el documento: los nodos no soportados y los `sequenceFlow` descartados por
@@ -697,6 +719,56 @@ function countMessageFlows(definitions: ModdleElement): number {
 
 function isNonEmptyProcess(el: ModdleElement): boolean {
   return (el.flowElements ?? []).length > 0;
+}
+
+/**
+ * Every flow element id of a process, embedded sub-processes included: the sanitized ids, which
+ * are the IR's and the ones a scenario writes (R-DURA-4).
+ */
+function elementIdsOf(el: ModdleElement): Set<string> {
+  const ids = new Set<string>();
+  const visit = (container: ModdleElement): void => {
+    for (const child of container.flowElements ?? []) {
+      if (child.id !== undefined) ids.add(child.id);
+      visit(child);
+    }
+  };
+  visit(el);
+  return ids;
+}
+
+/**
+ * #546: the process the scenario targets: the one that holds the most of its ids, wherever its
+ * pool is in the document. Usually it holds all of them; a majority, not unanimity, because the
+ * editor seeds the start and task of the pool left on the canvas when the other one is deleted
+ * (#420), and pasting the deleted pool back must still run it. With no ids, none the file knows,
+ * or a tie, `undefined`: the caller keeps the document-order rule, and the entries of the other
+ * process come out as E-ELEMENTO-DESCONOCIDO naming where they are (`elsewhere`).
+ */
+function targetedProcess(
+  processes: readonly ModdleElement[],
+  idsOf: ReadonlyMap<ModdleElement, ReadonlySet<string>>,
+  scenarioIds: Iterable<string> | undefined,
+): ModdleElement | undefined {
+  if (scenarioIds === undefined) return undefined;
+  const wanted = [...new Set(scenarioIds)];
+  const counts = processes
+    .map((el) => ({ el, n: wanted.filter((id) => idsOf.get(el)?.has(id) === true).length }))
+    .sort((a, b) => b.n - a.n);
+  const [first, second] = counts;
+  return first !== undefined && first.n > 0 && first.n > (second?.n ?? 0) ? first.el : undefined;
+}
+
+/**
+ * The ids a set of scenarios configures (their `elements` keys), the `scenarioIds` of
+ * `parseBpmn`. Several scenarios (`compare`) give their union: they share one model.
+ */
+export function scenarioElementIds(
+  ...scenarios: ReadonlyArray<{ readonly elements?: unknown } | null | undefined>
+): string[] {
+  const keys = (elements: unknown): string[] =>
+    elements !== null && typeof elements === 'object' ? Object.keys(elements) : [];
+  return [...new Set(scenarios.flatMap((scenario) => keys(scenario?.elements)))];
 }
 
 /**
@@ -888,18 +960,25 @@ function toSourceWarning(
  * su validación, así que un id ajeno inválido (algunos exports de Bizagi) tiene que arreglarse
  * antes de que bpmn-moddle lo vea, no después.
  */
-export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
+export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): Promise<ParseResult> {
   const { xml, sanitizedToOriginal } = sanitizeXmlIds(xmlIn);
   const moddle = BpmnModdle({ lila });
   const { rootElement: definitions, warnings: moddleWarnings } = await moddle.fromXML(xml);
 
   const processes = (definitions.rootElements ?? []).filter((el) => el.$type === 'bpmn:Process');
+  const idsOf = new Map(processes.map((el) => [el, elementIdsOf(el)]));
   const main =
+    targetedProcess(processes, idsOf, options.scenarioIds) ??
     processes.find((el) => el.isExecutable === true && isNonEmptyProcess(el)) ??
     processes.find(isNonEmptyProcess) ??
     processes[0];
   if (main === undefined) {
     throw new Error('El archivo no contiene ningún bpmn:process.');
+  }
+  const elsewhere: Record<string, ForeignElement> = {};
+  for (const [el, ids] of idsOf) {
+    if (el === main) continue;
+    for (const id of ids) elsewhere[id] ??= { processId: el.id, processName: el.name ?? '' };
   }
   const locateProcess = warningProcessLocator(xml, main.id);
 
@@ -999,6 +1078,7 @@ export async function parseBpmn(xmlIn: string): Promise<ParseResult> {
       },
     },
     ignoredProcessIds: processes.filter((el) => el !== main).map((el) => el.id),
+    elsewhere,
     unsupported: c.unsupported.sort((a, b) => a.at - b.at).map(({ element }) => element),
     messageFlowCount: countMessageFlows(definitions),
     conditionFlowIds: c.sequenceFlows

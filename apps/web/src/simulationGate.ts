@@ -1,5 +1,5 @@
 import type { ProcessIR } from '@lila-modeler/engine';
-import { validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { scenarioElementIds, validateBpmnModel } from '@lila-modeler/engine/bpmn';
 import { parseScenario, resolveExtends, validateScenario, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { getLocale, strings, type Locale } from './i18n';
 
@@ -23,7 +23,7 @@ export function sinRepetir(code: string, where: string, message: string): string
 /**
  * La misma frontera de validación que CLI, antes de crear un Worker.
  *
- * Los mensajes que salen de aquí con `code:` delante son del motor (`validateBpmnXml`,
+ * Los mensajes que salen de aquí con `code:` delante son del motor (`validateBpmnModel`,
  * `validateScenario`, zod), no del catálogo: se enseñan tal cual, para no tener dos ortografías
  * del mismo error. Since #280 the engine is asked for them in the app's language, so «verbatim»
  * and «in the user's language» are finally the same thing. The warnings returned here are copied
@@ -32,7 +32,6 @@ export function sinRepetir(code: string, where: string, message: string): string
 export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn', options: PrepareSimulationOptions = {}) {
   const S = strings();
   const locale = options.locale ?? getLocale();
-  const model = await validateBpmnXml(xml, { locale });
   // `parseScenario` en vez de `ScenarioSchema.parse`: un `ZodError` sin capturar llega a la barra
   // de estado como su volcado JSON en inglés (LILA-202). Aquí sale la misma lista que en la CLI.
   const parsed = parseScenario(resolveExtends(file, (path) => {
@@ -42,9 +41,11 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   }), { locale });
   if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || '$'}: ${i.message}`).join('\n'));
   const scenario = parsed.data;
+  // #546: the process the scenario targets is the one simulated, wherever its pool is.
+  const model = await validateBpmnModel(xml, { locale, scenarioIds: scenarioElementIds(scenario) });
   if (scenario.model === undefined || scenario.run === undefined) throw new Error(S.simulacion.errorFaltaModelORun);
   if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
-  const problems = validateScenario(scenario, model.ir, { locale });
+  const problems = validateScenario(scenario, model.ir, { locale, elsewhere: model.elsewhere });
   const errors = [
     ...model.errors.map((p) => sinRepetir(p.code, p.id, p.message)),
     ...problems.filter((p) => p.severity === 'error').map((p) => sinRepetir(p.code, p.path, p.message)),
