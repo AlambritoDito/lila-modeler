@@ -3671,3 +3671,31 @@ it('with unsaved changes it asks: «Keep mine» keeps them, «Reload» reads the
   // `null`: the file is gone from disk; the store already took it off the recents.
   expect(container.textContent).toContain(T.app.errorRecienteAusente);
 });
+
+it('an automatic reload gives the focus back to the canvas only if it had it (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
+  await click(T.app.guardar);
+  const svg = container.querySelector<SVGSVGElement>('.djs-container svg')!;
+  mocks.enfocar.mockClear();
+
+  await act(async () => svg.focus());
+  expect(document.activeElement).toBe(svg);
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.enfocar).toHaveBeenCalledOnce();
+  });
+  expect(reload).toHaveBeenCalledOnce();
+
+  // With the focus elsewhere (a field, a button) a reload leaves it to the user.
+  await act(async () => porEtiqueta(T.procesos.nuevo).focus());
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  expect(mocks.enfocar).toHaveBeenCalledOnce();
+});
+

@@ -265,23 +265,35 @@ describe('watchProject with nested copies and loose diagrams (QA of #551)', () =
 });
 
 describe('watchProject with the real fs.watch', () => {
+  // macOS's FSEvents starts listening asynchronously, so a single write right after `watch()` can
+  // land before it is listening, more so under load: the agent rewrites until it is heard, a bounded
+  // number of times (QA nit 1 of #551).
   it('reports an atomic rewrite of the .lila made by someone else', async () => {
     const dir = await realpath(await mkdtemp(join(tmpdir(), 'lila-watch-')));
     const file = join(dir, 'pedido.lila');
     await writeLilaFile(file, documento());
+    let oido = false;
+    let watcher: { close(): void } = { close: () => {} };
     const changed = new Promise<void>((resolve) => {
-      const watcher = watchProject({
+      watcher = watchProject({
         target: file,
         singleFile: true,
         isOwn: isOwnSnapshot,
         debounceMs: 50,
-        onChange: () => { watcher.close(); resolve(); },
+        onChange: () => { oido = true; resolve(); },
       });
     });
-    // Like an agent through the CLI: temporary file, then rename over the open project.
     const { rename } = await import('node:fs/promises');
-    await writeFile(`${file}.tmp-agent`, encodeLila(documento('de un agente con otro tamaño')));
-    await rename(`${file}.tmp-agent`, file);
-    await expect(changed).resolves.toBeUndefined();
-  });
+    try {
+      for (let intento = 0; intento < 40 && !oido; intento++) {
+        // Like an agent through the CLI: temporary file, then rename over the open project.
+        await writeFile(`${file}.tmp-agent`, encodeLila(documento(`de un agente, intento ${intento}`)));
+        await rename(`${file}.tmp-agent`, file);
+        await Promise.race([changed, new Promise((resolve) => setTimeout(resolve, 250))]);
+      }
+      expect(oido).toBe(true);
+    } finally {
+      watcher.close();
+    }
+  }, 20_000);
 });
