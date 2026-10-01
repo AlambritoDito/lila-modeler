@@ -17,7 +17,7 @@ import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
-import { encodeLila, processesOf, processSlug, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -707,8 +707,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
   const latest = Object.keys(escenarios).flatMap((name) => {
-    const run = [...runs].reverse().find((r) => r.scenarioName === name && r.inputs.modelRevision === revision
-      && r.inputs.scenarioRevision === (scenarioRevisions[name] ?? 0));
+    const run = [...runs].reverse().find((r) => r.scenarioName === name && isCurrentRun(r, revision, scenarioRevisions));
     return run ? [run] : [];
   });
   const ordered = [...latest].sort((a, b) => Number(b.scenarioName === baseId) - Number(a.scenarioName === baseId));
@@ -716,8 +715,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** Última corrida válida del escenario elegido: la que pintan el overlay y la animación (#331). */
   const corridaActual = useMemo(
-    () => [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
-      && r.inputs.scenarioRevision === (scenarioRevisions[escenarioId] ?? 0)),
+    () => [...runs].reverse().find((r) => r.scenarioName === escenarioId && isCurrentRun(r, revision, scenarioRevisions)),
     [runs, escenarioId, revision, scenarioRevisions],
   );
 
@@ -1856,10 +1854,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Only the last ten runs keep their log: ten thousand rows each is too much to hold for a
       // whole session of runs nobody will animate again (insertion order, so the oldest go first).
       for (const viejo of [...logs.current.keys()].slice(0, -10)) logs.current.delete(viejo);
-      setRuns((previous) => [...previous, {
-        id: runId, scenarioName: escenarioId, result,
-        inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
-      }]);
+      // The shape and the revisions of a stored run are the engine's (`storedRun`, #538), so a run an
+      // agent saves with `lila run --save` is current here exactly when one of ours would be.
+      setRuns((previous) => [...previous, storedRun({
+        id: runId, scenarioName: escenarioId, result, xml, modelRevision, scenarioRevision,
+        scenario: scenario as unknown as Record<string, unknown>,
+      })]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
       // #394, the owner's decision: a finished run no longer jumps to Results. It lands in Simulate
       // (Results and Compare stay where they are, they show the new run) with the dock open on
