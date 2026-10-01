@@ -180,6 +180,62 @@ run directly in a terminal and read from. Details, tool contracts and client reg
 node packages/engine/bin/lila.js mcp
 ```
 
+## `process`
+
+Creates a process from an **outline** and reads one back (#97). An outline is the process as data —
+lanes plus an ordered list of steps with branches — and is the same JSON the MCP tool
+`create_process` takes; its format and rules are in [`docs/MCP.md`](MCP.md#creating-a-process-from-an-outline).
+
+```text
+lila process create --outline <file.json> -p <file.lila> [--name name] [--process slug] [--dry-run] [--json]
+lila process show -p <file.lila> [--process slug] [--json]
+```
+
+`process create` builds the BPMN, lays it out (pool, lanes, flows), validates it and adds it to the
+`.lila` as a new `processes/<slug>/` with a base scenario `as-is.scenario.json`; a `.lila` that does
+not exist is created. `--name` overrides the outline's name, `--process` picks the slug (derived
+from the name otherwise). It never replaces a process: a slug already in the file exits `1` and
+writes nothing, and so does an outline with problems (all of them are listed, each with its path).
+`--dry-run` builds and checks everything and writes nothing. It prints a one-line summary and the
+validator warnings and Lila's notes; `--json` prints the result object of `create_process`
+instead, and on a failure `{ "error", "issues" }` (each issue with its `path` and `message`) before
+exiting `1`. With a new `.lila`, `--process` must be the slug the name gives.
+
+```bash
+npx lila process create --outline examples/outline/credit-application.json -p credit.lila --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would create process "Credit application" (credit-application) in the new file /…/credit.lila: 5 steps, 2 lanes. Nothing was written.
+```
+
+The slug `pedido` is taken in `examples/pedido.lila`, so this is refused:
+
+```bash
+npx lila process create --outline examples/outline/credit-application.json -p examples/pedido.lila --process pedido --dry-run
+```
+Exit code: `1`.
+
+`process show` prints the outline of one process, one step per line with its type, name, lane,
+duration, resources and where it goes; `--json` prints `{ slug, outline, warnings }`, the outline in
+normal form (the form `create_process` returns). Durations, resources and branch probabilities
+come from the process's `as-is.scenario.json`. What an outline cannot carry is reported on stderr.
+
+```bash
+npx lila process show -p examples/pedido.lila
+```
+Exit code: `0`.
+
+```text
+Process "Restaurant" (pedido)
+  Task_TomarPedido  task  "Take order"  triangular(min=60, mode=120, max=300)  Cashier
+  Gateway_ANDFork  and  "Prepare and pack" → Task_Preparar | Task_Empacar
+  …
+  Gateway_Aprobacion  xor  "Approved?" → Approved: Timer_Reposo (0.78) | Rejected: end (0.22)
+  Timer_Reposo  timer  "Rest"  constant(value=600) → end
+```
+
 ## General options
 
 Apply to every subcommand, in any position on the command line:
@@ -200,7 +256,7 @@ Exit code: `0`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The command ran; `validate` may still have printed warnings. |
-| `1` | Usage error, unknown command, a model/scenario validation error, a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
+| `1` | Usage error, unknown command, a model/scenario validation error, an outline with problems or a process that already exists (`process create`), a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
 
 ## For agents
 

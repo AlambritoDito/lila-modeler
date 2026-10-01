@@ -108,7 +108,9 @@ source instead of being copied.
 - The `lila` CLI (`packages/engine/bin/lila.js`) is not part of the desktop artifact: it uses Node
   directly, not Electron. Its dependencies are the same `@lila-modeler/engine` ones already listed above
   (`zod`, `bpmn-moddle` and what the latter pulls in: `moddle`, `moddle-xml`, `min-dash`, `saxen`),
-  with nothing additional.
+  plus `bpmn-auto-layout` 1.3.0 (MIT, https://github.com/bpmn-io/bpmn-auto-layout), which lays out
+  the processes `lila process create` and the MCP tool `create_process` build from an outline
+  (#97); the web bundle does not import it.
 
 ## How this file was generated
 

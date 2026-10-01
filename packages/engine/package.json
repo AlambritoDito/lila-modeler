@@ -16,6 +16,10 @@
       "default": "./dist/bpmn/index.js"
     },
     "./bpmn/lila.moddle.json": "./dist/bpmn/lila.moddle.json",
+    "./outline": {
+      "types": "./dist/bpmn/outline.d.ts",
+      "default": "./dist/bpmn/outline.js"
+    },
     "./schema": {
       "types": "./dist/scenario.d.ts",
       "default": "./dist/scenario.js"
@@ -79,6 +83,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
+    "bpmn-auto-layout": "^1.3.0",
     "bpmn-moddle": "^10.2.0",
     "fflate": "^0.8.3",
     "zod": "^4.5.4"
