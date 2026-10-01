@@ -49,8 +49,9 @@ Preferencias…** (`Ctrl+,`), go to **General** and set **Idioma** to **English*
    network access, you can choose **Cancel**; the app does not need it.
 6. **Open an example.** Under **Examples**, click **Restaurant order**. A diagram opens with two
    scenarios ready to run.
-7. **Run a simulation.** Click **Simulate** in the top bar, then **Run simulation**. The app switches
-   to **Results** and shows the tables. Then export them: click **Export XLSX**, choose where to
+7. **Run a simulation.** Click **Simulate** in the top bar, then **Run simulation**. You stay in
+   Simulate and the dock under the canvas shows the quick results. Click **Open in Results** to
+   see the full tables, then export them: click **Export XLSX**, choose where to
    save, and open the file in Excel. Check that it opens and has several sheets with numbers.
 8. **Export the process document.** Choose **File ▸ Export process document (Word)…**, save the
    file, and open it in Word. Check that it has a cover, the diagram and one section per element.

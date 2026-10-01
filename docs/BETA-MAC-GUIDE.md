@@ -116,15 +116,21 @@ follow that same setting. This walkthrough uses the English labels.
   its scenarios and runs in a project folder, as described below.
 - The central canvas is the bpmn-js editor: you edit it by dragging shapes from the palette, just
   like any bpmn.io editor.
-- **Undo** / **Redo**: in the bottom bar, next to the active file's name.
+- **Undo** / **Redo**: buttons at the top of the window, in the top bar.
 - The edited XML is saved as `model.bpmn` inside the project folder.
 
 ### Simulate (the "Simulación" tab in the right-hand panel)
 
-- **Scenario** selector: choose among the loaded scenarios (the project ships with
-  `as-is` and `to-be-3-cajeros` as examples).
-- The scenario panel lets you edit `run`, `calendars`, `resources`, and the process's per-element
-  properties. Union-shaped fields — today only `resources.<id>.capacity` — have an explicit
+- The **Scenarios** list on the left of Simulate shows the loaded scenarios (the project ships with
+  `as-is` and `to-be-3-cajeros` as examples); pick one to make it the active scenario, or
+  duplicate the active one from the list.
+- The scenario panel has four steps, in this order: **Parameters** (the run window and
+  replications, gateway branching and the time of each task and timer), **Resources** (pools,
+  units, a pool's calendar and capacity per shift, and which task takes which pool),
+  **Calendars** (calendars and holidays, and which element follows which calendar) and
+  **Arrivals** (how often each start event fires and how many cases it creates; the **Arrivals by
+  start event** list summarizes them). Each control lives in exactly one step. The panel lets you
+  edit `run`, `calendars`, `resources`, and the process's per-element properties. Union-shaped fields — today only `resources.<id>.capacity` — have an explicit
   **Fija** (Fixed, a number) / **Por turno** (Per shift, a list of `{ calendar, capacity }`
   segments, with `calendar` as a dropdown of already-declared calendars) selector.
 - A field inherited from an `extends` shows a **Quitar heredado** (Remove inherited) button (or
@@ -135,7 +141,7 @@ follow that same setting. This walkthrough uses the English labels.
 - **Guardar** (Save, inside the scenario panel) and **Duplicar** (Duplicate — creates a copy with
   `extends` on top of the current file, the app's own "what-if") are separate from the top bar's
   "Guardar proyecto" (Save project); they are never disabled.
-- **Simulate**: runs the simulation on whatever is on the canvas right now. While it
+- **Run simulation**: runs the simulation on whatever is on the canvas right now. While it
   runs, a **Cancel** button and a progress indicator (`% · replication N`) appear. The
   **Bottlenecks** toggle turns the diagram overlay on or off without
   re-simulating.
@@ -149,9 +155,23 @@ follow that same setting. This walkthrough uses the English labels.
   keys on it to resize it (it never takes more than the window leaves after a usable canvas); `⌘J`,
   the View menu, a double-click or `Enter` on that edge hides and shows it.
 
+- **Quick view · simulation**: select an element on the canvas and the Properties panel shows
+  its simulation data under the header: **Time**, **Resource** (tasks only) and the resource wait
+  (p95 when the run's log sample is in memory, the mean otherwise; **no run** before the first
+  run). **Edit in Parameters** and **Edit in Resources** jump to the matching step.
+- The scenario panel can be detached into its own window with the toggle in the top bar
+  (**Scenario docked ↗** / **In its own window**); **Dock** in the stand-in, or closing the
+  window, brings it back. While it is detached the right panel hides, so the stand-in only shows
+  after reopening the panel with `⇧⌘P`; the toolbar toggle also docks it.
+
 ### Results («Resultados»)
 
-Open it from the dock's **Open in Results** (or the Results mode): a finished run no longer switches here on its own. Each table (elements, flows,
+Open it from the dock's **Open in Results** (or the Results mode): a finished run no longer
+switches here on its own. Results can be detached into their own window with the top-bar toggle
+(**Results docked ↗** / **Results in their own window**, shown while you are in Results or the
+window is open). While detached, the Results view shows **Results in another window ↗** with
+**Show** and **Dock** buttons; the window always shows the current run, closing it docks Results
+again, and its size and position are remembered. Each table (elements, flows,
 resources, process) has its own **Export CSV** button, which downloads exactly the
 same content, byte for byte, that `npx lila run --csv` writes to disk (`elements.csv`, `flows.csv`,
 `resources.csv`, `process.csv`).
@@ -180,6 +200,8 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
 
 ### Validate paths («Validar rutas»)
 
+- Animation is entered only from this mode: pressing plain `T` on the canvas does not toggle it
+  (it used to switch the token simulation on and off in any mode).
 - **This is not the engine's DES simulation**: it animates `bpmn-js-token-simulation` tokens on top
   of the open diagram. It does not read the active scenario or produce results, and the tab itself
   says so: «Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el
@@ -224,8 +246,9 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   towards a project folder, which is the form to keep in git. Both apply the same
   `E-CARPETA-OCUPADA` rules as "New project": a destination that already holds a *different*
   project is refused without touching it.
-- The top bar shows `<project name> · Sin guardar` (Unsaved) or `· Guardado` (Saved) depending on
-  whether there are pending changes (`apps/web/src/App.tsx`).
+- The top bar shows the file name followed by `· Unsaved` or `· Saved` depending on whether
+  there are pending changes (`apps/web/src/App.tsx`). With several processes in the project it
+  shows the active process's name instead of the file name.
 - **Closing with unsaved changes**: the window (red button, Cmd+Q, or closing it from the Dock)
   shows the system's native dialog with **Save / Discard / Cancel**. **Save** waits up to 30 s for the app's response before closing; a cancelled save keeps the window open without an error. If saving fails or the response
   never arrives, an error is shown and the window does not close. A loose diagram saved with
@@ -294,10 +317,10 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ### Settings («Ajustes»)
 
-- `⌘,` (or the ⚙ button in the bar, or «Tema: …» — Theme: … — in the status bar) opens **Ajustes →
-  Apariencia** (Settings → Appearance): one of seven themes (Lila Light, Lila Dark, Eva-01 dark, Papel light,
-  Tieso light, Akira dark, Montana purple) and density (compacta/normal/cómoda —
-  compact/normal/comfortable). The theme change is immediate, it repaints
+- `⌘,` (or the ⚙ button in the bar) opens **Settings** on the **General** tab (language, density —
+  Compact/Normal/Comfortable — and the **Advanced** switch); **Appearance** and **Shortcuts** are the
+  other two tabs. **Appearance** holds **Follow the system theme** and one of seven themes (Lila
+  Light, Lila Dark, Eva-01 dark, Paper light, Tieso light, Akira dark, Montana purple). The theme change is immediate, it repaints
   the diagram too, and it is remembered across launches (the app's localStorage, under `lila://`).
   Switching themes remounts the canvas, so it clears the undo stack; the diagram and any unsaved
   changes are kept.
