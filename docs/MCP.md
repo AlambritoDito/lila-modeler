@@ -313,7 +313,8 @@ written. `dryRun: true` answers what would change and writes nothing.
 
 ```json
 { "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",
-  "scenarios": [{ "name": "as-is", "scenario": { "version": 1, "name": "AS-IS", "run": { "start": "2026-10-05T08:00:00-06:00", "duration": 28800, "seed": 1 } } }] } }
+  "scenarios": [{ "name": "as-is", "scenario": { "version": 1, "name": "AS-IS", "run": { "start": "2026-10-05T08:00:00-06:00", "duration": 28800, "seed": 1 },
+    "elements": { "StartEvent_Pedido": { "interTriggerTimer": { "type": "exponential", "mean": 300 } } } } }] } }
 ```
 
 ```json
@@ -525,10 +526,13 @@ mcp_servers:
     timeout: 300
 ```
 
-- Hermes passes the server only the environment variables listed in `env`, so give `command` as an
-  absolute path to `node` (`which node`) rather than relying on `PATH`.
-- `cwd` is where relative tool paths (`project: "card.lila"`, `saveTo`) land. Omit it and use
-  absolute paths in the calls instead.
+- Hermes does not hand the server your whole environment: it passes a safe baseline (`PATH`,
+  `HOME`, `LANG`, `TMPDIR`, `XDG_*` and similar) plus the variables listed in `env`. Put `LILA_LANG`
+  or anything else Lila should see in `env`, and give `command` as an absolute path to `node`
+  (`which node`) when the `PATH` Hermes runs with may not find it.
+- `cwd` is where relative tool paths (`project: "card.lila"`, `saveTo`) land. Only recent Hermes
+  versions pass it to the server; older ones (v0.17.0, for one) ignore it. Absolute paths in the
+  calls work with every version, so prefer them.
 - `timeout` is per tool call, in seconds: a long `run_simulation` or `compare_scenarios` blocks the
   server until it finishes, so leave room for it.
 - Run `/reload-mcp` in a Hermes session after editing the file. Hermes names the tools
@@ -576,11 +580,13 @@ Create a derived scenario without changing AS-IS:
 { "name": "patch_scenario", "arguments": {
   "scenario": "examples/pedido/as-is.scenario.json",
   "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 3 }],
-  "saveTo": "examples/pedido/to-be-3-cajeros.scenario.json",
-  "name": "TO-BE 3 cashiers" } }
+  "saveTo": "examples/pedido/to-be-3-cajeros-copy.scenario.json",
+  "name": "TO-BE 3 cashiers (copy)" } }
 ```
 
-This writes `version`, `name`, `extends: "as-is.scenario.json"` and
+`saveTo` is a new file: never point it at a scenario the repository tracks (such as
+`to-be-3-cajeros.scenario.json`), since it is overwritten. This writes `version`, `name`,
+`extends: "as-is.scenario.json"` and
 `resources: { "cajero": { "capacity": 3 } }`. Inline scenarios use the same resolved format;
 relative model paths are resolved against the server's working directory.
 
