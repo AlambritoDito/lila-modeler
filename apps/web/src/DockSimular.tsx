@@ -6,9 +6,9 @@
  *
  * Everything shown is read from the run as it is: the `RunResult` of the engine and the event log
  * sample the shell keeps (`App.tsx`, `logs`). The only numbers computed here are the per-activity
- * wait percentiles and the pools each activity used, both from that log, with the engine's own
- * definitions (linear-interpolated percentile, `docs/RESULTS_FORMAT.md` § 5; utilization as the
- * busiest pool the element used, § 6).
+ * wait p95 (the shared `percentilesPorElemento`, over the log sample) and the pools each activity
+ * used (utilization as the busiest pool the element used, the engine's bottleneck definition,
+ * `docs/RESULTS_FORMAT.md` § 6).
  */
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
@@ -17,6 +17,9 @@ import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
 import { GraficaDeInstancias, GraficaDeUtilizacion, type LogDeCorrida } from './GraficasResultados';
 import { useStrings } from './i18n';
+import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
+import { esperaCorta } from './BottleneckOverlay';
+import { percentilesPorElemento } from './percentilesPorElemento';
 import './DockSimular.css';
 
 export const PESTANAS_DOCK = ['rapidos', 'cuellos', 'log', 'avisos'] as const;
@@ -30,73 +33,76 @@ export interface FilaRapida {
   id: string;
   nombre: string;
   casos: number;
-  esperaP50: number | null;
+  /** `elements[id].resourceWait.mean`: every replication, the same figure as the Results view. */
+  esperaMedia: number | null;
+  /** 95th percentile of the same wait over the log sample (`percentilesPorElemento`). */
   esperaP95: number | null;
   utilizacion: number | null;
   costo: number;
 }
 
-/** Same percentile as the engine's (`core/metrics.ts`): linear interpolation at `(n − 1) · p`. */
-function percentil(ordenados: readonly number[], p: number): number {
-  const posicion = (ordenados.length - 1) * p;
-  const abajo = Math.floor(posicion);
-  const izquierda = ordenados[abajo]!;
-  return abajo === Math.ceil(posicion) ? izquierda : izquierda + (ordenados[abajo + 1]! - izquierda) * (posicion - abajo);
-}
+/** The wait the mean column measures, so the p95 next to it is of the same quantity. */
+const ESPERA_RECURSO = (fila: EventLogRow): number => fila.resourceWait;
 
 /**
  * The quick results table: one row per task (events and gateways repeat their neighbours' counts,
- * as in `instanciasPorTarea`) plus the total row. Wait p50/p95 per task come from the log sample
- * (one value per started activity instance); without a log they are `null`. The total row is the
- * process: completed cases, the per-case wait percentiles and the sum of the cost column.
+ * as in `instanciasPorTarea`) plus the total row. The mean wait is the engine's, over every
+ * replication; the p95 is the shared per-element percentile over the log sample (measured cohort
+ * only, one value per completed instance), `null` without a log. The total row carries the cases
+ * and the fixed cost only: the process wait per case is another quantity (QA of #394).
  */
-export function filasRapidas(ir: ProcessIR, result: RunResult, log: LogDeCorrida | undefined): { filas: FilaRapida[]; total: FilaRapida } {
-  const esperas = new Map<string, Map<string, number>>();
+export function filasRapidas(ir: ProcessIR, result: RunResult, scenario: ResolvedScenario, log: LogDeCorrida | undefined): { filas: FilaRapida[]; total: FilaRapida } {
+  const p95 = log === undefined ? new Map<string, number[]>()
+    : percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
   const pools = new Map<string, Set<string>>();
-  for (const fila of log?.rows ?? [] as readonly EventLogRow[]) {
-    if (fila.resourceId !== null) {
-      const usados = pools.get(fila.elementId) ?? new Set<string>();
-      usados.add(fila.resourceId);
-      pools.set(fila.elementId, usados);
-    }
-    if (fila.startedAt === null) continue;
-    // Several rows (one per pool allocation) share an activity instance and its wait.
-    const instancias = esperas.get(fila.elementId) ?? new Map<string, number>();
-    instancias.set(`${fila.replication}|${fila.activityInstanceId}`, fila.resourceWait);
-    esperas.set(fila.elementId, instancias);
+  for (const fila of log?.rows ?? []) {
+    if (fila.resourceId === null) continue;
+    const usados = pools.get(fila.elementId) ?? new Set<string>();
+    usados.add(fila.resourceId);
+    pools.set(fila.elementId, usados);
   }
   const filas = Object.entries(result.elements)
     .filter(([id]) => ir.nodes[id]?.type === 'task')
     .map(([id, m]): FilaRapida => {
-      const valores = [...(esperas.get(id)?.values() ?? [])].sort((a, b) => a - b);
       const usados = pools.get(id);
       const cuello = result.bottlenecks.find((b) => b.elementId === id);
       const utilizacion = usados !== undefined
         ? Math.max(...[...usados].map((pool) => result.resources[pool]?.utilization ?? 0))
         : cuello?.utilization ?? null;
+      const percentil95 = p95.get(id)?.[0];
       return {
         id,
         nombre: ir.nodes[id]?.name || id,
         casos: m.completed,
-        esperaP50: valores.length > 0 ? percentil(valores, 0.5) : null,
-        esperaP95: valores.length > 0 ? percentil(valores, 0.95) : null,
+        esperaMedia: m.started > 0 ? m.resourceWait.mean : null,
+        esperaP95: percentil95 === undefined || Number.isNaN(percentil95) ? null : percentil95,
         utilizacion,
         costo: m.fixedCostTotal,
       };
     });
-  const conCasos = result.process.completed > 0;
   return {
     filas,
     total: {
       id: '',
       nombre: '',
       casos: result.process.completed,
-      esperaP50: conCasos ? result.process.waitTime.p50 : null,
-      esperaP95: conCasos ? result.process.waitTime.p95 : null,
+      esperaMedia: null,
+      esperaP95: null,
       utilizacion: null,
       costo: filas.reduce((suma, f) => suma + f.costo, 0),
     },
   };
+}
+
+/**
+ * The Warnings tab: the run's warnings, then the live lint minus what the run already says (the
+ * lint repeats some of them without their code), grouped by code (QA of #394).
+ */
+export function avisosDelDock(warnings: readonly string[], lint: readonly AvisoDock[]): GrupoAvisos[] {
+  return agruparAvisos([
+    ...warnings.map((mensaje): AvisoDock => ({ mensaje, severidad: 'warning' })),
+    ...lint.filter((a) => !warnings.some((w) => w.includes(a.mensaje))),
+  ]);
 }
 
 /** A problem of the scenario or the model, or the failed Run, for the Warnings tab. */
@@ -130,11 +136,8 @@ export function DockSimular(props: DockSimularProps): ReactNode {
   const S = useStrings();
   const { id, ir, corrida, pestana, onPestana } = props;
   const conCorrida = corrida !== null && ir !== null;
-  const avisos = [
-    ...(corrida?.result.warnings ?? []).map((mensaje): AvisoDock => ({ mensaje, severidad: 'warning' })),
-    ...props.avisos,
-  ];
-  const etiqueta = (p: PestanaDock): string => (p === 'avisos' && avisos.length > 0 ? `${S.dock.pestanas[p]} (${avisos.length})` : S.dock.pestanas[p]);
+  const grupos = avisosDelDock(corrida?.result.warnings ?? [], props.avisos);
+  const etiqueta = (p: PestanaDock): string => (p === 'avisos' && grupos.length > 0 ? `${S.dock.pestanas[p]} (${grupos.length})` : S.dock.pestanas[p]);
 
   /** ARIA tabs with automatic activation: arrows wrap, Home/End go to the ends. */
   function teclaPestana(e: KeyboardEvent<HTMLButtonElement>): void {
@@ -160,8 +163,10 @@ export function DockSimular(props: DockSimularProps): ReactNode {
 
   return (
     <section id={id} className="dock-simular" aria-label={S.dock.region}>
+      {/* The run no longer changes mode, so its end is announced here (QA of #394). */}
+      <p role="status" className="dock-anuncio">{conCorrida ? S.dock.corridaTerminada(formatNumber(redondear(corrida.result.process.completed, 1))) : ''}</p>
       <div className="dock-cabecera">
-        <div role="tablist" aria-label={S.dock.region} className="dock-pestanas">
+        <div role="tablist" aria-label={S.dock.vistas} className="dock-pestanas">
           {PESTANAS_DOCK.map((p) => (
             <button key={p} type="button" role="tab" id={`${id}-tab-${p}`} aria-controls={`${id}-panel`}
               aria-selected={p === pestana} tabIndex={p === pestana ? 0 : -1}
@@ -171,7 +176,7 @@ export function DockSimular(props: DockSimularProps): ReactNode {
             </button>
           ))}
         </div>
-        {conCorrida && <Kpis result={corrida.result} scenario={corrida.scenario} />}
+        {conCorrida && <Kpis ir={ir} result={corrida.result} scenario={corrida.scenario} onSeleccionar={props.onSeleccionar} />}
         <div className="dock-acciones">
           <button type="button" className="boton" disabled={!conCorrida} onClick={props.onAbrirResultados}>{S.dock.abrirResultados}</button>
           <button type="button" className="boton" disabled={!conCorrida} title={S.dock.tituloExportar}
@@ -182,7 +187,7 @@ export function DockSimular(props: DockSimularProps): ReactNode {
       </div>
       {/* One panel whose content follows the tab: focusable, so a long table scrolls by keyboard. */}
       <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${pestana}`} tabIndex={0} className="dock-panel">
-        {pestana === 'avisos' ? <Avisos avisos={avisos} />
+        {pestana === 'avisos' ? <Avisos grupos={grupos} />
           : !conCorrida ? vacio
             : pestana === 'rapidos' ? <Rapidos ir={ir} result={corrida.result} scenario={corrida.scenario} log={props.log} />
               : pestana === 'cuellos'
@@ -193,20 +198,41 @@ export function DockSimular(props: DockSimularProps): ReactNode {
   );
 }
 
-/** The scenario's KPIs: the same Process figures the Results view prints. */
-function Kpis({ result, scenario }: { result: RunResult; scenario: ResolvedScenario }): ReactNode {
+const redondear = (valor: number, decimales: number): number => Math.round(valor * 10 ** decimales) / 10 ** decimales;
+
+/**
+ * The scenario's KPIs, the Process figures of the Results view rounded for a summary (the exact
+ * value is the `title`), and the main bottleneck as a button that picks it on the canvas, so it is
+ * read without changing tab.
+ */
+function Kpis({ ir, result, scenario, onSeleccionar }: {
+  ir: ProcessIR; result: RunResult; scenario: ResolvedScenario; onSeleccionar: (elementId: string) => void;
+}): ReactNode {
   const S = useStrings();
-  const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
-  const moneda = scenario.run.currency;
-  const kpis: [string, string][] = [
-    [S.dock.kpis.completados, formatNumber(result.process.completed)],
-    [S.dock.kpis.cicloMedio(unit), result.process.completed > 0 ? formatDuration(result.process.cycleTime.mean, unit) : '—'],
-    [S.dock.kpis.throughput, formatNumber(result.process.throughputPerHour)],
-    [S.dock.kpis.costoTotal, `${formatNumber(result.process.totalCost)}${moneda === undefined ? '' : ` ${moneda}`}`],
+  const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
+  const p = result.process;
+  const kpis: [string, string, string][] = [
+    [S.dock.kpis.completados, formatNumber(redondear(p.completed, 1)), formatNumber(p.completed)],
+    [S.dock.kpis.cicloMedio, p.completed > 0 ? esperaCorta(p.cycleTime.mean) : '—', formatNumber(p.cycleTime.mean)],
+    [S.dock.kpis.throughput, formatNumber(redondear(p.throughputPerHour, 2)), formatNumber(p.throughputPerHour)],
+    [S.dock.kpis.costoTotal, `${formatNumber(redondear(p.totalCost, 2))}${moneda}`, `${formatNumber(p.totalCost)}${moneda}`],
   ];
+  const cuello = result.bottlenecks[0];
   return (
     <dl className="dock-kpis">
-      {kpis.map(([nombre, valor]) => <div key={nombre}><dt>{nombre}</dt><dd>{valor}</dd></div>)}
+      {kpis.map(([nombre, valor, exacto]) => <div key={nombre}><dt>{nombre}</dt><dd title={exacto}>{valor}</dd></div>)}
+      {cuello !== undefined && (
+        <div className="dock-cuello">
+          <dt>{S.dock.kpis.cuello}</dt>
+          <dd>
+            <button type="button" className="enlace" onClick={() => onSeleccionar(cuello.elementId)}>
+              {ir.nodes[cuello.elementId]?.name || cuello.elementId}
+              {' · '}
+              {S.lienzo.cuelloEtiqueta(esperaCorta(result.elements[cuello.elementId]?.resourceWait.mean ?? 0), Math.round(cuello.utilization * 100))}
+            </button>
+          </dd>
+        </div>
+      )}
     </dl>
   );
 }
@@ -221,11 +247,11 @@ const numero = (): CSSProperties => ({ ...tdStyle, fontFamily: 'var(--font-mono)
 function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResult; scenario: ResolvedScenario; log: LogDeCorrida | undefined }): ReactNode {
   const S = useStrings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
-  const { filas, total } = filasRapidas(ir, result, log);
+  const { filas, total } = filasRapidas(ir, result, scenario, log);
   const celdas = (f: FilaRapida): ReactNode => (
     <>
       <td style={numero()}>{formatNumber(f.casos)}</td>
-      <td style={numero()}>{guion(f.esperaP50, (v) => formatDuration(v, unit))}</td>
+      <td style={numero()}>{guion(f.esperaMedia, (v) => formatDuration(v, unit))}</td>
       <td style={numero()}>{guion(f.esperaP95, (v) => formatDuration(v, unit))}</td>
       <td style={numero()}>{guion(f.utilizacion, (v) => formatNumber(v * 100))}</td>
       <td style={numero()}>{formatNumber(f.costo)}</td>
@@ -238,9 +264,9 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
           <tr>
             <th scope="col" style={th()}>{S.dock.columnas.actividad}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.casos}</th>
-            <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaP50(unit)}</th>
+            <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaMedia(unit)}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.esperaP95(unit)}</th>
-            <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.utilizacion}</th>
+            <th scope="col" style={{ ...th(), textAlign: 'right' }} title={S.dock.columnas.utilizacionTitulo}>{S.dock.columnas.utilizacion}</th>
             <th scope="col" style={{ ...th(), textAlign: 'right' }}>{S.dock.columnas.costo}</th>
           </tr>
         </thead>
@@ -251,7 +277,10 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
           <tr className="total"><th scope="row" style={{ ...tdStyle, textAlign: 'left' }}>{S.dock.total}</th>{celdas(total)}</tr>
         </tfoot>
       </table>
-      <p className="dock-nota">{log === undefined ? S.dock.notaSinLog : S.dock.notaPercentiles}</p>
+      <p className="dock-nota">
+        {log === undefined ? S.dock.notaSinLog : S.dock.notaPercentiles(log.rows.length)}
+        {log?.truncated === true && <> <strong>{S.dock.muestraParcial(log.rows.length)}</strong></>}
+      </p>
       <div className="graficas-fila">
         <GraficaDeInstancias ir={ir} result={result} scenario={scenario} />
         <GraficaDeUtilizacion result={result} scenario={scenario} nombres={Object.fromEntries(Object.entries(scenario.resources ?? {}).map(([id, r]) => [id, r.name ?? id]))} />
@@ -297,12 +326,8 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
   );
 }
 
-function Avisos({ avisos }: { avisos: readonly AvisoDock[] }): ReactNode {
+function Avisos({ grupos }: { grupos: readonly GrupoAvisos[] }): ReactNode {
   const S = useStrings();
-  if (avisos.length === 0) return <p className="vacio">{S.dock.sinAvisos}</p>;
-  return (
-    <ul className="dock-avisos">
-      {avisos.map((a, i) => <li key={i} className={a.severidad === 'error' ? 'error' : 'aviso'}>{a.mensaje}</li>)}
-    </ul>
-  );
+  if (grupos.length === 0) return <p className="vacio">{S.dock.sinAvisos}</p>;
+  return <ul className="dock-avisos">{grupos.map((g) => <AvisoAgrupado key={g.codigo} grupo={g} />)}</ul>;
 }

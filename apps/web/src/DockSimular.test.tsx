@@ -13,12 +13,14 @@ import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { elementsCsv } from '@lila-modeler/engine/csv';
-import { formatNumber } from '@lila-modeler/engine/format';
+import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
 import { DockSimular, FILAS_LOG, filasRapidas, PESTANAS_DOCK, type DockSimularProps, type PestanaDock } from './DockSimular';
 import type { LogDeCorrida } from './GraficasResultados';
+import { agruparAvisos } from './avisos';
+import { percentilesPorElemento } from './percentilesPorElemento';
 import { setLocale, strings } from './i18n';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -83,24 +85,55 @@ describe('quick results (#394)', () => {
     const total = tabla.querySelector('tfoot tr')!;
     expect(total.querySelector('th')!.textContent).toBe(S.dock.total);
     const celdas = [...total.querySelectorAll('td')].map((td) => td.textContent);
-    expect(celdas[0]).toBe(formatNumber(result.process.completed));
-    const costo = tareas.reduce((suma, id) => suma + result.elements[id]!.fixedCostTotal, 0);
-    expect(celdas[4]).toBe(formatNumber(costo));
-    // The scenario KPIs head the dock.
-    expect(container.querySelector('.dock-kpis')!.textContent).toContain(S.dock.kpis.completados);
-    expect(container.querySelector('.dock-kpis')!.textContent).toContain(formatNumber(result.process.totalCost));
+    // Cases and fixed cost only: the process wait per case is another quantity (QA of #394).
+    expect(celdas).toEqual([formatNumber(result.process.completed), '—', '—', '—',
+      formatNumber(tareas.reduce((suma, id) => suma + result.elements[id]!.fixedCostTotal, 0))]);
+    expect(tabla.querySelectorAll('thead th')[5]!.textContent).toBe(S.dock.columnas.costo);
+    // The mean wait column is the engine's, the same figure as the Results view.
+    const primera = tabla.querySelector('tbody tr')!;
+    const id = tareas[0]!;
+    expect(primera.querySelectorAll('td')[1]!.textContent).toBe(formatDuration(result.elements[id]!.resourceWait.mean, scenario.run.baseTimeUnit as BaseTimeUnit));
+    // The note says which population each wait column covers.
+    expect(container.querySelector('.dock-nota')!.textContent).toBe(S.dock.notaPercentiles(log.rows.length));
+    // The scenario KPIs head the dock, rounded, with the exact value as the title.
+    const kpis = container.querySelector('.dock-kpis')!;
+    expect(kpis.textContent).toContain(S.dock.kpis.completados);
+    const costo = [...kpis.querySelectorAll('dd')].find((dd) => dd.title.startsWith(formatNumber(result.process.totalCost)))!;
+    expect(costo.textContent).toBe(`${formatNumber(Math.round(result.process.totalCost * 100) / 100)} ${scenario.run.currency}`);
   });
 
-  test('per-task wait percentiles come from the log, utilization is the busiest pool used', () => {
-    const { filas } = filasRapidas(ir, result, log);
+  test('a truncated log says so under the table', async () => {
+    await montar({ log: { rows: log.rows, truncated: true } });
+    expect(container.querySelector('.dock-nota')!.textContent).toContain(S.dock.muestraParcial(log.rows.length));
+  });
+
+  test('the main bottleneck heads the dock and picks its element, without changing tab', async () => {
+    const seleccionar = vi.fn();
+    await montar({ onSeleccionar: seleccionar });
+    const cuello = result.bottlenecks[0]!;
+    const boton = container.querySelector<HTMLButtonElement>('.dock-cuello button')!;
+    expect(boton.textContent).toContain(ir.nodes[cuello.elementId]!.name);
+    expect(boton.textContent).toContain(`${Math.round(cuello.utilization * 100)}%`);
+    await act(async () => boton.click());
+    expect(seleccionar).toHaveBeenCalledWith(cuello.elementId);
+    expect(seleccionada()).toBe(S.dock.pestanas.rapidos);
+  });
+
+  test('the end of a run is announced in a status region, and the tablist has its own name', async () => {
+    await montar();
+    expect(container.querySelector('[role="status"]')!.textContent).toBe(S.dock.corridaTerminada(formatNumber(Math.round(result.process.completed * 10) / 10)));
+    expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).not.toBe(container.querySelector('section')!.getAttribute('aria-label'));
+  });
+
+  test('the p95 is the shared per-element percentile of the same wait, utilization the busiest pool used', () => {
+    const { filas } = filasRapidas(ir, result, scenario, log);
+    const compartido = percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: (r) => r.resourceWait });
     for (const fila of filas) {
-      const esperas = [...new Map(log.rows.filter((r) => r.elementId === fila.id && r.startedAt !== null)
-        .map((r) => [`${r.replication}|${r.activityInstanceId}`, r.resourceWait])).values()].sort((a, b) => a - b);
-      if (esperas.length === 0) { expect(fila.esperaP50).toBeNull(); continue; }
-      expect(fila.esperaP95).toBeGreaterThanOrEqual(fila.esperaP50!);
-      expect(fila.esperaP95).toBeLessThanOrEqual(esperas.at(-1)!);
+      expect(fila.esperaP95).toBe(compartido.get(fila.id)?.[0] ?? null);
+      expect(fila.esperaMedia).toBe(result.elements[fila.id]!.resourceWait.mean);
       expect(fila.casos).toBe(result.elements[fila.id]!.completed);
     }
+    expect(filas.some((f) => f.esperaP95 !== null)).toBe(true);
     // The engine ranks bottlenecks with the same utilization (busiest pool the element used).
     for (const cuello of result.bottlenecks) {
       expect(filas.find((f) => f.id === cuello.elementId)?.utilizacion).toBeCloseTo(cuello.utilization, 12);
@@ -108,8 +141,8 @@ describe('quick results (#394)', () => {
   });
 
   test('without a log the percentiles are absent, never zero', () => {
-    const { filas } = filasRapidas(ir, result, undefined);
-    expect(filas.every((f) => f.esperaP50 === null && f.esperaP95 === null)).toBe(true);
+    const { filas } = filasRapidas(ir, result, scenario, undefined);
+    expect(filas.every((f) => f.esperaP95 === null && f.esperaMedia !== null)).toBe(true);
   });
 
   test('Export CSV downloads the elements table, byte for byte the engine one', async () => {
@@ -170,12 +203,22 @@ describe('tabs (#394)', () => {
     expect(container.textContent).toContain(S.dock.logTruncado(log.rows.length));
   });
 
-  test('the warnings tab joins the run warnings and the scenario problems, and counts them', async () => {
-    await montar({ inicial: 'avisos', avisos: [{ mensaje: 'E-ESCENARIO: falta algo', severidad: 'error' }] });
-    const items = [...container.querySelectorAll('.dock-avisos li')].map((li) => li.textContent);
-    expect(items).toEqual([...result.warnings, 'E-ESCENARIO: falta algo']);
-    expect(container.querySelector('.dock-avisos li.error')!.textContent).toBe('E-ESCENARIO: falta algo');
-    expect(tabs()[3]!.textContent).toBe(`${S.dock.pestanas.avisos} (${items.length})`);
+  test('the warnings tab groups by code, drops the lint the run already says, and counts the groups', async () => {
+    const warnings = ['W-TAREA-SIN-TIEMPO: Task_A: no processingTime (30 times)', 'W-MSGFLOW: ignored', 'W-TAREA-SIN-TIEMPO: Task_A: no processingTime (28 times)',
+      'W-ELEMENTO-SIN-PARAMETROS: the element has no parameters (elements.Task_A).'];
+    await montar({ inicial: 'avisos', corrida: { result: { ...result, warnings }, scenario },
+      avisos: [{ mensaje: 'the element has no parameters', severidad: 'warning' }, { mensaje: 'E-ESCENARIO: falta algo', severidad: 'error' }] });
+    const items = [...container.querySelectorAll('.dock-avisos > li')];
+    expect(items.map((li) => li.firstChild!.textContent)).toEqual([warnings[0], warnings[1], warnings[3], 'E-ESCENARIO: falta algo']);
+    expect(items[0]!.querySelector('summary')!.textContent).toBe(S.dock.ocurrencias(2));
+    expect(items[0]!.querySelector('details li')!.textContent).toBe(warnings[2]);
+    expect(items[3]!.className).toBe('error');
+    expect(tabs()[3]!.textContent).toBe(`${S.dock.pestanas.avisos} (4)`);
+  });
+
+  test('agruparAvisos keeps the first-seen order and promotes a group to error', () => {
+    expect(agruparAvisos([{ mensaje: 'W-X: a', severidad: 'warning' }, { mensaje: 'sin código', severidad: 'warning' }, { mensaje: 'W-X: b', severidad: 'error' }]))
+      .toEqual([{ codigo: 'W-X', severidad: 'error', mensajes: ['W-X: a', 'W-X: b'] }, { codigo: 'sin código', severidad: 'warning', mensajes: ['sin código'] }]);
   });
 
   test('without a run: an invitation to run, and the actions are disabled', async () => {

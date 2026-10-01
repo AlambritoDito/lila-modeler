@@ -139,12 +139,14 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
   aparece **Cancelar** y un progreso (`% · replicación N`). El interruptor **Cuellos de botella**
   pinta o apaga el overlay sobre el diagrama sin volver a simular.
 - **Dock de simulación** (bajo el lienzo): al terminar una corrida te quedas en Simular y el dock
-  se abre en **Resultados rápidos** — una fila por tarea con casos, espera p50/p95, utilización y
-  costo fijo, más una fila total — con los KPI del escenario arriba. Las otras pestañas son
-  **Cuellos de botella** (elegir uno lo selecciona en el lienzo), **Log de la corrida** y
-  **Avisos**. **Abrir en Resultados** lleva a las tablas completas y **Exportar CSV** descarga
-  `elements.csv`. Arrastra su borde superior o usa las flechas sobre él para cambiar su altura;
-  `⌘J`, un doble clic o `Enter` sobre ese borde lo ocultan y lo muestran.
+  se abre en **Resultados rápidos** — una fila por tarea con casos, espera media (todas las
+  réplicas), espera p95 (de la muestra del log, como dice la nota bajo la tabla), utilización del
+  pool más ocupado y costo fijo total, más una fila total — con los KPI del escenario y el cuello
+  principal arriba (un clic lo selecciona en el lienzo). Las otras pestañas son **Cuellos de
+  botella**, **Log de la corrida** y **Avisos** (agrupados por código). **Abrir en Resultados** lleva a las tablas completas y **Exportar CSV** descarga
+  `elements.csv`. Arrastra su borde superior o usa las flechas sobre él para cambiar su altura (nunca
+  ocupa más de lo que deja la ventana tras un lienzo usable); `⌘J`, el menú Vista, un doble clic o
+  `Enter` sobre ese borde lo ocultan y lo muestran.
 
 ### Resultados
 

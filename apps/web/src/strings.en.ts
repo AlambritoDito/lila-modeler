@@ -1244,6 +1244,10 @@ export const en = {
    * ------------------------------------------------------------------ */
   dock: {
     region: 'Simulation dock',
+    /** The tablist's own name, so it is not read as the region twice. */
+    vistas: 'Simulation dock views',
+    /** Announced (role=status) when a run lands in the dock. */
+    corridaTerminada: (casos: string): string => `Run finished: ${casos} completed cases.`,
     pestanas: { rapidos: 'Quick results', cuellos: 'Bottlenecks', log: 'Run log', avisos: 'Warnings' },
     abrirResultados: 'Open in Results',
     exportarCsv: 'Export CSV',
@@ -1253,23 +1257,29 @@ export const en = {
     redimensionar: 'Resize the simulation dock',
     kpis: {
       completados: 'Completed cases',
-      cicloMedio: (unidad: string): string => `Average cycle time (${unidad})`,
+      cicloMedio: 'Average cycle time',
       throughput: 'Throughput per hour',
       costoTotal: 'Total cost',
+      cuello: 'Main bottleneck',
     },
     columnas: {
       actividad: 'Activity',
       casos: 'Cases',
-      esperaP50: (unidad: string): string => `Wait p50 (${unidad})`,
+      esperaMedia: (unidad: string): string => `Average wait (${unidad})`,
       esperaP95: (unidad: string): string => `Wait p95 (${unidad})`,
       utilizacion: 'Utilization (%)',
-      costo: 'Fixed cost',
+      utilizacionTitulo: 'Utilization of the busiest pool the activity used',
+      costo: 'Total fixed cost',
     },
     total: 'Total',
     /** Under the quick results table: where the per-task percentiles come from. */
-    notaPercentiles:
-      'Per-activity wait percentiles come from the run’s event log sample; the total row is the process wait per case.',
-    notaSinLog: 'This run has no event log in memory, so per-activity wait percentiles are not available: run it again to see them.',
+    /** Under the quick results table (QA of #394): the two wait columns cover different populations. */
+    notaPercentiles: (filas: number): string =>
+      `Average wait: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
+    muestraParcial: (filas: number): string => `Partial sample: the log stopped at ${filas} rows, so the p95 does not cover the whole run.`,
+    /** «Warnings» grouped by code: the disclosure with the other occurrences. */
+    ocurrencias: (n: number): string => `${n} occurrences`,
+    notaSinLog: 'This run has no event log in memory, so the wait p95 is not available: run it again to see it.',
     sinLog: 'This run has no event log in memory (it was reopened from a file): run it again to see it.',
     logTruncado: (n: number): string => `The log sample stopped at ${n} rows: later events are not in it.`,
     logMostrando: (mostradas: number, total: number): string => `Showing the first ${mostradas} of ${total} rows.`,

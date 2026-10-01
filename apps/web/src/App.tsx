@@ -309,6 +309,13 @@ const RAIL_MAX = 320;
 const DOCK_MIN = 120;
 const DOCK_MAX = 640;
 const DOCK_ALTO = 240;
+/**
+ * What the dock leaves to the rest of the window (QA of #394): the top bar, the diagram tabs, the
+ * status bar and a canvas of at least ~160 px. The dock's ceiling is the window height minus this,
+ * never more than `DOCK_MAX` nor less than `DOCK_MIN`.
+ */
+const DOCK_RESERVA = 360;
+const dockMax = (altoVentana: number): number => Math.max(DOCK_MIN, Math.min(DOCK_MAX, altoVentana - DOCK_RESERVA));
 /** Width of the compact palette, and the drag width under which the palette snaps to it (#406). */
 const PALETA_COMPACTA = 48;
 const PALETA_SALTO = 114;
@@ -386,6 +393,8 @@ function IconoAlinear({ tipo }: { tipo: Alineacion }): React.JSX.Element {
 }
 /** Focus the toggle of `region` that is on screen: the button group or, when narrow, the «View» menu. */
 function enfocarToggle(region: Region): void {
+  // The dock's divider is what brings it back (QA of #394): the focus waits there.
+  if (region === 'dock') { document.querySelector<HTMLElement>('.divisor-dock')?.focus(); return; }
   const boton = document.querySelector<HTMLElement>(`.vista-grupo [data-region="${region}"]`);
   if (boton !== null && boton.offsetParent !== null) boton.focus();
   else document.querySelector<HTMLElement>('.menu-vista > summary')?.focus();
@@ -597,6 +606,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [dockAlto, setDockAlto] = useState(DOCK_ALTO);
   const arrastreDock = useRef<{ x: number; ancho: number } | null>(null);
   const [pestanaDock, setPestanaDock] = useState<PestanaDock>('rapidos');
+  /** The window height bounds the dock (QA of #394): a saved 640 px must not swallow a small window. */
+  const [altoVentana, setAltoVentana] = useState(() => window.innerHeight);
+  useEffect(() => {
+    const medir = (): void => setAltoVentana(window.innerHeight);
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+  /** The height drawn: the saved one, or less while the window cannot fit it. */
+  const altoDock = Math.min(dockAlto, dockMax(altoVentana));
   /** Compact (icons only) palette; lifted from `Paleta` so the divider can snap to it (#406). */
   const [compacta, setCompacta] = useState(() => {
     try { return localStorage.getItem('lila.paleta') === 'compacta'; } catch { return false; }
@@ -1835,7 +1853,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
       // #394, the owner's decision: a finished run no longer jumps to Results. It lands in Simulate
       // (Results and Compare stay where they are, they show the new run) with the dock open on
-      // «Quick results»; the full view is one click away (`abrirResultados`).
+      // «Quick results»; the full view is one click away (`enfocarResultados`, which raises the
+      // detached Results window when there is one).
       setModo((m) => (m === 'resultados' || m === 'comparar' ? m : 'simular'));
       setPestanaDock('rapidos');
       mostrarRegion('simular', 'dock');
@@ -1846,6 +1865,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // su cuenta después de que se haya cancelado.
       if (control.signal.aborted) return;
       setSim({ mensaje: e instanceof Error ? e.message : String(e), tipo: 'error' });
+      // The dock shows the failure where it is listed (QA of #394).
+      setPestanaDock('avisos');
     } finally {
       if (enVuelo.current === control) enVuelo.current = null;
     }
@@ -2021,13 +2042,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     recordar({ paneles: siguiente });
   }
   const mostrarRegion = (m: ModoId, region: Region): void => fijarRegion(m, region, true);
-  /**
-   * «Open in Results» of the Simulate dock (#394). One function on purpose: the detachable Results
-   * window (W2 of Lote J) only has to redirect this.
-   */
-  function abrirResultados(): void {
-    setModo('resultados');
-  }
 
   // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
   function elegirModo(m: ModoId): void {
@@ -2108,6 +2122,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays out of the app's own
     // handling, but it must still be kept from bpmn-js-token-simulation's canvas listener (#492:
     // Alt+Shift+T toggled the token simulation in Simulate/Validate paths) — same hiding as below.
+    // ⌘J / Ctrl+J only acts in Simulate (#394); elsewhere it stays the browser's (Downloads).
+    if (a.id === 'dock' && modo !== 'simular') return;
     if (a.id in ALINEACIONES && modo !== 'modelar') {
       if (conMod || e.altKey) e.stopPropagation();
       return;
@@ -2191,7 +2207,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       data-densidad={densidad}
       data-theme={decoratedTheme}
       data-esquema={esquema}
-      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px`, '--dock-alto': `${dockAlto}px` } as React.CSSProperties}
+      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px`, '--dock-alto': `${altoDock}px` } as React.CSSProperties}
     >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
@@ -2415,7 +2431,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         }}>
           <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
           <div>
-            {REGIONES.map((r) => (
+            {/* The dock (#394) has no top-bar button; in Simulate it is listed here (QA of #394). */}
+            {[...REGIONES, ...(modo === 'simular' ? ['dock' as const] : [])].map((r) => (
               <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={`${tituloRegion(r)}${atajo(r)}`}
                 disabled={r === 'izquierda' && !hayIzquierda}
                 onClick={(e) => {
@@ -2626,15 +2643,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           double-click or Enter brings it back. */}
       {modo === 'simular' && <>
         <div className="divisor-dock" role="separator" aria-orientation="horizontal" tabIndex={0} aria-label={S.dock.redimensionar}
-          aria-valuemin={DOCK_MIN} aria-valuemax={DOCK_MAX} aria-valuenow={dockAlto} aria-controls={ID_REGION.dock}
+          aria-valuemin={DOCK_MIN} aria-valuemax={dockMax(altoVentana)} aria-valuenow={altoDock} aria-controls={ID_REGION.dock}
           {...divisor({
-            valor: dockAlto,
+            valor: altoDock,
             signo: -1,
             eje: 'y',
             oculto: !visible.dock,
             gesto: arrastreDock,
             alternar: () => alternarRegion('dock'),
-            resolver: (px) => limitar(px, DOCK_MIN, DOCK_MAX),
+            resolver: (px) => limitar(px, DOCK_MIN, dockMax(window.innerHeight)),
             fijar: setDockAlto,
             persistir: (px) => recordar({ dockAlto: px }),
           })} />
@@ -2647,7 +2664,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           pestana={pestanaDock}
           onPestana={setPestanaDock}
           onSeleccionar={(id) => { setSeleccion(id); modelador?.seleccionar?.(id, { centrar: true }); }}
-          onAbrirResultados={abrirResultados}
+          onAbrirResultados={enfocarResultados}
           onEjecutar={() => void simular()}
           puedeEjecutar={modelador !== null && sim.tipo !== 'simulando'}
         />

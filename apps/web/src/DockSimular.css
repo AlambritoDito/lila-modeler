@@ -8,6 +8,7 @@
   flex-direction: column;
   grid-area: dock;
   height: var(--dock-alto, 240px);
+  position: relative;
   min-height: 0;
   min-width: 0;
 }
@@ -124,4 +125,29 @@
 .divisor-dock:focus-visible {
   background: var(--accent-primary);
   outline: none;
+}
+
+/* Announces the end of a run to screen readers only (QA of #394). */
+.dock-anuncio {
+  clip-path: inset(50%);
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.dock-vacio .boton {
+  white-space: nowrap;
+}
+
+.dock-cuello .enlace {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.avisos-resto summary {
+  color: var(--fg-muted);
+  cursor: pointer;
 }

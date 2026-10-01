@@ -1201,6 +1201,8 @@ export const es: Strings = {
    * ------------------------------------------------------------------ */
   dock: {
     region: 'Dock de simulación',
+    vistas: 'Vistas del dock de simulación',
+    corridaTerminada: (casos: string): string => `Corrida terminada: ${casos} casos completados.`,
     pestanas: { rapidos: 'Resultados rápidos', cuellos: 'Cuellos de botella', log: 'Log de la corrida', avisos: 'Avisos' },
     abrirResultados: 'Abrir en Resultados',
     exportarCsv: 'Exportar CSV',
@@ -1210,22 +1212,26 @@ export const es: Strings = {
     redimensionar: 'Redimensionar el dock de simulación',
     kpis: {
       completados: 'Casos completados',
-      cicloMedio: (unidad: string): string => `Ciclo medio (${unidad})`,
+      cicloMedio: 'Ciclo medio',
       throughput: 'Throughput por hora',
       costoTotal: 'Costo total',
+      cuello: 'Cuello principal',
     },
     columnas: {
       actividad: 'Actividad',
       casos: 'Casos',
-      esperaP50: (unidad: string): string => `Espera p50 (${unidad})`,
+      esperaMedia: (unidad: string): string => `Espera media (${unidad})`,
       esperaP95: (unidad: string): string => `Espera p95 (${unidad})`,
       utilizacion: 'Utilización (%)',
-      costo: 'Costo fijo',
+      utilizacionTitulo: 'Utilización del pool más ocupado que usó la actividad',
+      costo: 'Costo fijo total',
     },
     total: 'Total',
-    notaPercentiles:
-      'Los percentiles de espera por actividad salen de la muestra del log de la corrida; la fila total es la espera del proceso por caso.',
-    notaSinLog: 'Esta corrida no tiene log en memoria, así que no hay percentiles de espera por actividad: córrela otra vez para verlos.',
+    notaPercentiles: (filas: number): string =>
+      `Espera media: todas las réplicas. p95: réplica 1 de la muestra del log (${filas} filas), casos iniciados tras el calentamiento.`,
+    muestraParcial: (filas: number): string => `Muestra parcial: el log se detuvo en ${filas} filas, así que el p95 no cubre toda la corrida.`,
+    ocurrencias: (n: number): string => `${n} ocurrencias`,
+    notaSinLog: 'Esta corrida no tiene log en memoria, así que no hay p95 de espera: córrela otra vez para verlo.',
     sinLog: 'Esta corrida no tiene log en memoria (se reabrió de un archivo): córrela otra vez para verlo.',
     logTruncado: (n: number): string => `La muestra del log se detuvo en ${n} filas: los eventos posteriores no están.`,
     logMostrando: (mostradas: number, total: number): string => `Se muestran las primeras ${mostradas} de ${total} filas.`,

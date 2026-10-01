@@ -2983,6 +2983,8 @@ it('detaches Results to its own window that follows the current run, and docks i
     // it out first, like «valida antes del Worker…» (#494).
     await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
+    // The run stays in Simulate (#394); the dock's «Open in Results» goes there.
+    await click(T.dock.abrirResultados);
     await vi.waitFor(() => expect(zona().textContent).toContain('Resultado actual W-FRONTERA W-MOTOR'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', expect.stringMatching(/popup/));
@@ -2996,6 +2998,14 @@ it('detaches Results to its own window that follows the current run, and docks i
     mocks.worker.mockResolvedValueOnce({ result: { warnings: ['W-NUEVA'], bottlenecks: [] }, logSample: [] });
     await click(T.app.ejecutar);
     await vi.waitFor(() => expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA'));
+
+    // While detached, the dock's «Open in Results» raises the window and leaves Simulate as it is (#394).
+    const enfocar = vi.spyOn(hijo, 'focus').mockImplementation(() => {});
+    await click(T.app.modos.simular);
+    await click(T.dock.abrirResultados);
+    expect(enfocar).toHaveBeenCalled();
+    expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+    await click(T.app.modos.resultados);
 
     // «Dock» in the stand-in brings it back and remembers where the window was.
     await click(T.app.acoplar);
@@ -3030,6 +3040,7 @@ it('reopens the Results window where it was last left (#395)', async () => {
     // it out first, like «valida antes del Worker…» (#494).
     await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
+    await click(T.dock.abrirResultados);
     await vi.waitFor(() => expect(container.querySelector('section.zona-resultados')?.textContent).toContain('Resultado actual'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', 'popup,width=640,height=480,left=12,top=34');
@@ -3636,14 +3647,16 @@ it('the dock divider resizes it by drag and arrows, remembers the height and hid
   expect(alto()).toBe('240px');
   expect(divisorDock().getAttribute('aria-orientation')).toBe('horizontal');
   expect(divisorDock().getAttribute('aria-controls')).toBe(dock()!.id);
-  // Dragging up makes it taller; the limits are 120–640.
+  // Dragging up makes it taller; the limits are 120 and the window height minus 360 (jsdom: 768).
+  expect(window.innerHeight).toBe(768);
   const puntero = (tipo: string, clientY: number) => act(async () => {
     divisorDock().dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientY, clientX: 5, button: 0 }));
   });
   await puntero('pointerdown', 600); await puntero('pointermove', 500);
   expect(alto()).toBe('340px');
   await puntero('pointermove', -2000);
-  expect(alto()).toBe('640px');
+  expect(alto()).toBe('408px');
+  expect(divisorDock().getAttribute('aria-valuemax')).toBe('408');
   await puntero('pointermove', 2000); await puntero('pointerup', 2000);
   expect(alto()).toBe('120px');
   expect(localStorage.getItem('lila.dockAlto')).toBe('120');
@@ -3705,4 +3718,62 @@ it('⌘J toggles the dock in Simulate only, and the palette offers it there (#39
   await abrirConTeclado();
   await escribir(T.atajos.dock);
   expect(opciones()).toEqual([]);
+});
+
+/** Plays a window resize to `alto` px (jsdom's `innerHeight` is a plain writable property). */
+async function altoDeVentana(alto: number): Promise<void> {
+  await act(async () => { Object.defineProperty(window, 'innerHeight', { value: alto, configurable: true, writable: true }); window.dispatchEvent(new Event('resize')); });
+}
+
+it('the dock never takes the canvas: its height is bounded by the window, saved or resized (QA of #394)', async () => {
+  const alto = () => appEl().style.getPropertyValue('--dock-alto');
+  try {
+    localStorage.setItem('lila.dockAlto', '640');
+    await altoDeVentana(1200);
+    await remontar();
+    await click(T.app.modos.simular);
+    expect(alto()).toBe('640px');
+    // 1280×800, 1024×768, 1024×600 and Electron's 360 px floor: at least ~160 px of canvas stays.
+    for (const [ventana, esperado] of [[800, 440], [768, 408], [600, 240], [360, 120]] as const) {
+      await altoDeVentana(ventana);
+      expect(alto(), String(ventana)).toBe(`${esperado}px`);
+      expect(divisorDock().getAttribute('aria-valuenow'), String(ventana)).toBe(String(esperado));
+    }
+    // The saved preference is kept: a taller window gives it back.
+    expect(localStorage.getItem('lila.dockAlto')).toBe('640');
+    await altoDeVentana(1200);
+    expect(alto()).toBe('640px');
+    // Restoring a saved 640 into a small window draws it bounded too.
+    await altoDeVentana(600);
+    await remontar();
+    await click(T.app.modos.simular);
+    expect(alto()).toBe('240px');
+  } finally {
+    await altoDeVentana(768);
+  }
+});
+
+it('the View menu lists the dock in Simulate only; hiding it with the focus inside sends the focus to its divider (QA of #394)', async () => {
+  const item = () => container.querySelector<HTMLButtonElement>('.menu-vista > div > [data-region="dock"]');
+  expect(item()!.textContent).toContain(T.app.regiones.dock);
+  await act(async () => item()!.click());
+  expect(conClase('sin-dock')).toBe(true);
+  await act(async () => item()!.click());
+  expect(conClase('sin-dock')).toBe(false);
+  // Focus inside the dock, ⌘J: it lands on the divider, which brings the dock back.
+  await act(async () => dock()!.querySelector('button')!.focus());
+  await pulsar(document.activeElement!, mod('j'));
+  expect(conClase('sin-dock')).toBe(true);
+  expect(document.activeElement).toBe(divisorDock());
+  await click(T.app.modos.modelar);
+  expect(item()).toBeNull();
+  // Outside Simulate ⌘J / Ctrl+J is not taken: the browser keeps it (Downloads).
+  expect(await pulsar(document.body, { key: 'j', ctrlKey: true })).toBe(false);
+});
+
+it('a failed run opens the dock on Warnings (QA of #394)', async () => {
+  await act(async () => mocks.dock!.onPestana('log'));
+  mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
+  await click(T.app.ejecutar);
+  expect(dock()!.dataset['pestana']).toBe('avisos');
 });
