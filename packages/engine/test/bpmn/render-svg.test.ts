@@ -79,7 +79,8 @@ function groups(svg: string): Map<string, { transform?: string; inner: string }>
 
 async function diOf(xml: string): Promise<{ plane: ModdleElement[]; flowNodes: string[] }> {
   const { rootElement } = await BpmnModdle().fromXML(xml);
-  const plane = rootElement.diagrams?.[0]?.plane?.planeElement ?? [];
+  // bpmn-js does not draw the DI Bizagi writes for a `bpmn:DataObject` (only its reference), nor do we.
+  const plane = (rootElement.diagrams?.[0]?.plane?.planeElement ?? []).filter((di) => di.bpmnElement?.$type !== 'bpmn:DataObject');
   const flowNodes: string[] = [];
   const walk = (el: ModdleElement): void => {
     for (const child of el.flowElements ?? []) {
@@ -145,7 +146,54 @@ describe.each(EXAMPLES.map((path) => [relative(root, path), path]))('%s', (_name
   });
 });
 
+/** The centre x and top y of the external label whose only line is `text`. */
+function labelAt(svg: string, text: string): [number, number] {
+  const m = svg.match(new RegExp(`<text font-family="[^"]*" font-size="11"[^>]*><tspan x="([^"]+)" y="([^"]+)">${text}</tspan></text>`));
+  if (m === null) throw new Error(`no label ${text}`);
+  return [Number(m[1]), Math.round((Number(m[2]) - 11 * 0.9) * 100) / 100];
+}
+
 describe('renderSvg', () => {
+  test('a flow label with no DI position goes where bpmn-js puts it (getFlowLabelPosition)', async () => {
+    // Three waypoints: the first segment, vertical here, so 15 to its right.
+    const pedido = await renderSvg(readFileSync(join(examplesDir, 'pedido/model.bpmn'), 'utf8'));
+    expect(labelAt(pedido, 'Rejected')).toEqual([970, 281.5]);
+    const levels = await renderSvg(readFileSync(join(examplesDir, 'bizagi-levels/level-1/model.bpmn'), 'utf8'));
+    expect(labelAt(levels, 'Yellow')).toEqual([490, 332.5]);
+    expect(labelAt(levels, 'Green')).toEqual([490, 392.5]);
+  });
+
+  test('a DI label with a position and no size is centred on that point; only 0 0 0 0 is no label', async () => {
+    const at = (bounds: string) => MINI('Go').replace(
+      '<di:waypoint x="100" y="90"/>',
+      `<di:waypoint x="100" y="90"/><bpmndi:BPMNLabel><dc:Bounds ${bounds}/></bpmndi:BPMNLabel>`,
+    );
+    expect(labelAt(await renderSvg(at('x="300" y="10" width="0" height="0"')), 'Go')).toEqual([300, 10]);
+    // All zeros: the default, 15 above the middle of the horizontal flow.
+    expect(labelAt(await renderSvg(at('x="0" y="0" width="0" height="0"')), 'Go')).toEqual([73, 65]);
+  });
+
+  test('the DI of a bpmn:DataObject is not drawn and does not stretch the drawing', async () => {
+    for (const [file, id] of [['B.1.0', 'DF1373655174778'], ['B.2.0', 'DF1373638080458']]) {
+      const svg = await renderSvg(readFileSync(join(examplesDir, `bizagi-exports/bizagi-miwg-${file}-roundtrip.bpmn`), 'utf8'));
+      expect(svg).not.toContain(`data-element-id="${id}"`);
+      const [vx, vy] = svg.match(/viewBox="([^"]*)"/)![1]!.split(' ').map(Number);
+      expect(vx! > -20 || vy! > -20, file).toBe(true);
+    }
+  });
+
+  test('the exclusive gateway shows its X only with isMarkerVisible, like bpmn-js', async () => {
+    const gateway = (marker: string) => MINI('x').replace('<task id="T" name="x"/>', '<exclusiveGateway id="T"/>').replace('bpmnElement="T" ', `bpmnElement="T" ${marker}`);
+    const inner = async (marker: string) => groups(await renderSvg(gateway(marker))).get('T')!.inner.split('</g>')[0]!;
+    expect(await inner('')).toMatch(/^<polygon [^>]*\/>$/);
+    expect(await inner('isMarkerVisible="true"')).toMatch(/^<polygon [^>]*\/><path /);
+  });
+
+  test('the margin must be a finite number ≥ 0', async () => {
+    await expect(renderSvg(MINI('x'), { margin: Number.NaN })).rejects.toThrow(RangeError);
+    await expect(renderSvg(MINI('x'), { margin: -1 })).rejects.toThrow(RangeError);
+  });
+
   test('snapshot of examples/pedido (pools, gateways, message flows)', async () => {
     expect(await renderSvg(readFileSync(join(examplesDir, 'pedido/model.bpmn'), 'utf8'))).toMatchSnapshot();
   });
@@ -178,6 +226,9 @@ describe('renderSvg', () => {
     // A colour that is not one is ignored rather than written into an attribute.
     const bad = await renderSvg(MINI('x', 'bioc:fill="red&quot; onload=&quot;x"'));
     expect(bad).not.toContain('onload');
+    // Names: CSS colour names only.
+    expect(groups(await renderSvg(MINI('x', 'bioc:fill="White"'))).get('T')!.inner).toContain('fill="White"');
+    expect(await renderSvg(MINI('x', 'bioc:fill="javascript"'))).not.toContain('javascript');
   });
 
   test('a file with no diagram, or an unknown diagram id, is an error', async () => {

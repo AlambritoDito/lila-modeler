@@ -15,7 +15,10 @@
  *
  * ponytail: labels wrap on an estimated text width (no font metrics without a DOM), so a line
  * can come out slightly shorter or longer than bpmn-js's; task-type icons, loop markers and
- * the less common event markers (error, escalation, compensation…) are not drawn. Upgrade path:
+ * the less common event markers (error, escalation, compensation…) are not drawn. A sub-process
+ * without `isExpanded` whose children are drawn on the same plane (Bizagi exports) is drawn
+ * expanded with them, where bpmn-js — and so the app — shows it collapsed and moves its children
+ * to a sub-plane: the export means it expanded. Upgrade path:
  * add the missing markers here as they are needed; real metrics would need a font file.
  */
 import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
@@ -61,11 +64,18 @@ function n(value: number): string {
   return String(Object.is(rounded, -0) ? 0 : rounded);
 }
 
-/** A DI colour, kept only when it is a plain hex, `rgb()`/`rgba()` or name (nothing to escape). */
+/** The CSS named colours (Bizagi's colours arrive as names such as `White`). */
+const CSS_COLOUR_NAMES = new Set(
+  ('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' '),
+);
+
+/** A DI colour, kept only when it is a hex, `rgb()`/`rgba()` or CSS colour name (nothing to escape). */
 function diColour(di: ModdleElement | undefined, names: readonly string[]): string | undefined {
   for (const name of names) {
-    const value = di?.get?.(name) ?? di?.$attrs?.[name];
-    if (typeof value === 'string' && /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i.test(value.trim())) return value.trim();
+    const raw = di?.get?.(name) ?? di?.$attrs?.[name];
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim();
+    if (/^(#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\([\d\s.,%]+\))$/i.test(value) || CSS_COLOUR_NAMES.has(value.toLowerCase())) return value;
   }
   return undefined;
 }
@@ -132,7 +142,7 @@ function wrapText(text: string, max: number, size: number): string[] {
   return lines;
 }
 
-type Align = 'center-middle' | 'center-top' | 'center-bottom' | 'left-top';
+type Align = 'center-middle' | 'center-top' | 'left-top';
 
 /**
  * `<text>` with one `<tspan>` per wrapped line inside the box `x, y, width, height`. Lines that
@@ -153,9 +163,7 @@ function textBlock(
   const left = options.align === 'left-top';
   const x = left ? box.x + padding : box.x + box.width / 2;
   const top =
-    options.align === 'center-middle' ? box.y + (box.height - blockHeight) / 2
-      : options.align === 'center-bottom' ? box.y + box.height - blockHeight
-        : box.y + (left ? padding : 0);
+    options.align === 'center-middle' ? box.y + (box.height - blockHeight) / 2 : box.y + (left ? padding : 0);
   // The baseline of a line sits about 0.8 em below its top.
   const tspans = lines
     .map((line, index) => `<tspan x="${n(x)}" y="${n(top + index * lineHeight + size * 0.9)}">${escapeXml(line)}</tspan>`)
@@ -258,7 +266,7 @@ function eventShape(el: ModdleElement, box: Box, c: Colours): string {
   }
 }
 
-function gatewayShape(el: ModdleElement, box: Box, c: Colours): string {
+function gatewayShape(el: ModdleElement, di: ModdleElement, box: Box, c: Colours): string {
   const { width: w, height: h } = box;
   const cx = w / 2;
   const cy = h / 2;
@@ -266,6 +274,8 @@ function gatewayShape(el: ModdleElement, box: Box, c: Colours): string {
   const s = Math.min(w, h) / 50; // bpmn-js markers are sized for a 50-unit gateway
   switch (el.$type) {
     case 'bpmn:ExclusiveGateway': {
+      // Like bpmn-js: the X only when the DI asks for it.
+      if (di.isMarkerVisible !== true) return diamond;
       const a = 8 * s;
       return diamond + line(`M${n(cx - a)} ${n(cy - a)}L${n(cx + a)} ${n(cy + a)}M${n(cx + a)} ${n(cy - a)}L${n(cx - a)} ${n(cy + a)}`, c, 4 * s);
     }
@@ -424,7 +434,7 @@ function edgeShape(el: ModdleElement, points: readonly Point[], c: Colours, flow
     case 'bpmn:DataOutputAssociation':
       return `<path d="${d}" fill="none" stroke="${ink}" stroke-width="1.5" stroke-dasharray="2 4" stroke-linecap="round"/>` + arrowhead(before, last, c, true);
     default:
-      // Associations: dotted, no arrow.
+      // `bpmn:Association`: dotted, no arrow.
       return `<path d="${d}" fill="none" stroke="${ink}" stroke-width="1.5" stroke-dasharray="2 4" stroke-linecap="round"/>`;
   }
 }
@@ -435,24 +445,37 @@ function edgeShape(el: ModdleElement, points: readonly Point[], c: Colours, flow
 
 type Bounds = { x: number; y: number; width: number; height: number };
 
-/** bpmn-js's default external label: 90×20 under a shape, or around the middle of a flow. */
+/**
+ * bpmn-js's default external label (`getExternalLabelMid`, `getFlowLabelPosition`): a 90×20 box
+ * centred 10 below a shape, or on the middle of a flow's middle segment, 15 above it — 15 to its
+ * right when that segment is vertical.
+ */
 function defaultLabelBounds(di: ModdleElement): Bounds | undefined {
+  let mid: Point;
   if (di.bounds !== undefined) {
     const b = di.bounds;
-    return { x: b.x + b.width / 2 - 45, y: b.y + b.height + 5, width: 90, height: 20 };
+    mid = { x: b.x + b.width / 2, y: b.y + b.height + 10 };
+  } else {
+    const points = di.waypoint ?? [];
+    if (points.length < 2) return undefined;
+    const at = points.length / 2 - 1;
+    const a = points[Math.floor(at)]!;
+    const b = points[Math.ceil(at + 0.01)]!;
+    const alpha = Math.atan((b.y - a.y) / (b.x - a.x));
+    const x = (a.x + b.x) / 2;
+    const y = (a.y + b.y) / 2;
+    mid = Math.abs(alpha) < Math.PI / 2 ? { x, y: y - 15 } : { x: x + 15, y };
   }
-  const points = di.waypoint ?? [];
-  if (points.length < 2) return undefined;
-  const mid = Math.floor((points.length - 1) / 2);
-  const a = points[mid]!;
-  const b = points[mid + 1]!;
-  return { x: (a.x + b.x) / 2 - 45, y: (a.y + b.y) / 2 - 25, width: 90, height: 20 };
+  return { x: mid.x - 45, y: mid.y - 10, width: 90, height: 20 };
 }
 
-/** The DI label box, unless it is empty (Bizagi writes `0 0 0 0` for a flow without one). */
+/**
+ * The DI label box, unless it is all zeros (Bizagi writes `0 0 0 0` for a flow without one). A
+ * box with a position and no size is a real one: bpmn-js centres the label on that point.
+ */
 function labelBounds(di: ModdleElement): Bounds | undefined {
   const b = di.label?.bounds;
-  return b !== undefined && (b.width > 0 || b.height > 0) ? b : defaultLabelBounds(di);
+  return b !== undefined && (b.x !== 0 || b.y !== 0 || b.width !== 0 || b.height !== 0) ? b : defaultLabelBounds(di);
 }
 
 function externalLabel(el: ModdleElement, di: ModdleElement, c: Colours): string {
@@ -460,12 +483,10 @@ function externalLabel(el: ModdleElement, di: ModdleElement, c: Colours): string
   if (text === undefined || text.trim() === '') return '';
   const bounds = labelBounds(di);
   if (bounds === undefined) return '';
-  // A flow's default label grows upwards, so a second line never sits on the flow itself.
-  const above = di.bounds === undefined && bounds !== di.label?.bounds;
   // A DI label box narrower than its words (common in exports) widens to bpmn-js's 90.
   const width = Math.max(bounds.width, 90);
   return textBlock(text, { x: bounds.x + bounds.width / 2 - width / 2, y: bounds.y, width, height: bounds.height }, {
-    align: above ? 'center-bottom' : 'center-top', size: EXTERNAL_FONT_SIZE, colour: diColour(di.label, ['color:color']) ?? THEME.label, padding: 0,
+    align: 'center-top', size: EXTERNAL_FONT_SIZE, colour: diColour(di.label, ['color:color']) ?? THEME.label, padding: 0,
   });
 }
 
@@ -495,16 +516,29 @@ function shapeBody(el: ModdleElement, di: ModdleElement, expanded: boolean, box:
   const type = el.$type;
   if (TASKS.has(type) || SUBPROCESSES.has(type)) return activityShape(el, expanded, box, c);
   if (EVENTS.has(type)) return eventShape(el, box, c);
-  if (GATEWAYS.has(type)) return gatewayShape(el, box, c);
+  if (GATEWAYS.has(type)) return gatewayShape(el, di, box, c);
   if (type === 'bpmn:Participant' || type === 'bpmn:Lane') return containerShape(el, di, box, c);
-  if (type === 'bpmn:DataObjectReference' || type === 'bpmn:DataStoreReference' || type === 'bpmn:DataInput' || type === 'bpmn:DataOutput') {
-    return dataShape(el, box, c);
-  }
+  if (DATA.has(type)) return dataShape(el, box, c);
   if (type === 'bpmn:TextAnnotation') return annotationShape(el, box, c);
-  if (type === 'bpmn:Group') return groupShape(box, c);
-  // Anything else (a choreography, a conversation node…) is a plain frame with its name.
-  return `<rect x="0" y="0" width="${n(box.width)}" height="${n(box.height)}" ${stroked(c, 1.5)}/>` +
-    textBlock(el.name, { x: 0, y: 0, ...box }, { align: 'center-middle', colour: c.label });
+  return groupShape(box, c);
+}
+
+const DATA = new Set(['bpmn:DataObjectReference', 'bpmn:DataStoreReference', 'bpmn:DataInput', 'bpmn:DataOutput']);
+const OTHER_SHAPES = new Set(['bpmn:Participant', 'bpmn:Lane', 'bpmn:TextAnnotation', 'bpmn:Group']);
+const EDGES = new Set(['bpmn:SequenceFlow', 'bpmn:MessageFlow', 'bpmn:Association', 'bpmn:DataInputAssociation', 'bpmn:DataOutputAssociation']);
+
+/**
+ * Whether this renderer draws the DI element. Anything else is left out, as bpmn-js leaves it
+ * out: a choreography, or the shape Bizagi writes for a `bpmn:DataObject` (the reference is what
+ * is drawn), which would otherwise sit at the origin and stretch the drawing.
+ */
+function drawable(di: ModdleElement): boolean {
+  const type = di.bpmnElement?.$type;
+  if (type === undefined) return false;
+  if (di.bounds !== undefined) {
+    return TASKS.has(type) || SUBPROCESSES.has(type) || EVENTS.has(type) || GATEWAYS.has(type) || DATA.has(type) || OTHER_SHAPES.has(type);
+  }
+  return EDGES.has(type) && (di.waypoint?.length ?? 0) >= 2;
 }
 
 /** The source element of a flow, to find out whether the flow is its default. */
@@ -525,8 +559,9 @@ export async function renderSvg(xmlIn: string, options: RenderSvgOptions = {}): 
     throw new Error(options.diagram === undefined ? 'The BPMN file has no diagram (bpmndi:BPMNDiagram).' : `No diagram with id "${options.diagram}".`);
   }
   const margin = options.margin ?? 20;
+  if (!Number.isFinite(margin) || margin < 0) throw new RangeError(`The margin must be a finite number ≥ 0, not ${margin}.`);
   const drawn = (diagram.plane?.planeElement ?? [])
-    .filter((di) => di.bpmnElement !== undefined && (di.bounds !== undefined || (di.waypoint?.length ?? 0) >= 2));
+    .filter(drawable);
   // A sub-process is expanded when its DI says so or its children are drawn on this plane
   // (exports that leave `isExpanded` out).
   const parents = new Set(drawn.map((di) => di.bpmnElement!.$parent));
