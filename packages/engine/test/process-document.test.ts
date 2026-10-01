@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, test } from 'vitest';
 
-import { parseBpmn, readAnnotations } from '../src/bpmn/index.js';
+import { parseBpmn, readAnnotations, renderSvg } from '../src/bpmn/index.js';
 import { loadResolvedScenario } from '../src/cli-shared.js';
 import type { ProcessIR } from '../src/core/ir.js';
 import { simulate } from '../src/index.js';
@@ -157,6 +157,27 @@ describe('process document (#454)', () => {
     expect(html).toContain('@media print{body{padding:0;max-width:none}table{font-size:8px}th,td{padding:2px 3px}.scroll{overflow:visible}');
     expect(html.match(/<div class="scroll"><table>/g)).toHaveLength(5);
     expect(html).toContain('.scroll{overflow-x:auto}');
+  });
+
+  test('the engine-drawn SVG goes into the HTML before the PNG; Word, which needs a PNG, goes without it (#538)', async () => {
+    const { ir } = await parseBpmn(xml);
+    const svg = await renderSvg(xml);
+    const base = { ir, annotations: {}, title: 't', date: 'd', svg };
+    const onlySvg = buildProcessDocument(base);
+    expect(onlySvg.svg).toBe(svg);
+    expect(onlySvg.blocks.filter((b) => b.kind === 'image')).toHaveLength(1);
+    const html = toHtml(onlySvg);
+    expect(html).toContain(`<img src="data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}" alt="`);
+    expect(html).not.toContain('data:image/png');
+    expect(Object.keys(parts(toDocx(onlySvg)))).not.toContain('word/media/diagram.png');
+    expect(strFromU8(parts(toDocx(onlySvg))['word/document.xml']!)).not.toContain('<w:drawing>');
+    // With both, the HTML shows the vector one and Word the PNG.
+    const both = buildProcessDocument({ ...base, png: PNG });
+    expect(toHtml(both)).toContain('data:image/svg+xml;base64,');
+    expect(toHtml(both)).not.toContain('data:image/png');
+    expect(parts(toDocx(both))['word/media/diagram.png']).toEqual(PNG);
+    // A blank SVG is no diagram.
+    expect(buildProcessDocument({ ...base, svg: '  ' }).blocks.some((b) => b.kind === 'image')).toBe(false);
   });
 
   test('a flattened sub-process gets its own section, documentation and lane (QA of #503, S2)', async () => {
