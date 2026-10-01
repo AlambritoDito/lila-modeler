@@ -1,0 +1,127 @@
+/* The Simulate dock (#394): its own grid row under the canvas (`app.css`, area `dock`), as tall as
+   `--dock-alto`, which its divider sets inline on `.app`. Square corners and the panel tokens,
+   like the right panel it sits next to. */
+.dock-simular {
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  grid-area: dock;
+  height: var(--dock-alto, 240px);
+  min-height: 0;
+  min-width: 0;
+}
+
+.dock-cabecera {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0 calc(10px * var(--espacio, 1));
+}
+
+.dock-pestanas {
+  display: flex;
+  gap: 2px;
+}
+
+/* The KPIs take a row of their own above the tabs (`order`), so they read on one line. */
+.dock-kpis {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  order: -1;
+  padding-top: calc(6px * var(--espacio, 1));
+  font-family: var(--font-mono);
+  font-size: 11px;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.dock-kpis div {
+  display: flex;
+  gap: 6px;
+}
+
+.dock-kpis dt {
+  color: var(--fg-muted);
+}
+
+.dock-kpis dd {
+  color: var(--fg-primary);
+  margin: 0;
+}
+
+.dock-acciones {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.dock-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: calc(8px * var(--espacio, 1)) calc(10px * var(--espacio, 1));
+}
+
+.dock-panel:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.dock-rapidos tfoot th,
+.dock-rapidos tfoot td {
+  border-top: 1px solid var(--border-strong);
+  font-weight: 600;
+}
+
+.dock-nota {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.dock-vacio {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.dock-avisos {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.dock-avisos .aviso {
+  color: var(--status-warning);
+}
+
+/* Divider of the dock: a 6 px strip straddling its top border, the same as the column dividers
+   but horizontal. It stays when the dock is hidden, overlaying the canvas's bottom edge, so a
+   double-click or Enter brings the dock back. */
+.divisor-dock {
+  align-self: start;
+  cursor: row-resize;
+  grid-area: dock;
+  height: 6px;
+  margin-top: -3px;
+  touch-action: none;
+  z-index: 1;
+}
+
+.app.sin-dock > .dock-simular {
+  display: none;
+}
+
+/* Alone in its row, it would add 6 px under the canvas: the negative margin makes it take none. */
+.app.sin-dock > .divisor-dock {
+  margin-top: -6px;
+}
+
+.divisor-dock:hover,
+.divisor-dock:focus-visible {
+  background: var(--accent-primary);
+  outline: none;
+}

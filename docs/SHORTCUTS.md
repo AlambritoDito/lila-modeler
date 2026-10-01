@@ -93,6 +93,7 @@ left filters as you type and inserts the highlighted shape with `Enter`.
 | Show or hide the right panel | `⇧⌘P` | `Ctrl+Shift+P` |
 | Show or hide the diagram tabs | `⇧⌘D` | `Ctrl+Shift+D` |
 | Show or hide the status bar | `⇧⌘B` | `Ctrl+Shift+B` |
+| Show or hide the simulation dock (Simulate) | `⌘J` | `Ctrl+J` |
 | Move the focus to the modes | `F6` | `F6` |
 | Move the focus to the right panel | `⇧F6` | `Shift+F6` |
 

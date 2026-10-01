@@ -26,6 +26,7 @@ import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
 import { RailEscenarios } from './RailEscenarios';
+import { DockSimular, type AvisoDock, type PestanaDock } from './DockSimular';
 import { ResultsView } from './ResultsView';
 import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
@@ -126,6 +127,8 @@ async function preferencias(): Promise<Ajustes> {
     // Left column widths (#406), same "blank is never saved" rule.
     const paletaAncho = Number(localStorage.getItem('lila.paletaAncho')?.trim() || NaN);
     const railAncho = Number(localStorage.getItem('lila.railAncho')?.trim() || NaN);
+    // Height of the Simulate dock (#394), same rule.
+    const dockAlto = Number(localStorage.getItem('lila.dockAlto')?.trim() || NaN);
     // «Advanced» (#447): '1' or absent, like `lila.paleta`; anything else reads as off.
     const avanzado = localStorage.getItem('lila.avanzado') === '1';
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
@@ -158,6 +161,7 @@ async function preferencias(): Promise<Ajustes> {
       ...(Number.isFinite(panelAncho) ? { panelAncho } : {}),
       ...(Number.isFinite(paletaAncho) ? { paletaAncho } : {}),
       ...(Number.isFinite(railAncho) ? { railAncho } : {}),
+      ...(Number.isFinite(dockAlto) ? { dockAlto } : {}),
       ...(avanzado ? { avanzado } : {}),
       ...(paneles === null ? {} : { paneles: paneles as NonNullable<Ajustes['paneles']> }),
       ...(temas === null ? {} : { temas: temas as readonly TemaGuardado[] }),
@@ -192,6 +196,7 @@ function recordar(ajustes: Ajustes): void {
     if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
     if (ajustes.paletaAncho !== undefined) localStorage.setItem('lila.paletaAncho', String(ajustes.paletaAncho));
     if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
+    if (ajustes.dockAlto !== undefined) localStorage.setItem('lila.dockAlto', String(ajustes.dockAlto));
     if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
     if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
     if (ajustes.ventanaResultados !== undefined) localStorage.setItem('lila.ventanaResultados', JSON.stringify(ajustes.ventanaResultados));
@@ -300,12 +305,19 @@ const PALETA_MIN = 180;
 const PALETA_MAX = 360;
 const RAIL_MIN = 160;
 const RAIL_MAX = 320;
+/** Height limits of the Simulate dock, in px (#394), and the height it starts with. */
+const DOCK_MIN = 120;
+const DOCK_MAX = 640;
+const DOCK_ALTO = 240;
 /** Width of the compact palette, and the drag width under which the palette snaps to it (#406). */
 const PALETA_COMPACTA = 48;
 const PALETA_SALTO = 114;
 
-/** The four regions that can be hidden, per mode (#412). */
-type Region = 'izquierda' | 'derecha' | 'diagramas' | 'estado';
+/**
+ * The regions that can be hidden, per mode (#412). `REGIONES` are the four with a toggle in the top
+ * bar; the Simulate dock (#394) is hidden with its key, its divider or the command palette.
+ */
+type Region = 'izquierda' | 'derecha' | 'diagramas' | 'estado' | 'dock';
 const REGIONES: readonly Region[] = ['izquierda', 'derecha', 'diagramas', 'estado'];
 type Paneles = Record<ModoId, Record<Region, boolean>>;
 /** Modes that draw a left column: the palette in Model, the rail in Simulate. */
@@ -318,11 +330,11 @@ function sanearPaneles(valor: unknown): Paneles {
   const guardado = (valor !== null && typeof valor === 'object' ? valor : {}) as Record<string, unknown>;
   return Object.fromEntries(MODO_IDS.map((modo) => {
     const entrada = (guardado[modo] !== null && typeof guardado[modo] === 'object' ? guardado[modo] : {}) as Record<string, unknown>;
-    return [modo, Object.fromEntries(REGIONES.map((r) => [r, typeof entrada[r] === 'boolean' ? entrada[r] : true]))];
+    return [modo, Object.fromEntries([...REGIONES, 'dock'].map((r) => [r, typeof entrada[r] === 'boolean' ? entrada[r] : true]))];
   })) as Paneles;
 }
 /** Ids of the regions, for `aria-controls` on their toggles. */
-const ID_REGION: Record<Region, string> = { izquierda: 'region-izquierda', derecha: 'region-derecha', diagramas: 'region-diagramas', estado: 'region-estado' };
+const ID_REGION: Record<Region, string> = { izquierda: 'region-izquierda', derecha: 'region-derecha', diagramas: 'region-diagramas', estado: 'region-estado', dock: 'region-dock' };
 /**
  * Toggle icon (#412): the window frame with the region it stands for as a rectangle, filled
  * while shown (`app.css`). Square corners, like the rest of the system.
@@ -332,6 +344,7 @@ const RECT_REGION: Record<Region, { x: number; y: number; width: number; height:
   derecha: { x: 10, y: 3, width: 3, height: 7 },
   diagramas: { x: 6, y: 10, width: 4, height: 1.5 },
   estado: { x: 3, y: 11.5, width: 10, height: 1.5 },
+  dock: { x: 6, y: 8, width: 4, height: 2 },
 };
 function IconoRegion({ region }: { region: Region | null }): React.JSX.Element {
   return (
@@ -580,6 +593,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [paletaAncho, setPaletaAncho] = useState(236);
   const [railAncho, setRailAncho] = useState(212);
   const arrastreIzquierda = useRef<{ x: number; ancho: number } | null>(null);
+  /** Height of the Simulate dock (#394) and its tab, which survives leaving Simulate. */
+  const [dockAlto, setDockAlto] = useState(DOCK_ALTO);
+  const arrastreDock = useRef<{ x: number; ancho: number } | null>(null);
+  const [pestanaDock, setPestanaDock] = useState<PestanaDock>('rapidos');
   /** Compact (icons only) palette; lifted from `Paleta` so the divider can snap to it (#406). */
   const [compacta, setCompacta] = useState(() => {
     try { return localStorage.getItem('lila.paleta') === 'compacta'; } catch { return false; }
@@ -1086,11 +1103,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * move the divider, so ArrowLeft widens the right panel and narrows the left column (`signo`).
    * Double-click and Enter hide or show that side (#412) instead; while it is hidden, dragging and
    * arrows do nothing. `resolver` turns a proposed width into the one to keep (clamped, or the
-   * palette's compact snap).
+   * palette's compact snap). `eje: 'y'` (the Simulate dock, #394) reads the pointer's `clientY` and
+   * the up and down arrows instead; `gesto.x` then holds that coordinate and `ancho` the height.
    */
   function divisor(o: {
     valor: number;
     signo: 1 | -1;
+    eje?: 'x' | 'y';
     resolver: (px: number, teclado: boolean) => number;
     fijar: (px: number) => void;
     persistir: (px: number) => void;
@@ -1098,6 +1117,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     oculto: boolean;
     gesto: React.MutableRefObject<{ x: number; ancho: number } | null>;
   }): React.HTMLAttributes<HTMLDivElement> {
+    const vertical = o.eje === 'y';
+    const punto = (e: React.PointerEvent): number => (vertical ? e.clientY : e.clientX);
     const mover = (x: number): number => o.resolver(o.gesto.current!.ancho + o.signo * (x - o.gesto.current!.x), false);
     const terminar = (px: number): void => {
       const inicial = o.gesto.current!.ancho;
@@ -1111,16 +1132,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onPointerDown: (e) => {
         if (e.button !== 0 || o.oculto) return;
         e.currentTarget.setPointerCapture?.(e.pointerId);
-        o.gesto.current = { x: e.clientX, ancho: o.valor };
+        o.gesto.current = { x: punto(e), ancho: o.valor };
       },
-      onPointerMove: (e) => { if (o.gesto.current !== null) o.fijar(mover(e.clientX)); },
-      onPointerUp: (e) => { if (o.gesto.current !== null) terminar(mover(e.clientX)); },
+      onPointerMove: (e) => { if (o.gesto.current !== null) o.fijar(mover(punto(e))); },
+      onPointerUp: (e) => { if (o.gesto.current !== null) terminar(mover(punto(e))); },
       onPointerCancel: soltar,
       onLostPointerCapture: soltar,
       onDoubleClick: o.alternar,
       onKeyDown: (e) => {
         if (e.key === 'Enter') { e.preventDefault(); o.alternar(); return; }
-        const paso = e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0;
+        const [menos, mas] = vertical ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+        const paso = e.key === menos ? -16 : e.key === mas ? 16 : 0;
         if (paso === 0 || o.oculto) return;
         e.preventDefault();
         const px = o.resolver(o.valor + o.signo * paso, true);
@@ -1175,7 +1197,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
-      return problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) });
+      // The list itself also goes to the Simulate dock's Warnings tab (#394).
+      return { ...problemasPorElemento(problemas, { avisos: estado.avisos, errores: projectProblems.length + (estado.error === null ? 0 : 1) }), problemas };
     },
     // The locale is in the dependencies for two reasons now: `escenarioResuelto` calls
     // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
@@ -1301,6 +1324,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
       if (typeof guardadas.paletaAncho === 'number') setPaletaAncho(limitar(guardadas.paletaAncho, PALETA_MIN, PALETA_MAX));
       if (typeof guardadas.railAncho === 'number') setRailAncho(limitar(guardadas.railAncho, RAIL_MIN, RAIL_MAX));
+      if (typeof guardadas.dockAlto === 'number') setDockAlto(limitar(guardadas.dockAlto, DOCK_MIN, DOCK_MAX));
       panelesRef.current = sanearPaneles(guardadas.paneles);
       setPaneles(panelesRef.current);
       geomEscenario.current = guardadas.ventanaEscenario;
@@ -1627,7 +1651,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
       ...ALINEAR_IDS.map((id) => accion(id, puedeAlinear(id))),
-      accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'),
+      accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'), accion('dock', modo === 'simular'),
       accion('ajustes'),
       // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
@@ -1809,7 +1833,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
       }]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
-      setModo('resultados');
+      // #394, the owner's decision: a finished run no longer jumps to Results. It lands in Simulate
+      // (Results and Compare stay where they are, they show the new run) with the dock open on
+      // «Quick results»; the full view is one click away (`abrirResultados`).
+      setModo((m) => (m === 'resultados' || m === 'comparar' ? m : 'simular'));
+      setPestanaDock('rapidos');
+      mostrarRegion('simular', 'dock');
       setSim({ tipo: 'inactivo' });
     } catch (e: unknown) {
       // Cancelar no es un error que enseñar: quien canceló ya dejó la UI como quería. Se
@@ -1953,17 +1982,24 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     derecha: derechaVisible,
     diagramas: visibles.diagramas,
     estado: visibles.estado || hayAlerta,
+    dock: modo === 'simular' && visibles.dock,
   };
   /**
    * What the toggles show as pressed and flip: what is on screen, except for the status bar, whose
    * toggle keeps showing (and recording) the user's choice while an error forces the bar in.
    */
   const pulsado: Record<Region, boolean> = { ...visible, estado: visibles.estado };
+  /** The Warnings tab of the dock (#394): the live lint, then a failed Run. */
+  const avisosDock: AvisoDock[] = [
+    ...validacion.problemas.map((p) => ({ mensaje: p.mensaje, severidad: p.severidad })),
+    ...(sim.tipo === 'error' ? [{ mensaje: S.app.errorSimular(sim.mensaje), severidad: 'error' as const }] : []),
+  ];
   const tituloRegion = (r: Region): string => (r === 'estado' && hayAlerta ? S.app.tituloEstadoForzado : S.app.tituloRegiones[r]);
 
   /** Show or hide `region` in the current mode, and save the whole map. `false` = nothing to do. */
   function alternarRegion(region: Region): boolean {
     if (region === 'izquierda' && !hayIzquierda) return false;
+    if (region === 'dock' && modo !== 'simular') return false;
     const mostrar = !pulsado[region];
     // Hiding the region that holds the focus would drop it on `<body>`: it goes to the toggle.
     if (!mostrar && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
@@ -1972,12 +2008,25 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setVerConVentana(mostrar);
       if (!mostrar || visibles.derecha) return true;
     }
+    fijarRegion(modo, region, mostrar);
+    return true;
+  }
+  /** Write one region of one mode into the map, and save it whole (the bridge merges shallowly). */
+  function fijarRegion(m: ModoId, region: Region, mostrar: boolean): void {
     const actual = panelesRef.current;
-    const siguiente = { ...actual, [modo]: { ...actual[modo], [region]: mostrar } };
+    if (actual[m][region] === mostrar) return;
+    const siguiente = { ...actual, [m]: { ...actual[m], [region]: mostrar } };
     panelesRef.current = siguiente;
     setPaneles(siguiente);
     recordar({ paneles: siguiente });
-    return true;
+  }
+  const mostrarRegion = (m: ModoId, region: Region): void => fijarRegion(m, region, true);
+  /**
+   * «Open in Results» of the Simulate dock (#394). One function on purpose: the detachable Results
+   * window (W2 of Lote J) only has to redirect this.
+   */
+  function abrirResultados(): void {
+    setModo('resultados');
   }
 
   // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
@@ -2020,6 +2069,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     derecha: () => alternarRegion('derecha'),
     diagramas: () => alternarRegion('diagramas'),
     estado: () => alternarRegion('estado'),
+    dock: () => alternarRegion('dock'),
     irModos: () => document.querySelector<HTMLElement>('.modos .modo')?.focus(),
     irPanel,
   };
@@ -2136,11 +2186,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   return (
     <div
       className={['app', ...(hayIzquierda && !visible.izquierda ? ['sin-izquierda'] : []), ...(visible.derecha ? [] : ['sin-panel']),
-        ...(visible.diagramas ? [] : ['sin-diagramas']), ...(visible.estado ? [] : ['sin-estado'])].join(' ')}
+        ...(visible.diagramas ? [] : ['sin-diagramas']), ...(visible.estado ? [] : ['sin-estado']),
+        ...(modo === 'simular' && !visible.dock ? ['sin-dock'] : [])].join(' ')}
       data-densidad={densidad}
       data-theme={decoratedTheme}
       data-esquema={esquema}
-      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px` } as React.CSSProperties}
+      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px`, '--dock-alto': `${dockAlto}px` } as React.CSSProperties}
     >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
@@ -2571,6 +2622,36 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}
       </div>
       </div>
+      {/* The Simulate dock (#394) and its divider, which stays while the dock is hidden so a
+          double-click or Enter brings it back. */}
+      {modo === 'simular' && <>
+        <div className="divisor-dock" role="separator" aria-orientation="horizontal" tabIndex={0} aria-label={S.dock.redimensionar}
+          aria-valuemin={DOCK_MIN} aria-valuemax={DOCK_MAX} aria-valuenow={dockAlto} aria-controls={ID_REGION.dock}
+          {...divisor({
+            valor: dockAlto,
+            signo: -1,
+            eje: 'y',
+            oculto: !visible.dock,
+            gesto: arrastreDock,
+            alternar: () => alternarRegion('dock'),
+            resolver: (px) => limitar(px, DOCK_MIN, DOCK_MAX),
+            fijar: setDockAlto,
+            persistir: (px) => recordar({ dockAlto: px }),
+          })} />
+        <DockSimular
+          id={ID_REGION.dock}
+          ir={ir}
+          corrida={corrida}
+          log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)}
+          avisos={avisosDock}
+          pestana={pestanaDock}
+          onPestana={setPestanaDock}
+          onSeleccionar={(id) => { setSeleccion(id); modelador?.seleccionar?.(id, { centrar: true }); }}
+          onAbrirResultados={abrirResultados}
+          onEjecutar={() => void simular()}
+          puedeEjecutar={modelador !== null && sim.tipo !== 'simulando'}
+        />
+      </>}
       {modo === 'resultados' && (
         <section className="zona-resultados">
           {ventanaResultados === null ? vistaResultados : (

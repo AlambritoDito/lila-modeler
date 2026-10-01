@@ -138,10 +138,17 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 - **Simular**: corre la simulación sobre lo que hay en el lienzo ahora mismo. Mientras corre,
   aparece **Cancelar** y un progreso (`% · replicación N`). El interruptor **Cuellos de botella**
   pinta o apaga el overlay sobre el diagrama sin volver a simular.
+- **Dock de simulación** (bajo el lienzo): al terminar una corrida te quedas en Simular y el dock
+  se abre en **Resultados rápidos** — una fila por tarea con casos, espera p50/p95, utilización y
+  costo fijo, más una fila total — con los KPI del escenario arriba. Las otras pestañas son
+  **Cuellos de botella** (elegir uno lo selecciona en el lienzo), **Log de la corrida** y
+  **Avisos**. **Abrir en Resultados** lleva a las tablas completas y **Exportar CSV** descarga
+  `elements.csv`. Arrastra su borde superior o usa las flechas sobre él para cambiar su altura;
+  `⌘J`, un doble clic o `Enter` sobre ese borde lo ocultan y lo muestran.
 
 ### Resultados
 
-Al terminar una simulación, la app cambia sola a este modo. Cada tabla (elementos, flujos,
+Se abre con **Abrir en Resultados** del dock (o con el modo Resultados): una corrida terminada ya no cambia sola a este modo. Cada tabla (elementos, flujos,
 recursos, proceso) tiene su propio botón **Exportar CSV**, que descarga exactamente el mismo
 contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv`, `flows.csv`,
 `resources.csv`, `process.csv`).

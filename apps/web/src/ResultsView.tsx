@@ -206,7 +206,7 @@ function ariaSort(sort: SortState | null, key: string): 'ascending' | 'descendin
 }
 
 /** Descarga `contents` como si el navegador hubiera guardado el archivo del enlace. */
-function downloadCsv(filename: string, contents: string): void {
+export function downloadCsv(filename: string, contents: string): void {
   descargar(filename, new Blob([contents], { type: 'text/csv;charset=utf-8' }));
 }
 
@@ -560,14 +560,20 @@ function outcomeColumns(unit: BaseTimeUnit, showServiceLevel: boolean): ColumnDe
  * este componente solo lo pinta tal cual llega en `result.bottlenecks`.
  * ------------------------------------------------------------------ */
 
-function BottleneckCard({
+/**
+ * Shared with the Simulate dock (#394). With `onElegir` each name is a button that picks that
+ * element on the canvas; without it (Results mode) the names are plain text, as before.
+ */
+export function BottleneckCard({
   bottlenecks,
   ir,
   unit,
+  onElegir,
 }: {
   bottlenecks: readonly BottleneckEntry[];
   ir: ProcessIR;
   unit: BaseTimeUnit;
+  onElegir?: ((elementId: string) => void) | undefined;
 }): ReactNode {
   const S = useStrings();
   return (
@@ -579,7 +585,14 @@ function BottleneckCard({
         <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
           {bottlenecks.map((entry) => (
             <li key={entry.elementId} style={{ color: 'var(--fg-primary)', marginBottom: 4 }}>
-              <strong>{ir.nodes[entry.elementId]?.name ?? entry.elementId}</strong>
+              {onElegir === undefined
+                ? <strong>{ir.nodes[entry.elementId]?.name ?? entry.elementId}</strong>
+                : (
+                  <button type="button" className="enlace" onClick={() => onElegir(entry.elementId)}>
+                    {/* An unnamed task would leave an empty button: the id names it instead. */}
+                    <strong>{ir.nodes[entry.elementId]?.name || entry.elementId}</strong>
+                  </button>
+                )}
               {S.resultados.cuelloDetalle(
                 formatDuration(entry.resourceWaitTotal, unit),
                 unit,

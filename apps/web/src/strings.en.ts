@@ -246,12 +246,14 @@ export const en = {
       derecha: 'Right panel',
       diagramas: 'Diagram tabs',
       estado: 'Status bar',
+      dock: 'Simulation dock',
     },
     tituloRegiones: {
       izquierda: 'Show or hide the left column',
       derecha: 'Show or hide the right panel',
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
+      dock: 'Show or hide the simulation dock',
     },
     /** The status bar toggle while an error keeps the bar on screen (#412). */
     tituloEstadoForzado: 'Show or hide the status bar — it stays while it shows an error',
@@ -1238,6 +1240,53 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Simulate dock under the canvas (#394, `DockSimular.tsx`)
+   * ------------------------------------------------------------------ */
+  dock: {
+    region: 'Simulation dock',
+    pestanas: { rapidos: 'Quick results', cuellos: 'Bottlenecks', log: 'Run log', avisos: 'Warnings' },
+    abrirResultados: 'Open in Results',
+    exportarCsv: 'Export CSV',
+    tituloExportar: 'Download the process elements table (elements.csv)',
+    vacio: 'Run the scenario to see its quick results, bottlenecks and run log here.',
+    ejecutar: 'Run simulation',
+    redimensionar: 'Resize the simulation dock',
+    kpis: {
+      completados: 'Completed cases',
+      cicloMedio: (unidad: string): string => `Average cycle time (${unidad})`,
+      throughput: 'Throughput per hour',
+      costoTotal: 'Total cost',
+    },
+    columnas: {
+      actividad: 'Activity',
+      casos: 'Cases',
+      esperaP50: (unidad: string): string => `Wait p50 (${unidad})`,
+      esperaP95: (unidad: string): string => `Wait p95 (${unidad})`,
+      utilizacion: 'Utilization (%)',
+      costo: 'Fixed cost',
+    },
+    total: 'Total',
+    /** Under the quick results table: where the per-task percentiles come from. */
+    notaPercentiles:
+      'Per-activity wait percentiles come from the run’s event log sample; the total row is the process wait per case.',
+    notaSinLog: 'This run has no event log in memory, so per-activity wait percentiles are not available: run it again to see them.',
+    sinLog: 'This run has no event log in memory (it was reopened from a file): run it again to see it.',
+    logTruncado: (n: number): string => `The log sample stopped at ${n} rows: later events are not in it.`,
+    logMostrando: (mostradas: number, total: number): string => `Showing the first ${mostradas} of ${total} rows.`,
+    log: {
+      caso: 'Case',
+      elemento: 'Element',
+      recurso: 'Resource',
+      habilitada: (unidad: string): string => `Enabled (${unidad})`,
+      inicio: (unidad: string): string => `Started (${unidad})`,
+      fin: (unidad: string): string => `Ended (${unidad})`,
+      espera: (unidad: string): string => `Wait (${unidad})`,
+      costo: 'Cost',
+    },
+    sinAvisos: 'No warnings for this run or this scenario.',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Comparison view (`CompareView.tsx`, `compareWarnings.ts`)
    * ------------------------------------------------------------------ */
   comparar: {
@@ -1571,6 +1620,7 @@ export const en = {
     estado: 'Show or hide the status bar',
     irModos: 'Move the focus to the modes',
     irPanel: 'Move the focus to the right panel',
+    dock: 'Show or hide the simulation dock',
   },
 
   /* ------------------------------------------------------------------ *

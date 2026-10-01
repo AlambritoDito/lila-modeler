@@ -33,14 +33,16 @@ body {
   grid-template-areas:
     'barra     barra     barra'
     'paleta    lienzo    panel'
+    'paleta    dock      panel'
     'paleta    diagramas panel'
     'estado    estado    estado';
   /* La paleta (LILA-207) fija su propio ancho —`--paleta-ancho`, o 48 en compacto— y la columna
      se encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
      scenario rail (`--rail-ancho`). The right panel is `--panel-ancho`. The three are set inline
-     by their dividers (#406). */
+     by their dividers (#406). The `dock` row is the Simulate dock (#394, `DockSimular.css`); in
+     every other mode nothing is drawn there and the row collapses. */
   grid-template-columns: auto 1fr var(--panel-ancho, 320px);
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto auto;
   height: 100vh;
 }
 
