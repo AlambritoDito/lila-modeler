@@ -8,3 +8,5 @@ export { ProjectFormatError, readProjectDocument, runProblem } from './document.
 export type { ProjectErrorCode } from './document.js';
 export { decodeLila, encodeLila, lilaEntryNames, readRepositoryManifest, repositoryManifestOf } from './lila.js';
 export type { ProcessManifest, RepositoryManifest } from './lila.js';
+export { isCurrentRun, storedRun, withStoredRun } from './runs.js';
+export type { StoredRunInput } from './runs.js';

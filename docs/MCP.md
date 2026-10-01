@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its five tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its eight tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
@@ -15,11 +15,13 @@ backed by `@lila-modeler/engine`. Its five tools reuse the CLI validation and si
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, locale? })`** validates
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, locale? })`** validates
   the model and scenario, simulates with `log: false` and returns the same `RunResult` as
   `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
   or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
   model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
+  With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
+  [Saving a run](#saving-a-run)).
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
@@ -29,6 +31,18 @@ backed by `@lila-modeler/engine`. Its five tools reuse the CLI validation and si
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
   only when valid. It returns `{ scenario, file, notes }` (plus `process` and `entry` inside a
   `.lila`).
+
+- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
+  diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
+  renderer. Returns `{ process, svg }`, or with `saveTo` `{ process, file }`.
+- **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
+  writes the process document (`format`: `docx` or `html`) with the results of a stored run.
+  Returns `{ file, format, project, process, run, notes }`.
+- **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
+  writes the results of a stored run (`format`: `xlsx`, or `csv` into the directory `saveTo`).
+  Returns `{ files, format, project, process, run }`.
+
+The three export tools are described in [App-free exports](#app-free-exports).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -88,6 +102,59 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
 ```json
 { "name": "patch_scenario", "arguments": { "project": "project.lila", "process": "pedido", "scenario": "as-is",
   "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
+```
+
+## App-free exports
+
+`export_diagram`, `export_document` and `export_results` (#538) are `lila export diagram|doc|results`
+(`docs/CLI.md`) as tools. They need no app and no browser:
+
+- **The diagram** is the engine's SVG renderer: the BPMN DI geometry in the Lila Light colours
+  on white. The HTML document embeds it. The Word document has **no diagram**, and neither
+  document has the run's charts: Word needs a PNG and the engine has no rasteriser. `notes`
+  says what was left out.
+- **Runs** are the ones the app saved in the `.lila`. `run: "latest"` (the default) is the run
+  of the current model and scenario. `scenario` narrows it to one scenario, which is needed when
+  several have a current run. `run: "<id>"` picks one, and an unknown id lists the ids; `run` and
+  `scenario` together are an error. The
+  document only takes a current run; without one it goes without results, and the `run` of the
+  answer is `null`. `export_results` without a run is `isError`, with a message that says so. An
+  older run's results are exported against the model it ran on.
+- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of the four files in
+  the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or
+  `.bpmn`) being exported is never a destination, with `overwrite` or not. Writes are atomic
+  (a temporary file, then published).
+
+```json
+{ "name": "export_diagram", "arguments": { "project": "examples/pedido.lila", "saveTo": "out/pedido.svg" } }
+```
+
+```json
+{ "name": "export_document", "arguments": { "project": "project.lila", "format": "html", "saveTo": "out/pedido.html" } }
+```
+
+```json
+{ "name": "export_results", "arguments": { "project": "project.lila", "scenario": "as-is", "format": "xlsx", "saveTo": "out/as-is.xlsx" } }
+```
+
+## Saving a run
+
+`run_simulation` with `saveRun: true` (and `lila run … --save`) stores the run in the `.lila`
+exactly as the app does: the same stored shape, the model and scenario revisions it ran on, the
+model XML and the resolved scenario (with `model: "model.bpmn"`), built by the same engine function
+the app uses (`storedRun`). The app then opens it as the current run of that scenario, and
+`export_document` / `export_results` use it. It needs a `.lila` `model` and a scenario **of the
+archive** (by name); a `.bpmn`, a scenario file on disk or an inline scenario is `isError`, after
+nothing was written. The answer's `structuredContent` is still the `RunResult`; a second text block
+says `{ "savedRun": { "id", "file", "process", "scenario" } }`.
+
+The write is atomic, under the file's lock. If another writer saved the `.lila` meanwhile, the
+archive is read again and the run appended to what is there now, so concurrent saves all land. If
+the model or that scenario changed meanwhile, the run is already stale and is not saved
+(`isError`). The app keeps every run (there is no retention limit), and so does this.
+
+```json
+{ "name": "run_simulation", "arguments": { "model": "project.lila", "scenario": "as-is", "seed": 42, "replications": 5, "saveRun": true } }
 ```
 
 ## Language
@@ -233,7 +300,8 @@ prevents producing a result. Messages identify the tool and offending scenario (
 
 Writes use the server process's filesystem permissions. Files are staged in the destination
 directory and published with `rename`, preventing partial JSON reads. An existing file is
-replaced; an existing directory is rejected. `compare_scenarios` saves only `comparison`,
+replaced; an existing directory is rejected. The export tools are the exception: they never
+replace a file unless `overwrite: true` (see [App-free exports](#app-free-exports)). `compare_scenarios` saves only `comparison`,
 without `notes`, matching CLI JSON output. For `patch_scenario`, omitting `saveTo` selects
 in-place editing; supplying it selects the derived-scenario mode described above.
 

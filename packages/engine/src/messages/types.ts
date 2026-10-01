@@ -288,6 +288,35 @@ export interface CliMessages {
   lilaChangedOnDisk: (file: string) => string;
   /** Another writer held the file's lock for too long (the busy code of `project-fs/lilaFile.ts`). */
   lilaBusy: (file: string) => string;
+
+  /* --- app-free exports (#538): `lila export` and the MCP export tools -- */
+  exportNeedsLila: (file: string) => string;
+  /** `runs` arrives already joined (`id (scenario), …`), empty when the process has none. */
+  exportRunUnknown: (id: string, slug: string, file: string, runs: string) => string;
+  /** `scenario` is empty when no scenario was named. */
+  exportNoRun: (file: string, slug: string, scenario: string) => string;
+  exportNoCurrentRun: (file: string, slug: string, runs: string) => string;
+  exportRunAmbiguous: (file: string, slug: string, scenarios: string) => string;
+  exportRunStale: (id: string, slug: string, file: string) => string;
+  exportNoDiagram: () => string;
+  exportDocxNoDiagram: () => string;
+  exportDocumentNoRun: () => string;
+  exportNoCharts: () => string;
+  exportTargetExists: (target: string) => string;
+  exportNotDirectory: (path: string) => string;
+  exportUnknownKind: (kind: string) => string;
+  exportPaths: () => string;
+  /** `accepted` arrives already joined (`docx, html`). */
+  exportInvalidFormat: (value: string, accepted: string) => string;
+  exportOutRequired: (kind: string) => string;
+  exportTargetIsSource: (target: string) => string;
+  exportFileNeeded: (path: string) => string;
+  exportRunAndScenario: () => string;
+  /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
+  saveRunNeedsLila: () => string;
+  saveRunNeedsArchiveScenario: (scenario: string) => string;
+  lilaRunStale: (file: string, scenario: string) => string;
+  runSaved: (id: string, file: string, slug: string) => string;
 }
 
 /**
@@ -320,6 +349,9 @@ export interface McpMessages {
   fileMissing: (file: string) => string;
   bothPathAndXml: () => string;
   pathOrXml: () => string;
+  /** `export_diagram` (#538): a `.lila` in `project` or a model in `path`. */
+  projectOrPath: () => string;
+  bothProjectAndPath: () => string;
   modelMismatch: (modelPath: string, scenarioModel: string) => string;
   modelInvalid: (detail: string) => string;
   scenarioInvalid: (detail: string) => string;

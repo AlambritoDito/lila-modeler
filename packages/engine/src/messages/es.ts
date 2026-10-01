@@ -38,14 +38,22 @@ const TIPOS_NODO: Record<string, string> = {
 const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slug] [--json]
      lila run <modelo.bpmn|proyecto.lila> <escenario> [--process slug] [--seed n]
               [--replications n] [--json resultado.json] [--csv directorio] [--xlsx libro.xlsx]
+              [--save]
      lila compare <modelo.bpmn|proyecto.lila> <a> <b> [...] [--process slug] [--seed n]
                   [--replications n] [--json resultado.json] [--xlsx libro.xlsx] [--all]
+     lila export diagram <modelo.bpmn|proyecto.lila> [--process slug] [--out archivo.svg] [--force]
+     lila export doc <proyecto.lila> --out archivo.docx|archivo.html [--format docx|html]
+                     [--process slug] [--run id|latest] [--scenario nombre] [--force]
+     lila export results <proyecto.lila> --out libro.xlsx|directorio [--format xlsx|csv]
+                         [--process slug] [--run id|latest] [--scenario nombre] [--force]
      lila mcp
 
 Comandos:
   validate   Parsea el BPMN, imprime su IR y valida el modelo.
   run        Valida modelo y escenario, simula y muestra tablas de resultados.
   compare    Simula dos o más escenarios sobre el mismo modelo y los compara lado a lado.
+  export     Exporta sin la app: el diagrama como SVG, el documento del proceso como Word o
+             HTML, o los resultados de una corrida guardada en el .lila como .xlsx o CSV.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -66,6 +74,8 @@ Opciones de run:
                     log.csv se escribe en streaming y lleva timestamps ISO desde run.start.
   --xlsx archivo    Escribe un libro .xlsx con las hojas Resumen, Elementos, Flujos,
                     Recursos y Parámetros. El event log solo está en --csv.
+  --save            Guarda la corrida en el .lila (un escenario del archivo), como la app:
+                    la app la muestra como corrida actual y lila export la usa.
 
 Opciones de compare:
   --seed n          Sobrescribe run.seed en todos los escenarios comparados.
@@ -75,6 +85,18 @@ Opciones de compare:
                     Comparación (valor, IC95, delta y solape del IC por KPI).
   --all             Imprime todos los KPI de compare(), no solo el subconjunto curado.
                     El primer escenario listado es la base: los demás se comparan contra él.
+
+Opciones de export:
+  --out ruta        Dónde escribir. Sin ella, export diagram imprime el SVG por stdout.
+  --format f        docx|html (doc) o xlsx|csv (results); por defecto según la extensión de --out
+                    (.docx, .html, .xlsx). csv escribe elements, flows, resources y process
+                    .csv en el directorio --out.
+  --run id|latest   La corrida guardada: latest (por defecto) es la del modelo y escenario actuales;
+                    el documento solo admite una corrida actual y, si no hay, va sin resultados.
+  --scenario nombre Con latest, la corrida de ese escenario (necesario si varios tienen una).
+  --force           Reemplaza archivos existentes; sin él no se sobrescribe nada.
+  El documento Word va sin diagrama y ningún documento lleva las gráficas de la corrida: el motor
+  no rasteriza. El documento HTML sí lleva el diagrama.
 
 Opciones de mcp:
   Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
@@ -376,6 +398,46 @@ export const es: Catalog = {
       `otro programa está guardando ${file} ahora mismo; no se escribió nada. Vuelve a intentarlo en un momento.`,
     lilaChangedOnDisk: (file) =>
       `${file} cambió en disco mientras esta llamada trabajaba con él; no se escribió nada. Vuelve a intentarlo.`,
+
+    exportNeedsLila: (file) => `${file} no es un proyecto .lila: el documento y los resultados se exportan de uno.`,
+    exportRunUnknown: (id, slug, file, runs) =>
+      `el proceso "${slug}" de ${file} no tiene la corrida "${id}"; ` +
+      (runs === '' ? 'no tiene corridas guardadas.' : `sus corridas son: ${runs}.`),
+    exportNoRun: (file, slug, scenario) =>
+      `el proceso "${slug}" de ${file} no tiene corridas guardadas${scenario === '' ? '' : ` de ${scenario}`}. ` +
+      'Simúlalo con `lila run <archivo> <escenario> --save` (`saveRun` en MCP), o en Lila Modeler y guarda el proyecto.',
+    exportNoCurrentRun: (file, slug, runs) =>
+      `el proceso "${slug}" de ${file} no tiene corridas de su modelo y escenario actuales; corridas anteriores: ${runs}. ` +
+      'Pasa una por id (--run, `run` en MCP) o vuelve a simular (`lila run … --save`).',
+    exportRunAmbiguous: (file, slug, scenarios) =>
+      `el proceso "${slug}" de ${file} tiene corridas actuales de varios escenarios (${scenarios}): ` +
+      'elige uno con --scenario (`scenario` en MCP) o pasa el id de una corrida.',
+    exportRunStale: (id, slug, file) =>
+      `la corrida "${id}" del proceso "${slug}" de ${file} es de un modelo o escenario anterior: el documento ` +
+      'mezclaría el modelo de hoy con resultados viejos. Exporta sus resultados o vuelve a simular.',
+    exportNoDiagram: () => 'El modelo no tiene diagrama (BPMN DI): el documento va sin él.',
+    exportDocxNoDiagram: () =>
+      'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
+    exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
+    exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
+    exportTargetExists: (target) => `${target} ya existe; no se escribió nada. Pasa --force (\`overwrite\` en MCP) para reemplazarlo.`,
+    exportNotDirectory: (path) => `no se puede escribir dentro de ${path}: es un archivo, no un directorio.`,
+    exportUnknownKind: (kind) => `exportación desconocida "${kind}": se espera diagram, doc o results.`,
+    exportPaths: () => 'diagram|doc|results y un <modelo.bpmn|proyecto.lila>',
+    exportInvalidFormat: (value, accepted) =>
+      value === '' ? `elige un formato con --format: ${accepted}.` : `--format solo acepta: ${accepted}; se recibió "${value}".`,
+    exportOutRequired: (kind) => `lila export ${kind} necesita --out <ruta>.`,
+    exportTargetIsSource: (target) =>
+      `${target} es el archivo que se exporta; no se escribió nada. Elige otro destino.`,
+    exportFileNeeded: (path) => `"${path}" termina en barra; nombra el archivo que se escribe.`,
+    exportRunAndScenario: () =>
+      'el id de una corrida ya dice qué escenario: pasa --run <id> o --scenario (`run` o `scenario` en MCP), no los dos.',
+    saveRunNeedsLila: () => 'guardar la corrida (--save, `saveRun` en MCP) necesita un modelo .lila.',
+    saveRunNeedsArchiveScenario: (scenario) =>
+      `guardar la corrida necesita un escenario del .lila, y "${scenario}" no lo es: nombra un escenario del proceso.`,
+    lilaRunStale: (file, scenario) =>
+      `el modelo o el escenario ${scenario} de ${file} cambió mientras corría la simulación; la corrida no se guardó. Vuelve a correrla.`,
+    runSaved: (id, file, slug) => `Corrida ${id} guardada en ${file} (proceso ${slug}).`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,
@@ -397,6 +459,8 @@ export const es: Catalog = {
     fileMissing: (file) => `no existe el archivo ${file}.`,
     bothPathAndXml: () => 'hay que pasar `path` o `xml`, no los dos.',
     pathOrXml: () => 'hay que pasar `path` o `xml`.',
+    projectOrPath: () => 'hay que pasar `project` o `path`.',
+    bothProjectAndPath: () => 'pasa `project` o `path`, no los dos.',
     modelMismatch: (modelPath, scenarioModel) =>
       `el modelo (${modelPath}) no coincide con scenario.model (${scenarioModel}).`,
     modelInvalid: (detail) => `el modelo no pasa la validación: ${detail}`,
