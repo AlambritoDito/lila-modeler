@@ -18,7 +18,7 @@ import { isCurrentRun, storedRun, withStoredRun, type StoredRun } from '../proje
 import type { ResolvedScenario } from '../scenario.js';
 import { openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 
-/** How many times a save re-reads the file after another writer got there first. */
+/** How many times a save re-reads the file after another writer got there first, or held it. */
 const ATTEMPTS = 8;
 
 /**
@@ -38,8 +38,10 @@ export async function saveLilaRun(input: LilaProcess, run: StoredRun, locale: Lo
       await writeLilaProject(current, document, locale);
       return { ...current, document, process: { ...process, runs: [...process.runs, run] } };
     } catch (error) {
-      const changed = error instanceof Error && error.message === C.lilaChangedOnDisk(input.file);
-      if (!changed || attempt >= ATTEMPTS) throw error;
+      // Another writer saved first (`E-CAMBIO-EXTERNO`) or still holds the lock (`E-ARCHIVO-OCUPADO`):
+      // read the file again and append to what is there now.
+      const code = (error as { code?: unknown }).code;
+      if ((code !== 'E-CAMBIO-EXTERNO' && code !== 'E-ARCHIVO-OCUPADO') || attempt >= ATTEMPTS) throw error;
       current = await openLilaProcess(input.file, { process: process.slug, locale });
     }
   }

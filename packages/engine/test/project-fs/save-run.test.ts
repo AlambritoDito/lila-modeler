@@ -114,6 +114,8 @@ describe('saveSimulationRun', () => {
     const [first] = processesOf(other.document);
     await writeLilaProject(other, withProcesses(other.document, [{ ...first!, model: { ...first!.model, revision: first!.model.revision + 1 } }]));
     await expect(saveSimulationRun(lila, 'as-is', scenario, result)).rejects.toThrow(/changed while the simulation ran; the run was not saved/);
+    // The write itself says why it refused with a code, not only in the text.
+    await expect(writeLilaProject(lila, lila.document)).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
     expect((await readLilaFile(file)).document.runs).toHaveLength(0);
   });
 });

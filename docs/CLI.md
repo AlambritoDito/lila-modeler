@@ -131,13 +131,14 @@ the app uses:
 the process of a repository, as elsewhere. **Runs** are the ones the app saved in the `.lila`:
 `--run latest` (the default) is the run of the current model and scenario, `--scenario <name>`
 narrows it to one scenario (needed when several scenarios have a current run), and `--run <id>`
-picks one by id — an error lists the ids. The document only takes a current run and, without one,
+picks one by id — an error lists the ids; `--run <id>` and `--scenario` together are an error. The document only takes a current run and, without one,
 goes without results; `results` without a run is an error saying so. An older run's results are
 exported against the model it ran on.
 
 **Nothing is overwritten**: an existing output file is an error and nothing is written, unless
-`--force`. Every file is written to a temporary file next to it and then published at once, so
-an error never leaves half a file.
+`--force`. The file being exported (the `.lila` or `.bpmn`) is never a destination, `--force` or
+not, by any path that reaches it. Every file is written to a temporary file next to it and then
+published at once, so an error never leaves half a file.
 
 ```bash
 npx lila export diagram examples/pedido.lila --out results/pedido.svg

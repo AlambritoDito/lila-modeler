@@ -115,12 +115,14 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
   says what was left out.
 - **Runs** are the ones the app saved in the `.lila`. `run: "latest"` (the default) is the run
   of the current model and scenario. `scenario` narrows it to one scenario, which is needed when
-  several have a current run. `run: "<id>"` picks one, and an unknown id lists the ids. The
+  several have a current run. `run: "<id>"` picks one, and an unknown id lists the ids; `run` and
+  `scenario` together are an error. The
   document only takes a current run; without one it goes without results, and the `run` of the
   answer is `null`. `export_results` without a run is `isError`, with a message that says so. An
   older run's results are exported against the model it ran on.
 - **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of the four files in
-  the directory) is `isError` and nothing is written, unless `overwrite: true`. Writes are atomic
+  the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or
+  `.bpmn`) being exported is never a destination, with `overwrite` or not. Writes are atomic
   (a temporary file, then published).
 
 ```json

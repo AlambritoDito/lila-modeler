@@ -138,13 +138,14 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
   `notes` dice qué quedó fuera.
 - **Las corridas** son las que la app guardó en el `.lila`. `run: "latest"` (por defecto) es la
   corrida del modelo y escenario actuales. `scenario` la acota a un escenario, y hace falta cuando
-  varios tienen una corrida actual. `run: "<id>"` elige una, y un id desconocido lista los ids. El
+  varios tienen una corrida actual. `run: "<id>"` elige una, y un id desconocido lista los ids; `run` y `scenario` juntos son un error. El
   documento solo admite una corrida actual; sin ella va sin resultados y el `run` de la respuesta
   es `null`. `export_results` sin corrida es `isError`, con un mensaje que lo dice. Los resultados
   de una corrida anterior se exportan contra el modelo con el que corrió.
 - **No se sobrescribe nada.** Si ya existe un archivo en `saveTo` (o, en CSV, cualquiera de los
   cuatro del directorio), la tool devuelve `isError` y no escribe nada, salvo con
-  `overwrite: true`. Las escrituras son atómicas: primero un temporal y luego se publica.
+  `overwrite: true`. El proyecto (o `.bpmn`) que se exporta nunca es un destino, con `overwrite` o
+  sin él. Las escrituras son atómicas: primero un temporal y luego se publica.
 
 ```json
 { "name": "export_diagram", "arguments": { "project": "examples/pedido.lila", "saveTo": "out/pedido.svg" } }

@@ -3,7 +3,7 @@
  * renderer, process document and result writers, no overwrite without --force, and clear errors
  * when there is no run to export.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -161,6 +161,55 @@ describe('lila export results', () => {
     await pedidoWithRuns(file, ['as-is.scenario.json'], { stale: true });
     await expect(exportResults({ file, format: 'xlsx' })).rejects.toThrow(/older runs: run-1/);
     expect((await exportResults({ file, format: 'csv', run: 'run-1' })).run.current).toBe(false);
+  });
+});
+
+describe('the source file is never a destination (QA of #552)', () => {
+  test('--out the project itself, with --force, by another spelling or through a symlink, is refused', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    const before = readFileSync(file);
+    const attempts: string[][] = [
+      ['export', 'doc', file, '--out', file, '--format', 'html', '--force'],
+      ['export', 'diagram', file, '--out', file, '--force'],
+      ['export', 'results', file, '--out', file, '--format', 'xlsx', '--force'],
+    ];
+    const upper = join(dir, 'P.LILA');
+    // A case-insensitive disk (macOS, Windows) reaches the same file by another spelling.
+    if (existsSync(upper)) attempts.push(['export', 'diagram', file, '--out', upper, '--force']);
+    symlinkSync(file, join(dir, 'link.lila'));
+    attempts.push(['export', 'doc', file, '--out', join(dir, 'link.lila'), '--format', 'html', '--force']);
+    for (const argv of attempts) {
+      expect(await main(argv), argv.join(' ')).toBe(1);
+      expect(err.at(-1)).toMatch(/is the file being exported; nothing was written. Choose another destination./);
+    }
+    expect(readFileSync(file).equals(before)).toBe(true);
+    // Without --force the message is the same: it never suggests overwriting the project.
+    expect(await main(['export', 'doc', file, '--out', file, '--format', 'html'])).toBe(1);
+    expect(err.at(-1)).not.toMatch(/--force/);
+    // A .bpmn source too.
+    const bpmn = join(dir, 'm.bpmn');
+    writeFileSync(bpmn, XML);
+    expect(await main(['export', 'diagram', bpmn, '--out', bpmn, '--force'])).toBe(1);
+    expect(readFileSync(bpmn, 'utf8')).toBe(XML);
+  });
+
+  test('an --out ending in a slash names no file', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, []);
+    expect(await main(['export', 'doc', file, '--out', `${dir}/docs/`, '--format', 'html'])).toBe(1);
+    expect(err.at(-1)).toMatch(/ends with a slash; name the file to write/);
+  });
+});
+
+describe('run selection', () => {
+  test('--run with --scenario is an error; --scenario with only older runs is too, for the document', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json'], { stale: true });
+    await expect(exportDocument({ file, format: 'html', run: 'run-1', scenario: 'as-is' })).rejects.toThrow(/pass --run <id> or --scenario/);
+    await expect(exportDocument({ file, format: 'html', scenario: 'as-is' })).rejects.toThrow(/no run of its current model and scenario; older runs: run-1/);
+    // Nothing named: the document goes without results.
+    expect((await exportDocument({ file, format: 'html' })).run).toBeNull();
   });
 });
 

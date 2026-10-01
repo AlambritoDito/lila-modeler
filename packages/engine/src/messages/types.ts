@@ -309,6 +309,9 @@ export interface CliMessages {
   /** `accepted` arrives already joined (`docx, html`). */
   exportInvalidFormat: (value: string, accepted: string) => string;
   exportOutRequired: (kind: string) => string;
+  exportTargetIsSource: (target: string) => string;
+  exportFileNeeded: (path: string) => string;
+  exportRunAndScenario: () => string;
   /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
   saveRunNeedsLila: () => string;
   saveRunNeedsArchiveScenario: (scenario: string) => string;

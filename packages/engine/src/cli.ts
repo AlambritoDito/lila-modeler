@@ -1024,9 +1024,9 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   const source = { file, process: values.process, locale };
   const write = { overwrite: values.force === true, locale };
   if (kind === 'diagram') {
-    const { svg } = await exportDiagram(source);
+    const { svg, file: from } = await exportDiagram(source);
     if (values.out === undefined) process.stdout.write(`${svg}\n`);
-    else console.log(`SVG: ${writeExportFile(values.out, svg, write)}`);
+    else console.log(`SVG: ${writeExportFile(values.out, svg, { ...write, source: from })}`);
     return 0;
   }
   if (kind !== 'doc' && kind !== 'results') {
@@ -1041,16 +1041,16 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   if (kind === 'doc') {
     const format = exportFormat('doc', values.format, values.out, locale);
     const doc = await exportDocument({ ...source, ...selection, format });
-    console.log(`${format.toUpperCase()}: ${writeExportFile(values.out, doc.data, write)}`);
+    console.log(`${format.toUpperCase()}: ${writeExportFile(values.out, doc.data, { ...write, source: doc.file })}`);
     for (const note of doc.notes) console.error(note);
     return 0;
   }
   const format = exportFormat('results', values.format, values.out, locale);
   const results = await exportResults({ ...source, ...selection, format });
   if (results.data instanceof Uint8Array) {
-    console.log(`XLSX: ${writeExportFile(values.out, results.data, write)}`);
+    console.log(`XLSX: ${writeExportFile(values.out, results.data, { ...write, source: results.file })}`);
   } else {
-    for (const path of writeExportDirectory(values.out, results.data, write)) console.log(`CSV: ${path}`);
+    for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
   }
   return 0;
 }

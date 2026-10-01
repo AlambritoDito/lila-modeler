@@ -135,13 +135,14 @@ usa la app:
 elige el proceso de un repositorio, como en el resto. Las **corridas** son las que la app guardó en
 el `.lila`: `--run latest` (por defecto) es la corrida del modelo y escenario actuales,
 `--scenario <nombre>` la acota a un escenario (necesario si varios tienen una corrida actual) y
-`--run <id>` elige una por id; un error lista los ids. El documento solo admite una corrida actual
+`--run <id>` elige una por id; un error lista los ids; `--run <id>` junto con `--scenario` es un error. El documento solo admite una corrida actual
 y, sin ella, va sin resultados; `results` sin corrida es un error que lo dice. Los resultados de
 una corrida anterior se exportan contra el modelo con el que corrió.
 
 **No se sobrescribe nada**: un archivo de salida que ya existe es un error y no se escribe nada,
-salvo con `--force`. Cada archivo se escribe en un temporal a su lado y se publica de una vez, así
-que un error nunca deja medio archivo.
+salvo con `--force`. El archivo que se exporta (el `.lila` o `.bpmn`) nunca es un destino, con
+`--force` o sin él, por ninguna ruta que llegue a él. Cada archivo se escribe en un temporal a su
+lado y se publica de una vez, así que un error nunca deja medio archivo.
 
 ```bash
 npx lila export diagram examples/pedido.lila --out results/pedido.svg

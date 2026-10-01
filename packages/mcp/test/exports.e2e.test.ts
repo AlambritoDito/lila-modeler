@@ -120,3 +120,19 @@ test('run_simulation with saveRun stores the run; export_document then has the r
   const bpmn = await call('run_simulation', { model: join(repo, 'examples/pedido/model.bpmn'), scenario: join(repo, 'examples/pedido/as-is.scenario.json'), saveRun: true });
   expect(bpmn.text).toMatch(/^run_simulation: saving the run .* needs a .lila model/);
 }, 120_000);
+
+test('an export never writes over the project, even with overwrite', async () => {
+  const before = readFileSync(project);
+  for (const [name, args] of [
+    ['export_document', { project: 'pedido.lila', format: 'html', saveTo: 'pedido.lila', overwrite: true }],
+    ['export_diagram', { project: 'pedido.lila', saveTo: 'pedido.lila', overwrite: true }],
+    ['export_results', { project: 'pedido.lila', format: 'xlsx', saveTo: 'pedido.lila', overwrite: true }],
+    ['export_document', { project: 'pedido.lila', format: 'html', saveTo: 'pedido.lila' }],
+  ] as const) {
+    const answer = await call(name, args);
+    expect(answer.isError, name).toBe(true);
+    expect(answer.text).toMatch(new RegExp(`^${name}: .*pedido.lila is the file being exported; nothing was written`));
+  }
+  expect(readFileSync(project).equals(before)).toBe(true);
+  expect((await call('export_diagram', { project: 'pedido.lila' })).isError).toBe(false);
+}, 120_000);

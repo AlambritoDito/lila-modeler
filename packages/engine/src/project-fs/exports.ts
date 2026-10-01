@@ -17,8 +17,8 @@
  * ponytail: no rasteriser (see `process-document.ts`), so the Word document carries no diagram and
  * neither format carries the run's charts; every export says so in its `notes`.
  */
-import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { parseBpmn, readAnnotations, renderSvg } from '../bpmn/index.js';
 import type { RunResult } from '../core/result.js';
@@ -93,6 +93,9 @@ function selectRun(lila: LilaProcess, selection: RunSelection, optional: boolean
   const C = messages(locale).cli;
   const runs = lila.process.runs;
   const where = { file: lila.file, slug: lila.process.slug };
+  if (selection.run !== undefined && selection.run !== 'latest' && selection.scenario !== undefined) {
+    throw new Error(C.exportRunAndScenario());
+  }
   if (selection.run !== undefined && selection.run !== 'latest') {
     const found = runs.find((run) => run.id === selection.run);
     if (found === undefined) throw new Error(C.exportRunUnknown(selection.run, where.slug, where.file, runList(runs)));
@@ -101,7 +104,8 @@ function selectRun(lila: LilaProcess, selection: RunSelection, optional: boolean
   const entry = selection.scenario === undefined ? undefined : findLilaScenario(lila, selection.scenario, locale);
   const candidates = runs.filter((run) => isCurrent(lila, run) && (entry === undefined || run.scenarioName === entry));
   if (candidates.length === 0) {
-    if (optional && selection.run === undefined) return undefined;
+    // Only an implied `latest` may come back empty: a run or a scenario asked for by name must exist.
+    if (optional && selection.run === undefined && selection.scenario === undefined) return undefined;
     const ofScenario = entry === undefined ? runs : runs.filter((run) => run.scenarioName === entry);
     throw new Error(
       ofScenario.length === 0
@@ -286,22 +290,59 @@ function publish(temporary: string, target: string, overwrite: boolean, locale: 
   }
 }
 
-function assertWritable(target: string, overwrite: boolean, locale: Locale): void {
+/**
+ * Refuses `target` when it is the file the export was read from (QA of #552): with `overwrite`,
+ * an export to the project's own path would replace the `.lila` with an SVG or a document. An
+ * existing target is compared by device and inode, which also catches another spelling on a
+ * case-insensitive disk, a hard link and a symlink; a missing one by its real path.
+ */
+function assertNotSource(target: string, source: string | undefined, locale: Locale): void {
+  if (source === undefined) return;
+  let origin: { dev: number; ino: number };
+  try {
+    origin = statSync(source);
+  } catch {
+    return;
+  }
+  let same: boolean;
+  try {
+    const info = statSync(target);
+    same = info.dev === origin.dev && info.ino === origin.ino;
+  } catch {
+    try {
+      same = join(realpathSync(dirname(target)), basename(target)) === realpathSync(source);
+    } catch {
+      same = false;
+    }
+  }
+  if (same) throw new Error(messages(locale).cli.exportTargetIsSource(target));
+}
+
+/** Options of `writeExportFile`/`writeExportDirectory`. */
+export interface WriteExportOptions {
+  /** Replace an existing file. */
+  readonly overwrite?: boolean | undefined;
+  /** The file the export was read from: never written over, `overwrite` or not. */
+  readonly source?: string | undefined;
+  readonly locale?: Locale | undefined;
+}
+
+function assertWritable(target: string, options: WriteExportOptions, locale: Locale): void {
+  assertNotSource(target, options.source, locale);
   if (!existsSync(target)) return;
+  const overwrite = options.overwrite === true;
   if (lstatSync(target).isDirectory()) throw new Error(messages(locale).cli.cannotWrite(target));
   if (!overwrite) throw new Error(messages(locale).cli.exportTargetExists(target));
 }
 
 /** Writes one export file atomically; refused if it exists, unless `overwrite`. Returns its absolute path. */
-export function writeExportFile(
-  file: string,
-  contents: string | Uint8Array,
-  options: { readonly overwrite?: boolean | undefined; readonly locale?: Locale | undefined } = {},
-): string {
+export function writeExportFile(file: string, contents: string | Uint8Array, options: WriteExportOptions = {}): string {
   const locale = options.locale ?? 'en';
   const overwrite = options.overwrite === true;
+  // `out/` names a directory; resolving it would silently drop the slash and write a file there.
+  if (/[\\/]$/.test(file)) throw new Error(messages(locale).cli.exportFileNeeded(file));
   const target = absolute(file);
-  assertWritable(target, overwrite, locale);
+  assertWritable(target, options, locale);
   mkdirSync(dirname(target), { recursive: true });
   const temporary = stage(target, contents);
   try {
@@ -324,12 +365,12 @@ export function writeExportFile(
 export function writeExportDirectory(
   directory: string,
   files: Readonly<Record<string, string | Uint8Array>>,
-  options: { readonly overwrite?: boolean | undefined; readonly locale?: Locale | undefined } = {},
+  options: WriteExportOptions = {},
 ): string[] {
   const locale = options.locale ?? 'en';
   const root = absolute(directory);
   if (existsSync(root) && !lstatSync(root).isDirectory()) throw new Error(messages(locale).cli.exportNotDirectory(root));
   const targets = Object.keys(files).map((name) => `${root}/${name}`);
-  for (const target of targets) assertWritable(target, options.overwrite === true, locale);
+  for (const target of targets) assertWritable(target, options, locale);
   return Object.entries(files).map(([name, contents]) => writeExportFile(`${root}/${name}`, contents, options));
 }

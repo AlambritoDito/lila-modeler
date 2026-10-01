@@ -1050,9 +1050,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
       const file = project ?? path;
       if (file === undefined) return errorResult(toolMessage('export_diagram', M.projectOrPath()));
       try {
-        const { svg, process: slug } = await exportDiagram({ file, process, locale: language });
+        const { svg, process: slug, file: source } = await exportDiagram({ file, process, locale: language });
         if (saveTo === undefined) return textResult({ process: slug ?? null, svg });
-        return textResult({ process: slug ?? null, file: writeExportFile(saveTo, svg, { overwrite, locale: language }) });
+        return textResult({ process: slug ?? null, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
       } catch (error) {
         return errorResult(toolMessage('export_diagram', message(error)));
       }
@@ -1085,7 +1085,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
       const language = localeOf(locale);
       try {
         const doc = await exportDocument({ file: project, process, run, scenario, format, locale: language });
-        const file = writeExportFile(saveTo, doc.data, { overwrite, locale: language });
+        const file = writeExportFile(saveTo, doc.data, { overwrite, source: doc.file, locale: language });
         return textResult({ file, format, project: doc.file, process: doc.process, run: doc.run, notes: doc.notes });
       } catch (error) {
         return errorResult(toolMessage('export_document', message(error)));
@@ -1120,8 +1120,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
       try {
         const results = await exportResults({ file: project, process, run, scenario, format, locale: language });
         const files = results.data instanceof Uint8Array
-          ? [writeExportFile(saveTo, results.data, { overwrite, locale: language })]
-          : writeExportDirectory(saveTo, results.data, { overwrite, locale: language });
+          ? [writeExportFile(saveTo, results.data, { overwrite, source: results.file, locale: language })]
+          : writeExportDirectory(saveTo, results.data, { overwrite, source: results.file, locale: language });
         return textResult({ files, format, project: results.file, process: results.process, run: results.run });
       } catch (error) {
         return errorResult(toolMessage('export_results', message(error)));

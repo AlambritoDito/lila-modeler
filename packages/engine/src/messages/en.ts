@@ -421,6 +421,11 @@ export const en: Catalog = {
     exportInvalidFormat: (value, accepted) =>
       value === '' ? `choose a format with --format: ${accepted}.` : `--format only accepts: ${accepted}; got "${value}".`,
     exportOutRequired: (kind) => `lila export ${kind} needs --out <path>.`,
+    exportTargetIsSource: (target) =>
+      `${target} is the file being exported; nothing was written. Choose another destination.`,
+    exportFileNeeded: (path) => `"${path}" ends with a slash; name the file to write.`,
+    exportRunAndScenario: () =>
+      'a run id already says which scenario: pass --run <id> or --scenario (`run` or `scenario` in MCP), not both.',
     saveRunNeedsLila: () => 'saving the run (--save, `saveRun` in MCP) needs a .lila model.',
     saveRunNeedsArchiveScenario: (scenario) =>
       `saving the run needs a scenario of the .lila, and "${scenario}" is not one: name a scenario of the process.`,
