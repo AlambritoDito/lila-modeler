@@ -632,6 +632,16 @@ export const es: Strings = {
    * Panel de propiedades y documentación (`PropertiesPanel.tsx`)
    * ------------------------------------------------------------------ */
   propiedades: {
+    /* #396: «Vista rápida · simulación» bajo la cabecera del elemento elegido. */
+    vistaRapida: 'Vista rápida · simulación',
+    vistaTiempo: 'Tiempo',
+    vistaRecurso: 'Recurso',
+    vistaEsperaP95: 'Espera p95',
+    vistaEsperaMedia: 'Espera (media)',
+    vistaSinCorrida: 'sin corrida',
+    editarEnParametros: 'Editar en Parámetros',
+    editarEnRecursos: 'Editar en Recursos',
+
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
     variosSeleccionados: (n: number): string =>
       `${n} elementos seleccionados. El color se aplica a todos; ` +
@@ -784,28 +794,34 @@ export const es: Strings = {
       `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
-     * #333 — los cuatro pasos del panel de simulación, que son los cuatro niveles de Bizagi en
-     * el mismo orden. El número forma parte del rótulo a propósito: es el número que usan la
-     * documentación de Bizagi, esta guía y quien pide ayuda.
+     * #333/#396 — los cuatro pasos del panel de simulación, nombrados por lo que edita cada uno
+     * (los rótulos del diseño). `docs/es/COMING-FROM-BIZAGI.md` los relaciona con los cuatro
+     * niveles de Bizagi.
      */
     pasos: 'Pasos',
     paso: {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     } as Record<string, string>,
     pasoAyuda: {
-      validation:
-        'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
-      times: 'Cuánto tarda cada llegada y cada trabajo.',
-      resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
-      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y la capacidad de cada turno.',
+      parameters:
+        'Cómo corre el modelo: la ventana de corrida y las réplicas, cómo ramifican las compuertas y cuánto tarda cada actividad.',
+      resources:
+        'Quién hace el trabajo: pools, cuántas unidades, cuándo trabaja cada pool (su calendario y su capacidad por turno) y qué tarea toma cuál.',
+      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y qué calendario sigue cada elemento.',
+      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
     } as Record<string, string>,
 
-    /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
+    /** Listas de elementos de los pasos: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
     listaRecursos: 'Recursos por elemento',
+    listaLlegadas: 'Llegadas por evento de inicio',
+    resumenLlegada: (cada: string, casos: number | null): string =>
+      casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
+    calendariosDePools: 'El calendario de un pool y su capacidad por turno se editan en el pool, en Recursos.',
+    irARecursos: 'Ir a Recursos',
     /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
     huerfanas: 'Entradas de elementos que ya no están en el diagrama',
     quitarHuerfanas: 'Quitar entradas huérfanas',

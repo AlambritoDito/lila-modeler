@@ -656,6 +656,16 @@ export const en = {
    * Properties and documentation panel (`PropertiesPanel.tsx`)
    * ------------------------------------------------------------------ */
   propiedades: {
+    /* #396: «Quick view · simulation» under the selected element's header. */
+    vistaRapida: 'Quick view · simulation',
+    vistaTiempo: 'Time',
+    vistaRecurso: 'Resource',
+    vistaEsperaP95: 'Wait p95',
+    vistaEsperaMedia: 'Wait (mean)',
+    vistaSinCorrida: 'no run',
+    editarEnParametros: 'Edit in Parameters',
+    editarEnRecursos: 'Edit in Resources',
+
     sinSeleccion: 'Select an element of the canvas to see its properties.',
     variosSeleccionados: (n: number): string =>
       `${n} elements selected. Colour applies to all of them; ` +
@@ -808,28 +818,35 @@ export const en = {
       `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
-     * #333 — the four steps of the Simulate panel, which are Bizagi's four levels of simulation
-     * in the same order. The number is part of the label on purpose: it is the number the Bizagi
-     * documentation, this guide and the people who ask for help all use.
+     * #333/#396 — the four steps of the Simulate panel, named after what each one edits (the
+     * design's labels). `docs/COMING-FROM-BIZAGI.md` maps them to Bizagi's four levels.
      */
     pasos: 'Steps',
     paso: {
-      validation: '1 · Process validation',
-      times: '2 · Time analysis',
-      resources: '3 · Resource analysis',
-      calendars: '4 · Calendar analysis',
+      parameters: 'Parameters',
+      resources: 'Resources',
+      calendars: 'Calendars',
+      arrivals: 'Arrivals',
     } as Record<string, string>,
     pasoAyuda: {
-      validation:
-        'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
-      times: 'How long each arrival and each piece of work takes.',
-      resources: 'Who does the work: pools, how many units, and which task takes which pool.',
-      calendars: 'When the work is possible: calendars and holidays, and the capacity of each shift.',
+      parameters:
+        'How the model runs: the run window and replications, how the gateways branch and how long each activity takes.',
+      resources:
+        'Who does the work: pools, how many units, when each pool works (its calendar and capacity per shift), and which task takes which pool.',
+      calendars: 'When the work is possible: calendars and holidays, and which element follows which calendar.',
+      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
     } as Record<string, string>,
 
-    /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
+    /** Element lists of the steps: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
     listaRecursos: 'Resources by element',
+    listaLlegadas: 'Arrivals by start event',
+    /** «every 5 min · 100 cases»: the arrival line of one start event in the Arrivals list. */
+    resumenLlegada: (cada: string, casos: number | null): string =>
+      casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
+    /** #396: Calendars no longer repeats the pools; this says where a pool's calendar went. */
+    calendariosDePools: "A pool's calendar and its capacity per shift are edited on the pool, in Resources.",
+    irARecursos: 'Go to Resources',
     /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
     huerfanas: 'Entries for elements that are no longer in the diagram',
     quitarHuerfanas: 'Remove orphan entries',

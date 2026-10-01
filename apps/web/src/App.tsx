@@ -53,7 +53,8 @@ import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
-import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PestanaId, type VerboPerdida } from './ids';
+import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
+import { datosVistaRapida } from './vistaRapida';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -615,6 +616,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * to sync between the two.
    */
   const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
+  /** #396: the step the quick view's «Edit in …» asked the scenario panel to open, until it does. */
+  const [pasoPedido, setPasoPedido] = useState<PasoId | null>(null);
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
@@ -2104,7 +2107,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
    * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
-   * on goes back to the first one; lift `paso` to the shell if anybody minds.
+   * on goes back to the first one (an «Edit in …» ask is consumed once, #396); lift `paso` to the
+   * shell if anybody minds.
    */
   const panelEscenario = (
     <ScenarioPanel
@@ -2119,6 +2123,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       nombresExtra={nombresModelo}
       seleccion={seleccion}
       avanzado={avanzado}
+      pasoPedido={pasoPedido}
+      onPasoAtendido={() => { setPasoPedido(null); }}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -2673,6 +2679,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             pestana={pestana}
             avisos={validacion.avisos}
             avanzado={avanzado}
+            simulacion={{
+              datos: (id) => {
+                const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);
+                return datosVistaRapida({
+                  id, ir, S, escenario: error === null ? resuelto as Record<string, unknown> : null,
+                  resultado: corridaActual?.result ?? null,
+                  log: corridaActual === undefined ? undefined : logs.current.get(corridaActual.id),
+                });
+              },
+              onEditar: (paso) => {
+                setPasoPedido(paso);
+                elegirModo('simular');
+                ventanaEscenario?.focus();
+              },
+            }}
           />
         )}
         </>}

@@ -105,16 +105,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
   pulsar(
     {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     }[paso],
   );
 }
@@ -238,9 +238,9 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
     pulsar(`${SELECCIONAR}${id}`);
   };
 
-  /* --- Paso 1 · Validación del proceso. La corrida entera, y la unidad primero: a partir de
-         ahí los tiempos se teclean en minutos. --- */
-  irAPaso('validation');
+  /* --- Parámetros: la corrida entera, y la unidad primero: a partir de ahí los tiempos se
+         teclean en minutos. --- */
+  irAPaso('parameters');
   elegir('campo-run.baseTimeUnit', 'min');
   teclear('campo-run.duration', '480');
   teclear('campo-run.warmup', '0');
@@ -249,7 +249,7 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   teclear('campo-run.serviceLevel', '30');
   teclear('campo-run.currency', 'MXN');
 
-  /* --- Paso 4 · Análisis de calendarios: el de la tienda, como lista (L-V de 08:00 a 16:00). --- */
+  /* --- Calendarios: el de la tienda, como lista (L-V de 08:00 a 16:00). --- */
   irAPaso('calendars');
   anadirClave(es.escenario.seccionCalendarios, 'tienda');
   pulsar(es.escenario.editarComoLista);
@@ -261,7 +261,7 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   teclear('campo-calendars.tienda.intervals[0].from', '08:00');
   teclear('campo-calendars.tienda.intervals[0].to', '16:00');
 
-  /* --- Paso 3 · Análisis de recursos: los tres grupos. --- */
+  /* --- Recursos: los tres grupos. --- */
   irAPaso('resources');
   for (const [clave, nombre, capacidad, coste] of GRUPOS) {
     anadirClave(es.escenario.seccionRecursos, clave);
@@ -272,21 +272,24 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
     elegir(`campo-resources.${clave}.calendar`, 'tienda');
   }
 
-  /* --- Paso 2 · Análisis de tiempos: las llegadas del inicio y las trece tareas. --- */
-  irAPaso('times');
+  /* --- Llegadas: cada cuánto llega una solicitud. --- */
+  irAPaso('arrivals');
   seleccionar('StartEvent_Request');
   elegirPorTexto(
     'campo-elements.StartEvent_Request.interTriggerTimer',
     es.escenario.distribuciones['exponential']!,
   );
   teclear('campo-elements.StartEvent_Request.interTriggerTimer.mean', '6');
+
+  /* --- Parámetros otra vez: las trece tareas. --- */
+  irAPaso('parameters');
   for (const [id, minutos] of TAREAS) {
     seleccionar(id);
     elegirPorTexto(`campo-elements.${id}.processingTime`, es.escenario.distribuciones['constant']!);
     teclear(`campo-elements.${id}.processingTime.value`, minutos);
   }
 
-  /* --- De vuelta al paso 3: qué grupo hace cada tarea. --- */
+  /* --- De vuelta a Recursos: qué grupo hace cada tarea. --- */
   irAPaso('resources');
   for (const [id, , grupo] of TAREAS) {
     seleccionar(id);
@@ -294,13 +297,13 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
     elegir(`campo-elements.${id}.resources[0].ref`, grupo);
   }
 
-  /* --- Y al paso 4: el inicio también atiende en el calendario de la tienda. --- */
+  /* --- Y a Calendarios: el inicio también atiende en el calendario de la tienda. --- */
   irAPaso('calendars');
   seleccionar('StartEvent_Request');
   elegir('campo-elements.StartEvent_Request.calendar', 'tienda');
 
-  /* --- Las dos compuertas, en el paso 1: su reparto es parte de que el modelo corra. --- */
-  irAPaso('validation');
+  /* --- Las dos compuertas, en Parámetros: su reparto es parte de cómo corre el modelo. --- */
+  irAPaso('parameters');
   seleccionar('Gateway_Screening');
   teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
   teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');

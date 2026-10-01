@@ -140,16 +140,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el paso 1, así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
   pulsar(
     {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     }[paso],
   );
 }
@@ -259,7 +259,7 @@ describe('uniones sobre un escenario que hereda', () => {
     );
 
     pulsar('Task_TomarPedido');
-    irAPaso('times');
+    irAPaso('parameters');
     const campo = 'campo-elements.Task_TomarPedido.processingTime';
     // El rótulo de la variante sale del catálogo desde #332, no de la ortografía del archivo.
     elegir(campo, opcion(campo, es.escenario.distribuciones['normal']!));
@@ -397,7 +397,7 @@ describe('registros', () => {
       />,
     );
 
-    // #333: en el paso 3 la única sección con `.anadir` es la de «Recursos».
+    // #333: en Recursos la única sección con `.anadir` es la de «Recursos».
     irAPaso('resources');
     const anadir = document.querySelectorAll('.anadir')[0] as HTMLElement;
     tecleaEn(anadir.querySelector('input') as HTMLInputElement, 'cajero');
@@ -479,7 +479,7 @@ describe('rutas de los problemas', () => {
 
   it('R14 se marca en el propio campo `selection`', () => {
     montarEn('Timer_Reposo');
-    // `selection` es del paso 3; en un timer no aplica, pero el escenario ya lo trae escrito y
+    // `selection` es de Recursos; en un timer no aplica, pero el escenario ya lo trae escrito y
     // por eso se sigue dibujando —con su error— en el paso al que pertenece.
     irAPaso('resources');
     expect(
