@@ -78,26 +78,27 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
 const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
 
 /**
- * The element fields each step of the Simulate panel owns, from Bizagi's four levels
- * (`docs/COMING-FROM-BIZAGI.md`). Every key of `ElementSchema` belongs to exactly one step, so
- * no field becomes unreachable by hiding the others:
+ * The element fields each step of the Simulate panel owns (#333, regrouped in #396). Every key of
+ * `ElementSchema` belongs to exactly one step, so no field becomes unreachable by hiding the
+ * others:
  *
- * - `validation`: what makes the model runnable at all — how many cases arrive and which way
- *   they branch — plus the reserved fields of § 4, which have no step of their own and are only
- *   ever shown to be deleted.
- * - `times`, `resources`, `calendars`: one kind of parameter each, in Bizagi's own order.
+ * - `parameters`: how the work flows once a case is in — the branch probabilities and conditions
+ *   of the flows, and how long each activity takes — plus the reserved fields of § 4, which have
+ *   no step of their own and are only ever shown to be deleted.
+ * - `resources`, `calendars`: one kind of parameter each.
+ * - `arrivals`: what a start event takes — how often a case arrives and how many do.
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
-  validation: ['triggerCount', 'probability', 'priority', 'preempt', 'batch', 'conditions'],
-  times: ['interTriggerTimer', 'processingTime'],
+  parameters: ['probability', 'conditions', 'processingTime', 'priority', 'preempt', 'batch'],
   resources: ['resources', 'selection', 'fixedCost'],
   calendars: ['calendar'],
+  arrivals: ['interTriggerTimer', 'triggerCount'],
 };
 
 /**
  * The fields the selected element offers in `paso`: its step's fields, kept only where they mean
  * something for `clase`. It is `fieldsForKind` composed with the table above, which is why a
- * task in step 2 offers `processingTime` and nothing else, and a gateway offers nothing at all.
+ * task in Parameters offers `processingTime` and nothing else, and a gateway offers nothing at all.
  *
  * With `clase === null` (no IR yet, or an id that is not in it) nothing is filtered by class —
  * same rule as `fieldsForKind` — and the step's own list is what comes out.

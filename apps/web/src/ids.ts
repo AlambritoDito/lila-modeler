@@ -32,13 +32,15 @@ export const DENSIDAD_IDS = ['compacta', 'normal', 'comoda'] as const;
 export type Densidad = (typeof DENSIDAD_IDS)[number];
 
 /**
- * Steps of the Simulate panel (#333), in the order they are painted.
+ * Steps of the Simulate panel (#333, renamed in #396), in the order they are painted.
  *
- * They are Bizagi's four levels of simulation — process validation, time analysis, resource
- * analysis, calendar analysis — kept in the same order and with the same vocabulary, because the
- * people this app is for learned the workflow there (`docs/COMING-FROM-BIZAGI.md`). They are a
+ * Parameters (the run window, gateway branches and activity times), Resources, Calendars and
+ * Arrivals (start events: how many cases and how often). They started as Bizagi's four levels of
+ * simulation; the owner relabelled them after the design (Turno 2) so each step is named after
+ * what it edits, and `docs/COMING-FROM-BIZAGI.md` maps them back to the levels. They are a
  * reading order, not a wizard: there is no "enable level N" switch anywhere, every step writes
- * into the same scenario document, and going back to step 1 after step 4 costs nothing.
+ * into the same scenario document, and going back to step 1 after step 4 costs nothing. The id
+ * lives only in the panel's state (nothing persists it), so the rename needs no migration.
  */
-export const PASO_IDS = ['validation', 'times', 'resources', 'calendars'] as const;
+export const PASO_IDS = ['parameters', 'resources', 'calendars', 'arrivals'] as const;
 export type PasoId = (typeof PASO_IDS)[number];

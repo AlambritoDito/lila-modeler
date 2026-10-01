@@ -108,16 +108,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: the panel opens on step 1, so a section of another step has to be asked for first. The
+ * #333: the panel opens on the first step (Parameters), so a section of another step has to be asked for first. The
  * label is written by hand —this is a test— and is the English one `setLocale` pins.
  */
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
   pulsar(
     {
-      validation: '1 · Process validation',
-      times: '2 · Time analysis',
-      resources: '3 · Resource analysis',
-      calendars: '4 · Calendar analysis',
+      parameters: 'Parameters',
+      resources: 'Resources',
+      calendars: 'Calendars',
+      arrivals: 'Arrivals',
     }[paso],
   );
 }

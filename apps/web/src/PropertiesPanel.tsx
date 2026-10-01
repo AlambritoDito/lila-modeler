@@ -28,6 +28,7 @@ import { iconoDeTipo } from './Paleta';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
 import type { Strings } from './strings.types';
+import type { VistaRapidaDatos } from './vistaRapida';
 
 /* ------------------------------------------------------------------ *
  * Modelo: lo mínimo de bpmn-js que hace falta para leer y escribir.
@@ -300,9 +301,19 @@ interface Props {
    * con él encendido, como siempre (`tipo · id` + fila Id visible y copiable).
    */
   avanzado?: boolean;
+  /**
+   * #396: the «Quick view · simulation» block. `datos` is computed by the shell from the active
+   * scenario and its last run (`vistaRapida.ts`) for the canvas id of the selected element, and
+   * answers `null` for anything the simulation does not time — then the block is not drawn.
+   * `onEditar` switches to Simulate on that step. Without it, no block at all.
+   */
+  simulacion?: {
+    datos: (id: string) => VistaRapidaDatos | null;
+    onEditar: (paso: 'parameters' | 'resources') => void;
+  };
 }
 
-export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = false }: Props): React.JSX.Element {
+export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = false, simulacion }: Props): React.JSX.Element {
   const S = useStrings();
   const [seleccion, setSeleccion] = useState<ElementoLienzo[]>([]);
   // El moddle no es estado de React: se lee en cada render. Este contador es lo que fuerza a
@@ -360,7 +371,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
 
   return (
     <>
-      <CabeceraElemento elemento={elemento} avanzado={avanzado} />
+      <CabeceraElemento elemento={elemento} avanzado={avanzado} simulacion={simulacion} />
       {pestana === 'propiedades' ? (
         <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
       ) : (
@@ -376,8 +387,8 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
  * no es un `bpmn:Process` (si lo es, `leerSeleccion` de arriba la elige sola): en un diagrama
  * con pools es donde de verdad se puede tener el lienzo abierto sin nada elegido.
  *
- * La vista rápida de simulación del artefacto queda fuera: este panel no recibe datos del
- * escenario activo, y traérselos es un cambio de otro alcance.
+ * La vista rápida de simulación (#396) va en la cabecera **con** un elemento elegido
+ * (`VistaRapida`), que es donde el diseño la pone: sin selección no hay actividad de la que hablar.
  */
 function PanelVacio({ registro, avisos }: { registro: Servicios['elementRegistry']; avisos: number }): React.JSX.Element {
   const S = useStrings();
@@ -444,7 +455,11 @@ function FilaResumen({ etiqueta, valor }: { etiqueta: string; valor: React.React
  * nombre repetiría «Sequence flow / Sequence flow»). El id sigue visible (y copiable, no
  * editable) en la fila «Id» de `Propiedades` cuando el ajuste está encendido, coherente con #447.
  */
-function CabeceraElemento({ elemento, avanzado }: { elemento: ElementoLienzo; avanzado: boolean }): React.JSX.Element {
+function CabeceraElemento({ elemento, avanzado, simulacion }: {
+  elemento: ElementoLienzo;
+  avanzado: boolean;
+  simulacion?: Props['simulacion'];
+}): React.JSX.Element {
   // Un clic en la etiqueta flotante selecciona la etiqueta, no la figura: sin esto el encabezado
   // enseñaría el `type` genérico `'label'` y el id con el sufijo `_label` en vez de los de verdad.
   const real = elemento.type === 'label' && elemento.labelTarget !== undefined ? elemento.labelTarget : elemento;
@@ -455,18 +470,51 @@ function CabeceraElemento({ elemento, avanzado }: { elemento: ElementoLienzo; av
   const nombre = real.businessObject.name?.trim() || nombreDeTipo(real.type);
   const tipoLegible = nombreDeTipo(real.type);
   const lineaTecnica = avanzado ? `${real.type} · ${real.id}` : tipoLegible;
+  const datos = simulacion?.datos(real.id) ?? null;
   return (
-    <div className="propiedades-cabecera">
-      {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
-      <div>
-        <div className="propiedades-cabecera-nombre">{nombre}</div>
-        {(avanzado || lineaTecnica !== nombre) && (
-          <div className={avanzado ? 'propiedades-cabecera-tipo mono' : 'propiedades-cabecera-tipo'}>
-            {lineaTecnica}
-          </div>
+    <>
+      <div className="propiedades-cabecera">
+        {icono !== undefined && <span className={`bpmn-icon-${icono}`} aria-hidden="true" />}
+        <div>
+          <div className="propiedades-cabecera-nombre">{nombre}</div>
+          {(avanzado || lineaTecnica !== nombre) && (
+            <div className={avanzado ? 'propiedades-cabecera-tipo mono' : 'propiedades-cabecera-tipo'}>
+              {lineaTecnica}
+            </div>
+          )}
+        </div>
+      </div>
+      {datos !== null && simulacion !== undefined && <VistaRapida datos={datos} onEditar={simulacion.onEditar} />}
+    </>
+  );
+}
+
+/**
+ * #396: «Quick view · simulation» (design 2d) — what the active scenario says about this activity
+ * and how long it waited in the last run, read-only, with a way into the step that edits it.
+ */
+function VistaRapida({ datos, onEditar }: {
+  datos: VistaRapidaDatos;
+  onEditar: (paso: 'parameters' | 'resources') => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const P = S.propiedades;
+  return (
+    <section className="propiedades-seccion vista-rapida" aria-label={P.vistaRapida}>
+      <h3>{P.vistaRapida}</h3>
+      <FilaResumen etiqueta={P.vistaTiempo} valor={datos.tiempo} />
+      {datos.recurso !== null && <FilaResumen etiqueta={P.vistaRecurso} valor={datos.recurso} />}
+      <FilaResumen
+        etiqueta={datos.espera === null || datos.espera.p95 ? P.vistaEsperaP95 : P.vistaEsperaMedia}
+        valor={datos.espera === null ? P.vistaSinCorrida : datos.espera.texto}
+      />
+      <div className="vista-rapida-enlaces">
+        <button type="button" className="enlace" onClick={() => { onEditar('parameters'); }}>{P.editarEnParametros}</button>
+        {datos.recurso !== null && (
+          <button type="button" className="enlace" onClick={() => { onEditar('resources'); }}>{P.editarEnRecursos}</button>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 

@@ -107,7 +107,7 @@ try {
   await selectTask(); await capture('properties');
   await button('Documentation').click(); await capture('documentation');
   await button('Simulate').click(); await capture('simulate');
-  await button('4 · Calendar analysis').click(); await capture('calendar'); // Step 4 of the Simulate panel (#333).
+  await page.locator('nav.pasos').getByRole('button', { name: 'Calendars', exact: true }).click(); await capture('calendar'); // Calendars step of the Simulate panel (#333, #396).
   await page.locator('.djs-container').first().click({ position: { x: 600, y: 650 } });
   await run(); await capture('results', false);
   // Animate (#331): the replay of the event log, paused mid-run so the counters are readable.
