@@ -170,6 +170,66 @@ npx lila export results examples/pedido.lila --out results/pedido.xlsx
 ```
 Exit code: `1`.
 
+## `process annotate` and `process raci` (#99)
+
+Document a process from the terminal, the way the app's properties panel does, and read back its
+RACI matrix:
+
+- `lila process annotate <project.lila> <elementId>` writes into the element with that BPMN id:
+  `--documentation <text>` replaces its description (`""` removes it); `--responsibility TYPE:role`
+  (repeatable, `TYPE` one of `R`, `A`, `C`, `I`) replaces its whole RACI list, and
+  `--clear-responsibilities` empties it; `--ref kind=id` (repeatable; `systemRef`, `documentRef`,
+  `riskRef`, `controlRef`, `kpiRef`, `input`, `output`) replaces the lists of the kinds given
+  (`kind=` empties one); `--attribute id=value` (repeatable, by attribute id or name) sets an
+  extended attribute, checked against the project's attribute definitions (`id=` removes the
+  value; the attributes not given stay). It prints the element as it ends up; `--json` prints
+  `{ file, process, elementId, dryRun, changed, written, before, after }`.
+- `lila process raci <project.lila>` prints the RACI matrix: a row per element with
+  responsibilities, in the order of the process document (`lila export doc`), a column per role.
+  `--json` prints `{ file, process, roles, rows }`; `--csv` prints `id,name,lane,<roles>` as CSV.
+
+`--dry-run` shows the result and writes nothing. A write saves the `.lila` atomically, under its
+lock, with every other process unchanged (see [A `.lila` as input](#a-lila-as-input-466)); the
+model's revision goes up by one, as when the app saves. An unknown element, a type that is not
+RACI or an attribute value that does not fit its definition is an error, and nothing is written.
+
+```bash
+npx lila process annotate examples/pedido.lila Task_TomarPedido --responsibility R:cajero --responsibility A:gerente --ref systemRef=POS --dry-run
+```
+Exit code: `0`.
+
+```bash
+npx lila process raci examples/pedido.lila --json
+```
+Exit code: `0`.
+
+## `scenario import` and `scenario template` (#514)
+
+The app's «Download template» and «Import Excel/CSV…» (`docs/SCENARIO_SHEETS.md`) on a scenario
+of a `.lila`:
+
+- `lila scenario template <project.lila> <scenario> --out sheet.xlsx` writes the scenario sheet
+  (Elements, Arrivals, Resources, Assignments, Calendars), filled in with the scenario's values,
+  for a person to fill in. An existing file is refused unless `--force`.
+- `lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv>` plans the sheet against
+  the resolved scenario and prints each change (`Cashier (cajero) · capacity: 2 → 3`), the rows not
+  applied and the notes, then writes the changes into the scenario's own file — its delta when it
+  `extends` another, exactly as the app does. A plan that would leave the scenario with errors is
+  refused and nothing is written. `--dry-run` prints the plan and writes nothing; `--json` prints
+  `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
+
+```bash
+npx lila scenario template examples/pedido.lila as-is --out results/as-is.xlsx
+```
+Exit code: `0`.
+
+```text
+npx lila scenario template project.lila as-is --out as-is.xlsx
+# … a person fills in as-is.xlsx …
+npx lila scenario import project.lila as-is as-is.xlsx --dry-run
+npx lila scenario import project.lila as-is as-is.xlsx
+```
+
 ## `mcp`
 
 Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you

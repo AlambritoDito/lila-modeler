@@ -49,6 +49,13 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila process create --outline <esquema.json> -p <proyecto.lila> [--name nombre]
                          [--process slug] [--dry-run] [--json]
      lila process show -p <proyecto.lila> [--process slug] [--json]
+     lila process annotate <proyecto.lila> <idElemento> [--process slug] [--documentation texto]
+                           [--responsibility R|A|C|I:rol ...] [--clear-responsibilities]
+                           [--ref tipo=id ...] [--attribute id=valor ...] [--dry-run] [--json]
+     lila process raci <proyecto.lila> [--process slug] [--json|--csv]
+     lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv> [--process slug]
+                          [--dry-run] [--json]
+     lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
      lila mcp
 
 Comandos:
@@ -59,6 +66,10 @@ Comandos:
              HTML, o los resultados de una corrida guardada en el .lila como .xlsx o CSV.
   process    create: arma un proceso maquetado desde un esquema (lista de pasos) en un .lila.
              show: imprime un proceso de un .lila como esquema. Ver docs/CLI.md.
+             annotate: escribe en el .lila la descripción, el RACI, las referencias al catálogo y
+             los atributos extendidos de un elemento. raci: imprime la matriz RACI del documento.
+  scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
+             Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -109,6 +120,18 @@ Opciones de process:
   --name nombre      create: nombre del proceso (por defecto, el del esquema).
   --dry-run          create: arma y comprueba todo, no escribe nada.
   --json             Imprime el resultado (create) o el esquema (show) como JSON.
+
+Opciones de process annotate:
+  --documentation t Reemplaza la descripción ("" la quita).
+  --responsibility  TIPO:rol, repetible; reemplaza toda la lista RACI del elemento.
+  --clear-responsibilities  Quita todas las responsabilidades.
+  --ref tipo=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input u output;
+                    repetible; reemplaza las listas de los tipos dados (tipo= vacía uno).
+  --attribute k=v   Un atributo extendido por id o nombre; repetible; "k=" quita su valor.
+  --dry-run         Muestra el resultado sin escribir.
+
+Opciones de scenario import:
+  --dry-run         Muestra los cambios previstos y las filas no aplicadas sin escribir.
 
 Opciones de mcp:
   Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
@@ -503,7 +526,7 @@ export const es: Catalog = {
       `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles, escenario base as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles. No se escribió nada.`,
-    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create o show.`,
+    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, annotate o raci.`,
     processMissingOption: (option) => `falta ${option}.`,
     processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
     processShowLanes: (lanes) => `Carriles: ${lanes}`,
