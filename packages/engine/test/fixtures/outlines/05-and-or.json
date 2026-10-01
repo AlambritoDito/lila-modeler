@@ -1,0 +1,19 @@
+{ "name": "Alta de empleado",
+  "lanes": ["RH", "TI", "Finanzas"],
+  "steps": [
+    { "id": "contratar", "name": "Firmar contrato", "lane": "RH", "duration": "30m" },
+    { "id": "split", "type": "and", "next": ["cuenta", "equipo", "nomina"] },
+    { "id": "cuenta", "name": "Crear cuenta", "lane": "TI", "duration": "15m", "next": "join" },
+    { "id": "equipo", "name": "Asignar laptop", "lane": "TI", "duration": "1h", "next": "join" },
+    { "id": "nomina", "name": "Alta en nómina", "lane": "Finanzas", "duration": "20m", "next": "join" },
+    { "id": "join", "type": "and", "lane": "RH" },
+    { "id": "beneficios", "type": "or", "name": "¿Beneficios?", "branches": [
+        { "label": "Seguro", "to": "seguro", "probability": 0.9 },
+        { "label": "Vales", "to": "vales", "probability": 0.5 },
+        { "label": "Gimnasio", "to": "gym", "probability": 0.2 } ] },
+    { "id": "seguro", "name": "Alta seguro", "lane": "Finanzas", "duration": "10m", "next": "orjoin" },
+    { "id": "vales", "name": "Alta vales", "lane": "Finanzas", "duration": "5m", "next": "orjoin" },
+    { "id": "gym", "name": "Alta gimnasio", "lane": "RH", "duration": "5m", "next": "orjoin" },
+    { "id": "orjoin", "type": "or", "lane": "RH" },
+    { "id": "bienvenida", "name": "Bienvenida", "duration": "1h" }
+  ] }
