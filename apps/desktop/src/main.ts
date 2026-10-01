@@ -496,8 +496,8 @@ const projectWatchers = new Map<BrowserWindow, ProjectWatcher>();
 let projectWrite: Promise<unknown> = Promise.resolve();
 
 /**
- * Points `win`'s watcher at `target` (a `.lila` or a project folder, `realpath`), replacing the one
- * on the previous project. `reportAs` is the path the renderer knows the project by, sent back with
+ * Points `win`'s watcher at `target` (a `.lila`, a loose `.bpmn` or a project folder, `realpath`),
+ * replacing the one on the previous project. `reportAs` is the path the renderer knows the project by, sent back with
  * `lila:reload` so it can ignore news about a project it has since left.
  */
 function watchOpenProject(win: BrowserWindow, target: string, reportAs: string = target): void {
@@ -505,7 +505,7 @@ function watchOpenProject(win: BrowserWindow, target: string, reportAs: string =
   projectWatchers.get(win)?.close();
   projectWatchers.set(win, watchProject({
     target,
-    isLila: isLilaPath(target),
+    singleFile: isLilaPath(target) || isBpmnPath(target),
     isOwn: async (file) => {
       await projectWrite;
       return isOwnSnapshot(file);
@@ -633,8 +633,11 @@ function registerIpcHandlers(win: BrowserWindow): void {
         const write = isLilaPath(dir) ? writeLilaFile(dir, document, options) : writeProjectFolder(dir, document, options);
         projectWrite = write.catch(() => {});
         await write;
-        // «Save as» moves the project: the watcher follows it.
-        watchOpenProject(win, dir);
+        // «Save as» moves the project: the watcher follows it. A loose diagram's save writes only
+        // its `.bpmn`, and only that file is watched (not the folder it happens to be in).
+        watchOpenProject(win, options.diagramOnly === true && options.modelFile !== undefined
+          ? path.join(dir, options.modelFile)
+          : dir);
         // Solo se anota lo que se puede reabrir desde recientes; guardar un diagrama suelto no
         // convierte `~/Descargas` en un proyecto (ver `recordRecentIfProject`).
         await recordRecentIfProject(dir, document.name);
@@ -649,6 +652,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
       }
     },
   );
+
+  // A project with no file behind it (a gallery example) replaces the one being watched (#539).
+  guardedOn(win, 'lila:forgetProject', () => unwatchProject(win));
 
   guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
     if (typeof value === 'boolean') setDirty(value);
@@ -752,7 +758,8 @@ function registerIpcHandlers(win: BrowserWindow): void {
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
       await recordRecentIfProject(real, document.name);
-      watchOpenProject(win, real, dirArg);
+      // A loose `.bpmn` is watched alone: its folder may be `~/Downloads` (LILA-072).
+      watchOpenProject(win, loose && file !== undefined ? path.join(real, file) : real, dirArg);
       return { ...document, problems, loose, occupiedSlugs: await occupiedSlugs(real) };
     } catch (error) {
       if (error instanceof ProjectIOError) throw new Error(`${error.code}: ${error.message}`);

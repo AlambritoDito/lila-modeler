@@ -56,6 +56,9 @@ const lila = {
     ipcRenderer.on('lila:open-path', listener);
     return () => ipcRenderer.removeListener('lila:open-path', listener);
   },
+  forgetProject: () => {
+    ipcRenderer.send('lila:forgetProject');
+  },
   onExternalChange: (cb: (dir: string) => void) => {
     const listener = (_event: unknown, dir: string) => cb(dir);
     ipcRenderer.on('lila:reload', listener);

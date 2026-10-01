@@ -5,7 +5,9 @@
  *
  * - A `.lila` is replaced whole by an atomic write (temporary file + `rename`), which gives the
  *   path a new inode: watching the file itself would go deaf after the first save. The containing
- *   folder is watched instead and events are filtered by the file's name.
+ *   folder is watched instead (not recursively) and events are filtered by the file's name. A loose
+ *   `.bpmn` (LILA-072) is watched the same way: its folder may be `~/Downloads` or the home folder,
+ *   and nothing else in it is the user's document.
  * - A project folder is watched recursively, and only the files a project is made of count
  *   (`relevantProjectFile`).
  * - Lila's own writes are told apart by `isOwn` (main passes `isOwnSnapshot` from
@@ -21,9 +23,10 @@ import path from 'node:path';
 export const RELOAD_DEBOUNCE_MS = 300;
 
 export interface ProjectWatcherOptions {
-  /** The open project: a `.lila` file or a project folder, as main authorized it (`realpath`). */
+  /** The open project: a `.lila`, a loose `.bpmn` or a project folder (`realpath`). */
   readonly target: string;
-  readonly isLila: boolean;
+  /** `target` is one file (a `.lila` or a loose `.bpmn`), not a project folder. */
+  readonly singleFile: boolean;
   /** `true` when `file` on disk is what Lila itself last read or wrote. */
   readonly isOwn: (file: string) => Promise<boolean>;
   /** Something other than Lila changed the project. */
@@ -39,23 +42,28 @@ export interface ProjectWatcher {
 }
 
 /**
- * The files of a project folder that make up the project (ADR-018, ADR-029). Left out: temporary
- * files of an atomic write (`*.tmp-…`), hidden files (`.DS_Store`), exports the user drops next to
- * the project, and `runs/*.result.json`, which the snapshot bookkeeping does not track and which
- * Lila itself writes on every save.
+ * The files of a project folder that make up the project (ADR-018, ADR-029), by their path
+ * relative to it: `lila-project.json`, `model.bpmn` and `*.scenario.json` at the top, and
+ * `model.bpmn` and `*.scenario.json` of `processes/<slug>/`. Nothing deeper or elsewhere: a copy
+ * the user keeps in a subfolder (`copia-vieja/model.bpmn`) is not the project. Also left out:
+ * temporary files of an atomic write (`*.tmp-…`), hidden files, exports, and `runs/*.result.json`,
+ * which the snapshot bookkeeping does not track and which Lila itself writes on every save.
  * ponytail: a run written by an agent alone does not reload; the next scenario or model change does.
  */
 export function relevantProjectFile(relative: string): boolean {
-  const name = path.basename(relative);
+  const parts = relative.split(/[\\/]/);
+  const name = parts.at(-1) ?? '';
   if (name.startsWith('.')) return false;
-  return name === 'lila-project.json' || name.endsWith('.bpmn') || name.endsWith('.scenario.json');
+  const modelOrScenario = name === 'model.bpmn' || name.endsWith('.scenario.json');
+  if (parts.length === 1) return modelOrScenario || name === 'lila-project.json';
+  return parts.length === 3 && parts[0] === 'processes' && !parts[1]!.startsWith('.') && modelOrScenario;
 }
 
 export function watchProject(options: ProjectWatcherOptions): ProjectWatcher {
-  const { target, isLila, isOwn, onChange } = options;
+  const { target, singleFile, isOwn, onChange } = options;
   const debounceMs = options.debounceMs ?? RELOAD_DEBOUNCE_MS;
   const watch = options.watch ?? fsWatch;
-  const dir = isLila ? path.dirname(target) : target;
+  const dir = singleFile ? path.dirname(target) : target;
   const name = path.basename(target);
   const changed = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -78,11 +86,11 @@ export function watchProject(options: ProjectWatcherOptions): ProjectWatcher {
 
   let watcher: FSWatcher;
   try {
-    watcher = watch(dir, { recursive: !isLila, persistent: false }, (_event, filename) => {
+    watcher = watch(dir, { recursive: !singleFile, persistent: false }, (_event, filename) => {
       if (closed || filename === null) return;
       const relative = filename.toString();
-      if (isLila ? relative !== name : !relevantProjectFile(relative)) return;
-      changed.add(isLila ? target : path.join(dir, relative));
+      if (singleFile ? relative !== name : !relevantProjectFile(relative)) return;
+      changed.add(singleFile ? target : path.join(dir, relative));
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => void settle(), debounceMs);
     });

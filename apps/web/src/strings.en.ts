@@ -1457,6 +1457,9 @@ export const en = {
     /** «Save as» of a loose diagram over the folder that already is its project (LILA-208). */
     errorMismaCarpeta:
       'This folder already has its model.bpmn; to turn the loose diagram into a project pick another folder.',
+    /** #539: re-reading the open project after an outside change failed; `codigo` is the disk's code. */
+    errorRecarga: (ruta: string, codigo: string): string =>
+      `${codigo}: ${ruta} changed outside Lila but could not be read back; what is on screen is unchanged.`,
     /** `E-ARCHIVO-OCUPADO` from the disk (#466): another program holds the `.lila`'s lock. */
     errorArchivoOcupado: (ruta: string): string =>
       `E-ARCHIVO-OCUPADO: another program is saving ${ruta} right now, so nothing was saved. ` +

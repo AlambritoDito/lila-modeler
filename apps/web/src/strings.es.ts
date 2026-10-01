@@ -1439,6 +1439,9 @@ export const es: Strings = {
     /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
     errorMismaCarpeta:
       'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
+    /** #539: falló releer el proyecto abierto tras un cambio externo; `codigo` es el código del disco. */
+    errorRecarga: (ruta: string, codigo: string): string =>
+      `${codigo}: ${ruta} cambió fuera de Lila pero no se pudo volver a leer; lo que hay en pantalla no cambió.`,
     /** `E-ARCHIVO-OCUPADO` del disco (#466): otro programa tiene el bloqueo del `.lila`. */
     errorArchivoOcupado: (ruta: string): string =>
       `E-ARCHIVO-OCUPADO: otro programa está guardando ${ruta} ahora mismo, así que no se guardó nada. ` +

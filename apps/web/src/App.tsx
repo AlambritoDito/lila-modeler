@@ -1058,9 +1058,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /**
    * Reads the open project again through the same door as Open, keeping the mode, the process on
    * the canvas and the scenario in use when they are still there. A save, open or dialog in progress
-   * goes first; the change is looked at again when it is over.
+   * goes first; the change is looked at again when it is over. `enfocar`: it came from the notice's
+   * button, which goes away with it, so the focus goes to the canvas instead of falling to `body`.
    */
-  async function recargar(): Promise<void> {
+  async function recargar(enfocar = false): Promise<void> {
     setCambioExterno(false);
     if (adapter?.reload === undefined || modelador === null) return;
     if (ioLock.current || respuestaPerdida.current !== null || pendingAction !== null) {
@@ -1075,7 +1076,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
       const raw = await adapter.reload();
-      if (raw === null || !await activate(raw, true, beforeToken)) return;
+      // Deleted on disk: `openRecent` already took it off the recents, and says so.
+      if (raw === null) { setIoError(S.app.errorRecienteAusente); return; }
+      if (!await activate(raw, true, beforeToken)) return;
       const doc = readProject(raw);
       const lista = (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
       const indice = slug === undefined ? -1 : lista.findIndex((p) => p.slug === slug);
@@ -1085,7 +1088,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (base in escenarios) setBaseId(base);
       setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally {
+      ioLock.current = false; setIoBusy(false);
+      if (enfocar) modelador.enfocar?.();
+    }
   }
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
@@ -2798,8 +2804,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {cambioExterno && (
           <span role="alert" className="aviso cambio-externo">
             {S.app.cambioExterno}{' '}
-            <button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar()}>{S.app.recargarCambioExterno}</button>{' '}
-            <button type="button" className="enlace" onClick={() => setCambioExterno(false)}>{S.app.mantenerMios}</button>
+            <button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar(true)}>{S.app.recargarCambioExterno}</button>{' '}
+            <button type="button" className="enlace" onClick={() => { setCambioExterno(false); modelador?.enfocar?.(); }}>{S.app.mantenerMios}</button>
           </span>
         )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}

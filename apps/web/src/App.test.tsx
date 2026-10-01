@@ -3659,6 +3659,7 @@ it('with unsaved changes it asks: «Keep mine» keeps them, «Reload» reads the
 
   await click(T.app.mantenerMios);
   expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledOnce(); // The button went away: the focus goes to the canvas.
   expect(reload).not.toHaveBeenCalled();
   expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([true]);
 
@@ -3666,4 +3667,7 @@ it('with unsaved changes it asks: «Keep mine» keeps them, «Reload» reads the
   await click(T.app.recargarCambioExterno);
   expect(reload).toHaveBeenCalledOnce();
   expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledTimes(2);
+  // `null`: the file is gone from disk; the store already took it off the recents.
+  expect(container.textContent).toContain(T.app.errorRecienteAusente);
 });

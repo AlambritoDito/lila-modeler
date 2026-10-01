@@ -110,6 +110,7 @@ class FakeBridge implements LilaBridge {
   recents: Recent[] = [];
   openRecentImpl: ((dir: string, file?: string) => Promise<LilaProjectDocument | null>) | null = null;
   onExternalChange?: (cb: (dir: string) => void) => () => void;
+  forgetProject?: () => void;
   private openPathCb: ((path: OpenPathRequest) => void) | null = null;
   pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
 
@@ -808,6 +809,25 @@ describe('DesktopStore and changes made outside Lila (#539)', () => {
     store.forget(); // An example from the gallery: no longer the file's project.
     avisar('/proyectos/pedido.lila');
     expect(avisos).toEqual([1]);
+  });
+
+  it('a failed reload says, in the UI language, which file changed outside Lila and the disk code', async () => {
+    const bridge = new FakeBridge();
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/proyectos/pedido.lila');
+    bridge.openRecentImpl = async () => {
+      throw new Error("Error invoking remote method 'lila:openRecent': Error: E-ZIP: El archivo no es un .lila legible.");
+    };
+    await expect(store.reload()).rejects.toThrow(S.almacen.errorRecarga('pedido.lila', 'E-ZIP'));
+  });
+
+  it('forgetting the project (a gallery example) tells main to stop watching it', () => {
+    const bridge = new FakeBridge();
+    let olvidos = 0;
+    bridge.forgetProject = () => { olvidos += 1; };
+    new DesktopStore(bridge).forget();
+    expect(olvidos).toBe(1);
   });
 
   it('a bridge without the watcher subscribes to nothing', () => {

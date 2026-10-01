@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { watch as fsWatch } from 'node:fs';
-import { mkdtemp, realpath, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -60,7 +60,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const watcher = watchProject({ target: file, isLila: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    const watcher = watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
     expect(fake.calls[0]).toEqual([dir, { recursive: false, persistent: false }]);
 
     // An agent rewrites it: temporary file, then the rename onto the name.
@@ -87,7 +87,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: file, isLila: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
 
     for (const name of ['v2', 'v3', 'v4']) {
       await writeLilaFile(file, documento(name));
@@ -112,7 +112,7 @@ describe('watchProject on a .lila (#539)', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     watchProject({
       target: file,
-      isLila: true,
+      singleFile: true,
       isOwn: async (path) => { await inFlight; return isOwnSnapshot(path); },
       onChange,
       watch: fake.watch,
@@ -135,7 +135,7 @@ describe('watchProject on a .lila (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const watcher = watchProject({ target: file, isLila: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    const watcher = watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
     fake.fire('pedido.lila');
     watcher.close();
     await settle();
@@ -144,7 +144,7 @@ describe('watchProject on a .lila (#539)', () => {
 
   it('a folder that cannot be watched leaves the app working without a watcher', () => {
     const watch = (() => { throw new Error('ENOENT'); }) as unknown as typeof fsWatch;
-    const watcher = watchProject({ target: '/no/such/pedido.lila', isLila: true, isOwn: async () => true, onChange: () => {}, watch });
+    const watcher = watchProject({ target: '/no/such/pedido.lila', singleFile: true, isOwn: async () => true, onChange: () => {}, watch });
     expect(() => watcher.close()).not.toThrow();
   });
 });
@@ -156,7 +156,7 @@ describe('watchProject on a project folder (#539)', () => {
     const fake = fakeWatch();
     const onChange = vi.fn();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    watchProject({ target: dir, isLila: false, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    watchProject({ target: dir, singleFile: false, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
     expect(fake.calls[0]).toEqual([dir, { recursive: true, persistent: false }]);
 
     await writeProjectFolder(dir, documento('v2'));
@@ -172,15 +172,67 @@ describe('watchProject on a project folder (#539)', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('counts only the files a project is made of', () => {
+  it('counts only the files a project is made of: the top level and processes/<slug>/', () => {
     expect(relevantProjectFile('model.bpmn')).toBe(true);
     expect(relevantProjectFile('lila-project.json')).toBe(true);
     expect(relevantProjectFile('as-is.scenario.json')).toBe(true);
     expect(relevantProjectFile(join('processes', 'alta', 'model.bpmn'))).toBe(true);
+    expect(relevantProjectFile('processes\\alta\\to-be.scenario.json')).toBe(true); // Windows separators.
+    expect(relevantProjectFile(join('processes', 'alta', 'runs', 'r1.result.json'))).toBe(false);
+    expect(relevantProjectFile(join('processes', 'alta', 'copia', 'model.bpmn'))).toBe(false);
+    expect(relevantProjectFile(join('processes', 'lila-project.json'))).toBe(false);
+    expect(relevantProjectFile(join('copia-vieja', 'model.bpmn'))).toBe(false);
+    expect(relevantProjectFile(join('otra', 'sub', 'as-is.scenario.json'))).toBe(false);
+    expect(relevantProjectFile('borrador.bpmn')).toBe(false); // Not the project's model.
     expect(relevantProjectFile(join('runs', 'as-is.result.json'))).toBe(false);
     expect(relevantProjectFile('model.bpmn.tmp-1234')).toBe(false);
     expect(relevantProjectFile('.DS_Store')).toBe(false);
     expect(relevantProjectFile('diagrama.png')).toBe(false);
+  });
+});
+
+describe('watchProject with nested copies and loose diagrams (QA of #551)', () => {
+  it('a copy of model.bpmn in a subfolder of the project is not the project', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'lila-watch-')));
+    await writeProjectFolder(dir, documento());
+    const fake = fakeWatch();
+    const onChange = vi.fn();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    watchProject({ target: dir, singleFile: false, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    await mkdir(join(dir, 'copia-vieja'));
+    await writeFile(join(dir, 'copia-vieja', 'model.bpmn'), XML);
+    fake.fire(join('copia-vieja', 'model.bpmn'));
+    fake.fire('copia-vieja');
+    await settle();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('a loose .bpmn is watched alone, without recursing into the folder it sits in', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'lila-descargas-')));
+    const file = join(dir, 'suelto.bpmn');
+    await writeProjectFolder(dir, documento(), { modelFile: 'suelto.bpmn', diagramOnly: true });
+    expect(await isOwnSnapshot(file)).toBe(true);
+    const fake = fakeWatch();
+    const onChange = vi.fn();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    watchProject({ target: file, singleFile: true, isOwn: isOwnSnapshot, onChange, watch: fake.watch });
+    expect(fake.calls[0]).toEqual([dir, { recursive: false, persistent: false }]);
+
+    // Other programs writing diagrams next to it, or below it, are none of its business.
+    await mkdir(join(dir, 'otra', 'sub'), { recursive: true });
+    await writeFile(join(dir, 'otra', 'sub', 'ajeno.bpmn'), XML);
+    await writeFile(join(dir, 'model.bpmn'), XML);
+    fake.fire(join('otra', 'sub', 'ajeno.bpmn'));
+    fake.fire('model.bpmn');
+    fake.fire('lila-project.json');
+    await settle();
+    expect(onChange).not.toHaveBeenCalled();
+
+    // The diagram itself, rewritten by somebody else, is.
+    await writeFile(file, XML.replace('/>', '><!-- agente --></bpmn:definitions>'));
+    fake.fire('suelto.bpmn');
+    await settle();
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -192,7 +244,7 @@ describe('watchProject with the real fs.watch', () => {
     const changed = new Promise<void>((resolve) => {
       const watcher = watchProject({
         target: file,
-        isLila: true,
+        singleFile: true,
         isOwn: isOwnSnapshot,
         debounceMs: 50,
         onChange: () => { watcher.close(); resolve(); },

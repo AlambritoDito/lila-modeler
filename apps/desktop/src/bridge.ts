@@ -136,6 +136,8 @@ export interface LilaBridge {
    * renderer decides between reloading and asking (unsaved changes). Returns the unsubscriber.
    */
   onExternalChange?(cb: (dir: string) => void): () => void;
+  /** The renderer left the project on disk for one with no file (a gallery example): main stops watching it. */
+  forgetProject?(): void;
 
   /**
    * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell
