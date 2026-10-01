@@ -169,7 +169,7 @@ test('extends cíclico y XML impenetrable: isError con el motivo, y el servidor 
   expect(conCiclo.isError ?? false).toBe(false);
   expect(jsonOf(conCiclo).resumen).toContain('the scenario could not be read');
 
-  expect((await client.listTools()).tools).toHaveLength(10);
+  expect((await client.listTools()).tools).toHaveLength(15);
 }, 120_000);
 
 test('dos llamadas concurrentes se responden las dos, sin mezclarse', async () => {

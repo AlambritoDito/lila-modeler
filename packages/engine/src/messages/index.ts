@@ -35,6 +35,7 @@ export {
   FALLBACK_CONSTRUCTION,
   type ConstructionId,
 } from './constructions.js';
+export { AGENT_TOOL_MESSAGES, agentToolMessages, type AgentToolMessages } from './agent-tools.js';
 export { en } from './en.js';
 export { es } from './es.js';
 

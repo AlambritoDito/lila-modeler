@@ -66,6 +66,7 @@ import { version } from './version.js';
 import { createLilaProcess, readLilaOutline } from './project-fs/outline.js';
 import type { NormalOutline } from './bpmn/outline.js';
 import { describeDistribution } from './xlsx-report.js';
+import { dispatchProcessTools, dispatchScenarioTools, isProcessToolSubcommand } from './cli-agent-tools.js';
 
 export { resolveLocale } from './locale.js';
 
@@ -1238,6 +1239,8 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'run') return await dispatchRun(args, locale);
     if (command === 'compare') return await dispatchCompare(args, locale);
     if (command === 'export') return await dispatchExport(args, locale);
+    if (command === 'process' && isProcessToolSubcommand(args[0])) return await dispatchProcessTools(args, locale);
+    if (command === 'scenario') return await dispatchScenarioTools(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
     if (command === 'process') return await dispatchProcess(args, locale);
     console.error(C.unknownCommand(command));

@@ -45,3 +45,23 @@ export { saveLilaRun, saveSimulationRun } from './save-run.js';
 export type { SavedRun } from './save-run.js';
 export { BASE_SCENARIO, createLilaProcess, readLilaOutline } from './outline.js';
 export type { CreatedLilaProcess, CreateLilaProcessOptions, LilaOutline } from './outline.js';
+export {
+  annotateLilaElement,
+  createLilaProject,
+  importLilaScenarioSheet,
+  lilaRaciMatrix,
+  lilaScenarioTemplate,
+  raciCsv,
+} from './agent-tools.js';
+export type {
+  AnnotateRequest,
+  AnnotateResult,
+  CreatedScenario,
+  CreateProjectRequest,
+  CreateProjectResult,
+  LilaRaciMatrix,
+  LilaTarget,
+  SheetImportChange,
+  SheetImportRequest,
+  SheetImportResult,
+} from './agent-tools.js';

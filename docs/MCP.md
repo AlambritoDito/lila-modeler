@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its ten tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its fifteen tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 ## Tools
@@ -49,7 +49,22 @@ backed by `@lila-modeler/engine`. Its ten tools reuse the CLI validation and sim
 - **`get_process_outline({ project, process?, locale? })`** reads one process of a `.lila` back as an
   outline: `{ file, slug, name, outline, warnings }`.
 
-The three export tools are described in [App-free exports](#app-free-exports).
+- **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
+  writes the description, RACI, catalog references and extended attributes of one element of a
+  `.lila` process. Returns `{ file, process, elementId, dryRun, changed, written, before, after }`.
+- **`get_raci_matrix({ project, process?, locale? })`** returns the process's RACI matrix:
+  `{ file, process, roles, rows }`.
+- **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** applies a
+  scenario sheet (`.xlsx`/`.csv`) to a scenario of the `.lila`. Returns
+  `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
+- **`export_scenario_template({ project, process?, scenario, saveTo, overwrite?, locale? })`**
+  writes that sheet as `.xlsx`, filled in. Returns `{ file, project, process, scenario }`.
+- **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
+  from a BPMN you already have (an agent that starts from steps uses `create_process`) and
+  scenarios. Returns `{ file, name, processId, warnings, scenarios }`.
+
+The three export tools are described in [App-free exports](#app-free-exports); the last five in
+[Modelling tools for agents](#modelling-tools-for-agents).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -241,6 +256,72 @@ marks, other event types, nested lanes, and the parts of the scenario an outline
 (arrivals, calendars, costs, resource capacities and types, conditional routing; the scenario
 itself is not changed). A process with no name takes the one in the `.lila`, else its id. The
 steps keep the document order.
+
+## Modelling tools for agents
+
+`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and
+`create_project` (#99, #403, #514) let an agent build and document a project with no app. The CLI
+has the first four as `lila process annotate|raci` and `lila scenario import|template`
+(`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
+`patch_scenario` (see [A `.lila` as input](#a-lila-as-input)): only the process touched changes,
+the others are carried through byte for byte, and an invalid input is `isError` with nothing
+written. `dryRun: true` answers what would change and writes nothing.
+
+- **`annotate_element`** finds the element by its BPMN id (a task, event, gateway, flow, lane,
+  pool, the process…; an unknown id is an error). `documentation` replaces the description (`""`
+  removes it). `responsibilities` is the whole RACI list, `[{ "type": "R"|"A"|"C"|"I", "roleRef":
+  "cashier" }]` (`[]` clears it). `refs` maps a kind (`systemRef`, `documentRef`, `riskRef`,
+  `controlRef`, `kpiRef`, `input`, `output`) to its ids and replaces only the kinds given.
+  `attributes` maps an extended attribute (its id, or its name when only one has it) to a value
+  and is merged: `""` removes a value, the attributes left out stay. Each value is checked
+  against the project's attribute definitions, as in the app's properties panel: a `number` is
+  a plain decimal (`12`, `-3.5`), a `date` is `YYYY-MM-DD`, a `list` value is one of its
+  options, and the attribute must apply to the element's type. The model's revision goes up by
+  one, as when the app saves an edit. An annotation that changes nothing writes nothing
+  (`changed: false`).
+- **`get_raci_matrix`** lists what the process document (`export_document`) lists under
+  «Responsibilities (RACI)», in the same order: one row per element with responsibilities, with
+  its `id`, `name`, `lane` (when it has one), the raw `responsibilities`, and `cells` (role →
+  `"R"`, or `"A, C"` when a role has several types). `roles` are the roles in order of appearance.
+- **`import_scenario_sheet`** is the app's «Import Excel/CSV…» (`docs/SCENARIO_SHEETS.md`): the
+  sheet is planned against the resolved scenario, and each change is written into the scenario's
+  own file, its delta when it `extends` another (the parent is never touched). `changes` carries
+  each field's `before`, `after` and a readable `text` (`Cashier (cajero) · capacity: 2 → 3`, a
+  distribution in the unit of its row); `issues` the rows not applied (`error`, `unmatched`,
+  `ambiguous`), notes (`warning`) and the errors the result would have (`lint`). A plan with a
+  `lint` issue is refused (it is reported by a `dryRun`). The scenario's revision goes up by one.
+- **`export_scenario_template`** is the app's «Download template»: hand it to a person, then
+  import what comes back. An existing `saveTo` is refused unless `overwrite`.
+- **`create_project`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`.
+  A model with validation errors is refused. `scenarios` are `[{ "name", "scenario" }]`, saved
+  as `<name>.scenario.json`; a scenario with neither `model` nor `extends` gets
+  `"model": "model.bpmn"`, and one that names another model is refused. A scenario that cannot
+  run yet is a draft: it is saved, and comes back with `runnable: false` and its `errors`. The
+  file is written whole or not at all, and an existing one is refused unless `overwrite`. The web
+  and desktop apps open it.
+
+```json
+{ "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",
+  "scenarios": [{ "name": "as-is", "scenario": { "version": 1, "name": "AS-IS", "run": { "start": "2026-10-05T08:00:00-06:00", "duration": 28800, "seed": 1 } } }] } }
+```
+
+```json
+{ "name": "annotate_element", "arguments": { "project": "project.lila", "elementId": "Task_TomarPedido",
+  "documentation": "Takes the order at the counter.", "responsibilities": [{ "type": "R", "roleRef": "cashier" }, { "type": "A", "roleRef": "manager" }],
+  "refs": { "systemRef": ["POS"] } } }
+```
+
+```json
+{ "name": "get_raci_matrix", "arguments": { "project": "project.lila" } }
+```
+
+```json
+{ "name": "export_scenario_template", "arguments": { "project": "project.lila", "scenario": "as-is", "saveTo": "as-is.xlsx" } }
+```
+
+```json
+{ "name": "import_scenario_sheet", "arguments": { "project": "project.lila", "scenario": "as-is", "sheet": "as-is.xlsx", "dryRun": true } }
+```
 
 ## Language
 

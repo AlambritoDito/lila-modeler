@@ -21,7 +21,8 @@ export interface Responsibility {
 /** Los `lila:*Ref` que son una simple referencia al catálogo, agrupados por tipo. */
 export type Refs = Partial<Record<RefKind, string[]>>;
 
-const REF_KINDS = [
+/** The `lila:*Ref` kinds an element can carry, in the order `annotateElement` writes them. */
+export const REF_KINDS = [
   'systemRef',
   'documentRef',
   'riskRef',
@@ -110,9 +111,41 @@ function assertNoContentLoss(warnings: readonly unknown[]): void {
   const detail = warnings
     .map((w) => (w instanceof Error ? w.message : String(w)))
     .join('; ');
-  throw new Error(
-    `el archivo tiene contenido que bpmn-moddle no sabe reescribir y se perdería al guardarlo: ${detail}`,
-  );
+  throw new AnnotationContentLossError(detail);
+}
+
+/**
+ * The file has content bpmn-moddle cannot write back (see `assertNoContentLoss`). Its own class, so
+ * a caller that speaks another language (the MCP server, #99) can say so in its own words; `detail`
+ * is bpmn-moddle's text.
+ */
+export class AnnotationContentLossError extends Error {
+  constructor(readonly detail: string) {
+    super(`el archivo tiene contenido que bpmn-moddle no sabe reescribir y se perdería al guardarlo: ${detail}`);
+    this.name = 'AnnotationContentLossError';
+  }
+}
+
+/** An element `annotateElement` can reach: its BPMN `$type` and its `name` (`''` when it has none). */
+export interface AnnotatableElement {
+  type: string;
+  name: string;
+}
+
+/**
+ * Every element `annotateElement` can annotate, keyed by id (#99): what a caller checks an id
+ * against before writing, and where the element type of an extended attribute comes from.
+ * Throws `AnnotationContentLossError` where `annotateElement` would.
+ */
+export async function annotatableElements(xml: string): Promise<Record<string, AnnotatableElement>> {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
+  assertNoContentLoss(warnings);
+  const result: Record<string, AnnotatableElement> = Object.create(null) as Record<string, AnnotatableElement>;
+  for (const el of walk(definitions)) {
+    if (!Object.hasOwn(result, el.id)) result[el.id] = { type: el.$type, name: typeof el.name === 'string' ? el.name : '' };
+  }
+  return result;
 }
 
 function readOne(el: ModdleElement): Annotations {
