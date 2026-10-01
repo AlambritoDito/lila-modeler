@@ -1610,8 +1610,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   /** «Open in Results»: raises the detached Results window, or switches to the Results mode. */
   function enfocarResultados(): void {
-    if (ventanaResultados !== null) ventanaResultados.focus();
-    else elegirModo('resultados');
+    if (ventanaResultados !== null) { ventanaResultados.focus(); return; }
+    // The button pressed (the dock's) goes away with Simulate: the focus goes to the Results view,
+    // not to <body> (QA of #394).
+    flushSync(() => elegirModo('resultados'));
+    document.querySelector<HTMLElement>('section.zona-resultados')?.focus();
   }
   /**
    * Command palette (#410). Not while a file operation holds the app (`ioBusy`: the canvas and the
@@ -2670,7 +2673,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         />
       </>}
       {modo === 'resultados' && (
-        <section className="zona-resultados">
+        <section className="zona-resultados" tabIndex={-1} aria-label={S.app.modos.resultados}>
           {ventanaResultados === null ? vistaResultados : (
             <div className="panel-desacoplado">
               <p>{S.app.resultadosEnVentana}</p>

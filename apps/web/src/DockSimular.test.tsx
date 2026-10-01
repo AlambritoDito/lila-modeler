@@ -20,7 +20,7 @@ import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 import { DockSimular, FILAS_LOG, filasRapidas, PESTANAS_DOCK, type DockSimularProps, type PestanaDock } from './DockSimular';
 import type { LogDeCorrida } from './GraficasResultados';
 import { agruparAvisos } from './avisos';
-import { percentilesPorElemento } from './percentilesPorElemento';
+import { ESPERA_RECURSO, percentilesPorElemento } from './percentilesPorElemento';
 import { setLocale, strings } from './i18n';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -86,7 +86,8 @@ describe('quick results (#394)', () => {
     expect(total.querySelector('th')!.textContent).toBe(S.dock.total);
     const celdas = [...total.querySelectorAll('td')].map((td) => td.textContent);
     // Cases and fixed cost only: the process wait per case is another quantity (QA of #394).
-    expect(celdas).toEqual([formatNumber(result.process.completed), '—', '—', '—',
+    // Whole cases (a mean over replications reads as a count).
+    expect(celdas).toEqual([formatNumber(Math.round(result.process.completed)), '—', '—', '—',
       formatNumber(tareas.reduce((suma, id) => suma + result.elements[id]!.fixedCostTotal, 0))]);
     expect(tabla.querySelectorAll('thead th')[5]!.textContent).toBe(S.dock.columnas.costo);
     // The mean wait column is the engine's, the same figure as the Results view.
@@ -102,9 +103,12 @@ describe('quick results (#394)', () => {
     expect(costo.textContent).toBe(`${formatNumber(Math.round(result.process.totalCost * 100) / 100)} ${scenario.run.currency}`);
   });
 
-  test('a truncated log says so under the table', async () => {
+  test('a truncated log says so under the table and gives no p95, the quick view\'s rule', async () => {
     await montar({ log: { rows: log.rows, truncated: true } });
     expect(container.querySelector('.dock-nota')!.textContent).toContain(S.dock.muestraParcial(log.rows.length));
+    const p95 = [...container.querySelectorAll('table.dock-rapidos tbody tr')].map((tr) => tr.querySelectorAll('td')[2]!.textContent);
+    expect(p95.every((t) => t === '—')).toBe(true);
+    expect(filasRapidas(ir, result, scenario, { rows: log.rows, truncated: true }).filas.every((f) => f.esperaP95 === null)).toBe(true);
   });
 
   test('the main bottleneck heads the dock and picks its element, without changing tab', async () => {
@@ -121,13 +125,13 @@ describe('quick results (#394)', () => {
 
   test('the end of a run is announced in a status region, and the tablist has its own name', async () => {
     await montar();
-    expect(container.querySelector('[role="status"]')!.textContent).toBe(S.dock.corridaTerminada(formatNumber(Math.round(result.process.completed * 10) / 10)));
+    expect(container.querySelector('[role="status"]')!.textContent).toBe(S.dock.corridaTerminada(formatNumber(Math.round(result.process.completed))));
     expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).not.toBe(container.querySelector('section')!.getAttribute('aria-label'));
   });
 
   test('the p95 is the shared per-element percentile of the same wait, utilization the busiest pool used', () => {
     const { filas } = filasRapidas(ir, result, scenario, log);
-    const compartido = percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: (r) => r.resourceWait });
+    const compartido = percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
     for (const fila of filas) {
       expect(fila.esperaP95).toBe(compartido.get(fila.id)?.[0] ?? null);
       expect(fila.esperaMedia).toBe(result.elements[fila.id]!.resourceWait.mean);
@@ -216,9 +220,19 @@ describe('tabs (#394)', () => {
     expect(tabs()[3]!.textContent).toBe(`${S.dock.pestanas.avisos} (4)`);
   });
 
+  test('agruparAvisos keeps two subjects of the same code apart (QA of #394)', () => {
+    const grupos = agruparAvisos([
+      { mensaje: 'W-TAREA-SIN-TIEMPO: Task_A: no processingTime (30 times)', severidad: 'warning' },
+      { mensaje: 'W-TAREA-SIN-TIEMPO: Task_B: no processingTime (12 times)', severidad: 'warning' },
+      { mensaje: 'W-TAREA-SIN-TIEMPO: Task_A: no processingTime (28 times)', severidad: 'warning' },
+    ]);
+    expect(grupos.map((g) => [g.codigo, g.mensajes.length])).toEqual([['W-TAREA-SIN-TIEMPO: Task_A', 2], ['W-TAREA-SIN-TIEMPO: Task_B', 1]]);
+  });
+
   test('agruparAvisos keeps the first-seen order and promotes a group to error', () => {
-    expect(agruparAvisos([{ mensaje: 'W-X: a', severidad: 'warning' }, { mensaje: 'sin código', severidad: 'warning' }, { mensaje: 'W-X: b', severidad: 'error' }]))
-      .toEqual([{ codigo: 'W-X', severidad: 'error', mensajes: ['W-X: a', 'W-X: b'] }, { codigo: 'sin código', severidad: 'warning', mensajes: ['sin código'] }]);
+    // A message with no subject segment groups by its code alone.
+    expect(agruparAvisos([{ mensaje: 'W-X: a', severidad: 'warning' }, { mensaje: 'sin código', severidad: 'warning' }, { mensaje: 'W-X: a', severidad: 'error' }]))
+      .toEqual([{ codigo: 'W-X', severidad: 'error', mensajes: ['W-X: a', 'W-X: a'] }, { codigo: 'sin código', severidad: 'warning', mensajes: ['sin código'] }]);
   });
 
   test('without a run: an invitation to run, and the actions are disabled', async () => {

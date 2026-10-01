@@ -662,8 +662,8 @@ export const en = {
     vistaRapida: 'Quick view · simulation',
     vistaTiempo: 'Time',
     vistaRecurso: 'Resource',
-    vistaEsperaP95: 'Wait p95',
-    vistaEsperaMedia: 'Wait (mean)',
+    vistaEsperaP95: 'Resource wait p95',
+    vistaEsperaMedia: 'Resource wait (mean)',
     vistaSinCorrida: 'no run',
     editarEnParametros: 'Edit in Parameters',
     editarEnRecursos: 'Edit in Resources',
@@ -1265,8 +1265,8 @@ export const en = {
     columnas: {
       actividad: 'Activity',
       casos: 'Cases',
-      esperaMedia: (unidad: string): string => `Average wait (${unidad})`,
-      esperaP95: (unidad: string): string => `Wait p95 (${unidad})`,
+      esperaMedia: (unidad: string): string => `Resource wait, mean (${unidad})`,
+      esperaP95: (unidad: string): string => `Resource wait p95 (${unidad})`,
       utilizacion: 'Utilization (%)',
       utilizacionTitulo: 'Utilization of the busiest pool the activity used',
       costo: 'Total fixed cost',
@@ -1275,8 +1275,8 @@ export const en = {
     /** Under the quick results table: where the per-task percentiles come from. */
     /** Under the quick results table (QA of #394): the two wait columns cover different populations. */
     notaPercentiles: (filas: number): string =>
-      `Average wait: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
-    muestraParcial: (filas: number): string => `Partial sample: the log stopped at ${filas} rows, so the p95 does not cover the whole run.`,
+      `Mean: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
+    muestraParcial: (filas: number): string => `Partial sample: the log stopped at ${filas} rows, so there is no p95 (it would only cover the first cases).`,
     /** «Warnings» grouped by code: the disclosure with the other occurrences. */
     ocurrencias: (n: number): string => `${n} occurrences`,
     notaSinLog: 'This run has no event log in memory, so the wait p95 is not available: run it again to see it.',

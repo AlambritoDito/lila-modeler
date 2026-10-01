@@ -1666,6 +1666,8 @@ body {
 .zona-modelo { grid-area: lienzo; position: relative; min-width: 0; min-height: 0; }
 .zona-modelo > .lienzo { width: 100%; height: 100%; }
 .zona-resultados { grid-area: lienzo; overflow: auto; padding: 16px; min-width: 0; z-index: 1; }
+/* Focused by «Open in Results» from the Simulate dock (#394). */
+.zona-resultados:focus-visible { outline: 1px solid var(--accent-primary); outline-offset: -1px; }
 
 /* ---------- controles de zoom (LILA-208) ---------- */
 

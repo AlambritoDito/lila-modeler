@@ -13,13 +13,13 @@
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
-import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
+import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
 import { GraficaDeInstancias, GraficaDeUtilizacion, type LogDeCorrida } from './GraficasResultados';
 import { useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
 import { esperaCorta } from './BottleneckOverlay';
-import { percentilesPorElemento } from './percentilesPorElemento';
+import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
 import './DockSimular.css';
 
 export const PESTANAS_DOCK = ['rapidos', 'cuellos', 'log', 'avisos'] as const;
@@ -41,8 +41,6 @@ export interface FilaRapida {
   costo: number;
 }
 
-/** The wait the mean column measures, so the p95 next to it is of the same quantity. */
-const ESPERA_RECURSO = (fila: EventLogRow): number => fila.resourceWait;
 
 /**
  * The quick results table: one row per task (events and gateways repeat their neighbours' counts,
@@ -52,7 +50,8 @@ const ESPERA_RECURSO = (fila: EventLogRow): number => fila.resourceWait;
  * and the fixed cost only: the process wait per case is another quantity (QA of #394).
  */
 export function filasRapidas(ir: ProcessIR, result: RunResult, scenario: ResolvedScenario, log: LogDeCorrida | undefined): { filas: FilaRapida[]; total: FilaRapida } {
-  const p95 = log === undefined ? new Map<string, number[]>()
+  // Same rule as the properties quick view (`p95Fiable`): no p95 from a truncated sample.
+  const p95 = !p95Fiable(log) ? new Map<string, number[]>()
     : percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
   const pools = new Map<string, Set<string>>();
   for (const fila of log?.rows ?? []) {
@@ -164,7 +163,7 @@ export function DockSimular(props: DockSimularProps): ReactNode {
   return (
     <section id={id} className="dock-simular" aria-label={S.dock.region}>
       {/* The run no longer changes mode, so its end is announced here (QA of #394). */}
-      <p role="status" className="dock-anuncio">{conCorrida ? S.dock.corridaTerminada(formatNumber(redondear(corrida.result.process.completed, 1))) : ''}</p>
+      <p role="status" className="dock-anuncio">{conCorrida ? S.dock.corridaTerminada(formatNumber(Math.round(corrida.result.process.completed))) : ''}</p>
       <div className="dock-cabecera">
         <div role="tablist" aria-label={S.dock.vistas} className="dock-pestanas">
           {PESTANAS_DOCK.map((p) => (
@@ -212,7 +211,7 @@ function Kpis({ ir, result, scenario, onSeleccionar }: {
   const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
   const p = result.process;
   const kpis: [string, string, string][] = [
-    [S.dock.kpis.completados, formatNumber(redondear(p.completed, 1)), formatNumber(p.completed)],
+    [S.dock.kpis.completados, formatNumber(Math.round(p.completed)), formatNumber(p.completed)],
     [S.dock.kpis.cicloMedio, p.completed > 0 ? esperaCorta(p.cycleTime.mean) : '—', formatNumber(p.cycleTime.mean)],
     [S.dock.kpis.throughput, formatNumber(redondear(p.throughputPerHour, 2)), formatNumber(p.throughputPerHour)],
     [S.dock.kpis.costoTotal, `${formatNumber(redondear(p.totalCost, 2))}${moneda}`, `${formatNumber(p.totalCost)}${moneda}`],
@@ -250,7 +249,8 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
   const { filas, total } = filasRapidas(ir, result, scenario, log);
   const celdas = (f: FilaRapida): ReactNode => (
     <>
-      <td style={numero()}>{formatNumber(f.casos)}</td>
+      {/* Whole cases: a mean over replications (1485.23…) reads as a count (QA of #394). */}
+      <td style={numero()} title={formatNumber(f.casos)}>{formatNumber(Math.round(f.casos))}</td>
       <td style={numero()}>{guion(f.esperaMedia, (v) => formatDuration(v, unit))}</td>
       <td style={numero()}>{guion(f.esperaP95, (v) => formatDuration(v, unit))}</td>
       <td style={numero()}>{guion(f.utilizacion, (v) => formatNumber(v * 100))}</td>

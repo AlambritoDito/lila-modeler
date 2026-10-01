@@ -49,7 +49,8 @@ row selects that element on the canvas. Every control lives in exactly one step:
 
 With an activity selected in **Model**, the properties panel shows a **Quick view · simulation**
 block: its time distribution and resource in the active scenario, and its wait in the last run (or
-*no run*). The wait is the **p95** of the cases measured after the warmup in the first replication,
+*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Simulate
+dock and the Results «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
 when that run's event-log sample is complete; a longer run (more than 10,000 log rows in its first
 replication) shows the **mean** wait over every replication instead, and says so. Its **Edit in
 Parameters** / **Edit in Resources** links open that step in Simulate.

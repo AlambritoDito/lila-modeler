@@ -214,6 +214,8 @@ it('valida antes del Worker; la corrida se queda en Simular con el dock en Resul
   await click(T.dock.abrirResultados);
   expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.resultados);
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
+  // The pressed button went away with Simulate: the focus lands on the Results view, not <body>.
+  expect(document.activeElement).toBe(container.querySelector('section.zona-resultados'));
 });
 it('un error de validación impide iniciar Worker', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));

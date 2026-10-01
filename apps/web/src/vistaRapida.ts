@@ -12,7 +12,7 @@
  */
 import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
 import { esperaCorta } from './BottleneckOverlay';
-import { percentilesPorElemento } from './percentilesPorElemento';
+import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
 import { resumenDistribucion, resumenRecursos } from './ScenarioPanel';
 import { esUnidadTiempo, type UnidadTiempo } from './scenarioFields';
 import type { Strings } from './strings.types';
@@ -23,7 +23,8 @@ export interface VistaRapidaDatos {
   /** `resources` as one line («clerk ×1»), «—» without any; `null` where it does not apply (timer). */
   recurso: string | null;
   /**
-   * Wait before starting (`resourceWait + offHoursWait`) in the last valid run of the active
+   * Wait for a resource (`resourceWait`, the measure of the canvas labels, the Simulate dock and
+   * Results; QA of #394) in the last valid run of the active
    * scenario, rounded like the bottleneck labels (`esperaCorta`). The 95th percentile of the
    * measured cohort (`percentilesPorElemento`: after `run.warmup`) when the run's log sample is in
    * memory and complete — the shell keeps replication 0 only, up to `LOG_SAMPLE_LIMIT` rows, the
@@ -56,12 +57,12 @@ function idDelIr(ir: ProcessIR, id: string): string | null {
   return enIr?.[0] ?? null;
 }
 
-/** Wait p95 per element of a log sample, computed once per sample and warmup (it can be 10k rows). */
+/** Resource wait p95 per element of a log sample, computed once per sample and warmup (it can be 10k rows). */
 const cache = new WeakMap<readonly EventLogRow[], { warmup: number; p95: Map<string, number> }>();
 export function esperasP95(rows: readonly EventLogRow[], warmup = 0): Map<string, number> {
   const hecho = cache.get(rows);
   if (hecho !== undefined && hecho.warmup === warmup) return hecho.p95;
-  const p95 = new Map([...percentilesPorElemento(rows, [0.95], { warmup })].map(([id, [valor]]) => [id, valor!]));
+  const p95 = new Map([...percentilesPorElemento(rows, [0.95], { warmup, medida: ESPERA_RECURSO })].map(([id, [valor]]) => [id, valor!]));
   cache.set(rows, { warmup, p95 });
   return p95;
 }
@@ -83,8 +84,8 @@ export function datosVistaRapida({ id, ir, escenario, resultado, log, S }: Entra
   let espera: VistaRapidaDatos['espera'] = null;
   if (resultado !== null) {
     const metricas = resultado.elements[idIr];
-    const p95 = log !== undefined && !log.truncated ? esperasP95(log.rows, warmup).get(idIr) : undefined;
-    const segundos = p95 ?? (metricas === undefined ? undefined : metricas.resourceWait.mean + metricas.offHoursWait.mean);
+    const p95 = p95Fiable(log) ? esperasP95(log.rows, warmup).get(idIr) : undefined;
+    const segundos = p95 ?? metricas?.resourceWait.mean;
     // A run that has nothing on this element (added after it ran, say) is «—», not «no run».
     espera = segundos === undefined
       ? { texto: S.escenario.sinResumen, p95: false }
