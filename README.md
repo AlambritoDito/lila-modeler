@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17"><img src="https://img.shields.io/badge/Download-Beta_17_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download Beta 17 (macOS; Windows untested)"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Download-Beta_16_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download Beta 16 (macOS; Windows untested)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -79,18 +79,18 @@ asks for a minimal `.bpmn` file or scenario that shows it.
 
 ### Desktop beta
 
-Every beta is a GitHub prerelease. [Beta 17](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17)
+Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
 (not `/releases/latest` — GitHub excludes prereleases from that link) attaches two installers and a
 `SHA256SUMS` file to check them. Where each platform stands:
 
-- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg`. The platform the project is
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg`. The platform the project is
   developed and tested on. The app is ad-hoc sealed but **not notarized**, so the first launch is
   blocked: after the first blocked attempt (double-clicking the app), go to **System Settings ▸
   Privacy & Security** and click **Open Anyway** next to the message naming the app, then confirm
   **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open** works directly. Do not
   disable Gatekeeper to work around this. [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks
   through the whole flow, including checksum verification.
-- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.17-win-x64.exe`, the NSIS installer built by CI. It is
+- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
   **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
   clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
   **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer

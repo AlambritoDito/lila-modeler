@@ -23,11 +23,11 @@ something is not yet wired up, this is stated explicitly under "Limitations of t
 ## Where the installer is and how to open it unsigned
 
 The installer is a `.dmg` generated with `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
-named `Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg` for the current release (hyphens, no spaces, matching
+named `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` for the current release (hyphens, no spaces, matching
 the `SHA256SUMS` file's entry). Download it and `SHA256SUMS` from
-[the `v1.0.0-beta.17` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17)
+[the `v1.0.0-beta.16` release](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
 — not `/releases/latest`, since GitHub excludes prereleases from that link. The release also attaches
-the Windows installer (`Lila-Modeler-1.0.0-beta.17-win-x64.exe`), which is unsigned and untested on a
+the Windows installer (`Lila-Modeler-1.0.0-beta.16-win-x64.exe`), which is unsigned and untested on a
 real Windows machine: see the [Windows tester guide](WINDOWS-TESTER-GUIDE.md). There is no Linux
 installer on the release (CI builds an AppImage, untested — see "Limitations" below). The `.dmg` is
 not distributed inside the repository (the `apps/desktop/release/` folder is in `.gitignore`): you

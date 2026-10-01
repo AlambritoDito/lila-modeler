@@ -23,11 +23,11 @@ explícitamente en «Limitaciones de esta beta».
 ## Dónde está el instalador y cómo abrirlo sin firma
 
 El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
-llamado `Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg` para la versión actual (guiones, sin espacios,
+llamado `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` para la versión actual (guiones, sin espacios,
 igual que la entrada del archivo `SHA256SUMS`). Descárgalo junto con `SHA256SUMS` desde
-[la versión `v1.0.0-beta.17`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17)
+[la versión `v1.0.0-beta.16`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
 — no `/releases/latest`, porque GitHub excluye los prereleases de ese enlace. El release también
-adjunta el instalador de Windows (`Lila-Modeler-1.0.0-beta.17-win-x64.exe`), que está sin firmar y
+adjunta el instalador de Windows (`Lila-Modeler-1.0.0-beta.16-win-x64.exe`), que está sin firmar y
 sin probar en una máquina Windows real: ver la [guía para probar en
 Windows](GUIA-PROBADOR-WINDOWS.md). No hay instalador de Linux en el release (CI construye un
 AppImage, sin probar — ver «Limitaciones» más abajo). El `.dmg` no se distribuye dentro del repositorio (la carpeta `apps/desktop/release/` está

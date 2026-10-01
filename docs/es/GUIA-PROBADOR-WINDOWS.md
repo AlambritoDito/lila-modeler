@@ -28,14 +28,14 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
 [guía en inglés](../WINDOWS-TESTER-GUIDE.md), que usa los nombres en inglés.
 
 1. **Descarga el instalador.** Abre la
-   [versión `v1.0.0-beta.17`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.17)
+   [versión `v1.0.0-beta.16`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
    (es un prerelease, así que no aparece como «Latest») y descarga
-   `Lila-Modeler-1.0.0-beta.17-win-x64.exe` de la lista **Assets**. Tu navegador puede pedirte que
+   `Lila-Modeler-1.0.0-beta.16-win-x64.exe` de la lista **Assets**. Tu navegador puede pedirte que
    confirmes que quieres conservar el archivo; confírmalo.
 2. **Opcional: verifica la descarga.** Abre en el Explorador de archivos la carpeta donde guardaste el
    archivo (normalmente **Descargas**), haz clic derecho en un espacio vacío y elige **Abrir en
    Terminal** (o escribe `powershell` en la barra de direcciones y pulsa Enter). Ejecuta
-   `Get-FileHash .\Lila-Modeler-1.0.0-beta.17-win-x64.exe -Algorithm SHA256` y compara el resultado
+   `Get-FileHash .\Lila-Modeler-1.0.0-beta.16-win-x64.exe -Algorithm SHA256` y compara el resultado
    con la línea de ese archivo en el `SHA256SUMS` del release (descárgalo también). Da igual si son
    mayúsculas o minúsculas. Si no coinciden, no ejecutes el archivo y avísanos.
 3. **Pasa el aviso de SmartScreen.** Haz doble clic en el `.exe`. Windows muestra **«Windows protegió
@@ -45,7 +45,7 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
 4. **Instala.** Se espera que el instalador funcione con un solo clic, sin preguntas, y abra Lila
    Modeler al terminar. Si muestra un asistente, síguelo y anótalo en tu reporte.
 5. **Primer arranque.** Deberías ver la pantalla de **Bienvenida** con la versión
-   (`v1.0.0-beta.17`), **Empezar**, una lista de **Ejemplos** y **Recientes**. Si el Firewall de
+   (`v1.0.0-beta.16`), **Empezar**, una lista de **Ejemplos** y **Recientes**. Si el Firewall de
    Windows Defender pregunta por el acceso a la red, puedes elegir **Cancelar**; la app no lo necesita.
 6. **Abre un ejemplo.** En **Ejemplos**, pulsa **Pedido de restaurante**. Se abre un diagrama con dos
    escenarios listos para correr.
@@ -91,7 +91,7 @@ Reporta aunque todo haya funcionado («los 13 pasos bien» sirve). Usa una de es
 Para saber tu versión de Windows, pulsa `Win+R`, escribe `winver` y pulsa Enter.
 
 ```text
-Versión de Lila Modeler: 1.0.0-beta.17 (Archivo ▸ Acerca de Lila Modeler)
+Versión de Lila Modeler: 1.0.0-beta.16 (Archivo ▸ Acerca de Lila Modeler)
 Versión y compilación de Windows (de winver):
 Idioma de Windows e idioma de la app (español / inglés):
 Equipo: (por ejemplo laptop, 8 GB de RAM; antivirus si lo sabes)
