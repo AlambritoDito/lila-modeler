@@ -1735,6 +1735,8 @@ it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de
 // --- Barra superior y barra de estado como el artboard 01 (#237) ---
 
 it('la barra tiene una sola acción primaria y corre el escenario desde cualquier modo', async () => {
+  // Same wait as «valida antes del Worker…» (#494): the 150 ms startup reparse would make the run stale.
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.modos.modelar);
   expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
   await click(T.app.ejecutar);
