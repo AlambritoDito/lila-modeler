@@ -161,7 +161,8 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
   correspondiente.
 - El panel de escenario se puede separar en su propia ventana con el interruptor de la barra
   superior (**Escenario acoplado ↗** / **En ventana aparte**); **Acoplar** en el sustituto, o
-  cerrar la ventana, lo devuelve.
+  cerrar la ventana, lo devuelve. Mientras está separado el panel derecho se oculta, así que el
+  sustituto solo aparece al reabrir el panel con `⇧⌘P`; el interruptor de la barra también lo acopla.
 
 ### Resultados
 
@@ -311,9 +312,10 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ### Ajustes
 
-- `⌘,` (o el botón ⚙ de la barra) abre **Ajustes** en la pestaña **General** (idioma e interruptor
-  **Avanzado**); **Apariencia** y **Atajos** son las otras dos pestañas. **Apariencia** tiene uno de siete temas (Lila claro, Lila oscuro, Eva-01 oscuro, Papel claro, Tieso claro,
-  Akira oscuro, Montana morado) y densidad (compacta, normal, cómoda). El cambio
+- `⌘,` (o el botón ⚙ de la barra) abre **Ajustes** en la pestaña **General** (idioma, densidad —
+  compacta, normal, cómoda— e interruptor **Avanzado**); **Apariencia** y **Atajos** son las otras
+  dos pestañas. **Apariencia** tiene **Seguir el tema del sistema** y uno de siete temas (Lila claro,
+  Lila oscuro, Eva-01 oscuro, Papel claro, Tieso claro, Akira oscuro, Montana morado). El cambio
   de tema es inmediato, repinta también el diagrama y se recuerda entre arranques (localStorage de
   la app, bajo `lila://`). Cambiar de tema vuelve a montar el lienzo, así que vacía la pila de
   deshacer; el diagrama y los cambios sin guardar se conservan.

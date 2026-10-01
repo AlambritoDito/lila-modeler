@@ -161,7 +161,8 @@ follow that same setting. This walkthrough uses the English labels.
   run). **Edit in Parameters** and **Edit in Resources** jump to the matching step.
 - The scenario panel can be detached into its own window with the toggle in the top bar
   (**Scenario docked ↗** / **In its own window**); **Dock** in the stand-in, or closing the
-  window, brings it back.
+  window, brings it back. While it is detached the right panel hides, so the stand-in only shows
+  after reopening the panel with `⇧⌘P`; the toolbar toggle also docks it.
 
 ### Results («Resultados»)
 
@@ -316,10 +317,10 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ### Settings («Ajustes»)
 
-- `⌘,` (or the ⚙ button in the bar) opens **Settings** on the **General** tab (language and the
-  **Advanced** switch); **Appearance** and **Shortcuts** are the other two tabs. **Appearance** holds
-  one of seven themes (Lila Light, Lila Dark, Eva-01 dark, Paper light,
-  Tieso light, Akira dark, Montana purple) and density (Compact/Normal/Comfortable). The theme change is immediate, it repaints
+- `⌘,` (or the ⚙ button in the bar) opens **Settings** on the **General** tab (language, density —
+  Compact/Normal/Comfortable — and the **Advanced** switch); **Appearance** and **Shortcuts** are the
+  other two tabs. **Appearance** holds **Follow the system theme** and one of seven themes (Lila
+  Light, Lila Dark, Eva-01 dark, Paper light, Tieso light, Akira dark, Montana purple). The theme change is immediate, it repaints
   the diagram too, and it is remembered across launches (the app's localStorage, under `lila://`).
   Switching themes remounts the canvas, so it clears the undo stack; the diagram and any unsaved
   changes are kept.
