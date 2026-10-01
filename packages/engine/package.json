@@ -20,6 +20,10 @@
       "types": "./dist/bpmn/outline.d.ts",
       "default": "./dist/bpmn/outline.js"
     },
+    "./edit": {
+      "types": "./dist/bpmn/edit.d.ts",
+      "default": "./dist/bpmn/edit.js"
+    },
     "./schema": {
       "types": "./dist/scenario.d.ts",
       "default": "./dist/scenario.js"

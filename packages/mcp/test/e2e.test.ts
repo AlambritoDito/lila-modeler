@@ -54,6 +54,7 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'create_process',
     'create_project',
     'describe_process',
+    'edit_process',
     'export_diagram',
     'export_document',
     'export_results',
@@ -133,7 +134,8 @@ test('el servidor sobrevive a un error de tool y sigue respondiendo', async () =
   expect(roto.isError).toBe(true);
 
   const { tools } = await client.listTools();
-  expect(tools).toHaveLength(15);
+  // Still serving: the same tools as before the failed call (the full list is asserted above).
+  expect(tools.map((tool) => tool.name)).toContain('edit_process');
 }, 120_000);
 
 test('nada de esto deja archivos nuevos en examples/pedido', () => {

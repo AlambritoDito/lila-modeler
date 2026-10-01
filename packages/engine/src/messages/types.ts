@@ -374,6 +374,57 @@ export interface CliMessages {
   processMissingOption: (option: string) => string;
   processShowHeader: (name: string, slug: string) => string;
   processShowLanes: (lanes: string) => string;
+  /* --- edits and `lila process edit` (#98), shared by the CLI and the MCP server -- */
+  editInvalid: (detail: string) => string;
+  editBpmnInvalid: (detail: string) => string;
+  editContentLoss: (detail: string) => string;
+  editUnknownId: (id: string) => string;
+  editNotAStep: (id: string, type: string) => string;
+  editOtherProcess: (id: string, process: string) => string;
+  editBadId: (id: string) => string;
+  editIdTaken: (id: string) => string;
+  editAfterAndBetween: () => string;
+  editAfterAndBefore: () => string;
+  editAfterEnd: (id: string) => string;
+  editAfterAmbiguous: (id: string, count: number) => string;
+  editNoFlowBetween: (from: string, to: string) => string;
+  editOtherContainer: (from: string, to: string) => string;
+  editFromEnd: (id: string) => string;
+  editToStart: (id: string) => string;
+  editProbabilityNeedsChoice: (id: string) => string;
+  editNeedsScenario: (field: string, scenario: string) => string;
+  editRemoveAmbiguous: (id: string, incoming: number, outgoing: number) => string;
+  editRemoveBoundary: (id: string, boundaries: string) => string;
+  editCannotRemove: (id: string, type: string) => string;
+  editBoundaryNeedsActivity: (id: string, boundaries: string) => string;
+  editLaneUnknown: (lane: string, lanes: string) => string;
+  editLaneAmbiguous: (lane: string, ids: string) => string;
+  editLaneOutsideProcess: (id: string) => string;
+  editProbabilityNote: (gateway: string, scenario: string, sum: number, flows: string) => string;
+  editScenarioRemoved: (scenario: string, id: string, removed: string) => string;
+  editScenarioBroken: (detail: string) => string;
+  editPositionAfter: (id: string) => string;
+  editPositionBetween: (from: string, to: string) => string;
+  editPositionAlone: () => string;
+  editPositionLane: (lane: string) => string;
+  editAdded: (id: string, type: string, position: string) => string;
+  editConnected: (from: string, to: string, flow: string) => string;
+  editRemovedFlow: (id: string) => string;
+  editRemovedStep: (id: string, reconnected: string, also: string) => string;
+  editAlsoRemoved: (ids: string) => string;
+  editRenamed: (id: string, before: string, after: string) => string;
+  editRetyped: (id: string, from: string, to: string) => string;
+  editMoved: (id: string, lane: string) => string;
+  editLaneAdded: (name: string, id: string) => string;
+  /** One-line summary of `edit_process` / `lila process edit`. */
+  processEdited: (name: string, slug: string, file: string, operations: number, removed: number) => string;
+  processEditDryRun: (name: string, slug: string, file: string, operations: number, removed: number) => string;
+  editOpsUnreadable: (file: string, detail: string) => string;
+  editNotList: () => string;
+  editUnknownOp: (op: string, accepted: string) => string;
+  editBadBetween: () => string;
+  editDuplicateLane: (lane: string) => string;
+  editLayoutFailed: (detail: string) => string;
 }
 
 /**

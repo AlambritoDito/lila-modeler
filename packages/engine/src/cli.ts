@@ -64,6 +64,7 @@ import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './m
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
 import { version } from './version.js';
 import { createLilaProcess, readLilaOutline } from './project-fs/outline.js';
+import { editLilaProcess } from './project-fs/edit.js';
 import type { NormalOutline } from './bpmn/outline.js';
 import { describeDistribution } from './xlsx-report.js';
 import { dispatchProcessTools, dispatchScenarioTools, isProcessToolSubcommand } from './cli-agent-tools.js';
@@ -1145,6 +1146,8 @@ async function processCommand(argv: readonly string[], locale: Locale): Promise<
     args: [...argv],
     options: {
       outline: { type: 'string' },
+      ops: { type: 'string' },
+      'no-layout': { type: 'boolean' },
       project: { type: 'string', short: 'p' },
       process: { type: 'string' },
       name: { type: 'string' },
@@ -1160,7 +1163,7 @@ async function processCommand(argv: readonly string[], locale: Locale): Promise<
     return 0;
   }
   const [sub, ...rest] = positionals;
-  if (sub !== 'create' && sub !== 'show') {
+  if (sub !== 'create' && sub !== 'show' && sub !== 'edit') {
     console.error(C.commandError('process', C.processUnknownSubcommand(sub ?? '')));
     return 1;
   }
@@ -1179,6 +1182,34 @@ async function processCommand(argv: readonly string[], locale: Locale): Promise<
     else {
       printOutline(read.outline, read.slug, locale);
       for (const warning of read.warnings) console.error(`${C.warningLabel()}: ${warning}`);
+    }
+    return 0;
+  }
+
+  if (sub === 'edit') {
+    if (values.ops === undefined) {
+      console.error(C.commandError('process', C.processMissingOption('--ops <ops.json>')));
+      return 1;
+    }
+    let operations: unknown;
+    try {
+      operations = JSON.parse(readFileSync(resolve(values.ops), 'utf8'));
+    } catch (error) {
+      console.error(C.commandError('process', C.editOpsUnreadable(values.ops, error instanceof Error ? error.message : String(error))));
+      return 1;
+    }
+    const edited = await editLilaProcess(values.project, operations, {
+      process: values.process,
+      dryRun: values['dry-run'] === true,
+      layout: values['no-layout'] !== true,
+      locale,
+    });
+    if (values.json === true) console.log(JSON.stringify(edited, null, 2));
+    else {
+      console.log(edited.summary);
+      for (const change of edited.changes) console.log(`  ${change.op}: ${change.message}`);
+      for (const note of edited.notes) console.log(`${C.warningLabel()} ${note}`);
+      for (const warning of edited.warnings) console.log(`${C.warningLabel()} ${warning.code} ${warning.id}: ${warning.message}`);
     }
     return 0;
   }
