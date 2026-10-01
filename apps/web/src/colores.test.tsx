@@ -204,6 +204,8 @@ describe('dark themes, at render time only (#489)', () => {
     // Outside any pool, or in an uncoloured one, the theme's colours stay.
     expect(trazoAlPintar(m.elemento('Flow_Aprobado'), oscuro)).toBeUndefined();
     expect(trazoAlPintar({ ...m.elemento('Flow_Aprobado'), parent: m.elemento('Participant_Cliente') }, oscuro)).toBeUndefined();
+    // Taken off the canvas (⌘Z of a pasted pool), bpmn-js leaves `parent: null` (#534).
+    expect(trazoAlPintar({ ...m.elemento('Flow_Aprobado'), parent: null }, oscuro)).toBeUndefined();
   });
 
   it('a pool that changes redraws the flows and labels inside it, since its fill is their background', () => {

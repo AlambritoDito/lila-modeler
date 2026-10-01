@@ -3152,6 +3152,27 @@ it('a start and a task drawn on an empty process get the defaults in the BASE sc
   // Undo/delete: the untouched seed (Task_C) goes with its node; the edited entry stays.
   await reparsear(modelo(['Start_A'], []));
   expect(Object.keys(asIs()).sort()).toEqual(['Start_A', 'Task_A', 'Task_B']);
+  // ⌘Z of that delete: Task_C comes back with its seed (#534).
+  await reparsear(modelo(['Start_A', 'Start_B'], ['Task_A', 'Task_B', 'Task_C']));
+  expect(asIs()['Task_C']).toEqual({ processingTime: { type: 'constant', value: 60 } });
+});
+
+it('nodes that come back (⌘Z of a pool delete) are not seeded: the scenario is the one before the delete (#534)', async () => {
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const xml = modelo(['Start_A'], ['Task_A']);
+  const llegadas = { triggerCount: 5, interTriggerTimer: { type: 'constant', value: 10 } };
+  const doc = { version: 1, id: 'abierto', name: 'Abierto', model: { id: 'Process_semilla', name: 'model.bpmn', xml, revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, model: 'model.bpmn', run: { duration: 60 }, elements: { Start_A: llegadas } } }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(xml);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  // The first pool deleted: the engine simulates the other one, whose nodes are new.
+  await reparsear(modelo(['Start_Z'], ['Task_Z']));
+  // ⌘Z: the first pool is back, Task_A without a seed it never had, the other pool's seeds gone.
+  await reparsear(xml);
+  expect(asIs()).toEqual({ Start_A: llegadas });
 });
 
 it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
