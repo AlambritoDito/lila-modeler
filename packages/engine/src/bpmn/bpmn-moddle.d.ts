@@ -72,6 +72,24 @@ declare module 'bpmn-moddle' {
     /** `lila:attributeDefinition` (#509); its `default` is a string, not the gateway's flow above. */
     appliesTo?: string;
     options?: ModdleElement[];
+    /** Attributes of namespaces moddle does not know, by qualified name. */
+    $attrs?: Record<string, unknown>;
+    /** A property by qualified name, known (`bioc:fill`, `color:border-color`) or not. */
+    get?(name: string): unknown;
+    /** `bpmn:Definitions` → `bpmndi:BPMNDiagram` → `bpmndi:BPMNPlane` (DI, read by `render-svg.ts`). */
+    diagrams?: ModdleElement[];
+    plane?: ModdleElement;
+    planeElement?: ModdleElement[];
+    /** `bpmndi:BPMNShape` / `BPMNEdge` / `BPMNPlane` */
+    bpmnElement?: ModdleElement;
+    bounds?: { x: number; y: number; width: number; height: number };
+    waypoint?: { x: number; y: number }[];
+    label?: ModdleElement;
+    isExpanded?: boolean;
+    isHorizontal?: boolean;
+    isMarkerVisible?: boolean;
+    /** `bpmn:BoundaryEvent` / event sub-process start */
+    isInterrupting?: boolean;
   }
 
   /**
