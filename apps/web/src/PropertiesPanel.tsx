@@ -21,6 +21,7 @@
  */
 import { documentationHolder } from '@lila-modeler/engine/bpmn';
 import { useEffect, useReducer, useState } from 'react';
+import { ANCHO_MINIMO, conAncho, problemaDeAncho } from './ancho';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
 import { AtributosDelElemento } from './AtributosExtendidos';
@@ -379,7 +380,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
     <>
       <CabeceraElemento elemento={elemento} avanzado={avanzado} simulacion={simulacion} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} ancho={modelador.servicios.ancho} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -536,10 +537,12 @@ function Propiedades({
   refrescar,
   avanzado = false,
   pintar,
+  ancho,
   raiz,
 }: PropsPestana & {
   avanzado?: boolean;
   pintar?: ((elementos: ElementoColoreable[], color: ColorId | null) => void) | undefined;
+  ancho?: Servicios['ancho'];
   /** The canvas root, where the extended attribute definitions are found (#509). */
   raiz?: ElementoLienzo | undefined;
 }): React.JSX.Element {
@@ -640,10 +643,64 @@ function Propiedades({
         </div>
       )}
 
+      {ancho !== undefined && conAncho(real) && <CampoAncho key={real.id} forma={real as ElementoLienzo & Caja} ancho={ancho} refrescar={refrescar} />}
+
       {pintar !== undefined && <Colores elementos={[elemento]} pintar={pintar} refrescar={refrescar} />}
 
       {raiz !== undefined && <AtributosDelElemento elemento={real} raiz={raiz} escritor={escritor} refrescar={refrescar} />}
     </div>
+  );
+}
+
+interface Caja { x: number; y: number; width: number; height: number }
+
+/**
+ * The width of a task or call activity (#563), in diagram units. Like a number attribute it keeps
+ * a draft and writes it on blur or Enter, and only if it fits; an invalid draft stays on screen
+ * with the reason and the diagram keeps its width. Escape, undo or a drag on the canvas drop it.
+ */
+function CampoAncho({ forma, ancho, refrescar }: {
+  forma: ElementoLienzo & Caja;
+  ancho: NonNullable<Servicios['ancho']>;
+  refrescar: () => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  const guardado = String(forma.width);
+  const [borrador, setBorrador] = useState<string | null>(null);
+  useEffect(() => setBorrador(null), [guardado]);
+  const mostrado = borrador ?? guardado;
+  const problema = problemaDeAncho(mostrado);
+  const idError = `ancho-error-${forma.id}`;
+  const confirmar = (): void => {
+    if (borrador === null || problemaDeAncho(borrador) !== null) return;
+    setBorrador(null);
+    if (Number(borrador) === forma.width) return;
+    ancho.fijar(forma, Number(borrador));
+    refrescar();
+  };
+  return (
+    <label className="campo">
+      <span>{S.propiedades.ancho}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={S.propiedades.ancho}
+        aria-invalid={problema !== null}
+        {...(problema === null ? {} : { 'aria-describedby': idError })}
+        value={mostrado}
+        onChange={(e) => setBorrador(e.target.value)}
+        onBlur={confirmar}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') confirmar();
+          if (e.key === 'Escape') setBorrador(null);
+        }}
+      />
+      {problema !== null && (
+        <small id={idError} className="error" role="alert">
+          {problema === 'minimo' ? S.propiedades.anchoProblemas.minimo(ANCHO_MINIMO) : S.propiedades.anchoProblemas[problema]}
+        </small>
+      )}
+    </label>
   );
 }
 
