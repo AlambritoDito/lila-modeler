@@ -9,6 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { simulate } from '@lila-modeler/engine';
 import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 import { DesktopStore } from './store/DesktopStore';
 import { newModelXml, seedModelXml } from './project';
@@ -59,7 +60,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
   alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {},
   // #461: the canvas double-click listener, to play a double-click on a call activity.
-  dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown }));
+  dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown,
+  // QA of #539: the canvas's `onSeleccion`, to play bpmn-js reporting a selection.
+  onSeleccion: (_id: string | null) => {} }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -96,7 +99,8 @@ vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () =
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
   } }));
-vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
+vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void; onSeleccion: (id: string | null) => void }) => {
+  mocks.onSeleccion = onSeleccion;
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
@@ -3759,3 +3763,56 @@ it('an automatic reload gives the focus back to the canvas only if it had it (#5
   expect(mocks.enfocar).toHaveBeenCalledOnce();
 });
 
+
+it('an automatic reload selects the same element again in the new import (QA of #539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
+  await click(T.app.guardar);
+  // The canvas reported `Task_TomarPedido` selected (the properties panel shows it).
+  await act(async () => { mocks.onSeleccion('Task_TomarPedido'); });
+  mocks.abrir.mockClear();
+  mocks.seleccionar.mockClear();
+
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.seleccionar).toHaveBeenCalledWith('Task_TomarPedido');
+  });
+  expect(reload).toHaveBeenCalledOnce();
+  // After the import, against its new elements: `Modeler.abrir` cleared the old selection, and
+  // `seleccionar` finds the id in the reloaded diagram (or does nothing when it is gone).
+  expect(mocks.abrir.mock.invocationCallOrder[0]!).toBeLessThan(mocks.seleccionar.mock.invocationCallOrder[0]!);
+
+  // Nothing selected before: nothing is selected after.
+  await act(async () => { mocks.onSeleccion(null); });
+  mocks.seleccionar.mockClear();
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(mocks.seleccionar).not.toHaveBeenCalled();
+});
+
+it('the status bar shows the seed of the run on screen, not only the scenario\'s (QA of #539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  const pedido = decodeLila(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../examples/pedido.lila')));
+  const nombre = 'as-is.scenario.json';
+  const escenario = pedido.scenarios[nombre] as { run: Record<string, unknown> };
+  expect(escenario.run.seed).toBe(42);
+  // An agent ran AS-IS with `--seed 7` (short, so the test stays fast) and saved the run.
+  const entradas = { ...escenario, run: { ...escenario.run, seed: 7, duration: 600, warmup: 0, replications: 1 } };
+  const { ir: irPedido } = await parseBpmn(pedido.model.xml, { scenarios: Object.values(pedido.scenarios) });
+  const result = simulate(irPedido, entradas as unknown as Parameters<typeof simulate>[1], { log: false });
+  const corrida = { id: 'run-agente', scenarioName: nombre, result,
+    inputs: { modelRevision: pedido.model.revision, scenarioRevision: pedido.scenarioRevisions[nombre] ?? 0, xml: pedido.model.xml, scenario: entradas } };
+  reload.mockResolvedValue({ ...pedido, runs: [corrida] });
+
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(container.querySelector('.estado')!.textContent).toContain(T.app.semilla('7'));
+  });
+  expect(container.querySelector('.estado')!.textContent).not.toContain(T.app.semilla('42'));
+});

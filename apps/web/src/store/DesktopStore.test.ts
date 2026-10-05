@@ -631,8 +631,32 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
       // The code stays in the message (contract), and any other error is left as it came.
       expect(es.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
       expect(S.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
-      bridge.writeProject = async () => { throw new Error('E-CAMBIO-EXTERNO: model.bpmn'); };
-      await expect(store.saveProject(documentoBase())).rejects.toThrow('E-CAMBIO-EXTERNO: model.bpmn');
+      bridge.writeProject = async () => { throw new Error('E-RUN-DUPLICADO: model.bpmn'); };
+      await expect(store.saveProject(documentoBase())).rejects.toThrow('E-RUN-DUPLICADO: model.bpmn');
+    } finally {
+      setLocale('en');
+    }
+  });
+
+  it('E-CAMBIO-EXTERNO after «Keep mine» is shown in the UI language, naming the file, without the IPC prefix (#539)', async () => {
+    const remoto = "Error invoking remote method 'lila:writeProject': Error: E-CAMBIO-EXTERNO: " +
+      'Cambiaron en disco desde la última lectura/escritura, sin guardar: pedido.lila.';
+    const bridge = new FakeBridge();
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    try {
+      for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
+        setLocale(locale);
+        bridge.writeProject = async () => { throw new Error(remoto); };
+        bridge.queueChooseFolder('/carpeta/pedido.lila');
+        await store.openProject();
+        const error = await store.saveProject(documentoBase()).then(() => null, (e: unknown) => e as Error);
+        expect(error?.message).toBe(catalogo.almacen.errorCambioExterno('pedido.lila'));
+        expect(error?.message).not.toContain('invoking remote method');
+        expect(error?.message).toMatch(/^E-CAMBIO-EXTERNO: pedido\.lila /);
+      }
+      expect(S.almacen.errorCambioExterno('x')).toMatch(/Save As/);
+      expect(es.almacen.errorCambioExterno('x')).toMatch(/Recarga/);
     } finally {
       setLocale('en');
     }

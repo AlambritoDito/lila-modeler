@@ -1446,6 +1446,10 @@ export const es: Strings = {
     errorArchivoOcupado: (ruta: string): string =>
       `E-ARCHIVO-OCUPADO: otro programa está guardando ${ruta} ahora mismo, así que no se guardó nada. ` +
       'Vuelve a intentarlo en un momento.',
+    /** `E-CAMBIO-EXTERNO` del disco (#539): `nombre` cambió fuera de Lila desde la última lectura. */
+    errorCambioExterno: (nombre: string): string =>
+      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que se abrió, así que no se guardó nada. ` +
+      'Recarga para traer la otra versión, o usa «Guardar como» para conservar la tuya en otro archivo.',
     /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
     errorCarpetaOcupada: (ruta: string): string =>
       `E-CARPETA-OCUPADA: ${ruta} tiene archivos de otro proyecto o proceso, y guardar los ` +

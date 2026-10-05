@@ -1464,6 +1464,10 @@ export const en = {
     errorArchivoOcupado: (ruta: string): string =>
       `E-ARCHIVO-OCUPADO: another program is saving ${ruta} right now, so nothing was saved. ` +
       'Try again in a moment.',
+    /** `E-CAMBIO-EXTERNO` from the disk (#539): `nombre` changed outside Lila since it was last read. */
+    errorCambioExterno: (nombre: string): string =>
+      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since it was opened, so nothing was saved. ` +
+      'Reload to get the other version, or use Save As to keep yours in another file.',
     /** `E-CARPETA-OCUPADA` from the disk (#517): `ruta` holds another project's files. */
     errorCarpetaOcupada: (ruta: string): string =>
       `E-CARPETA-OCUPADA: ${ruta} holds files of another project or process, and saving would ` +
