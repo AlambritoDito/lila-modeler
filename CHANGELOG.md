@@ -3,6 +3,29 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.20] - 2026-10-05
+
+On Windows, Lila Modeler is now meant to be used as the web app installed from Chrome or Edge
+(ADR-031, #577). Signing the Windows installer is paused, so the unsigned `.exe` becomes a secondary
+channel. In Chromium the web app installs as a real app, opens `.lila` files by double click and
+saves back to the same file; Safari and Firefox keep the download.
+
+### Added
+
+- **Installable web app (#570, #571)**: a web app manifest with the brand icons, including a maskable
+  one. Chrome and Edge install it with its own window and Start menu entry.
+- **Open by double click (#572)**: double-clicking a `.lila` opens it in the installed web app the
+  same way as Open, including the unsaved-changes prompt.
+- **Save in place (#573)**: in Chrome and Edge, Save writes back to the same `.lila` instead of
+  downloading a new copy. The first save and Save as ask where to save. Browsers without the File
+  System Access API still download.
+- **Windows web app tester guide (#575)**, in English and Spanish, for people who are not developers.
+  `tools/check-pwa.mjs` checks the installable app over CDP before anyone tests it by hand (#576).
+
+### Changed
+
+- On Windows the unsigned `.exe` is the secondary channel; ADR-023 is amended by ADR-031.
+
 ## [1.0.0-beta.19] - 2026-10-05
 
 The MCP server is published as its own npm package, `@lila-modeler/mcp` (#569, ADR-030). Until now

@@ -247,7 +247,7 @@ English is the base language; Spanish versions live under `docs/es/`.
   "for agents" section.
 - [`MCP.md`](docs/MCP.md) — the MCP server and its sixteen tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
-- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-030).
+- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-031).
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.

@@ -259,7 +259,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciséis tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
-  ADR-030).
+  ADR-031).
 - [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
