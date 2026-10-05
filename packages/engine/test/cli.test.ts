@@ -90,7 +90,7 @@ test('un comando desconocido sale con 1', async () => {
 
 test('validate sin ruta sale con 1', async () => {
   expect(await main(['validate'])).toBe(1);
-  expect(out.join('\n')).toContain('the path of the .bpmn file is missing');
+  expect(out.join('\n')).toContain('the path of the .bpmn or .lila file is missing');
 });
 
 test('--help sale con 0', async () => {

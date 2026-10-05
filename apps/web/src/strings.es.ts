@@ -243,6 +243,9 @@ export const es: Strings = {
     sinValor: '—',
     densidadEstado: (nombre: string): string => `Densidad ${nombre}`,
     zoom: (porCiento: number): string => `Zoom ${porCiento} % · ajustar`,
+    cambioExterno: 'El archivo cambió fuera de Lila',
+    recargarCambioExterno: 'Recargar',
+    mantenerMios: 'Conservar los míos',
     diagramaSuelto: 'Diagrama suelto: los escenarios y las corridas no se guardan hasta «Guardar como»',
     perdidaAlExportar: (n: number, lista: string): string =>
       `${n} ${n === 1 ? 'elemento o referencia' : 'elementos o referencias'} ${
@@ -1490,6 +1493,17 @@ export const es: Strings = {
     /** «Guardar como» de un diagrama suelto sobre la carpeta que ya es su proyecto (LILA-208). */
     errorMismaCarpeta:
       'Esta carpeta ya tiene su model.bpmn; para convertir el diagrama suelto en proyecto elige otra carpeta.',
+    /** #539: falló releer el proyecto abierto tras un cambio externo; `codigo` es el código del disco. */
+    errorRecarga: (ruta: string, codigo: string): string =>
+      `${codigo}: ${ruta} cambió fuera de Lila pero no se pudo volver a leer; lo que hay en pantalla no cambió.`,
+    /** `E-ARCHIVO-OCUPADO` del disco (#466): otro programa tiene el bloqueo del `.lila`. */
+    errorArchivoOcupado: (ruta: string): string =>
+      `E-ARCHIVO-OCUPADO: otro programa está guardando ${ruta} ahora mismo, así que no se guardó nada. ` +
+      'Vuelve a intentarlo en un momento.',
+    /** `E-CAMBIO-EXTERNO` del disco (#539): `nombre` cambió fuera de Lila desde la última lectura. */
+    errorCambioExterno: (nombre: string): string =>
+      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que se abrió, así que no se guardó nada. ` +
+      'Recarga para traer la otra versión, o usa «Guardar como» para conservar la tuya en otro archivo.',
     /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
     errorCarpetaOcupada: (ruta: string): string =>
       `E-CARPETA-OCUPADA: ${ruta} tiene archivos de otro proyecto o proceso, y guardar los ` +

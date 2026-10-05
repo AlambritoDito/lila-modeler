@@ -57,12 +57,23 @@ afterEach(async () => {
   await client.close();
 });
 
-test('listTools devuelve las cinco tools', async () => {
+test('listTools devuelve todas las tools', async () => {
   const { tools } = await client.listTools();
   const names = tools.map((tool) => tool.name).sort();
   expect(names).toEqual([
+    'annotate_element',
     'compare_scenarios',
+    'create_process',
+    'create_project',
     'describe_process',
+    'edit_process',
+    'export_diagram',
+    'export_document',
+    'export_results',
+    'export_scenario_template',
+    'get_process_outline',
+    'get_raci_matrix',
+    'import_scenario_sheet',
     'patch_scenario',
     'run_simulation',
     'validate_bpmn',
@@ -481,7 +492,7 @@ test('run_simulation: un escenario inline inválido no cita un archivo que no ex
  * Idioma (LILA-211, parte 2)
  * ------------------------------------------------------------------ */
 
-test('`title`, `description` y los `describe()` de las cinco tools están en inglés', async () => {
+test('`title`, `description` y los `describe()` de las tools están en inglés', async () => {
   const { tools } = await client.listTools();
   // La superficie del protocolo no depende del `locale`: el cliente la leyó una sola vez.
   for (const tool of tools) {
@@ -495,15 +506,26 @@ test('`title`, `description` y los `describe()` de las cinco tools están en ing
     }
   }
   expect(tools.map((tool) => tool.title).sort()).toEqual([
+    'Annotate element',
     'Compare scenarios',
+    'Create process',
+    'Create project',
     'Describe process',
+    'Edit process',
+    'Export diagram',
+    'Export process document',
+    'Export results',
+    'Export scenario template',
+    'Get RACI matrix',
+    'Get process outline',
+    'Import scenario sheet',
     'Patch scenario',
     'Run simulation',
     'Validate BPMN',
   ]);
 });
 
-test('las cinco tools aceptan `locale` como enum opcional', async () => {
+test('todas las tools aceptan `locale` como enum opcional', async () => {
   const { tools } = await client.listTools();
   for (const tool of tools) {
     const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};

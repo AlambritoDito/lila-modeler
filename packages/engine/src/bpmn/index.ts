@@ -4,3 +4,5 @@ export * from './parse.js';
 export * from './validate.js';
 export * from './validate-report.js';
 export * from './attributes.js';
+export * from './render-svg.js';
+export * from './annotation-holders.js';

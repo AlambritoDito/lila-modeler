@@ -264,6 +264,9 @@ export const en = {
     sinValor: '—',
     densidadEstado: (nombre: string): string => `${nombre} density`,
     zoom: (porCiento: number): string => `Zoom ${porCiento} % · fit`,
+    cambioExterno: 'The file changed outside Lila',
+    recargarCambioExterno: 'Reload',
+    mantenerMios: 'Keep mine',
     diagramaSuelto: 'Loose diagram: scenarios and runs are not saved until «Save as»',
     perdidaAlExportar: (n: number, lista: string): string =>
       `${n} ${n === 1 ? 'element or reference' : 'elements or references'} will be lost on export: ${lista}`,
@@ -1513,6 +1516,17 @@ export const en = {
     /** «Save as» of a loose diagram over the folder that already is its project (LILA-208). */
     errorMismaCarpeta:
       'This folder already has its model.bpmn; to turn the loose diagram into a project pick another folder.',
+    /** #539: re-reading the open project after an outside change failed; `codigo` is the disk's code. */
+    errorRecarga: (ruta: string, codigo: string): string =>
+      `${codigo}: ${ruta} changed outside Lila but could not be read back; what is on screen is unchanged.`,
+    /** `E-ARCHIVO-OCUPADO` from the disk (#466): another program holds the `.lila`'s lock. */
+    errorArchivoOcupado: (ruta: string): string =>
+      `E-ARCHIVO-OCUPADO: another program is saving ${ruta} right now, so nothing was saved. ` +
+      'Try again in a moment.',
+    /** `E-CAMBIO-EXTERNO` from the disk (#539): `nombre` changed outside Lila since it was last read. */
+    errorCambioExterno: (nombre: string): string =>
+      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since it was opened, so nothing was saved. ` +
+      'Reload to get the other version, or use Save As to keep yours in another file.',
     /** `E-CARPETA-OCUPADA` from the disk (#517): `ruta` holds another project's files. */
     errorCarpetaOcupada: (ruta: string): string =>
       `E-CARPETA-OCUPADA: ${ruta} holds files of another project or process, and saving would ` +

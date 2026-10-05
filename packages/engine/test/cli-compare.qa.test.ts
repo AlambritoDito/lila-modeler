@@ -629,10 +629,11 @@ describe('QA LILA-047 · ataque 11: calidad del código', () => {
       expect(source, `${name} usa as any`).not.toMatch(/\bas any\b/);
     }
 
-    // `compare` reutiliza el parseo y la validación del modelo de `run` (loadValidatedModel).
+    // `compare` reutiliza el parseo y la validación del modelo de `run`. Since #546 both resolve
+    // their scenarios first (they pick the process) and call `validatedModelOf` themselves.
     const compareSource = cli.slice(cli.indexOf('async function compareCommand('));
     expect(compareSource).not.toContain('parseBpmn(');
-    expect(compareSource).toContain('loadValidatedModel(');
+    expect(compareSource).toContain('validatedModelOf(');
     expect(cli).not.toContain('function loadValidatedModel(');
     expect(cliShared.match(/export async function loadValidatedModel\(/g)?.length).toBe(1);
   });

@@ -149,3 +149,18 @@ it('E-CAL-VACIO and E-CAPACIDAD-Y-CALENDARIO reach the alert as one clean line e
     'E-CAPACIDAD-Y-CALENDARIO: la capacidad por intervalos y el calendario son excluyentes; el calendario va en cada tramo (resources.cajero.capacity).',
   );
 });
+
+/**
+ * #546 (QA of #560, must-fix 2): the gate picks the process with the union of the project's
+ * scenarios, as the live reparse and its seeding do, not with the one that runs. A scenario that
+ * configures only the Customer pool does not take the run (and so the panel's IR) to Customer.
+ */
+it('the process simulated is the one all the project scenarios target, whichever runs (#546)', async () => {
+  const cliente = { ...raw, name: 'Customer', elements: { StartEvent_ClienteInicio: { triggerCount: 1 }, Task_ClienteRecibe: {} } };
+  const escenarios = { 'as-is.scenario.json': raw, 'cliente.scenario.json': cliente };
+  const { ir } = await prepareSimulation(xml, 'as-is.scenario.json', escenarios, 'model.bpmn', { locale: 'en' });
+  expect(ir.id).toBe('Process_Restaurante');
+  await expect(prepareSimulation(xml, 'cliente.scenario.json', escenarios, 'model.bpmn', { locale: 'en' })).rejects.toThrow(
+    'E-ELEMENTO-DESCONOCIDO: the id StartEvent_ClienteInicio belongs to the process "Customer" (Process_Cliente), but the simulated process is "Restaurant" (Process_Restaurante).',
+  );
+});

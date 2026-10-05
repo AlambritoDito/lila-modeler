@@ -109,6 +109,8 @@ class FakeBridge implements LilaBridge {
 
   recents: Recent[] = [];
   openRecentImpl: ((dir: string, file?: string) => Promise<LilaProjectDocument | null>) | null = null;
+  onExternalChange?: (cb: (dir: string) => void) => () => void;
+  forgetProject?: () => void;
   private openPathCb: ((path: OpenPathRequest) => void) | null = null;
   pendingOpenPathQueue: (OpenPathRequest | null)[] = [];
 
@@ -629,8 +631,57 @@ describe('DesktopStore — extensiones de OP-14 incremento 2 (recientes, apertur
       // The code stays in the message (contract), and any other error is left as it came.
       expect(es.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
       expect(S.almacen.errorCarpetaOcupada('x')).toMatch(/^E-CARPETA-OCUPADA: /);
-      bridge.writeProject = async () => { throw new Error('E-CAMBIO-EXTERNO: model.bpmn'); };
-      await expect(store.saveProject(documentoBase())).rejects.toThrow('E-CAMBIO-EXTERNO: model.bpmn');
+      bridge.writeProject = async () => { throw new Error('E-RUN-DUPLICADO: model.bpmn'); };
+      await expect(store.saveProject(documentoBase())).rejects.toThrow('E-RUN-DUPLICADO: model.bpmn');
+    } finally {
+      setLocale('en');
+    }
+  });
+
+  it('E-CAMBIO-EXTERNO after «Keep mine» is shown in the UI language, naming the file, without the IPC prefix (#539)', async () => {
+    const remoto = "Error invoking remote method 'lila:writeProject': Error: E-CAMBIO-EXTERNO: " +
+      'Cambiaron en disco desde la última lectura/escritura, sin guardar: pedido.lila.';
+    const bridge = new FakeBridge();
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    try {
+      for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
+        setLocale(locale);
+        bridge.writeProject = async () => { throw new Error(remoto); };
+        bridge.queueChooseFolder('/carpeta/pedido.lila');
+        await store.openProject();
+        const error = await store.saveProject(documentoBase()).then(() => null, (e: unknown) => e as Error);
+        expect(error?.message).toBe(catalogo.almacen.errorCambioExterno('pedido.lila'));
+        expect(error?.message).not.toContain('invoking remote method');
+        expect(error?.message).toMatch(/^E-CAMBIO-EXTERNO: pedido\.lila /);
+      }
+      expect(S.almacen.errorCambioExterno('x')).toMatch(/Save As/);
+      expect(es.almacen.errorCambioExterno('x')).toMatch(/Recarga/);
+    } finally {
+      setLocale('en');
+    }
+  });
+
+  it('E-ARCHIVO-OCUPADO (another program holds the .lila lock) is shown in the UI language (#466)', async () => {
+    const bridge = new FakeBridge();
+    bridge.readProjectImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    try {
+      for (const [locale, catalogo] of [['en', S], ['es', es]] as const) {
+        setLocale(locale);
+        bridge.writeProject = async () => {
+          throw new Error(
+            "Error invoking remote method 'lila:writeProject': Error: E-ARCHIVO-OCUPADO: Otro programa está guardando este archivo ahora mismo; no se guardó nada: pedido.lila.",
+          );
+        };
+        bridge.queueChooseFolder('/proyectos/pedido.lila');
+        await store.openProject();
+        await expect(store.saveProject(documentoBase())).rejects.toThrow(
+          catalogo.almacen.errorArchivoOcupado('/proyectos/pedido.lila'),
+        );
+      }
+      expect(S.almacen.errorArchivoOcupado('x')).toMatch(/^E-ARCHIVO-OCUPADO: another program/);
+      expect(es.almacen.errorArchivoOcupado('x')).toMatch(/^E-ARCHIVO-OCUPADO: otro programa/);
     } finally {
       setLocale('en');
     }
@@ -753,5 +804,58 @@ describe('DesktopStore.saveProject · destino de «Guardar como»', () => {
     await expect(store.saveProject(otro)).resolves.not.toBeNull();
     expect(bridge.dialogos.at(-1)).toBe('saveFile');
     expect(bridge.writes.at(-1)).toMatchObject({ dir: '/proyectos/otro.lila', options: { saveAs: true } });
+  });
+});
+
+describe('DesktopStore and changes made outside Lila (#539)', () => {
+  it('passes on only news about the open project, and reloads it through openRecent', async () => {
+    const bridge = new FakeBridge();
+    let avisar: (dir: string) => void = () => {};
+    bridge.onExternalChange = (cb) => { avisar = cb; return () => {}; };
+    const lecturas: (string | undefined)[][] = [];
+    bridge.openRecentImpl = async (dir, file) => { lecturas.push([dir, file]); return { ...documentoBase({ name: `leído ${lecturas.length}` }), problems: [] }; };
+    const store = new DesktopStore(bridge);
+    const avisos: number[] = [];
+    store.onExternalChange(() => avisos.push(1));
+
+    await expect(store.reload()).resolves.toBeNull(); // Nothing open, nothing to read.
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([]);
+
+    await store.openRecent('/proyectos/pedido.lila');
+    avisar('/proyectos/otro.lila'); // A project this store has left.
+    expect(avisos).toEqual([]);
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([1]);
+    await expect(store.reload()).resolves.toMatchObject({ name: 'leído 2' });
+    expect(lecturas.at(-1)).toEqual(['/proyectos/pedido.lila', undefined]);
+
+    store.forget(); // An example from the gallery: no longer the file's project.
+    avisar('/proyectos/pedido.lila');
+    expect(avisos).toEqual([1]);
+  });
+
+  it('a failed reload says, in the UI language, which file changed outside Lila and the disk code', async () => {
+    const bridge = new FakeBridge();
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [] });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/proyectos/pedido.lila');
+    bridge.openRecentImpl = async () => {
+      throw new Error("Error invoking remote method 'lila:openRecent': Error: E-ZIP: El archivo no es un .lila legible.");
+    };
+    await expect(store.reload()).rejects.toThrow(S.almacen.errorRecarga('pedido.lila', 'E-ZIP'));
+  });
+
+  it('forgetting the project (a gallery example) tells main to stop watching it', () => {
+    const bridge = new FakeBridge();
+    let olvidos = 0;
+    bridge.forgetProject = () => { olvidos += 1; };
+    new DesktopStore(bridge).forget();
+    expect(olvidos).toBe(1);
+  });
+
+  it('a bridge without the watcher subscribes to nothing', () => {
+    const store = new DesktopStore(new FakeBridge());
+    expect(() => store.onExternalChange(() => {})()).not.toThrow();
   });
 });

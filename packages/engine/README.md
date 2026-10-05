@@ -19,9 +19,10 @@ npx @lila-modeler/engine@beta --version
 ```
 
 English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic
-codes, model IDs and result columns remain stable. The optional `lila mcp` command requires the
-separate MCP workspace from a repository checkout; the engine package alone does not include the
-server. Full reference, worked examples and a "for agents" section:
+codes, model IDs and result columns remain stable. The MCP server for AI agents is a separate
+package, [`@lila-modeler/mcp`](https://www.npmjs.com/package/@lila-modeler/mcp)
+(`npx -y @lila-modeler/mcp`); `lila mcp` starts it when both packages are installed. Full
+reference, worked examples and a "for agents" section:
 [docs/CLI.md](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/CLI.md).
 
 ## Library
@@ -32,7 +33,9 @@ import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { validateScenario } from '@lila-modeler/engine/schema';
 ```
 
-Typed entry points also include `messages`, `cli-shared`, `result-schema`, `csv`, and `format`. The dependency-free simulation core runs in Node.js and browser Web Workers.
+`@lila-modeler/engine/bpmn` also draws a model's diagram without a browser: `renderSvg(xml)` returns an SVG of its BPMN DI.
+
+Typed entry points also include `messages`, `cli-shared`, `project`, `project-fs` (Node only: the project folder and `.lila` file on disk, and `createLilaProcess`/`readLilaOutline`/`editLilaProcess`), `outline` (a step list to a laid-out BPMN and back, #97), `result-schema`, `csv`, and `format`. The dependency-free simulation core runs in Node.js and browser Web Workers.
 
 See the [scenario format](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/SCENARIO_FORMAT.md), [result format](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/RESULTS_FORMAT.md) and [semantics](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/SEMANTICS.md) for contracts and limitations.
 

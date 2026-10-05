@@ -15,6 +15,8 @@
  * - Carpeta y `.lila` por igual: `E-CARPETA-OCUPADA` («Guardar como» sobre un destino que ya tiene
  *   otro proyecto), `E-CAMBIO-EXTERNO` (algo cambió en disco desde la última lectura/escritura y
  *   no se pidió `overwrite`), `E-SIN-MODELO` (no hay proyecto que leer).
+ * - Solo `.lila` (escritura): `E-ARCHIVO-OCUPADO` (otro programa tiene `<archivo>.lila.lock` y no lo
+ *   soltó en 3 s; no se escribió nada, #466).
  * - Solo carpeta: `E-RUN-DUPLICADO`, `E-SYMLINK`, `E-DESTINO-INVALIDO`, `E-RECUPERACION-PENDIENTE`.
  * - Solo `.lila` (ADR-027, contenido del archivo): `E-ZIP` (no se pudo descomprimir),
  *   `E-NO-MANIFEST` (sin `lila-project.json`), `E-MANIFEST` (manifiesto inválido o de otra
@@ -127,6 +129,15 @@ export interface LilaBridge {
    * suscripción.
    */
   onOpenPath(cb: (path: OpenPathRequest) => void): () => void;
+  /**
+   * The open project changed on disk and Lila did not write it (#539): an agent rewrote the
+   * `.lila` or the folder through the CLI or MCP. `dir` is the path the project was opened or saved
+   * by, so a renderer that has since moved on can ignore it. Main only reports the change; the
+   * renderer decides between reloading and asking (unsaved changes). Returns the unsubscriber.
+   */
+  onExternalChange?(cb: (dir: string) => void): () => void;
+  /** The renderer left the project on disk for one with no file (a gallery example): main stops watching it. */
+  forgetProject?(): void;
 
   /**
    * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell

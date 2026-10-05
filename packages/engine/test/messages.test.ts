@@ -129,7 +129,11 @@ describe('catálogo de mensajes (LILA-211)', () => {
 
   test('los 62 códigos son los que aparecen en `packages/engine/src`', () => {
     const found = new Set<string>();
-    for (const file of typeScriptFiles(ENGINE_SRC)) {
+    // `src/project-fs/` is the project disk IO that moved from the desktop (#466): its `E-*` codes
+    // (`E-CAMBIO-EXTERNO`, `E-CARPETA-OCUPADA`, …) are the desktop bridge's own vocabulary
+    // (`apps/desktop/src/bridge.ts`), not problems of a model or scenario (§ 17).
+    const projectFs = `${fileURLToPath(new URL('packages/engine/src/project-fs', REPOSITORY_ROOT))}`;
+    for (const file of typeScriptFiles(ENGINE_SRC).filter((path) => !path.startsWith(projectFs))) {
       for (const [code] of readFileSync(file, 'utf8').matchAll(/[EW]-[A-Z][A-Z0-9-]*/g)) {
         found.add(code);
       }

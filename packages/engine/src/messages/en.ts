@@ -31,18 +31,52 @@ const NODE_TYPES: Record<string, string> = {
   eventGateway: 'event-based gateway',
 };
 
-const EN_USAGE = `Usage: lila validate <file.bpmn> [--json]
-       lila run <model.bpmn> <scenario.json> [--seed n] [--replications n]
-                [--json result.json] [--csv directory] [--xlsx book.xlsx]
-       lila compare <model.bpmn> <a.json> <b.json> [...] [--seed n] [--replications n]
-                    [--json result.json] [--xlsx book.xlsx] [--all]
+const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug] [--json]
+       lila run <model.bpmn|project.lila> <scenario> [--process slug] [--seed n]
+                [--replications n] [--json result.json] [--csv directory] [--xlsx book.xlsx]
+                [--save]
+       lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
+                    [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
+       lila export diagram <model.bpmn|project.lila> [--process slug] [--out file.svg] [--force]
+       lila export doc <project.lila> --out file.docx|file.html [--format docx|html]
+                       [--process slug] [--run id|latest] [--scenario name] [--force]
+       lila export results <project.lila> --out book.xlsx|directory [--format xlsx|csv]
+                           [--process slug] [--run id|latest] [--scenario name] [--force]
+       lila process create --outline <outline.json> -p <project.lila> [--name name]
+                           [--process slug] [--dry-run] [--json]
+       lila process show -p <project.lila> [--process slug] [--json]
+       lila process edit -p <project.lila> --ops <ops.json> [--process slug]
+                         [--dry-run] [--no-layout] [--json]
+       lila process annotate <project.lila> <elementId> [--process slug] [--documentation text]
+                             [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
+                             [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
+       lila process raci <project.lila> [--process slug] [--json|--csv]
+       lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
+                            [--dry-run] [--json]
+       lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
        lila mcp
 
 Commands:
   validate   Parses the BPMN, prints its IR and validates the model.
   run        Validates model and scenario, simulates and shows the result tables.
   compare    Simulates two or more scenarios on the same model and compares them side by side.
+  export     Exports without the app: the diagram as SVG, the process document as Word or
+             HTML, or the results of a run saved in the .lila as .xlsx or CSV.
+  process    create: builds a laid-out process from an outline (a step list) into a .lila.
+             show: prints one process of a .lila as an outline.
+             edit: applies a list of operations to a process, all or none. See docs/CLI.md.
+             annotate: writes an element's description, RACI, catalog references and extended
+             attributes into the .lila. raci: prints the RACI matrix of the process document.
+  scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
+             app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
+
+A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
+such file exists, the name of a scenario of that process (its file name, with or without
+.scenario.json, or its "name"). A .lila with several processes needs --process.
+
+Options of validate, run and compare:
+  --process slug    The process of a .lila with several processes (implicit with one).
 
 validate options:
   --json     Prints the IR and the problems on stdout.
@@ -55,6 +89,8 @@ run options:
                     log.csv is written streaming and carries ISO timestamps from run.start.
   --xlsx file       Writes one .xlsx workbook with the Summary, Elements, Flows, Resources
                     and Parameters sheets. The event log is only in --csv.
+  --save            Stores the run in the .lila (a scenario of the archive), as the app does:
+                    the app shows it as the current run, and lila export uses it.
 
 compare options:
   --seed n          Overrides run.seed in every compared scenario.
@@ -64,6 +100,40 @@ compare options:
                     Comparison sheet (value, 95% CI, delta and CI overlap per KPI).
   --all             Prints every KPI of compare(), not just the curated subset.
                     The first scenario listed is the base: the rest are compared against it.
+
+export options:
+  --out path        Where to write. Without it, export diagram prints the SVG on stdout.
+  --format f        docx|html (doc) or xlsx|csv (results); by default from the --out extension
+                    (.docx, .html, .xlsx). csv writes elements, flows, resources and process
+                    .csv into the --out directory.
+  --run id|latest   The stored run: latest (default) is the run of the current model and scenario;
+                    the document only takes a current run and goes without results when there is
+                    none.
+  --scenario name   With latest, the run of that scenario (needed when several have one).
+  --force           Replaces existing files; without it nothing existing is overwritten.
+  The Word document has no diagram and no document has the run's charts: the engine has no
+  rasteriser. The HTML document has the diagram.
+process options:
+  --outline file    create: the outline JSON (lanes plus steps; docs/MCP.md).
+  -p, --project f   The .lila; create makes it when it does not exist.
+  --ops file        edit: the JSON list of operations (docs/CLI.md).
+  --process slug    create: slug of the new process (default: from the name). show, edit: which one.
+  --name name       create: name of the process (default: the outline's).
+  --dry-run         create, edit: build and check everything, write nothing.
+  --no-layout       edit: keep every position; place only the new shapes.
+  --json            Prints the result (create, edit) or the outline (show) as JSON.
+
+process annotate options:
+  --documentation t Replaces the description ("" removes it).
+  --responsibility  TYPE:role, repeatable; replaces the element's whole RACI list.
+  --clear-responsibilities  Removes every responsibility.
+  --ref kind=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input or output;
+                    repeatable; replaces the lists of the kinds given (kind= empties one).
+  --attribute k=v   An extended attribute by id or name; repeatable; "k=" removes its value.
+  --dry-run         Shows the result without writing.
+
+scenario import options:
+  --dry-run         Shows the planned changes and the rows not applied without writing.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
@@ -107,6 +177,10 @@ export const en: Catalog = {
     'E-SUBPROC-PARAMETRO': (path, id) =>
       `${id} is an embedded subprocess and has no processing time, resources or cost of its own; its time is the sum of what happens inside (${path}).`,
     'E-ELEMENTO-DESCONOCIDO': (path, id) => `the id ${id} does not exist in the model (${path}).`,
+    'E-ELEMENTO-DESCONOCIDO/otro-proceso': (path, id, ownerId, ownerName, simulatedId, simulatedName) => {
+      const label = (pid: string, name: string) => (name === '' ? pid : `"${name}" (${pid})`);
+      return `the id ${id} belongs to the process ${label(ownerId, ownerName)}, but the simulated process is ${label(simulatedId, simulatedName)}. The simulated process is the one that holds most of the elements the process's scenarios configure, and on a tie the first one in the file: remove from the scenarios the entries of the process you do not want to simulate (${path}).`;
+    },
     'E-PROB-EN-NODO': (path) => `a probability is only accepted on a sequence flow (${path}).`,
     'E-PROB-RANGO': (path, value) => `${value} is outside [0, 1] (${path}).`,
     'E-CAMPO-NO-APLICA/solo-inicio': (path) => `only accepted on a start event (${path}).`,
@@ -330,19 +404,195 @@ export const en: Catalog = {
     minimumIntegerRequired: (option, minimum, raw) =>
       `--${option} requires an integer >= ${minimum}; got "${raw}".`,
     expectedPositionals: (expected) => `expected ${expected}.`,
-    bpmnPath: () => 'one .bpmn path',
-    runPaths: () => 'the paths <model.bpmn> <scenario.json>',
-    comparePaths: () => 'a <model.bpmn> and at least two scenarios <a.json> <b.json>',
-    missingBpmnPath: () => 'the path of the .bpmn file is missing.',
+    bpmnPath: () => 'one .bpmn or .lila path',
+    runPaths: () => 'a <model.bpmn|project.lila> and a <scenario>',
+    comparePaths: () => 'a <model.bpmn|project.lila> and at least two scenarios <a> <b>',
+    missingBpmnPath: () => 'the path of the .bpmn or .lila file is missing.',
     modelMismatch: (modelPath, scenarioModel) =>
       `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
     modelMismatchIn: (modelPath, scenarioModel, file) =>
       `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}) in ${file}.`,
     mcpNoArguments: () => 'it takes no arguments.',
     mcpMissingPackage: (packageName) =>
-      `the package ${packageName} is missing. In the repo, \`npm ci && npm run build\` from the root.`,
+      `the package ${packageName} is missing. Install it next to the engine, or run \`npx -y ${packageName}\`; in the repo, \`npm ci && npm run build\` from the root.`,
     invalidLang: (value, accepted) => `lila: --lang only accepts: ${accepted}; got "${value}".`,
     missingLangValue: (accepted) => `lila: --lang requires a value: ${accepted}.`,
+
+    lilaProcessRequired: (file, slugs) =>
+      `${file} holds several processes (${slugs}): choose one with --process <slug> (\`process\` in MCP).`,
+    lilaUnknownProcess: (file, slug, slugs) => `${file} has no process "${slug}"; its processes are: ${slugs}.`,
+    processOnlyForLila: () => 'a process slug only applies when the model is a .lila file.',
+    lilaUnreadable: (file, detail) => `${file} cannot be opened as a .lila project: ${detail}`,
+    lilaScenarioNotFound: (name, slug, file, available) =>
+      `there is no file "${name}" and no scenario of that name in process "${slug}" of ${file}; ` +
+      (available === '' ? 'that process has no scenarios.' : `its scenarios are: ${available}.`),
+    lilaScenarioUnknown: (name, slug, file, available) =>
+      `there is no scenario "${name}" in process "${slug}" of ${file}; ` +
+      (available === '' ? 'that process has no scenarios.' : `its scenarios are: ${available}.`),
+    lilaScenarioAmbiguous: (name, matches) =>
+      `several scenarios are named "${name}": ${matches}. Use the file name instead.`,
+    lilaScenarioEntryName: (name) =>
+      `"${name}" is not a scenario name inside a .lila: use a flat <name>.scenario.json, without folders.`,
+    lilaBusy: (file) =>
+      `another program is saving ${file} right now; nothing was written. Try again in a moment.`,
+    lilaChangedOnDisk: (file) =>
+      `${file} changed on disk while this call was working on it; nothing was written. Try again.`,
+
+    exportNeedsLila: (file) => `${file} is not a .lila project: the document and the results are exported from one.`,
+    exportRunUnknown: (id, slug, file, runs) =>
+      `process "${slug}" of ${file} has no run "${id}"; ` + (runs === '' ? 'it has no stored runs.' : `its runs are: ${runs}.`),
+    exportNoRun: (file, slug, scenario) =>
+      `process "${slug}" of ${file} has no stored run${scenario === '' ? '' : ` of ${scenario}`}. ` +
+      'Simulate it with `lila run <file> <scenario> --save` (`saveRun` in MCP), or in Lila Modeler and save the project.',
+    exportNoCurrentRun: (file, slug, runs) =>
+      `process "${slug}" of ${file} has no run of its current model and scenario; older runs: ${runs}. ` +
+      'Pass one by id (--run, `run` in MCP) or simulate again (`lila run … --save`).',
+    exportRunAmbiguous: (file, slug, scenarios) =>
+      `process "${slug}" of ${file} has current runs of several scenarios (${scenarios}): ` +
+      'choose one with --scenario (`scenario` in MCP) or pass a run id.',
+    exportRunStale: (id, slug, file) =>
+      `run "${id}" of process "${slug}" of ${file} is of an older model or scenario: the document would ` +
+      'mix today\'s model with old results. Export its results instead, or simulate again.',
+    exportNoDiagram: () => 'The model has no diagram (BPMN DI): the document goes without one.',
+    exportDocxNoDiagram: () =>
+      'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
+    exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
+    exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,
+    exportNotDirectory: (path) => `cannot write into ${path}: it is a file, not a directory.`,
+    exportUnknownKind: (kind) => `unknown export "${kind}": expected diagram, doc or results.`,
+    exportPaths: () => 'diagram|doc|results and a <model.bpmn|project.lila>',
+    exportInvalidFormat: (value, accepted) =>
+      value === '' ? `choose a format with --format: ${accepted}.` : `--format only accepts: ${accepted}; got "${value}".`,
+    exportOutRequired: (kind) => `lila export ${kind} needs --out <path>.`,
+    exportTargetIsSource: (target) =>
+      `${target} is the file being exported; nothing was written. Choose another destination.`,
+    exportFileNeeded: (path) => `"${path}" ends with a slash; name the file to write.`,
+    exportRunAndScenario: () =>
+      'a run id already says which scenario: pass --run <id> or --scenario (`run` or `scenario` in MCP), not both.',
+    saveRunNeedsLila: () => 'saving the run (--save, `saveRun` in MCP) needs a .lila model.',
+    saveRunNeedsArchiveScenario: (scenario) =>
+      `saving the run needs a scenario of the .lila, and "${scenario}" is not one: name a scenario of the process.`,
+    lilaRunStale: (file, scenario) =>
+      `the model or the scenario ${scenario} of ${file} changed while the simulation ran; the run was not saved. Run it again.`,
+    runSaved: (id, file, slug) => `Run ${id} saved in ${file} (process ${slug}).`,
+    outlineInvalid: (detail) => `the outline is invalid:\n${detail}`,
+    outlineDuplicateId: (id) => `step id "${id}" is used more than once.`,
+    outlineBadId: (id) => `step id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    outlineReservedId: (id) => `step id "${id}" clashes with an id Lila generates (start, end, flows, lanes, diagram); rename the step.`,
+    outlineDuplicateLane: (lane) => `lane "${lane}" is listed more than once.`,
+    outlineUnknownLane: (step, lane) => `step "${step}": lane "${lane}" is not in "lanes".`,
+    outlineUnknownTarget: (step, target) => `step "${step}": "${target}" is not the id of a step.`,
+    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and), not ${type}.`,
+    outlineBranchTarget: (step) => `step "${step}": each branch needs either "to" (a step id) or "end": true.`,
+    outlineManyNextNeedGateway: (step) => `step "${step}": several "next" steps need a gateway (xor, or, and); add one.`,
+    outlineEndWithNext: (step) => `step "${step}": "end" cannot be combined with "next" or "branches".`,
+    outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a ${type}.`,
+    outlineProbabilityOnAnd: (step) => `step "${step}": a parallel gateway (and) takes every branch; "probability" does not apply.`,
+    outlineProbabilitySum: (step, sum) => `step "${step}": the branch probabilities add up to ${sum}, more than 1.`,
+    outlineBadDuration: (step, text) =>
+      `step "${step}": duration "${text}" is not a distribution. Write a number of seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", "exponential(mean=4m)" or a scenario distribution object.`,
+    outlineBpmnInvalid: (detail) => `the process built from the outline does not validate:\n${detail}`,
+    outlineNoProcess: () => 'the BPMN has no process.',
+    outlineUnsupported: (id, type) => `${id} (${type}) has no outline equivalent and was left out.`,
+    outlineLostFlow: (id) => `${id}: a flow to or from an element the outline left out was dropped.`,
+    outlineUnknownKey: (key) => `unknown field "${key}".`,
+    outlineNotObject: () => 'must be an object.',
+    outlineNotText: () => 'must be a non-empty text.',
+    outlineNotTextList: () => 'must be a list of non-empty texts.',
+    outlineNotBoolean: () => 'must be true or false.',
+    outlineNotProbability: () => 'must be a number between 0 and 1.',
+    outlineNotQuantity: () => 'must be a whole number of at least 1.',
+    outlineNoSteps: () => 'must be a non-empty list of steps.',
+    outlineBadType: (value, accepted) => `"${value}" is not a step type; use one of ${accepted}.`,
+    outlineBadNext: () => 'must be a step id or a list of step ids.',
+    outlineBadResource: () => 'must be a resource name or {"name", "quantity"}.',
+    outlineBadSelection: () => 'must be "and" (every resource) or "or" (any one of them).',
+    outlineNoWayOut: (step) => `from step "${step}" no path reaches an end: a case that gets here would loop forever. Give the loop an exit.`,
+    outlineLayoutFailed: (detail) => `the automatic layout failed on this outline (${detail}). Try listing the branches in the order their steps appear.`,
+    outlineXorAndJoin: (join, split) =>
+      `parallel join "${join}" waits for branches of the exclusive gateway "${split}", which only ever takes one: cases would wait there forever. Use an xor (or or) join.`,
+    outlineDroppedPools: (names) => `other pools are not part of the outline and were left out: ${names}.`,
+    outlineDroppedMessageFlows: (count) => `${count} message flows are not part of the outline and were left out.`,
+    outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
+    outlineDroppedArtifacts: (count) => `${count} annotations, groups or associations are not part of the outline and were left out.`,
+    outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
+    outlineScenarioOutside: (kinds) =>
+      `the scenario's ${kinds.split(',').map((k) => ({ arrivals: 'arrivals', calendars: 'calendars', costs: 'costs', capacities: 'resource capacities and types', conditions: 'conditional routing' } as Record<string, string>)[k] ?? k).join(', ')} are not part of the outline; they stay in the scenario, which this reading does not change.`,
+    processSlugNewFile: (slug, derived) =>
+      `a new .lila holds one process, whose slug comes from its name ("${derived}"), so it cannot be "${slug}". Leave the slug out, or set a name that gives it.`,
+    outlineFileUnreadable: (file, detail) => `cannot read the outline ${file}: ${detail}`,
+    processNotLila: (file) => `${file} is not a .lila file.`,
+    processBadSlug: (slug) => `"${slug}" is not a valid process slug (lowercase letters, digits and hyphens).`,
+    processExists: (slug, file) => `${file} already has a process "${slug}"; nothing was written. Choose another name or slug.`,
+    processCreated: (name, slug, file, steps, lanes, newFile) =>
+      `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes, base scenario as-is.scenario.json.`,
+    processDryRun: (name, slug, file, steps, lanes, newFile) =>
+      `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes. Nothing was written.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
+    processMissingOption: (option) => `missing ${option}.`,
+    processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
+    processShowLanes: (lanes) => `Lanes: ${lanes}`,
+    editInvalid: (detail) => `the edit was refused; nothing was changed:\n${detail}`,
+    editBpmnInvalid: (detail) => `the edited process would not validate; nothing was changed:\n${detail}`,
+    editContentLoss: (detail) => `the model has content the BPMN reader cannot write back, so editing it would lose it: ${detail}`,
+    editUnknownId: (id) => `"${id}" is not the id of an element of the model.`,
+    editNotAStep: (id, type) => `"${id}" is a ${type}, not a step (task, gateway, event or sub-process).`,
+    editOtherProcess: (id, process) => `"${id}" is not in the process being edited (${process}).`,
+    editBadId: (id) => `"${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    editIdTaken: (id) => `id "${id}" is already used in the model.`,
+    editAfterAndBetween: () => 'use either "after" or "between", not both.',
+    editAfterAndBefore: () => 'use either "after" or "before", not both.',
+    editAfterEnd: (id) => `"${id}" is an end event: nothing can follow it. Use "between" with the step before it.`,
+    editAfterAmbiguous: (id, count) =>
+      `"${id}" has ${count} outgoing flows, so "after" is ambiguous; use "between": ["${id}", "<next step id>"].`,
+    editNoFlowBetween: (from, to) => `there is no flow from "${from}" to "${to}".`,
+    editOtherContainer: (from, to) => `"${from}" and "${to}" are not in the same process or sub-process.`,
+    editFromEnd: (id) => `"${id}" is an end event: no flow can leave it.`,
+    editToStart: (id) => `"${id}" is a start or boundary event: no flow can arrive at it.`,
+    editProbabilityNeedsChoice: (id) =>
+      `"probability" only applies to a flow out of an exclusive (xor) or inclusive (or) gateway; "${id}" is not one.`,
+    editNeedsScenario: (field, scenario) =>
+      `"${field}" goes into the base scenario ${scenario}, and this process has none; set it with patch_scenario instead.`,
+    editRemoveAmbiguous: (id, incoming, outgoing) =>
+      `cannot remove "${id}": with ${incoming} incoming and ${outgoing} outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.`,
+    editRemoveBoundary: (id, boundaries) => `cannot remove "${id}": boundary events are attached to it (${boundaries}); remove them first.`,
+    editCannotRemove: (id, type) => `"${id}" is a ${type}; only steps and sequence flows can be removed.`,
+    editBoundaryNeedsActivity: (id, boundaries) =>
+      `"${id}" has boundary events attached (${boundaries}); only a task, call activity or sub-process can hold them.`,
+    editLaneUnknown: (lane, lanes) =>
+      lanes === '' ? `there is no lane "${lane}": the process has no lanes; add one with addLane.` : `there is no lane "${lane}"; the lanes are: ${lanes}.`,
+    editLaneAmbiguous: (lane, ids) => `several lanes are named "${lane}" (${ids}); use the lane id.`,
+    editLaneOutsideProcess: (id) => `"${id}" is inside a sub-process, which has no lanes.`,
+    editProbabilityNote: (gateway, scenario, sum, flows) =>
+      `gateway "${gateway}": the probabilities of its outgoing flows in ${scenario} now add up to ${sum}; adjust them with patch_scenario, one {"op": "replace", "path": "/elements/<flow>/probability", "value": …} per flow of ${flows}.`,
+    editScenarioRemoved: (scenario, id, removed) =>
+      `${scenario}: removed elements.${id} ${removed}, which no longer applies to the model; patch_scenario can put it back on another element.`,
+    editScenarioBroken: (detail) => `the edit would leave a scenario that does not simulate; nothing was changed:\n${detail}`,
+    editPositionAfter: (id) => `after "${id}"`,
+    editPositionBetween: (from, to) => `between "${from}" and "${to}"`,
+    editPositionAlone: () => 'unconnected',
+    editPositionLane: (lane) => `in lane "${lane}"`,
+    editAdded: (id, type, position) => `added ${type} "${id}" ${position}`,
+    editConnected: (from, to, flow) => `connected "${from}" → "${to}" (${flow})`,
+    editRemovedFlow: (id) => `removed flow "${id}"`,
+    editRemovedStep: (id, reconnected, also) =>
+      `removed "${id}"${reconnected === '' ? '' : `; reconnected ${reconnected}`}${also === '' ? '' : `; also removed ${also}`}`,
+    editAlsoRemoved: (ids) => `; also removed ${ids}`,
+    editRenamed: (id, before, after) => `renamed "${id}": "${before}" → "${after}"`,
+    editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
+    editMoved: (id, lane) => `moved "${id}" to lane "${lane}"`,
+    editLaneAdded: (name, id) => `added lane "${name}" (${id})`,
+    processEdited: (name, slug, file, operations, removed) =>
+      `Edited process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed.`,
+    processEditDryRun: (name, slug, file, operations, removed) =>
+      `Dry run: would edit process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed. Nothing was written.`,
+    editOpsUnreadable: (file, detail) => `cannot read the operations ${file}: ${detail}`,
+    editNotList: () => 'must be a non-empty list of operations.',
+    editUnknownOp: (op, accepted) => `"${op}" is not an operation; use one of ${accepted}.`,
+    editBadBetween: () => 'must be two step ids: [from, to].',
+    editDuplicateLane: (lane) => `there is already a lane named "${lane}"; choose another name.`,
+    editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,
@@ -364,6 +614,8 @@ export const en: Catalog = {
     fileMissing: (file) => `the file ${file} does not exist.`,
     bothPathAndXml: () => 'pass `path` or `xml`, not both.',
     pathOrXml: () => 'pass `path` or `xml`.',
+    projectOrPath: () => 'pass `project` or `path`.',
+    bothProjectAndPath: () => 'pass `project` or `path`, not both.',
     modelMismatch: (modelPath, scenarioModel) =>
       `the model (${modelPath}) does not match scenario.model (${scenarioModel}).`,
     modelInvalid: (detail) => `the model does not pass validation: ${detail}`,
@@ -375,5 +627,6 @@ export const en: Catalog = {
     patchedMissingRun: () => 'the resulting scenario does not declare run.',
     patchedName: (name) => `${name} (patched)`,
     inlineScenario: () => 'inline scenario',
+    projectNotLila: (file) => `\`project\` must be a .lila file; got ${file}.`,
   },
 };

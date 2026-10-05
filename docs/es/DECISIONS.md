@@ -543,6 +543,36 @@ análisis, dashboards y registros, el flujo de liberación, el CRDT del servidor
 
 ---
 
+## ADR-030 — El servidor MCP es su propio paquete de npm, `@lila-modeler/mcp`
+
+**Estado:** Aceptada (decidida por Brito el 2026-10-05).
+
+El servidor MCP se publica como un paquete público aparte, `@lila-modeler/mcp`, con el bin
+`lila-mcp`, en lugar de meterlo en `@lila-modeler/engine`. Los agentes lo instalan como se instala
+cualquier servidor MCP: `npx -y @lila-modeler/mcp`. Antes, `packages/mcp` era `private`, así que el
+motor publicado traía el subcomando `lila mcp` pero no el servidor que carga, y
+`npx -y @lila-modeler/engine mcp` se detenía con «falta el paquete @lila-modeler/mcp».
+
+- **El motor sigue ligero.** Solo depende de `bpmn-moddle`, `bpmn-auto-layout`, `fflate` y `zod`, y
+  también lo consumen la app web y la de escritorio. Meter el servidor obligaría a todos ellos a
+  instalar `@modelcontextprotocol/server`.
+- **El paquete ya existía.** `packages/mcp` tenía el bin, `files`, un script de build y la
+  dependencia fijada al motor; publicarlo es quitar `private` y añadir los metadatos de npm.
+- **Ritmo propio para el SDK del protocolo.** El SDK de MCP (v2) cambia a su propio ritmo; subirlo no
+  toca el árbol de dependencias del motor.
+- **Misma versión, misma release.** Los dos paquetes llevan la versión del lote (los seis lugares que
+  revisa `release.yml`), y `@lila-modeler/mcp` fija la versión exacta del motor. `release.yml`
+  publica primero el motor y después el servidor, con la misma dist-tag (`beta` para una
+  prerelease, `latest` si no), `--provenance` y la misma guarda `publish_npm`. El paquete contiene
+  solo `dist`, `bin`, `README.md`, `package.json`, y `LICENSE` y `NOTICE` como el motor.
+- **`lila mcp` se queda.** Sigue cargando `@lila-modeler/mcp` con un `import()` dinámico (sin ciclo
+  entre paquetes), así que funciona donde estén instalados los dos, como en un clon del repo.
+
+La primera publicación la hace el dueño a mano, y después se configura el publicador de confianza
+de npm (OIDC) para el paquete nuevo, como se hizo con el motor. *(prueba: #569)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).

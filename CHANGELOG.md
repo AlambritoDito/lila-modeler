@@ -3,6 +3,89 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.19] - 2026-10-05
+
+The MCP server is published as its own npm package, `@lila-modeler/mcp` (#569, ADR-030). Until now
+`npx -y @lila-modeler/engine mcp` did not work: the published engine has the `lila mcp` subcommand
+but not the server, which lived in a private workspace. An MCP client now starts the server from any
+directory with `npx -y @lila-modeler/mcp`.
+
+### Added
+
+- **`@lila-modeler/mcp` on npm (#569)**: the MCP server with its 16 tools and the `lila-mcp` bin, as a
+  public package that pins the engine of the same version. The engine stays free of the MCP SDK.
+  The package README carries the client configuration for Claude Code, Claude Desktop and Codex.
+- **Release (#569)**: `release.yml` pack-checks the MCP package and publishes it right after the
+  engine, with the same dist-tag, `--provenance` and `publish_npm` guard. `npm run test:package`
+  installs both packed packages in a clean directory and lists the server's 16 tools through the
+  official MCP client.
+
+### Changed
+
+- **Docs (#569)**: `docs/MCP.md`, the agent guide, the CLI reference and the READMEs (English and
+  Spanish) use `npx -y @lila-modeler/mcp` instead of the checkout-only setup; `docs/RELEASING.md`
+  covers the first manual publish of the new package and its trusted publisher.
+- **`lila mcp` without the server package (#569)** now suggests `npx -y @lila-modeler/mcp`.
+
+## [1.0.0-beta.18] - 2026-10-01
+
+Lote K (epic #527): agents can do through MCP and the CLI what a person does in the app, on the same
+`.lila` files. An agent can create a process from an outline, edit it, annotate it, simulate it,
+import a scenario sheet and export the diagram, the document and the results, with no app and no
+browser; the open desktop app notices the change and reloads.
+
+### Added
+
+- **16 MCP tools and new CLI commands (#550, #553, #557, #559)**: the MCP server now has 16 tools,
+  among them `create_process`, `get_process_outline`, `edit_process`, `annotate_element`,
+  `get_raci_matrix`, `export_scenario_template`, `import_scenario_sheet`, `export_diagram`,
+  `export_document` and `export_results`. The CLI gains `lila process create|show|edit|annotate|raci`,
+  `lila scenario template|import` and `lila export diagram|doc|results`, all with English and Spanish
+  messages and `--json` output.
+- **`.lila` as input everywhere (#550, #466)**: the CLI and MCP open a project archive directly, pick a
+  process by slug and a scenario by name, and write back atomically. Project disk IO moved from the
+  desktop to the engine as `@lila-modeler/engine/project-fs`.
+- **Create a process from data (#553, #97)**: an outline (lanes plus an ordered list of steps with
+  branches) becomes a laid-out, validated BPMN process inside a `.lila`, with every problem reported
+  at once with its path. Uses `bpmn-auto-layout`.
+- **Atomic process edits (#557, #98)**: `edit_process` and `lila process edit` apply a list of
+  operations all or none, with a dry run, and report every failing operation by index.
+- **Annotate, RACI, scenario sheets and project creation (#559, #99, #403)**: write descriptions, RACI
+  lists, catalog refs and extended attributes by BPMN id; read the RACI matrix; export and import a
+  scenario sheet (Excel or CSV) with a dry run; create a new `.lila` from a model and scenarios.
+- **App-free exports (#548, #552, #538)**: a DOM-free SVG renderer for BPMN diagrams
+  (`renderSvg`), and the process document (.docx, HTML) and results (.xlsx, CSV) exported without the
+  app. Runs can be stored in the project from the CLI (`--save`) and MCP (`saveRun`).
+- **Docs for agents (#540, #561, #562)**: an agent guide, setup for Hermes Agent and Codex, and an
+  end-to-end test that runs the whole flow over stdio with no UI.
+
+### Changed
+
+- **Cross-process lock (#550, #559)**: every write to a `.lila` takes a lock shared by the CLI, MCP
+  and the desktop app. A busy file is refused with E-ARCHIVO-OCUPADO; a file changed on disk since it
+  was read is refused with E-CAMBIO-EXTERNO. Nothing partial is left on disk.
+- **Desktop reloads on external changes (#539, #551, #558)**: the open project reloads when its `.lila`
+  or folder changes on disk, keeping the mode, the active process and the scenarios. With unsaved
+  changes a notice offers Reload or Keep mine. The app's own writes are ignored, and the canvas keeps
+  its focus across automatic reloads.
+
+### Fixed
+
+- **Properties panel after an automatic reload (#539, #567)**: when an agent changed the open
+  project, the panel kept the element from before the reload, and an edit made through it was lost
+  on save while the app said Saved. The reload now selects the same element in the fresh model;
+  `E-CAMBIO-EXTERNO` after «Keep mine» is translated, and the status bar shows the seed of the
+  current run.
+- **Simulated process depended on pool order (#546, #560)**: the simulation runs the process that
+  holds most of the scenario's element ids, wherever its pool is, in the CLI, MCP and the app.
+
+### Known limits
+
+- The Word document exported without the app has no diagram and no charts (there is no rasteriser,
+  #548); the HTML embeds the SVG. Each export says so.
+- `npx -y @lila-modeler/engine mcp` does not work while `@lila-modeler/mcp` is unpublished; run the
+  MCP server from a repository checkout (see `docs/MCP.md`).
+
 ## [1.0.0-beta.17] - 2026-09-30
 
 Lote J: Simulate phase 2 (epic #526). Finishing a run no longer throws you to the Results view: a dock

@@ -1,0 +1,9 @@
+{ "name": "Credit application",
+  "lanes": ["Customer", "Analyst"],
+  "steps": [
+    { "id": "receive", "name": "Receive application", "lane": "Analyst" },
+    { "id": "check", "name": "Check bureau", "lane": "Analyst", "duration": "normal(20m, 5m)" },
+    { "id": "ok", "type": "xor", "name": "Approved?",
+      "branches": [ { "label": "Yes", "to": "issue" }, { "label": "No", "to": "reject", "probability": 0.3 } ] },
+    { "id": "issue", "name": "Issue card", "end": true },
+    { "id": "reject", "name": "Notify rejection", "lane": "Customer", "end": true } ] }

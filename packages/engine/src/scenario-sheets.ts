@@ -50,10 +50,10 @@ export type TableId = 'elements' | 'arrivals' | 'resources' | 'assignments' | 'c
 const PARAMETERS = ['value', 'min', 'mode', 'max', 'mean', 'sd', 'shape', 'scale', 'k', 'alpha', 'beta', 'n', 'p'] as const;
 
 /** The same set the panel scales by `baseTimeUnit` (`scenarioFields.ts::PARAMETROS_DE_TIEMPO`). */
-const TIME_PARAMETERS = new Set<string>(['value', 'min', 'mode', 'max', 'mean', 'sd']);
+export const TIME_PARAMETERS: ReadonlySet<string> = new Set<string>(['value', 'min', 'mode', 'max', 'mean', 'sd']);
 
 /** Parameters of each distribution (§ 3). `user` takes its points from the `points` column. */
-const DISTRIBUTIONS: Readonly<Record<string, readonly string[]>> = {
+export const DISTRIBUTIONS: Readonly<Record<string, readonly string[]>> = {
   constant: ['value'],
   uniform: ['min', 'max'],
   triangular: ['min', 'mode', 'max'],
@@ -71,7 +71,7 @@ const DISTRIBUTIONS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** Spanish and Bizagi spellings of the distribution names, keyed by `normalized()`. */
-const DISTRIBUTION_ALIASES: Readonly<Record<string, string>> = {
+export const DISTRIBUTION_ALIASES: Readonly<Record<string, string>> = {
   ...Object.fromEntries(Object.keys(DISTRIBUTIONS).map((type) => [normalized(type), type])),
   constante: 'constant',
   fixed: 'constant',
@@ -125,8 +125,8 @@ const TABLE_ALIASES: Readonly<Record<string, TableId>> = {
 /** Order the tables are applied in: a calendar or pool created by the file can then be referenced. */
 const APPLY_ORDER: readonly TableId[] = ['calendars', 'resources', 'elements', 'arrivals', 'assignments'];
 
-const UNITS: Readonly<Record<string, number>> = { s: 1, min: 60, h: 3600, day: 86_400 };
-const UNIT_ALIASES: Readonly<Record<string, string>> = {
+export const UNITS: Readonly<Record<string, number>> = { s: 1, min: 60, h: 3600, day: 86_400 };
+export const UNIT_ALIASES: Readonly<Record<string, string>> = {
   s: 's', sec: 's', secs: 's', second: 's', seconds: 's', seg: 's', segundo: 's', segundos: 's',
   min: 'min', mins: 'min', minute: 'min', minutes: 'min', minuto: 'min', minutos: 'min', m: 'min',
   h: 'h', hr: 'h', hrs: 'h', hour: 'h', hours: 'h', hora: 'h', horas: 'h',
@@ -149,7 +149,7 @@ const DAY_NAMES: Readonly<Record<string, string>> = {
  * ------------------------------------------------------------------ */
 
 /** `Fixed cost (MXN)` → `fixedcost`: lower case, no accents, no parenthesis, letters and digits. */
-function normalized(text: string): string {
+export function normalized(text: string): string {
   return text
     .replace(/\([^)]*\)/g, '')
     .normalize('NFD')

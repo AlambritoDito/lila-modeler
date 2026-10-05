@@ -230,6 +230,7 @@ export class DesktopStore implements ProjectSessionStore {
   }
 
   forget(): void {
+    this.bridge.forgetProject?.(); // #539: nothing on disk to watch any more.
     this.occupied = new Set();
     this.activeDir = null;
     this.activeDocument = null;
@@ -281,6 +282,33 @@ export class DesktopStore implements ProjectSessionStore {
     this.activeModelFile = file?.toLowerCase().endsWith('.bpmn') === true ? file : undefined;
     this.activeLoose = raw.loose === true;
     return document;
+  }
+
+  /**
+   * #539: main reports a change it did not make to the project it watches; news about a project
+   * this store has since left (another one opened, an example from the gallery) is dropped.
+   */
+  onExternalChange(cb: () => void): () => void {
+    return this.bridge.onExternalChange?.((dir) => {
+      if (dir === this.activeDir) cb();
+    }) ?? (() => {});
+  }
+
+  /** #539: the open project again, through `openRecent` (the door Open and the recents use). */
+  async reload(): Promise<ProjectDocument | null> {
+    if (this.activeDir === null) return null;
+    const dir = this.activeDir;
+    const file = this.activeModelFile;
+    try {
+      return await this.openRecent(dir, file);
+    } catch (error) {
+      // Main's error is `"Error invoking remote method …: Error: <code>: <Spanish detail>"`: only the
+      // code travels, in a sentence of the UI language that says it came from an outside change.
+      // A file another program is still saving (`E-ARCHIVO-OCUPADO`, #466) says so the same way.
+      const codigo = error instanceof Error ? /\bE-[A-Z0-9-]+/.exec(error.message)?.[0] : undefined;
+      const nombre = file ?? dir.split(/[\\/]/).pop() ?? dir;
+      throw new Error(strings().almacen.errorRecarga(nombre, codigo ?? 'E-RECARGA'));
+    }
   }
 
   /** `.bpmn` pendiente de abrir (doble clic, `open-file`, argumento de línea de comandos). Se consume una vez. */
@@ -375,9 +403,21 @@ export class DesktopStore implements ProjectSessionStore {
  * shown in the UI language, naming what is in the way so the user knows what to move (QA of #531),
  * instead of raw and only in Spanish. The disk detail quotes `processes/…` or `model.bpmn` when
  * that is the obstacle (`projectIO.ts`); otherwise the obstacle is the destination `dir` itself
- * (another project's folder or `.lila`). Any other error is rethrown as it came.
+ * (another project's folder or `.lila`). `E-ARCHIVO-OCUPADO` and `E-CAMBIO-EXTERNO` are translated the same way. Any
+ * other error is rethrown as it came.
  */
 function traducirOcupada(error: unknown, dir: string): never {
+  // `E-ARCHIVO-OCUPADO` (#466): another program held the `.lila`'s lock while it saved. Nothing
+  // changed on disk and nothing was written; the user only has to try again.
+  if (error instanceof Error && error.message.includes('E-ARCHIVO-OCUPADO')) {
+    throw new Error(strings().almacen.errorArchivoOcupado(dir));
+  }
+  // `E-CAMBIO-EXTERNO`: something else (an agent, #539) wrote the project after Lila last read it,
+  // and the user chose «Keep mine». Main's detail lists the changed files' names in Spanish.
+  if (error instanceof Error && error.message.includes('E-CAMBIO-EXTERNO')) {
+    const lista = /sin guardar: (.+?)\.?$/.exec(error.message)?.[1];
+    throw new Error(strings().almacen.errorCambioExterno(lista ?? dir.split(/[\\/]/).filter(Boolean).pop() ?? dir));
+  }
   if (error instanceof Error && error.message.includes('E-CARPETA-OCUPADA')) {
     const dentro = /"(processes\/[^"]*|model\.bpmn)"/.exec(error.message)?.[1];
     const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';

@@ -10,14 +10,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, readAnnotations, validateBpmnXml } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, validateBpmnModel, type ValidatedBpmnModel } from '@lila-modeler/engine/bpmn';
 import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
-import { encodeLila, processesOf, processSlug, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -569,6 +569,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // A partir de ahí ya no se remonta nunca: cambiar de tema es `modelador.repintar()`.
   const [tema, setTema] = useState<Theme | null | undefined>(undefined);
   const [avisoTema, setAvisoTema] = useState<string | null>(null);
+  /** #539: the open project changed on disk while there were unsaved changes; asks Reload / Keep mine. */
+  const [cambioExterno, setCambioExterno] = useState(false);
   // Estos dos arrancan de fábrica y los pisa el primer efecto con lo que devuelva `preferencias()`:
   // en escritorio están en `userData` y leerlos es IPC, o sea asíncrono. Es el mismo instante en el
   // que `tema` deja de ser `undefined`, así que el lienzo nunca llega a ver el valor provisional.
@@ -663,6 +665,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Los escenarios se editan en el panel (LILA-061), así que dejan de ser una constante de
   // módulo: el mapa entero es estado, y `simular()` corre siempre lo que el panel tiene ahora.
   const [escenarios, setEscenarios] = useState<Escenarios>(ESCENARIOS_INICIALES);
+  /** `elsewhere` of the live reparse: the ids of the file's other processes (#546). */
+  const [otrosProcesos, setOtrosProcesos] = useState<ValidatedBpmnModel['elsewhere']>({});
+  /** The scenarios as they are now, for the reparse that does not rerun when they change (#546). */
+  const escenariosVivos = useRef(escenarios);
+  escenariosVivos.current = escenarios;
   // IR del diagrama del lienzo, para que el panel valide con `validateScenario` (reglas R3…R14)
   // y no solo con el esquema. `null` mientras no se haya podido parsear.
   const [ir, setIr] = useState<ProcessIR | null>(null);
@@ -707,8 +714,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
   const latest = Object.keys(escenarios).flatMap((name) => {
-    const run = [...runs].reverse().find((r) => r.scenarioName === name && r.inputs.modelRevision === revision
-      && r.inputs.scenarioRevision === (scenarioRevisions[name] ?? 0));
+    const run = [...runs].reverse().find((r) => r.scenarioName === name && isCurrentRun(r, revision, scenarioRevisions));
     return run ? [run] : [];
   });
   const ordered = [...latest].sort((a, b) => Number(b.scenarioName === baseId) - Number(a.scenarioName === baseId));
@@ -716,8 +722,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** Última corrida válida del escenario elegido: la que pintan el overlay y la animación (#331). */
   const corridaActual = useMemo(
-    () => [...runs].reverse().find((r) => r.scenarioName === escenarioId && r.inputs.modelRevision === revision
-      && r.inputs.scenarioRevision === (scenarioRevisions[escenarioId] ?? 0)),
+    () => [...runs].reverse().find((r) => r.scenarioName === escenarioId && isCurrentRun(r, revision, scenarioRevisions)),
     [runs, escenarioId, revision, scenarioRevisions],
   );
 
@@ -779,7 +784,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `guardar()` ya obtuvo el sí del usuario si había pérdida; aquí no se decide nada.
     const xml = await modelador.exportar({ aceptarPerdida: true });
     if (atRevision !== revisionRef.current) throw new Error(S.app.errorModeloCambio);
-    const parsed = await parseBpmn(xml);
+    // #546: every reader of a process picks it by its scenarios (`ParseBpmnOptions.scenarios`).
+    const parsed = await parseBpmn(xml, { scenarios: Object.values(escenarios) });
     const yo = procesos[activo];
     // A one-process project has no slug on disk yet: the day it grows it takes a free one, never
     // the folder of a process deleted before (QA of #511).
@@ -852,7 +858,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
     if (modelador === null) return false;
     const doc = readProject(raw);
-    const parsed = await parseBpmn(doc.model.xml);
+    const parsed = await parseBpmn(doc.model.xml, { scenarios: Object.values(doc.scenarios) });
     if (expectedToken !== tokenRef.current) throw new Error(S.app.errorProyectoCambio);
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
@@ -864,6 +870,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     slugsBorrados.current.clear();
     setProjectProblems(doc.problems ?? []);
     setSuelto(doc.loose === true);
+    setCambioExterno(false); // A notice about the project being left, or the one just reloaded.
     if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
@@ -887,7 +894,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function cargarProceso(lista: readonly ProcessDocument[], indice: number): Promise<boolean> {
     const destino = lista[indice];
     if (modelador === null || destino === undefined) return false;
-    const parsed = await parseBpmn(destino.model.xml);
+    const parsed = await parseBpmn(destino.model.xml, { scenarios: Object.values(destino.scenarios) });
     cancelarCorrida();
     if (!await modelador.abrir(destino.model.xml)) return false;
     procesoEnLienzo.current = destino.slug;
@@ -1039,6 +1046,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (adapter === null || modelador === null || ioLock.current || respuestaPerdida.current !== null) return;
     if (dirty && !confirmed) { setPendingAction(kind); return; }
     const beforeToken = tokenRef.current;
+    recordarFocoLienzo();
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
       if (kind === 'open' || kind === 'openFile') {
@@ -1072,8 +1080,87 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const created = await adapter.createProject(doc);
       if (created) await activate(created, true, beforeToken);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally {
+      ioLock.current = false; setIoBusy(false);
+      if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
+    }
   }
+
+  /**
+   * #539: an agent rewrote the open project on disk (main's watcher, `projectWatcher.ts`). Clean,
+   * it reloads at once; with unsaved changes it asks first (`cambioExterno`). «Keep mine» only
+   * dismisses: the next save still meets `E-CAMBIO-EXTERNO`, as it did before there was a watcher.
+   */
+  const alCambiarFueraRef = useRef<() => void>(() => undefined);
+  alCambiarFueraRef.current = () => {
+    if (dirty) { setCambioExterno(true); return; }
+    void recargar();
+  };
+  useEffect(() => adapter?.onExternalChange?.(() => alCambiarFueraRef.current()), [adapter]);
+
+  /**
+   * Reads the open project again through the same door as Open, keeping the mode, the process on
+   * the canvas and the scenario in use when they are still there. A save, open or dialog in progress
+   * goes first; the change is looked at again when it is over. `enfocar`: it came from the notice's
+   * button, which goes away with it, so the focus goes to the canvas instead of falling to `body`.
+   */
+  async function recargar(enfocar = false): Promise<void> {
+    setCambioExterno(false);
+    if (adapter?.reload === undefined || modelador === null) return;
+    if (ioLock.current || respuestaPerdida.current !== null || pendingAction !== null) {
+      setTimeout(() => alCambiarFueraRef.current(), 500);
+      return;
+    }
+    const slug = procesos[activo]?.slug;
+    const escenario = escenarioId;
+    const base = baseId;
+    const modoPrevio = modo;
+    const elegido = seleccion;
+    const beforeToken = tokenRef.current;
+    recordarFocoLienzo();
+    ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
+    try {
+      const raw = await adapter.reload();
+      // Deleted on disk: `openRecent` already took it off the recents, and says so.
+      if (raw === null) { setIoError(S.app.errorRecienteAusente); return; }
+      if (!await activate(raw, true, beforeToken)) return;
+      const doc = readProject(raw);
+      const lista = (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+      const indice = slug === undefined ? -1 : lista.findIndex((p) => p.slug === slug);
+      if (indice > 0 && !await cargarProceso(lista, indice)) return;
+      const escenarios = indice > 0 ? lista[indice]!.scenarios : doc.scenarios;
+      if (escenario in escenarios) setEscenarioId(escenario);
+      if (base in escenarios) setBaseId(base);
+      setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
+      // The import made new elements: select the same id in them, so the properties panel and the
+      // quick view show (and edit) the reloaded element, not the one from before (QA of #539).
+      // `seleccionar` does nothing when the id is gone, and the selection stays empty.
+      if (elegido !== null) modelador.seleccionar?.(elegido);
+    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    finally {
+      ioLock.current = false; setIoBusy(false);
+      if (enfocar) enfocarTrasRecarga.current = true;
+      if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
+    }
+  }
+  /**
+   * The canvas is `inert` while `ioBusy` (QA round 2 of #551): focusing it from `recargar` itself
+   * fails silently, so it is focused once the render that lifts `inert` has been committed. Set by
+   * the notice's «Reload», and by `recordarFocoLienzo` when an open or an automatic reload starts
+   * with the focus on the canvas: the import replaces the canvas's `svg`, and the focus with it.
+   */
+  const enfocarTrasRecarga = useRef(false);
+  // Bumped when the operation ends, so the effect runs even if React batched `ioBusy`'s true and
+  // false into one render (then `ioBusy` alone would not change).
+  const [focoPendiente, setFocoPendiente] = useState(0);
+  function recordarFocoLienzo(): void {
+    if (document.activeElement?.closest('.djs-container') != null) enfocarTrasRecarga.current = true;
+  }
+  useEffect(() => {
+    if (ioBusy || !enfocarTrasRecarga.current) return;
+    enfocarTrasRecarga.current = false;
+    modelador?.enfocar?.();
+  }, [ioBusy, focoPendiente, modelador]);
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
@@ -1209,7 +1296,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The messages of `problemasEscenario` are the engine's (zod and `validateScenario`) and
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
       // A copy: the model's problems (#455) are appended to it, not to the lint's own list.
-      const problemas = [...problemasEscenario(resuelto, ir, locale), ...problemasModelo];
+      const problemas = [...problemasEscenario(resuelto, ir, locale, otrosProcesos), ...problemasModelo];
       // ponytail (#409): an empty process («New») is not an error yet. `E-SIN-START`/`E-SIN-END`
       // come from the engine's full `validate()`: the live reparse runs it since #455 but keeps only
       // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
@@ -1222,7 +1309,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `strings()` inside and this `useMemo` caches the text it returned (LILA-210), and since
     // #280 it also picks the language of the engine messages. Without it a broken `extends` —and
     // the whole lint— would stay in the language it was resolved in.
-    [escenarioId, escenarios, ir, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
+    [escenarioId, escenarios, ir, otrosProcesos, estado.avisos, estado.error, projectProblems, locale, problemasModelo],
   );
 
   // Único punto donde se pintan o se quitan los marcadores. Cualquier cosa que cambie los
@@ -1255,11 +1342,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (modelador === null) return;
     let vivo = true;
     const timer = setTimeout(() => {
-      // `validateBpmnXml` is `parseBpmn` plus the engine's `validate()`, and never throws for an
+      // `validateBpmnModel` is `parseBpmn` plus the engine's `validate()`, and never throws for an
       // invalid model: its `ir` is the same one `parseBpmn` returns (#455).
-      void modelador.exportar().then((xml) => validateBpmnXml(xml, { locale })).then((informe) => {
+      // #546: the process the scenarios target is the one shown and run, wherever its pool is.
+      const scenarios = Object.values(escenariosVivos.current);
+      void modelador.exportar().then((xml) => validateBpmnModel(xml, { locale, scenarios })).then((informe) => {
         if (!vivo) return;
-        setIr(informe.ir);
+        setIr(informe.ir); setOtrosProcesos(informe.elsewhere);
         // Unsupported elements never enter the IR, so the panel cannot read their name from it:
         // it comes from the canvas (seams QA of #476, E2 × E5).
         const nosop = informe.errors.filter((p) => p.code === 'E-NOSOP');
@@ -1856,10 +1945,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Only the last ten runs keep their log: ten thousand rows each is too much to hold for a
       // whole session of runs nobody will animate again (insertion order, so the oldest go first).
       for (const viejo of [...logs.current.keys()].slice(0, -10)) logs.current.delete(viejo);
-      setRuns((previous) => [...previous, {
-        id: runId, scenarioName: escenarioId, result,
-        inputs: { modelRevision, scenarioRevision, xml, scenario: scenario as unknown as Record<string, unknown> },
-      }]);
+      // The shape and the revisions of a stored run are the engine's (`storedRun`, #538), so a run an
+      // agent saves with `lila run --save` is current here exactly when one of ours would be.
+      setRuns((previous) => [...previous, storedRun({
+        id: runId, scenarioName: escenarioId, result, xml, modelRevision, scenarioRevision,
+        scenario: scenario as unknown as Record<string, unknown>,
+      })]);
       setCorrida({ originalIds: ir.source.originalIds, result, scenario });
       // #394, the owner's decision: a finished run no longer jumps to Results. It lands in Simulate
       // (Results and Compare stay where they are, they show the new run) with the dock open on
@@ -1937,7 +2028,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The diagram's XML and its picture, both read from the canvas in this same tick.
       const [xml, svg] = await Promise.all([modelador.exportar(), modelador.exportarSvg({ papel: true })]);
       const [{ ir: modelo, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types }, annotations, png] = await Promise.all([
-        parseBpmn(xml),
+        // #546: the process the run and the scenarios target, the one Run simulates.
+        parseBpmn(xml, { scenarios: [run?.inputs.scenario, ...Object.values(escenarios)] }),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
         aPng(svg).then(async (blob) => new Uint8Array(await blob.arrayBuffer())),
@@ -2007,7 +2099,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * the whole session (QA of #429).
    */
   const hayAlerta = ioError !== null || perdidasAlExportar.length > 0 || estado.error !== null || avisoTema !== null
-    || errorSimOculto !== null;
+    || errorSimOculto !== null || cambioExterno;
   const visible: Record<Region, boolean> = {
     izquierda: hayIzquierda && visibles.izquierda,
     derecha: derechaVisible,
@@ -2195,6 +2287,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onGuardar={() => { void guardar(); }}
       onDuplicar={anadirEscenario}
       ir={ir}
+      otrosProcesos={otrosProcesos}
       problemasExtra={problemasModelo}
       nombresExtra={nombresModelo}
       seleccion={seleccion}
@@ -2832,7 +2925,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />
         <span>{S.app.escenario} <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
-        <span>{S.app.semilla(semillaEscenario(escenarioId, escenarios))}</span>
+        {/* The seed of the run on screen when there is one (an agent may have run with `--seed`),
+            otherwise the one the next run would use. */}
+        <span>{S.app.semilla(corridaActual !== undefined
+          ? String((corridaActual.inputs.scenario.run as Record<string, unknown> | undefined)?.seed ?? 1)
+          : semillaEscenario(escenarioId, escenarios))}</span>
         <span className="hueco" />
         <span>{S.app.densidadEstado(S.app.densidadNombre(densidad))}</span>
         <button
@@ -2848,6 +2945,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <span className="aviso">{S.app.diagramaSuelto}</span>
         )}
         {avisoLlamada !== null && <span role="status" className="aviso">{avisoLlamada}</span>}
+        {cambioExterno && (
+          <span role="alert" className="aviso cambio-externo">
+            {S.app.cambioExterno}{' '}
+            <button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar(true)}>{S.app.recargarCambioExterno}</button>{' '}
+            <button type="button" className="enlace" onClick={() => { setCambioExterno(false); modelador?.enfocar?.(); }}>{S.app.mantenerMios}</button>
+          </span>
+        )}
         {ioError !== null && <span role="alert" className="error">{ioError}</span>}
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>

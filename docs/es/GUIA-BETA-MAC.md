@@ -296,6 +296,14 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   al intentar guardar, la app rechaza con `E-CAMBIO-EXTERNO: <archivos>` sin tocar disco. **Hoy no
   hay un botón "Sobrescribir"**: la única salida disponible desde la interfaz es "Guardar como"
   (hacia otra carpeta).
+- **El proyecto abierto se vigila** (#539): cuando un agente o un script reescribe el `.lila`
+  abierto (o el modelo, el manifiesto o los escenarios de una carpeta de proyecto) por la CLI o el
+  MCP, la app lo nota en una fracción de segundo. Sin cambios sin guardar, recarga sola y conserva
+  el modo, la pestaña del proceso y el escenario en pantalla si siguen existiendo. Con cambios sin
+  guardar, la barra de estado dice «El archivo cambió fuera de Lila» con **Recargar** (tomar el
+  archivo y descartar tus cambios) y **Conservar los míos** (seguir editando; el siguiente guardado
+  se sigue rechazando con `E-CAMBIO-EXTERNO`, como arriba). Los guardados de la propia Lila nunca
+  lo disparan.
 
 ### Recientes y ventana
 
@@ -323,7 +331,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.17, tag `v1.0.0-beta.17`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-beta.19, tag `v1.0.0-beta.19`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -366,10 +374,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.17` para la Beta 17):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.19` para la Beta 19):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.17-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.19-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.19-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

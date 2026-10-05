@@ -55,7 +55,7 @@ stable.
 - **Themes** — `eva-01` (dark, default), `papel` (light), `tieso` (light, ITESO blues), `akira` (dark, Neo-Tokyo) and `montana` (purple, bubblegum pink and gold, inspired by Hannah Montana Linux), plain JSON files.
 - **English and Spanish** in the app, the CLI and the MCP server.
 - **Desktop welcome screen** with recent projects (Electron only).
-- **MCP server** with five tools, so an agent can validate, describe, run, compare and patch.
+- **MCP server** with sixteen tools, so an agent can create a process from a step list, edit and annotate it, validate, describe, run, compare, patch and export.
 
 ## Quick start
 
@@ -164,16 +164,22 @@ section: [`docs/CLI.md`](docs/CLI.md).
 
 ### MCP
 
-`lila mcp` starts an MCP server over stdio with five tools on the same engine: `validate_bpmn`,
-`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`.
+`@lila-modeler/mcp` is an MCP server over stdio with sixteen tools on the same engine: `validate_bpmn`,
+`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
+`get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
+`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
+`create_project`.
 
 ```bash
-claude mcp add lila -- node /path/to/lila-modeler/packages/engine/bin/lila.js mcp
+claude mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
-The repo ships a project-level `.mcp.json`, so opening Claude Code at the repo root registers the
-server on its own. Tool contracts and known limits (no cancellation; all I/O against the server's
-disk) are in [`docs/MCP.md`](docs/MCP.md).
+Other clients take `"command": "npx"` and `"args": ["-y", "@lila-modeler/mcp"]`. From a checkout,
+`lila mcp` starts the same server, and the repo ships a project-level `.mcp.json`, so opening
+Claude Code at the repo root registers it on its own. Tool contracts and known limits (no cancellation; all I/O against the server's
+disk) are in [`docs/MCP.md`](docs/MCP.md), with the setup for Claude Desktop, Codex and Hermes
+Agent. The [agent guide](docs/AGENT_GUIDE.md) walks an agent through the whole flow: interview,
+outline, scenario, run, document, and the open app reloading on its own.
 
 ## How it compares to Bizagi Modeler
 
@@ -213,7 +219,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 
 - `packages/engine` — `@lila-modeler/engine`: the engine core (`src/core/`, no dependencies), the BPMN
   parser, schemas, CSV/XLSX writers and the `lila` CLI.
-- `packages/mcp` — `@lila-modeler/mcp` (private): the MCP server, a thin layer over the engine.
+- `packages/mcp` — `@lila-modeler/mcp` (on npm): the MCP server, a thin layer over the engine.
 - `apps/web` — React 19 + Vite + bpmn-js editor and viewer.
 - `apps/desktop` — Electron packaging of `apps/web`; `.github/workflows/desktop.yml` builds the
   three installers on `v*` tags and attaches the macOS DMG and the Windows `.exe` (plus checksums) to a draft Release.
@@ -230,11 +236,12 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`RESULTS_FORMAT.md`](docs/RESULTS_FORMAT.md) — results, CSV and XLSX.
 - [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — the project folder and the `.lila` file.
 - [`BPMN_EXTENSION.md`](docs/BPMN_EXTENSION.md) — the `lila:` namespace and the id policy.
+- [`AGENT_GUIDE.md`](docs/AGENT_GUIDE.md) — the agent flow from an interview to a document, end to end.
 - [`CLI.md`](docs/CLI.md) — the `lila` command line: every subcommand, exit codes, and a
   "for agents" section.
-- [`MCP.md`](docs/MCP.md) — the MCP server and its five tools.
+- [`MCP.md`](docs/MCP.md) — the MCP server and its sixteen tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
-- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-028).
+- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-030).
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.

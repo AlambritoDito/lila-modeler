@@ -38,6 +38,15 @@ export interface OuterCodeMessages {
   'E-REF-DESCONOCIDA/flujo': (path: string, flowId: string) => string;
   'E-SUBPROC-PARAMETRO': (path: string, id: string) => string;
   'E-ELEMENTO-DESCONOCIDO': (path: string, id: string) => string;
+  /** #546: the id is in another process of the file, not in the simulated one. */
+  'E-ELEMENTO-DESCONOCIDO/otro-proceso': (
+    path: string,
+    id: string,
+    ownerId: string,
+    ownerName: string,
+    simulatedId: string,
+    simulatedName: string,
+  ) => string;
   'E-PROB-EN-NODO': (path: string) => string;
   'E-PROB-RANGO': (path: string, value: number) => string;
   'E-CAMPO-NO-APLICA/solo-inicio': (path: string) => string;
@@ -272,6 +281,159 @@ export interface CliMessages {
   /** `accepted` arrives already joined (`en, es`), like every list in the catalog. */
   invalidLang: (value: string, accepted: string) => string;
   missingLangValue: (accepted: string) => string;
+
+  /* --- a `.lila` as input (#466), shared by the CLI and the MCP server -- */
+  /** `slugs` arrives already joined (`cobro, pedido`). */
+  lilaProcessRequired: (file: string, slugs: string) => string;
+  lilaUnknownProcess: (file: string, slug: string, slugs: string) => string;
+  processOnlyForLila: () => string;
+  lilaUnreadable: (file: string, detail: string) => string;
+  /** `available` arrives already joined, or empty when the process has no scenarios. */
+  lilaScenarioNotFound: (name: string, slug: string, file: string, available: string) => string;
+  /** Same as `lilaScenarioNotFound`, where no file of that name was looked for. */
+  lilaScenarioUnknown: (name: string, slug: string, file: string, available: string) => string;
+  lilaScenarioAmbiguous: (name: string, matches: string) => string;
+  lilaScenarioEntryName: (name: string) => string;
+  lilaChangedOnDisk: (file: string) => string;
+  /** Another writer held the file's lock for too long (the busy code of `project-fs/lilaFile.ts`). */
+  lilaBusy: (file: string) => string;
+
+  /* --- app-free exports (#538): `lila export` and the MCP export tools -- */
+  exportNeedsLila: (file: string) => string;
+  /** `runs` arrives already joined (`id (scenario), …`), empty when the process has none. */
+  exportRunUnknown: (id: string, slug: string, file: string, runs: string) => string;
+  /** `scenario` is empty when no scenario was named. */
+  exportNoRun: (file: string, slug: string, scenario: string) => string;
+  exportNoCurrentRun: (file: string, slug: string, runs: string) => string;
+  exportRunAmbiguous: (file: string, slug: string, scenarios: string) => string;
+  exportRunStale: (id: string, slug: string, file: string) => string;
+  exportNoDiagram: () => string;
+  exportDocxNoDiagram: () => string;
+  exportDocumentNoRun: () => string;
+  exportNoCharts: () => string;
+  exportTargetExists: (target: string) => string;
+  exportNotDirectory: (path: string) => string;
+  exportUnknownKind: (kind: string) => string;
+  exportPaths: () => string;
+  /** `accepted` arrives already joined (`docx, html`). */
+  exportInvalidFormat: (value: string, accepted: string) => string;
+  exportOutRequired: (kind: string) => string;
+  exportTargetIsSource: (target: string) => string;
+  exportFileNeeded: (path: string) => string;
+  exportRunAndScenario: () => string;
+  /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
+  saveRunNeedsLila: () => string;
+  saveRunNeedsArchiveScenario: (scenario: string) => string;
+  lilaRunStale: (file: string, scenario: string) => string;
+  runSaved: (id: string, file: string, slug: string) => string;
+  /* --- outlines and `lila process` (#97), shared by the CLI and the MCP server -- */
+  /** `detail` is one problem per line, already joined. */
+  outlineInvalid: (detail: string) => string;
+  outlineDuplicateId: (id: string) => string;
+  outlineBadId: (id: string) => string;
+  outlineReservedId: (id: string) => string;
+  outlineDuplicateLane: (lane: string) => string;
+  outlineUnknownLane: (step: string, lane: string) => string;
+  outlineUnknownTarget: (step: string, target: string) => string;
+  outlineBranchesNeedGateway: (step: string, type: string) => string;
+  outlineManyNextNeedGateway: (step: string) => string;
+  outlineBranchTarget: (step: string) => string;
+  outlineEndWithNext: (step: string) => string;
+  outlineFieldNotApplicable: (step: string, field: string, type: string) => string;
+  outlineProbabilityOnAnd: (step: string) => string;
+  outlineProbabilitySum: (step: string, sum: number) => string;
+  outlineBadDuration: (step: string, text: string) => string;
+  /** `detail` is the validator's problems, one per line. */
+  outlineBpmnInvalid: (detail: string) => string;
+  outlineNoProcess: () => string;
+  outlineUnsupported: (id: string, type: string) => string;
+  outlineLostFlow: (id: string) => string;
+  outlineFileUnreadable: (file: string, detail: string) => string;
+  outlineUnknownKey: (key: string) => string;
+  outlineNotObject: () => string;
+  outlineNotText: () => string;
+  outlineNotTextList: () => string;
+  outlineNotBoolean: () => string;
+  outlineNotProbability: () => string;
+  outlineNotQuantity: () => string;
+  outlineNoSteps: () => string;
+  outlineBadType: (value: string, accepted: string) => string;
+  outlineBadNext: () => string;
+  outlineBadResource: () => string;
+  outlineBadSelection: () => string;
+  outlineNoWayOut: (step: string) => string;
+  outlineLayoutFailed: (detail: string) => string;
+  outlineXorAndJoin: (join: string, split: string) => string;
+  /** `names` arrives already joined. */
+  outlineDroppedPools: (names: string) => string;
+  outlineDroppedMessageFlows: (count: number) => string;
+  outlineDroppedEventNames: (events: string) => string;
+  outlineDroppedArtifacts: (count: number) => string;
+  outlineDroppedDefaults: (ids: string) => string;
+  /** `kinds` are keys joined by `,` (`arrivals,calendars`): arrivals, calendars, costs, capacities, conditions. */
+  outlineScenarioOutside: (kinds: string) => string;
+  processSlugNewFile: (slug: string, derived: string) => string;
+  processNotLila: (file: string) => string;
+  processBadSlug: (slug: string) => string;
+  processExists: (slug: string, file: string) => string;
+  /** One-line summary of `create_process` / `lila process create`. */
+  processCreated: (name: string, slug: string, file: string, steps: number, lanes: number, newFile: boolean) => string;
+  processDryRun: (name: string, slug: string, file: string, steps: number, lanes: number, newFile: boolean) => string;
+  processUnknownSubcommand: (sub: string) => string;
+  processMissingOption: (option: string) => string;
+  processShowHeader: (name: string, slug: string) => string;
+  processShowLanes: (lanes: string) => string;
+  /* --- edits and `lila process edit` (#98), shared by the CLI and the MCP server -- */
+  editInvalid: (detail: string) => string;
+  editBpmnInvalid: (detail: string) => string;
+  editContentLoss: (detail: string) => string;
+  editUnknownId: (id: string) => string;
+  editNotAStep: (id: string, type: string) => string;
+  editOtherProcess: (id: string, process: string) => string;
+  editBadId: (id: string) => string;
+  editIdTaken: (id: string) => string;
+  editAfterAndBetween: () => string;
+  editAfterAndBefore: () => string;
+  editAfterEnd: (id: string) => string;
+  editAfterAmbiguous: (id: string, count: number) => string;
+  editNoFlowBetween: (from: string, to: string) => string;
+  editOtherContainer: (from: string, to: string) => string;
+  editFromEnd: (id: string) => string;
+  editToStart: (id: string) => string;
+  editProbabilityNeedsChoice: (id: string) => string;
+  editNeedsScenario: (field: string, scenario: string) => string;
+  editRemoveAmbiguous: (id: string, incoming: number, outgoing: number) => string;
+  editRemoveBoundary: (id: string, boundaries: string) => string;
+  editCannotRemove: (id: string, type: string) => string;
+  editBoundaryNeedsActivity: (id: string, boundaries: string) => string;
+  editLaneUnknown: (lane: string, lanes: string) => string;
+  editLaneAmbiguous: (lane: string, ids: string) => string;
+  editLaneOutsideProcess: (id: string) => string;
+  editProbabilityNote: (gateway: string, scenario: string, sum: number, flows: string) => string;
+  editScenarioRemoved: (scenario: string, id: string, removed: string) => string;
+  editScenarioBroken: (detail: string) => string;
+  editPositionAfter: (id: string) => string;
+  editPositionBetween: (from: string, to: string) => string;
+  editPositionAlone: () => string;
+  editPositionLane: (lane: string) => string;
+  editAdded: (id: string, type: string, position: string) => string;
+  editConnected: (from: string, to: string, flow: string) => string;
+  editRemovedFlow: (id: string) => string;
+  editRemovedStep: (id: string, reconnected: string, also: string) => string;
+  editAlsoRemoved: (ids: string) => string;
+  editRenamed: (id: string, before: string, after: string) => string;
+  editRetyped: (id: string, from: string, to: string) => string;
+  editMoved: (id: string, lane: string) => string;
+  editLaneAdded: (name: string, id: string) => string;
+  /** One-line summary of `edit_process` / `lila process edit`. */
+  processEdited: (name: string, slug: string, file: string, operations: number, removed: number) => string;
+  processEditDryRun: (name: string, slug: string, file: string, operations: number, removed: number) => string;
+  editOpsUnreadable: (file: string, detail: string) => string;
+  editNotList: () => string;
+  editUnknownOp: (op: string, accepted: string) => string;
+  editBadBetween: () => string;
+  editDuplicateLane: (lane: string) => string;
+  editLayoutFailed: (detail: string) => string;
 }
 
 /**
@@ -304,6 +466,9 @@ export interface McpMessages {
   fileMissing: (file: string) => string;
   bothPathAndXml: () => string;
   pathOrXml: () => string;
+  /** `export_diagram` (#538): a `.lila` in `project` or a model in `path`. */
+  projectOrPath: () => string;
+  bothProjectAndPath: () => string;
   modelMismatch: (modelPath: string, scenarioModel: string) => string;
   modelInvalid: (detail: string) => string;
   scenarioInvalid: (detail: string) => string;
@@ -316,6 +481,8 @@ export interface McpMessages {
   patchedName: (name: string) => string;
   /** Etiqueta del escenario que llegó inline, en vez del archivo virtual que nunca existió. */
   inlineScenario: () => string;
+  /** `patch_scenario` with a `project` that is not a `.lila` (#466). */
+  projectNotLila: (file: string) => string;
 }
 
 export interface Catalog {

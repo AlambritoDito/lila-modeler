@@ -23,16 +23,26 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { parseBpmn } from './bpmn/parse.js';
-import { validate, type ValidationResult } from './bpmn/validate.js';
+import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
+import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
+import type { ValidationResult } from './bpmn/validate.js';
 import type { RunResult } from './core/result.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
+import { isLilaPath } from './project-fs/paths.js';
+import {
+  findLilaScenario,
+  lilaScenarioPath,
+  lilaScenarioReader,
+  openLilaProcess,
+  type LilaProcess,
+} from './project-fs/input.js';
 import {
   resolveExtends,
   parseScenario,
@@ -107,20 +117,139 @@ export function withRunOverrides(
 
 export type ParsedIr = Awaited<ReturnType<typeof parseBpmn>>['ir'];
 
+/**
+ * The model a command or tool was given (#466): a `.bpmn` on disk, or one process of a `.lila`.
+ * `path` is what scenarios are compared against and what messages cite: the file itself for a
+ * `.bpmn`, the virtual `…/model.bpmn` of the process for a `.lila` (`project-fs/input.ts`).
+ */
+export interface ModelSource {
+  readonly path: string;
+  readonly xml: string;
+  /** Present when the model came from a `.lila`. */
+  readonly lila?: LilaProcess | undefined;
+}
+
+/**
+ * Reads the model `file`: a `.bpmn` as it always was, or a `.lila` (selecting `process`, implicit
+ * when the project has one). A `process` for a `.bpmn` is an error rather than silently ignored.
+ */
+export async function loadModelSource(
+  file: string,
+  options: { process?: string | undefined; locale?: Locale | undefined } = {},
+): Promise<ModelSource> {
+  const locale = options.locale ?? 'en';
+  if (isLilaPath(file)) {
+    const lila = await openLilaProcess(file, { process: options.process, locale });
+    return { path: lila.modelPath, xml: lila.process.model.xml, lila };
+  }
+  if (options.process !== undefined) throw new Error(messages(locale).cli.processOnlyForLila());
+  const path = absolutePath(file);
+  return { path, xml: readFileSync(path, 'utf8') };
+}
+
+/** A parsed and validated model; `elsewhere` goes to `validateScenario` (#546). */
+export interface ValidatedModel {
+  path: string;
+  ir: ParsedIr;
+  validation: ValidationResult;
+  elsewhere: ValidatedBpmnModel['elsewhere'];
+}
+
+/**
+ * #546: the scenarios that choose the simulated process (`ParseBpmnOptions.scenarios`): those of
+ * the `.lila` process, as the app counts them, plus the ones about to run. A `.bpmn` has no
+ * document scenarios, so its explicit scenarios decide alone.
+ */
+export function targetScenarios(
+  lila: LilaProcess | undefined,
+  given: readonly TargetingScenario[] = [],
+): TargetingScenario[] {
+  return [...given, ...Object.values(lila?.process.scenarios ?? {})];
+}
+
+/**
+ * Parses and validates an already loaded model; `run`, `compare` and the MCP tools start here.
+ * `scenarios` are the ones about to run; with the process's own (`targetScenarios`) they choose
+ * the process simulated (#546).
+ */
+export async function validatedModelOf(
+  source: Pick<ModelSource, 'path' | 'xml' | 'lila'>,
+  locale: Locale = 'en',
+  scenarios: readonly TargetingScenario[] = [],
+): Promise<ValidatedModel> {
+  const model = await validateBpmnModel(source.xml, { locale, scenarios: targetScenarios(source.lila, scenarios) });
+  return {
+    path: source.path,
+    ir: model.ir,
+    validation: { errors: model.errors, warnings: model.warnings },
+    elsewhere: model.elsewhere,
+  };
+}
+
 /** Lee y valida el modelo posicional; `run` y `compare` arrancan exactamente igual. */
 export async function loadValidatedModel(
   modelFile: string,
   locale: Locale = 'en',
-): Promise<{ path: string; ir: ParsedIr; validation: ValidationResult }> {
-  const path = absolutePath(modelFile);
-  const parsed = await parseBpmn(readFileSync(path, 'utf8'));
-  const validation = validate(parsed.ir, {
-    unsupported: parsed.unsupported,
-    messageFlowCount: parsed.messageFlowCount,
-    conditionFlowIds: parsed.conditionFlowIds,
-    locale,
-  });
-  return { path, ir: parsed.ir, validation };
+  options: {
+    process?: string | undefined;
+    scenarios?: readonly TargetingScenario[] | undefined;
+  } = {},
+): Promise<ValidatedModel & { lila?: LilaProcess | undefined }> {
+  const source = await loadModelSource(modelFile, { process: options.process, locale });
+  return { ...(await validatedModelOf(source, locale, options.scenarios)), lila: source.lila };
+}
+
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A scenario argument of `run`/`compare` and of the MCP tools, resolved (`extends` included).
+ *
+ * Without a `.lila` it is a `.json` path, as always. With a `.lila` model (#466), the precedence is:
+ * 1. an existing file at `argument` is that file (relative to the cwd). Its `model` field is not
+ *    compared with the archive: the model simulated is the process of the `.lila`, and
+ *    `validateScenario` still rejects an element id that process does not have;
+ * 2. otherwise, `argument` names a scenario of the process (`findLilaScenario`: the entry name,
+ *    the entry name without `.scenario.json`, or the scenario's `"name"`), whose `model` and
+ *    `extends` resolve inside the archive.
+ * `label` is what messages should cite: the argument for a file, the entry name for the archive.
+ */
+export function resolveScenarioArgument(
+  argument: string,
+  lila: LilaProcess | undefined,
+  locale: Locale = 'en',
+): { label: string; path: string; scenario: ResolvedScenario } {
+  const source = scenarioSource(argument, lila, locale);
+  const scenario = loadResolvedScenario(source.path, source.read, locale);
+  return {
+    label: source.label,
+    path: source.path,
+    scenario: lila !== undefined && !source.inArchive ? { ...scenario, model: lila.modelPath } : scenario,
+  };
+}
+
+/**
+ * Where a scenario argument is read from, without resolving it: the rule of
+ * `resolveScenarioArgument`, for callers that need the raw chain (`describe_process` reads a
+ * scenario that may still lack `model` or `run`). `read` serves the archive's scenarios from
+ * memory and everything else from disk.
+ */
+export function scenarioSource(
+  argument: string,
+  lila: LilaProcess | undefined,
+  locale: Locale = 'en',
+): { label: string; path: string; read: ScenarioReader; inArchive: boolean } {
+  const disk: ScenarioReader = (file) => readJsonFile(file, locale);
+  if (lila === undefined || isFile(argument)) {
+    return { label: argument, path: absolutePath(argument), read: disk, inArchive: false };
+  }
+  const entry = findLilaScenario(lila, argument, locale, { fileTried: true });
+  return { label: entry, path: lilaScenarioPath(lila, entry), read: lilaScenarioReader(lila, disk, locale), inArchive: true };
 }
 
 /** Avisos de modelo + escenario + motor, deduplicados; `--json` y las tools MCP los llevan igual. */

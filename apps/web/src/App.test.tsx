@@ -9,6 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { simulate } from '@lila-modeler/engine';
 import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
 import { DesktopStore } from './store/DesktopStore';
 import { newModelXml, seedModelXml } from './project';
@@ -62,7 +63,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown,
   // #394: the last props the Simulate dock received (its real rendering is `DockSimular.test.tsx`).
   dock: null as null | { pestana: string; corrida: { result: { warnings: string[]; bottlenecks: { elementId: string }[] } } | null;
-    onPestana: (p: string) => void; onSeleccionar: (id: string) => void } }));
+    onPestana: (p: string) => void; onSeleccionar: (id: string) => void },
+  // QA of #539: the canvas's `onSeleccion`, to play bpmn-js reporting a selection.
+  onSeleccion: (_id: string | null) => {} }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -110,7 +113,8 @@ vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () =
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
   } }));
-vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void }) => {
+vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onListo: (model: Modelador) => void; onEstado: (estado: unknown) => void; onSeleccion: (id: string | null) => void }) => {
+  mocks.onSeleccion = onSeleccion;
   useEffect(() => { mocks.montajes += 1; mocks.publicarEstado = onEstado; mocks.listo = () => onListo({
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
@@ -3217,6 +3221,66 @@ it('nodes that come back (⌘Z of a pool delete) are not seeded: the scenario is
   expect(asIs()).toEqual({ Start_A: llegadas });
 });
 
+it('Sample order with the Restaurant pool deleted and pasted back after Customer still runs the Restaurant (#546)', async () => {
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const pedido = readFileSync(resolve(aqui, '../../../examples/pedido/model.bpmn'), 'utf8');
+  const asIsInicial = JSON.parse(readFileSync(resolve(aqui, '../../../examples/pedido/as-is.scenario.json'), 'utf8')) as Record<string, unknown>;
+  const proceso = /\s*<bpmn:process id="Process_Restaurante"[\s\S]*?<\/bpmn:process>/.exec(pedido)![0];
+  const participante = /\s*<bpmn:participant id="Participant_Restaurante"[^>]*\/>/.exec(pedido)![0];
+  // Deleting the pool takes its process, its participant and its message flows.
+  const borrado = pedido.replace(proceso, '').replace(participante, '').replace(/\s*<bpmn:messageFlow [^>]*\/>/g, '');
+  // Pasting it back appends both at the end: Customer is now first in the document.
+  const pegado = borrado
+    .replace(/(\s*<\/bpmn:collaboration>)/, `${participante}$1`)
+    .replace(/(\s*<bpmn:process id="Process_Cliente"[\s\S]*?<\/bpmn:process>)/, `$1${proceso}`);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const doc = { version: 1, id: 'pedido', name: 'Pedido', model: { id: 'Process_Restaurante', name: 'model.bpmn', xml: pedido, revision: 0 },
+    scenarios: { 'as-is.scenario.json': asIsInicial }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(pedido);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  const antes = asIs();
+  expect(Object.keys(antes)).toContain('StartEvent_Pedido');
+
+  // With Restaurant gone, Customer is the only process: its start and task get seeds (#420).
+  await reparsear(borrado);
+  expect(Object.keys(asIs())).toEqual(expect.arrayContaining(['StartEvent_ClienteInicio', 'Task_ClienteRecibe']));
+  // Pasted back, last: the scenario still targets Restaurant, so the reparse follows it and the
+  // Customer seeds go away with their nodes.
+  await reparsear(pegado);
+  expect(asIs()).toEqual(antes);
+
+  // And Run's gate (the real one) simulates Restaurant with those scenarios.
+  const { prepareSimulation } = await vi.importActual<typeof import('./simulationGate')>('./simulationGate');
+  const { ir } = await prepareSimulation(pegado, 'as-is.scenario.json', mocks.escenarios, 'model.bpmn', { locale: 'en' });
+  expect(ir.id).toBe('Process_Restaurante');
+
+});
+
+it('opening a Sample order saved with Customer first does not touch its scenario (#546, QA of #560)', async () => {
+  const aqui = dirname(fileURLToPath(import.meta.url));
+  const pedido = readFileSync(resolve(aqui, '../../../examples/pedido/model.bpmn'), 'utf8');
+  const asIsInicial = JSON.parse(readFileSync(resolve(aqui, '../../../examples/pedido/as-is.scenario.json'), 'utf8')) as Record<string, unknown>;
+  const proceso = /\s*<bpmn:process id="Process_Restaurante"[\s\S]*?<\/bpmn:process>/.exec(pedido)![0];
+  const participante = /\s*<bpmn:participant id="Participant_Restaurante"[^>]*\/>/.exec(pedido)![0];
+  const clienteDelante = pedido.replace(proceso, '').replace(participante, '')
+    .replace(/(\s*<\/bpmn:collaboration>)/, `${participante}$1`)
+    .replace(/(\s*<bpmn:process id="Process_Cliente"[\s\S]*?<\/bpmn:process>)/, `$1${proceso}`);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const doc = { version: 1, id: 'pedido', name: 'Pedido', model: { id: 'Process_Restaurante', name: 'model.bpmn', xml: clienteDelante, revision: 0 },
+    scenarios: { 'as-is.scenario.json': asIsInicial }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(clienteDelante);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  // The open's baseline is Restaurant, like the live reparse: nothing is new, nothing is seeded.
+  expect(asIs()).toEqual(asIsInicial['elements']);
+});
+
 it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
   mocks.exportXml.mockResolvedValue(modelo([], []));
   await click(T.app.nuevo);
@@ -3804,4 +3868,160 @@ it('a failed run opens the dock on Warnings (QA of #394)', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
   await click(T.app.ejecutar);
   expect(dock()!.dataset['pestana']).toBe('avisos');
+});
+
+// ---------- the open project changed on disk (#539) ----------
+
+/**
+ * Mounts the app again on a session that has the desktop's `onExternalChange`/`reload`; `avisar`
+ * plays main's watcher reporting a change Lila did not make.
+ */
+async function montarConVigilancia(): Promise<{ avisar: () => Promise<void>; reload: ReturnType<typeof vi.fn> }> {
+  let avisar: () => void = () => {};
+  const reload = vi.fn();
+  session = { ...session, onExternalChange: (cb: () => void) => { avisar = cb; return () => {}; }, reload } as unknown as ProjectSessionStore;
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<App store={session} />));
+  await click(T.app.modos.simular);
+  return { avisar: async () => { await act(async () => { avisar(); await new Promise((r) => setTimeout(r, 0)); }); }, reload };
+}
+const avisoCambioExterno = () => [...container.querySelectorAll('[role="alert"]')].find((n) => n.textContent?.includes(T.app.cambioExterno));
+
+it('a change on disk with nothing unsaved reloads, keeping the mode, the process and the scenario on screen (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  await act(async () => { filaRail(T.proyecto.escenarioToBe).click(); });
+  // An agent renames the second process's diagram through the CLI.
+  const deFuera: ProjectDocument = { ...guardado, processes: guardado.processes!.map((p) => ({ ...p, model: { ...p.model, xml: p.model.xml.replace('name="Cobro"', 'name="Cobro por agente"') } })) };
+  reload.mockResolvedValue(deFuera);
+
+  await avisar();
+  // The reload parses the BPMN for real: wait for it to put the second process back on the canvas.
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.abrir.mock.calls.at(-1)![0]).toContain('name="Cobro por agente"');
+  });
+
+  expect(reload).toHaveBeenCalledOnce();
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual([T.app.proyectoDemo, 'Cobro']);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(container.querySelector('.estado')!.textContent).toContain(T.proyecto.escenarioToBe);
+  expect(filaRail(T.proyecto.escenarioToBe)).toBeDefined(); // Still in Simulate: its rail is there.
+  // Reloaded is saved: nothing asks before closing.
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([false]);
+});
+
+it('with unsaved changes it asks: «Keep mine» keeps them, «Reload» reads the file again (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockResolvedValue(null);
+  await act(async () => mocks.scenarioChange({ version: 1, name: 'AS-IS editado' }));
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([true]);
+
+  await avisar();
+  const aviso = avisoCambioExterno();
+  expect(aviso).toBeDefined();
+  expect(reload).not.toHaveBeenCalled();
+  const botones = [...aviso!.querySelectorAll('button')];
+  expect(botones.map((b) => b.textContent)).toEqual([T.app.recargarCambioExterno, T.app.mantenerMios]);
+  expect(botones.every((b) => b.type === 'button')).toBe(true); // Reachable and pressed by keyboard.
+
+  await click(T.app.mantenerMios);
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledOnce(); // The button went away: the focus goes to the canvas.
+  expect(reload).not.toHaveBeenCalled();
+  expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([true]);
+
+  await avisar();
+  await click(T.app.recargarCambioExterno);
+  expect(reload).toHaveBeenCalledOnce();
+  expect(avisoCambioExterno()).toBeUndefined();
+  expect(mocks.enfocar).toHaveBeenCalledTimes(2);
+  // `null`: the file is gone from disk; the store already took it off the recents.
+  expect(container.textContent).toContain(T.app.errorRecienteAusente);
+});
+
+it('an automatic reload gives the focus back to the canvas only if it had it (#539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
+  await click(T.app.guardar);
+  const svg = container.querySelector<SVGSVGElement>('.djs-container svg')!;
+  mocks.enfocar.mockClear();
+
+  await act(async () => svg.focus());
+  expect(document.activeElement).toBe(svg);
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.enfocar).toHaveBeenCalledOnce();
+  });
+  expect(reload).toHaveBeenCalledOnce();
+
+  // With the focus elsewhere (a field, a button) a reload leaves it to the user.
+  await act(async () => porEtiqueta(T.procesos.nuevo).focus());
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  expect(mocks.enfocar).toHaveBeenCalledOnce();
+});
+
+
+it('an automatic reload selects the same element again in the new import (QA of #539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
+  await click(T.app.guardar);
+  // The canvas reported `Task_TomarPedido` selected (the properties panel shows it).
+  await act(async () => { mocks.onSeleccion('Task_TomarPedido'); });
+  mocks.abrir.mockClear();
+  mocks.seleccionar.mockClear();
+
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(mocks.seleccionar).toHaveBeenCalledWith('Task_TomarPedido');
+  });
+  expect(reload).toHaveBeenCalledOnce();
+  // After the import, against its new elements: `Modeler.abrir` cleared the old selection, and
+  // `seleccionar` finds the id in the reloaded diagram (or does nothing when it is gone).
+  expect(mocks.abrir.mock.invocationCallOrder[0]!).toBeLessThan(mocks.seleccionar.mock.invocationCallOrder[0]!);
+
+  // Nothing selected before: nothing is selected after.
+  await act(async () => { mocks.onSeleccion(null); });
+  mocks.seleccionar.mockClear();
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(mocks.seleccionar).not.toHaveBeenCalled();
+});
+
+it('the status bar shows the seed of the run on screen, not only the scenario\'s (QA of #539)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  const pedido = decodeLila(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../examples/pedido.lila')));
+  const nombre = 'as-is.scenario.json';
+  const escenario = pedido.scenarios[nombre] as { run: Record<string, unknown> };
+  expect(escenario.run.seed).toBe(42);
+  // An agent ran AS-IS with `--seed 7` (short, so the test stays fast) and saved the run.
+  const entradas = { ...escenario, run: { ...escenario.run, seed: 7, duration: 600, warmup: 0, replications: 1 } };
+  const { ir: irPedido } = await parseBpmn(pedido.model.xml, { scenarios: Object.values(pedido.scenarios) });
+  const result = simulate(irPedido, entradas as unknown as Parameters<typeof simulate>[1], { log: false });
+  const corrida = { id: 'run-agente', scenarioName: nombre, result,
+    inputs: { modelRevision: pedido.model.revision, scenarioRevision: pedido.scenarioRevisions[nombre] ?? 0, xml: pedido.model.xml, scenario: entradas } };
+  reload.mockResolvedValue({ ...pedido, runs: [corrida] });
+
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(container.querySelector('.estado')!.textContent).toContain(T.app.semilla('7'));
+  });
+  expect(container.querySelector('.estado')!.textContent).not.toContain(T.app.semilla('42'));
 });

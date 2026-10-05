@@ -6,7 +6,14 @@
  *
  * Pure, like `xlsx-report.ts`: no DOM, no `node:*`, no clock (the date comes from the caller), so
  * the same inputs always give the same bytes. The diagram arrives as PNG bytes the host already
- * rasterised (the web's paper export of #451).
+ * rasterised (the web's paper export of #451) and/or as SVG text (`renderSvg` of
+ * `bpmn/render-svg.ts`, #538, for hosts with no browser). The HTML prefers the SVG; Word only
+ * takes the PNG, so a document built from the SVG alone has no diagram in its `.docx`.
+ *
+ * ponytail: no rasteriser in the engine. `@resvg/resvg-wasm` renders no text without a TTF/OTF
+ * font handed to it (it cannot read system fonts, and the woff/woff2 files of `@fontsource` are
+ * not accepted), so it would mean shipping a 2.5 MB wasm plus a font. Upgrade path: a node-only
+ * `svgToPng` with resvg and a bundled OFL font, when a Word diagram without the app is needed.
  *
  * The `.docx` is hand-written WordprocessingML zipped with `fflate`, the same approach as
  * `xlsx.ts`:
@@ -56,6 +63,8 @@ export interface ProcessDocument {
   readonly title: string;
   /** The diagram; only present when the bytes are a PNG (its size is read from the header). */
   readonly png?: Uint8Array;
+  /** The diagram as an `<svg>` element (#538): used by `toHtml` before `png`, ignored by `toDocx`. */
+  readonly svg?: string;
   /** The charts of the run (#460), PNG only; `image` blocks point into it with `chart`. */
   readonly charts?: readonly Uint8Array[];
   readonly blocks: readonly DocBlock[];
@@ -76,6 +85,8 @@ export interface ProcessDocumentInput {
   readonly date: string;
   readonly locale?: Locale;
   readonly png?: Uint8Array;
+  /** The diagram as SVG text, e.g. `renderSvg(xml)`; only the HTML shows it (Word needs `png`). */
+  readonly svg?: string;
   /** `parseBpmn(xml).subprocesses`: names and lanes of the flattened sub-processes. */
   readonly subprocesses?: Readonly<Record<string, SubprocessInfo>> | undefined;
   /** `parseBpmn(xml).lanes` and `.pool`: where the lanes' and the pool's extended attributes are (#509). */
@@ -171,6 +182,54 @@ function pngSize(png: Uint8Array | undefined): readonly [number, number] | null 
  * `bpmn:process` of the file and emit one chapter per pool.
  */
 export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocument {
+  return build(input);
+}
+
+/** One row of `raciMatrix`: an element of the document that has responsibilities. */
+export interface RaciRow {
+  /** The element's id as written in the `.bpmn` file. */
+  readonly id: string;
+  /** Its heading in the document: the name, or the id when it has none. */
+  readonly name: string;
+  /** Its lane as the document titles it, when it has one. */
+  readonly lane?: string;
+  /** Its `lila:responsibility` entries in file order, exactly what the document lists. */
+  readonly responsibilities: readonly { readonly type: string; readonly roleRef: string }[];
+  /** Role → its types on this element, joined with `, ` in file order (`R`, or `A, C`). */
+  readonly cells: Readonly<Record<string, string>>;
+}
+
+/** The RACI matrix of a process (#99): roles as columns, elements as rows. */
+export interface RaciMatrix {
+  /** Every `roleRef`, in order of first appearance along the rows. */
+  readonly roles: readonly string[];
+  readonly rows: readonly RaciRow[];
+}
+
+/**
+ * The RACI matrix the process document carries (#99): the elements the document has a section for
+ * (nodes and flattened sub-processes), in the document's own order, that have at least one
+ * `lila:responsibility`. Built by the same walk as `buildProcessDocument`, so the two cannot
+ * disagree on which elements, in which order, with which responsibilities.
+ */
+export function raciMatrix(input: ProcessDocumentInput): RaciMatrix {
+  const rows: RaciRow[] = [];
+  const roles: string[] = [];
+  build(input, (row) => {
+    if (row.responsibilities.length === 0) return;
+    const cells: Record<string, string> = Object.create(null) as Record<string, string>;
+    for (const { type, roleRef } of row.responsibilities) {
+      if (!roles.includes(roleRef)) roles.push(roleRef);
+      cells[roleRef] = Object.hasOwn(cells, roleRef) ? `${cells[roleRef]}, ${type}` : type;
+    }
+    rows.push({ ...row, cells: { ...cells } });
+  });
+  return { roles, rows };
+}
+
+type SectionVisitor = (row: Omit<RaciRow, 'cells'>) => void;
+
+function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocument {
   const { ir, annotations, locale = 'en' } = input;
   const M = messages(locale);
   const C = M.cli;
@@ -183,7 +242,8 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
   if (process.versionTag) blocks.push({ kind: 'paragraph', text: C.docVersion(process.versionTag) });
   blocks.push({ kind: 'paragraph', text: C.docDate(input.date) });
   blocks.push({ kind: 'paragraph', text: C.docGeneratedBy(ENGINE_VERSION) });
-  if (png !== undefined) blocks.push({ kind: 'image', alt: C.docDiagramAlt() });
+  const svg = input.svg?.trim() || undefined;
+  if (png !== undefined || svg !== undefined) blocks.push({ kind: 'image', alt: C.docDiagramAlt() });
   blocks.push({ kind: 'heading', level: 1, text: C.docDescription() });
   blocks.push({ kind: 'paragraph', text: process.documentation ?? C.docNoDescription() });
 
@@ -256,6 +316,12 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
     line(C.docDocumentation(), notes.documentation);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
+    visit?.({
+      id: original(id),
+      name: heading || original(id),
+      ...(laneTitleOf(lane) === undefined ? {} : { lane: laneTitleOf(lane)! }),
+      responsibilities: (notes.responsibilities ?? []).map(({ type, roleRef }) => ({ type, roleRef })),
+    });
     for (const [kind, refs] of Object.entries(notes.refs ?? {})) line(`lila:${kind}`, refs.join(', '));
     const bpmnType = input.types?.[id];
     const fallback = ir.nodes[id] === undefined ? 'subProcess' : NODE_CATEGORY[ir.nodes[id].type];
@@ -322,6 +388,7 @@ export function buildProcessDocument(input: ProcessDocumentInput): ProcessDocume
     title: input.title,
     blocks,
     ...(png === undefined ? {} : { png }),
+    ...(svg === undefined ? {} : { svg }),
     ...(charts.length === 0 ? {} : { charts }),
   };
 }
@@ -529,7 +596,8 @@ function htmlText(text: string): string {
 /**
  * Always white paper, whatever the app's theme (`color-scheme: light`): the page is meant to be
  * printed or saved as PDF from the browser. Everything is inline — styles and the diagram as a
- * `data:` URI — so the single file opens anywhere, offline, with no external request.
+ * `data:` URI (an SVG one too: inside an `<img>` its scripts never run and its ids cannot clash
+ * with the page's) — so the single file opens anywhere, offline, with no external request.
  */
 const HTML_STYLE =
   ':root{color-scheme:light}' +
@@ -561,6 +629,9 @@ export function toHtml(doc: ProcessDocument): string {
         case 'paragraph':
           return `<p>${block.label === undefined ? '' : `<strong>${htmlText(block.label)}:</strong> `}${htmlText(block.text)}</p>`;
         case 'image': {
+          if (block.chart === undefined && doc.svg !== undefined) {
+            return `<img src="data:image/svg+xml;base64,${btoa(strFromU8(strToU8(doc.svg), true))}" alt="${escapeHtml(block.alt)}">`;
+          }
           const bytes = block.chart === undefined ? png : doc.charts?.[block.chart];
           return bytes === undefined
             ? ''

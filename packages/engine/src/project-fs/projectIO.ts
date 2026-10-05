@@ -1,9 +1,13 @@
 /**
  * Lectura/escritura de la carpeta de proyecto (OP-08, ADR-018). Puro: solo `node:fs/promises` y
  * `node:path` (más `crypto`/`process`, globales de Node — sin `import`), para poder probarlo con
- * `mkdtemp` y carpetas reales sin levantar Electron. `main.ts` es el único que llama a estas
- * funciones desde un handler IPC, después de validar `dir` contra la carpeta autorizada y los
- * nombres de escenario/run contra `resolveWithin` (eso vive ahí, no aquí: ver `bridge.ts`).
+ * `mkdtemp` y carpetas reales sin levantar Electron.
+ *
+ * Moved from `apps/desktop/src/` into the engine (`@lila-modeler/engine/project-fs`, #466) so the
+ * CLI, the MCP server and the desktop share one disk implementation. Nothing here decides whether a
+ * path may be touched: in the desktop, `main.ts` validates `dir` against the authorized folder and
+ * the scenario/run names against `resolveWithin` (see `bridge.ts`) before calling; the CLI and MCP
+ * act on the paths their user passed, like every other file they read or write.
  *
  * Disposición de carpeta (decisión del coordinador, no se reabre):
  * - `model.bpmn`: el XML tal cual.
@@ -24,11 +28,10 @@ import {
   readRepositoryManifest,
   repositoryManifestOf,
   withProcesses,
-} from '@lila-modeler/engine/project';
-import type { ProcessDocument, ProcessManifest } from '@lila-modeler/engine/project';
-import { isLilaPath, isMiscasedModelFile } from './openPath.js';
-import { isSymlink } from './safePaths.js';
-import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './projectTypes.js';
+} from '../project/index.js';
+import type { ProcessDocument, ProcessManifest } from '../project/index.js';
+import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '../project/index.js';
+import { isLilaPath, isMiscasedModelFile, isSymlink } from './paths.js';
 
 const MODEL_FILE = 'model.bpmn';
 const MANIFEST_FILE = 'lila-project.json';
@@ -114,6 +117,17 @@ export async function rememberSnapshot(path: string): Promise<void> {
   const snap = await currentSnapshot(path);
   if (snap === null) lastSeen.delete(path);
   else lastSeen.set(path, snap);
+}
+
+/**
+ * `true` when `path` on disk is exactly what this process last read or wrote (#539): the desktop
+ * watcher uses it to tell Lila's own saves from an agent's. A file this process never saw and that
+ * does not exist counts as own (an atomic write's temporary file that is already gone); one that
+ * exists but was never seen does not (a new file someone else wrote). Read-only: it never updates
+ * the snapshot, so a later save still meets `E-CAMBIO-EXTERNO`.
+ */
+export async function isOwnSnapshot(path: string): Promise<boolean> {
+  return sameSnapshot(await currentSnapshot(path), lastSeen.get(path) ?? null);
 }
 
 /** Manifiesto por defecto cuando `lila-project.json` falta o no se pudo interpretar. */

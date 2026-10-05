@@ -21,10 +21,12 @@ import {
   assertReplaceableFile,
   comparablePath,
   compareWarnings,
-  loadResolvedScenario,
-  loadValidatedModel,
+  loadModelSource,
+  resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
+  targetScenarios,
+  validatedModelOf,
   withRunOverrides,
   writeJsonAtomic,
   type LoadedScenarioResult,
@@ -44,6 +46,8 @@ import {
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
+import { exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile } from './project-fs/exports.js';
+import { saveSimulationRun } from './project-fs/save-run.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
 import {
@@ -60,6 +64,11 @@ import {
 import { LOCALE_LIST, isLocale, messages, resolveLocale, type Locale } from './messages/index.js';
 import { scenarioErrors, validateScenario, type ResolvedScenario, type ScenarioProblem } from './scenario.js';
 import { version } from './version.js';
+import { createLilaProcess, readLilaOutline } from './project-fs/outline.js';
+import { editLilaProcess } from './project-fs/edit.js';
+import type { NormalOutline } from './bpmn/outline.js';
+import { describeDistribution } from './xlsx-report.js';
+import { dispatchProcessTools, dispatchScenarioTools, isProcessToolSubcommand } from './cli-agent-tools.js';
 
 export { resolveLocale } from './locale.js';
 
@@ -124,11 +133,17 @@ function printValidationProblems({ errors, warnings }: ValidationResult, locale:
   for (const error of errors) console.log(`${C.errorLabel()}  ${error.code}  ${error.message}`);
 }
 
-async function validateCommand(file: string, json: boolean, locale: Locale): Promise<number> {
+async function validateCommand(
+  file: string,
+  json: boolean,
+  locale: Locale,
+  process?: string | undefined,
+): Promise<number> {
   const C = messages(locale).cli;
-  const xml = readFileSync(file, 'utf8');
+  const { xml, lila } = await loadModelSource(file, { process, locale });
   // ponytail: el reporte lo arma `validateBpmnXml`, compartido con el servidor MCP (LILA-053).
-  const report = await validateBpmnXml(xml, { locale });
+  // #546: in a `.lila`, the process its scenarios target, as `run` simulates it.
+  const report = await validateBpmnXml(xml, { locale, scenarios: targetScenarios(lila) });
   const { ir, ignoredProcessIds } = report;
   const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
 
@@ -541,11 +556,14 @@ function openEventLogSink(directory: string, startMs: number, locale: Locale): E
 }
 
 interface RunCommandOptions {
+  process?: string | undefined;
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
   csv?: string | undefined;
   xlsx?: string | undefined;
+  /** `--save` (#538): store the run in the `.lila`, as the app does. */
+  save?: boolean | undefined;
   locale: Locale;
 }
 
@@ -556,11 +574,19 @@ async function runCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  const source = await loadModelSource(modelFile, { process: options.process, locale });
+  const { lila } = source;
+  if (options.save === true && lila === undefined) throw new Error(C.saveRunNeedsLila());
+  // The scenario comes first: the process it targets is the one simulated (#546).
+  const { scenario: resolvedScenario } = resolveScenarioArgument(scenarioFile, lila, locale);
+  const {
+    path: modelPath,
+    ir,
+    validation: modelValidation,
+    elsewhere,
+  } = await validatedModelOf(source, locale, [resolvedScenario]);
   if (modelHasErrors(modelValidation, locale)) return 1;
 
-  const scenarioPath = absolutePath(scenarioFile);
-  const resolvedScenario = loadResolvedScenario(scenarioPath, undefined, locale);
   if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
     console.error(C.commandError('run', C.modelMismatch(modelPath, resolvedScenario.model)));
     return 1;
@@ -568,7 +594,7 @@ async function runCommand(
 
   const scenario = withRunOverrides(resolvedScenario, options);
 
-  const scenarioProblems = validateScenario(scenario, ir, { locale });
+  const scenarioProblems = validateScenario(scenario, ir, { locale, elsewhere });
   const errors = scenarioErrors(scenarioProblems);
   if (errors.length > 0) {
     printScenarioProblems(scenarioProblems, locale);
@@ -602,6 +628,10 @@ async function runCommand(
         locale,
       );
     }
+    if (options.save === true) {
+      const saved = await saveSimulationRun(lila!, scenarioFile, scenario, result, locale);
+      console.log(C.runSaved(saved.id, saved.file, saved.process));
+    }
     return 0;
   } catch (error) {
     logSink?.abort();
@@ -614,6 +644,7 @@ async function runCommand(
  * ------------------------------------------------------------------ */
 
 interface CompareCommandOptions {
+  process?: string | undefined;
   seed?: number | undefined;
   replications?: number | undefined;
   json?: string | undefined;
@@ -796,7 +827,18 @@ async function compareCommand(
 ): Promise<number> {
   const locale = options.locale;
   const C = messages(locale).cli;
-  const { path: modelPath, ir, validation: modelValidation } = await loadValidatedModel(modelFile, locale);
+  const source = await loadModelSource(modelFile, { process: options.process, locale });
+  const { lila } = source;
+  // The scenarios come first: the process they target is the one simulated (#546).
+  const resolvedScenarios = scenarioFiles.map(
+    (scenarioFile) => resolveScenarioArgument(scenarioFile, lila, locale).scenario,
+  );
+  const {
+    path: modelPath,
+    ir,
+    validation: modelValidation,
+    elsewhere,
+  } = await validatedModelOf(source, locale, resolvedScenarios);
   if (modelHasErrors(modelValidation, locale)) return 1;
 
   // `compare` y `run` aceptan el mismo escenario (LILA-184): ninguno rechaza `resources` ni
@@ -809,8 +851,8 @@ async function compareCommand(
   }> = [];
   // Todo se valida antes de simular nada: un escenario inválido en la posición n no debe costar la
   // simulación completa de los n − 1 anteriores.
-  for (const scenarioFile of scenarioFiles) {
-    const resolvedScenario = loadResolvedScenario(absolutePath(scenarioFile), undefined, locale);
+  for (const [index, scenarioFile] of scenarioFiles.entries()) {
+    const resolvedScenario = resolvedScenarios[index]!;
     if (comparablePath(modelPath) !== comparablePath(resolvedScenario.model)) {
       console.error(
         C.commandError('compare', C.modelMismatchIn(modelPath, resolvedScenario.model, scenarioFile)),
@@ -819,7 +861,7 @@ async function compareCommand(
     }
 
     const scenario = withRunOverrides(resolvedScenario, options);
-    const problems = validateScenario(scenario, ir, { locale });
+    const problems = validateScenario(scenario, ir, { locale, elsewhere });
     if (scenarioErrors(problems).length > 0) {
       console.error(C.commandError('compare', scenarioFile));
       printScenarioProblems(problems, locale);
@@ -860,7 +902,7 @@ function positionalError(
 async function dispatchValidate(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
-    options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    options: { json: { type: 'boolean' }, process: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
     allowPositionals: true,
   });
   const C = messages(locale).cli;
@@ -873,18 +915,20 @@ async function dispatchValidate(argv: readonly string[], locale: Locale): Promis
     return 1;
   }
   if (positionals.length > 1) return positionalError('validate', C.bpmnPath(), locale);
-  return validateCommand(positionals[0]!, values.json === true, locale);
+  return validateCommand(positionals[0]!, values.json === true, locale, values.process);
 }
 
 async function dispatchRun(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
+      process: { type: 'string' },
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
       csv: { type: 'string' },
       xlsx: { type: 'string' },
+      save: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -896,11 +940,13 @@ async function dispatchRun(argv: readonly string[], locale: Locale): Promise<num
   }
   if (positionals.length !== 2) return positionalError('run', C.runPaths(), locale);
   return runCommand(positionals[0]!, positionals[1]!, {
+    process: values.process,
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
     csv: values.csv,
     xlsx: values.xlsx,
+    save: values.save === true,
     locale,
   });
 }
@@ -909,6 +955,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
+      process: { type: 'string' },
       seed: { type: 'string' },
       replications: { type: 'string' },
       json: { type: 'string' },
@@ -926,6 +973,7 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
   if (positionals.length < 3) return positionalError('compare', C.comparePaths(), locale);
   const [model, ...scenarios] = positionals;
   return compareCommand(model!, scenarios, {
+    process: values.process,
     seed: integerOption('seed', values.seed, locale),
     replications: integerOption('replications', values.replications, locale, 1),
     json: values.json,
@@ -942,6 +990,86 @@ async function dispatchCompare(argv: readonly string[], locale: Locale): Promise
  * `@lila-modeler/mcp` (que se compila después) y el paquete solo se resuelve cuando alguien corre `lila mcp`.
  */
 const MCP_PACKAGE = '@lila-modeler/mcp';
+
+const EXPORT_FORMATS = { doc: ['docx', 'html'], results: ['xlsx', 'csv'] } as const;
+
+/** `--format`, or the one `--out`'s extension names (`.htm` is html). */
+function exportFormat<K extends 'doc' | 'results'>(
+  kind: K,
+  format: string | undefined,
+  out: string,
+  locale: Locale,
+): (typeof EXPORT_FORMATS)[K][number] {
+  const accepted: readonly string[] = EXPORT_FORMATS[kind];
+  const extension = /\.([a-z0-9]+)$/i.exec(out)?.[1]?.toLowerCase();
+  const chosen = format ?? (extension === 'htm' ? 'html' : extension);
+  if (chosen === undefined || !accepted.includes(chosen)) {
+    throw new Error(messages(locale).cli.exportInvalidFormat(format ?? '', accepted.join(', ')));
+  }
+  return chosen as (typeof EXPORT_FORMATS)[K][number];
+}
+
+/**
+ * `lila export diagram|doc|results` (#538): the same engine functions as the MCP export tools
+ * (`@lila-modeler/engine/project-fs`), printing the paths written and any note on stderr.
+ */
+async function dispatchExport(argv: readonly string[], locale: Locale): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      process: { type: 'string' },
+      out: { type: 'string' },
+      format: { type: 'string' },
+      run: { type: 'string' },
+      scenario: { type: 'string' },
+      force: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: true,
+  });
+  const C = messages(locale).cli;
+  if (values.help === true) {
+    console.log(C.usage());
+    return 0;
+  }
+  if (positionals.length !== 2) {
+    console.error(C.commandError('export', C.expectedPositionals(C.exportPaths())));
+    return 1;
+  }
+  const [kind, file] = positionals as [string, string];
+  const source = { file, process: values.process, locale };
+  const write = { overwrite: values.force === true, locale };
+  if (kind === 'diagram') {
+    const { svg, file: from } = await exportDiagram(source);
+    if (values.out === undefined) process.stdout.write(`${svg}\n`);
+    else console.log(`SVG: ${writeExportFile(values.out, svg, { ...write, source: from })}`);
+    return 0;
+  }
+  if (kind !== 'doc' && kind !== 'results') {
+    console.error(C.commandError('export', C.exportUnknownKind(kind)));
+    return 1;
+  }
+  if (values.out === undefined) {
+    console.error(C.commandError('export', C.exportOutRequired(kind)));
+    return 1;
+  }
+  const selection = { run: values.run, scenario: values.scenario };
+  if (kind === 'doc') {
+    const format = exportFormat('doc', values.format, values.out, locale);
+    const doc = await exportDocument({ ...source, ...selection, format });
+    console.log(`${format.toUpperCase()}: ${writeExportFile(values.out, doc.data, { ...write, source: doc.file })}`);
+    for (const note of doc.notes) console.error(note);
+    return 0;
+  }
+  const format = exportFormat('results', values.format, values.out, locale);
+  const results = await exportResults({ ...source, ...selection, format });
+  if (results.data instanceof Uint8Array) {
+    console.log(`XLSX: ${writeExportFile(values.out, results.data, { ...write, source: results.file })}`);
+  } else {
+    for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
+  }
+  return 0;
+}
 
 async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
@@ -986,6 +1114,144 @@ async function dispatchMcp(argv: readonly string[], locale: Locale): Promise<num
   return 0;
 }
 
+/** `lila process show`: one line per step, the way an outline reads. */
+function printOutline(outline: NormalOutline, slug: string, locale: Locale): void {
+  const C = messages(locale).cli;
+  console.log(C.processShowHeader(outline.name, slug));
+  if (outline.lanes !== undefined) console.log(C.processShowLanes(outline.lanes.join(', ')));
+  for (const step of outline.steps) {
+    const parts = [`${step.id}`, step.type ?? 'task'];
+    if (step.name !== undefined) parts.push(`"${step.name}"`);
+    if (step.lane !== undefined) parts.push(`[${step.lane}]`);
+    if (step.duration !== undefined) parts.push(describeDistribution(step.duration));
+    if (step.resources !== undefined) {
+      parts.push(step.resources.map((r) => (typeof r === 'string' ? r : `${r.name}×${r.quantity}`)).join(', '));
+    }
+    let after = '';
+    if (step.end === true) after = ' → end';
+    else if (step.branches !== undefined) {
+      after = ` → ${step.branches
+        .map((b) => `${b.label === undefined ? '' : `${b.label}: `}${b.to ?? 'end'}${b.probability === undefined ? '' : ` (${b.probability})`}`)
+        .join(' | ')}`;
+    } else if (step.next !== undefined) after = ` → ${[step.next].flat().join(', ')}`;
+    console.log(`  ${parts.join('  ')}${after}`);
+  }
+}
+
+async function dispatchProcess(argv: readonly string[], locale: Locale): Promise<number> {
+  try {
+    return await processCommand(argv, locale);
+  } catch (error) {
+    // With --json an agent gets the failure as JSON on stdout too: the message and, for an outline,
+    // every issue with its path. The text still goes to stderr through `main`.
+    if (argv.includes('--json')) {
+      const issues = (error as { issues?: unknown }).issues;
+      console.log(JSON.stringify({ error: error instanceof Error ? error.message : String(error), ...(Array.isArray(issues) ? { issues } : {}) }, null, 2));
+    }
+    throw error;
+  }
+}
+
+async function processCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      outline: { type: 'string' },
+      ops: { type: 'string' },
+      'no-layout': { type: 'boolean' },
+      project: { type: 'string', short: 'p' },
+      process: { type: 'string' },
+      name: { type: 'string' },
+      'dry-run': { type: 'boolean' },
+      json: { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: true,
+  });
+  const C = messages(locale).cli;
+  if (values.help === true) {
+    console.log(C.usage());
+    return 0;
+  }
+  const [sub, ...rest] = positionals;
+  if (sub !== 'create' && sub !== 'show' && sub !== 'edit') {
+    console.error(C.commandError('process', C.processUnknownSubcommand(sub ?? '')));
+    return 1;
+  }
+  if (rest.length > 0) {
+    console.error(C.commandError('process', C.expectedPositionals(sub)));
+    return 1;
+  }
+  if (values.project === undefined) {
+    console.error(C.commandError('process', C.processMissingOption('-p/--project <file.lila>')));
+    return 1;
+  }
+
+  if (sub === 'show') {
+    const read = await readLilaOutline(values.project, { process: values.process, locale });
+    if (values.json === true) console.log(JSON.stringify({ slug: read.slug, outline: read.outline, warnings: read.warnings }, null, 2));
+    else {
+      printOutline(read.outline, read.slug, locale);
+      for (const warning of read.warnings) console.error(`${C.warningLabel()}: ${warning}`);
+    }
+    return 0;
+  }
+
+  if (sub === 'edit') {
+    if (values.ops === undefined) {
+      console.error(C.commandError('process', C.processMissingOption('--ops <ops.json>')));
+      return 1;
+    }
+    let operations: unknown;
+    try {
+      operations = JSON.parse(readFileSync(resolve(values.ops), 'utf8'));
+    } catch (error) {
+      console.error(C.commandError('process', C.editOpsUnreadable(values.ops, error instanceof Error ? error.message : String(error))));
+      return 1;
+    }
+    const edited = await editLilaProcess(values.project, operations, {
+      process: values.process,
+      dryRun: values['dry-run'] === true,
+      layout: values['no-layout'] !== true,
+      locale,
+    });
+    if (values.json === true) console.log(JSON.stringify(edited, null, 2));
+    else {
+      console.log(edited.summary);
+      for (const change of edited.changes) console.log(`  ${change.op}: ${change.message}`);
+      for (const note of edited.notes) console.log(`${C.warningLabel()} ${note}`);
+      for (const warning of edited.warnings) console.log(`${C.warningLabel()} ${warning.code} ${warning.id}: ${warning.message}`);
+    }
+    return 0;
+  }
+
+  if (values.outline === undefined) {
+    console.error(C.commandError('process', C.processMissingOption('--outline <file.json>')));
+    return 1;
+  }
+  let outline: unknown;
+  try {
+    outline = JSON.parse(readFileSync(resolve(values.outline), 'utf8'));
+  } catch (error) {
+    console.error(C.commandError('process', C.outlineFileUnreadable(values.outline, error instanceof Error ? error.message : String(error))));
+    return 1;
+  }
+  const created = await createLilaProcess(values.project, outline, {
+    name: values.name,
+    process: values.process,
+    dryRun: values['dry-run'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(created, null, 2));
+  } else {
+    console.log(created.summary);
+    for (const warning of created.warnings) console.log(`${C.warningLabel()} ${warning.code} ${warning.id}: ${warning.message}`);
+    for (const note of created.notes) console.log(`${C.warningLabel()}: ${note}`);
+  }
+  return 0;
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   // `--lang` se resuelve antes de repartir: es global, no de un subcomando (ver `extractLang`).
   const { argv: rest, lang, invalid } = extractLang(argv);
@@ -1014,7 +1280,11 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'validate') return await dispatchValidate(args, locale);
     if (command === 'run') return await dispatchRun(args, locale);
     if (command === 'compare') return await dispatchCompare(args, locale);
+    if (command === 'export') return await dispatchExport(args, locale);
+    if (command === 'process' && isProcessToolSubcommand(args)) return await dispatchProcessTools(args, locale);
+    if (command === 'scenario') return await dispatchScenarioTools(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
+    if (command === 'process') return await dispatchProcess(args, locale);
     console.error(C.unknownCommand(command));
     console.error(C.usage());
     return 1;
