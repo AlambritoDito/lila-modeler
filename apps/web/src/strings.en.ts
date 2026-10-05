@@ -879,6 +879,13 @@ export const en = {
     anadir: 'Add',
     anadirEtiqueta: (etiqueta: string): string => `Add ${etiqueta}`,
     claveNueva: 'new key',
+    /** #579: the create control, on top of Calendars and Resources. */
+    nuevoCalendario: 'New calendar',
+    ejemploCalendario: 'night-shift',
+    crearCalendario: '+ Create calendar',
+    nuevoRecurso: 'New resource',
+    ejemploRecurso: 'analyst',
+    crearRecurso: '+ Create resource',
     claveRepetida: (clave: string): string => `${clave} already exists; edit it below or use another id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'deleted (null)',
