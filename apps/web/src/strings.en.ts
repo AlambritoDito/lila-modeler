@@ -442,7 +442,9 @@ export const en = {
     sinCoincidencias: (filtro: string): string => `No shape matches «${filtro}».`,
     /** Title of a boundary event or a lane while nothing fitting is selected (#456). */
     requiereActividad: (figura: string): string => `${figura}: select a task or a sub-process to attach it to`,
-    requiereContenedor: (figura: string): string => `${figura}: select a pool or a lane to add it to`,
+    requiereContenedor: (figura: string): string => `${figura}: add a pool first`,
+    /** The lane tool waiting for a click on a pool (#580); Escape cancels. */
+    eligePool: 'Click the pool or lane to add the lane to. Esc cancels.',
     /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */
     comandos: {
       titulo: 'Command palette',
@@ -1416,6 +1418,9 @@ export const en = {
     plegarMinimapa: 'Collapse minimap',
     desplegarMinimapa: 'Expand minimap',
     errorSinBpmn: 'The modeler has no BPMN open yet.',
+    /** Context pad entries of a lane (#580). */
+    moverCarrilArriba: 'Move lane up',
+    moverCarrilAbajo: 'Move lane down',
 
     /** Floating label of the bottleneck overlay (#226): short above, complete in the `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,

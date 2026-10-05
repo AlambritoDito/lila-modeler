@@ -30,8 +30,9 @@ export interface Figura {
   readonly triggeredByEvent?: boolean;
   /**
    * What has to be selected for the figure to be inserted (#456): a boundary event hangs from an
-   * `actividad`, a lane goes into a pool or next to a lane (`contenedor`). Without it the item is
-   * disabled and its title says what to select.
+   * `actividad`, a lane goes into a pool or next to a lane (`contenedor`). Without it a boundary
+   * event is disabled and its title says what to select; a lane asks for a pool instead (#580) and
+   * is disabled only when the diagram has none.
    */
   readonly requiere?: 'actividad' | 'contenedor';
 }
@@ -265,6 +266,11 @@ export function anfitrion(servicios: Servicios, figura: Figura, seleccion: strin
   return host;
 }
 
+/** Whether the diagram has a pool the lane tool could pick (#580). */
+export function hayPool(servicios: Servicios): boolean {
+  return servicios.elementRegistry.filter((el) => el.type === 'bpmn:Participant' && el.labelTarget === undefined).length > 0;
+}
+
 interface Punto { x: number; y: number }
 
 /** Centro de un elemento del diagrama, en coordenadas del propio diagrama. */
@@ -309,9 +315,17 @@ function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: u
 /**
  * Inserta la figura en el centro de lo que se ve y deja el nombre en edición, que es lo que hace
  * el clic (o `Enter`) sobre un ítem. A figure with `requiere` goes into the selected element
- * instead (#456), and without a fitting selection nothing happens (the item is disabled then).
+ * instead (#456). Without a fitting selection a boundary event inserts nothing (its item is
+ * disabled then) and a lane goes to the only pool, or waits for a click on one (#580);
+ * `alTerminar` runs when that wait ends.
  */
-export function insertar(servicios: Servicios, figura: Figura, seleccion: string | null = null): void {
+export function insertar(servicios: Servicios, figura: Figura, seleccion: string | null = null, alTerminar: () => void = () => {}): void {
+  if (figura.requiere === 'contenedor' && anfitrion(servicios, figura, seleccion) === null) {
+    // #580: no pool or lane selected. With one pool the lane goes straight in; with several the
+    // next click on the canvas picks one (`carriles.ts`).
+    servicios.carriles?.elegirPool(alTerminar);
+    return;
+  }
   if (figura.requiere !== undefined) {
     insertarEnSeleccion(servicios, figura, seleccion);
     return;
@@ -363,6 +377,8 @@ interface Props {
 export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }: Props): React.JSX.Element {
   const S = useStrings();
   const [filtro, setFiltro] = useState('');
+  // The lane tool waiting for a click on a pool (#580).
+  const [eligiendo, setEligiendo] = useState(false);
   const grupos = filtrar(gruposDeFiguras(), filtro);
 
   return (
@@ -387,7 +403,10 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
             <summary>{grupo.nombre}</summary>
             {grupo.figuras.map((figura) => {
               // Boundary events and lanes need a fitting selection (#456); the title says which.
-              const falta = figura.requiere !== undefined && (servicios === null || anfitrion(servicios, figura, seleccion) === null);
+              // A lane only needs a pool somewhere: without a fitting selection it asks for one (#580).
+              const falta = figura.requiere !== undefined && (servicios === null ||
+                (anfitrion(servicios, figura, seleccion) === null && (figura.requiere === 'actividad' || !hayPool(servicios))));
+              const esCarril = figura.tipo === 'bpmn:Lane';
               // A lane is only added by `modeling.addLane`: dragging it has no drop target.
               const arrastrable = figura.tipo !== 'bpmn:Lane';
               return (
@@ -401,8 +420,15 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
                   title={!falta ? figura.nombre
                     : figura.requiere === 'actividad' ? S.paleta.requiereActividad(figura.nombre) : S.paleta.requiereContenedor(figura.nombre)}
                   disabled={servicios === null || falta}
+                  {...(esCarril ? { 'aria-pressed': eligiendo } : {})}
                   onDragStart={(e) => { if (arrastrable) servicios?.create.start(e.nativeEvent, nueva(servicios, figura)); }}
-                  onClick={() => { if (servicios !== null) insertar(servicios, figura, seleccion); }}
+                  onClick={() => {
+                    if (servicios === null) return;
+                    // A second click on the waiting lane tool cancels the pick.
+                    if (esCarril && servicios.carriles?.eligiendo() === true) { servicios.carriles.cancelar(); return; }
+                    insertar(servicios, figura, seleccion, () => setEligiendo(false));
+                    if (esCarril) setEligiendo(servicios.carriles?.eligiendo() === true);
+                  }}
                 >
                   <span className={`bpmn-icon-${figura.icono}`} aria-hidden="true" />
                   <span className="nombre">{figura.nombre}</span>
@@ -414,6 +440,8 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
         ))}
         {grupos.length === 0 && <p className="vacio">{S.paleta.sinCoincidencias(filtro)}</p>}
       </div>
+      {/* Always mounted, so screen readers announce the text when it appears (#580). */}
+      <p className="paleta-eligiendo" role="status">{eligiendo ? S.paleta.eligePool : ''}</p>
       <footer>{S.paleta.piePrefijo}<span>{S.paleta.pieTecla}</span>{S.paleta.pieSufijo}</footer>
     </div>
   );

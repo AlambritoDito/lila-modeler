@@ -2057,6 +2057,43 @@ body {
   color: var(--fg-muted);
 }
 
+/* The lane tool waiting for a click on a pool (#580): the hint above the footer, the pressed
+   item and a crosshair over the canvas. */
+.paleta-eligiendo {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--accent-primary);
+  color: var(--fg-primary);
+  font-size: 11px;
+  margin: 0;
+  padding: calc(6px * var(--espacio, 1)) 12px;
+}
+
+.paleta .figura[aria-pressed='true'] {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.lila-eligiendo-pool .djs-element,
+.lila-eligiendo-pool svg {
+  cursor: crosshair;
+}
+
+/* Empty, it takes no room; it stays rendered so the live region is there when the text comes. */
+.paleta-eligiendo:empty {
+  border: 0;
+  padding: 0;
+}
+
+/* In 48 px the hint does not fit: it stays for screen readers only. */
+.paleta.compacta .paleta-eligiendo {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
 /* En 48 px el pie no cabe: el modo compacto se explica solo con el botón, que sigue teniendo su
    tooltip. */
 .paleta.compacta footer {
