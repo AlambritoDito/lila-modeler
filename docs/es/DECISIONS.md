@@ -543,6 +543,42 @@ análisis, dashboards y registros, el flujo de liberación, el CRDT del servidor
 
 ---
 
+## ADR-030 — El servidor MCP es un paquete npm propio, `@lila-modeler/mcp`
+
+**Estado:** Aceptada (decidida por Brito el 2026-10-05, #569)
+
+El servidor MCP se publica como **`@lila-modeler/mcp`**, un paquete público aparte con el bin
+`lila-mcp`, en vez de moverlo dentro de `@lila-modeler/engine`. Los agentes lo arrancan con
+`npx -y @lila-modeler/mcp`. Hasta ahora `packages/mcp` era `private`, así que el documentado
+`npx -y @lila-modeler/engine mcp` se detenía con «falta el paquete @lila-modeler/mcp».
+
+Por qué un paquete aparte:
+
+- **El motor sigue ligero.** Solo depende de `bpmn-moddle`, `bpmn-auto-layout`, `fflate` y `zod`, y
+  también lo consumen la app web y la de escritorio. Meter el servidor obligaría a todo consumidor a
+  instalar `@modelcontextprotocol/server` y su árbol por una función que la mayoría nunca usa.
+- **Ya es un paquete.** `packages/mcp` tenía su bin, su compilación y una dependencia fijada del
+  motor; publicarlo cuesta metadatos, un README y un `npm publish` más.
+- **El SDK de MCP va a su propio ritmo.** La v2 partió el SDK en paquetes de cliente y servidor y
+  sigue cambiando; subir el servidor no debe obligar a sacar versión del motor, ni al revés.
+- **`npx -y <paquete-del-servidor>` es como se instalan los servidores MCP**, y es lo que esperan la
+  documentación y los fragmentos de configuración de los clientes.
+
+Cómo se publica: siempre con la misma versión que el motor. `@lila-modeler/mcp` fija
+`@lila-modeler/engine` a esa versión exacta, `release.yml` rechaza una etiqueta en la que la
+dependencia fijada, los manifiestos y la constante `VERSION` no coincidan, y la publicación en npm
+sube primero el motor y justo después el servidor, con la misma dist-tag y `--provenance`.
+`npm run test:package` instala los dos tarballs en un consumidor limpio y lista las tools por stdio.
+
+`lila mcp` se queda: sigue cargando `@lila-modeler/mcp` con un `import()` dinámico (desde
+LILA-056, para evitar un ciclo entre paquetes) y funciona donde los dos paquetes estén instalados
+juntos: un clon del repositorio o un proyecto que instale ambos. Con el motor solo, ahora dice que el
+servidor se publica aparte y nombra `npx -y @lila-modeler/mcp`. Revisar si el motor llega a
+necesitar el servidor, o si mantener las dos versiones a la par se vuelve una carga.
+*(tests: `tools/check-package.mjs`, `packages/mcp/test/e2e.test.ts`)*
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).

@@ -4,13 +4,15 @@
 
 This guide is for an agent (Claude Code, Claude Desktop, Codex, Hermes Agent or any MCP client)
 that turns what people say about a process into a model, a simulation and a document, with no one
-clicking in the app. Every step is an MCP tool of `lila mcp` ([`MCP.md`](MCP.md), where each tool
+clicking in the app. Every step is a tool of the MCP server `@lila-modeler/mcp` ([`MCP.md`](MCP.md), where each tool
 has its full contract) or the matching `lila` command ([`CLI.md`](CLI.md)). Steps 2 to 7 below,
 one tool call at a time, run in CI with no UI: `packages/mcp/test/agent-flow.e2e.test.ts`, starting
 from the synthetic interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. Step 8 needs the
 desktop app, so it is checked by hand with `tools/agent-live-check.mjs`.
 
-Setting up the server for each client is in [`MCP.md`](MCP.md#installation).
+The client starts the server with `npx -y @lila-modeler/mcp` (Node 22 or later), for example
+`claude mcp add lila -- npx -y @lila-modeler/mcp`. Setting it up for each client is in
+[`MCP.md`](MCP.md#installation).
 
 ## The flow
 
@@ -202,8 +204,8 @@ outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-
   write nothing.
 - **Validation is not an error of the tool.** `validate_bpmn` answers `isError: false` with a
   report whose `errors[]` may be full; read them.
-- **Language.** Messages follow `lila mcp --lang es` (or `LILA_LANG`), or `locale` per call. Codes
-  (`E-…`), ids and JSON keys never change.
+- **Language.** Messages follow `LILA_LANG=es` in the server's environment (or
+  `lila mcp --lang es`), or `locale` per call. Codes (`E-…`), ids and JSON keys never change.
 
 ## More than one writer
 
@@ -245,6 +247,3 @@ the same `.lila`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
 - **Simulation is synchronous** in the server: a long run blocks the server until it finishes. Keep
   replications reasonable while iterating.
-- **Installation.** `npx -y @lila-modeler/engine mcp` does not work yet: the published engine does
-  not include the MCP server, which lives in the unpublished `@lila-modeler/mcp`. Run the server
-  from a checkout ([`MCP.md`](MCP.md#installation)).

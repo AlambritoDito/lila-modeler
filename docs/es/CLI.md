@@ -240,11 +240,15 @@ npx lila scenario import proyecto.lila as-is as-is.xlsx
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
-corre a mano en una terminal para leer su salida. Los detalles, el contrato de las tools y el
-registro en clientes están en [`docs/es/MCP.md`](MCP.md); el comando de fondo es:
+corre a mano en una terminal para leer su salida. El servidor es un paquete npm propio: registra
+`npx -y @lila-modeler/mcp` en tu cliente. `lila mcp` arranca el mismo servidor cuando
+`@lila-modeler/mcp` está instalado junto al motor (un clon del repo, o un proyecto que instale los
+dos); con el motor solo sale con 1 y apunta a `npx -y @lila-modeler/mcp`. Los detalles, el
+contrato de las tools y el registro en clientes están en [`docs/es/MCP.md`](MCP.md).
 
 ```text
-node packages/engine/bin/lila.js mcp
+npx -y @lila-modeler/mcp
+node packages/engine/bin/lila.js mcp    # desde un clon del repo
 ```
 
 ## `process`

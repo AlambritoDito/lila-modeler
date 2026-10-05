@@ -164,21 +164,24 @@ section: [`docs/CLI.md`](docs/CLI.md).
 
 ### MCP
 
-`lila mcp` starts an MCP server over stdio with sixteen tools on the same engine: `validate_bpmn`,
-`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
-`get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
-`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
-`create_project`.
+`npx -y @lila-modeler/mcp` starts an MCP server over stdio with sixteen tools on the same engine:
+`validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`,
+`create_process`, `get_process_outline`, `edit_process`, `export_diagram`, `export_document`,
+`export_results`, `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
+`export_scenario_template`, `create_project`.
 
 ```bash
-claude mcp add lila -- node /path/to/lila-modeler/packages/engine/bin/lila.js mcp
+claude mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
-The repo ships a project-level `.mcp.json`, so opening Claude Code at the repo root registers the
-server on its own. Tool contracts and known limits (no cancellation; all I/O against the server's
-disk) are in [`docs/MCP.md`](docs/MCP.md), with the setup for Claude Desktop, Codex and Hermes
-Agent. The [agent guide](docs/AGENT_GUIDE.md) walks an agent through the whole flow: interview,
-outline, scenario, run, document, and the open app reloading on its own.
+The server is its own npm package,
+[`@lila-modeler/mcp`](https://www.npmjs.com/package/@lila-modeler/mcp), with the same version as the
+engine. In a checkout, `lila mcp` starts the same server, and the repo's project-level `.mcp.json`
+registers it when Claude Code opens at the repo root. Tool contracts and known limits (no
+cancellation; all I/O against the server's disk) are in [`docs/MCP.md`](docs/MCP.md), with the setup
+for Claude Desktop, Codex and Hermes Agent. The [agent guide](docs/AGENT_GUIDE.md) walks an agent
+through the whole flow: interview, outline, scenario, run, document, and the open app reloading on
+its own.
 
 ## How it compares to Bizagi Modeler
 
@@ -218,7 +221,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 
 - `packages/engine` — `@lila-modeler/engine`: the engine core (`src/core/`, no dependencies), the BPMN
   parser, schemas, CSV/XLSX writers and the `lila` CLI.
-- `packages/mcp` — `@lila-modeler/mcp` (private): the MCP server, a thin layer over the engine.
+- `packages/mcp` — `@lila-modeler/mcp` (npm): the MCP server, a thin layer over the engine.
 - `apps/web` — React 19 + Vite + bpmn-js editor and viewer.
 - `apps/desktop` — Electron packaging of `apps/web`; `.github/workflows/desktop.yml` builds the
   three installers on `v*` tags and attaches the macOS DMG and the Windows `.exe` (plus checksums) to a draft Release.

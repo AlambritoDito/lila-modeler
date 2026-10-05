@@ -538,6 +538,42 @@ dashboards and records, the release workflow, the server's CRDT.
 
 ---
 
+## ADR-030 — The MCP server is its own npm package, `@lila-modeler/mcp`
+
+**Status:** Accepted (decided by Brito on 2026-10-05, #569)
+
+The MCP server is published as **`@lila-modeler/mcp`**, a separate public package with the
+`lila-mcp` bin, instead of being moved into `@lila-modeler/engine`. Agents start it with
+`npx -y @lila-modeler/mcp`. Until now `packages/mcp` was `private`, so the documented
+`npx -y @lila-modeler/engine mcp` stopped with "the package @lila-modeler/mcp is missing".
+
+Why a separate package:
+
+- **The engine stays light.** It depends only on `bpmn-moddle`, `bpmn-auto-layout`, `fflate` and
+  `zod`, and the web and desktop apps consume it too. Moving the server in would make every
+  consumer install `@modelcontextprotocol/server` and its tree for a feature most of them never run.
+- **It already is a package.** `packages/mcp` had its bin, its build and a pinned engine
+  dependency; publishing it costs metadata, a README and one more `npm publish`.
+- **The MCP SDK moves on its own cadence.** v2 split the SDK into client and server packages and
+  keeps changing; a server bump should not force an engine release, nor the other way around.
+- **`npx -y <server-package>` is how MCP servers are installed**, and it is what client docs and
+  config snippets expect.
+
+How it is released: same version as the engine, always. `@lila-modeler/mcp` pins
+`@lila-modeler/engine` to that exact version, `release.yml` refuses a tag where the pin, the
+manifests and the `VERSION` constant disagree, and the npm publication publishes the engine
+first and the server right after, with the same dist-tag and `--provenance`. `npm run
+test:package` installs both tarballs in a clean consumer and lists the tools over stdio.
+
+`lila mcp` stays: it still loads `@lila-modeler/mcp` with a dynamic `import()` (since
+LILA-056, to avoid a package cycle) and works wherever both packages are installed side by side
+— a repository checkout, or a project that installs both. With the engine alone it now says the
+server is published separately and names `npx -y @lila-modeler/mcp`. Revisit if the engine ever
+needs the server itself, or if keeping the two versions in lockstep becomes a burden.
+*(tests: `tools/check-package.mjs`, `packages/mcp/test/e2e.test.ts`)*
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).

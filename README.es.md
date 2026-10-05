@@ -170,22 +170,24 @@ y una sección «para agentes»: [`docs/es/CLI.md`](docs/es/CLI.md).
 
 ### MCP
 
-`lila mcp` arranca un servidor MCP por stdio con dieciséis tools sobre el mismo motor:
-`validate_bpmn`,
-`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
-`get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
-`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
-`create_project`.
+`npx -y @lila-modeler/mcp` arranca un servidor MCP por stdio con dieciséis tools sobre el mismo
+motor: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`,
+`create_process`, `get_process_outline`, `edit_process`, `export_diagram`, `export_document`,
+`export_results`, `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
+`export_scenario_template`, `create_project`.
 
 ```bash
-claude mcp add lila -- node /ruta/a/lila-modeler/packages/engine/bin/lila.js mcp
+claude mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
-El repo trae un `.mcp.json` de proyecto, así que abrir Claude Code en la raíz del repo registra el
-servidor solo. Contratos de cada tool y límites conocidos (sin cancelación; todo I/O contra el
-disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md), con la configuración para Claude Desktop,
-Codex y Hermes Agent. La [guía para agentes](docs/es/GUIA-AGENTES.md) recorre el flujo completo de un
-agente: entrevista, esquema, escenario, corrida, documento y la app abierta que se recarga sola.
+El servidor es un paquete npm propio,
+[`@lila-modeler/mcp`](https://www.npmjs.com/package/@lila-modeler/mcp), con la misma versión que el
+motor. En un clon, `lila mcp` arranca el mismo servidor, y el `.mcp.json` de proyecto del repo lo
+registra al abrir Claude Code en la raíz. Contratos de cada tool y límites conocidos (sin
+cancelación; todo I/O contra el disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md), con la
+configuración para Claude Desktop, Codex y Hermes Agent. La [guía para
+agentes](docs/es/GUIA-AGENTES.md) recorre el flujo completo de un agente: entrevista, esquema,
+escenario, corrida, documento y la app abierta que se recarga sola.
 
 ## Cómo se compara con Bizagi Modeler
 
@@ -226,7 +228,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 
 - `packages/engine` — `@lila-modeler/engine`: el núcleo del motor (`src/core/`, sin dependencias), el
   parser BPMN, los esquemas, los escritores CSV/XLSX y la CLI `lila`.
-- `packages/mcp` — `@lila-modeler/mcp` (privado): el servidor MCP, capa fina sobre el motor.
+- `packages/mcp` — `@lila-modeler/mcp` (npm): el servidor MCP, capa fina sobre el motor.
 - `apps/web` — editor y visor en React 19 + Vite + bpmn-js.
 - `apps/desktop` — empaquetado Electron de `apps/web`; `.github/workflows/desktop.yml` construye
   los tres instaladores con tags `v*` y adjunta el DMG de macOS y el `.exe` de Windows (más los
