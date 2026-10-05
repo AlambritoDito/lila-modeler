@@ -19,7 +19,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import {
   columnLabel,
-  formatDuration,
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
@@ -42,7 +41,7 @@ import {
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
 import { MAX_SERIES } from './graficas';
 import { GraficaBarras, geometriaBarras, PLOT_MINIMO, useAncho, type GraficaBarrasProps } from './GraficasSvg';
-import { formatDisplay, formatDisplayDuration, roundDisplay } from './formatDisplay';
+import { exactDuration, formatDisplay, formatDisplayDuration, roundDisplay } from './formatDisplay';
 import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
@@ -154,7 +153,7 @@ function formatCellValue(metric: string, value: number | null, unit: BaseTimeUni
   const plain = exact ? formatNumber : formatDisplay;
   if (value === null) return S.comparar.sinValor;
   if (isCostMetric(metric)) return formatMoney(value, currency, exact);
-  if (isDurationMetric(metric)) return exact ? formatDuration(value, unit) : formatDisplayDuration(value, unit);
+  if (isDurationMetric(metric)) return exact ? exactDuration(value, unit) : formatDisplayDuration(value, unit);
   if (metric === 'utilization') return S.comparar.porCiento(plain(value * 100));
   if (metric === 'withinServiceLevel' || splitOutcomeMetric(metric)?.metric === 'withinServiceLevel') {
     return S.comparar.porCiento(plain(value * 100));

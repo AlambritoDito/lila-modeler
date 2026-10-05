@@ -24,9 +24,7 @@ import {
 import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
 import {
   columnLabel,
-  formatDuration,
   formatNumber,
-  SECONDS_PER_UNIT,
   type BaseTimeUnit,
   type ResultScope,
 } from '@lila-modeler/engine/format';
@@ -43,7 +41,7 @@ import type {
 import { hasLegacyReplications } from './compareWarnings.js';
 import { agruparAvisos, AvisoAgrupado } from './avisos';
 import { GraficaDeInstancias, GraficaDeUtilizacion, GraficasDelProceso, type LogDeCorrida } from './GraficasResultados';
-import { formatDisplay, formatDisplayDuration } from './formatDisplay';
+import { exactDuration, formatDisplay, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -439,7 +437,7 @@ function durationColumn<Row>(
   const S = strings();
   return {
     display: (row) => formatDisplayDuration(get(row), unit),
-    title: (row) => formatDuration(get(row), unit),
+    title: (row) => exactDuration(get(row), unit),
     header: S.resultados.columnaConUnidad(columnLabel(scope, key), unit),
     key,
     numeric: true,
@@ -603,9 +601,7 @@ export function BottleneckCard({
                   </button>
                 )}
               {S.resultados.cuelloDetalle(
-                // The sentence already names the unit, so the number stays in it (no "h (… min)").
-                formatDisplay(entry.resourceWaitTotal / SECONDS_PER_UNIT[unit]),
-                unit,
+                formatDisplayDurationWithUnit(entry.resourceWaitTotal, unit),
                 formatDisplay(entry.utilization * 100),
               )}
             </li>

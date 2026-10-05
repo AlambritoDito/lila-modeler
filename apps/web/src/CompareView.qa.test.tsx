@@ -21,7 +21,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { resolveExtends } from '@lila-modeler/engine/schema';
 import { formatDuration } from '@lila-modeler/engine/format';
-import { formatDisplayDuration } from './formatDisplay';
+import { exactDuration, formatDisplayDuration } from './formatDisplay';
 import {
   compare,
   simulate,
@@ -84,11 +84,16 @@ const normalizeMark = (text: string): string => text.replace(/\s+\*$/, '*');
 function exactOf(cell: string): string {
   const title = /^<t[dh][^>]*\stitle="([^"]*)"/.exec(cell)?.[1];
   if (title === undefined) return textOf(cell);
-  return textOf(title) + (cell.includes('role="img"') ? ' *' : '');
+  // A duration's title carries its unit ("7977.379789 min (+3%)"); the CLI prints the bare number.
+  return textOf(title).replace(/ (?:s|min|h|d)(?= \(|$)/, '') + (cell.includes('role="img"') ? ' *' : '');
 }
 
-/** Ningún número visible de la celda pasa de dos decimales. */
-const maxDecimals = (text: string): number => Math.max(0, ...(text.match(/\d+\.\d+/g) ?? []).map((n) => n.split('.')[1]!.length));
+/**
+ * Ningún número visible de la celda pasa de dos decimales; por debajo de 0.01 van dos cifras
+ * significativas en vez de un «0» engañoso (QA de #585), así que esos no cuentan.
+ */
+const maxDecimals = (text: string): number =>
+  Math.max(0, ...(text.match(/\d+\.\d+/g) ?? []).filter((n) => Number(n) >= 0.01).map((n) => n.split('.')[1]!.length));
 
 /* ------------------------------------------------------------------ *
  * Fixture real: examples/pedido AS-IS vs TO-BE 3 cajeros, más la salida de `lila compare`.
@@ -320,6 +325,7 @@ describe('CompareView QA: baseTimeUnit', () => {
       const cells = cellsOf(findRow(source, 'Task_Revisar', 'Average time'));
       expect(textOf(cells[3]!), `base en ${unit}`).toBe(formatDisplayDuration(duracion.values[0]!, unit));
       expect(exactOf(cells[3]!), `base exacta en ${unit}`).toBe(formatDuration(duracion.values[0]!, unit));
+      expect(cells[3], `unidad en el title en ${unit}`).toContain(`title="${exactDuration(duracion.values[0]!, unit)}"`);
     }
 
     // Conteos, utilización y `queueLength.mean` no son segundos: su texto no puede cambiar.

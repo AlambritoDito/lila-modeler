@@ -136,7 +136,7 @@ describe('(a) each chart shows the values of its table', () => {
       const metrica = `${b.serie === 0 ? 'cycleTime' : 'waitTime'}.${b.grupo}`;
       expect(b.texto).toBe(fila![unidad(columnLabel('process', metrica))]);
       expect(formatDisplayDuration(Number(b.valor) * SECONDS_PER_UNIT.min, 'min')).toBe(b.texto);
-      expect(exacta![unidad(columnLabel('process', metrica))]).toBe(formatDuration(Number(b.valor) * SECONDS_PER_UNIT.min, 'min'));
+      expect(exacta![unidad(columnLabel('process', metrica))]).toBe(`${formatDuration(Number(b.valor) * SECONDS_PER_UNIT.min, 'min')} min`);
     }
     const clases = [...container.querySelectorAll('[data-grafica="histograma"] g.marca')];
     expect(clases.length).toBeGreaterThanOrEqual(5);

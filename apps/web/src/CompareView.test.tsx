@@ -159,7 +159,8 @@ describe('CompareView (LILA-063): AS-IS vs TO-BE 3 cajeros', () => {
     // Copiados de `node packages/engine/bin/lila.js compare examples/pedido/model.bpmn
     // examples/pedido/as-is.scenario.json examples/pedido/to-be-3-cajeros.scenario.json`.
     expect(html).toContain('0.249493');
-    expect(html).toContain('0.036306 (-85.447978%)');
+    // A duration's exact value carries its unit in the title (QA of #585); the cell shows two decimals.
+    expect(html).toContain('title="0.036306 min (-85.447978%)">0.04 (-85.45%)');
     expect(html).toContain('41.411072%');
     expect(html).toContain('28.444895% (-31.310893%)');
     // Utilización en %, no en fracción (RESULTS_FORMAT §10, igual que resources.csv).

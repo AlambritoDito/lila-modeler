@@ -16,7 +16,7 @@ import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
 import { GraficaDeInstancias, GraficaDeUtilizacion, type LogDeCorrida } from './GraficasResultados';
-import { formatDisplay } from './formatDisplay';
+import { exactDuration, formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
 import { esperaCorta } from './BottleneckOverlay';
@@ -248,14 +248,15 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
   const { filas, total } = filasRapidas(ir, result, scenario, log);
   // Without a usable sample there is no p95 column at all; the note says why (QA of #394).
   const conP95 = p95Fiable(log);
-  const tiempo = (segundos: number): string => formatDisplay(segundos / SECONDS_PER_UNIT[unit]);
+  // The same text as the Results tables (#578): hours from an hour on.
+  const tiempo = (segundos: number): string => formatDisplayDuration(segundos, unit);
   const celdas = (f: FilaRapida): ReactNode => (
     <>
       {/* Whole cases: a mean over replications (1485.23…) reads as a count (QA of #394). */}
       <td style={numero()} title={formatNumber(f.casos)}>{formatNumber(Math.round(f.casos))}</td>
       {/* Rounded like the KPIs, the exact value as the title (QA of #394). */}
-      <td style={numero()} title={guion(f.esperaMedia, (v) => formatDuration(v, unit))}>{guion(f.esperaMedia, tiempo)}</td>
-      {conP95 && <td style={numero()} title={guion(f.esperaP95, (v) => formatDuration(v, unit))}>{guion(f.esperaP95, tiempo)}</td>}
+      <td style={numero()} title={guion(f.esperaMedia, (v) => exactDuration(v, unit))}>{guion(f.esperaMedia, tiempo)}</td>
+      {conP95 && <td style={numero()} title={guion(f.esperaP95, (v) => exactDuration(v, unit))}>{guion(f.esperaP95, tiempo)}</td>}
       <td style={numero()} title={guion(f.utilizacion, (v) => formatNumber(v * 100))}>{guion(f.utilizacion, (v) => formatDisplay(v * 100, 1))}</td>
       <td style={numero()} title={formatNumber(f.costo)}>{formatDisplay(f.costo)}</td>
     </>
@@ -297,7 +298,7 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const filas = log.rows.slice(0, FILAS_LOG);
   const tiempo = (v: number | null): string => guion(v, (x) => formatDisplay(x / SECONDS_PER_UNIT[unit]));
-  const exacto = (v: number | null): string => guion(v, (x) => formatDuration(x, unit));
+  const exacto = (v: number | null): string => guion(v, (x) => exactDuration(x, unit));
   return (
     <>
       {log.truncated && <p className="dock-nota" role="note">{S.dock.logTruncado(log.rows.length)}</p>}

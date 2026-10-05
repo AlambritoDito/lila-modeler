@@ -125,7 +125,8 @@ describe('overlayModel (LILA-064)', () => {
       const entry = overlayModel(resultAsIs, asIs)['Task_Preparar'];
 
       expect(entry?.etiqueta).toBe('2.1 d · 34%');
-      expect(entry?.titulo).toBe('espera media 3000.56 min · utilización 34.35%');
+      // An hour or more reads in hours, the same text as the Results tables (QA of #585).
+      expect(entry?.titulo).toBe('espera media 50.01 h (3000.56 min) · utilización 34.35%');
     });
 
     // TO-BE triplica la capacidad de cajero (2 -> 3) y la espera media de Task_TomarPedido baja

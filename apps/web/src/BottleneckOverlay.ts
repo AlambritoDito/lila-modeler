@@ -36,7 +36,7 @@ import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { ElementLike } from 'diagram-js/lib/model/Types';
 import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
 import { formatDuration, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
-import { formatDisplay } from './formatDisplay';
+import { formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { RunResult } from '@lila-modeler/engine';
 import { strings } from './i18n';
@@ -172,9 +172,8 @@ export function overlayModel(result: RunResult, scenario: ResolvedScenario): Ove
         principal: rango === 0,
         rango,
         titulo: S.lienzo.cuelloTitulo(
-          // The sentence names the unit itself: two decimals in it (#578), not the engine's six.
-          formatDisplay(metrics.resourceWait.mean / SECONDS_PER_UNIT[unit]),
-          unit,
+          // The same text as the Results tables (#578): hours from an hour on, with its unit.
+          formatDisplayDurationWithUnit(metrics.resourceWait.mean, unit),
           formatDisplay(entrada.utilization * 100),
         ),
       },

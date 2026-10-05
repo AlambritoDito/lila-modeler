@@ -17,7 +17,7 @@ import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { BottleneckEntry, ProcessIR, RunResult } from '@lila-modeler/engine';
 
 import { buildResultCsvExports, ResultsView, sortRows, type ColumnDef } from './ResultsView.js';
-import { formatDisplay, formatDisplayDuration } from './formatDisplay';
+import { exactDuration, formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { setLocale, strings } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
@@ -65,13 +65,38 @@ describe('ResultsView (LILA-062)', () => {
     // La pestaña "Elementos del proceso" es la que se ve por defecto (sin clics).
     expect(html).toContain('Minimum time (min)');
     for (const segundos of [task.processing.min, task.processing.mean]) {
-      expect(html).toContain(`title="${formatDuration(segundos, 'min')}">${formatDisplayDuration(segundos, 'min')}</td>`);
+      expect(html).toContain(`title="${exactDuration(segundos, 'min')}">${formatDisplayDuration(segundos, 'min')}</td>`);
     }
     expect(html).toContain(`title="${formatNumber(task.started)}">${formatDisplay(task.started)}</td>`);
     expect(html).toContain('Task_TomarPedido');
     // Ninguna celda visible pasa de dos decimales; el golden sí los tiene (si no, no prueba nada).
     expect(formatDuration(task.processing.mean, 'min')).toMatch(/\.\d{3,}$/);
-    for (const [, texto] of html.matchAll(/<td[^>]*>([^<]*)<\/td>/g)) expect(texto).not.toMatch(/\d\.\d{3,}/);
+    for (const [, texto] of html.matchAll(/<td[^>]*>([^<]*)<\/td>/g)) expect(texto).not.toMatch(/\d\.(?!00)\d{3,}/);
+  });
+
+  it('una espera corta pero real en horas no se lee «0» (QA de #585)', async () => {
+    const ir = await loadIr();
+    const result = structuredClone(loadGolden());
+    // ~15 s, the mean wait QA saw on `pedido` in hours: 0.004158 h.
+    const espera = 14.97;
+    result.elements['Task_TomarPedido']!.resourceWait.mean = espera;
+    const html = renderToStaticMarkup(<ResultsView ir={ir} scenario={scenarioWithUnit('h')} result={result} />);
+    const celda = `title="${exactDuration(espera, 'h')}">`;
+    expect(html).toContain(celda);
+    const texto = html.slice(html.indexOf(celda) + celda.length, html.indexOf('</td>', html.indexOf(celda)));
+    expect(texto).not.toBe('0');
+    expect(Number(texto)).toBeCloseTo(espera / 3600, 4);
+  });
+
+  it('la tarjeta de cuellos lee en horas una espera de una hora o más, como las tablas (QA de #585)', async () => {
+    const ir = await loadIr();
+    // 3000.56 min of total wait, the figure QA saw in minutes only.
+    const cuello: BottleneckEntry = { elementId: 'Task_Preparar', resourceWaitTotal: 180_033.6, utilization: 0.3435 };
+    const result = { ...loadGolden(), bottlenecks: [cuello] };
+    const html = renderToStaticMarkup(<ResultsView ir={ir} scenario={scenarioWithUnit('min')} result={result} />);
+    expect(html).toContain('espera total 50.01 h (3000.56 min), utilización 34.35%');
+    expect(html).toContain(`espera total ${formatDisplayDuration(cuello.resourceWaitTotal, 'min')},`);
+    expect(formatDisplayDuration(cuello.resourceWaitTotal, 'min')).toMatch(/^[\d.]+ h \([\d.]+ min\)$/);
   });
 
   it('cambiar baseTimeUnit a "h" cambia etiqueta y valores de la tabla, igual que la CLI', async () => {
@@ -90,8 +115,8 @@ describe('ResultsView (LILA-062)', () => {
     expect(hourHtml).toContain('Average time (h)');
     expect(minHtml).toContain(`>${formatDisplayDuration(task.processing.mean, 'min')}</td>`);
     expect(hourHtml).toContain(`>${formatDisplayDuration(task.processing.mean, 'h')}</td>`);
-    expect(minHtml).toContain(`title="${formatDuration(task.processing.mean, 'min')}"`);
-    expect(hourHtml).toContain(`title="${formatDuration(task.processing.mean, 'h')}"`);
+    expect(minHtml).toContain(`title="${formatDuration(task.processing.mean, 'min')} min"`);
+    expect(hourHtml).toContain(`title="${formatDuration(task.processing.mean, 'h')} h"`);
     // El mismo segundo crudo formatea distinto en cada unidad (no es casualidad de redondeo).
     expect(formatDuration(task.processing.mean, 'min')).not.toBe(formatDuration(task.processing.mean, 'h'));
   });

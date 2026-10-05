@@ -1157,8 +1157,9 @@ export const es: Strings = {
 
     cuellos: 'Cuellos de botella',
     sinCuellos: 'Sin espera por recurso detectada.',
-    cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>
-      ` — espera total ${espera} ${unidad}, utilización ${utilizacion}%`,
+    /** `espera` lleva su unidad, como en las tablas (`3000.56 min`, `50.01 h (3000.56 min)`). */
+    cuelloDetalle: (espera: string, utilizacion: string): string =>
+      ` — espera total ${espera}, utilización ${utilizacion}%`,
 
     avisos: 'Avisos',
 
@@ -1354,8 +1355,9 @@ export const es: Strings = {
 
     /** Etiqueta flotante del overlay de cuellos (#226): corta arriba, completa en el `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,
-    cuelloTitulo: (espera: string, unidad: string, utilizacion: string): string =>
-      `espera media ${espera} ${unidad} · utilización ${utilizacion}%`,
+    /** `espera` lleva su unidad, como en las tablas. */
+    cuelloTitulo: (espera: string, utilizacion: string): string =>
+      `espera media ${espera} · utilización ${utilizacion}%`,
     /** Abreviatura de la unidad en la etiqueta; el `title` usa el código del escenario. */
     unidadesCortas: { day: 'd', h: 'h', min: 'min', s: 's' },
 
