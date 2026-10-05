@@ -1,4 +1,4 @@
-/** Exercise the actual npm artifact from a consumer outside the workspace. Never publishes. */
+/** Exercise the actual npm artifacts (engine and MCP server) from a consumer outside the workspace. Never publishes. */
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,13 +19,15 @@ function run(command, args, cwd = consumer) {
 }
 function json(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 console.log(`Checking package in ${consumer}`);
-run(process.execPath, [npmCli, 'pack', '--workspace', '@lila-modeler/engine', '--pack-destination', consumer], root);
-const archives = readdirSync(consumer).filter((name) => name.endsWith('.tgz'));
-assert.equal(archives.length, 1);
+for (const workspace of ['@lila-modeler/engine', '@lila-modeler/mcp']) {
+  run(process.execPath, [npmCli, 'pack', '--workspace', workspace, '--pack-destination', consumer], root);
+}
+const archives = readdirSync(consumer).filter((name) => name.endsWith('.tgz')).sort();
+assert.equal(archives.length, 2);
 writeFileSync(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
 const typescript = json(join(root, 'node_modules/typescript/package.json')).version;
 const nodeTypes = json(join(root, 'node_modules/@types/node/package.json')).version;
-run(process.execPath, [npmCli, 'install', '--ignore-scripts', '--no-audit', '--no-fund', join(consumer, archives[0]), `typescript@${typescript}`, `@types/node@${nodeTypes}`]);
+run(process.execPath, [npmCli, 'install', '--ignore-scripts', '--no-audit', '--no-fund', ...archives.map((name) => join(consumer, name)), `typescript@${typescript}`, `@types/node@${nodeTypes}`]);
 const installed = join(consumer, 'node_modules/@lila-modeler/engine');
 const manifest = json(join(installed, 'package.json'));
 assert.equal(manifest.version, json(join(root, 'packages/engine/package.json')).version);
@@ -59,4 +61,21 @@ for (const [language, heading] of [['en', 'Usage:'], ['es', 'Uso:']]) {
   }
   assert.deepEqual(readFileSync(join(consumer, `installed-${language}.json`)), readFileSync(join(consumer, `checkout-${language}.json`)));
 }
-console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes.');
+// @lila-modeler/mcp (ADR-030): only its build output, and the installed bin answers an MCP client.
+const mcp = join(consumer, 'node_modules/@lila-modeler/mcp');
+const mcpManifest = json(join(mcp, 'package.json'));
+assert.equal(mcpManifest.version, manifest.version);
+assert.deepEqual(readdirSync(mcp).sort(), ['LICENSE', 'NOTICE', 'README.md', 'bin', 'dist', 'package.json']);
+const { Client } = await import('@modelcontextprotocol/client');
+const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
+const client = new Client({ name: 'lila-package-check', version: '0' });
+await client.connect(new StdioClientTransport({ command: process.execPath, args: [join(mcp, mcpManifest.bin['lila-mcp'])], cwd: consumer }));
+try {
+  assert.equal(client.getServerVersion()?.version, manifest.version);
+  assert.equal((await client.listTools()).tools.length, 16);
+  const validated = await client.callTool({ name: 'validate_bpmn', arguments: { path: model } });
+  assert.notEqual(validated.isError, true, JSON.stringify(validated));
+} finally {
+  await client.close();
+}
+console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes, MCP server with 16 tools.');

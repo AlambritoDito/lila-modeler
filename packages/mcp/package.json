@@ -1,29 +1,54 @@
 {
   "name": "@lila-modeler/mcp",
-  "version": "1.0.0-beta.18",
-  "description": "Servidor MCP stdio sobre @lila-modeler/engine: validate_bpmn y describe_process",
-  "private": true,
+  "version": "1.0.0-beta.19",
+  "description": "MCP server (stdio) for Lila Modeler: model, validate, simulate and document BPMN processes from an AI agent, on top of @lila-modeler/engine",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
   "bin": {
-    "lila-mcp": "./bin/lila-mcp.js"
+    "lila-mcp": "bin/lila-mcp.js"
   },
   "files": [
     "dist",
-    "bin"
+    "!dist/**/*.map",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bpmn",
+    "simulation",
+    "discrete-event-simulation",
+    "process-modeling",
+    "bizagi",
+    "ai-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlambritoDito/lila-modeler.git",
+    "directory": "packages/mcp"
+  },
   "scripts": {
-    "build": "tsc --build"
+    "build": "tsc --build",
+    "prepack": "npm run build"
   },
   "dependencies": {
-    "@lila-modeler/engine": "1.0.0-beta.18",
+    "@lila-modeler/engine": "1.0.0-beta.19",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
     "fflate": "^0.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -331,7 +331,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.18, tag `v1.0.0-beta.18`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-beta.19, tag `v1.0.0-beta.19`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -374,10 +374,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.18` para la Beta 18):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.19` para la Beta 19):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.18-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.18-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.19-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.19-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

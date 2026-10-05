@@ -247,6 +247,10 @@ registro en clientes están en [`docs/es/MCP.md`](MCP.md); el comando de fondo e
 node packages/engine/bin/lila.js mcp
 ```
 
+`lila mcp` necesita `@lila-modeler/mcp` instalado junto al motor; la CLI sola se detiene con
+`lila mcp: falta el paquete @lila-modeler/mcp`. Fuera de un clon, lo habitual es arrancar el
+servidor con el comando del propio paquete, `npx -y @lila-modeler/mcp`.
+
 ## `process`
 
 Crea un proceso a partir de un **esquema**, lee uno de vuelta (#97) y edita uno (#98). Un esquema es el proceso como
