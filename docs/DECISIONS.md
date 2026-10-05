@@ -559,7 +559,7 @@ engine had the `lila mcp` subcommand but not the server it loads, and
   `release.yml` checks), and `@lila-modeler/mcp` pins the exact engine version. `release.yml`
   publishes the engine first and then the server, with the same dist-tag (`beta` for a prerelease,
   `latest` otherwise), `--provenance` and the same `publish_npm` guard. The package contains only
-  `dist`, `bin`, `README.md` and `package.json`.
+  `dist`, `bin`, `README.md`, `package.json`, and `LICENSE` and `NOTICE` like the engine.
 - **`lila mcp` stays.** It still loads `@lila-modeler/mcp` with a dynamic `import()` (no package
   cycle), so it works wherever both packages are installed, as in a repository checkout.
 

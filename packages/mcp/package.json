@@ -13,7 +13,9 @@
     "dist",
     "!dist/**/*.map",
     "bin",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "keywords": [
     "mcp",

@@ -65,7 +65,7 @@ for (const [language, heading] of [['en', 'Usage:'], ['es', 'Uso:']]) {
 const mcp = join(consumer, 'node_modules/@lila-modeler/mcp');
 const mcpManifest = json(join(mcp, 'package.json'));
 assert.equal(mcpManifest.version, manifest.version);
-assert.deepEqual(readdirSync(mcp).sort(), ['README.md', 'bin', 'dist', 'package.json']);
+assert.deepEqual(readdirSync(mcp).sort(), ['LICENSE', 'NOTICE', 'README.md', 'bin', 'dist', 'package.json']);
 const { Client } = await import('@modelcontextprotocol/client');
 const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
 const client = new Client({ name: 'lila-package-check', version: '0' });

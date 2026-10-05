@@ -564,7 +564,7 @@ motor publicado traía el subcomando `lila mcp` pero no el servidor que carga, y
   revisa `release.yml`), y `@lila-modeler/mcp` fija la versión exacta del motor. `release.yml`
   publica primero el motor y después el servidor, con la misma dist-tag (`beta` para una
   prerelease, `latest` si no), `--provenance` y la misma guarda `publish_npm`. El paquete contiene
-  solo `dist`, `bin`, `README.md` y `package.json`.
+  solo `dist`, `bin`, `README.md`, `package.json`, y `LICENSE` y `NOTICE` como el motor.
 - **`lila mcp` se queda.** Sigue cargando `@lila-modeler/mcp` con un `import()` dinámico (sin ciclo
   entre paquetes), así que funciona donde estén instalados los dos, como en un clon del repo.
 
