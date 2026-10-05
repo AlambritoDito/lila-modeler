@@ -220,9 +220,10 @@ Agents, the CLI and the desktop app can work on the same `.lila`:
   Try again.»). Call it again: it reads the new file. A saved run is the exception: it is appended
   to what is there, unless the model or the scenario it ran on changed (then it is already stale
   and is not saved).
-- **The app.** It reloads after your writes. If the person saves edits made before your write, the
-  app refuses with `E-CAMBIO-EXTERNO` instead of overwriting your work; they choose Reload or Keep
-  mine.
+- **The app.** It reloads after your writes. If the person has unsaved edits, it asks first:
+  Reload or Keep mine. After Keep mine, saving is refused with `E-CAMBIO-EXTERNO` («… changed
+  outside Lila since it was opened, so nothing was saved…»), so your work is not overwritten; they
+  reload, or use Save As to keep their version in another file.
 
 Do one write at a time per file and wait for its answer; there is no benefit in parallel writes to
 the same `.lila`.

@@ -442,7 +442,13 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         anterior.destroy();
       }
       staging.remove();
-      onSeleccion(null);
+      // The new instance starts with nothing selected, but it imported before `vincular`, so no
+      // subscriber heard of it. Anyone holding elements of the destroyed instance (the properties
+      // panel, #539 QA) must drop them now: an edit through a stale element writes to a model that
+      // is no longer on the canvas and gets lost on save. Through `vincular` this also clears
+      // `onSeleccion`.
+      candidato.get<{ fire(evento: string, datos: object): unknown }>('eventBus')
+        .fire('selection.changed', { oldSelection: [], newSelection: [] });
       const canvas = candidato.get<Canvas>('canvas');
       // `fit-viewport` divide por el ancho del contenedor: con la pestaña en segundo plano
       // eso es 0 y bpmn-js muere con «SVGMatrix: The provided float value is non-finite».
