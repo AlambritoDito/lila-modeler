@@ -273,6 +273,8 @@ Supported in v1: the list in section 3 of `LILA_MODELER_ESTRUCTURA.md` (see `doc
 
 **Why TypeScript comes out stronger**: the same bundle runs in the desktop app's Worker and in the server's Node; a Python engine would have required bundling a Python runtime inside the installer or loading Pyodide (~12 MB).
 
+> **Note:** Amended by ADR-031 (2026-10-05): on Windows the primary channel is the web app installed as a PWA from Chrome or Edge, where the objection above (no native file dialogs, no file association) mostly disappears. Safari and Firefox keep the download fallback, and the Electron app stays primary on macOS.
+
 ---
 
 ## ADR-024 — Top-level aggregate across multiple replications
@@ -565,6 +567,37 @@ engine had the `lila mcp` subcommand but not the server it loads, and
 
 The first publication is by hand by the owner, and then the npm trusted publisher (OIDC) is set up
 for the new package, as was done for the engine. *(test: #569)*
+
+---
+
+## ADR-031 — On Windows, the primary channel is the PWA in Chrome and Edge
+
+**Status:** Accepted (decided by the owner on 2026-10-05). Amends ADR-023.
+
+Signing the Windows installer is paused: SignPath Foundation declined while the project has no
+users yet, and an unsigned `.exe` meets SmartScreen warnings that a first-time tester should not
+have to click through. Meanwhile the same SPA is already published on GitHub Pages, and in
+Chromium the reasons ADR-023 gave for ruling out a PWA as the primary mode mostly no longer hold:
+
+- **Install.** Chrome and Edge install the app from its web app manifest
+  (`apps/web/src/pwa/manifest.webmanifest`) as a standalone window with its own Start menu entry,
+  with no installer to sign. Every URL in the manifest is relative to it, so the same file works
+  under `/` locally and under `/lila-modeler/app/` on Pages.
+- **File association.** The manifest's `file_handlers` registers `.lila`; a double click launches
+  the installed app, and `launchQueue` hands the file to the app, which opens it through the same
+  path as «Open» — including the unsaved-changes prompt.
+- **Native dialogs and save in place.** With the File System Access API, `BrowserStore` opens with
+  `showOpenFilePicker`, keeps the file handle, and «Save» rewrites the same `.lila`; the first save
+  and «Save as» use `showSaveFilePicker`.
+
+So on Windows the primary channel is the web app installed as a PWA from Chrome or Edge; the
+unsigned `.exe` stays as a secondary channel for whoever wants the desktop app. Nothing is lost
+elsewhere: Safari and Firefox lack those APIs and keep the `<input type=file>` and the download
+(progressive enhancement), and macOS keeps the Electron app. Working offline is not part of this
+decision: a service worker is #574.
+
+Revisit when Windows signing becomes possible, or if the File System Access or file handling APIs
+change in Chromium. *(test: #570)*
 
 ---
 

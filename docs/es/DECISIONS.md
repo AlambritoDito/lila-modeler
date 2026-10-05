@@ -273,6 +273,8 @@ Soportado en v1: la lista de la sección 3 de `LILA_MODELER_ESTRUCTURA.md` (ver 
 
 **Porqué TypeScript sale reforzado**: el mismo bundle corre en el Worker de la app de escritorio y en el Node del servidor; un motor Python habría exigido empaquetar un runtime Python dentro del instalador o cargar Pyodide (~12 MB).
 
+> **Nota:** Enmendado por ADR-031 (2026-10-05): en Windows el canal principal es la app web instalada como PWA desde Chrome o Edge, donde la objeción de arriba (sin diálogos nativos de archivo, sin asociación de archivos) casi desaparece. Safari y Firefox conservan la descarga, y la app Electron sigue siendo la principal en macOS.
+
 ---
 
 ## ADR-024 — Agregado top-level de varias replicaciones
@@ -570,6 +572,38 @@ motor publicado traía el subcomando `lila mcp` pero no el servidor que carga, y
 
 La primera publicación la hace el dueño a mano, y después se configura el publicador de confianza
 de npm (OIDC) para el paquete nuevo, como se hizo con el motor. *(prueba: #569)*
+
+---
+
+## ADR-031 — En Windows el canal principal es la PWA en Chrome y Edge
+
+**Status:** Accepted (decidido por el dueño el 2026-10-05). Enmienda ADR-023.
+
+La firma del instalador de Windows está en pausa: SignPath Foundation la rechazó mientras el
+proyecto no tenga usuarios, y un `.exe` sin firmar choca con avisos de SmartScreen que un probador
+nuevo no debería tener que saltarse. Mientras tanto, la misma SPA ya está publicada en GitHub Pages,
+y en Chromium los motivos con los que ADR-023 descartó una PWA como modalidad principal casi dejan
+de valer:
+
+- **Instalación.** Chrome y Edge instalan la app desde su manifiesto
+  (`apps/web/src/pwa/manifest.webmanifest`) como ventana propia con entrada en el menú Inicio, sin
+  instalador que firmar. Todas las URL del manifiesto son relativas a él, así que el mismo archivo
+  sirve bajo `/` en local y bajo `/lila-modeler/app/` en Pages.
+- **Asociación de archivos.** `file_handlers` registra `.lila`; un doble clic lanza la app
+  instalada y `launchQueue` le entrega el archivo, que se abre por el mismo camino que «Abrir»,
+  incluido el aviso de cambios sin guardar.
+- **Diálogos nativos y guardar en el mismo archivo.** Con la File System Access API, `BrowserStore`
+  abre con `showOpenFilePicker`, conserva el identificador del archivo y «Guardar» reescribe el
+  mismo `.lila`; el primer guardado y «Guardar como» usan `showSaveFilePicker`.
+
+Así que en Windows el canal principal es la app web instalada como PWA desde Chrome o Edge; el
+`.exe` sin firmar queda como canal secundario para quien quiera la app de escritorio. No se pierde
+nada en otros sitios: Safari y Firefox no tienen esas API y conservan el `<input type=file>` y la
+descarga (mejora progresiva), y macOS conserva la app Electron. Trabajar sin conexión no entra en
+esta decisión: el service worker es #574.
+
+Revisar cuando la firma de Windows sea posible, o si las API de File System Access o de manejo de
+archivos cambian en Chromium. *(test: #570)*
 
 ---
 

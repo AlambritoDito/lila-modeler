@@ -90,7 +90,13 @@ Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/li
   **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open** works directly. Do not
   disable Gatekeeper to work around this. [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks
   through the whole flow, including checksum verification.
-- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
+- **Windows** — the recommended way is the web app installed from **Chrome or Edge** (ADR-031): open
+  <https://alambritodito.github.io/lila-modeler/app/> and install it (the install icon in the address
+  bar, or the browser menu). It gets its own window and Start menu entry, double-clicking a `.lila`
+  opens it, and **Save** rewrites the same file instead of downloading a copy. It is new and not yet
+  tested on a real Windows machine either; [`docs/WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md)
+  walks a non-developer through it and ends with a report template.
+- **Windows (x64) installer, secondary** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
   **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
   clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
   **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer
@@ -199,7 +205,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Results export | Excel | CSV and XLSX |
 | Percentiles, queue lengths, throughput, cost per case, bottleneck ranking, off-hours wait | ✗ | ✓ |
 | Live-counter animation | ✓ | ✓ Animate replays the event log |
-| Platforms | Windows only | web app (Chrome tested), macOS (tested); Windows installer unsigned and untested; Linux AppImage untested |
+| Platforms | Windows only | web app (Chrome tested), macOS (tested); on Windows the web app installed from Chrome or Edge, plus an unsigned, untested installer; Linux AppImage untested |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
 | Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
 | Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
@@ -246,6 +252,7 @@ English is the base language; Spanish versions live under `docs/es/`.
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
 - [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
+- [`WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) — installing the web app from Chrome or Edge on Windows, trying it and reporting what happens.
 - [`WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) — trying the untested, unsigned Windows installer and reporting what happens.
 - [`EXAMPLES_POLICY.md`](docs/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — examples policy, test oracles, Pages deployment.

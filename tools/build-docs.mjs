@@ -86,19 +86,19 @@ function render(markdown, from, published) {
 const titleOf = (markdown, fallback) => markdown.match(/^#\s+(.+)$/m)?.[1].replace(/`/g, '') ?? fallback;
 
 /** Spanish docs whose file name differs from their English counterpart. */
-const ES_ALIAS = { 'ATAJOS.md': 'SHORTCUTS.md', 'GUIA-BETA-MAC.md': 'BETA-MAC-GUIDE.md', 'GUIA-PROBADOR-WINDOWS.md': 'WINDOWS-TESTER-GUIDE.md', 'GUIA-AGENTES.md': 'AGENT_GUIDE.md' };
+const ES_ALIAS = { 'ATAJOS.md': 'SHORTCUTS.md', 'GUIA-BETA-MAC.md': 'BETA-MAC-GUIDE.md', 'GUIA-PROBADOR-WINDOWS.md': 'WINDOWS-TESTER-GUIDE.md', 'GUIA-PROBADOR-WINDOWS-PWA.md': 'WINDOWS-PWA-TESTER-GUIDE.md', 'GUIA-AGENTES.md': 'AGENT_GUIDE.md' };
 /** English name of a doc, which is what places it in the sidebar in both languages. */
 const canonical = (doc) => { const base = path.posix.basename(doc); return ES_ALIAS[base] ?? base; };
 
 const GROUPS = [
-  { en: 'Getting started', es: 'Primeros pasos', docs: ['BETA-MAC-GUIDE.md', 'WINDOWS-TESTER-GUIDE.md', 'COMING-FROM-BIZAGI.md'] },
+  { en: 'Getting started', es: 'Primeros pasos', docs: ['BETA-MAC-GUIDE.md', 'WINDOWS-PWA-TESTER-GUIDE.md', 'WINDOWS-TESTER-GUIDE.md', 'COMING-FROM-BIZAGI.md'] },
   { en: 'Guides', es: 'Guías', docs: ['SCENARIO_SHEETS.md', 'THEMES.md', 'SHORTCUTS.md', 'BIZAGI_PARITY.md'] },
   { en: 'Reference', es: 'Referencia', docs: ['SCENARIO_FORMAT.md', 'RESULTS_FORMAT.md', 'PROJECT_FORMAT.md', 'SEMANTICS.md', 'BPMN_EXTENSION.md'] },
   { en: 'Integrations', es: 'Integraciones', docs: ['AGENT_GUIDE.md', 'MCP.md', 'ORACLES.md'] },
   { en: 'Project', es: 'Proyecto', docs: ['DECISIONS.md', 'EXAMPLES_POLICY.md', 'BRANDING.md'] },
 ];
 const LABELS = {
-  'BETA-MAC-GUIDE.md': ['Desktop beta (macOS)', 'Beta de escritorio (macOS)'], 'WINDOWS-TESTER-GUIDE.md': ['Windows tester guide', 'Guía para probar en Windows'], 'COMING-FROM-BIZAGI.md': ['Coming from Bizagi', 'Si vienes de Bizagi'],
+  'BETA-MAC-GUIDE.md': ['Desktop beta (macOS)', 'Beta de escritorio (macOS)'], 'WINDOWS-PWA-TESTER-GUIDE.md': ['Windows web app tester guide', 'Guía para probar la app web en Windows'], 'WINDOWS-TESTER-GUIDE.md': ['Windows tester guide', 'Guía para probar en Windows'], 'COMING-FROM-BIZAGI.md': ['Coming from Bizagi', 'Si vienes de Bizagi'],
   'SCENARIO_SHEETS.md': ['Parameters from Excel/CSV', 'Parámetros desde Excel/CSV'],
   'THEMES.md': ['Themes', 'Temas'], 'SHORTCUTS.md': ['Keyboard shortcuts', 'Atajos de teclado'], 'BIZAGI_PARITY.md': ['Bizagi parity', 'Paridad con Bizagi'],
   'SCENARIO_FORMAT.md': ['Scenario format', 'Formato de escenario'], 'RESULTS_FORMAT.md': ['Results format', 'Formato de resultados'],
@@ -152,7 +152,7 @@ const INTRO = {
     qsH: 'Quick start', qsP: 'Simulate <code>examples/pedido</code> — a restaurant process with a parallel branch, an approval and a timer — from a fresh clone. Node 22 and npm are all you need.',
     steps: ['Clone and build', 'Validate the model', 'Simulate the AS-IS scenario', 'Compare against TO-BE'],
     note: 'The engine and CLI are on npm as <code>@lila-modeler/engine</code> (<code>beta</code> tag); the unscoped <code>lila</code> package on the registry is unrelated. Inside the checkout, <code>npx</code> resolves the workspace\'s own binary.',
-    nextH: 'Next steps', next: [['COMING-FROM-BIZAGI.md', 'Where each Bizagi screen and field lives here.'], ['SCENARIO_FORMAT.md', 'Arrivals, times, pools and calendars as JSON.'], ['BETA-MAC-GUIDE.md', 'Install the macOS beta (not notarized).'], ['WINDOWS-TESTER-GUIDE.md', 'Try the untested, unsigned Windows installer.']],
+    nextH: 'Next steps', next: [['COMING-FROM-BIZAGI.md', 'Where each Bizagi screen and field lives here.'], ['SCENARIO_FORMAT.md', 'Arrivals, times, pools and calendars as JSON.'], ['BETA-MAC-GUIDE.md', 'Install the macOS beta (not notarized).'], ['WINDOWS-PWA-TESTER-GUIDE.md', 'Install the web app on Windows from Chrome or Edge.'], ['WINDOWS-TESTER-GUIDE.md', 'Try the untested, unsigned Windows installer.']],
   },
   es: {
     lead: 'Lila Modeler es un simulador de eventos discretos y modelador de procesos BPMN, de código abierto. Dibuja el proceso, describe un escenario, córrelo con replicaciones y compara el resultado contra una alternativa — todo en tu propia máquina.',
@@ -163,7 +163,7 @@ const INTRO = {
     qsH: 'Inicio rápido', qsP: 'Simula <code>examples/pedido</code> — un proceso de restaurante con una rama paralela, una aprobación y un temporizador — desde un clon limpio. Solo necesitas Node 22 y npm.',
     steps: ['Clonar y compilar', 'Validar el modelo', 'Simular el escenario AS-IS', 'Comparar contra TO-BE'],
     note: 'El motor y la CLI están en npm como <code>@lila-modeler/engine</code> (etiqueta <code>beta</code>); el paquete <code>lila</code> sin scope del registro es otro proyecto. Dentro del checkout, <code>npx</code> resuelve el binario del propio workspace.',
-    nextH: 'Siguientes pasos', next: [['es/COMING-FROM-BIZAGI.md', 'Dónde vive aquí cada pantalla y campo de Bizagi.'], ['es/SCENARIO_FORMAT.md', 'Llegadas, tiempos, pools y calendarios en JSON.'], ['es/GUIA-BETA-MAC.md', 'Instala la beta de macOS (sin notarizar).'], ['es/GUIA-PROBADOR-WINDOWS.md', 'Prueba el instalador de Windows, sin firmar y sin probar.']],
+    nextH: 'Siguientes pasos', next: [['es/COMING-FROM-BIZAGI.md', 'Dónde vive aquí cada pantalla y campo de Bizagi.'], ['es/SCENARIO_FORMAT.md', 'Llegadas, tiempos, pools y calendarios en JSON.'], ['es/GUIA-BETA-MAC.md', 'Instala la beta de macOS (sin notarizar).'], ['es/GUIA-PROBADOR-WINDOWS-PWA.md', 'Instala la app web en Windows desde Chrome o Edge.'], ['es/GUIA-PROBADOR-WINDOWS.md', 'Prueba el instalador de Windows, sin firmar y sin probar.']],
   },
 };
 const STEP_CODE = [

@@ -56,6 +56,23 @@ describe('Windows tester guide', () => {
   });
 });
 
+describe('Windows web app (PWA) tester guide', () => {
+  const docs = ['BETA-MAC-GUIDE.md', 'WINDOWS-PWA-TESTER-GUIDE.md', 'WINDOWS-TESTER-GUIDE.md',
+    'es/GUIA-BETA-MAC.md', 'es/GUIA-PROBADOR-WINDOWS-PWA.md', 'es/GUIA-PROBADOR-WINDOWS.md'];
+
+  it('comes before the Windows installer guide, in both languages', () => {
+    const flat = (lang) => sidebar(docs, lang).flatMap((g) => g.items.map((i) => i.doc));
+    expect(flat('en')).toEqual(['index', 'BETA-MAC-GUIDE.md', 'WINDOWS-PWA-TESTER-GUIDE.md', 'WINDOWS-TESTER-GUIDE.md']);
+    expect(flat('es')).toEqual(['es/index', 'es/GUIA-BETA-MAC.md', 'es/GUIA-PROBADOR-WINDOWS-PWA.md', 'es/GUIA-PROBADOR-WINDOWS.md']);
+  });
+
+  it('is linked to its Spanish translation and back', () => {
+    const published = new Set(docs);
+    expect(counterpart('WINDOWS-PWA-TESTER-GUIDE.md', published)).toBe('es/GUIA-PROBADOR-WINDOWS-PWA.md');
+    expect(counterpart('es/GUIA-PROBADOR-WINDOWS-PWA.md', published)).toBe('WINDOWS-PWA-TESTER-GUIDE.md');
+  });
+});
+
 describe('stripLangLine', () => {
   it('removes the Markdown language switch, which the site header replaces', () => {
     expect(stripLangLine('# T\n\n> Read this in: [Español](es/T.md)\n\nBody')).toBe('# T\n\nBody');

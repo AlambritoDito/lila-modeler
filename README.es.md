@@ -93,7 +93,14 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar esto.
   [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
   verificación del checksum.
-- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
+- **Windows** — la forma recomendada es la app web instalada desde **Chrome o Edge** (ADR-031): abre
+  <https://alambritodito.github.io/lila-modeler/app/> e instálala (el icono de instalar en la barra de
+  direcciones, o el menú del navegador). Tiene su propia ventana y entrada en el menú Inicio, un doble
+  clic en un `.lila` lo abre y **Guardar** reescribe el mismo archivo en vez de descargar una copia. Es
+  nueva y tampoco se ha probado aún en una máquina Windows real;
+  [`docs/es/GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) guía a quien no es
+  desarrollador y termina con una plantilla de reporte.
+- **Instalador de Windows (x64), secundario** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
   **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
   ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
   «Windows protegió su PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
@@ -205,7 +212,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Exportación de resultados | Excel | CSV y XLSX |
 | Percentiles, longitud de cola, throughput, costo por caso, ranking de cuellos, espera fuera de horario | ✗ | ✓ |
 | Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
-| Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); instalador de Windows sin firmar y sin probar; AppImage de Linux sin probar |
+| Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); en Windows la app web instalada desde Chrome o Edge, más un instalador sin firmar y sin probar; AppImage de Linux sin probar |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
@@ -258,6 +265,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
   usuarios de Bizagi.
 - [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — la beta de escritorio.
+- [`GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) — instalar la app web desde Chrome o Edge en Windows, probarla y reportar qué pasa.
 - [`GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) — probar el instalador de Windows, sin firmar y sin probar, y reportar qué pasa.
 - [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — política de ejemplos, oráculos de test, despliegue de Pages (este
