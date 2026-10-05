@@ -419,7 +419,7 @@ export const es: Catalog = {
       `el modelo posicional (${modelPath}) no coincide con scenario.model (${scenarioModel}) en ${file}.`,
     mcpNoArguments: () => 'no acepta argumentos.',
     mcpMissingPackage: (packageName) =>
-      `falta el paquete ${packageName}. En el repo, \`npm ci && npm run build\` desde la raíz.`,
+      `falta el paquete ${packageName}. El servidor MCP se publica aparte: ejecuta \`npx -y ${packageName}\` (o instala ${packageName} junto al motor). En un clon del repositorio, \`npm ci && npm run build\` desde la raíz.`,
     invalidLang: (value, accepted) => `lila: --lang solo acepta: ${accepted}; se recibió "${value}".`,
     missingLangValue: (accepted) => `lila: --lang requiere un valor: ${accepted}.`,
 

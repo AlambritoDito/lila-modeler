@@ -4,11 +4,13 @@
 try {
   await import('../dist/bin.js');
 } catch (error) {
-  // Solo un módulo ausente significa "falta compilar"; cualquier otro fallo de arranque se
-  // reporta tal cual, o el usuario se queda compilando un paquete que ya estaba compilado.
+  // Solo la ausencia de nuestro propio `dist/bin.js` significa "falta compilar" (checkout sin
+  // `npm run build`). Una dependencia ausente en una instalación de npm, o cualquier otro fallo de
+  // arranque, se reporta tal cual: el paquete publicado ya viene compilado.
+  const unbuilt = error?.code === 'ERR_MODULE_NOT_FOUND' && /Cannot find module '[^']*dist[\\/]bin\.js'/.test(String(error?.message));
   console.error(
-    error?.code === 'ERR_MODULE_NOT_FOUND'
-      ? 'lila-mcp: falta compilar el paquete. Ejecuta `npm run build` en la raíz del repo.'
+    unbuilt
+      ? 'lila-mcp: the package is not built. Run `npm run build` at the repository root.'
       : `lila-mcp: ${error instanceof Error ? error.message : String(error)}`,
   );
   process.exit(1);

@@ -1,21 +1,32 @@
 {
   "name": "@lila-modeler/mcp",
   "version": "1.0.0-beta.18",
-  "description": "Servidor MCP stdio sobre @lila-modeler/engine: validate_bpmn y describe_process",
-  "private": true,
+  "description": "MCP server (stdio) for Lila Modeler: lets an AI agent create, edit, validate, simulate, compare and export BPMN processes with @lila-modeler/engine",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
   "bin": {
-    "lila-mcp": "./bin/lila-mcp.js"
+    "lila-mcp": "bin/lila-mcp.js"
   },
   "files": [
     "dist",
-    "bin"
+    "!dist/**/*.map",
+    "!dist/**/*.tsbuildinfo",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc --build"
+    "build": "tsc --build",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@lila-modeler/engine": "1.0.0-beta.18",
@@ -25,5 +36,31 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
     "fflate": "^0.8.3"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "bpmn",
+    "simulation",
+    "discrete-event-simulation",
+    "bizagi",
+    "agent",
+    "lila-modeler"
+  ],
+  "homepage": "https://github.com/AlambritoDito/lila-modeler/blob/main/docs/MCP.md",
+  "bugs": {
+    "url": "https://github.com/AlambritoDito/lila-modeler/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlambritoDito/lila-modeler.git",
+    "directory": "packages/mcp"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

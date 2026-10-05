@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -60,3 +60,28 @@ for (const [language, heading] of [['en', 'Usage:'], ['es', 'Uso:']]) {
   assert.deepEqual(readFileSync(join(consumer, `installed-${language}.json`)), readFileSync(join(consumer, `checkout-${language}.json`)));
 }
 console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes.');
+
+// @lila-modeler/mcp (ADR-030): its tarball, installed next to the engine's, starts over stdio and an
+// MCP client lists every tool, both through its own `lila-mcp` bin and through `lila mcp`.
+run(process.execPath, [npmCli, 'pack', '--workspace', '@lila-modeler/mcp', '--pack-destination', consumer], root);
+const mcpArchive = readdirSync(consumer).find((name) => name.startsWith('lila-modeler-mcp-') && name.endsWith('.tgz'));
+assert.ok(mcpArchive, 'the @lila-modeler/mcp tarball');
+run(process.execPath, [npmCli, 'install', '--ignore-scripts', '--no-audit', '--no-fund', join(consumer, archives[0]), join(consumer, mcpArchive)]);
+const mcpInstalled = join(consumer, 'node_modules/@lila-modeler/mcp');
+const mcpManifest = json(join(mcpInstalled, 'package.json'));
+assert.equal(mcpManifest.version, manifest.version);
+assert.equal(mcpManifest.dependencies['@lila-modeler/engine'], manifest.version);
+assert.deepEqual(readdirSync(mcpInstalled).sort(), ['LICENSE', 'NOTICE', 'README.md', 'bin', 'dist', 'package.json']);
+assert.ok(!readdirSync(join(mcpInstalled, 'dist')).some((name) => name.endsWith('.map')), 'no source maps in dist');
+const { Client } = await import(new URL('node_modules/@modelcontextprotocol/client/dist/index.mjs', pathToFileURL(root)).href);
+const { StdioClientTransport } = await import(new URL('node_modules/@modelcontextprotocol/client/dist/stdio.mjs', pathToFileURL(root)).href);
+for (const args of [[join(mcpInstalled, mcpManifest.bin['lila-mcp'])], [cli, 'mcp']]) {
+  const client = new Client({ name: 'check-package', version: '0' });
+  await client.connect(new StdioClientTransport({ command: process.execPath, args, cwd: consumer, stderr: 'pipe' }));
+  const { tools } = await client.listTools();
+  const server = client.getServerVersion();
+  await client.close();
+  assert.equal(server?.version, manifest.version);
+  assert.equal(tools.length, 16, `${args.join(' ')}: ${tools.map((tool) => tool.name).join(', ')}`);
+}
+console.log('MCP package OK: published files, pinned engine, 16 tools over stdio from lila-mcp and lila mcp.');

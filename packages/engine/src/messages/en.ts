@@ -414,7 +414,7 @@ export const en: Catalog = {
       `the positional model (${modelPath}) does not match scenario.model (${scenarioModel}) in ${file}.`,
     mcpNoArguments: () => 'it takes no arguments.',
     mcpMissingPackage: (packageName) =>
-      `the package ${packageName} is missing. In the repo, \`npm ci && npm run build\` from the root.`,
+      `the package ${packageName} is missing. The MCP server is published on its own: run \`npx -y ${packageName}\` (or install ${packageName} next to the engine). In a repository checkout, run \`npm ci && npm run build\` from the root.`,
     invalidLang: (value, accepted) => `lila: --lang only accepts: ${accepted}; got "${value}".`,
     missingLangValue: (accepted) => `lila: --lang requires a value: ${accepted}.`,
 
