@@ -3,6 +3,30 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.20] - 2026-10-05
+
+Feedback from a process-management professor and a beta tester (epic #582, Lote L1): what already
+existed was hard to find or noisy to read.
+
+### Changed
+
+- **Results read cleanly (#578)**: Results, Compare, the charts, the Simulate dock and the canvas
+  bottleneck labels show at most two decimals, and a duration of an hour or more in seconds or
+  minutes reads as hours with minutes, e.g. `3.25 h (195 min)`. A non-zero value below 0.01 keeps
+  two significant digits instead of reading `0`. The exact value, with its unit, is the cell's
+  tooltip. The engine, the CLI, CSV/XLSX exports and the goldens keep exact values.
+- **Create calendars and resources from the top (#579)**: the Calendars and Resources steps open
+  with a labelled "New calendar" / "New resource" box (Enter also creates) that scrolls to and
+  focuses the new entry. Before, the only way was an unlabelled box at the very bottom, below every
+  calendar's full editor, and a beta tester could not find it.
+
+### Added
+
+- **Move lanes (#580)**: "Move lane up" / "Move lane down" in a lane's context pad move the lane with
+  its tasks, boundary events and annotations, update the lane order in the saved BPMN and undo in one
+  step. The Lane tool no longer needs the pool selected first: with one pool it adds the lane there,
+  with several the next click on a pool picks it (Escape cancels).
+
 ## [1.0.0-beta.19] - 2026-10-05
 
 The MCP server is published as its own npm package, `@lila-modeler/mcp` (#569, ADR-030). Until now
