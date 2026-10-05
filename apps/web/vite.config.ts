@@ -13,6 +13,8 @@ if (webVersion !== desktopVersion) throw new Error('Web and desktop versions mus
 mkdirSync(here('./public'), { recursive: true });
 cpSync(here('./src/theme/themes'), here('./public'), { recursive: true });
 cpSync(here('../../docs/design/branding/web'), here('./public/branding'), { recursive: true });
+// The PWA manifest (#571, ADR-031): every URL in it is relative to it, so it works under any base.
+cpSync(here('./src/pwa/manifest.webmanifest'), here('./public/manifest.webmanifest'));
 
 export default defineConfig({
   // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
@@ -25,6 +27,7 @@ export default defineConfig({
       const sources = [
         [here('./src/theme/themes'), here('./public')],
         [here('../../docs/design/branding/web'), here('./public/branding')],
+        [here('./src/pwa'), here('./public')],
       ] as const;
       for (const [source, target] of sources) {
         server.watcher.add(source);

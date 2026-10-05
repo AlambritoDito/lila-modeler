@@ -13,9 +13,9 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 try {
   const page = await browser.newPage();
-  async function render(source, width, height, rounded = false) {
+  async function render(source, width, height, rounded = false, maskable = false) {
     const data = readFileSync(join(brand, 'sources', source)).toString('base64');
-    const result = await page.evaluate(async ({ data, width, height, rounded }) => {
+    const result = await page.evaluate(async ({ data, width, height, rounded, maskable }) => {
       const img = new Image(); img.src = `data:image/png;base64,${data}`; await img.decode();
       const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
@@ -25,9 +25,15 @@ try {
         const margin = width * .05, side = width - margin * 2;
         ctx.beginPath(); ctx.roundRect(margin, margin, side, side, side * .2); ctx.clip();
         ctx.drawImage(img, margin, margin, side, side);
+      } else if (maskable) {
+        // PWA maskable icon (#571): the master at 80% on the solid brand purple, centred across
+        // and resting on the bottom edge, where the master's own body is cut, so no seam shows.
+        const side = width * .8;
+        ctx.fillStyle = '#7028f0'; ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, (width - side) / 2, height - side, side, side);
       } else ctx.drawImage(img, 0, 0, width, height);
       return canvas.toDataURL('image/png').split(',')[1];
-    }, { data, width, height, rounded });
+    }, { data, width, height, rounded, maskable });
     return Buffer.from(result, 'base64');
   }
   writeFileSync(join(web, 'lila-transparent.png'), await render('lila-transparent.png', 256, 256));
@@ -36,6 +42,7 @@ try {
   for (const size of [16, 32, 48, 180, 192, 512]) {
     writeFileSync(join(web, `icon-${size}.png`), await render('lila-app-master.png', size, size));
   }
+  writeFileSync(join(web, 'icon-maskable-512.png'), await render('lila-app-master.png', 512, 512, false, true));
   const images = [16, 32, 48].map(size => ({ size, data: readFileSync(join(web, `icon-${size}.png`)) }));
   const header = Buffer.alloc(6); header.writeUInt16LE(1, 2); header.writeUInt16LE(images.length, 4);
   let offset = 6 + 16 * images.length;

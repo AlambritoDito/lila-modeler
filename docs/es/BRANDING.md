@@ -35,6 +35,11 @@ nuevos tamaños usa `tools/generate-branding.mjs`, sin regenerar el personaje.
 El favicon y los iconos de plataforma mantienen el fondo morado; el logo
 horizontal continúa sobre blanco en la presentación principal y el arranque.
 
+La aplicación web instalable (PWA, ADR-031) usa `web/icon-192.png`, `web/icon-512.png`
+y `web/icon-maskable-512.png`. El icono enmascarable es `lila-app-master.png` sin cambios,
+al 80 % sobre el morado de marca `#7028f0`, centrado en horizontal y apoyado en el borde
+inferior, para que la cabeza quede dentro de la zona segura circular.
+
 ## Excepción de la ventana Acerca de — 23 de septiembre de 2026 (#408)
 
 Por decisión del usuario, y solo en la ventana «Acerca de», se muestra

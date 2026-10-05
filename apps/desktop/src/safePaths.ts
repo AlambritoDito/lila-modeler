@@ -73,6 +73,7 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
   '.map': 'application/json; charset=utf-8',
   '.wasm': 'application/wasm',
   '.bpmn': 'application/xml',
+  '.webmanifest': 'application/manifest+json',
 };
 
 /** Tipo MIME por extensión de `path`; `application/octet-stream` si no está en el mapa. */

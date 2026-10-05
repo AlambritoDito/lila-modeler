@@ -31,6 +31,11 @@ variants can contain small drawing differences. `explorations/` archives the rej
 simplification for provenance only; it is never used by the application.
 
 - App and favicon: `web/app-icon.png`, `web/icon-*.png`, `web/favicon.ico`.
+- Installable web app (PWA, ADR-031): `apps/web/src/pwa/manifest.webmanifest` lists
+  `web/icon-192.png`, `web/icon-512.png` and `web/icon-maskable-512.png`. The maskable
+  icon is the unchanged `lila-app-master.png` scaled to 80% on solid brand purple
+  `#7028f0`, centred across and resting on the bottom edge (where the master's body is
+  already cut), so the head stays inside the platform's circular safe zone.
 - Editor toolbar, welcome view and product header: `web/lila-transparent.png`
   with adjacent text. Hero and startup: horizontal logo on white.
 - `sources/lila-transparent.png` is the 1254 × 1254 transparent PNG approved on

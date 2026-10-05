@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const site = path.join(root, '_site');
 const output = path.join(root, 'output/branding/review');
 await mkdir(output, { recursive: true });
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2' };
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
