@@ -1054,41 +1054,149 @@ function ayudaDe(
 function AnadirClave({
   onAnadir,
   existe,
+  textos,
+  id,
 }: {
   onAnadir: (clave: string) => void;
   existe: (clave: string) => boolean;
+  /**
+   * #579: rótulo visible, ejemplo y botón propios del registro (`calendars`, `resources`). Sin
+   * ellos el control conserva su forma genérica: una caja con nombre accesible y «Añadir».
+   */
+  textos?: { rotulo: string; placeholder: string; boton: string } | undefined;
+  id: string;
 }): React.JSX.Element {
   const S = useStrings();
   const [clave, setClave] = useState('');
   const repetida = clave.trim() !== '' && existe(clave.trim());
+  const crear = (): void => {
+    const limpia = clave.trim();
+    if (limpia === '' || existe(limpia)) return;
+    onAnadir(limpia);
+    setClave('');
+  };
   return (
     <div className="anadir">
+      {textos !== undefined && (
+        <label htmlFor={id} className="etiqueta">
+          {textos.rotulo}
+        </label>
+      )}
       <input
+        id={id}
         type="text"
-        aria-label={S.escenario.claveNueva}
+        aria-label={textos === undefined ? S.escenario.claveNueva : undefined}
+        placeholder={textos?.placeholder}
         aria-invalid={repetida ? true : undefined}
         value={clave}
         onChange={(e) => {
           setClave(e.target.value);
         }}
-      />
-      <button
-        type="button"
-        className="boton"
-        onClick={() => {
-          const limpia = clave.trim();
-          if (limpia === '' || existe(limpia)) return;
-          onAnadir(limpia);
-          setClave('');
+        onKeyDown={(e) => {
+          // Enter crea, como el botón: teclear el id y confirmar sin ir a buscar el ratón.
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            crear();
+          }
         }}
-      >
-        {S.escenario.anadir}
+      />
+      <button type="button" className="boton" onClick={crear}>
+        {textos?.boton ?? S.escenario.anadir}
       </button>
       {repetida && (
         <p role="alert" className="error">
           {S.escenario.claveRepetida(clave.trim())}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Un registro (`calendars`, `resources`, `elements`): una entrada por clave más el control para
+ * crear otra. En Calendarios y Recursos (#579) ese control va arriba, con rótulo visible, y la
+ * entrada recién creada recibe el foco: abajo, tras el editor de cada calendario, nadie lo
+ * encontraba.
+ */
+function Registro({
+  esquema,
+  ruta,
+  ctx,
+}: {
+  esquema: EsquemaJson;
+  ruta: Ruta;
+  ctx: Contexto;
+}): React.JSX.Element {
+  const S = useStrings();
+  const valor = leer(ctx.resuelto, ruta);
+  const entrada = esquemaEntrada(esquema);
+  const claves = esObjeto(valor) ? Object.keys(valor) : [];
+  const caja = useRef<HTMLDivElement>(null);
+  const [recienCreada, setRecienCreada] = useState<string | null>(null);
+  const textos =
+    ruta.length === 1 && ruta[0] === 'calendars'
+      ? {
+          rotulo: S.escenario.nuevoCalendario,
+          placeholder: S.escenario.ejemploCalendario,
+          boton: S.escenario.crearCalendario,
+        }
+      : ruta.length === 1 && ruta[0] === 'resources'
+        ? {
+            rotulo: S.escenario.nuevoRecurso,
+            placeholder: S.escenario.ejemploRecurso,
+            boton: S.escenario.crearRecurso,
+          }
+        : undefined;
+
+  // La entrada nueva aparece cuando el escenario vuelve del padre: hasta entonces no hay a quién
+  // dar el foco.
+  useEffect(() => {
+    if (recienCreada === null || !claves.includes(recienCreada)) return;
+    const fieldset = [...(caja.current?.querySelectorAll<HTMLFieldSetElement>(':scope > fieldset') ?? [])].find(
+      (f) => f.dataset.clave === recienCreada,
+    );
+    setRecienCreada(null);
+    if (fieldset === undefined) return;
+    fieldset.scrollIntoView?.({ block: 'nearest' });
+    const editor = fieldset.querySelector<HTMLElement>('input, select, textarea');
+    (editor ?? fieldset).focus();
+  });
+
+  const anadir = (
+    <AnadirClave
+      id={`nueva-${rutaTexto(ruta)}`}
+      textos={textos}
+      existe={(clave) => claves.includes(clave)}
+      onAnadir={(clave) => {
+        ctx.editar([...ruta, clave], valorVacio(entrada));
+        setRecienCreada(clave);
+      }}
+    />
+  );
+  return (
+    <div className="campo-schema" ref={caja}>
+      {textos !== undefined && anadir}
+      {claves.map((clave) => (
+        <fieldset key={clave} className="entrada" data-clave={clave} tabIndex={-1}>
+          <legend>
+            {clave}
+            <button
+              type="button"
+              className="enlace"
+              aria-label={S.escenario.quitarClave(clave)}
+              onClick={() => {
+                ctx.quitar([...ruta, clave]);
+              }}
+            >
+              {S.escenario.quitarElemento}
+            </button>
+          </legend>
+          <Propiedades esquema={entrada} ruta={[...ruta, clave]} ctx={ctx} />
+          <Problemas ruta={[...ruta, clave]} ctx={ctx} />
+        </fieldset>
+      ))}
+      {textos === undefined && anadir}
+      <Problemas ruta={ruta} ctx={ctx} />
     </div>
   );
 }
@@ -1247,38 +1355,7 @@ export function Campo({
   }
 
   if (esRegistro(esquema)) {
-    const entrada = esquemaEntrada(esquema);
-    const claves = esObjeto(valor) ? Object.keys(valor) : [];
-    return (
-      <div className="campo-schema">
-        {claves.map((clave) => (
-          <fieldset key={clave} className="entrada">
-            <legend>
-              {clave}
-              <button
-                type="button"
-                className="enlace"
-                aria-label={S.escenario.quitarClave(clave)}
-                onClick={() => {
-                  ctx.quitar([...ruta, clave]);
-                }}
-              >
-                {S.escenario.quitarElemento}
-              </button>
-            </legend>
-            <Propiedades esquema={entrada} ruta={[...ruta, clave]} ctx={ctx} />
-            <Problemas ruta={[...ruta, clave]} ctx={ctx} />
-          </fieldset>
-        ))}
-        <AnadirClave
-          existe={(clave) => claves.includes(clave)}
-          onAnadir={(clave) => {
-            ctx.editar([...ruta, clave], valorVacio(entrada));
-          }}
-        />
-        <Problemas ruta={ruta} ctx={ctx} />
-      </div>
-    );
+    return <Registro esquema={esquema} ruta={ruta} ctx={ctx} />;
   }
 
   if (esquema.type === 'array') {

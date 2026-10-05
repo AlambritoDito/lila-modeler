@@ -854,6 +854,13 @@ export const es: Strings = {
     anadir: 'Añadir',
     anadirEtiqueta: (etiqueta: string): string => `Añadir ${etiqueta}`,
     claveNueva: 'clave nueva',
+    /** #579: el control para crear, arriba de Calendarios y de Recursos. */
+    nuevoCalendario: 'Nuevo calendario',
+    ejemploCalendario: 'turno-noche',
+    crearCalendario: '+ Crear calendario',
+    nuevoRecurso: 'Nuevo recurso',
+    ejemploRecurso: 'analista',
+    crearRecurso: '+ Crear recurso',
     claveRepetida: (clave: string): string => `${clave} ya existe; edítalo abajo o usa otro id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'eliminado (null)',
