@@ -3,6 +3,30 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.19] - 2026-10-05
+
+The MCP server is published as its own npm package, `@lila-modeler/mcp` (#569, ADR-030). Until now
+`npx -y @lila-modeler/engine mcp` did not work: the published engine has the `lila mcp` subcommand
+but not the server, which lived in a private workspace. An MCP client now starts the server from any
+directory with `npx -y @lila-modeler/mcp`.
+
+### Added
+
+- **`@lila-modeler/mcp` on npm (#569)**: the MCP server with its 16 tools and the `lila-mcp` bin, as a
+  public package that pins the engine of the same version. The engine stays free of the MCP SDK.
+  The package README carries the client configuration for Claude Code, Claude Desktop and Codex.
+- **Release (#569)**: `release.yml` pack-checks the MCP package and publishes it right after the
+  engine, with the same dist-tag, `--provenance` and `publish_npm` guard. `npm run test:package`
+  installs both packed packages in a clean directory and lists the server's 16 tools through the
+  official MCP client.
+
+### Changed
+
+- **Docs (#569)**: `docs/MCP.md`, the agent guide, the CLI reference and the READMEs (English and
+  Spanish) use `npx -y @lila-modeler/mcp` instead of the checkout-only setup; `docs/RELEASING.md`
+  covers the first manual publish of the new package and its trusted publisher.
+- **`lila mcp` without the server package (#569)** now suggests `npx -y @lila-modeler/mcp`.
+
 ## [1.0.0-beta.18] - 2026-10-01
 
 Lote K (epic #527): agents can do through MCP and the CLI what a person does in the app, on the same
