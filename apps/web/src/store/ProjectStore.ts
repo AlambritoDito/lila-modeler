@@ -15,7 +15,7 @@
  * `docs/RESULTS_FORMAT.md`. Ningún método aquí es especulativo: son exactamente los seis que
  * pide el ticket, ni uno más.
  */
-import type { Recent, SaveOutcome } from '../../../desktop/src/bridge.js';
+import type { ImportedBpmn, Recent, SaveOutcome } from '../../../desktop/src/bridge.js';
 import type { RunResult } from '@lila-modeler/engine';
 import type { Scenario } from '@lila-modeler/engine/schema';
 import type { ProjectDocument } from '@lila-modeler/engine/project';
@@ -108,4 +108,10 @@ export interface ProjectSessionStore extends ProjectStore {
    * the old one's scenarios and runs. Only `DesktopStore`; a `.lila` is rewritten whole.
    */
   occupiedSlugs?(): readonly string[];
+  /**
+   * File → Import BPMN… (#591): asks for a `.bpmn`/`.xml` from another tool. The web reads it with
+   * a file input; the desktop's native dialog may instead hand back a `.bpmn` to open where it is
+   * (`{ dir, file }`, the double-click's loose diagram). `null` is a cancel.
+   */
+  importBpmn?(): Promise<ImportedBpmn | null>;
 }

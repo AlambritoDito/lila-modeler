@@ -91,7 +91,8 @@ export const en = {
     abrir: 'Open',
     guardar: 'Save',
     guardarComo: 'Save as',
-    abrirBpmn: 'Open .bpmn',
+    /** A `.bpmn`/`.xml` from another tool (#591), opened as the current diagram. */
+    importarBpmn: 'Import BPMN…',
     exportarBpmn: 'Export .bpmn',
     /** Diagram export (#451): downloads on the web; PDF is the browser's print dialog. */
     exportarSvg: 'Export diagram as SVG',
@@ -115,6 +116,7 @@ export const en = {
       nuevoProyecto: 'New project',
       abrirProyecto: 'Open project…',
       abrirProyectoArchivo: 'Open project file (.lila)…',
+      importarBpmn: 'Import BPMN…',
       abrirReciente: 'Open recent',
       // QA of #432 (N1): word for word with the native menu's own empty state
       // (`apps/desktop/src/strings/en.ts`'s `menu.ninguno`), not a longer paraphrase.

@@ -11,7 +11,7 @@
  */
 import type { RunResult } from '@lila-modeler/engine';
 import type { Scenario } from '@lila-modeler/engine/schema';
-import type { SaveOutcome, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
+import type { SaveOutcome, ImportedBpmn, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent } from '../../../desktop/src/bridge.js';
 import type {
   ProcessData,
   ProcessSummary,
@@ -265,6 +265,11 @@ export class DesktopStore implements ProjectSessionStore {
    * existe (el bridge ya la quitó de recientes); no lanza por eso. `file` es el `.bpmn` que se
    * pulsó cuando no es el `model.bpmn` del proyecto (LILA-072): la misma puerta, otro modelo.
    */
+  /** #591: main's dialog; a `.bpmn` comes back authorized, to open with `openRecent` like a double-click. */
+  async importBpmn(): Promise<ImportedBpmn | null> {
+    return await this.bridge.importBpmn?.() ?? null;
+  }
+
   async openRecent(dir: string, file?: string): Promise<ProjectDocument | null> {
     const raw = await this.bridge.openRecent(dir, file);
     if (raw === null) return null;

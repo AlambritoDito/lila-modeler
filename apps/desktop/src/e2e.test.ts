@@ -27,6 +27,12 @@ describe('e2eOverrides', () => {
     expect(e2eOverrides({ LILA_E2E_SAVE_FILE: '' })).toEqual({});
   });
 
+  it('LILA_E2E_IMPORT (#591): mismas tres formas, para «Importar BPMN…»', () => {
+    expect(e2eOverrides({ LILA_E2E_IMPORT: '/tmp/lila-e2e/otro.bpmn' })).toEqual({ importFile: '/tmp/lila-e2e/otro.bpmn' });
+    expect(e2eOverrides({ LILA_E2E_IMPORT: 'cancel' })).toEqual({ importFile: null });
+    expect(e2eOverrides({ LILA_E2E_IMPORT: '' })).toEqual({});
+  });
+
   it('las dos rutas conviven: abrir y guardar son diálogos distintos', () => {
     expect(e2eOverrides({ LILA_E2E_FOLDER: '/tmp/a', LILA_E2E_SAVE_FILE: '/tmp/b.lila' })).toEqual({
       folder: '/tmp/a',

@@ -318,6 +318,57 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
 });
 
+// ---------- File → Import BPMN… (#591) ----------
+
+/** Clicks Import BPMN… and, when the demo project has unsaved changes, discards them. */
+async function importar(): Promise<void> {
+  await click(T.app.importarBpmn);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+}
+it('Import BPMN… opens the chosen file as the current diagram, with no folder dialog and no download (#591)', async () => {
+  const xml = seedModelXml();
+  const importBpmn = vi.fn().mockResolvedValue({ xml, name: 'De Signavio.xml' });
+  Object.assign(session, { importBpmn, forget: vi.fn() });
+  await importar();
+  expect(importBpmn).toHaveBeenCalledOnce();
+  expect(mocks.abrir).toHaveBeenCalledWith(xml);
+  expect(container.textContent).toContain('De Signavio');
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(session.saveProject).not.toHaveBeenCalled();
+  // Like a gallery example: nothing on disk behind it, so the first Save asks where.
+  expect(session.forget).toHaveBeenCalledOnce();
+});
+it('Import BPMN… of a file that is not BPMN shows the open error and leaves the canvas as it was (#591)', async () => {
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue({ xml: '<html>no</html>', name: 'pagina.xml' }) });
+  await importar();
+  expect(mocks.abrir).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"].error')?.textContent).toMatch(new RegExp(`^${T.app.errorAbrirDiagrama('')}`));
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+});
+it('a cancelled Import BPMN… changes nothing (#591)', async () => {
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue(null) });
+  await importar();
+  expect(mocks.abrir).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"].error')).toBeNull();
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+});
+it("the native menu's Import BPMN… opens a .bpmn where it is, through the double-click's door (#591)", async () => {
+  let menu: ((a: unknown) => void) | null = null;
+  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    pendingOpenPath: async () => null, onOpenPath: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {} });
+  const suelto = { version: 1, id: 'p9', name: 'De Camunda', loose: true, model: { id: 'Process_9', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  const openRecent = vi.fn().mockResolvedValue(suelto);
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue({ dir: '/descargas', file: 'De Camunda.bpmn' }), openRecent, forget: vi.fn() });
+  await montar();
+  await act(async () => { menu!('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(openRecent).toHaveBeenCalledWith('/descargas', 'De Camunda.bpmn');
+  expect(container.textContent).toContain('De Camunda');
+  // It is the file on disk now: Save writes back to it, so the adapter keeps it.
+  expect(session.forget).not.toHaveBeenCalled();
+});
+
 it('guardar cancelado mantiene cambios pendientes', async () => {
   await act(async () => mocks.changed());
   vi.mocked(session.saveProject).mockResolvedValueOnce(null);

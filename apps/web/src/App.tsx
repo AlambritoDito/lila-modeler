@@ -1070,16 +1070,35 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         else if (doc === null) setIoError(S.app.errorRecienteAusente);
         return;
       }
-      const data = kind === 'bpmn' ? await store.getProcess(crypto.randomUUID()) : { xml: newModelXml(), name: 'model.bpmn' };
-      if (data === null) return;
+      let data = { xml: newModelXml(), name: 'model.bpmn' };
+      if (kind === 'bpmn') {
+        // File → Import BPMN… (#591). A `.bpmn` the desktop dialog authorized opens where it is,
+        // through the same door as a double-click (`openRecent` with its `file`, a loose diagram);
+        // anything else comes back as its text.
+        const elegido = await adapter.importBpmn?.() ?? null;
+        if (elegido === null) return;
+        if ('dir' in elegido) {
+          const doc = await adapter.openRecent?.(elegido.dir, elegido.file);
+          if (doc) await activate(doc, true, beforeToken);
+          return;
+        }
+        data = elegido;
+      }
       const parsed = await parseBpmn(data.xml);
       await modelador.comprobar?.(data.xml);
       const doc: ProjectDocument = { version: 1, id: crypto.randomUUID(), name: kind === 'new' ? S.app.proyectoNuevo : data.name.replace(/\.(bpmn|xml)$/i, ''),
         model: { id: parsed.ir.id, name: 'model.bpmn', xml: data.xml, revision: 0 },
         scenarios: defaultScenarios(parsed.ir), scenarioRevisions: {}, runs: [] };
+      // An imported file is not a project yet: like a gallery example it opens with no file
+      // behind it, and the first Save asks where (no folder dialog, no download up front).
+      if (kind === 'bpmn') { if (await activate(doc, true, beforeToken)) adapter.forget?.(); return; }
       const created = await adapter.createProject(doc);
       if (created) await activate(created, true, beforeToken);
-    } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : String(e);
+      // An unreadable or non-BPMN import says so like any diagram that does not open (#591).
+      setIoError(kind === 'bpmn' ? S.app.errorAbrirDiagrama(mensaje) : mensaje);
+    }
     finally {
       ioLock.current = false; setIoBusy(false);
       if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
@@ -1618,6 +1637,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
+    else if (accion === 'importarBpmn') void projectAction('bpmn');
     else if (accion === 'guardar') void guardar();
     else if (accion === 'guardarComo') void guardar(true);
     else if (accion === 'guardarComoCarpeta') void guardar(true, true);
@@ -1776,6 +1796,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       DESKTOP && modelador !== null && { grupo: 'acciones', nombre: S.app.menuEscritorio.exportarPdf, elegir: () => ejecutar('exportarPdf') },
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarDocx, elegir: () => ejecutar('exportarDocx') },
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarHtml, elegir: () => ejecutar('exportarHtml') },
+      libre && { grupo: 'acciones', nombre: S.app.importarBpmn, elegir: () => ejecutar('importarBpmn') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
     ];
     return [
@@ -2410,6 +2431,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.nuevoProyecto}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.menuEscritorio.nuevoProyecto}</button>
               <button type="button" title={`${S.app.menuEscritorio.abrirProyecto}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.menuEscritorio.abrirProyecto}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('openFile')}>{S.app.menuEscritorio.abrirProyectoArchivo}</button>
+              <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.menuEscritorio.importarBpmn}</button>
               <details className="menu-archivo-reciente">
                 <summary>{S.app.menuEscritorio.abrirReciente}</summary>
                 <div>
@@ -2441,7 +2463,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.tituloGuardar}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
               <button type="button" title={`${S.app.tituloGuardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
               {bpmnFilesEnabled && <>
-                <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.abrirBpmn}</button>
+                <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.importarBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
               </>}
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.exportarSvg}</button>

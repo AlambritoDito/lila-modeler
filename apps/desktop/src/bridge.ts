@@ -124,6 +124,13 @@ export interface LilaBridge {
    */
   pendingOpenPath(): Promise<OpenPathRequest | null>;
   /**
+   * File → Import BPMN… (#591): the native open dialog filtered to `.bpmn` and `.xml`. A `.bpmn`
+   * comes back like a double-click (`dir` authorized, `file` its name: a loose diagram, LILA-072);
+   * a `.xml` comes back as its text, because the project IO only knows `.bpmn` names
+   * (`requireBpmnName`) and saving would have nowhere to write it. `null` is a cancel.
+   */
+  importBpmn?(): Promise<ImportedBpmn | null>;
+  /**
    * Se dispara cuando llega una nueva ruta `.bpmn` a abrir con la ventana ya lista (segunda
    * instancia, o `open-file` con la app ya corriendo). Devuelve una función para cancelar la
    * suscripción.
@@ -275,6 +282,7 @@ export type MenuAction =
   | 'nuevo'
   | 'abrir'
   | 'abrirArchivo'
+  | 'importarBpmn'
   | 'guardar'
   | 'guardarComo'
   | 'guardarComoCarpeta'
@@ -314,6 +322,11 @@ export interface OpenPathRequest {
   readonly dir: string;
   readonly file?: string;
 }
+
+/** What `importBpmn` brings back: a `.bpmn` to open where it is, or the text of a `.xml`. */
+export type ImportedBpmn =
+  | { readonly dir: string; readonly file: string }
+  | { readonly xml: string; readonly name: string };
 
 declare global {
   interface Window {

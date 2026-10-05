@@ -147,11 +147,10 @@ it('en Electron, el desplegable Archivo se pinta en la barra con el mismo texto 
   const acciones = [...menu!.querySelectorAll('button')].map((b) => b.textContent);
   expect(acciones).toEqual(expect.arrayContaining([
     T.app.menuEscritorio.nuevoProyecto, T.app.menuEscritorio.abrirProyecto, T.app.menuEscritorio.abrirProyectoArchivo,
-    T.app.menuEscritorio.guardarProyecto, T.app.menuEscritorio.guardarComo, T.app.menuEscritorio.guardarComoCarpeta,
+    T.app.menuEscritorio.importarBpmn, T.app.menuEscritorio.guardarProyecto, T.app.menuEscritorio.guardarComo, T.app.menuEscritorio.guardarComoCarpeta,
     T.app.acercaDe,
   ]));
-  // Web-only entries (open/export .bpmn) don't apply here: `bpmnFilesEnabled` is false.
-  expect(acciones).not.toContain(T.app.abrirBpmn);
+  // Export .bpmn is web-only (`bpmnFilesEnabled` is false here).
   expect(acciones).not.toContain(T.app.exportarBpmn);
 });
 

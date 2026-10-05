@@ -20,7 +20,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, scree
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SaveOutcome, Ajustes, Exportacion, OpenPathRequest, Recent } from './bridge.js';
+import type { SaveOutcome, Ajustes, Exportacion, ImportedBpmn, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
@@ -599,6 +599,36 @@ function registerIpcHandlers(win: BrowserWindow): void {
     authorizedFolders.add(real);
     await e2eLog('chooseSaveFile', { result: real });
     return real;
+  });
+
+  /**
+   * File → Import BPMN… (#591). A `.bpmn` takes the double-click's door (`acceptOpenPath`): its
+   * folder is authorized and the renderer opens it as a loose diagram, so ⌘S writes back to it. A
+   * `.xml` (Signavio, Camunda…) cannot: the project IO only accepts `.bpmn` names
+   * (`requireBpmnName`), so its text goes to the renderer, which opens it as an unsaved project.
+   */
+  guardedHandle(win, 'lila:importBpmn', async (): Promise<ImportedBpmn | null> => {
+    let chosen: string;
+    if (e2e.importFile !== undefined) {
+      // E2E seam (`LILA_E2E_IMPORT`, see `e2e.ts`): no native dialog.
+      if (e2e.importFile === null) {
+        await e2eLog('importBpmn', { result: null });
+        return null;
+      }
+      chosen = e2e.importFile;
+    } else {
+      const result = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [{ name: 'BPMN', extensions: ['bpmn', 'xml'] }],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      chosen = result.filePaths[0]!;
+    }
+    await e2eLog('importBpmn', { result: chosen });
+    if (!isBpmnPath(chosen)) return { xml: await readFile(chosen, 'utf8'), name: path.basename(chosen) };
+    const dir = await realpath(path.dirname(chosen));
+    authorizedFolders.add(dir);
+    return { dir, file: path.basename(chosen) };
   });
 
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {

@@ -4,7 +4,7 @@ import type { SaveOutcome } from '../../../desktop/src/bridge.js';
  * `DesktopStore` con un `LilaBridge` falso (sin Electron): cubre cancelación, error, "guardar
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import { en as S } from '../strings.en';
@@ -857,5 +857,20 @@ describe('DesktopStore and changes made outside Lila (#539)', () => {
   it('a bridge without the watcher subscribes to nothing', () => {
     const store = new DesktopStore(new FakeBridge());
     expect(() => store.onExternalChange(() => {})()).not.toThrow();
+  });
+});
+
+describe('DesktopStore.importBpmn (#591)', () => {
+  it("hands back what main's dialog chose, and a cancel as null", async () => {
+    const bridge = new FakeBridge();
+    const elegido = { dir: '/descargas', file: 'De Camunda.bpmn' };
+    Object.assign(bridge, { importBpmn: vi.fn().mockResolvedValueOnce(elegido).mockResolvedValueOnce(null) });
+    const store = new DesktopStore(bridge);
+    await expect(store.importBpmn()).resolves.toEqual(elegido);
+    await expect(store.importBpmn()).resolves.toBeNull();
+  });
+
+  it('a bridge without the dialog (an older main) imports nothing', async () => {
+    await expect(new DesktopStore(new FakeBridge()).importBpmn()).resolves.toBeNull();
   });
 });

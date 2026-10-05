@@ -20,6 +20,7 @@ export const es: Strings = {
     nuevoProyecto: 'Nuevo proyecto',
     abrirProyecto: 'Abrir proyecto…',
     abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+    importarBpmn: 'Importar BPMN…',
     abrirReciente: 'Abrir reciente',
     guardarProyecto: 'Guardar proyecto',
     guardarComo: 'Guardar como…',
