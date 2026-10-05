@@ -295,3 +295,18 @@ it('in Electron the New and ⚙ tooltips show the native menu key', async () => 
   expect(nuevo.title).toContain(`(${etiqueta(atajoPorId('nuevo'), false)})`);
   expect(contenedor.querySelector<HTMLButtonElement>(`button[aria-label="${T.app.ajustes}"]`)!.title).toContain(`(${etiqueta(atajoPorId('ajustes'), false)})`);
 });
+
+/**
+ * #572: in the browser, a `.lila` the installed PWA was launched with opens through «Open»'s own
+ * path — `openProject({ launched: true })` — once the canvas is ready, even when the store
+ * announced it before the app subscribed.
+ */
+it('en el navegador, un lanzamiento de la PWA abre el archivo como «Abrir», sin selector', async () => {
+  vi.resetModules();
+  const onLaunch = vi.fn((cb: (name: string) => void) => { cb('Pedido.lila'); return () => {}; });
+  const { session } = await montarApp({ onLaunch });
+  await tick();
+  expect(onLaunch).toHaveBeenCalled();
+  expect(session.openProject).toHaveBeenCalledOnce();
+  expect(session.openProject).toHaveBeenCalledWith({ launched: true });
+});

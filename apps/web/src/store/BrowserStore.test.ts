@@ -296,7 +296,7 @@ describe('BrowserStore', () => {
         model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 0 },
         scenarios: { 'draft.scenario.json': { name: 'Original draft' } }, scenarioRevisions: {}, runs: [] };
       const saved = await store.saveProject(doc);
-      Object.assign(saved.scenarios['draft.scenario.json']!, { name: 'Unsaved returned edit' });
+      Object.assign(saved!.scenarios['draft.scenario.json']!, { name: 'Unsaved returned edit' });
       Object.assign(store.restoreSession()!.scenarios['draft.scenario.json']!, { name: 'Unsaved restored edit' });
       await store.putProcess('P', '<definitions/>');
       expect(new BrowserStore().restoreSession()).toEqual(doc);
@@ -382,6 +382,146 @@ describe('BrowserStore', () => {
       await expect(store.listScenarios('pedido')).resolves.toEqual(['as-is']);
       // Dos escrituras fallidas, un solo aviso: el problema se ve en la consola sin inundarla.
       expect(aviso).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * Chrome y Edge (#573, ADR-031): con la File System Access API «Guardar» reescribe el mismo
+   * `.lila` en vez de descargar otra copia; sin ella (Safari, Firefox) los casos de arriba siguen
+   * descargando. #572: el `.lila` con el que se lanzó la PWA se abre sin selector.
+   */
+  describe('File System Access y lanzamiento', () => {
+    const DOC: ProjectDocument = {
+      version: 1, id: 'p1', name: 'Pedido',
+      model: { id: 'Process_1', name: 'model.bpmn', xml: '<definitions/>', revision: 0 },
+      scenarios: {}, scenarioRevisions: {}, runs: [],
+    };
+
+    /** A fake `FileSystemFileHandle`: `getFile` serves `contenido`, every write is recorded. */
+    function archivo(nombre: string, contenido: BlobPart = encodeLila(DOC)) {
+      const escrito: Uint8Array[] = [];
+      const handle = {
+        kind: 'file', name: nombre,
+        getFile: vi.fn(async () => new File([contenido], nombre)),
+        createWritable: vi.fn(async () => ({
+          write: vi.fn(async (datos: Uint8Array) => { escrito.push(datos); }),
+          close: vi.fn(async () => {}),
+        })),
+      };
+      return { handle: handle as unknown as FileSystemFileHandle, escrito, createWritable: handle.createWritable };
+    }
+    const cancelado = () => Promise.reject(new DOMException('The user aborted a request.', 'AbortError'));
+
+    let clic: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock'), revokeObjectURL: vi.fn() });
+      clic = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('sin la API, guardar sigue siendo una descarga', async () => {
+      expect('showSaveFilePicker' in globalThis).toBe(false);
+      await new BrowserStore().saveProject(DOC);
+      expect(clic).toHaveBeenCalledOnce();
+    });
+
+    it('abre con el selector y dos guardados reescriben el mismo archivo, sin descargas', async () => {
+      const abierto = archivo('Pedido.lila');
+      const showOpenFilePicker = vi.fn(async () => [abierto.handle]);
+      const showSaveFilePicker = vi.fn();
+      vi.stubGlobal('showOpenFilePicker', showOpenFilePicker);
+      vi.stubGlobal('showSaveFilePicker', showSaveFilePicker);
+      const store = new BrowserStore();
+
+      await expect(store.openProject()).resolves.toEqual(DOC);
+      await store.saveProject(DOC);
+      await store.saveProject({ ...DOC, name: 'Pedido 2' });
+
+      expect(abierto.escrito).toHaveLength(2);
+      expect(decodeLila(abierto.escrito[1]!).name).toBe('Pedido 2');
+      expect(showSaveFilePicker).not.toHaveBeenCalled();
+      expect(clic).not.toHaveBeenCalled();
+      expect(document.body.querySelector('input[type="file"]')).toBeNull();
+    });
+
+    it('el primer guardado y «Guardar como» piden destino; el elegido pasa a ser el archivo', async () => {
+      const primero = archivo('Pedido.lila');
+      const segundo = archivo('Copia.lila');
+      const showSaveFilePicker = vi.fn().mockResolvedValueOnce(primero.handle).mockResolvedValueOnce(segundo.handle);
+      vi.stubGlobal('showSaveFilePicker', showSaveFilePicker);
+      const store = new BrowserStore();
+
+      await store.saveProject(DOC);
+      expect(showSaveFilePicker).toHaveBeenLastCalledWith(expect.objectContaining({ suggestedName: 'Pedido.lila' }));
+      await store.saveProject(DOC, { saveAs: true });
+      await store.saveProject(DOC);
+
+      expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+      expect(primero.escrito).toHaveLength(1);
+      expect(segundo.escrito).toHaveLength(2);
+      expect(clic).not.toHaveBeenCalled();
+    });
+
+    it('cerrar un selector es cancelar: null, sin escribir ni olvidar el archivo', async () => {
+      const abierto = archivo('Pedido.lila');
+      vi.stubGlobal('showOpenFilePicker', vi.fn().mockResolvedValueOnce([abierto.handle]).mockImplementationOnce(cancelado));
+      vi.stubGlobal('showSaveFilePicker', vi.fn(cancelado));
+      const store = new BrowserStore();
+      await store.openProject();
+
+      await expect(store.openProject()).resolves.toBeNull();
+      await expect(store.saveProject(DOC, { saveAs: true })).resolves.toBeNull();
+      await expect(store.createProject(DOC)).resolves.toBeNull();
+      expect(store.restoreSession()).toBeNull();
+      await store.saveProject(DOC);
+      expect(abierto.escrito).toHaveLength(1);
+    });
+
+    it('un .lila.json abierto no se reescribe, y un ejemplo (forget) tampoco pisa el archivo', async () => {
+      const json = archivo('Viejo.lila.json', JSON.stringify(DOC));
+      const lila = archivo('Pedido.lila');
+      const nuevo = archivo('Nuevo.lila');
+      vi.stubGlobal('showOpenFilePicker', vi.fn().mockResolvedValueOnce([json.handle]).mockResolvedValueOnce([lila.handle]));
+      const showSaveFilePicker = vi.fn(async () => nuevo.handle);
+      vi.stubGlobal('showSaveFilePicker', showSaveFilePicker);
+      const store = new BrowserStore();
+
+      await store.openProject();
+      await store.saveProject(DOC);
+      expect(json.createWritable).not.toHaveBeenCalled();
+      await store.openProject();
+      store.forget();
+      await store.saveProject(DOC);
+      expect(lila.createWritable).not.toHaveBeenCalled();
+      expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+    });
+
+    it('el archivo del lanzamiento se anuncia y openProject({ launched }) lo abre sin selector', async () => {
+      const lanzado = archivo('Pedido.lila');
+      const showOpenFilePicker = vi.fn();
+      vi.stubGlobal('showOpenFilePicker', showOpenFilePicker);
+      const store = new BrowserStore();
+      const antes = vi.fn();
+      store.onLaunch(antes);
+      store.launch(lanzado.handle);
+      // Quien se suscribe tarde también se entera: el lanzamiento puede llegar antes que la app.
+      const despues = vi.fn();
+      const baja = store.onLaunch(despues);
+
+      expect(antes).toHaveBeenCalledWith('Pedido.lila');
+      expect(despues).toHaveBeenCalledWith('Pedido.lila');
+      await expect(store.openProject({ launched: true })).resolves.toEqual(DOC);
+      expect(showOpenFilePicker).not.toHaveBeenCalled();
+      // Se consume una vez; guardar vuelve a ese mismo archivo.
+      await expect(store.openProject({ launched: true })).resolves.toBeNull();
+      await store.saveProject(DOC);
+      expect(lanzado.escrito).toHaveLength(1);
+      baja();
+      store.launch(archivo('Otro.lila').handle);
+      expect(despues).toHaveBeenCalledOnce();
     });
   });
 });

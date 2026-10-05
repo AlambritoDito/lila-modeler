@@ -19,7 +19,17 @@ import '@fontsource/jetbrains-mono/700.css';
 
 // Único punto de elección BrowserStore/DesktopStore (OP-01).
 const desktop = typeof window.lila !== 'undefined';
-const store = desktop ? new DesktopStore() : new BrowserStore(new Map([['pedido', { xml: pedido, name: 'model.bpmn' }]]));
+const browserStore = desktop ? null : new BrowserStore(new Map([['pedido', { xml: pedido, name: 'model.bpmn' }]]));
+const store = browserStore ?? new DesktopStore();
+
+/** Chromium's Launch Handler API, not in `lib.dom`: only what is read here. */
+interface LaunchQueue { setConsumer(consumer: (params: { readonly files: readonly FileSystemHandle[] }) => void): void }
+// #572: the installed PWA opened by a double click on a `.lila` (`file_handlers` in
+// `manifest.webmanifest`). The store opens it through the same door as «Open».
+const launched = browserStore?.launch.bind(browserStore);
+(window as { launchQueue?: LaunchQueue }).launchQueue?.setConsumer(({ files: [file] }) => {
+  if (launched !== undefined && file?.kind === 'file') launched(file as FileSystemFileHandle);
+});
 createRoot(document.getElementById('root')!, { onUncaughtError: (error) => { console.error(error); failStartup(); } }).render(
   <StrictMode><App store={store} bpmnFilesEnabled={!desktop} /></StrictMode>,
 );

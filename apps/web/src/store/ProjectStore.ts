@@ -5,7 +5,8 @@
  * el navegador, en Electron y contra un servidor sin que la UI sepa cuál de los tres es.
  *
  * Implementaciones:
- * - `BrowserStore` (este ticket): demo online sin persistencia — abre y descarga archivos.
+ * - `BrowserStore` (este ticket): demo online sin persistencia — abre y descarga archivos (en
+ *   Chrome y Edge, guarda de vuelta en el mismo `.lila`: #573).
  * - `DesktopStore` (LILA-071): Electron, sobre `window.lila.{openFile,saveFile,readProject}`.
  * - `RemoteStore` (LILA-086): servidor self-hosted (`packages/server`, M6), sobre su REST.
  *
@@ -66,14 +67,17 @@ export interface ProjectSessionStore extends ProjectStore {
   /**
    * `options.fileOnly` pide explícitamente el contenedor `.lila` (ADR-027) en vez de una carpeta
    * de proyecto. Solo lo usa `DesktopStore`, donde son dos diálogos nativos distintos fuera de
-   * macOS; `BrowserStore` ya abre las dos cosas con el mismo `<input type=file>` y lo ignora.
+   * macOS; `BrowserStore` ya abre las dos cosas con el mismo selector y lo ignora.
+   * `options.launched` (#572) abre, sin selector, el `.lila` con el que se lanzó la PWA instalada
+   * (ver `onLaunch`). Solo `BrowserStore`.
    */
-  openProject(options?: { readonly fileOnly?: boolean }): Promise<ProjectDocument | null>;
+  openProject(options?: { readonly fileOnly?: boolean; readonly launched?: boolean }): Promise<ProjectDocument | null>;
   /**
    * `options.asFolder` pide que el destino nuevo sea una CARPETA de proyecto (ADR-018) en vez de
    * un `.lila` (ADR-027), que es lo que «Guardar como» elige por defecto. Como `fileOnly`, solo lo
    * usa `DesktopStore` —son dos diálogos nativos distintos— y `BrowserStore` lo ignora, porque en
-   * el navegador guardar es siempre descargar un `.lila`.
+   * el navegador el destino es siempre un `.lila`: reescrito en su sitio con la File System Access
+   * API de Chrome y Edge (#573), o descargado donde no existe (Safari, Firefox).
    */
   saveProject(document: ProjectDocument, options?: { saveAs?: boolean; asFolder?: boolean }): Promise<ProjectDocument | null>;
   /** Browser-only: last explicitly saved project, restored on startup without a file picker. */
@@ -91,10 +95,16 @@ export interface ProjectSessionStore extends ProjectStore {
    * Olvida la carpeta/documento activos sin tocar disco (#458, QA de #505, hallazgo S2c). Se
    * llama antes de activar un proyecto sin ruta (un ejemplo de la galería): sin esto, `DesktopStore`
    * seguía comparando el siguiente guardado contra el documento anterior y `E-PROYECTO-DISTINTO`
-   * saltaba aunque el usuario nunca hubiera tocado ese proyecto viejo. Solo `DesktopStore`;
-   * `BrowserStore` no guarda identidad entre guardados.
+   * saltaba aunque el usuario nunca hubiera tocado ese proyecto viejo. En `BrowserStore` suelta
+   * el `.lila` que «Guardar» reescribía (#573), para que el ejemplo no lo pise.
    */
   forget?(): void;
+  /**
+   * #572: `cb` runs with the file name when the installed PWA was launched with a `.lila` (a
+   * double click in the file manager); the app then opens it with `openProject({ launched: true })`.
+   * Only `BrowserStore`.
+   */
+  onLaunch?(cb: (name: string) => void): () => void;
   /**
    * #539: `cb` runs when the open project changed on disk and Lila did not write it (an agent
    * through the CLI or MCP). Only for the project this store has open now. Only `DesktopStore`.

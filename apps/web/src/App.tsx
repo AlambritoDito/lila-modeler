@@ -77,7 +77,7 @@ import './theme/montana.css';
 import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'launch' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -1049,8 +1049,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     recordarFocoLienzo();
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
     try {
-      if (kind === 'open' || kind === 'openFile') {
-        const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
+      if (kind === 'open' || kind === 'openFile' || kind === 'launch') {
+        const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : kind === 'launch' ? { launched: true } : undefined);
         if (doc) await activate(doc, true, beforeToken); return;
       }
       if (typeof kind === 'object' && 'ejemplo' in kind) {
@@ -1903,6 +1903,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     rutaPendiente.current = null;
     abrirRutaRef.current(ruta);
   }, [modelador]);
+
+  /**
+   * #572: the installed PWA was launched with a `.lila`. It opens like «Open» (`'launch'` only
+   * skips the picker), so the unsaved-changes prompt applies. It waits for the canvas, and for
+   * whatever holds the I/O lock first — on startup that is the restored session.
+   */
+  const [lanzamiento, setLanzamiento] = useState(0);
+  useEffect(() => adapter?.onLaunch?.(() => setLanzamiento((n) => n + 1)), [adapter]);
+  const lanzamientoAtendido = useRef(0);
+  useEffect(() => {
+    if (lanzamiento === lanzamientoAtendido.current || modelador === null) return;
+    if (ioLock.current || ioBusy || pendingAction !== null || respuestaPerdida.current !== null) return;
+    lanzamientoAtendido.current = lanzamiento;
+    void projectAction('launch');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lanzamiento, modelador, ioBusy, pendingAction]);
 
   /**
    * Corre el escenario elegido sobre lo que hay en el lienzo **ahora**: se exporta el XML y se

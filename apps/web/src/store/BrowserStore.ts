@@ -1,6 +1,7 @@
 /**
  * `ProjectStore` de la demo online (LILA-058, ADR-023, ADR-018): abrir es un selector de
- * archivo nativo y guardar es una descarga. Es la modalidad que arranca `main.tsx`;
+ * archivo nativo y guardar es una descarga — salvo en Chrome y Edge (ADR-031, #573), donde la
+ * File System Access API deja guardar de vuelta en el mismo `.lila` que se abrió o se eligió. Es la modalidad que arranca `main.tsx`;
  * `DesktopStore` (LILA-071) y `RemoteStore` (LILA-086) sustituyen esto sin que el resto de la
  * SPA lo note.
  *
@@ -28,6 +29,24 @@ const CLAVE = 'lila.project.v1';
 /** The project container written by «Save project» (ADR-027, `docs/PROJECT_FORMAT.md`). */
 const LILA_EXT = '.lila';
 const LILA_MIME = 'application/vnd.lila-modeler+zip';
+
+/**
+ * The File System Access pickers (#573): Chromium only, so they are not in `lib.dom` and are
+ * declared here, just the part this store calls. Safari and Firefox lack them and keep the
+ * `<input type=file>` and the download.
+ */
+interface TipoArchivo {
+  readonly description?: string;
+  readonly accept: Record<string, readonly string[]>;
+}
+interface SelectoresArchivo {
+  showOpenFilePicker?(options?: { readonly types?: readonly TipoArchivo[] }): Promise<FileSystemFileHandle[]>;
+  showSaveFilePicker?(options?: { readonly suggestedName?: string; readonly types?: readonly TipoArchivo[] }): Promise<FileSystemFileHandle>;
+}
+const selectores = (): SelectoresArchivo => globalThis as SelectoresArchivo;
+const TIPO_LILA: TipoArchivo = { description: 'Lila Modeler', accept: { [LILA_MIME]: [LILA_EXT] } };
+/** Closing a picker without choosing rejects with `AbortError`: a cancel, not an error. */
+const esCancelacion = (error: unknown): boolean => error instanceof DOMException && error.name === 'AbortError';
 
 /** What is mirrored: the three collections this store owns, as plain JSON. */
 interface SesionGuardada {
@@ -147,6 +166,14 @@ export class BrowserStore implements ProjectSessionStore {
   private readonly corridas = new Map<string, Map<string, RunResult>>();
   /** One warning per store when writing fails: enough to debug, not enough to flood. */
   private avisoEscritura = false;
+  /**
+   * The `.lila` that «Save» rewrites in place (#573): the one opened or chosen with the File
+   * System Access pickers. `null` without the API, or before the first save: then «Save» asks.
+   */
+  private archivo: FileSystemFileHandle | null = null;
+  /** A `.lila` the installed PWA was launched with (#572), waiting for `openProject({ launched })`. */
+  private lanzado: FileSystemFileHandle | null = null;
+  private readonly oyentesLanzamiento = new Set<(name: string) => void>();
 
   /**
    * `semilla`: procesos ya cargados al arrancar (en `main.tsx`, `examples/pedido`).
@@ -203,8 +230,37 @@ export class BrowserStore implements ProjectSessionStore {
     return this.project ? structuredClone(this.project) : null;
   }
 
-  async createProject(document: ProjectDocument): Promise<ProjectDocument> {
-    return this.saveProject(document);
+  /**
+   * A new project is a new file: with the File System Access API this asks where to keep it, like
+   * the desktop's folder dialog, and cancelling cancels «New»; without it, it downloads as before.
+   */
+  async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
+    return this.saveProject(document, { saveAs: true });
+  }
+
+  /**
+   * #458: an example has no file behind it, so «Save» must ask instead of rewriting the `.lila`
+   * that was open before it.
+   */
+  forget(): void {
+    this.archivo = null;
+  }
+
+  /**
+   * #572: `main.tsx` hands over the file a double click launched the installed PWA with. It waits
+   * here until the app asks for it through `openProject({ launched: true })`, so it goes through
+   * the same door as «Open» — including the unsaved-changes prompt. A later launch replaces it.
+   */
+  launch(handle: FileSystemFileHandle): void {
+    this.lanzado = handle;
+    for (const oyente of this.oyentesLanzamiento) oyente(handle.name);
+  }
+
+  /** The app may subscribe after the launch arrived: a waiting file is announced at once. */
+  onLaunch(cb: (name: string) => void): () => void {
+    this.oyentesLanzamiento.add(cb);
+    if (this.lanzado !== null) cb(this.lanzado.name);
+    return () => this.oyentesLanzamiento.delete(cb);
   }
 
   /**
@@ -213,20 +269,47 @@ export class BrowserStore implements ProjectSessionStore {
    * no migration step to run — the file is on the visitor's disk, not in a database. Which reader
    * to use is decided by the name, not by sniffing the bytes: a `.lila` is a ZIP and a `.lila.json`
    * is JSON, and a file whose extension lies about that is a file worth refusing.
+   *
+   * With the File System Access API (#573) the picker hands back a handle, kept for «Save» only
+   * when the file is a `.lila`: a `.lila.json` is never rewritten, the next save asks for a `.lila`.
+   * `launched` (#572) takes the file the PWA was launched with instead of showing any picker.
    */
-  async openProject(): Promise<ProjectDocument | null> {
-    const file = await elegirArchivo('.lila,.lila.json,.json');
-    if (file === null) return null;
-    if (file.name.toLowerCase().endsWith('.lila')) {
-      return readLila(new Uint8Array(await file.arrayBuffer()));
+  async openProject(options?: { readonly fileOnly?: boolean; readonly launched?: boolean }): Promise<ProjectDocument | null> {
+    let handle: FileSystemFileHandle | null = null;
+    if (options?.launched === true) {
+      handle = this.lanzado;
+      this.lanzado = null;
+      if (handle === null) return null;
+    } else if (selectores().showOpenFilePicker !== undefined) {
+      try {
+        [handle = null] = await selectores().showOpenFilePicker!({
+          types: [TIPO_LILA, { description: 'Lila Modeler JSON', accept: { 'application/json': ['.json'] } }],
+        });
+      } catch (error) {
+        if (esCancelacion(error)) return null;
+        throw error;
+      }
+      if (handle === null) return null;
     }
-    return readProject(JSON.parse(await file.text()) as unknown);
+    const file = handle !== null ? await handle.getFile() : await elegirArchivo('.lila,.lila.json,.json');
+    if (file === null) return null;
+    const lila = file.name.toLowerCase().endsWith('.lila');
+    const doc = lila
+      ? readLila(new Uint8Array(await file.arrayBuffer()))
+      : readProject(JSON.parse(await file.text()) as unknown);
+    // Only once it read: a file that fails leaves the open project, and its file, as they were.
+    this.archivo = lila ? handle : null;
+    return doc;
   }
 
-  async saveProject(document: ProjectDocument): Promise<ProjectDocument> {
+  /**
+   * «Save» rewrites the kept `.lila` in place; «Save as», or the first save, asks where with
+   * `showSaveFilePicker`. Without the API (Safari, Firefox) it is the download it always was.
+   */
+  async saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null> {
     const snapshot = structuredClone(readProject(document));
-    descargar(encodeLila(snapshot), `${snapshot.name}${LILA_EXT}`, LILA_MIME);
-    // Commit only after the download was initiated successfully. Keep the returned document
+    if (!(await this.escribir(encodeLila(snapshot), `${snapshot.name}${LILA_EXT}`, options?.saveAs === true))) return null;
+    // Commit only after the write or the download was initiated successfully. Keep the returned document
     // separate so callers cannot mutate the last explicit save through a shared reference.
     this.project = structuredClone(snapshot);
     // Saving also flushes the mirror. Normally it is already up to date — every mutation writes
@@ -234,6 +317,30 @@ export class BrowserStore implements ProjectSessionStore {
     // save is the moment to try again.
     this.guardar();
     return snapshot;
+  }
+
+  /** `false` = the save picker was closed without choosing: nothing was written. */
+  private async escribir(datos: Uint8Array<ArrayBuffer>, nombre: string, saveAs: boolean): Promise<boolean> {
+    let destino = saveAs ? null : this.archivo;
+    if (destino === null) {
+      const elegir = selectores().showSaveFilePicker;
+      if (elegir === undefined) {
+        descargar(datos, nombre, LILA_MIME);
+        return true;
+      }
+      try {
+        destino = await elegir({ suggestedName: nombre, types: [TIPO_LILA] });
+      } catch (error) {
+        if (esCancelacion(error)) return false;
+        throw error;
+      }
+    }
+    const escritura = await destino.createWritable();
+    await escritura.write(datos);
+    await escritura.close();
+    // The new file becomes the one «Save» rewrites only once it holds the project.
+    this.archivo = destino;
+    return true;
   }
 
   async listProcesses(): Promise<readonly ProcessSummary[]> {
