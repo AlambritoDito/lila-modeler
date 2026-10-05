@@ -19,7 +19,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import {
   columnLabel,
-  formatDuration,
   formatNumber,
   formatSignedPercent,
   isDurationMetric,
@@ -42,6 +41,7 @@ import {
 import { compareWarnings, type CompareRunMeta } from './compareWarnings.js';
 import { MAX_SERIES } from './graficas';
 import { GraficaBarras, geometriaBarras, PLOT_MINIMO, useAncho, type GraficaBarrasProps } from './GraficasSvg';
+import { exactDuration, formatDisplay, formatDisplayDuration, roundDisplay } from './formatDisplay';
 import { getLocale, strings, useStrings } from './i18n';
 
 export type { CompareRunMeta } from './compareWarnings.js';
@@ -134,26 +134,36 @@ export function compareMetricLabel(scope: CompareScope, metric: string): string 
  * códigos ISO — un código de tres letras mayúsculas que `Intl` no reconozca (p. ej. inventado a
  * mano en un escenario de prueba) cae al mismo número plano en vez de lanzar.
  */
-function formatMoney(value: number, currency: string | undefined): string {
-  if (currency === undefined) return formatNumber(value);
+function formatMoney(value: number, currency: string | undefined, exact: boolean): string {
+  const plain = exact ? formatNumber : formatDisplay;
+  if (currency === undefined) return plain(value);
   try {
     return new Intl.NumberFormat(undefined, { currency, style: 'currency' }).format(value);
   } catch {
-    return formatNumber(value);
+    return plain(value);
   }
 }
 
-/** Igual que `formatCompareValue` de `lila compare`: guion para `null`, % para utilización. */
-function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit, currency?: string): string {
+/**
+ * Igual que `formatCompareValue` de `lila compare`: guion para `null`, % para utilización. La
+ * celda muestra dos decimales (#578); con `exact` sale el valor de la CLI, para el `title`.
+ */
+function formatCellValue(metric: string, value: number | null, unit: BaseTimeUnit, currency: string | undefined, exact = false): string {
   const S = strings();
+  const plain = exact ? formatNumber : formatDisplay;
   if (value === null) return S.comparar.sinValor;
-  if (isCostMetric(metric)) return formatMoney(value, currency);
-  if (isDurationMetric(metric)) return formatDuration(value, unit);
-  if (metric === 'utilization') return S.comparar.porCiento(formatNumber(value * 100));
+  if (isCostMetric(metric)) return formatMoney(value, currency, exact);
+  if (isDurationMetric(metric)) return exact ? exactDuration(value, unit) : formatDisplayDuration(value, unit);
+  if (metric === 'utilization') return S.comparar.porCiento(plain(value * 100));
   if (metric === 'withinServiceLevel' || splitOutcomeMetric(metric)?.metric === 'withinServiceLevel') {
-    return S.comparar.porCiento(formatNumber(value * 100));
+    return S.comparar.porCiento(plain(value * 100));
   }
-  return formatNumber(value);
+  return plain(value);
+}
+
+/** Delta relativo como porcentaje con signo; en pantalla, con dos decimales de porcentaje. */
+function deltaText(fraction: number, exact: boolean): string {
+  return formatSignedPercent(exact ? fraction : roundDisplay(fraction, 4));
 }
 
 /**
@@ -168,10 +178,10 @@ interface ColumnContext {
 }
 
 /** Texto completo de una celda no base: valor y delta relativo, como `lila compare` en la CLI. */
-function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsComparable: boolean): string {
+function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsComparable: boolean, exact = false): string {
   const S = strings();
   const value = row.values[index] ?? null;
-  const valueText = formatCellValue(row.metric, value, ctx.unit, ctx.currency);
+  const valueText = formatCellValue(row.metric, value, ctx.unit, ctx.currency, exact);
   if (index === 0 || value === null) return valueText;
   // Costos en monedas distintas (o una corrida sin moneda): `deltaAbs`/`deltaRel` restan números
   // crudos sin saber que representan divisas distintas (compare() no conoce `run.currency`), así
@@ -180,7 +190,7 @@ function cellText(row: CompareRow, index: number, ctx: ColumnContext, costsCompa
   const deltaRel = row.deltaRel[index] ?? null;
   return S.comparar.celdaConDelta(
     valueText,
-    deltaRel === null ? S.comparar.sinValor : formatSignedPercent(deltaRel),
+    deltaRel === null ? S.comparar.sinValor : deltaText(deltaRel, exact),
   );
 }
 
@@ -202,7 +212,7 @@ function cellChanged(row: CompareRow, index: number, ctx: ColumnContext, baseCtx
   const value = formatCellValue(row.metric, row.values[index] ?? null, ctx.unit, ctx.currency);
   if (value !== formatCellValue(row.metric, row.values[0] ?? null, baseCtx.unit, baseCtx.currency)) return true;
   const deltaRel = row.deltaRel[index] ?? null;
-  return deltaRel !== null && formatSignedPercent(deltaRel) !== '0%';
+  return deltaRel !== null && deltaText(deltaRel, false) !== '0%';
 }
 
 /** Filas de un scope; con `showAll = false` solo el subconjunto curado (BACKLOG LILA-047). */
@@ -290,6 +300,7 @@ function scenarioColumn(
         </>
       );
     },
+    title: (row) => cellText(row, index, ctx, costsComparable, true),
     cellStyle: (row): CSSProperties => (cellChanged(row, index, ctx, baseCtx, costsComparable) ? highlightStyle : {}),
     header: columnHeader(name, index, meta),
     key: `scenario-${index}`,

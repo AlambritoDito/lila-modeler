@@ -11,8 +11,8 @@
  * Text wears the ink tokens, never a series color.
  */
 import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { formatNumber } from '@lila-modeler/engine/format';
 import { escala, histograma, SERIES_CLARO, type Clase } from './graficas';
+import { formatDisplay } from './formatDisplay';
 import { useStrings } from './i18n';
 import './graficas.css';
 
@@ -203,7 +203,7 @@ export function geometriaBarras(grupos: readonly Grupo[], W: number): { x0: numb
 export function marcasQueCaben(marcas: readonly number[], pxPorUnidad: number): number[] {
   if (marcas.length < 2) return [...marcas];
   const paso = (marcas[1]! - marcas[0]!) * pxPorUnidad;
-  const etiqueta = mayor(marcas, (m) => anchoTexto(formatNumber(m), 11), 0) + 8;
+  const etiqueta = mayor(marcas, (m) => anchoTexto(formatDisplay(m), 11), 0) + 8;
   const cada = Math.max(1, Math.ceil(etiqueta / paso));
   return marcas.filter((_, i) => i % cada === 0);
 }
@@ -277,7 +277,7 @@ export function SvgBarras({
         <g key={m}>
           <line x1={x(m)} x2={x(m)} y1={arriba - 4} y2={abajo + 4} stroke={paleta.reja} strokeWidth={1} />
           <text className="marca-eje" x={x(m)} y={abajo + 18} fill={paleta.tenue} fontSize={11} textAnchor="middle">
-            {formatNumber(m)}
+            {formatDisplay(m)}
           </text>
         </g>
       ))}
@@ -336,7 +336,7 @@ export function Histograma(props: HistogramaProps): ReactNode {
 
 /** Text of a class, the same in the `<desc>`, the tooltip and the data table. */
 export function textoClase(c: Clase): string {
-  return c.desde === c.hasta ? formatNumber(c.desde) : `${formatNumber(c.desde)} – ${formatNumber(c.hasta)}`;
+  return c.desde === c.hasta ? formatDisplay(c.desde) : `${formatDisplay(c.desde)} – ${formatDisplay(c.hasta)}`;
 }
 
 export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, ancho = ANCHO_POR_DEFECTO }: HistogramaProps): ReactNode {
@@ -345,7 +345,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
   const clases = histograma(valores);
   const W = Math.max(280, ancho);
   const eje = escala(mayor(clases, (c) => c.casos, 0));
-  const anchoY = Math.max(24, anchoTexto(formatNumber(eje.tope), 11) + 10);
+  const anchoY = Math.max(24, anchoTexto(formatDisplay(eje.tope), 11) + 10);
   const x0 = PAD + anchoY;
   const anchoPlot = W - x0 - PAD;
   const arriba = PAD + 20 + (sub === undefined ? 0 : 18) + 26;
@@ -380,7 +380,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
         <g key={m}>
           <line x1={x0} x2={W - PAD} y1={y(m)} y2={y(m)} stroke={paleta.reja} strokeWidth={1} />
           <text x={x0 - 6} y={y(m) + 4} fill={paleta.tenue} fontSize={11} textAnchor="end">
-            {formatNumber(m)}
+            {formatDisplay(m)}
           </text>
         </g>
       ))}
@@ -398,7 +398,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
             {c.casos > 0 && <path className="barra" d={columna(xc, base, w, h)} fill={paleta.series[0]} />}
             {i === moda && c.casos > 0 && (
               <text x={xc + w / 2} y={y(c.casos) - 4} fill={paleta.tinta} fontSize={11} textAnchor="middle">
-                {formatNumber(c.casos)}
+                {formatDisplay(c.casos)}
               </text>
             )}
           </g>
@@ -409,7 +409,7 @@ export function SvgHistograma({ titulo, sub, valores, paleta = PALETA_PANTALLA, 
         i % cadaCuantas === 0 ? (
           // The last edge ends at the plot's right edge instead of running past it.
           <text key={i} x={x0 + i * anchoClase} y={base + 16} fill={paleta.tenue} fontSize={11} textAnchor={i === bordes.length - 1 ? 'end' : 'middle'}>
-            {formatNumber(b)}
+            {formatDisplay(b)}
           </text>
         ) : null,
       )}

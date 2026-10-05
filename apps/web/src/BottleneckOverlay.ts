@@ -35,7 +35,8 @@ import type GraphicsFactory from 'diagram-js/lib/core/GraphicsFactory';
 import type Overlays from 'diagram-js/lib/features/overlays/Overlays';
 import type { ElementLike } from 'diagram-js/lib/model/Types';
 import type { Shape as BpmnShape } from 'bpmn-js/lib/model/Types';
-import { formatDuration, formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatDuration, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { RunResult } from '@lila-modeler/engine';
 import { strings } from './i18n';
@@ -51,7 +52,7 @@ export interface OverlayEntry {
   nivel: NivelEspera;
   /** Texto corto de la etiqueta sobre la tarea: cabe en el ancho de una tarea (#226). */
   etiqueta: string;
-  /** Texto completo, sin recortar, para el `title` de la etiqueta (#226). */
+  /** Detalle completo (unidad del escenario, dos decimales: #578) para el `title` de la etiqueta (#226). */
   titulo: string;
   /** `true` solo para `bottlenecks[0]`: la tarea donde más tiempo total se perdió esperando. */
   principal: boolean;
@@ -105,8 +106,6 @@ function nivelDeRatio(ratio: number): NivelEspera {
   return 'high';
 }
 
-/** Segundos por unidad. `format.ts` tiene la misma tabla pero no la exporta. */
-const SEGUNDOS: Readonly<Record<BaseTimeUnit, number>> = { day: 86_400, h: 3_600, min: 60, s: 1 };
 /** De la más gruesa a la más fina: gana la primera en la que la espera valga 1 o más. */
 const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
 /**
@@ -118,9 +117,9 @@ const UNIDADES: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
  */
 export function esperaCorta(seconds: number): string {
   const S = strings();
-  const unidad = UNIDADES.find((u) => seconds >= SEGUNDOS[u]) ?? 's';
+  const unidad = UNIDADES.find((u) => seconds >= SECONDS_PER_UNIT[u]) ?? 's';
   // Redondeo a un decimal *en la unidad elegida* antes de formatear, no después.
-  const paso = SEGUNDOS[unidad] / 10;
+  const paso = SECONDS_PER_UNIT[unidad] / 10;
   // Abreviatura de la unidad en la etiqueta; el `title` sigue usando el código del escenario.
   return `${formatDuration(Math.round(seconds / paso) * paso, unidad)} ${S.lienzo.unidadesCortas[unidad]}`;
 }
@@ -173,9 +172,9 @@ export function overlayModel(result: RunResult, scenario: ResolvedScenario): Ove
         principal: rango === 0,
         rango,
         titulo: S.lienzo.cuelloTitulo(
-          formatDuration(metrics.resourceWait.mean, unit),
-          unit,
-          formatNumber(entrada.utilization * 100),
+          // The same text as the Results tables (#578): hours from an hour on, with its unit.
+          formatDisplayDurationWithUnit(metrics.resourceWait.mean, unit),
+          formatDisplay(entrada.utilization * 100),
         ),
       },
     ]);

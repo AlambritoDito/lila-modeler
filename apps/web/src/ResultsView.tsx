@@ -24,7 +24,6 @@ import {
 import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
 import {
   columnLabel,
-  formatDuration,
   formatNumber,
   type BaseTimeUnit,
   type ResultScope,
@@ -42,6 +41,7 @@ import type {
 import { hasLegacyReplications } from './compareWarnings.js';
 import { agruparAvisos, AvisoAgrupado } from './avisos';
 import { GraficaDeInstancias, GraficaDeUtilizacion, GraficasDelProceso, type LogDeCorrida } from './GraficasResultados';
+import { exactDuration, formatDisplay, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -81,9 +81,11 @@ export interface ColumnDef<Row> {
   header: string;
   /** Valor comparable para ordenar; `numeric` decide si se compara como número. */
   sortValue: (row: Row) => number | string;
-  /** Casi siempre un string (`formatNumber`/`formatDuration`); CompareView (LILA-063) le mete
+  /** Casi siempre un string (`formatDisplay`/`formatDisplayDuration`); CompareView (LILA-063) le mete
    * JSX para la marca `*` de significancia sin duplicar la tabla. */
   display: (row: Row) => ReactNode;
+  /** Exact value for the cell's `title` when `display` rounds it (#578). */
+  title?: (row: Row) => string | undefined;
   /** Estilo extra por celda; CompareView (LILA-063) lo usa para resaltar solo las que cambian. */
   cellStyle?: (row: Row) => CSSProperties;
   numeric?: boolean;
@@ -329,6 +331,7 @@ export function DataTable<Row>({
                         : { textAlign: 'left' as const }),
                       ...column.cellStyle?.(row),
                     }}
+                    title={column.title?.(row)}
                   >
                     {column.display(row)}
                   </td>
@@ -416,7 +419,8 @@ function idNameColumns<Row extends { id: string; name: string }>(): ColumnDef<Ro
  */
 function numberColumn<Row>(scope: ResultScope, key: string, get: (row: Row) => number): ColumnDef<Row> {
   return {
-    display: (row) => formatNumber(get(row)),
+    display: (row) => formatDisplay(get(row)),
+    title: (row) => formatNumber(get(row)),
     header: columnLabel(scope, key),
     key,
     numeric: true,
@@ -432,7 +436,8 @@ function durationColumn<Row>(
 ): ColumnDef<Row> {
   const S = strings();
   return {
-    display: (row) => formatDuration(get(row), unit),
+    display: (row) => formatDisplayDuration(get(row), unit),
+    title: (row) => exactDuration(get(row), unit),
     header: S.resultados.columnaConUnidad(columnLabel(scope, key), unit),
     key,
     numeric: true,
@@ -545,7 +550,8 @@ function outcomeColumns(unit: BaseTimeUnit, showServiceLevel: boolean): ColumnDe
     ...(showServiceLevel
       ? [
           {
-            display: (row: OutcomeRow) => `${formatNumber((row.metrics.withinServiceLevel ?? 0) * 100)}%`,
+            display: (row: OutcomeRow) => `${formatDisplay((row.metrics.withinServiceLevel ?? 0) * 100)}%`,
+            title: (row: OutcomeRow) => `${formatNumber((row.metrics.withinServiceLevel ?? 0) * 100)}%`,
             header: columnLabel('process', 'withinServiceLevel'),
             key: 'withinServiceLevel',
             numeric: true,
@@ -595,9 +601,8 @@ export function BottleneckCard({
                   </button>
                 )}
               {S.resultados.cuelloDetalle(
-                formatDuration(entry.resourceWaitTotal, unit),
-                unit,
-                formatNumber(entry.utilization * 100),
+                formatDisplayDurationWithUnit(entry.resourceWaitTotal, unit),
+                formatDisplay(entry.utilization * 100),
               )}
             </li>
           ))}
