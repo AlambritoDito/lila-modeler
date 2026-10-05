@@ -680,6 +680,7 @@ export const es: Strings = {
       vacio: 'Escribe un ancho.',
       numero: 'El ancho debe ser un número, por ejemplo 120.',
       minimo: (minimo: number): string => `El ancho debe ser al menos ${minimo}.`,
+      maximo: (maximo: number): string => `El ancho debe ser como mucho ${maximo}.`,
     },
     /** Colores por elemento (#452): la fila del panel, la entrada del context pad y los ocho colores. */
     color: 'Color',

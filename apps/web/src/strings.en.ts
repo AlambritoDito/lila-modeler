@@ -705,6 +705,7 @@ export const en = {
       vacio: 'Enter a width.',
       numero: 'The width must be a number, for example 120.',
       minimo: (minimo: number): string => `The width must be at least ${minimo}.`,
+      maximo: (maximo: number): string => `The width must be at most ${maximo}.`,
     },
     /** Colours per element (#452): the panel row, the context pad entry and the eight colours. */
     color: 'Color',

@@ -21,7 +21,7 @@
  */
 import { documentationHolder } from '@lila-modeler/engine/bpmn';
 import { useEffect, useReducer, useState } from 'react';
-import { ANCHO_MINIMO, conAncho, problemaDeAncho } from './ancho';
+import { ANCHO_MAXIMO, ANCHO_MINIMO, conAncho, problemaDeAncho } from './ancho';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
 import { AtributosDelElemento } from './AtributosExtendidos';
@@ -697,7 +697,9 @@ function CampoAncho({ forma, ancho, refrescar }: {
       />
       {problema !== null && (
         <small id={idError} className="error" role="alert">
-          {problema === 'minimo' ? S.propiedades.anchoProblemas.minimo(ANCHO_MINIMO) : S.propiedades.anchoProblemas[problema]}
+          {problema === 'minimo' ? S.propiedades.anchoProblemas.minimo(ANCHO_MINIMO)
+            : problema === 'maximo' ? S.propiedades.anchoProblemas.maximo(ANCHO_MAXIMO)
+              : S.propiedades.anchoProblemas[problema]}
         </small>
       )}
     </label>

@@ -11,7 +11,7 @@ import Modeler from 'bpmn-js/lib/Modeler';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ANCHO_MINIMO, moduloAncho, problemaDeAncho, type LilaAncho } from './ancho';
+import { ANCHO_MAXIMO, ANCHO_MINIMO, moduloAncho, problemaDeAncho, type LilaAncho } from './ancho';
 import type { Modelador, Servicios } from './Modeler';
 import { PanelPropiedades } from './PropertiesPanel';
 import { setLocale, strings } from './i18n';
@@ -227,6 +227,11 @@ describe('setting the width (#563)', () => {
     expect(problemaDeAncho(String(ANCHO_MINIMO - 1))).toBe('minimo');
     expect(problemaDeAncho(String(ANCHO_MINIMO))).toBeNull();
     expect(problemaDeAncho(' 120.5 ')).toBeNull();
+    expect(problemaDeAncho('0x64')).toBe('numero');
+    expect(problemaDeAncho('1e2')).toBe('numero');
+    expect(problemaDeAncho('-60')).toBe('numero');
+    expect(problemaDeAncho(String(ANCHO_MAXIMO))).toBeNull();
+    expect(problemaDeAncho(String(ANCHO_MAXIMO + 1))).toBe('maximo');
   });
 });
 

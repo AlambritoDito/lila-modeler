@@ -20,6 +20,9 @@ import { is } from 'bpmn-js/lib/util/ModelUtil';
  */
 export const ANCHO_MINIMO = 50;
 
+/** The widest one typed in the field: 20 default tasks side by side, so a stray `1e7` is refused. */
+export const ANCHO_MAXIMO = 2000;
+
 interface Caja { x: number; y: number; width: number; height: number }
 
 /** A canvas shape as diagram-js hands it out, or (when bpmn-js's replace asks) a business object. */
@@ -33,11 +36,13 @@ export function conAncho(forma: unknown): boolean {
 }
 
 /** Why `texto` is not a width that can be set, or `null` if it is (then `Number(texto)` is it). */
-export function problemaDeAncho(texto: string): 'vacio' | 'numero' | 'minimo' | null {
+export function problemaDeAncho(texto: string): 'vacio' | 'numero' | 'minimo' | 'maximo' | null {
   if (texto.trim() === '') return 'vacio';
+  // Plain decimals only: `Number` would also take `0x64` and `1e2`.
+  if (!/^\d+(\.\d+)?$/.test(texto.trim())) return 'numero';
   const valor = Number(texto.trim());
-  if (!Number.isFinite(valor)) return 'numero';
-  return valor < ANCHO_MINIMO ? 'minimo' : null;
+  if (valor < ANCHO_MINIMO) return 'minimo';
+  return valor > ANCHO_MAXIMO ? 'maximo' : null;
 }
 
 export class LilaAncho extends RuleProvider {
