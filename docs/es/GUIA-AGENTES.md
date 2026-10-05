@@ -227,9 +227,11 @@ Agentes, la CLI y la app de escritorio pueden trabajar sobre el mismo `.lila`:
   escribió nada. Vuelve a intentarlo.»). Vuelve a llamarla: lee el archivo nuevo. La corrida guardada es
   la excepción: se agrega a lo que haya, salvo que el modelo o el escenario con que corrió hayan
   cambiado (entonces ya está vencida y no se guarda).
-- **La app.** Recarga después de tus escrituras. Si la persona guarda ediciones hechas antes de tu
-  escritura, la app se niega con `E-CAMBIO-EXTERNO` en vez de pisar tu trabajo; ella elige Recargar
-  o Conservar los míos.
+- **La app.** Recarga después de tus escrituras. Si la persona tiene ediciones sin guardar, primero
+  pregunta: Recargar o Conservar los míos. Tras Conservar los míos, guardar se niega con
+  `E-CAMBIO-EXTERNO` («… cambió fuera de Lila desde que se abrió, así que no se guardó nada…»), así
+  que tu trabajo no se pisa; ella recarga, o usa «Guardar como» para conservar su versión en otro
+  archivo.
 
 Haz una escritura a la vez por archivo y espera su respuesta; escribir en paralelo sobre el mismo
 `.lila` no gana nada.

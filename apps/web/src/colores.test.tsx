@@ -327,6 +327,51 @@ describe('properties panel', () => {
     expect(pintar).toHaveBeenLastCalledWith([tarea], null);
   });
 
+  it('after a reload (a new import) it shows and paints the reloaded element, not the old one (QA of #539)', async () => {
+    const xml = leer('examples/pedido/model.bpmn');
+    const antes = await abrir(xml);
+    // `lila process edit` renamed the task on disk; the reload imports a new model.
+    const despues = await abrir(xml.replace('name="Take order"', 'name="Tomar R"'));
+    // A stand-in for `Lienzo`: `servicios` and the subscriptions follow the live instance, and
+    // `abrir` announces `selection.changed` with nothing selected, as `Modeler.tsx` does on import.
+    let vivo = antes;
+    let elegidos: unknown[] = [vivo.elemento('Task_TomarPedido')];
+    const oyentes = new Set<() => void>();
+    const avisar = (): void => act(() => { for (const o of oyentes) o(); });
+    const pintar = vi.fn();
+    const modelador = {
+      get servicios() {
+        return { selection: { get: () => elegidos }, rootElement: () => undefined, elementRegistry: { filter: () => [] }, colores: { pintar } };
+      },
+      suscribir: (eventos: string[], escuchar: () => void) => {
+        if (eventos.includes('selection.changed')) oyentes.add(escuchar);
+        return () => { oyentes.delete(escuchar); };
+      },
+    } as unknown as Modelador;
+    const contenedor = document.createElement('div');
+    document.body.append(contenedor);
+    const raiz = createRoot(contenedor);
+    act(() => raiz.render(<PanelPropiedades modelador={modelador} pestana="propiedades" />));
+    montados.push(() => { act(() => raiz.unmount()); contenedor.remove(); });
+    const cabecera = (): string => contenedor.textContent ?? '';
+    expect(cabecera()).toContain('Take order');
+
+    // The import: nothing selected in the new instance, so the panel lets go of the old element.
+    vivo = despues; elegidos = [];
+    avisar();
+    expect(cabecera()).not.toContain('Take order');
+    // `recargar` selects the same id again, now in the new import.
+    elegidos = [vivo.elemento('Task_TomarPedido')];
+    avisar();
+    expect(cabecera()).toContain('Tomar R');
+    expect(cabecera()).not.toContain('Take order');
+
+    const rojo = [...contenedor.querySelectorAll<HTMLButtonElement>('.colores button')].find((b) => b.title === 'Red')!;
+    act(() => rojo.click());
+    expect(pintar).toHaveBeenCalledWith([despues.elemento('Task_TomarPedido')], 'rojo');
+    expect((pintar.mock.calls[0]![0] as Array<{ businessObject: { name: string } }>)[0]!.businessObject.name).toBe('Tomar R');
+  });
+
   it('with several selected, one click paints them all (one call, so one command and one ⌘Z)', async () => {
     const m = await abrir(leer('examples/pedido/model.bpmn'));
     const elegidos = [m.elemento('Task_Preparar'), m.elemento('Task_Empacar'), m.elemento('Flow_Aprobado')];

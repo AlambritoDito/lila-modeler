@@ -1115,6 +1115,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const escenario = escenarioId;
     const base = baseId;
     const modoPrevio = modo;
+    const elegido = seleccion;
     const beforeToken = tokenRef.current;
     recordarFocoLienzo();
     ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
@@ -1131,6 +1132,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (escenario in escenarios) setEscenarioId(escenario);
       if (base in escenarios) setBaseId(base);
       setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
+      // The import made new elements: select the same id in them, so the properties panel and the
+      // quick view show (and edit) the reloaded element, not the one from before (QA of #539).
+      // `seleccionar` does nothing when the id is gone, and the selection stays empty.
+      if (elegido !== null) modelador.seleccionar?.(elegido);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally {
       ioLock.current = false; setIoBusy(false);
@@ -2920,7 +2925,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         <span className={`marca${validacion.avisos > 0 ? ' aviso' : ''}`}>{S.app.avisos(validacion.avisos)}</span>
         <span className="separador" />
         <span>{S.app.escenario} <span className="acento">{etiquetaEscenario(escenarioId, escenarios)}</span></span>
-        <span>{S.app.semilla(semillaEscenario(escenarioId, escenarios))}</span>
+        {/* The seed of the run on screen when there is one (an agent may have run with `--seed`),
+            otherwise the one the next run would use. */}
+        <span>{S.app.semilla(corridaActual !== undefined
+          ? String((corridaActual.inputs.scenario.run as Record<string, unknown> | undefined)?.seed ?? 1)
+          : semillaEscenario(escenarioId, escenarios))}</span>
         <span className="hueco" />
         <span>{S.app.densidadEstado(S.app.densidadNombre(densidad))}</span>
         <button

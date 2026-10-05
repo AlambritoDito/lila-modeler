@@ -403,7 +403,7 @@ export class DesktopStore implements ProjectSessionStore {
  * shown in the UI language, naming what is in the way so the user knows what to move (QA of #531),
  * instead of raw and only in Spanish. The disk detail quotes `processes/…` or `model.bpmn` when
  * that is the obstacle (`projectIO.ts`); otherwise the obstacle is the destination `dir` itself
- * (another project's folder or `.lila`). `E-ARCHIVO-OCUPADO` is translated the same way. Any
+ * (another project's folder or `.lila`). `E-ARCHIVO-OCUPADO` and `E-CAMBIO-EXTERNO` are translated the same way. Any
  * other error is rethrown as it came.
  */
 function traducirOcupada(error: unknown, dir: string): never {
@@ -411,6 +411,12 @@ function traducirOcupada(error: unknown, dir: string): never {
   // changed on disk and nothing was written; the user only has to try again.
   if (error instanceof Error && error.message.includes('E-ARCHIVO-OCUPADO')) {
     throw new Error(strings().almacen.errorArchivoOcupado(dir));
+  }
+  // `E-CAMBIO-EXTERNO`: something else (an agent, #539) wrote the project after Lila last read it,
+  // and the user chose «Keep mine». Main's detail lists the changed files' names in Spanish.
+  if (error instanceof Error && error.message.includes('E-CAMBIO-EXTERNO')) {
+    const lista = /sin guardar: (.+?)\.?$/.exec(error.message)?.[1];
+    throw new Error(strings().almacen.errorCambioExterno(lista ?? dir.split(/[\\/]/).filter(Boolean).pop() ?? dir));
   }
   if (error instanceof Error && error.message.includes('E-CARPETA-OCUPADA')) {
     const dentro = /"(processes\/[^"]*|model\.bpmn)"/.exec(error.message)?.[1];
