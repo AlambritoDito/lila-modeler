@@ -32,6 +32,8 @@ try {
   await mkdir(output, { recursive: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'light' });
   const page = await context.newPage();
+  // The download/<input> path: Chrome's File System Access pickers (#573) cannot be answered here.
+  await page.addInitScript(() => { for (const k of ['showOpenFilePicker', 'showSaveFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true }); });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const url = `http://127.0.0.1:${server.address().port}/lila-modeler/app/`;

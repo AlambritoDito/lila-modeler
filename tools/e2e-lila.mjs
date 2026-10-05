@@ -35,10 +35,14 @@ const PORT = Number(process.env.LILA_E2E_PORT ?? 8787);
 const CDP_PORT = Number(process.env.LILA_E2E_CDP_PORT ?? 9333);
 const BASE = `http://127.0.0.1:${PORT}/lila-modeler/app/`;
 
+/** Hides the File System Access pickers (#573) so the app falls back to `<input>` + download. */
+const SIN_SELECTORES = "for (const k of ['showOpenFilePicker', 'showSaveFilePicker']) Object.defineProperty(window, k, { value: undefined, configurable: true });";
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.bpmn': 'application/xml',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const report = {};
@@ -145,6 +149,9 @@ async function main() {
     await cdp.send('Runtime.enable');
     await cdp.send('DOM.enable');
     await cdp.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    // Chrome has the File System Access pickers (#573), which a headless run cannot answer: hide
+    // them so the app takes the `<input type=file>` + download path this check drives.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: SIN_SELECTORES });
 
     const evaluate = async (expression) => {
       // `userGesture`: opening a file chooser needs user activation, and a plain `Runtime.evaluate`
