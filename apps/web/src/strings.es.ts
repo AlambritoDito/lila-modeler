@@ -420,7 +420,8 @@ export const es: Strings = {
     pieSufijo: ' para insertar',
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
     requiereActividad: (figura: string): string => `${figura}: selecciona una tarea o un subproceso para adjuntarlo`,
-    requiereContenedor: (figura: string): string => `${figura}: selecciona un pool o un carril para añadirlo`,
+    requiereContenedor: (figura: string): string => `${figura}: añade antes un pool`,
+    eligePool: 'Haz clic en el pool o carril donde añadir el carril. Esc cancela.',
     comandos: {
       titulo: 'Paleta de comandos',
       pista: 'Busca elementos, escenarios, modos y acciones',
@@ -854,6 +855,13 @@ export const es: Strings = {
     anadir: 'Añadir',
     anadirEtiqueta: (etiqueta: string): string => `Añadir ${etiqueta}`,
     claveNueva: 'clave nueva',
+    /** #579: el control para crear, arriba de Calendarios y de Recursos. */
+    nuevoCalendario: 'Nuevo calendario',
+    ejemploCalendario: 'turno-noche',
+    crearCalendario: '+ Crear calendario',
+    nuevoRecurso: 'Nuevo recurso',
+    ejemploRecurso: 'analista',
+    crearRecurso: '+ Crear recurso',
     claveRepetida: (clave: string): string => `${clave} ya existe; edítalo abajo o usa otro id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'eliminado (null)',
@@ -1157,8 +1165,9 @@ export const es: Strings = {
 
     cuellos: 'Cuellos de botella',
     sinCuellos: 'Sin espera por recurso detectada.',
-    cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>
-      ` — espera total ${espera} ${unidad}, utilización ${utilizacion}%`,
+    /** `espera` lleva su unidad, como en las tablas (`3000.56 min`, `50.01 h (3000.56 min)`). */
+    cuelloDetalle: (espera: string, utilizacion: string): string =>
+      ` — espera total ${espera}, utilización ${utilizacion}%`,
 
     avisos: 'Avisos',
 
@@ -1351,11 +1360,14 @@ export const es: Strings = {
     plegarMinimapa: 'Plegar minimapa',
     desplegarMinimapa: 'Desplegar minimapa',
     errorSinBpmn: 'El modelador todavía no tiene un BPMN abierto.',
+    moverCarrilArriba: 'Mover carril arriba',
+    moverCarrilAbajo: 'Mover carril abajo',
 
     /** Etiqueta flotante del overlay de cuellos (#226): corta arriba, completa en el `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,
-    cuelloTitulo: (espera: string, unidad: string, utilizacion: string): string =>
-      `espera media ${espera} ${unidad} · utilización ${utilizacion}%`,
+    /** `espera` lleva su unidad, como en las tablas. */
+    cuelloTitulo: (espera: string, utilizacion: string): string =>
+      `espera media ${espera} · utilización ${utilizacion}%`,
     /** Abreviatura de la unidad en la etiqueta; el `title` usa el código del escenario. */
     unidadesCortas: { day: 'd', h: 'h', min: 'min', s: 's' },
 

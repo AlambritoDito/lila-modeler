@@ -113,6 +113,8 @@ describe('(a) each compare bar is its table cell', () => {
     expect(grupos).toHaveLength(recursos.length);
     grupos.forEach((g, i) => {
       expect(g.textos).toEqual(recursos[i]!.slice(3));
+      // Bar labels are the cells' text: two decimals at most (#578); the values stay exact.
+      for (const t of g.textos) expect(t).not.toMatch(/\d\.(?!00)\d{3,}/);
       expect(g.valores.map((v) => formatNumber(Number(v)))).toEqual(
         comparison.rows.filter((r) => r.scope === 'resources' && r.metric === 'utilization')[i]!.values.map((v) => formatNumber(v! * 100)),
       );

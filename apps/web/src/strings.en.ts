@@ -442,7 +442,9 @@ export const en = {
     sinCoincidencias: (filtro: string): string => `No shape matches «${filtro}».`,
     /** Title of a boundary event or a lane while nothing fitting is selected (#456). */
     requiereActividad: (figura: string): string => `${figura}: select a task or a sub-process to attach it to`,
-    requiereContenedor: (figura: string): string => `${figura}: select a pool or a lane to add it to`,
+    requiereContenedor: (figura: string): string => `${figura}: add a pool first`,
+    /** The lane tool waiting for a click on a pool (#580); Escape cancels. */
+    eligePool: 'Click the pool or lane to add the lane to. Esc cancels.',
     /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */
     comandos: {
       titulo: 'Command palette',
@@ -879,6 +881,13 @@ export const en = {
     anadir: 'Add',
     anadirEtiqueta: (etiqueta: string): string => `Add ${etiqueta}`,
     claveNueva: 'new key',
+    /** #579: the create control, on top of Calendars and Resources. */
+    nuevoCalendario: 'New calendar',
+    ejemploCalendario: 'night-shift',
+    crearCalendario: '+ Create calendar',
+    nuevoRecurso: 'New resource',
+    ejemploRecurso: 'analyst',
+    crearRecurso: '+ Create resource',
     claveRepetida: (clave: string): string => `${clave} already exists; edit it below or use another id.`,
     itemNumerado: (etiqueta: string, i: number): string => `${etiqueta} ${i}`,
     eliminadoNull: 'deleted (null)',
@@ -1182,8 +1191,9 @@ export const en = {
 
     cuellos: 'Bottlenecks',
     sinCuellos: 'No resource wait detected.',
-    cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>
-      ` — total wait ${espera} ${unidad}, utilization ${utilizacion}%`,
+    /** `espera` carries its unit, as in the tables (`3000.56 min`, `50.01 h (3000.56 min)`). */
+    cuelloDetalle: (espera: string, utilizacion: string): string =>
+      ` — total wait ${espera}, utilization ${utilizacion}%`,
 
     avisos: 'Warnings',
 
@@ -1416,11 +1426,15 @@ export const en = {
     plegarMinimapa: 'Collapse minimap',
     desplegarMinimapa: 'Expand minimap',
     errorSinBpmn: 'The modeler has no BPMN open yet.',
+    /** Context pad entries of a lane (#580). */
+    moverCarrilArriba: 'Move lane up',
+    moverCarrilAbajo: 'Move lane down',
 
     /** Floating label of the bottleneck overlay (#226): short above, complete in the `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,
-    cuelloTitulo: (espera: string, unidad: string, utilizacion: string): string =>
-      `mean wait ${espera} ${unidad} · utilization ${utilizacion}%`,
+    /** `espera` carries its unit, as in the tables. */
+    cuelloTitulo: (espera: string, utilizacion: string): string =>
+      `mean wait ${espera} · utilization ${utilizacion}%`,
     /** Short unit for the label; the `title` uses the scenario code. */
     unidadesCortas: { day: 'd', h: 'h', min: 'min', s: 's' },
 

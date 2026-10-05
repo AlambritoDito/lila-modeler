@@ -131,16 +131,20 @@ function seccion(titulo: string): HTMLElement {
 /** Añade una clave a un registro (`calendars`, `resources`) desde su propia sección. */
 function anadirClave(titulo: string, clave: string): void {
   const donde = seccion(titulo);
-  const caja = [...donde.querySelectorAll('input')].find(
-    (i) => i.getAttribute('aria-label') === es.escenario.claveNueva,
-  );
-  if (caja === undefined) throw new Error(`la sección «${titulo}» no tiene caja de clave nueva`);
+  // #579: en Calendarios y Recursos la caja tiene rótulo visible y su botón dice qué crea.
+  const [rotulo, boton] =
+    titulo === es.escenario.seccionCalendarios
+      ? [es.escenario.nuevoCalendario, es.escenario.crearCalendario]
+      : [es.escenario.nuevoRecurso, es.escenario.crearRecurso];
+  const etiqueta = [...donde.querySelectorAll('label')].find((l) => l.textContent?.trim() === rotulo);
+  const caja = etiqueta === undefined ? null : document.getElementById(etiqueta.htmlFor);
+  if (!(caja instanceof HTMLInputElement)) throw new Error(`la sección «${titulo}» no tiene caja «${rotulo}»`);
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   act(() => {
     setter?.call(caja, clave);
     caja.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  pulsarEn(donde, es.escenario.anadir);
+  pulsarEn(donde, boton);
 }
 
 /* ------------------------------------------------------------------ *
