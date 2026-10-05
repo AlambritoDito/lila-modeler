@@ -1094,7 +1094,7 @@ function AnadirClave({
         }}
         onKeyDown={(e) => {
           // Enter crea, como el botón: teclear el id y confirmar sin ir a buscar el ratón.
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             crear();
           }
