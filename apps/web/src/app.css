@@ -1504,6 +1504,18 @@ body {
   display: flex;
   gap: 6px;
   margin-top: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* #579: in Calendars and Resources the create control carries a visible label on its own line. */
+.escenario .anadir > label,
+.escenario .anadir > [role='alert'] {
+  flex-basis: 100%;
+}
+
+.escenario .anadir > .boton {
+  white-space: nowrap;
 }
 
 .escenario .anadir input {
