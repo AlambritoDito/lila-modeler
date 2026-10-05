@@ -392,6 +392,76 @@ it('QA #593: a failed Import BPMN… of a broken .bpmn leaves the open project s
   expect(writeProject).toHaveBeenCalledWith('/p/proj', expect.objectContaining({ id: 'p1' }), expect.anything());
 });
 
+function puenteQa(openRecent: (dir: string, file?: string) => Promise<unknown>, extra: object = {}) {
+  let abrirRuta: (p: unknown) => void = () => {};
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const chooseSaveFile = vi.fn().mockResolvedValue(null);
+  const watchProject = vi.fn(); const forgetProject = vi.fn();
+  const puente = puenteRecuperacion(null, {
+    onOpenPath: (cb: (p: unknown) => void) => { abrirRuta = cb; return () => {}; },
+    openRecent: vi.fn(openRecent), writeProject, chooseSaveFile, watchProject, forgetProject,
+    setDirty: vi.fn(), onCloseRequested: () => () => {}, ...extra,
+  });
+  return { puente, writeProject, chooseSaveFile, watchProject, forgetProject, abrir: async (p: unknown) => { await act(async () => { abrirRuta(p); }); } };
+}
+const ROTO = { version: 1, id: 'roto', name: 'roto', loose: true, model: { id: 'x', name: 'model.bpmn', xml: '<html>no</html>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+it('QA2 #593: double-click of a broken .bpmn over a LOOSE diagram goes back to that loose file', async () => {
+  const suelto = { ...proyecto('s1', 'Suelto'), loose: true };
+  const q = puenteQa(async (dir) => (dir === '/d' ? suelto : ROTO));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/d', file: 'ventas.bpmn' });
+  expect(container.textContent).toContain('Suelto');
+  await q.abrir({ dir: '/x', file: 'roto.bpmn' });
+  expect(q.watchProject).toHaveBeenCalledWith('/d', 'ventas.bpmn');
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/d', expect.objectContaining({ id: 's1' }), expect.objectContaining({ modelFile: 'ventas.bpmn' }));
+});
+it('QA2 #593: with nothing open, a broken import forgets it and Save asks where', async () => {
+  const q = puenteQa(async () => ROTO, { importBpmn: vi.fn().mockResolvedValue({ dir: '/x', file: 'roto.bpmn' }) });
+  await montar(new DesktopStore(q.puente as never));
+  await act(async () => { q.puente.menu('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(q.forgetProject).toHaveBeenCalled();
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(container.querySelector('[role="alert"].error')?.textContent ?? '').not.toContain('E-PROYECTO-DISTINTO');
+  expect(q.writeProject).not.toHaveBeenCalled();
+});
+it('QA2 #593: activate returning false (modeler refuses) also undoes the read', async () => {
+  const q = puenteQa(async (dir) => (dir === '/p' ? proyecto('p1', 'Proyecto') : proyecto('p2', 'Otro')));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  mocks.abrir.mockResolvedValueOnce(false);
+  await q.abrir({ dir: '/o' });
+  expect(container.textContent).toContain('Proyecto');
+  expect(q.watchProject).toHaveBeenCalledWith('/p', undefined);
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/p', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
+it('QA2 #593: a successful open commits: no undo, Save writes to the new folder', async () => {
+  const q = puenteQa(async (dir) => (dir === '/p' ? proyecto('p1', 'Proyecto') : proyecto('p2', 'Otro')));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  await q.abrir({ dir: '/o' });
+  expect(container.textContent).toContain('Otro');
+  expect(q.watchProject).not.toHaveBeenCalled();
+  expect(q.forgetProject).not.toHaveBeenCalled();
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/o', expect.objectContaining({ id: 'p2' }), expect.anything());
+});
+it('QA2 #593: Open project… (folder) of a broken model undoes too', async () => {
+  const q = puenteQa(async () => proyecto('p1', 'Proyecto'), {
+    chooseFolder: vi.fn().mockResolvedValue('/r'),
+    readProject: vi.fn().mockResolvedValue({ ...ROTO, loose: false }),
+  });
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  await act(async () => { q.puente.menu('abrir'); });
+  expect(container.textContent).toContain('Proyecto');
+  expect(q.watchProject).toHaveBeenCalledWith('/p', undefined);
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/p', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
+
 it('guardar cancelado mantiene cambios pendientes', async () => {
   await act(async () => mocks.changed());
   vi.mocked(session.saveProject).mockResolvedValueOnce(null);
