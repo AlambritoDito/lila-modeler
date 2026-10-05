@@ -208,6 +208,8 @@ export interface Ajustes {
   readonly paletaAncho?: number;
   /** Width of the scenario rail in Simulate, in px (#406); the renderer clamps it to 160–320. */
   readonly railAncho?: number;
+  /** Height of the Simulate dock in px (#394); the renderer clamps it to 120–640. */
+  readonly dockAlto?: number;
   /** Settings → General → «Advanced» (#447): BPMN ids shown next to names. Absent means off. */
   readonly avanzado?: boolean;
   /**
@@ -221,14 +223,18 @@ export interface Ajustes {
    * `sessionState.ts` and its `node:` imports in.
    */
   readonly ventanaEscenario?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  /** Same, for the detached Results window (#395). */
+  readonly ventanaResultados?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 }
 
-/** Visibility of the four hideable regions of one mode (#412). */
+/** Visibility of the hideable regions of one mode (#412, the dock since #394). */
 export interface VisibilidadPaneles {
   readonly izquierda?: boolean;
   readonly derecha?: boolean;
   readonly diagramas?: boolean;
   readonly estado?: boolean;
+  /** The Simulate dock under the canvas (#394); only Simulate draws it. */
+  readonly dock?: boolean;
 }
 
 /**

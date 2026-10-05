@@ -50,7 +50,8 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
 6. **Abre un ejemplo.** En **Ejemplos**, pulsa **Pedido de restaurante**. Se abre un diagrama con dos
    escenarios listos para correr.
 7. **Corre una simulación.** Pulsa **Simular** en la barra superior y luego **Ejecutar simulación**.
-   La app pasa a **Resultados** y muestra las tablas. Después expórtalas: pulsa **Exportar XLSX**,
+   Te quedas en Simular y el dock bajo el lienzo muestra los resultados rápidos. Pulsa **Abrir en
+   Resultados** para ver las tablas completas y expórtalas: pulsa **Exportar XLSX**,
    elige dónde guardar y abre el archivo en Excel. Comprueba que abre y tiene varias hojas con números.
 8. **Exporta el documento del proceso.** Elige **Archivo ▸ Exportar documento del proceso (Word)…**,
    guarda el archivo y ábrelo en Word. Comprueba que tiene portada, el diagrama y una sección por

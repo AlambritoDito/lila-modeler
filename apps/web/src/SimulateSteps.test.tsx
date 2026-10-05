@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * #333 — the Simulate panel as Bizagi's four levels: one step at a time.
+ * #333/#396 — the Simulate panel as four steps (Parameters, Resources, Calendars, Arrivals): one
+ * step at a time.
  *
  * What this suite pins is the promise of `docs/COMING-FROM-BIZAGI.md`: each step shows its own
  * parameters and only those, the step you are on survives picking elements on the canvas, and
@@ -21,6 +22,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { ProcessIR } from '@lila-modeler/engine';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 
+import { PASO_IDS, type PasoId } from './ids';
 import { ScenarioPanel } from './ScenarioPanel.js';
 import { setLocale } from './i18n';
 import { en } from './strings.en';
@@ -81,12 +83,20 @@ function pulsar(texto: string): void {
   });
 }
 
-function irAPaso(paso: 'validation' | 'times' | 'resources' | 'calendars'): void {
+function irAPaso(paso: PasoId): void {
   pulsar(en.escenario.paso[paso]!);
 }
 
 function hay(id: string): boolean {
   return document.getElementById(id) !== null;
+}
+
+/**
+ * The section titles drawn now. Since #396 a step is named like its main section («Resources»,
+ * «Calendars»), so the panel's whole text always contains both through the step bar.
+ */
+function secciones(): string[] {
+  return [...document.querySelectorAll('.escenario details > summary')].map((s) => s.textContent ?? '');
 }
 
 /** Texto del panel entero: lo que se ve, con las secciones de otros pasos ya fuera del DOM. */
@@ -151,34 +161,40 @@ function asIs(): Json {
  * ------------------------------------------------------------------ */
 
 describe('los cuatro pasos del panel de simulación', () => {
-  it('abre en el paso 1: la corrida y la validación, sin calendarios ni pools', () => {
+  it('abre en Parámetros: la corrida y la validación, sin calendarios ni pools', () => {
     montar(<Anfitrion inicial={asIs()} />);
 
-    expect(boton(en.escenario.paso['validation']!).getAttribute('aria-pressed')).toBe('true');
-    expect(boton(en.escenario.paso['validation']!).getAttribute('aria-current')).toBe('step');
+    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-pressed')).toBe('true');
+    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-current')).toBe('step');
     expect(boton(en.escenario.paso['calendars']!).getAttribute('aria-pressed')).toBe('false');
 
-    // La corrida entera es del paso 1 (R8 incluido), y la lista de validación vive con ella.
+    // La corrida entera es de Parámetros (R8 incluido), réplicas y semilla con ella.
     expect(hay('campo-run.duration')).toBe(true);
     expect(hay('campo-run.replications')).toBe(true);
     expect(hay('campo-run.start')).toBe(true);
     // #360: this fully configured fixture has no actionable lint warnings.
     expect(texto()).not.toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
 
-    // Y nada de los pasos 3 y 4: no plegado, fuera del DOM.
-    expect(texto()).not.toContain(en.escenario.seccionCalendarios);
-    expect(texto()).not.toContain(en.escenario.seccionRecursos);
+    // Y nada de Recursos ni Calendarios: no plegado, fuera del DOM.
+    expect(secciones()).not.toContain(en.escenario.seccionCalendarios);
+    expect(secciones()).not.toContain(en.escenario.seccionRecursos);
     expect(hay('campo-resources.executive.capacity')).toBe(false);
     expect(hay('campo-calendars.tienda.intervals[0].from')).toBe(false);
   });
 
-  it('el paso 3 trae los pools y la acción de carril, y ya no la corrida', () => {
+  it('the step bar reads Parameters, Resources, Calendars, Arrivals, in that order (#396)', () => {
+    montar(<Anfitrion inicial={asIs()} />);
+    const rotulos = [...document.querySelectorAll('nav.pasos button')].map((b) => b.textContent);
+    expect(rotulos).toEqual(['Parameters', 'Resources', 'Calendars', 'Arrivals']);
+  });
+
+  it('Recursos trae los pools y la acción de carril, y ya no la corrida', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('resources');
 
-    expect(texto()).toContain(en.escenario.seccionRecursos);
+    expect(secciones()).toContain(en.escenario.seccionRecursos);
     expect(hay('campo-resources.executive.capacity')).toBe(true);
-    // La acción «asignar carril a pool» (#334) es del paso 3, con los pools.
+    // La acción «asignar carril a pool» (#334) va con los pools.
     expect(document.querySelector('.carril-a-pool')).not.toBeNull();
     expect(boton(en.escenario.carrilAsignar)).toBeInstanceOf(HTMLButtonElement);
 
@@ -186,37 +202,53 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(hay('campo-run.duration')).toBe(false);
   });
 
-  it('el paso 4 trae la rejilla de calendarios', () => {
+  it('Calendarios trae la rejilla y ya no repite los pools: dice dónde están (#396)', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('calendars');
 
-    expect(texto()).toContain(en.escenario.seccionCalendarios);
+    expect(secciones()).toContain(en.escenario.seccionCalendarios);
     expect(document.querySelector('.calendario')).not.toBeNull();
     expect(hay('campo-run.duration')).toBe(false);
+    // Each control lives in exactly one step: the pool editor is in Resources only.
+    expect(hay('campo-resources.executive.capacity')).toBe(false);
+    expect(document.querySelector('.carril-a-pool')).toBeNull();
+    expect(texto()).toContain(en.escenario.calendariosDePools);
+    pulsar(en.escenario.irARecursos);
+    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    expect(hay('campo-resources.executive.capacity')).toBe(true);
   });
 
-  it('una tarea en el paso 2 enseña su tiempo y no sus recursos', () => {
+  it('una tarea en Parámetros enseña su tiempo y no sus recursos', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    irAPaso('times');
     seleccionar('Task_RegisterRequest');
 
     expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(true);
     expect(hay('campo-elements.Task_RegisterRequest.resources[0].ref')).toBe(false);
     expect(hay('campo-elements.Task_RegisterRequest.calendar')).toBe(false);
 
-    // Y en el paso 3, al revés: los mismos datos, la otra mitad de la ficha.
+    // Y en Recursos, al revés: los mismos datos, la otra mitad de la ficha.
     irAPaso('resources');
     expect(hay('campo-elements.Task_RegisterRequest.resources[0].ref')).toBe(true);
     expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(false);
   });
 
-  it('las probabilidades de una compuerta son del paso 1', () => {
+  it('un evento de inicio enseña sus dos llegadas en Llegadas y nada en Parámetros', () => {
+    montar(<Anfitrion inicial={asIs()} />);
+    seleccionar('StartEvent_Request');
+    expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(false);
+
+    irAPaso('arrivals');
+    expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
+    expect(texto()).toContain(en.escenario.listaLlegadas);
+  });
+
+  it('las probabilidades de una compuerta son de Parámetros', () => {
     montar(<Anfitrion inicial={asIs()} />);
     seleccionar('Gateway_Screening');
     expect(texto()).toContain(en.escenario.seccionCompuerta);
     expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
 
-    irAPaso('times');
+    irAPaso('resources');
     expect(texto()).not.toContain(en.escenario.seccionCompuerta);
   });
 });
@@ -225,18 +257,58 @@ describe('los cuatro pasos del panel de simulación', () => {
  * 2 — El paso no se pierde por el camino
  * ------------------------------------------------------------------ */
 
+describe('a step asked for from outside (#396 «Edit in …»)', () => {
+  function Pedido({ montado }: { montado: boolean }): React.JSX.Element {
+    const [pedido, setPedido] = useState<PasoId | null>(null);
+    return (
+      <>
+        <button type="button" onClick={() => { setPedido('resources'); }}>ask:resources</button>
+        {montado && (
+          <ScenarioPanel
+            archivo={ARCHIVO}
+            escenarios={{ [ARCHIVO]: asIs() }}
+            onCambio={() => {}}
+            onGuardar={() => {}}
+            onDuplicar={() => {}}
+            ir={ir}
+            seleccion={null}
+            onSeleccionar={() => {}}
+            pasoPedido={pedido}
+            onPasoAtendido={() => { setPedido(null); }}
+          />
+        )}
+      </>
+    );
+  }
+
+  it('opens that step once, and twice in a row; a remount afterwards opens on Parameters again', () => {
+    montar(<Pedido montado />);
+    pulsar('ask:resources');
+    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    irAPaso('arrivals');
+    pulsar('ask:resources');
+    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+
+    // Detaching or switching tabs remounts the panel: the ask was consumed, it does not come back.
+    // Same root, so the host keeps its state: only the panel unmounts and mounts again.
+    act(() => { raiz!.render(<Pedido montado={false} />); });
+    act(() => { raiz!.render(<Pedido montado />); });
+    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('el paso elegido sobrevive', () => {
-  it('seleccionar un elemento tras otro no devuelve el panel al paso 1', () => {
+  it('seleccionar un elemento tras otro no devuelve el panel al primer paso', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    irAPaso('times');
+    irAPaso('arrivals');
 
     for (const id of ['Task_RegisterRequest', 'Task_PrepareService', 'StartEvent_Request']) {
       seleccionar(id);
-      expect(boton(en.escenario.paso['times']!).getAttribute('aria-pressed')).toBe('true');
+      expect(boton(en.escenario.paso['arrivals']!).getAttribute('aria-pressed')).toBe('true');
     }
-    // El campo que se ve sigue siendo el del paso 2, no el del elemento entero.
+    // El campo que se ve sigue siendo el del paso, no el del elemento entero.
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
-    expect(hay('campo-elements.StartEvent_Request.triggerCount')).toBe(false);
+    expect(hay('campo-elements.StartEvent_Request.calendar')).toBe(false);
   });
 
   it('an actionable lint warning shows the validation list in every step (#360)', () => {
@@ -245,7 +317,7 @@ describe('el paso elegido sobrevive', () => {
     const elementos = { ...(escenario['elements'] as Json) };
     delete elementos['Task_PrepareService'];
     montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
-    for (const paso of ['validation', 'times', 'resources', 'calendars'] as const) {
+    for (const paso of PASO_IDS) {
       irAPaso(paso);
       expect(texto()).toContain(en.escenario.seccionValidacion(0));
     }
@@ -253,7 +325,7 @@ describe('el paso elegido sobrevive', () => {
 
   it('el JSON avanzado está en los cuatro pasos', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    for (const paso of ['validation', 'times', 'resources', 'calendars'] as const) {
+    for (const paso of PASO_IDS) {
       irAPaso(paso);
       expect(texto()).toContain(en.escenario.seccionJson);
     }
@@ -265,7 +337,7 @@ describe('el paso elegido sobrevive', () => {
  * ------------------------------------------------------------------ */
 
 describe('la lista de elementos del paso', () => {
-  it('el paso 2 resume el tiempo de cada elemento, y «—» el que no tiene', () => {
+  it('Parámetros resume el tiempo de cada actividad, y «—» la que no tiene', () => {
     // El AS-IS sin el tiempo de una tarea: es exactamente lo que la lista tiene que delatar.
     const escenario = asIs();
     const elementos = { ...(escenario['elements'] as Json) };
@@ -273,7 +345,6 @@ describe('la lista de elementos del paso', () => {
     delete sinTiempo['processingTime'];
     elementos['Task_PrepareService'] = sinTiempo;
     montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
-    irAPaso('times');
 
     // Rows are found by their `data-id` (#447): the visible text is the element's name.
     const fila = (id: string): string =>

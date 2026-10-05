@@ -154,6 +154,12 @@ export const en = {
     ventanaBloqueada: 'The browser blocked the scenario window. Allow pop-ups for this site to detach it.',
     acercaBloqueada: 'The About window was blocked; allow pop-ups for this site.',
     tituloVentanaEscenario: (nombre: string): string => `Scenario ${nombre} — Lila Modeler`,
+    /** Detachable Results window (#395): same toggle and stand-in as the scenario's. */
+    resultadosAcoplados: 'Results docked ↗',
+    resultadosDesacoplados: 'Results in their own window',
+    resultadosEnVentana: 'Results in another window ↗',
+    resultadosBloqueada: 'The browser blocked the Results window. Allow pop-ups for this site to detach it.',
+    tituloVentanaResultados: 'Results — Lila Modeler',
 
     /** Canvas zoom controls. */
     acercar: 'Zoom in',
@@ -240,12 +246,14 @@ export const en = {
       derecha: 'Right panel',
       diagramas: 'Diagram tabs',
       estado: 'Status bar',
+      dock: 'Simulation dock',
     },
     tituloRegiones: {
       izquierda: 'Show or hide the left column',
       derecha: 'Show or hide the right panel',
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
+      dock: 'Show or hide the simulation dock',
     },
     /** The status bar toggle while an error keeps the bar on screen (#412). */
     tituloEstadoForzado: 'Show or hide the status bar — it stays while it shows an error',
@@ -650,6 +658,16 @@ export const en = {
    * Properties and documentation panel (`PropertiesPanel.tsx`)
    * ------------------------------------------------------------------ */
   propiedades: {
+    /* #396: «Quick view · simulation» under the selected element's header. */
+    vistaRapida: 'Quick view · simulation',
+    vistaTiempo: 'Time',
+    vistaRecurso: 'Resource',
+    vistaEsperaP95: 'Resource wait p95',
+    vistaEsperaMedia: 'Resource wait (mean)',
+    vistaSinCorrida: 'no run',
+    editarEnParametros: 'Edit in Parameters',
+    editarEnRecursos: 'Edit in Resources',
+
     sinSeleccion: 'Select an element of the canvas to see its properties.',
     variosSeleccionados: (n: number): string =>
       `${n} elements selected. Colour applies to all of them; ` +
@@ -802,28 +820,35 @@ export const en = {
       `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
-     * #333 — the four steps of the Simulate panel, which are Bizagi's four levels of simulation
-     * in the same order. The number is part of the label on purpose: it is the number the Bizagi
-     * documentation, this guide and the people who ask for help all use.
+     * #333/#396 — the four steps of the Simulate panel, named after what each one edits (the
+     * design's labels). `docs/COMING-FROM-BIZAGI.md` maps them to Bizagi's four levels.
      */
     pasos: 'Steps',
     paso: {
-      validation: '1 · Process validation',
-      times: '2 · Time analysis',
-      resources: '3 · Resource analysis',
-      calendars: '4 · Calendar analysis',
+      parameters: 'Parameters',
+      resources: 'Resources',
+      calendars: 'Calendars',
+      arrivals: 'Arrivals',
     } as Record<string, string>,
     pasoAyuda: {
-      validation:
-        'Check the model runs: the run window, how many cases arrive and how the gateways branch.',
-      times: 'How long each arrival and each piece of work takes.',
-      resources: 'Who does the work: pools, how many units, and which task takes which pool.',
-      calendars: 'When the work is possible: calendars and holidays, and the capacity of each shift.',
+      parameters:
+        'How the model runs: the run window and replications, how the gateways branch and how long each activity takes.',
+      resources:
+        'Who does the work: pools, how many units, when each pool works (its calendar and capacity per shift), and which task takes which pool.',
+      calendars: 'When the work is possible: calendars and holidays, and which element follows which calendar.',
+      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
     } as Record<string, string>,
 
-    /** Element list of steps 2 and 3: what is already parameterised and what is still missing. */
+    /** Element lists of the steps: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
     listaRecursos: 'Resources by element',
+    listaLlegadas: 'Arrivals by start event',
+    /** «every 5 min · 100 cases»: the arrival line of one start event in the Arrivals list. */
+    resumenLlegada: (cada: string, casos: number | null): string =>
+      casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
+    /** #396: Calendars no longer repeats the pools; this says where a pool's calendar went. */
+    calendariosDePools: "A pool's calendar and its capacity per shift are edited on the pool, in Resources.",
+    irARecursos: 'Go to Resources',
     /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
     huerfanas: 'Entries for elements that are no longer in the diagram',
     quitarHuerfanas: 'Remove orphan entries',
@@ -1215,6 +1240,63 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Simulate dock under the canvas (#394, `DockSimular.tsx`)
+   * ------------------------------------------------------------------ */
+  dock: {
+    region: 'Simulation dock',
+    /** The tablist's own name, so it is not read as the region twice. */
+    vistas: 'Simulation dock views',
+    /** Announced (role=status) when a run lands in the dock. */
+    corridaTerminada: (casos: string): string => `Run finished: ${casos} completed cases.`,
+    pestanas: { rapidos: 'Quick results', cuellos: 'Bottlenecks', log: 'Run log', avisos: 'Warnings' },
+    abrirResultados: 'Open in Results',
+    exportarCsv: 'Export CSV',
+    tituloExportar: 'Download the process elements table (elements.csv)',
+    vacio: 'Run the scenario to see its quick results, bottlenecks and run log here.',
+    ejecutar: 'Run simulation',
+    redimensionar: 'Resize the simulation dock',
+    kpis: {
+      completados: 'Completed cases',
+      cicloMedio: 'Average cycle time',
+      throughput: 'Throughput per hour',
+      costoTotal: 'Total cost',
+      cuello: 'Main bottleneck',
+    },
+    columnas: {
+      actividad: 'Activity',
+      casos: 'Cases',
+      esperaMedia: (unidad: string): string => `Resource wait, mean (${unidad})`,
+      esperaP95: (unidad: string): string => `Resource wait p95 (${unidad})`,
+      utilizacion: 'Utilization (%)',
+      utilizacionTitulo: 'Utilization of the busiest pool the activity used',
+      costo: 'Total fixed cost',
+    },
+    total: 'Total',
+    /** Under the quick results table: where the per-task percentiles come from. */
+    /** Under the quick results table (QA of #394): the two wait columns cover different populations. */
+    notaPercentiles: (filas: number): string =>
+      `Mean: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
+    muestraParcial: (filas: number): string => `The wait is the mean over every replication. There is no p95: the run’s log sample stopped at ${filas} rows and would only cover its first cases.`,
+    /** «Warnings» grouped by code: the disclosure with the other occurrences. */
+    ocurrencias: (n: number): string => `${n} occurrences`,
+    notaSinLog: 'The wait is the mean over every replication. There is no p95: this run has no event log in memory (run it again to see it).',
+    sinLog: 'This run has no event log in memory (it was reopened from a file): run it again to see it.',
+    logTruncado: (n: number): string => `The log sample stopped at ${n} rows: later events are not in it.`,
+    logMostrando: (mostradas: number, total: number): string => `Showing the first ${mostradas} of ${total} rows.`,
+    log: {
+      caso: 'Case',
+      elemento: 'Element',
+      recurso: 'Resource',
+      habilitada: (unidad: string): string => `Enabled (${unidad})`,
+      inicio: (unidad: string): string => `Started (${unidad})`,
+      fin: (unidad: string): string => `Ended (${unidad})`,
+      espera: (unidad: string): string => `Wait (${unidad})`,
+      costo: 'Cost',
+    },
+    sinAvisos: 'No warnings for this run or this scenario.',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Comparison view (`CompareView.tsx`, `compareWarnings.ts`)
    * ------------------------------------------------------------------ */
   comparar: {
@@ -1548,6 +1630,7 @@ export const en = {
     estado: 'Show or hide the status bar',
     irModos: 'Move the focus to the modes',
     irPanel: 'Move the focus to the right panel',
+    dock: 'Show or hide the simulation dock',
   },
 
   /* ------------------------------------------------------------------ *

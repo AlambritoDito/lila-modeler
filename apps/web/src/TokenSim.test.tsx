@@ -16,11 +16,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 // se copian sus nombres) para que la prueba se entere si el módulo los renombra.
 import NeutralElementColorsModule from 'bpmn-js-token-simulation/lib/features/neutral-element-colors';
 import SimulationStylesModule from 'bpmn-js-token-simulation/lib/features/simulation-styles';
+import KeyboardBindingsModule from 'bpmn-js-token-simulation/lib/features/keyboard-bindings';
+import EventBus from 'diagram-js/lib/core/EventBus';
+import Keyboard from 'diagram-js/lib/features/keyboard/Keyboard';
 
 import {
   ColoresNeutrosDelTema,
   EstilosDelTema,
   moduloColoresDelTema,
+  moduloSinTeclaT,
   observarSimulacion,
   traducirSimulacion,
   traducirTexto,
@@ -299,5 +303,51 @@ describe('«Validar rutas»: el diagrama conserva los colores del tema (#264)', 
     expect(modulos.indexOf('moduloColoresDelTema')).toBeGreaterThan(modulos.indexOf('tokenSimulationModule'));
     // Y las dos claves que sustituye siguen siendo las que el módulo de la librería declara.
     expect(Object.keys(moduloColoresDelTema).sort()).toEqual(['neutralElementColors', 'simulationStyles']);
+  });
+});
+
+describe('the library T key (#506)', () => {
+  /** diagram-js's real `eventBus` and `keyboard`, the library's real bindings, and an `editorActions` that records. */
+  function teclado(conGuardia: boolean) {
+    const acciones: string[] = [];
+    const injector = new Injector([
+      { eventBus: ['type', EventBus], keyboard: ['type', Keyboard], config: ['value', {}], 'config.keyboard': ['value', {}] } as never,
+      { editorActions: ['value', { trigger: (accion: string) => acciones.push(accion) }] } as never,
+      KeyboardBindingsModule as never,
+      ...(conGuardia ? [moduloSinTeclaT as never] : []),
+    ]);
+    injector.get('tokenSimulationKeyboardBindings');
+    if (conGuardia) injector.get('sinTeclaT');
+    const bus = injector.get<EventBus>('eventBus');
+    const kb = injector.get<Keyboard>('keyboard');
+    bus.fire('keyboard.init', { keyboard: kb });
+    const pulsar = (key: string): void => {
+      (kb as unknown as { _keyHandler(e: KeyboardEvent): void })._keyHandler(new KeyboardEvent('keydown', { key }));
+    };
+    return { acciones, bus, pulsar };
+  }
+
+  it('without the guard, a plain T toggles the token simulation (the bug)', () => {
+    const { acciones, pulsar } = teclado(false);
+    pulsar('t');
+    expect(acciones).toEqual(['toggleTokenSimulation']);
+  });
+
+  it('with the guard, t and T never reach the library, and its L/Space/R still work while it is on', () => {
+    const { acciones, bus, pulsar } = teclado(true);
+    pulsar('t');
+    pulsar('T');
+    expect(acciones).toEqual([]);
+    bus.fire('tokenSimulation.toggleMode', { active: true });
+    pulsar('t');
+    pulsar('r');
+    expect(acciones).toEqual(['resetTokenSimulation']);
+  });
+
+  it('Modeler.tsx registers the guard after the library', () => {
+    const ruta = './Modeler.tsx';
+    const fuente = readFileSync(new URL(ruta, import.meta.url), 'utf8');
+    const lista = fuente.match(/additionalModules:\s*\[[^\]]*\]/)![0];
+    expect(lista.indexOf('moduloSinTeclaT')).toBeGreaterThan(lista.indexOf('tokenSimulationModule'));
   });
 });

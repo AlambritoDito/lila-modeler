@@ -101,32 +101,33 @@ describe('unidad de presentación (R1, R2)', () => {
   });
 });
 
-/** Los reservados de § 4 salen en el paso 1 de cualquier clase (se dibujan solo si están). */
+/** Los reservados de § 4 salen en Parámetros para cualquier clase (se dibujan solo si están). */
 const RESERVADOS = ['priority', 'preempt', 'batch', 'conditions'];
 
 function sinReservados(campos: readonly string[]): readonly string[] {
   return campos.filter((campo) => !RESERVADOS.includes(campo));
 }
 
-describe('fieldsForStep (#333: los cuatro niveles de Bizagi como cuatro pasos)', () => {
-  it('una tarea enseña su tiempo en el paso 2 y sus recursos en el 3, nunca a la vez', () => {
-    expect(fieldsForStep('times', 'task')).toEqual(['processingTime']);
+describe('fieldsForStep (#333/#396: Parámetros, Recursos, Calendarios, Llegadas)', () => {
+  it('una tarea enseña su tiempo en Parámetros y sus recursos en Recursos, nunca a la vez', () => {
+    expect(sinReservados(fieldsForStep('parameters', 'task'))).toEqual(['processingTime']);
     expect(fieldsForStep('resources', 'task')).toEqual(['resources', 'selection', 'fixedCost']);
-    expect(fieldsForStep('times', 'task')).not.toContain('resources');
+    expect(fieldsForStep('parameters', 'task')).not.toContain('resources');
     expect(fieldsForStep('resources', 'task')).not.toContain('processingTime');
     expect(fieldsForStep('calendars', 'task')).toEqual(['calendar']);
+    expect(fieldsForStep('arrivals', 'task')).toEqual([]);
   });
 
-  it('las dos llegadas de un inicio se reparten: cuántas en el paso 1, cada cuánto en el 2', () => {
-    expect(sinReservados(fieldsForStep('validation', 'start'))).toEqual(['triggerCount']);
-    expect(fieldsForStep('times', 'start')).toEqual(['interTriggerTimer']);
+  it('las dos llegadas de un inicio van juntas al paso Llegadas', () => {
+    expect(fieldsForStep('arrivals', 'start')).toEqual(['interTriggerTimer', 'triggerCount']);
+    expect(sinReservados(fieldsForStep('parameters', 'start'))).toEqual([]);
   });
 
-  it('un flujo lleva su probabilidad al paso 1, que es donde se valida el reparto', () => {
+  it('un flujo lleva su probabilidad a Parámetros, junto con las ramas de la compuerta', () => {
     // `conditions` va al mismo paso: también decide el reparto (ADR-028).
-    expect(sinReservados(fieldsForStep('validation', 'flow'))).toEqual(['probability']);
-    expect(fieldsForStep('validation', 'flow')).toContain('conditions');
-    for (const paso of ['times', 'resources', 'calendars'] as const) {
+    expect(sinReservados(fieldsForStep('parameters', 'flow'))).toEqual(['probability']);
+    expect(fieldsForStep('parameters', 'flow')).toContain('conditions');
+    for (const paso of ['resources', 'calendars', 'arrivals'] as const) {
       expect(fieldsForStep(paso, 'flow')).toEqual([]);
     }
   });
@@ -143,7 +144,7 @@ describe('fieldsForStep (#333: los cuatro niveles de Bizagi como cuatro pasos)',
     // No los declara ninguna clase, así que sin la excepción se volverían invisibles: un
     // `priority` heredado se quedaría escrito para siempre, con su error y sin botón.
     for (const reservado of RESERVADOS) {
-      expect(fieldsForStep('validation', 'task')).toContain(reservado);
+      expect(fieldsForStep('parameters', 'task')).toContain(reservado);
     }
   });
 

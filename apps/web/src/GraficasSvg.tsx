@@ -53,13 +53,16 @@ export function useAncho(): [RefObject<HTMLDivElement | null>, number] {
   const [ancho, setAncho] = useState(ANCHO_POR_DEFECTO);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el === null || typeof ResizeObserver === 'undefined') return undefined;
+    // The observer of the element's own window: one from the main window never fires for an
+    // element portalled into the detached Results window (#395).
+    const Observador = el?.ownerDocument.defaultView?.ResizeObserver;
+    if (el === null || Observador === undefined) return undefined;
     const medir = (): void => {
       const w = Math.floor(el.clientWidth);
       if (w > 0) setAncho(w);
     };
     medir();
-    const observador = new ResizeObserver(medir);
+    const observador = new Observador(medir);
     observador.observe(el);
     return () => observador.disconnect();
   }, []);

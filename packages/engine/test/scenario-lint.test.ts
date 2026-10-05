@@ -465,6 +465,22 @@ describe('R16 — `capacity` por intervalos (LILA-164)', () => {
     expect(error?.code).toBe('E-REC-CANTIDAD');
     expect(error?.message).toMatch(/exceeds the capacity 3/);
   });
+
+  test('E-REC-CANTIDAD names the resource by its name and id, and by its id alone when it has no name (#537)', () => {
+    const mensaje = (name?: string) =>
+      scenarioErrors(
+        validateScenario(
+          ScenarioSchema.parse({
+            ...BASE,
+            resources: { asesor: { capacity: 1, ...(name === undefined ? {} : { name }) } },
+            elements: { Task_R: { resources: [{ ref: 'asesor', quantity: 2 }] } },
+          }),
+          pedidoIrWithTask('Task_R'),
+        ),
+      ).find((e) => e.code === 'E-REC-CANTIDAD')?.message;
+    expect(mensaje('Asesor')).toMatch(/of Asesor \(asesor\) \(elements\.Task_R\.resources\[0\]\.quantity\)/);
+    expect(mensaje()).toMatch(/of asesor \(/);
+  });
 });
 
 describe('run.start — hora y offset inexistentes (QA LILA-042)', () => {

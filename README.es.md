@@ -32,8 +32,8 @@ proyecto que se mantiene estable.
 ## Funciones
 
 - **Seis modos en una ventana** — Modelar, Simular, Resultados, Comparar, Animar y Validar rutas.
-- **Simular en cuatro pasos** — validación del proceso, análisis de tiempos, de recursos y de
-  calendarios: los cuatro niveles de Bizagi, en el mismo orden y con el mismo vocabulario.
+- **Simular en cuatro pasos** — Parámetros, Recursos, Calendarios y Llegadas, que cubren los
+  cuatro niveles de Bizagi (validación, tiempos, recursos, calendarios) sin interruptor de nivel.
 - **Distribuciones** — las 13 de BPSim 2.0 (incluida la empírica) más la constante.
 - **Replicaciones con intervalo de confianza del 95 %**, siempre; con semilla, las corridas son
   deterministas byte a byte.
@@ -192,7 +192,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 
 | Capacidad | Bizagi Modeler | Lila Modeler |
 |---|---|---|
-| Cuatro niveles: validación, tiempos, recursos, calendarios | ✓ | ✓ como los cuatro pasos de Simular; sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7 |
+| Cuatro niveles: validación, tiempos, recursos, calendarios | ✓ | ✓ como los cuatro pasos de Simular (Parámetros, Recursos, Calendarios, Llegadas); sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7 |
 | Distribuciones | subconjunto no documentado | las 13 de BPSim 2.0 (incl. empírica) + constante |
 | Replicaciones y determinismo | replicaciones solo en what-if; semilla parcial | siempre, con IC 95 %; determinista byte a byte |
 | Comparación what-if | ✓ | ✓ modo Comparar y `lila compare`, con deltas y marca de significancia |

@@ -59,7 +59,10 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // #453: how many shapes the selection has to align, what was asked, and the selection listener.
   alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {},
   // #461: the canvas double-click listener, to play a double-click on a call activity.
-  dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown }));
+  dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown,
+  // #394: the last props the Simulate dock received (its real rendering is `DockSimular.test.tsx`).
+  dock: null as null | { pestana: string; corrida: { result: { warnings: string[]; bottlenecks: { elementId: string }[] } } | null;
+    onPestana: (p: string) => void; onSeleccionar: (id: string) => void } }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -84,6 +87,17 @@ vi.mock('./exportarDiagrama', async (real) => ({ ...(await real<object>()), impr
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
+// The dock reads a full `RunResult`; this suite's runs are stubs, so it is a marker with its two
+// callbacks the shell wires (open Results, pick a bottleneck).
+vi.mock('./DockSimular', () => ({ DockSimular: (props: NonNullable<typeof mocks.dock> & { id: string; onAbrirResultados: () => void }) => {
+  mocks.dock = props;
+  return (
+    <section id={props.id} data-mock="dock" data-pestana={props.pestana}>
+      Dock {props.corrida === null ? 'vacío' : `con corrida ${props.corrida.result.warnings.join(' ')}`}
+      <button type="button" onClick={props.onAbrirResultados}>{T.dock.abrirResultados}</button>
+    </section>
+  );
+} }));
 vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
 // Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
 vi.mock('./replay/Replay', () => ({ Replay: () => null }));
@@ -157,6 +171,7 @@ beforeEach(async () => {
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   mocks.seleccionados = [];
+  mocks.dock = null;
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   // LILA-381: «Acerca de» cierra Ajustes con `close()` antes de abrir su propio diálogo; jsdom no
   // implementa ese método tampoco (mismo motivo que `showModal` arriba).
@@ -181,15 +196,26 @@ beforeEach(async () => {
   await click(T.app.modos.simular);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
-it('valida antes del Worker y abre Resultados con avisos preservados', async () => {
+/** The Simulate dock marker (#394), or `null` when it is not drawn. */
+const dock = () => container.querySelector<HTMLElement>('[data-mock="dock"]');
+it('valida antes del Worker; la corrida se queda en Simular con el dock en Resultados rápidos y los avisos preservados (#394)', async () => {
   // The startup reparse (150 ms) settles and rewrites `ir`/`noSoportados` on its own timer; wait
   // it out before running, same fix as «abrir un .bpmn inválido...» below (#494): under CI load
   // it could land mid-assertion instead of before the click and fail only there.
   await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
-  expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
+  // #394, the owner's decision: no jump to Results any more.
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(dock()!.dataset['pestana']).toBe('rapidos');
+  expect(dock()!.textContent).toContain('con corrida W-FRONTERA W-MOTOR');
   expect(container.textContent).toContain('Modelo montado');
+  // «Open in Results» shows the same run, warnings included.
+  await click(T.dock.abrirResultados);
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.resultados);
+  expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
+  // The pressed button went away with Simulate: the focus lands on the Results view, not <body>.
+  expect(document.activeElement).toBe(container.querySelector('section.zona-resultados'));
 });
 it('un error de validación impide iniciar Worker', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
@@ -215,6 +241,7 @@ it.each(['modelo', 'escenario'])('editar %s aborta y descarta resultado y progre
   expect(options.signal.aborted).toBe(true);
   await act(async () => { options.onProgress({ fraction: 1, replication: 1 }); run.resolve(done); });
   expect(container.textContent).not.toContain('Resultado actual');
+  expect(dock()!.textContent).toContain('Dock vacío');
   expect(container.querySelector('.progreso')).toBeNull();
 });
 it('desmontar termina la corrida activa', async () => {
@@ -1396,6 +1423,16 @@ it('«+» crea un segundo proceso en el mismo proyecto y cada pestaña trae su d
   expect(decodeLila(encodeLila(guardado))).toEqual(guardado);
 });
 
+it('with several processes the top bar names the process on the canvas, not model.bpmn (#537)', async () => {
+  lienzoQueRecuerda();
+  const rotulo = () => container.querySelector('header.barra .archivo')!.firstChild!.textContent;
+  expect(rotulo()).toBe('model.bpmn');
+  await nuevoProcesoConNombre('Facturación');
+  expect(rotulo()).toBe('Facturación');
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(rotulo()).toBe(T.app.proyectoDemo);
+});
+
 it('un proceso se renombra y se borra con confirmación; el último no se puede borrar', async () => {
   const lienzo = lienzoQueRecuerda();
   const primero = lienzo.xml();
@@ -1469,6 +1506,8 @@ it('a second process document export while one is running is refused with a noti
   await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalled());
   await act(async () => {});
   expect(mocks.descargar.mock.calls.map((c) => c[1])).toEqual([`${T.app.proyectoDemo}.docx`]);
+  // The notice goes with the export it was about, not with the next action (#537).
+  expect(container.querySelector('footer.estado [role="alert"].error')).toBeNull();
   // Once it is done, the next export goes through and the notice goes away.
   await act(async () => ejecutarArchivo(T.app.exportarHtml));
   await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledTimes(2));
@@ -1696,11 +1735,15 @@ it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de
 // --- Barra superior y barra de estado como el artboard 01 (#237) ---
 
 it('la barra tiene una sola acción primaria y corre el escenario desde cualquier modo', async () => {
+  // Same wait as «valida antes del Worker…» (#494): the 150 ms startup reparse would make the run stale.
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.modos.modelar);
   expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
-  expect(container.textContent).toContain('Resultado actual');
+  // From Model the run lands in Simulate, where the dock shows it (#394).
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(dock()!.textContent).toContain('con corrida');
 });
 it('mientras simula, la barra enseña la replicación, el porcentaje y CANCELAR', async () => {
   mocks.worker.mockReturnValueOnce(new Promise(() => {}));
@@ -1967,8 +2010,8 @@ it('panel visibility is remembered per mode in lila.paneles and restored, invali
   const guardado = JSON.parse(localStorage.getItem('lila.paneles')!) as Record<string, Record<string, boolean>>;
   // The whole map, every mode.
   expect(Object.keys(guardado)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
-  expect(guardado['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: true });
-  expect(guardado['modelar']).toEqual({ izquierda: true, derecha: true, diagramas: true, estado: false });
+  expect(guardado['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: true, dock: true });
+  expect(guardado['modelar']).toEqual({ izquierda: true, derecha: true, diagramas: true, estado: false, dock: true });
 
   await remontar();
   expect(conClase('sin-estado')).toBe(true);
@@ -2000,7 +2043,7 @@ it('with the desktop bridge the panel map and the left widths go through Ajustes
   const paneles = escrito.filter((a) => 'paneles' in a).at(-1)!['paneles'] as Record<string, Record<string, boolean>>;
   // Always the full map (the bridge merges shallowly), sanitised to the known modes.
   expect(Object.keys(paneles)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
-  expect(paneles['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: false });
+  expect(paneles['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: false, dock: true });
   expect(localStorage.getItem('lila.paneles')).toBeNull();
 });
 
@@ -2923,6 +2966,96 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
   }
 });
 
+it('detaches Results to its own window that follows the current run, and docks it back (#395)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  const zona = (): HTMLElement => container.querySelector('section.zona-resultados')!;
+  const acoplarEnHija = async (): Promise<void> => {
+    const boton = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
+    expect(boton).toBeDefined();
+    await act(async () => {
+      boton!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
+    });
+  };
+  try {
+    // Not in Simulate: the toggle only shows in Results.
+    expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)).toBeNull();
+    // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
+    // it out first, like «valida antes del Worker…» (#494).
+    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+    await click(T.app.ejecutar);
+    // The run stays in Simulate (#394); the dock's «Open in Results» goes there.
+    await click(T.dock.abrirResultados);
+    await vi.waitFor(() => expect(zona().textContent).toContain('Resultado actual W-FRONTERA W-MOTOR'));
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', expect.stringMatching(/popup/));
+    expect(hijo.document.title).toBe(T.app.tituloVentanaResultados);
+    expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
+    expect(zona().textContent).not.toContain('Resultado actual');
+    expect(zona().textContent).toContain(T.app.resultadosEnVentana);
+    expect(porEtiqueta(T.app.resultadosDesacoplados).getAttribute('aria-pressed')).toBe('true');
+
+    // A new run lands in the window.
+    mocks.worker.mockResolvedValueOnce({ result: { warnings: ['W-NUEVA'], bottlenecks: [] }, logSample: [] });
+    await click(T.app.ejecutar);
+    await vi.waitFor(() => expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA'));
+
+    // While detached, the dock's «Open in Results» raises the window and leaves Simulate as it is (#394).
+    const enfocar = vi.spyOn(hijo, 'focus').mockImplementation(() => {});
+    await click(T.app.modos.simular);
+    await click(T.dock.abrirResultados);
+    expect(enfocar).toHaveBeenCalled();
+    expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+    await click(T.app.modos.resultados);
+
+    // «Dock» in the stand-in brings it back and remembers where the window was.
+    await click(T.app.acoplar);
+    expect(cerrar).toHaveBeenCalled();
+    expect(zona().textContent).toContain('Resultado actual');
+    expect(zona().textContent).not.toContain(T.app.resultadosEnVentana);
+    expect(JSON.parse(localStorage.getItem('lila.ventanaResultados')!)).toMatchObject({ width: hijo.innerWidth, height: hijo.innerHeight });
+
+    // The window's own «Dock» button, and closing the window, dock it too.
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    await acoplarEnHija();
+    expect(zona().textContent).toContain('Resultado actual');
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(zona().textContent).toContain(T.app.resultadosEnVentana);
+    await act(async () => { hijo.dispatchEvent(new (hijo as unknown as typeof globalThis).Event('pagehide')); });
+    expect(zona().textContent).toContain('Resultado actual');
+    expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)!.getAttribute('aria-pressed')).toBe('false');
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('reopens the Results window where it was last left (#395)', async () => {
+  localStorage.setItem('lila.ventanaResultados', JSON.stringify({ x: 12, y: 34, width: 640, height: 480 }));
+  await act(async () => { root.unmount(); });
+  root = createRoot(container);
+  await act(async () => { root.render(<App store={session} />); });
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+  try {
+    // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
+    // it out first, like «valida antes del Worker…» (#494).
+    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+    await click(T.app.ejecutar);
+    await click(T.dock.abrirResultados);
+    await vi.waitFor(() => expect(container.querySelector('section.zona-resultados')?.textContent).toContain('Resultado actual'));
+    await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
+    expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', 'popup,width=640,height=480,left=12,top=34');
+    // Blocked: it stays docked and says why.
+    expect(container.textContent).toContain(T.app.resultadosBloqueada);
+    expect(container.querySelector('section.zona-resultados')!.textContent).toContain('Resultado actual');
+  } finally {
+    abrir.mockRestore();
+  }
+});
+
 it('si el navegador bloquea la ventana, el escenario se queda acoplado y lo dice (diseño 2c)', async () => {
   const abrir = vi.spyOn(window, 'open').mockReturnValue(null);
   try {
@@ -3061,6 +3194,27 @@ it('a start and a task drawn on an empty process get the defaults in the BASE sc
   // Undo/delete: the untouched seed (Task_C) goes with its node; the edited entry stays.
   await reparsear(modelo(['Start_A'], []));
   expect(Object.keys(asIs()).sort()).toEqual(['Start_A', 'Task_A', 'Task_B']);
+  // ⌘Z of that delete: Task_C comes back with its seed (#534).
+  await reparsear(modelo(['Start_A', 'Start_B'], ['Task_A', 'Task_B', 'Task_C']));
+  expect(asIs()['Task_C']).toEqual({ processingTime: { type: 'constant', value: 60 } });
+});
+
+it('nodes that come back (⌘Z of a pool delete) are not seeded: the scenario is the one before the delete (#534)', async () => {
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  const xml = modelo(['Start_A'], ['Task_A']);
+  const llegadas = { triggerCount: 5, interTriggerTimer: { type: 'constant', value: 10 } };
+  const doc = { version: 1, id: 'abierto', name: 'Abierto', model: { id: 'Process_semilla', name: 'model.bpmn', xml, revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, model: 'model.bpmn', run: { duration: 60 }, elements: { Start_A: llegadas } } }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc as unknown as ProjectDocument);
+  mocks.exportXml.mockResolvedValue(xml);
+  await click(T.app.abrir);
+  await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
+  await click(T.app.modos.simular);
+  // The first pool deleted: the engine simulates the other one, whose nodes are new.
+  await reparsear(modelo(['Start_Z'], ['Task_Z']));
+  // ⌘Z: the first pool is back, Task_A without a seed it never had, the other pool's seeds gone.
+  await reparsear(xml);
+  expect(asIs()).toEqual({ Start_A: llegadas });
 });
 
 it('a start configured with only an inter-arrival timer counts as the first start (#420)', async () => {
@@ -3091,7 +3245,7 @@ it('Run pressed right after drawing waits for the reparse and the seeding, and k
   expect(mocks.gate).toHaveBeenCalledOnce();
   const escenarios = mocks.gate.mock.calls[0]![2] as typeof mocks.escenarios;
   expect(Object.keys(escenarios['as-is.scenario.json']!.elements ?? {}).sort()).toEqual(['Start_A', 'Task_A']);
-  expect(container.textContent).toContain('Resultado actual');
+  expect(dock()!.textContent).toContain('con corrida');
 });
 
 it('Run with a label being typed commits it first and waits for that edit too (QA S1 of #507, #431)', async () => {
@@ -3105,7 +3259,7 @@ it('Run with a label being typed commits it first and waits for that edit too (Q
   expect(mocks.gate).not.toHaveBeenCalled();
   await act(async () => { await new Promise((r) => setTimeout(r, 200)); });
   expect(mocks.gate).toHaveBeenCalledOnce();
-  expect(container.textContent).toContain('Resultado actual');
+  expect(dock()!.textContent).toContain('con corrida');
 });
 
 it('a failed Run in Animate shows in the status bar (#419)', async () => {
@@ -3483,4 +3637,171 @@ it('the canvas group aligns and distributes when bpmn-js would move something; k
   await abrirConTeclado();
   await escribir(T.atajos.distribuirVertical);
   expect(opciones()).toEqual([]);
+});
+
+// ---------- Simulate dock (#394) ----------
+
+const divisorDock = () => container.querySelector<HTMLElement>('.divisor-dock[role="separator"]')!;
+
+it('a run from Simulate keeps Simulate and reopens the dock on Quick results; Results and Compare stay put (#394)', async () => {
+  // The startup reparse (150 ms) bumps the revision and would make a run stale mid-test: wait it
+  // out first, like «valida antes del Worker…» (#494).
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  // Hide the dock and leave it on another tab: the run brings both back.
+  await act(async () => mocks.dock!.onPestana('log'));
+  expect(await pulsar(document.body, mod('j'))).toBe(true);
+  expect(conClase('sin-dock')).toBe(true);
+  await click(T.app.ejecutar);
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect(conClase('sin-dock')).toBe(false);
+  expect(dock()!.dataset['pestana']).toBe('rapidos');
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!).simular.dock).toBe(true);
+  // Running while looking at Results leaves you there, with the new run.
+  await click(T.app.modos.resultados);
+  await click(T.app.ejecutar);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
+  await vi.waitFor(() => expect(container.textContent).toContain('Resultado actual'));
+});
+
+it('picking a bottleneck in the dock selects and centres it on the canvas (#394)', async () => {
+  mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
+  await click(T.app.ejecutar);
+  await act(async () => mocks.dock!.onSeleccionar(mocks.dock!.corrida!.result.bottlenecks[0]!.elementId));
+  expect(mocks.seleccionar).toHaveBeenCalledWith('Task_Preparar', { centrar: true });
+});
+
+it('the dock divider resizes it by drag and arrows, remembers the height and hides it with Enter (#394)', async () => {
+  const alto = () => appEl().style.getPropertyValue('--dock-alto');
+  expect(alto()).toBe('240px');
+  expect(divisorDock().getAttribute('aria-orientation')).toBe('horizontal');
+  expect(divisorDock().getAttribute('aria-controls')).toBe(dock()!.id);
+  // Dragging up makes it taller; the limits are 120 and the window height minus 360 (jsdom: 768).
+  expect(window.innerHeight).toBe(768);
+  const puntero = (tipo: string, clientY: number) => act(async () => {
+    divisorDock().dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientY, clientX: 5, button: 0 }));
+  });
+  await puntero('pointerdown', 600); await puntero('pointermove', 500);
+  expect(alto()).toBe('340px');
+  await puntero('pointermove', -2000);
+  expect(alto()).toBe('408px');
+  expect(divisorDock().getAttribute('aria-valuemax')).toBe('408');
+  await puntero('pointermove', 2000); await puntero('pointerup', 2000);
+  expect(alto()).toBe('120px');
+  expect(localStorage.getItem('lila.dockAlto')).toBe('120');
+  // ArrowUp moves the divider up: a taller dock, 16 px a step. Left and right do nothing here.
+  expect(await pulsar(divisorDock(), { key: 'ArrowUp' })).toBe(true);
+  expect(alto()).toBe('136px');
+  expect(await pulsar(divisorDock(), { key: 'ArrowLeft' })).toBe(false);
+  expect(localStorage.getItem('lila.dockAlto')).toBe('136');
+  await remontar();
+  expect(alto()).toBe('136px');
+  localStorage.setItem('lila.dockAlto', '5');
+  await remontar();
+  expect(alto()).toBe('120px');
+  // Enter hides it (the divider stays to bring it back) and the choice belongs to Simulate only.
+  await click(T.app.modos.simular);
+  await pulsar(divisorDock(), { key: 'Enter' });
+  expect(conClase('sin-dock')).toBe(true);
+  expect(divisorDock()).not.toBeNull();
+  await act(async () => { divisorDock().dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  expect(conClase('sin-dock')).toBe(false);
+});
+
+it('the dock is remembered per mode: hidden in Simulate stays hidden after a trip to Model, and its tab too (#394)', async () => {
+  await act(async () => mocks.dock!.onPestana('avisos'));
+  await pulsar(document.body, mod('j'));
+  expect(conClase('sin-dock')).toBe(true);
+  await click(T.app.modos.modelar);
+  // Only Simulate draws it.
+  expect(dock()).toBeNull();
+  expect(container.querySelector('.divisor-dock')).toBeNull();
+  expect(conClase('sin-dock')).toBe(false);
+  await click(T.app.modos.simular);
+  expect(conClase('sin-dock')).toBe(true);
+  await pulsar(document.body, mod('j'));
+  expect(dock()!.dataset['pestana']).toBe('avisos');
+  await remontar();
+  await click(T.app.modos.simular);
+  expect(conClase('sin-dock')).toBe(false);
+  localStorage.setItem('lila.paneles', JSON.stringify({ simular: { dock: false } }));
+  await remontar();
+  await click(T.app.modos.simular);
+  expect(conClase('sin-dock')).toBe(true);
+});
+
+it('⌘J toggles the dock in Simulate only, and the palette offers it there (#394)', async () => {
+  expect(etiqueta(atajoPorId('dock'), false)).toBe('Ctrl+J');
+  expect(await pulsar(svgLienzo(), { key: 'j', ctrlKey: true })).toBe(true);
+  expect(conClase('sin-dock')).toBe(true);
+  expect(await pulsar(document.body, mod('j'))).toBe(true);
+  expect(conClase('sin-dock')).toBe(false);
+  await abrirConTeclado();
+  await escribir(T.atajos.dock);
+  expect(opciones()).toEqual([T.atajos.dock]);
+  await teclaPaleta('Enter');
+  expect(conClase('sin-dock')).toBe(true);
+  await click(T.app.modos.modelar);
+  await pulsar(document.body, mod('j'));
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!).modelar.dock).toBe(true);
+  await abrirConTeclado();
+  await escribir(T.atajos.dock);
+  expect(opciones()).toEqual([]);
+});
+
+/** Plays a window resize to `alto` px (jsdom's `innerHeight` is a plain writable property). */
+async function altoDeVentana(alto: number): Promise<void> {
+  await act(async () => { Object.defineProperty(window, 'innerHeight', { value: alto, configurable: true, writable: true }); window.dispatchEvent(new Event('resize')); });
+}
+
+it('the dock never takes the canvas: its height is bounded by the window, saved or resized (QA of #394)', async () => {
+  const alto = () => appEl().style.getPropertyValue('--dock-alto');
+  try {
+    localStorage.setItem('lila.dockAlto', '640');
+    await altoDeVentana(1200);
+    await remontar();
+    await click(T.app.modos.simular);
+    expect(alto()).toBe('640px');
+    // 1280×800, 1024×768, 1024×600 and Electron's 360 px floor: at least ~160 px of canvas stays.
+    for (const [ventana, esperado] of [[800, 440], [768, 408], [600, 240], [360, 120]] as const) {
+      await altoDeVentana(ventana);
+      expect(alto(), String(ventana)).toBe(`${esperado}px`);
+      expect(divisorDock().getAttribute('aria-valuenow'), String(ventana)).toBe(String(esperado));
+    }
+    // The saved preference is kept: a taller window gives it back.
+    expect(localStorage.getItem('lila.dockAlto')).toBe('640');
+    await altoDeVentana(1200);
+    expect(alto()).toBe('640px');
+    // Restoring a saved 640 into a small window draws it bounded too.
+    await altoDeVentana(600);
+    await remontar();
+    await click(T.app.modos.simular);
+    expect(alto()).toBe('240px');
+  } finally {
+    await altoDeVentana(768);
+  }
+});
+
+it('the View menu lists the dock in Simulate only; hiding it with the focus inside sends the focus to its divider (QA of #394)', async () => {
+  const item = () => container.querySelector<HTMLButtonElement>('.menu-vista > div > [data-region="dock"]');
+  expect(item()!.textContent).toContain(T.app.regiones.dock);
+  await act(async () => item()!.click());
+  expect(conClase('sin-dock')).toBe(true);
+  await act(async () => item()!.click());
+  expect(conClase('sin-dock')).toBe(false);
+  // Focus inside the dock, ⌘J: it lands on the divider, which brings the dock back.
+  await act(async () => dock()!.querySelector('button')!.focus());
+  await pulsar(document.activeElement!, mod('j'));
+  expect(conClase('sin-dock')).toBe(true);
+  expect(document.activeElement).toBe(divisorDock());
+  await click(T.app.modos.modelar);
+  expect(item()).toBeNull();
+  // Outside Simulate ⌘J / Ctrl+J is not taken: the browser keeps it (Downloads).
+  expect(await pulsar(document.body, { key: 'j', ctrlKey: true })).toBe(false);
+});
+
+it('a failed run opens the dock on Warnings (QA of #394)', async () => {
+  await act(async () => mocks.dock!.onPestana('log'));
+  mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
+  await click(T.app.ejecutar);
+  expect(dock()!.dataset['pestana']).toBe('avisos');
 });

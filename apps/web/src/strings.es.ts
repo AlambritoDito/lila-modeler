@@ -136,6 +136,12 @@ export const es: Strings = {
     ventanaBloqueada: 'El navegador bloqueó la ventana del escenario. Permite ventanas emergentes para este sitio para desacoplarlo.',
     acercaBloqueada: 'Se bloqueó la ventana Acerca de; permite ventanas emergentes para este sitio.',
     tituloVentanaEscenario: (nombre: string): string => `Escenario ${nombre} — Lila Modeler`,
+    /** Ventana de Resultados desacoplable (#395): mismo interruptor y sustituto que el escenario. */
+    resultadosAcoplados: 'Resultados acoplados ↗',
+    resultadosDesacoplados: 'Resultados en ventana aparte',
+    resultadosEnVentana: 'Resultados en otra ventana ↗',
+    resultadosBloqueada: 'El navegador bloqueó la ventana de Resultados. Permite ventanas emergentes para este sitio para desacoplarla.',
+    tituloVentanaResultados: 'Resultados — Lila Modeler',
 
     /** Controles de zoom del lienzo. */
     acercar: 'Acercar',
@@ -219,12 +225,14 @@ export const es: Strings = {
       derecha: 'Panel derecho',
       diagramas: 'Pestañas de diagramas',
       estado: 'Barra de estado',
+      dock: 'Dock de simulación',
     },
     tituloRegiones: {
       izquierda: 'Mostrar u ocultar la columna izquierda',
       derecha: 'Mostrar u ocultar el panel derecho',
       diagramas: 'Mostrar u ocultar las pestañas de diagramas',
       estado: 'Mostrar u ocultar la barra de estado',
+      dock: 'Mostrar u ocultar el dock de simulación',
     },
     /** El botón de la barra de estado mientras un error la mantiene en pantalla (#412). */
     tituloEstadoForzado: 'Mostrar u ocultar la barra de estado — sigue mientras muestre un error',
@@ -626,6 +634,16 @@ export const es: Strings = {
    * Panel de propiedades y documentación (`PropertiesPanel.tsx`)
    * ------------------------------------------------------------------ */
   propiedades: {
+    /* #396: «Vista rápida · simulación» bajo la cabecera del elemento elegido. */
+    vistaRapida: 'Vista rápida · simulación',
+    vistaTiempo: 'Tiempo',
+    vistaRecurso: 'Recurso',
+    vistaEsperaP95: 'Espera por recurso p95',
+    vistaEsperaMedia: 'Espera por recurso (media)',
+    vistaSinCorrida: 'sin corrida',
+    editarEnParametros: 'Editar en Parámetros',
+    editarEnRecursos: 'Editar en Recursos',
+
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
     variosSeleccionados: (n: number): string =>
       `${n} elementos seleccionados. El color se aplica a todos; ` +
@@ -778,28 +796,34 @@ export const es: Strings = {
       `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
-     * #333 — los cuatro pasos del panel de simulación, que son los cuatro niveles de Bizagi en
-     * el mismo orden. El número forma parte del rótulo a propósito: es el número que usan la
-     * documentación de Bizagi, esta guía y quien pide ayuda.
+     * #333/#396 — los cuatro pasos del panel de simulación, nombrados por lo que edita cada uno
+     * (los rótulos del diseño). `docs/es/COMING-FROM-BIZAGI.md` los relaciona con los cuatro
+     * niveles de Bizagi.
      */
     pasos: 'Pasos',
     paso: {
-      validation: '1 · Validación del proceso',
-      times: '2 · Análisis de tiempos',
-      resources: '3 · Análisis de recursos',
-      calendars: '4 · Análisis de calendarios',
+      parameters: 'Parámetros',
+      resources: 'Recursos',
+      calendars: 'Calendarios',
+      arrivals: 'Llegadas',
     } as Record<string, string>,
     pasoAyuda: {
-      validation:
-        'Comprueba que el modelo corre: la ventana de corrida, cuántos casos llegan y cómo ramifican las compuertas.',
-      times: 'Cuánto tarda cada llegada y cada trabajo.',
-      resources: 'Quién hace el trabajo: pools, cuántas unidades y qué tarea toma cuál.',
-      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y la capacidad de cada turno.',
+      parameters:
+        'Cómo corre el modelo: la ventana de corrida y las réplicas, cómo ramifican las compuertas y cuánto tarda cada actividad.',
+      resources:
+        'Quién hace el trabajo: pools, cuántas unidades, cuándo trabaja cada pool (su calendario y su capacidad por turno) y qué tarea toma cuál.',
+      calendars: 'Cuándo se puede trabajar: calendarios y festivos, y qué calendario sigue cada elemento.',
+      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
     } as Record<string, string>,
 
-    /** Lista de elementos de los pasos 2 y 3: qué está parametrizado y qué falta. */
+    /** Listas de elementos de los pasos: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
     listaRecursos: 'Recursos por elemento',
+    listaLlegadas: 'Llegadas por evento de inicio',
+    resumenLlegada: (cada: string, casos: number | null): string =>
+      casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
+    calendariosDePools: 'El calendario de un pool y su capacidad por turno se editan en el pool, en Recursos.',
+    irARecursos: 'Ir a Recursos',
     /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
     huerfanas: 'Entradas de elementos que ya no están en el diagrama',
     quitarHuerfanas: 'Quitar entradas huérfanas',
@@ -1173,6 +1197,58 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Dock de Simular bajo el lienzo (#394, `DockSimular.tsx`)
+   * ------------------------------------------------------------------ */
+  dock: {
+    region: 'Dock de simulación',
+    vistas: 'Vistas del dock de simulación',
+    corridaTerminada: (casos: string): string => `Corrida terminada: ${casos} casos completados.`,
+    pestanas: { rapidos: 'Resultados rápidos', cuellos: 'Cuellos de botella', log: 'Log de la corrida', avisos: 'Avisos' },
+    abrirResultados: 'Abrir en Resultados',
+    exportarCsv: 'Exportar CSV',
+    tituloExportar: 'Descargar la tabla de elementos del proceso (elements.csv)',
+    vacio: 'Corre el escenario para ver aquí sus resultados rápidos, cuellos de botella y log.',
+    ejecutar: 'Ejecutar simulación',
+    redimensionar: 'Redimensionar el dock de simulación',
+    kpis: {
+      completados: 'Casos completados',
+      cicloMedio: 'Ciclo medio',
+      throughput: 'Throughput por hora',
+      costoTotal: 'Costo total',
+      cuello: 'Cuello principal',
+    },
+    columnas: {
+      actividad: 'Actividad',
+      casos: 'Casos',
+      esperaMedia: (unidad: string): string => `Espera por recurso, media (${unidad})`,
+      esperaP95: (unidad: string): string => `Espera por recurso p95 (${unidad})`,
+      utilizacion: 'Utilización (%)',
+      utilizacionTitulo: 'Utilización del pool más ocupado que usó la actividad',
+      costo: 'Costo fijo total',
+    },
+    total: 'Total',
+    notaPercentiles: (filas: number): string =>
+      `Media: todas las réplicas. p95: réplica 1 de la muestra del log (${filas} filas), casos iniciados tras el calentamiento.`,
+    muestraParcial: (filas: number): string => `La espera es la media de todas las réplicas. No hay p95: la muestra del log de la corrida se detuvo en ${filas} filas y solo cubriría sus primeros casos.`,
+    ocurrencias: (n: number): string => `${n} ocurrencias`,
+    notaSinLog: 'La espera es la media de todas las réplicas. No hay p95: esta corrida no tiene log en memoria (córrela otra vez para verlo).',
+    sinLog: 'Esta corrida no tiene log en memoria (se reabrió de un archivo): córrela otra vez para verlo.',
+    logTruncado: (n: number): string => `La muestra del log se detuvo en ${n} filas: los eventos posteriores no están.`,
+    logMostrando: (mostradas: number, total: number): string => `Se muestran las primeras ${mostradas} de ${total} filas.`,
+    log: {
+      caso: 'Caso',
+      elemento: 'Elemento',
+      recurso: 'Recurso',
+      habilitada: (unidad: string): string => `Habilitada (${unidad})`,
+      inicio: (unidad: string): string => `Inicio (${unidad})`,
+      fin: (unidad: string): string => `Fin (${unidad})`,
+      espera: (unidad: string): string => `Espera (${unidad})`,
+      costo: 'Costo',
+    },
+    sinAvisos: 'No hay avisos de esta corrida ni de este escenario.',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Vista de comparación (`CompareView.tsx`, `compareWarnings.ts`)
    * ------------------------------------------------------------------ */
   comparar: {
@@ -1523,6 +1599,7 @@ export const es: Strings = {
     estado: 'Mostrar u ocultar la barra de estado',
     irModos: 'Llevar el foco a los modos',
     irPanel: 'Llevar el foco al panel derecho',
+    dock: 'Mostrar u ocultar el dock de simulación',
   },
 
   /* ------------------------------------------------------------------ *
